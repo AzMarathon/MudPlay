@@ -516,4 +516,54 @@ public sealed class RouteChoiceDialogViewModelTests
             new RouteChoiceResult?[] { RouteChoiceResult.Free, RouteChoiceResult.Gated },
             previews);
     }
+
+    // ----- Trap-avoid fork -----------------------------------------------
+
+    private static RouteChoice TrapAvoidChoice(int freeTraps = 0, int gatedTraps = 2) =>
+        new(FreeStepCount: 3, GatedStepCount: 1,
+            System.Array.Empty<RouteRequirement>(), FreeLine, GatedLine,
+            RouteChoiceKind.TrapAvoid,
+            FreeTrapCount: freeTraps, GatedTrapCount: gatedTraps);
+
+    [Fact]
+    public void TrapAvoid_PreSelectsFreeRoute_HidesSendIt_ShowsTrapCaveat()
+    {
+        var vm = new RouteChoiceDialogViewModel(TrapAvoidChoice(), "Deep Cavern (1/9)", id => "");
+
+        Assert.True(vm.IsTrapAvoidChoice);
+        Assert.False(vm.ShowSendItCard);                         // plain two-way fork
+        Assert.Equal(RouteChoiceResult.Free, vm.SelectedRoute);  // safer route pre-selected
+        Assert.True(vm.IsFreeSelected);
+        Assert.True(vm.GoCommand.CanExecute(null));              // Go enabled on open
+        Assert.Equal(vm.TrapCaveat, vm.GatedDetail);            // gated sub-line = trap caveat
+        Assert.Contains("trap-free", vm.FreeSummary);           // 0 free traps → "trap-free"
+        Assert.Contains("2 traps", vm.GatedSummary);            // shortest crosses 2
+    }
+
+    [Fact]
+    public void TrapAvoid_FewerButNotZeroTraps_StatesBothCounts()
+    {
+        // The fewest-traps route still crosses an unavoidable trap — it must NOT claim
+        // "trap-free", and both counts show.
+        var vm = new RouteChoiceDialogViewModel(
+            TrapAvoidChoice(freeTraps: 1, gatedTraps: 3), "Deep Cavern (1/9)", id => "");
+
+        Assert.Contains("1 trap", vm.FreeSummary);
+        Assert.DoesNotContain("trap-free", vm.FreeSummary);
+        Assert.Contains("3 traps", vm.GatedSummary);
+    }
+
+    [Fact]
+    public void TrapAvoid_RaiseSelectionPreview_FiresFreePreview()
+    {
+        var vm = new RouteChoiceDialogViewModel(TrapAvoidChoice(), "Deep Cavern (1/9)", id => "");
+        RouteChoiceResult? previewed = null;
+        bool fired = false;
+        vm.PreviewRequested += r => { previewed = r; fired = true; };
+
+        vm.RaiseSelectionPreview();
+
+        Assert.True(fired);
+        Assert.Equal(RouteChoiceResult.Free, previewed);
+    }
 }

@@ -95,6 +95,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _scaleTerminalToWindow;
     [ObservableProperty] private bool _typeToTerminalFromOtherWindows = true;
     [ObservableProperty] private bool _showStartupMudAnimation = true;
+    // Install-global (GlobalSettings.SnapWindows), read live by WindowSnapManager.
+    [ObservableProperty] private bool _snapWindows = true;
 
     // PlayerCleanupDays moved to Settings → Other per user direction.
     // GlobalSettings.PlayerCleanupDays remains the canonical store —
@@ -378,6 +380,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // Save fires GlobalSettingsChanged, so the live map (NavigationViewModel
         // listens) repaints with the new colours / thickness immediately.
         _globalSettings.Current.NavLines = SnapshotNavLines();
+        // Window snapping is install-global too; WindowSnapManager reads it live off
+        // the same GlobalSettings, so this is all the wiring the toggle needs.
+        _globalSettings.Current.SnapWindows = SnapWindows;
         _globalSettings.Save();
 
         ClearDirty();
@@ -431,6 +436,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         NavLineStyles? navLines = _globalSettings.Current.NavLines;
         foreach (NavLineStyleRowViewModel row in NavLineRows)
             row.Load(navLines?.Get(row.Kind));
+
+        // Window snapping is Global-tier — reflect the live GlobalSettings value.
+        SnapWindows = _globalSettings.Current.SnapWindows;
 
         SelectedFontFamily = FontFamilyOptions.FirstOrDefault(o => o.Uri == dto.TerminalFontFamily)
                              ?? FontFamilyOptions[0];
@@ -565,6 +573,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnScaleTerminalToWindowChanged(bool value)  => Dirty();
     partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();
     partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
+    partial void OnSnapWindowsChanged(bool value)                    => Dirty();
     partial void OnSelectedFontFamilyChanged(FontFamilyOption? value) => Dirty();
     partial void OnSelectedFontSizeChanged(FontSizeOption? value)     => Dirty();
     partial void OnSelectedNavTooltipFontFamilyChanged(FontFamilyOption? value) => Dirty();

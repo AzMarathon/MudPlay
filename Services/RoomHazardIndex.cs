@@ -13,9 +13,18 @@ namespace MudPlay.Services;
 // player carries no counter item, the walker routes around it, offers the item as
 // a path requirement, or (with the per-item auto-obtain flag) acquires it first.
 //
-// A room-entry spell is a *protectable* hazard when the 1.11p data ships an item
-// that counters it. Three protection shapes are decoded, all reached by walking
-// the spell's Abil-0..9 chain:
+// A room-entry spell is only a hazard when its unprotected effect actually HARMS
+// the player — deals damage, kills, or forces movement (a teleport/transfer). A
+// spell whose worst outcome is benign (an alignment shift, a flavor message, a
+// monster summon, quest-item placement) is NOT a hazard even if it ships a
+// `failitem` "counter": gating movement on it is wrong (blackwood forest, the class
+// quest-item rooms, the area triggers). Confirmed with the user: a summon is not a
+// hazard. Harm is detected by walking the effect chain for a Damage/EndCast ability
+// or a `cast`/`teleport`/`transfer`/`checkspell`/`failspell` textblock directive.
+//
+// A harmful room-entry spell is a *protectable* hazard when the 1.11p data also
+// ships an item that counters it. Three protection shapes are decoded, all reached
+// by walking the spell's Abil-0..9 chain:
 //   • Damage (Abil 1) / EndCast (Abil 151) death-timer chain — countered by an
 //     item whose NegateSpell-0..9 cancels the spell or ANY member of its EndCast
 //     chain (the gnomish fish-helm negates the black-water / freeze-drown chain).
@@ -198,6 +207,19 @@ public sealed class RoomHazardIndex
         List<int> textBlocks = new();
         bool damaging = WalkSpellChain(rootSpell, 0, spellAbils, chain, textBlocks);
 
+        // A room-entry spell is a HAZARD only when its unprotected effect actually
+        // harms the player: deals damage / kills (a Damage or EndCast-death ability),
+        // or its textblock branch leads to a damaging `cast`, a `teleport`/`transfer`
+        // that relocates them (a movement hazard), or a `checkspell`/`failspell`
+        // buff-gate whose buff-absent branch does the damage (the desert's heat, the
+        // drown chain). A spell whose only effects are benign — an alignment shift
+        // (addevil), flavor (message), a monster summon, quest-item placement — is NOT
+        // a hazard even when it ships a `failitem` "counter": routing around it or
+        // demanding the item is wrong. That over-classification gated blackwood forest
+        // (summon only), the class quest-item rooms, and the area triggers. Confirmed
+        // with the user: a summon on entry is not a hazard.
+        bool harmful = damaging || AnyBranchHarmful(textBlocks, tbActions);
+
         List<IReadOnlyList<int>> groups = new();
         List<BuffCounter> buffCounters = new();
 
@@ -221,7 +243,53 @@ public sealed class RoomHazardIndex
         foreach (int tb in textBlocks)
             ScanTextBlock(tb, 0, tbActions, castersBySpell, durationSecondsBySpell, visitedTb, groups, buffCounters);
 
-        return groups.Count > 0 ? new RoomHazard(groups, buffCounters) : null;
+        // Only index a genuinely harmful spell — a benign one that happens to carry a
+        // failitem/checkspell counter is not a hazard (see `harmful` above).
+        return harmful && groups.Count > 0 ? new RoomHazard(groups, buffCounters) : null;
+    }
+
+    // Directives in a textblock branch that mean the unprotected outcome harms the
+    // player: a spell CAST (a damaging outcome), a TELEPORT/TRANSFER that relocates
+    // them (a movement hazard), or a CHECKSPELL/FAILSPELL buff-gate whose buff-absent
+    // branch deals the damage (desert heat / drowning). Benign directives — addevil,
+    // message, summon, nomonsters, takeitem, quest flags — are not here, so a branch
+    // built only from those reads as non-harmful.
+    private static readonly string[] HarmfulTbDirectives =
+        { "cast", "teleport", "transfer", "checkspell", "failspell" };
+
+    // Control-flow directives whose target block continues the same branch.
+    private static readonly string[] BranchFlowDirectives =
+        { "random", "linkto", "link", "goto" };
+
+    // True when any textblock reachable from these roots contains a harmful directive.
+    // Follows the random/link control flow, bounded by depth + a visited set.
+    private bool AnyBranchHarmful(IReadOnlyList<int> roots, Dictionary<int, string> tbActions)
+    {
+        HashSet<int> visited = new();
+        foreach (int tb in roots)
+            if (BranchHarmful(tb, 0, tbActions, visited)) return true;
+        return false;
+    }
+
+    private bool BranchHarmful(int tb, int depth, Dictionary<int, string> tbActions, HashSet<int> visited)
+    {
+        if (depth > MaxChainDepth || tb <= 0 || !visited.Add(tb)) return false;
+        if (!tbActions.TryGetValue(tb, out string? action) || string.IsNullOrWhiteSpace(action))
+            return false;
+
+        foreach (string line in action.Split('\n'))
+            foreach (string raw in line.Split(':'))
+            {
+                string tok = raw.Trim();
+                if (tok.Length == 0) continue;
+                foreach (string kw in HarmfulTbDirectives)
+                    if (StartsWith(tok, kw)) return true;
+                foreach (string flow in BranchFlowDirectives)
+                    if (StartsWith(tok, flow)
+                        && BranchHarmful(FirstIntAfter(tok, flow), depth + 1, tbActions, visited))
+                        return true;
+            }
+        return false;
     }
 
     // Depth-first walk of a spell's EndCast chain. Returns true when any chain

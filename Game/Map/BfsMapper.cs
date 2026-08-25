@@ -141,19 +141,34 @@ public sealed class BfsMapper
     //   teleport" choice — a teleport is often a much shorter but far more
     //   dangerous crossing (it can drop you in a lethal zone, or past a
     //   hazard only a specific build survives), so the user picks.
+    // avoidTraps: when true, the search MINIMISES traps crossed (then hops) instead
+    //   of pure hop count, via FindMinTrapPath — it avoids every trap it CAN and
+    //   crosses only the unavoidable ones (a destination reachable only past a trap
+    //   still routes, just past the fewest traps possible). Backs the route picker's
+    //   "avoid traps" choice: the shortest-by-hops route may cross traps the walker
+    //   would disarm at step time, so we offer the fewest-traps alternative. Trap
+    //   count is directional — a trap counts only in the direction actually stepped,
+    //   so a room whose reverse exit is clean routes through it safely.
     public IReadOnlyList<Direction>? FindPath(
         RoomKey source,
         RoomKey destination,
         IRoomFilter? filter = null,
         bool returnEmptyWhenAtDestination = false,
         bool ignoreExitGates = false,
-        bool refuseTeleports = false)
+        bool refuseTeleports = false,
+        bool avoidTraps = false)
     {
         if (_graph.GetRoom(source) is null) return null;
         if (_graph.GetRoom(destination) is null) return null;
 
         if (source.Equals(destination))
             return returnEmptyWhenAtDestination ? Array.Empty<Direction>() : null;
+
+        // Trap-minimising route is a cost search (fewest traps, then fewest hops),
+        // not a plain BFS — a refuse-all-traps BFS would return NOTHING the moment
+        // one trap on the way is unavoidable, stranding the whole "avoid" offer.
+        if (avoidTraps)
+            return FindMinTrapPath(source, destination, filter, ignoreExitGates, refuseTeleports);
 
         // Two-tier search: a deterministic pass first (gateway teleports
         // excluded), then — only if that finds nothing — a fallback pass that
@@ -390,6 +405,94 @@ public sealed class BfsMapper
             cursor = exit.Target;
         }
         return false;
+    }
+
+    // How many trapped exits (RoomExitHint.Trap) walking `path` from `source`
+    // crosses. Directional — counts the exit actually stepped, so a clean reverse
+    // edge on a two-way corridor never counts. Backs the route picker's decision to
+    // offer the trap-avoiding alternative: worth surfacing only when the fewest-trap
+    // route crosses fewer traps than the shortest-by-hops one.
+    public int CountTrapsOnPath(RoomKey source, IReadOnlyList<Direction>? path)
+    {
+        if (path is null || path.Count == 0) return 0;
+
+        int traps = 0;
+        RoomKey cursor = source;
+        foreach (Direction dir in path)
+        {
+            Room? room = _graph.GetRoom(cursor);
+            if (room is null) break;
+            if (!room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            if (exit.Hint == RoomExitHint.Trap) traps++;
+            cursor = exit.Target;
+        }
+        return traps;
+    }
+
+    // Fewest-traps route from source to destination, ties broken by fewest hops —
+    // a Dijkstra over the lexicographic cost (trapsCrossed, hops). Unlike a
+    // refuse-all-traps BFS this still reaches a destination whose only approach
+    // crosses an unavoidable trap; it just crosses the fewest traps it can, so a
+    // path with one avoidable and one unavoidable trap routes around the avoidable
+    // one and accepts the other (the walker disarms it at step time). Shares
+    // FindPathCore's per-exit traversability rules; gateway teleports are excluded
+    // (this is a ground alternative, not the last-resort portal pass). Returns null
+    // only when genuinely disconnected.
+    private IReadOnlyList<Direction>? FindMinTrapPath(
+        RoomKey source,
+        RoomKey destination,
+        IRoomFilter? filter,
+        bool ignoreExitGates,
+        bool refuseTeleports)
+    {
+        var best = new Dictionary<RoomKey, (int Traps, int Hops)>();
+        var parent = new Dictionary<RoomKey, (RoomKey ParentKey, Direction Step)>();
+        var frontier = new PriorityQueue<RoomKey, (int Traps, int Hops)>();
+
+        best[source] = (0, 0);
+        parent[source] = (source, default);
+        frontier.Enqueue(source, (0, 0));
+
+        while (frontier.TryDequeue(out RoomKey here, out (int Traps, int Hops) cost))
+        {
+            // Stale queue entry — a cheaper cost for this room was settled after it
+            // was enqueued (a node can be queued several times as its cost drops).
+            if (!best.TryGetValue(here, out (int Traps, int Hops) settled) || settled != cost) continue;
+            if (here.Equals(destination)) return ReconstructPath(parent, source, destination);
+
+            Room? room = _graph.GetRoom(here);
+            if (room is null) continue;
+
+            foreach ((Direction dir, RoomExit exit) in room.Exits)
+            {
+                RoomKey next = exit.Target;
+
+                // Same exclusions as FindPathCore, minus the gateway two-tier: a
+                // gateway portal is never taken on the fewest-traps alternative.
+                if (exit.CastTeleportRandom || exit.GatewayTeleport) continue;
+                if (exit.Hint == RoomExitHint.MultiActionHidden
+                    && exit.MultiAction is not { IsSatisfiable: true }) continue;
+                if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
+                if (filter is not null && filter.IsAvoided(next)) continue;
+                if (!ignoreExitGates && filter is not null && filter.IsExitBlocked(exit)) continue;
+                if (_graph.GetRoom(next) is null) continue;
+
+                (int Traps, int Hops) nextCost =
+                    (cost.Traps + (exit.Hint == RoomExitHint.Trap ? 1 : 0), cost.Hops + 1);
+                if (best.TryGetValue(next, out (int Traps, int Hops) prior)
+                    && Compare(prior, nextCost) <= 0) continue;   // no improvement
+
+                best[next] = nextCost;
+                parent[next] = (here, dir);
+                frontier.Enqueue(next, nextCost);
+            }
+        }
+
+        return null;
+
+        // Lexicographic: fewer traps wins; equal traps → fewer hops.
+        static int Compare((int Traps, int Hops) a, (int Traps, int Hops) b) =>
+            a.Traps != b.Traps ? a.Traps.CompareTo(b.Traps) : a.Hops.CompareTo(b.Hops);
     }
 
     // BFS-planar layout from origin. Caches the result; OnGraphReloaded

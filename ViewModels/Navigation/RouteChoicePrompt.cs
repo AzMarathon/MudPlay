@@ -54,6 +54,18 @@ public static class RouteChoicePrompt
             return;
         }
 
+        // Trap-avoid fork: the shortest route crosses a trap and a trap-free route to
+        // the same room exists. Surface the clean detour so the user can take it
+        // instead of trusting the step-time disarm — a disarm can fail (no picks, no
+        // party disarmer) and some traps aren't worth the hit even when disarmable.
+        RouteChoice? trapAvoid = RouteChoicePlanner.EvaluateTrapAvoid(
+            services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
+        if (trapAvoid is not null)
+        {
+            await RunPickerAsync(services, destination, source.Key, trapAvoid, previewSink);
+            return;
+        }
+
         RouteChoice? choice = RouteChoicePlanner.Evaluate(
             services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
         if (choice is null)
@@ -178,6 +190,7 @@ public static class RouteChoicePrompt
         // the picker closes so a committed walk's live path isn't double-drawn and
         // a cancel leaves no stale preview behind.
         if (previewSink is not null)
+        {
             vm.PreviewRequested += r => previewSink(r switch
             {
                 RouteChoiceResult.Free => choice.FreePath,
@@ -186,6 +199,10 @@ public static class RouteChoicePrompt
                 RouteChoiceResult.GatedNoAcquire => choice.GatedPath,
                 _ => null,
             });
+            // A pre-selected route (trap-avoid defaults to the trap-free line) draws
+            // its preview on open, now that the sink is subscribed.
+            vm.RaiseSelectionPreview();
+        }
 
         RouteChoiceResult? result;
         try
@@ -225,6 +242,23 @@ public static class RouteChoicePrompt
             return;
         }
 
+        if (choice.Kind == RouteChoiceKind.TrapAvoid)
+        {
+            switch (result)
+            {
+                case RouteChoiceResult.Free:
+                    // "Avoid traps" — plan the trap-free route (refuse trapped exits).
+                    CommitWalk(services, destination, gated: false, avoidTraps: true);
+                    break;
+                case RouteChoiceResult.Gated:
+                    // "Cross traps" — the walker's default plan, disarming at step time.
+                    CommitWalk(services, destination, gated: false);
+                    break;
+                // null → cancelled: walk nothing.
+            }
+            return;
+        }
+
         switch (result)
         {
             case RouteChoiceResult.Free:
@@ -235,18 +269,22 @@ public static class RouteChoicePrompt
                 // grabbed in place; the rest are forced through the acquire pipeline
                 // (give/shop/drop) even when unflagged — the explicit pick is the
                 // consent. The walk still plans gated (the counter isn't carried
-                // yet at plan time) and crosses safely once it's in hand.
+                // yet at plan time) and crosses safely once it's in hand. A SOLE
+                // route (the gate is unavoidable) also plans avoidTraps, so the
+                // forced crossing takes the fewest-traps approach the planner chose.
                 foreach (int id in floorCounters)
                     if (services.ItemNames.GetName(id) is { Length: > 0 } n)
                         services.SendGameCommand($"get {n}");
                 if (detourCounters.Count > 0)
                     services.ForcePathObtain(detourCounters);
-                CommitWalk(services, destination, gated: true);
+                CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
                 break;
             case RouteChoiceResult.GatedNoAcquire:
                 // "Send it": walk the gated route but don't arm acquisition — the
-                // user asserts they'll clear the gates without provisioning.
-                CommitWalk(services, destination, gated: true, armAcquisition: false);
+                // user asserts they'll clear the gates without provisioning. A sole
+                // route still avoids traps, matching the planner's chosen approach.
+                CommitWalk(services, destination, gated: true,
+                    armAcquisition: false, avoidTraps: !choice.HasFreeRoute);
                 break;
             // null → cancelled: walk nothing (and leave any manual pause intact —
             // the user backed out, so nothing changed).
@@ -261,7 +299,7 @@ public static class RouteChoicePrompt
     // rest / party) are left asserted and re-pause on their own if still relevant.
     private static void CommitWalk(
         AppServices services, RoomKey destination, bool gated,
-        bool armAcquisition = true, bool avoidTeleports = false)
+        bool armAcquisition = true, bool avoidTeleports = false, bool avoidTraps = false)
     {
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
@@ -277,7 +315,8 @@ public static class RouteChoicePrompt
             destination,
             planThroughAcquirableGates: gated,
             armItemAcquisition: armAcquisition,
-            avoidTeleports: avoidTeleports);
+            avoidTeleports: avoidTeleports,
+            avoidTraps: avoidTraps);
     }
 
     private static string DestinationLabel(AppServices services, RoomKey destination) =>

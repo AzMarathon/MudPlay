@@ -2,23 +2,35 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.25.8
+## 3.27.7
 
-- Combat: a locally blocked initial attack spell now seeds the five-second combat heartbeat when MudPlay has just started and no prior combat line has established its cadence; previously `_combatOff` was correctly cleared by 3.25.6, but the promised retry still never ran when `LastCombatTick` was null and the monster only produced non-generic armour-block wording such as "reaches out for you"
-- A blocked attack spell now marks its round as owed immediately, preventing another startup self-buff from taking the deterministic retry round before the attack can go out
-- bug report addressed: paradigm-20260824-235607
+- Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast (a heal/buff sent moments earlier) left the engine's `_combatOff` latch stuck true, which permanently blocked the spell-mode retry heartbeat since only a successful cast used to clear it; it's now cleared unconditionally the moment the engine commits to engaging
+- Combat: a locally blocked initial attack spell now seeds the five-second combat heartbeat on a fresh session where no prior combat line has anchored the cadence (`LastCombatTick` null) and the monster only shows non-generic armour-block wording such as "reaches out for you" — and marks its round as owed immediately, so a startup self-buff can't steal the deterministic retry round before the attack goes out
+- CastingDirector: a self-buff/heal (e.g. `vlwa`) no longer gets spammed every few seconds after it's already landed — the server's "already cast this round" rejection names no spell, and an unrelated attack-spell cast losing the same round's slot was mistaken for the pending buff failing, dropping its just-armed timer; `CastCoordinator.CastFailed` now carries the cast code the rejection applies to, so shared callers tell their own failure from a collision
+- Bug report: new **Combat off (stuck?)** field (Combat weapon state) — true alongside a live target means the fight is permanently stalled
+- bug reports addressed: paradigm-20260824-215802, paradigm-20260824-233439, paradigm-20260824-235607
 
-## 3.25.7
+## 3.27.4
 
-- CastingDirector: a self-buff/heal (e.g. `vlwa`) no longer gets spammed every few seconds after it's already landed — the server's "You have already cast a spell this round!" line never says which cast it's rejecting, and an unrelated attack-spell cast losing the same round's slot was being mistaken for the pending buff itself failing, dropping its just-armed timer and forcing an immediate spurious recast
-- CastCoordinator's `CastFailed` event now carries the cast code the rejection actually applies to, so callers sharing the coordinator (CastingDirector's between-round casts, CombatManager's attack-spell cascade) can tell their own cast failing from an unrelated collision
-- bug reports addressed: paradigm-20260824-233439
+- Map: a trapped connection is drawn red only on the trapped **side** now — full red = trap both ways, half red (against the room whose exit is trapped) = a one-way trap — instead of the whole line, which falsely implied the return trip was trapped too
+- Navigation: a walk-to whose shortest path crosses a trap now offers a **fewest-traps** alternate route in the picker (pre-selected) — it avoids every avoidable trap and crosses only the unavoidable ones, so it's offered whenever it beats the shortest route's trap count; both cards show their trap count, and the walker disarms any unavoidable trap en route
+- Navigation: when a route must cross an unavoidable gate/hazard, it now takes the fewest-traps approach among the ways in, so a forced crossing no longer also eats a trap it could have skirted
+- Hazards: a room-entry spell is only treated as a movement hazard when it actually **damages, kills, or forces movement** — benign room spells (a monster summon, an alignment shift, a flavor message, quest-item placement: blackwood forest, the area triggers, the class quest-item rooms) no longer gate or reroute travel, even when they carry a counter item
+- bug reports addressed: paradigm-20260825-125954
 
-## 3.25.6
+## 3.27.0
 
-- Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast (a heal/buff sent moments earlier) left the engine's `_combatOff` latch stuck true, which permanently blocked the spell-mode retry heartbeat since only a successful cast used to clear it
-- Bug report: new **Combat off (stuck?)** field (Combat weapon state) — true here alongside a live target means the fight is permanently stalled
-- bug reports addressed: paradigm-20260824-215802
+- New feature: **realm-complete, combat-aware death recovery** — recovery now works on both realms: Paradigm recovers your `corpse` in one command; Stock `get`s your items loose off the floor (previously Stock recovered nothing)
+- Recovering with a hostile present: engage first, grab the pile (which doesn't break combat), then pace the re-equip between rounds — weapon first, then armour heaviest-first — re-attacking after each burst; whatever's left goes on the instant the room clears
+- Stock spillover: a deliberate recovery (Recover Now, or an auto-recover walk-to that ends in the death room) sweeps each exit and walks to collect items that overflowed into adjacent rooms — disarming traps in the way (both directions), skipping an exit whose trap it can't get through; an auto-recover walk that passes through a death room grabs your overflow from the rooms right before and after it in-stride, no detour. Manually stepping into a death room grabs the floor but never fires the sweep
+- Stock: a deathpile down to only currency counts as fully recovered — coins recover as cash (never `get`-ed), so they no longer strand the pile at Partial
+- Bug report: new **Re-equip pieces pending** field (shown mid-recovery)
+- Party: dying — including an instant `suicide` (which skips the mortally-wounded drop) — now clears your party state (a follower is removed, a leader's party disbands), so `@join`/`@invite` stop replying "I'm following someone; denied." after a death
+- bug reports addressed: stock-20260825-101612, stock-20260825-104351, stock-20260825-105851, stock-20260825-112233
+
+## 3.26.0
+
+- New feature: **window snapping** — MudPlay's panel windows (Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats) snap flush to each other's edges as you drag them near, on every platform. Dragging the **main** window carries the whole snapped cluster with it; grab any other panel to pull it off freely. Toggle it in **Settings → General → "Snap windows together"** (on by default); child windows opened from within a panel don't snap
 
 ## 3.25.5
 

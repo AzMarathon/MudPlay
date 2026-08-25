@@ -99,6 +99,29 @@ public sealed class GroundItemTrackerTests
     }
 
     [Fact]
+    public void MultiLineWrap_StitchesAcrossFourRows_CrowdedFloor()
+    {
+        // The stock spillover case (report stock-20260825-101612): a crowded
+        // adjacent-room floor wraps a "You notice" survey across FOUR rows, with
+        // count-prefixed items split at the wrap ("…, 2" + "padded boots, …"). Every
+        // item the deathpile sweep needs must survive the stitch — a single-line
+        // parse missed it entirely, so the sweep peeked but never walked.
+        var (ground, _, lines) = Setup();
+
+        FeedLine(lines, "You notice bone key, amethyst ring, demonhide sandals, silver bracelet, 2");
+        FeedLine(lines, "padded boots, 2 padded pants, 2 silk robe, 2 silk cape, 2 bone charm, 2 padded");
+        FeedLine(lines, "gloves, 2 padded helm, waterskin, sandals, skullcap, cotton gloves, cloth");
+        FeedLine(lines, "pants, small sign here.");
+
+        Assert.Contains("bone key", ground.Items);
+        Assert.Contains("2 padded boots", ground.Items);   // count survived the wrap-join
+        Assert.Contains("2 silk robe", ground.Items);
+        Assert.Contains("2 padded helm", ground.Items);
+        Assert.Contains("cloth pants", ground.Items);      // wrapped "cloth" + "pants"
+        Assert.Contains("small sign", ground.Items);
+    }
+
+    [Fact]
     public void RoomChanged_ClearsSnapshot()
     {
         var (ground, router, _) = Setup();

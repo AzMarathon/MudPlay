@@ -104,6 +104,22 @@ it isn't here and you're unsure, ask.
   two lines arrive back-to-back but are distinct — the client matches each on its own.
 - **[CONFIRMED]** No effect in the game force-unequips gear (no disarm / removal effects).
   Worn state changes *only* from commands the player or the client issues.
+- **[CONFIRMED 2026-08-24, user]** Equipping (`eq` / `wear` / `wield`) **breaks combat** on **both**
+  Stock and Paradigm — it's a non-swing action, so it interrupts the sustained weapon attack and
+  emits `*Combat Off*`, exactly like a between-round cast (see Combat & backstab). By contrast,
+  **getting items from the ground (`get`) and recovering your corpse (`recover corpse`) do NOT
+  break combat** — you can grab your pile mid-fight without dropping the round. This asymmetry is
+  what makes in-combat death recovery safe to interleave: grab everything freely, but the re-equip
+  burst must be paced across rounds (a few pieces per round, re-attacking after each) so it doesn't
+  stall the fight. The engine re-attacks on the equip's `*Combat Off*` via the same signal a cast
+  arms (`CombatManager.NoteBetweenRoundCast`).
+  - **Death-pile source differs by realm** *([CONFIRMED 2026-08-24, user])*: on **Stock**, death
+    drops **all your items loose on the ground** — they appear in the room's `You notice … here.`
+    survey and, if the floor is already crowded, can **spill into adjacent rooms**; you recover each
+    with `get <item>` (confirmed by `You took <item>.`). On **Paradigm**, your items are held **inside
+    a corpse** (`corpse of <given-name>` in the survey), recovered in one `recover corpse <name>`
+    (confirmed by `You have recovered the corpse of <name>.`). The combat-break rule above is
+    realm-agnostic (it re-times only the wear/eq burst), so it applies to both.
 - **[OBSERVED]** A two-handed weapon needs both hands free; the game rejects the wield while an
   off-hand is occupied (it isn't "usable" until the off-hand is gone), so the off-hand must be
   `rem`'d first.
@@ -856,6 +872,20 @@ route resolver never counted.
   spawn before you leave (`× (1 + summonChance)`), scaled by laps/hr. A simplification of the true
   per-tick loop, but it lands close and stops the under-report.
 
+### What makes a room-entry spell a movement HAZARD *([CONFIRMED] 2026-08-25, user)*
+
+For the navigation router's purposes, a room's entry spell (`Rooms.Spell`) is a **hazard** — something to
+route around, gate behind a counter item, or warn on — **only when its unprotected effect actually
+damages the player, kills the player, or forces/prevents their movement** (a teleport/transfer out).
+**A monster summon on entry is NOT a hazard**, and neither is an alignment shift (`addevil`/`addgood`),
+a flavor `message`, or quest-item placement — you can still walk in freely, so the router must treat the
+room as ordinary. This holds **even when the room-entry spell carries a `failitem` "counter"**: e.g.
+Blackwood Forest (`Spell 1040`) only summons a monster + shifts alignment + prints a message, so despite
+its `failitem 185` ("manhole"), it is **not** a movement hazard. Real hazards damage (a `Damage`/`EndCast`
+ability, or a TextBlock `cast` of a damaging spell), gate on a survival buff (`checkspell`/`failspell` — the
+desert heat, the drown chain), or `teleport`/`transfer` you out (the sea/ice/pit rooms). *(Encoded in
+`RoomHazardIndex` — see the harm gate in `BuildHazard`.)*
+
 ## Mana regeneration & the ManaRgn breakpoints *([CONFIRMED] 2026-08-08, against the engine's own reference formula)*
 
 Passive (non-resting, non-meditating) mana regen ticks **every 30 s** (6 rounds) and adds a whole-MP amount computed by one integer formula. `CharacterCalculator.CalcManaRegen` implements it; the Level Projection grid already relies on it.
@@ -1017,6 +1047,12 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   the client still believed it was partied and following the leader. The **only** reason a dropped
   character still tracks the leader's room is that the leader `drag`s them — following is an artifact
   of the drag, not live party membership.
+- **`suicide` / instant death also removes you — with no drop stage** *([CONFIRMED 2026-08-25, user])*.
+  A `suicide` (or any instant death that costs a life) skips the mortally-wounded / 0-HP drop entirely:
+  it goes straight to `After a LONG thought, you take your own life.` → `You now have N lives remaining.`
+  → respawn. Party removal still happens — a **follower** sees `You are no longer following <leader>.`
+  and is out of the party; a **leader**'s party **disbands** — but there's no `<name> drops to the
+  ground!` line, since the character never passed through the mortally-wounded state.
 - While dropped / mortally wounded the game **rejects every action command**: movement, casting,
   aiding, telepaths all bounce with `You may not do that while you are mortally wounded!`,
   `Your command had no effect.`, or (for remote / telepath commands) `{command invalid or not

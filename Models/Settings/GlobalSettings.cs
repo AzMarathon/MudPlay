@@ -78,6 +78,12 @@ public sealed class GlobalSettings
     // TeleportMazeSolver.Enabled. Surfaced in Settings → Other.
     public bool AsylumSolverEnabled { get; set; } = true;
 
+    // Snap MudPlay's panel windows to each other's edges as you drag them, and
+    // move the whole snapped cluster when the main window is dragged. When false,
+    // windows float freely. Install-wide (Global tier — a UI preference, not
+    // per-character); read live by WindowSnapManager. Surfaced in Settings → General.
+    public bool SnapWindows { get; set; } = true;
+
     // Per-tab settings deltas — keyed by tab name (Health / Combat / Talk /
     // etc.). Each value is a partial DTO for that tab containing only the
     // fields the user pinned to the Global tier. SettingsResolver merges
