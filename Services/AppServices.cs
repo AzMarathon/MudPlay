@@ -3826,6 +3826,9 @@ public sealed class AppServices
         // Auto-recover reads the floor survey to confirm our corpse is in the room
         // before sending `recover corpse` (and arms off its SurveyUpdated event).
         DeathRecovery.AttachGroundItems(GroundItems);
+        // Realm picks the recovery mechanic: Paradigm packs the pile into a corpse
+        // (`recover corpse`), Stock scatters it loose on the floor (per-item `get`).
+        DeathRecovery.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
 
         // Read-only inventory queries — @wealth / @enc / @have report off the
         // InventoryManager snapshot; @what reports the GroundItems survey. No

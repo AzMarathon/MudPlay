@@ -44,6 +44,9 @@ public sealed class DeathRecoveryManagerTests
         public int ResumeArmed { get; private set; }
         public bool GateHeld { get; private set; }
         public Dictionary<string, int> Ac { get; } = new();
+        // Realm probe: true = Paradigm (corpse), false = Stock (loose ground items).
+        // Defaults Paradigm so the existing corpse tests keep their behaviour.
+        public bool Paradigm { get; set; } = true;
         public void CombatRound() => Recovery.OnRecoveryCombatRound();
         public void Heartbeat() => Recovery.OnRecoveryHeartbeat();
 
@@ -87,6 +90,7 @@ public sealed class DeathRecoveryManagerTests
                 () => GateHeld = true,
                 () => GateHeld = false,
                 name => Ac.TryGetValue(name, out int v) ? v : 0);
+            Recovery.SetRealmProbe(() => Paradigm);
 
             Profile.LoadBlank();
             Profile.Current!.Name = characterName;
@@ -373,6 +377,60 @@ public sealed class DeathRecoveryManagerTests
 
         Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
         Assert.False(h.GateHeld);                          // no gate when there's no fight to pace against
+    }
+
+    [Fact]
+    public void Stock_Recovery_GetsFloorItems_NotCorpse_ThenReequipsOnceAllBack()
+    {
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("platinum mace", "Weapon Hand"), new EquippedItem("plate mail", "Torso") },
+            new[] { "torch" });
+        h.Paradigm = false;                 // Stock: items scattered loose on the floor
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+
+        h.EnterGates();
+        h.FeedSurvey("a platinum mace, a plate mail, and a torch");   // our pile on the floor
+
+        // `get` each present pile item (article-insensitive) — NOT `recover corpse`.
+        Assert.Contains("get platinum mace", h.Sent);
+        Assert.Contains("get plate mail", h.Sent);
+        Assert.Contains("get torch", h.Sent);
+        Assert.DoesNotContain(h.Sent, s => s.StartsWith("recover corpse"));
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+
+        h.Sent.Clear();
+        h.Recovery.FeedTestLine("You took a platinum mace.");
+        h.Recovery.FeedTestLine("You took a plate mail.");
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);   // torch still out → not done
+        h.Recovery.FeedTestLine("You took a torch.");
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        // Worn gear re-equipped once the whole pile is back — weapon first (no hostile → all at once).
+        Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
+    }
+
+    [Fact]
+    public void Stock_Recovery_OnlyGetsItemsPresentOnTheFloor_NoGetSpam()
+    {
+        // A worn helm spilled elsewhere — it is NOT in this room's survey, so we must
+        // not `get` it (that was the old spam). We grab what's here and hold Partial.
+        using GraphHarness h = new();
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
+            Array.Empty<string>());
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+
+        h.EnterGates();
+        h.FeedSurvey("an iron sword");       // only the sword is here; the helm spilled
+
+        Assert.Contains("get iron sword", h.Sent);
+        Assert.DoesNotContain("get steel helm", h.Sent);   // absent → never `get`-spammed
+        h.Recovery.FeedTestLine("You took an iron sword.");
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);   // helm still out → Partial
     }
 
     // North Square (1/3) — the adjacent room, used to leave and re-enter the death room.

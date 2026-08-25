@@ -80,6 +80,18 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // re-attack to land before the next round (user-tuned "3-4 pieces / ~3 s").
     private const int EquipBurstPerRound = 4;
 
+    // Stock ground recovery. On Stock, death scatters items LOOSE on the floor
+    // (Paradigm packs them in a corpse — the path is chosen by _isParadigm). We
+    // `get <name>` each pile item that's actually in the survey (never an absent
+    // one — that was the old get-spam), confirmed one at a time by "You took
+    // <name>."; when the whole pile is back the record finalises and worn gear
+    // re-equips (paced by the combat interleave). Items not on this floor stay
+    // unrecovered — the pile holds at Partial, retried on re-entry (and, on a
+    // deliberate recovery, swept from adjacent rooms — later stage). _stockRecovering
+    // scopes the "You took" tracking to our own in-progress grab.
+    private Func<bool>? _isParadigm;
+    private bool _stockRecovering;
+
     public DeathRecoveryManager(
         DeathLineWatcher deathWatcher,
         ProfileService profile,
@@ -180,6 +192,16 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _assertRecoveryGate = assertRecoveryGate;
         _clearRecoveryGate = clearRecoveryGate;
         _armourClass = armourClass;
+    }
+
+    // Bind the realm probe that chooses the recovery mechanic: Paradigm packs the
+    // pile into a `corpse of <name>` (one `recover corpse`), Stock scatters it
+    // loose on the floor (per-item `get`). Wired by AppServices from the active
+    // game-data set's realm. Unbound, recovery defaults to the corpse path.
+    public void SetRealmProbe(Func<bool> isParadigm)
+    {
+        ArgumentNullException.ThrowIfNull(isParadigm);
+        _isParadigm = isParadigm;
     }
 
     // Bind the live inventory snapshot provider so SimulateDeath captures a
@@ -339,6 +361,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         {
             _activeRecovery = null;
             _grabOnSurvey = false;
+            _stockRecovering = false;
         }
 
         // Left the room our paced re-equip pieces belong to (rare — the
@@ -405,11 +428,13 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     }
 
     // The room's floor survey ("You notice … here.") was just reparsed. If we're
-    // armed to auto-recover a pile here, act on it now: recover the corpse if it's
-    // present, else mark the pile Missing (nothing on the floor to grab).
+    // armed to auto-recover a pile here, act on it now — via the realm's mechanic:
+    // Paradigm recovers the `corpse of <name>`, Stock `get`s the loose items.
     private void OnSurveyUpdated()
     {
-        if (_activeRecovery is { } record && _grabOnSurvey) TryCorpseRecover(record);
+        if (_activeRecovery is not { } record || !_grabOnSurvey) return;
+        if (_isParadigm?.Invoke() ?? true) TryCorpseRecover(record);
+        else TryGroundRecover(record);
     }
 
     // Stock deathpile = one "corpse of <given-name>" object. If our corpse is in
@@ -429,6 +454,70 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         }
         _log?.Info(LogCategory, $"auto-recover: recover corpse {corpse}");
         Send($"recover corpse {corpse}");
+    }
+
+    // Stock deathpile = loose items on the floor. `get <name>` each pile item
+    // that's actually in this room's survey (article/count-insensitive match) —
+    // never an absent one, which is what made the old flow spam "You don't see X
+    // here.". Each grab confirms with a "You took <name>." line (see OnStockItemTaken)
+    // that decrements the pile; the record finalises when everything's back. Items
+    // NOT on this floor stay unrecovered — the pile holds at Partial (retried on
+    // re-entry, or swept from adjacent rooms on a deliberate recovery).
+    private void TryGroundRecover(DeathRecord record)
+    {
+        _grabOnSurvey = false;   // one shot per arming — never loop
+        if (record.UnrecoveredItems is not { Count: > 0 } remaining || _groundItems is not { } ground)
+            return;
+
+        HashSet<string> floor = ground.Items
+            .Select(ItemNameStore.Normalize)
+            .Where(n => n.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        int sent = 0;
+        foreach (string pileName in remaining)
+        {
+            if (!floor.Contains(ItemNameStore.Normalize(pileName))) continue;
+            Send($"get {pileName}");
+            sent++;
+        }
+
+        if (sent > 0)
+        {
+            _stockRecovering = true;
+            _log?.Info(LogCategory, $"stock-recover: get {sent} of {remaining.Count} pile item(s) from the floor");
+        }
+        else
+        {
+            _log?.Info(LogCategory, "stock-recover: none of our pile items on this floor");
+        }
+    }
+
+    // A "You took <item>." landed while we're grabbing a stock deathpile. Drop one
+    // matching entry from the unrecovered set (article/count-insensitive); once the
+    // whole pile is back, finalise Recovered and re-equip the worn half (paced by
+    // the combat interleave, same as the corpse path).
+    private void OnStockItemTaken(string rawItem)
+    {
+        if (_activeRecovery is not { } record || record.UnrecoveredItems is not { } remaining) return;
+        string norm = ItemNameStore.Normalize(rawItem);
+        if (norm.Length == 0) return;
+
+        int idx = remaining.FindIndex(n =>
+            string.Equals(ItemNameStore.Normalize(n), norm, StringComparison.OrdinalIgnoreCase));
+        if (idx < 0) return;   // not one of our pile items (or already counted)
+
+        remaining.RemoveAt(idx);
+        _log?.Info(LogCategory, $"stock-recover: got {rawItem} ({remaining.Count} left)");
+        OnPropertyChanged(nameof(Records));
+
+        if (remaining.Count == 0)
+        {
+            _stockRecovering = false;
+            int total = PileNames(record).Count;
+            ReequipAllWorn(record);
+            FinalizeRecovered(record, $"Recovered the deathpile ({total} item(s)).");
+        }
     }
 
     // The given name of OUR corpse as it appears in the floor survey ("corpse of
@@ -469,21 +558,27 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         return names;
     }
 
-    // Watch for the single "You have recovered the corpse of <name>." line that
-    // ends a `recover corpse` — the whole pile (items + coins) is back at once, so
-    // finalise and (Auto-Equip) re-wear everything that was worn at death. Works
-    // for a manual `recover corpse` too, since we key off the confirmation, not
-    // who sent the command.
+    // Recovery confirmations. Paradigm: the whole pile returns on one "You have
+    // recovered the corpse of <name>." line — finalise and (Auto-Equip) re-wear
+    // everything worn at death (works for a manual `recover corpse` too, since we
+    // key off the confirmation, not who sent it). Stock: items come back one "You
+    // took <item>." at a time — decrement the pile per confirmation.
     private void OnLine(LineExtractor.EmittedLine line)
     {
         if (line.IsPromptLine || _activeRecovery is null) return;
-        if (!CorpseRecoveredRegex().IsMatch(line.Text)) return;
 
-        DeathRecord record = _activeRecovery;
-        int total = PileNames(record).Count;
-        ReequipAllWorn(record);
-        FinalizeRecovered(record,
-            total > 0 ? $"Recovered the corpse ({total} item(s))." : "Recovered the corpse.");
+        if (CorpseRecoveredRegex().IsMatch(line.Text))
+        {
+            DeathRecord record = _activeRecovery;
+            int total = PileNames(record).Count;
+            ReequipAllWorn(record);
+            FinalizeRecovered(record,
+                total > 0 ? $"Recovered the corpse ({total} item(s))." : "Recovered the corpse.");
+            return;
+        }
+
+        if (_stockRecovering && YouTookRegex().Match(line.Text) is { Success: true } took)
+            OnStockItemTaken(took.Groups["item"].Value);
     }
 
     // Re-equip everything worn at death after the corpse is recovered (Auto-Equip).
@@ -613,6 +708,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         _activeRecovery = null;
         _grabOnSurvey = false;
+        _stockRecovering = false;
         record.UnrecoveredItems = null;   // everything accounted for
         SetStatus(record, DeathRecoveryStatus.Recovered, message);
     }
@@ -794,8 +890,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     }
 
     // A floor-survey entry naming our deathpile corpse: "corpse of <given-name>"
-    // (stock renders the given name only, no article). The captured name is the
-    // exact token `recover corpse <name>` takes.
+    // (the survey renders the given name only, no article). The captured name is
+    // the exact token `recover corpse <name>` takes. Paradigm only — Stock scatters
+    // the pile loose instead of packing it in a corpse.
     [GeneratedRegex(@"^corpse of (?<name>.+?)\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex CorpseRegex();
@@ -806,4 +903,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // record Partial (the user can Mark Recovered); no false transition occurs.
     [GeneratedRegex(@"^You have recovered the corpse of .+?\.$", RegexOptions.CultureInvariant)]
     private static partial Regex CorpseRecoveredRegex();
+
+    // "You took <item>." — the own-pickup confirmation for a Stock ground `get`
+    // (matches KnownPatterns.PlayerGets' own branch; the "<player> picks up" form
+    // is another player and never reaches here). Drives the per-item Stock
+    // deathpile decrement.
+    [GeneratedRegex(@"^You took (?<item>.+?)\.$", RegexOptions.CultureInvariant)]
+    private static partial Regex YouTookRegex();
 }

@@ -113,12 +113,13 @@ it isn't here and you're unsure, ask.
   burst must be paced across rounds (a few pieces per round, re-attacking after each) so it doesn't
   stall the fight. The engine re-attacks on the equip's `*Combat Off*` via the same signal a cast
   arms (`CombatManager.NoteBetweenRoundCast`).
-  - **[UNRESOLVED]** Which realm leaves a `corpse of <name>` object vs. loose ground items on death
-    is not pinned down: the client's `DeathRecoveryManager` recovers via `recover corpse <name>`
-    (keyed on a `corpse of <name>` floor survey) and its comments call that the Stock path, but the
-    user has said Stock has "no corpses" and "get covers stock." The combat-break rule above holds
-    regardless of source; the re-equip interleaving is realm-agnostic. **Ask before building any
-    realm-specific recovery-source logic on top of this.**
+  - **Death-pile source differs by realm** *([CONFIRMED 2026-08-24, user])*: on **Stock**, death
+    drops **all your items loose on the ground** — they appear in the room's `You notice … here.`
+    survey and, if the floor is already crowded, can **spill into adjacent rooms**; you recover each
+    with `get <item>` (confirmed by `You took <item>.`). On **Paradigm**, your items are held **inside
+    a corpse** (`corpse of <given-name>` in the survey), recovered in one `recover corpse <name>`
+    (confirmed by `You have recovered the corpse of <name>.`). The combat-break rule above is
+    realm-agnostic (it re-times only the wear/eq burst), so it applies to both.
 - **[OBSERVED]** A two-handed weapon needs both hands free; the game rejects the wield while an
   off-hand is occupied (it isn't "usable" until the off-hand is gone), so the off-hand must be
   `rem`'d first.
