@@ -2012,4 +2012,45 @@ public sealed class CombatManagerSpellsTests
         Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
     }
+
+    // Report paradigm-20260824-215802: engaged a fresh shade after a kill left
+    // _combatOff stuck true, but the attack spell lost the round's cast slot to a
+    // self-buff sent moments earlier (blocked by CastCoordinator's MinRecastInterval
+    // guard — a genuine, correct block, not a bug on its own). DispatchRoundAction's
+    // default case only cleared _combatOff inside the TryCast-succeeded branch, so a
+    // blocked engage left it stuck — OnCombatTick's spell-mode heartbeat gates on
+    // !_combatOff, so nothing ever retried the attack for the rest of the fight (the
+    // character sat there getting hit with no offense at all). _combatOff must clear
+    // as soon as the engine commits to engaging this round, whether or not the send
+    // itself succeeds, so the very next tick gets a chance to retry.
+    [Fact]
+    public void EngageBlockedByRecastInterval_ClearsCombatOff_RetriesNextTick()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "shade");
+
+        // A prior kill's *Combat Off* leaves _combatOff true, same as production.
+        h.Feed("*Combat Off*");
+
+        // A cast just went out (e.g. a self-buff) — stamps CastCoordinator's
+        // recast-interval clock.
+        Assert.True(h.Cast.TryCast("vlwa"));
+        Assert.Equal("vlwa", h.LastSent);
+
+        // A fresh engage arrives immediately after — well within MinRecastInterval
+        // (500ms) — so the attack-spell TryCast is synchronously blocked. Before the
+        // fix, _combatOff stayed stuck true here and nothing ever retried.
+        h.Feed("Also here: shade.");
+        Assert.Equal("vlwa", h.LastSent);              // still blocked — nothing new sent
+        Assert.False(h.Combat.CombatOff);              // the fix: cleared regardless of the block
+        Assert.Equal("shade", h.Combat.Snapshot().CastingSpellTarget);
+
+        // Past the recast-interval guard, the next tick must retry and actually attack.
+        h.AdvanceClock(TimeSpan.FromMilliseconds(600));
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+
+        Assert.Equal("turn shade", h.LastSent);
+    }
 }

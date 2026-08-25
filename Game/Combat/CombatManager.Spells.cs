@@ -394,6 +394,21 @@ public sealed partial class CombatManager
                 // decision later changes. Set the bridge even when the cast is blocked so
                 // we stay in spell mode and retry next tick rather than swinging.
                 _castingSpellTarget = picked.RawName;
+                // Clear _combatOff here, not only inside the TryCast-succeeded branch
+                // below. A fresh engage can lose the round's one-cast slot to a
+                // between-round survival cast that landed the same instant (self-heal/
+                // buff firing on the same HP-changed tick) — TryCast then returns false
+                // and the attack never reaches the server, so no *Combat Engaged*/*Combat
+                // Off* cycle ever starts for this target to interrupt. The existing
+                // OnCombatStatus resume (elsewhere in this class) only fires off a real
+                // *Combat Off* line, so it never sees this case — _combatOff is left
+                // however it was before this engage (stuck true from the PRIOR fight's
+                // kill), and OnCombatTick's spell-mode heartbeat gates on !_combatOff, so
+                // nothing ever retries the blocked cast. Report paradigm-20260824-215802:
+                // engaged a fresh shade, lost the round to a self-buff, and never attacked
+                // it again for the rest of the capture. Clearing it unconditionally here
+                // means the next tick always gets a chance to retry, cast blocked or not.
+                _combatOff = false;
                 // Room-wide multi-attack spells (e.g. dancing blades) hit every enemy
                 // and MUST be cast bare — `blad`, never `blad <mob>` (the server treats
                 // the targeted form as an unknown command). Single-target attack/debuff
@@ -414,7 +429,6 @@ public sealed partial class CombatManager
                     // cascade had already advanced by the time the kill landed).
                     _lastCastAction = decision.Action;
                     _announcedSpellCode = decision.Spell;
-                    _combatOff = false;
                     if (decision.Action == CombatSpellAction.DrainSpell)
                         _log?.Info(LogCategory,
                             $"drain-life {decision.Spell} vs {picked.RawName} — HP under trigger, overriding the round's attack");

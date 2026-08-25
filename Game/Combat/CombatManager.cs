@@ -368,6 +368,12 @@ public sealed partial class CombatManager : IDisposable
     // Cleared the moment we send any attack or the server reports Engaged.
     private bool _combatOff;
 
+    // CastingDirector/diagnostics view of _combatOff — stuck true here with a live
+    // CastingSpellTarget is the signature of report paradigm-20260824-215802: an
+    // engage whose attack cast got blocked (round already spent) left OnCombatTick's
+    // spell-mode heartbeat permanently gated, so nothing ever retried the attack.
+    public bool CombatOff => _combatOff;
+
     // Timestamp of the last interrupt-resume (see TryResumeEngage) — paces
     // re-engages to one per round so a non-sustaining attack (KAI pummel, which
     // emits *Combat Off* after every strike) can't spin.

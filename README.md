@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.25.5**
-> - Combat: disabling AutoCombat mid-fight, or dying, no longer strands the attack-spell cascade latched to a target that's no longer being fought — this was silently blocking all automatic healing, curing, and blessing until the next profile reload
-> - CastingDirector's buff-duration timers are now cleared on death, so a dead-and-gone buff can't suppress a legitimate recast
-> - Auto Bless now re-evaluates immediately when toggled on, matching Auto Heal/Rest
-> - Fixed a prompt-in-chat poisoning bug: another player's own status line quoted inside a chat message could be mistaken for the local character's prompt, corrupting MaxHp and triggering a spurious healing/mana-drain spiral
+> **Version 3.25.6**
+> - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — a between-round survival cast winning the round's cast slot right as a fresh engage tried to attack could permanently stall the fight's retry logic
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

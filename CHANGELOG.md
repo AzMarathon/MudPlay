@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.25.6
+
+- Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast (a heal/buff sent moments earlier) left the engine's `_combatOff` latch stuck true, which permanently blocked the spell-mode retry heartbeat since only a successful cast used to clear it
+- Bug report: new **Combat off (stuck?)** field (Combat weapon state) — true here alongside a live target means the fight is permanently stalled
+- bug reports addressed: paradigm-20260824-215802
+
 ## 3.25.5
 
 - Combat: disabling AutoCombat mid-fight, or dying, no longer strands the attack-spell cascade latched to a target that's no longer being fought — CastingDirector's round-owed gate runs before every category (heal, cure, bless, item-cast, party heal/bless, debuff), so a stale latch was silently blocking all of them until the next profile reload
