@@ -519,10 +519,11 @@ public sealed class RouteChoiceDialogViewModelTests
 
     // ----- Trap-avoid fork -----------------------------------------------
 
-    private static RouteChoice TrapAvoidChoice() =>
+    private static RouteChoice TrapAvoidChoice(int freeTraps = 0, int gatedTraps = 2) =>
         new(FreeStepCount: 3, GatedStepCount: 1,
             System.Array.Empty<RouteRequirement>(), FreeLine, GatedLine,
-            RouteChoiceKind.TrapAvoid);
+            RouteChoiceKind.TrapAvoid,
+            FreeTrapCount: freeTraps, GatedTrapCount: gatedTraps);
 
     [Fact]
     public void TrapAvoid_PreSelectsFreeRoute_HidesSendIt_ShowsTrapCaveat()
@@ -531,11 +532,25 @@ public sealed class RouteChoiceDialogViewModelTests
 
         Assert.True(vm.IsTrapAvoidChoice);
         Assert.False(vm.ShowSendItCard);                         // plain two-way fork
-        Assert.Equal(RouteChoiceResult.Free, vm.SelectedRoute);  // trap-free pre-selected
+        Assert.Equal(RouteChoiceResult.Free, vm.SelectedRoute);  // safer route pre-selected
         Assert.True(vm.IsFreeSelected);
         Assert.True(vm.GoCommand.CanExecute(null));              // Go enabled on open
         Assert.Equal(vm.TrapCaveat, vm.GatedDetail);            // gated sub-line = trap caveat
-        Assert.Contains("trap", vm.GatedDetail);
+        Assert.Contains("trap-free", vm.FreeSummary);           // 0 free traps → "trap-free"
+        Assert.Contains("2 traps", vm.GatedSummary);            // shortest crosses 2
+    }
+
+    [Fact]
+    public void TrapAvoid_FewerButNotZeroTraps_StatesBothCounts()
+    {
+        // The fewest-traps route still crosses an unavoidable trap — it must NOT claim
+        // "trap-free", and both counts show.
+        var vm = new RouteChoiceDialogViewModel(
+            TrapAvoidChoice(freeTraps: 1, gatedTraps: 3), "Deep Cavern (1/9)", id => "");
+
+        Assert.Contains("1 trap", vm.FreeSummary);
+        Assert.DoesNotContain("trap-free", vm.FreeSummary);
+        Assert.Contains("3 traps", vm.GatedSummary);
     }
 
     [Fact]

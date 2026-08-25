@@ -66,7 +66,13 @@ public sealed record RouteChoice(
     RouteChoiceKind Kind = RouteChoiceKind.ItemGate,
     string? TeleportLanding = null,
     RoomKey? StopRoom = null,
-    string? BlockedReason = null)
+    string? BlockedReason = null,
+    // For a TrapAvoid choice: how many traps each route crosses. The free
+    // (fewest-traps) route may still cross an unavoidable trap, so the picker states
+    // the real counts rather than claiming "trap-free" when it isn't. Zero for every
+    // other kind.
+    int FreeTrapCount = 0,
+    int GatedTrapCount = 0)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -212,16 +218,16 @@ public static class RouteChoicePlanner
             landing);
     }
 
-    // Compares the shortest route (traps allowed — the walker's default plan, which
-    // disarms at step time) against a trap-free route (trapped exits refused).
-    // Returns a TrapAvoid RouteChoice when the shortest route crosses at least one
-    // trap AND a trap-free route to the same room exists, so the user can choose the
-    // clean detour instead of trusting the disarm. The trap-free route is the "free"
-    // (safe, pre-selected) side; the trapped shortcut is the "gated" side. No savings
-    // floor — a trap-free alternative is always worth surfacing when one exists (the
-    // user asked to see it), even if it's the same length or longer. Null when the
-    // shortest route crosses no trap (nothing to weigh) or no trap-free route exists
-    // (the walker must cross and disarm — unchanged behaviour, no fork).
+    // Compares the shortest route (by hops — the walker's default plan, which crosses
+    // traps and disarms them at step time) against the fewest-traps route (avoid
+    // every avoidable trap, cross only unavoidable ones). Returns a TrapAvoid
+    // RouteChoice when the fewest-traps route crosses STRICTLY FEWER traps than the
+    // shortest — so the user can take the safer route even when it's longer, and even
+    // when some traps on the way are unavoidable (it still avoids the ones it can).
+    // The fewest-traps route is the "free" (pre-selected) side; the shortest is the
+    // "gated" side. No length floor — worth surfacing whenever it dodges a trap. Null
+    // when the shortest route crosses no trap, or the fewest-traps route can't do any
+    // better (every route crosses the same traps → nothing to avoid, no fork).
     public static RouteChoice? EvaluateTrapAvoid(
         BfsMapper bfs,
         MovementFilter filter,
@@ -233,25 +239,30 @@ public static class RouteChoicePlanner
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(graph);
 
-        // Shortest route: traps allowed (what the walker would otherwise take).
+        // Shortest route: by hops (what the walker would otherwise take).
         IReadOnlyList<Direction>? shortest = bfs.FindPath(source, destination, filter);
         if (shortest is null || shortest.Count == 0) return null;
 
-        // Nothing to weigh unless the shortest route actually crosses a trap.
-        if (!bfs.PathCrossesTrap(source, shortest)) return null;
+        int shortestTraps = bfs.CountTrapsOnPath(source, shortest);
+        if (shortestTraps == 0) return null;   // nothing to avoid
 
-        // Trap-free route: trapped exits refused. None → the only way there crosses a
-        // trap, so there's no clean alternative to offer (walker crosses + disarms).
-        IReadOnlyList<Direction>? clean =
+        // Fewest-traps route: avoids every avoidable trap, keeps only unavoidable
+        // ones. Same destination reachable (it's a cost search, not refuse-all).
+        IReadOnlyList<Direction>? fewest =
             bfs.FindPath(source, destination, filter, avoidTraps: true);
-        if (clean is null || clean.Count == 0) return null;
+        if (fewest is null || fewest.Count == 0) return null;
+
+        int fewestTraps = bfs.CountTrapsOnPath(source, fewest);
+        if (fewestTraps >= shortestTraps) return null;   // can't dodge any → no fork
 
         return new RouteChoice(
-            clean.Count, shortest.Count,
+            fewest.Count, shortest.Count,
             Array.Empty<RouteRequirement>(),
-            BuildKeyPath(graph, source, clean),
+            BuildKeyPath(graph, source, fewest),
             BuildKeyPath(graph, source, shortest),
-            RouteChoiceKind.TrapAvoid);
+            RouteChoiceKind.TrapAvoid,
+            FreeTrapCount: fewestTraps,
+            GatedTrapCount: shortestTraps);
     }
 
     // When every route to the destination is blocked — no gate-free route, and

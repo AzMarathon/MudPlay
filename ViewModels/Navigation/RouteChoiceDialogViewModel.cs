@@ -175,20 +175,29 @@ public sealed partial class RouteChoiceDialogViewModel
         }
         else if (IsTrapAvoidChoice)
         {
+            int freeTraps = choice.FreeTrapCount;
+            int gatedTraps = choice.GatedTrapCount;
             Heading = $"Avoid traps to {destinationLabel}?";
-            FreeSummary = $"Avoid traps — {StepsEta(choice.FreeStepCount, freeEta)}, trap-free";
-            GatedSummary = $"Through the trap — {StepsEta(choice.GatedStepCount, gatedEta)}";
-            TrapCaveat =
-                "The shortcut crosses a trapped exit the walker would try to disarm as it steps — "
-                + "a disarm can fail (no lockpicks, no party disarmer) and springs the trap, so the "
-                + "trap-free route is the safer bet.";
+            // The fewest-traps route isn't always fully clean — it may still cross an
+            // unavoidable trap — so state the real counts instead of claiming "trap-free".
+            FreeSummary = freeTraps == 0
+                ? $"Avoid traps — {StepsEta(choice.FreeStepCount, freeEta)}, trap-free"
+                : $"Fewest traps — {StepsEta(choice.FreeStepCount, freeEta)}, crosses {TrapWord(freeTraps)}";
+            GatedSummary = $"Shortest — {StepsEta(choice.GatedStepCount, gatedEta)}, crosses {TrapWord(gatedTraps)}";
+            TrapCaveat = freeTraps == 0
+                ? "The shortest route crosses a trap the walker would try to disarm as it steps — "
+                    + "a disarm can fail (no lockpicks, no party disarmer) and springs the trap, so the "
+                    + "trap-free route is the safer bet."
+                : $"The shortest route crosses {TrapWord(gatedTraps)}; the safer route can't avoid "
+                    + $"{TrapWord(freeTraps)} (no way around it), but dodges the rest — and a step-time "
+                    + "disarm can fail, so fewer traps is the safer bet.";
             RequirementSummary = string.Empty;
             TeleportCaveat = string.Empty;
             Footnote = "Click a route to preview it on the map, then Go to walk it. "
-                + "The trap-free route is pre-selected — \"through the trap\" takes the shortcut and "
-                + "disarms it en route.";
-            // Default to the safe route so a plain Go avoids the trap; the user can
-            // still click the shortcut. Previewed on open via RaiseSelectionPreview.
+                + "The fewest-traps route is pre-selected — \"shortest\" is quicker but crosses more "
+                + "traps (disarmed en route).";
+            // Default to the safer route so a plain Go dodges what it can; the user
+            // can still click the shortcut. Previewed on open via RaiseSelectionPreview.
             SelectedRoute = RouteChoiceResult.Free;
         }
         else
@@ -261,6 +270,9 @@ public sealed partial class RouteChoiceDialogViewModel
         string steps = n == 1 ? "1 step" : $"{n} steps";
         return eta > TimeSpan.Zero ? $"{steps} (~{RouteEtaEstimator.FormatCompact(eta)})" : steps;
     }
+
+    // "1 trap" / "3 traps" — the trap count on a route, for the trap-avoid cards.
+    private static string TrapWord(int n) => n == 1 ? "1 trap" : $"{n} traps";
 
     // "a raft (buy at General Store); the iron key; a waterskin (dropped by a
     // sand nomad)" — each requirement is one clause; a hazard's any-of counters

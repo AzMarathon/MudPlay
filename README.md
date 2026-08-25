@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.27.2**
+> **Version 3.27.3**
 > - Map: a trapped connection is drawn red only on the trapped **side** now — full red = trap both ways, half red (against the room whose exit is trapped) = a one-way trap — instead of the whole line, which falsely implied the return trip was trapped too
-> - Navigation: a walk-to whose shortest path crosses a trap now offers a **trap-free alternate route** in the picker (pre-selected) when one exists — take the clean detour, or the trapped shortcut (disarmed en route)
+> - Navigation: a walk-to whose shortest path crosses a trap now offers a **fewest-traps** alternate route in the picker (pre-selected) — it avoids every avoidable trap and crosses only the unavoidable ones, so it's offered whenever it beats the shortest route's trap count (not only when a fully trap-free route exists); both cards show their trap count
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -821,6 +821,29 @@ public sealed class RouteChoicePlannerTests
         ]
         """;
 
+    //  1/1 ──N(Trap)── 1/2 ──N(Trap)── 1/4 (goal)   shortest 2 traps; the 1/2→1/4
+    //   └──── E,1/3 ──N────┘                         trap is unavoidable, the other isn't
+    private const string MultiTrapJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Fork",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Trap)", "S": "0", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Mid",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4 (Trap)", "S": "1/1", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Detour",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     [Fact]
     public void OffersTrapAvoidChoice_WhenShortestCrossesTrap_AndCleanRouteExists()
     {
@@ -833,6 +856,8 @@ public sealed class RouteChoicePlannerTests
             Assert.Equal(RouteChoiceKind.TrapAvoid, choice!.Kind);
             Assert.Equal(2, choice.FreeStepCount);      // trap-free detour
             Assert.Equal(1, choice.GatedStepCount);     // trapped shortcut
+            Assert.Equal(0, choice.FreeTrapCount);      // detour is fully clean
+            Assert.Equal(1, choice.GatedTrapCount);     // shortcut crosses the trap
             Assert.Empty(choice.Requirements);
             Assert.True(choice.HasFreeRoute);
 
@@ -843,6 +868,29 @@ public sealed class RouteChoicePlannerTests
             Assert.Equal(
                 new[] { new RoomKey(1, 1), new RoomKey(1, 2) },
                 choice.GatedPath);
+        });
+    }
+
+    [Fact]
+    public void OffersTrapAvoidChoice_WhenFewerButNotZeroTraps()
+    {
+        // The reported case: a route with an avoidable AND an unavoidable trap. The
+        // fork must still fire, offering the fewest-traps route (1 trap) over the
+        // shortest (2 traps) — not give up because it can't be made fully clean.
+        WithGraph(MultiTrapJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 4));
+
+            Assert.NotNull(choice);
+            Assert.Equal(RouteChoiceKind.TrapAvoid, choice!.Kind);
+            Assert.Equal(3, choice.FreeStepCount);      // longer detour
+            Assert.Equal(2, choice.GatedStepCount);     // shortest
+            Assert.Equal(1, choice.FreeTrapCount);      // dodged one, kept the unavoidable
+            Assert.Equal(2, choice.GatedTrapCount);     // shortest crosses both
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 3), new RoomKey(1, 2), new RoomKey(1, 4) },
+                choice.FreePath);
         });
     }
 
@@ -860,14 +908,16 @@ public sealed class RouteChoicePlannerTests
     }
 
     [Fact]
-    public void NoTrapAvoidChoice_WhenTrapIsTheOnlyRoute()
+    public void NoTrapAvoidChoice_WhenTrapIsUnavoidable()
     {
         WithGraph(TrapOnlyJson, (bfs, graph, filter) =>
         {
             RouteChoice? choice = RouteChoicePlanner.EvaluateTrapAvoid(
                 bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 2));
 
-            // No clean alternative — the walker must cross and disarm, no fork.
+            // The fewest-traps route crosses the same one trap as the shortest — it
+            // can't dodge any, so there's nothing better to offer. Walker crosses and
+            // disarms, no fork.
             Assert.Null(choice);
         });
     }
