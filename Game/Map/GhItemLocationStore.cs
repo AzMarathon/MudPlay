@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
+using MudPlay.Game.Inventory;
+using MudPlay.Game.Remote;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 
@@ -54,6 +56,7 @@ public sealed class GhItemLocationStore
         DateTimeOffset now = DateTimeOffset.Now;
         foreach (string entry in items)
         {
+            (int count, _) = CountedCommand.SplitLeadingCount(entry);
             string canonical = GhSurveyMerger.Canonical(entry, _itemNames);
             _sightings[canonical] = new GhItemSighting
             {
@@ -61,6 +64,7 @@ public sealed class GhItemLocationStore
                 Map = room.Map,
                 Room = room.Room,
                 SeenAt = now,
+                Quantity = Math.Max(1, count),
             };
         }
         Persist();
@@ -104,6 +108,53 @@ public sealed class GhItemLocationStore
             return true;
         }
         return false;
+    }
+
+    // This client's sightings encoded for the @roomba sync wire — only the ones
+    // whose canonical name resolves back to an item record number (the sync
+    // format has no name fallback; an unresolvable name can't happen for
+    // anything Roomba itself recorded, since GhSurveyMerger.Canonical only
+    // returns a game-data name when ItemNameStore can already resolve it back).
+    public IReadOnlyList<GhItemSyncRecord> ToSyncRecords()
+    {
+        List<GhItemSyncRecord> records = new();
+        foreach (GhItemSighting s in _sightings.Values)
+        {
+            if (_itemNames.FindByName(s.ItemName) is not int number) continue;
+            records.Add(new GhItemSyncRecord(s.Map, s.Room, number, s.Quantity, s.SeenAt));
+        }
+        return records;
+    }
+
+    // Merge sightings received from another MudPlay client's @roomba sync
+    // reply. Newest SeenAt per item wins — unlike a boss kill time there's no
+    // meaningful "conflict" for a room-contents sighting, so this never needs a
+    // user-facing merge decision, just silent adoption of whichever side saw it
+    // more recently. Records naming an item number outside our active game-data
+    // set are skipped (nothing to resolve a name from). Returns the count
+    // actually applied, for the program log.
+    public int MergeSyncRecords(IReadOnlyList<GhItemSyncRecord> records)
+    {
+        if (_activeBbs is null) return 0;
+        int applied = 0;
+        foreach (GhItemSyncRecord r in records)
+        {
+            string? name = _itemNames.GetName(r.ItemNumber);
+            if (name is null) continue;
+            if (_sightings.TryGetValue(name, out GhItemSighting? existing) && existing.SeenAt >= r.SeenAt) continue;
+
+            _sightings[name] = new GhItemSighting
+            {
+                ItemName = name,
+                Map = r.Map,
+                Room = r.Room,
+                Quantity = r.Quantity,
+                SeenAt = r.SeenAt,
+            };
+            applied++;
+        }
+        if (applied > 0) { Persist(); Changed?.Invoke(); }
+        return applied;
     }
 
     // Load the item-sighting log for the active BBS. Called by AppServices on

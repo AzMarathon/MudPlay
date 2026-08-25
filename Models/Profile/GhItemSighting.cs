@@ -12,4 +12,9 @@ public sealed class GhItemSighting
     public int Map { get; set; }
     public int Room { get; set; }
     public DateTimeOffset SeenAt { get; set; }
+
+    // Stack size observed, from the count-prefixed floor entry ("3 torch"). 1 for
+    // an unstacked / singular entry. Carried through @roomba sync so a receiving
+    // client's merged sighting is as informative as one it observed itself.
+    public int Quantity { get; set; } = 1;
 }

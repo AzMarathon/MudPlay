@@ -765,6 +765,12 @@ public sealed class AppServices
     // room from GhItemLocations. App-lifetime, like the other query handlers.
     public Game.Remote.RoombaQueryHandler RoombaQuery { get; private set; } = null!;
 
+    // Requester-side @roomba sync listener — merges another MudPlay client's
+    // sighting log into GhItemLocations as replies arrive. App-lifetime; unlike
+    // BossTimerSyncCollector it isn't gated to a merge-review window (see the
+    // class comment), so it's always live once constructed.
+    public Game.Remote.RoombaSyncReceiver RoombaSync { get; private set; } = null!;
+
     // Runtime keystroke → macro → wire-send bridge. Constructed up-
     // front; MacroDispatcher.SetSender gets bound from
     // MainWindowViewModel after the telnet client is
@@ -1922,6 +1928,7 @@ public sealed class AppServices
         // scrapes itself (BossTimerSyncCollector); reserve the token so the engine
         // swallows it instead of bouncing "{command invalid}" at each responder.
         RemoteCommands.RegisterIgnored(Game.Remote.BossTimerQueryHandler.SyncResponseToken);
+        RemoteCommands.RegisterIgnored(Game.Remote.RoombaQueryHandler.SyncResponseToken);
         // Stat-screen parser ahead of LivesProvider hookup below so
         // both the engine's @suicide hard-block and the @lives reply
         // path share the same "unknown until first stat poll" source.
@@ -3864,6 +3871,7 @@ public sealed class AppServices
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
         DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
         RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels, RoomGraph);
+        RoombaSync = new Game.Remote.RoombaSyncReceiver(Chat, GhItemLocations, GhRoomLabels, Log);
 
         // Write-side inventory / cash actions — @get-all / @drop-all /
         // @deposit-all / @share emit get / drop / dep / with / give on the wire.
