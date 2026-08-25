@@ -104,6 +104,21 @@ it isn't here and you're unsure, ask.
   two lines arrive back-to-back but are distinct — the client matches each on its own.
 - **[CONFIRMED]** No effect in the game force-unequips gear (no disarm / removal effects).
   Worn state changes *only* from commands the player or the client issues.
+- **[CONFIRMED 2026-08-24, user]** Equipping (`eq` / `wear` / `wield`) **breaks combat** on **both**
+  Stock and Paradigm — it's a non-swing action, so it interrupts the sustained weapon attack and
+  emits `*Combat Off*`, exactly like a between-round cast (see Combat & backstab). By contrast,
+  **getting items from the ground (`get`) and recovering your corpse (`recover corpse`) do NOT
+  break combat** — you can grab your pile mid-fight without dropping the round. This asymmetry is
+  what makes in-combat death recovery safe to interleave: grab everything freely, but the re-equip
+  burst must be paced across rounds (a few pieces per round, re-attacking after each) so it doesn't
+  stall the fight. The engine re-attacks on the equip's `*Combat Off*` via the same signal a cast
+  arms (`CombatManager.NoteBetweenRoundCast`).
+  - **[UNRESOLVED]** Which realm leaves a `corpse of <name>` object vs. loose ground items on death
+    is not pinned down: the client's `DeathRecoveryManager` recovers via `recover corpse <name>`
+    (keyed on a `corpse of <name>` floor survey) and its comments call that the Stock path, but the
+    user has said Stock has "no corpses" and "get covers stock." The combat-break rule above holds
+    regardless of source; the re-equip interleaving is realm-agnostic. **Ask before building any
+    realm-specific recovery-source logic on top of this.**
 - **[OBSERVED]** A two-handed weapon needs both hands free; the game rejects the wield while an
   off-hand is occupied (it isn't "usable" until the off-hand is gone), so the off-hand must be
   `rem`'d first.

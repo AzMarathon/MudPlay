@@ -4401,6 +4401,28 @@ public sealed class AppServices
         // through the walker — attached here since the walker is built
         // after the manager.
         DeathRecovery.AttachWalker(Walker);
+        // Combat-aware re-equip interleaving: recovering a corpse in a room with a
+        // live hostile paces the wear/eq burst across combat rounds (each equip
+        // breaks the round, same as a between-round cast) instead of firing it all
+        // at once. Probes the combat engine for hostiles, re-arms the attack via
+        // the same NoteBetweenRoundCast signal a cast uses, holds the walker on the
+        // CorpseRecovery gate while pieces are pending, and reads item ArmourClass
+        // for the highest-AC-first ordering. The tick drives the pacing/flush.
+        DeathRecovery.AttachCombatInterleave(
+            () => CombatTracker.HasEngageableHostiles,
+            () => Combat.NoteBetweenRoundCast(),
+            () => MovementCoordinator.AssertGate(
+                Game.Map.MovementCoordinator.CorpseRecoveryGate, "DeathRecovery",
+                "recovering — pacing re-equip across combat rounds"),
+            () => MovementCoordinator.ClearGate(
+                Game.Map.MovementCoordinator.CorpseRecoveryGate, "DeathRecovery",
+                "re-equip complete"),
+            name => GameData.FindRowByName("Items", name) is { } row
+                    && row.TryGetProperty("ArmourClass", out System.Text.Json.JsonElement ac)
+                    && ac.ValueKind == System.Text.Json.JsonValueKind.Number
+                    && ac.TryGetInt32(out int acv) ? acv : 0);
+        Tick.CombatTickElapsed += DeathRecovery.OnRecoveryCombatRound;
+        Tick.HeartbeatElapsed += DeathRecovery.OnRecoveryHeartbeat;
         // Route walker over trapped exits through the TrapDisarmManager. The
         // walker only enqueues on a RoomExitHint.Trap — it already knows a trap
         // sits on the exit, so it disarms directly (trapKnown: true) instead of

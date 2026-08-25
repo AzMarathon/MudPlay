@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.27.0
+
+- New feature: **combat-aware corpse re-equip** — when Auto-Equip on recovery is on and you recover your pile in a room with a live hostile, MudPlay no longer dumps the whole wear/eq burst at once (each equip breaks the combat round). It engages the hostile, grabs the pile (which doesn't interrupt the fight), then puts a few pieces on between combat rounds — weapon first, then armour heaviest-first — re-attacking after each burst, and equips whatever's left the instant the room clears
+- Bug report: new **Re-equip pieces pending** field (shown mid-recovery) so a "recovered but not fully re-equipped" capture is legible
+
 ## 3.26.0
 
 - New feature: **window snapping** — MudPlay's panel windows (Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats) snap flush to each other's edges as you drag them near, on every platform. Dragging the **main** window carries the whole snapped cluster with it; grab any other panel to pull it off freely. Toggle it in **Settings → General → "Snap windows together"** (on by default); child windows opened from within a panel don't snap

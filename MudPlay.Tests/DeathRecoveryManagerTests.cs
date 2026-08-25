@@ -37,6 +37,16 @@ public sealed class DeathRecoveryManagerTests
         public List<string> Sent { get; } = new();
         public InventorySnapshot Snapshot { get; set; } = InventorySnapshot.Empty;
 
+        // Combat-interleave spies: Hostiles drives the hostilesPresent probe,
+        // ResumeArmed counts NoteBetweenRoundCast nudges, GateHeld mirrors the
+        // CorpseRecovery gate, Ac backs the ArmourClass lookup.
+        public bool Hostiles { get; set; }
+        public int ResumeArmed { get; private set; }
+        public bool GateHeld { get; private set; }
+        public Dictionary<string, int> Ac { get; } = new();
+        public void CombatRound() => Recovery.OnRecoveryCombatRound();
+        public void Heartbeat() => Recovery.OnRecoveryHeartbeat();
+
         private const string GraphJson = """
             [
               { "Map Number": 1, "Room Number": 1, "Name": "Town Gates",
@@ -71,6 +81,12 @@ public sealed class DeathRecoveryManagerTests
             Recovery.AttachGroundItems(Ground);
             Recovery.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Recovery.AttachInventorySnapshot(() => Snapshot);
+            Recovery.AttachCombatInterleave(
+                () => Hostiles,
+                () => ResumeArmed++,
+                () => GateHeld = true,
+                () => GateHeld = false,
+                name => Ac.TryGetValue(name, out int v) ? v : 0);
 
             Profile.LoadBlank();
             Profile.Current!.Name = characterName;
@@ -272,6 +288,91 @@ public sealed class DeathRecoveryManagerTests
         Assert.Contains("look", h.Sent);                   // re-look to re-render the survey
         h.FeedSurvey("corpse of Ermias");                  // the look's survey
         Assert.Contains("recover corpse Ermias", h.Sent);
+    }
+
+    [Fact]
+    public void OrderForReequip_WeaponFirst_ThenArmourByHighestAc()
+    {
+        var worn = new List<DeathItem>
+        {
+            new("cloth cap", "Head"),
+            new("plate mail", "Torso"),
+            new("platinum mace", "Weapon Hand"),
+            new("small shield", "Off-Hand"),
+            new("leather boots", "Feet"),
+        };
+        var ac = new Dictionary<string, int>
+        {
+            ["cloth cap"] = 2, ["plate mail"] = 30, ["leather boots"] = 5,
+        };
+        List<DeathItem> ordered =
+            DeathRecoveryManager.OrderForReequip(worn, n => ac.TryGetValue(n, out int v) ? v : 0);
+
+        // Weapon Hand, then Off-Hand, then armour highest-AC-first.
+        Assert.Equal(
+            new[] { "platinum mace", "small shield", "plate mail", "leather boots", "cloth cap" },
+            ordered.Select(i => i.Name).ToArray());
+    }
+
+    [Fact]
+    public void InCombat_Recovery_PacesReequipAcrossRounds_ThenFlushesOnRoomClear()
+    {
+        using GraphHarness h = new();
+        var worn = new[]
+        {
+            new EquippedItem("platinum mace", "Weapon Hand"),
+            new EquippedItem("plate mail", "Torso"),
+            new EquippedItem("steel helm", "Head"),
+            new EquippedItem("steel greaves", "Legs"),
+            new EquippedItem("leather boots", "Feet"),
+            new EquippedItem("silver ring", "Finger"),
+        };
+        Die(h, worn, Array.Empty<string>());
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+        h.Hostiles = true;                                 // a live hostile shares the death room
+
+        h.EnterGates();
+        h.FeedSurvey("corpse of Ermias");
+        Assert.Contains("recover corpse Ermias", h.Sent);  // recovery itself is unchanged (safe)
+
+        h.Sent.Clear();
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        Assert.Empty(h.Sent);                              // NOT fired all at once — paced
+        Assert.True(h.GateHeld);                           // walker held while pieces pend
+
+        h.CombatRound();                                   // first round-gap: 4 pieces + one re-attack
+        Assert.Equal(4, h.Sent.Count);
+        Assert.Equal("eq platinum mace", h.Sent[0]);       // weapon first
+        Assert.Equal(1, h.ResumeArmed);
+        Assert.True(h.GateHeld);                           // 2 still pending
+
+        h.Hostiles = false;                                // mob dies between rounds → room clears
+        h.Heartbeat();                                     // remainder flushes at once
+        Assert.Equal(6, h.Sent.Count);
+        Assert.False(h.GateHeld);                          // gate released
+    }
+
+    [Fact]
+    public void NoHostile_Recovery_EquipsAllAtOnce_WeaponFirst_NoGate()
+    {
+        using GraphHarness h = new();
+        Die(h, new[]
+        {
+            new EquippedItem("plate mail", "Torso"),
+            new EquippedItem("platinum mace", "Weapon Hand"),
+        }, Array.Empty<string>());
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+        // Hostiles defaults false — an empty room recovers exactly as before.
+
+        h.EnterGates();
+        h.FeedSurvey("corpse of Ermias");
+        h.Sent.Clear();
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+
+        Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
+        Assert.False(h.GateHeld);                          // no gate when there's no fight to pace against
     }
 
     // North Square (1/3) — the adjacent room, used to leave and re-enter the death room.

@@ -183,6 +183,10 @@ public static class BugReportBuilder
         // armed and how the last pile resolved (Recovered / Partial / Missing).
         Kv(sb, "Auto-recover deathpiles", svc.DeathRecovery.AutoRecover ? "on" : "off");
         Kv(sb, "Auto-equip on recovery", svc.DeathRecovery.AutoEquip ? "on" : "off");
+        // Non-zero while an in-combat recovery is still pacing its re-equip across
+        // rounds — shows a "recovered but not fully re-equipped" report mid-burst.
+        if (svc.DeathRecovery.PendingReequipCount > 0)
+            Kv(sb, "Re-equip pieces pending", svc.DeathRecovery.PendingReequipCount.ToString());
         var lastDeath = svc.DeathRecovery.Records.Count > 0 ? svc.DeathRecovery.Records[^1] : null;
         Kv(sb, "Latest deathpile", lastDeath is null
             ? "(none)"

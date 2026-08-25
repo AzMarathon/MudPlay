@@ -56,6 +56,30 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private bool _grabOnSurvey;
     private GroundItemTracker? _groundItems;
 
+    // Combat-aware re-equip interleaving. Recovering the corpse itself
+    // (`recover corpse`) doesn't break combat, but each re-equip (wear/eq) DOES —
+    // exactly like a between-round cast (see OutboundCastObserver). So when the
+    // corpse comes back in a room with a live hostile, the wear/eq burst is paced
+    // a few pieces per combat round instead of firing all at once, letting the
+    // weapon attack keep landing between bursts; the remainder is flushed the
+    // moment the room clears. _pendingEquip holds the ordered pieces still to go
+    // on; _equipRoom pins the room they belong to (abandon if we leave it). All
+    // delegates are wired by AppServices after the combat engine exists; unbound
+    // (tests / no hostile), ReequipAllWorn sends everything at once as before.
+    private readonly Queue<DeathItem> _pendingEquip = new();
+    private (int Map, int Room)? _equipRoom;
+    private bool _recoveryGateHeld;
+    private Func<bool>? _hostilesPresent;
+    private Action? _armCombatResume;
+    private Action? _assertRecoveryGate;
+    private Action? _clearRecoveryGate;
+    private Func<string, int>? _armourClass;
+
+    // Pieces re-equipped per combat round while a hostile is up. A wear/eq breaks
+    // the round, so ~4 fits the 5 s round window and still leaves time for the
+    // re-attack to land before the next round (user-tuned "3-4 pieces / ~3 s").
+    private const int EquipBurstPerRound = 4;
+
     public DeathRecoveryManager(
         DeathLineWatcher deathWatcher,
         ProfileService profile,
@@ -129,6 +153,35 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _groundItems.SurveyUpdated += OnSurveyUpdated;
     }
 
+    // Wire the combat-interleaving probes so an in-combat corpse recovery paces
+    // its re-equip across rounds instead of dumping the whole wear/eq burst (which
+    // would repeatedly break the round). hostilesPresent reports a live engageable
+    // hostile in the room; armCombatResume nudges the combat engine to re-attack
+    // on the *Combat Off* a burst produces (same signal a between-round cast arms);
+    // assert/clearRecoveryGate hold the walker on the CorpseRecovery gate while
+    // pieces are still going on; armourClass returns an item's game-data ArmourClass
+    // for the highest-AC-first ordering. Bound by AppServices once the combat
+    // engine + tick exist; the tick drives OnRecoveryCombatRound / OnRecoveryHeartbeat.
+    // Unbound, ReequipAllWorn falls back to the immediate all-at-once burst.
+    public void AttachCombatInterleave(
+        Func<bool> hostilesPresent,
+        Action armCombatResume,
+        Action assertRecoveryGate,
+        Action clearRecoveryGate,
+        Func<string, int> armourClass)
+    {
+        ArgumentNullException.ThrowIfNull(hostilesPresent);
+        ArgumentNullException.ThrowIfNull(armCombatResume);
+        ArgumentNullException.ThrowIfNull(assertRecoveryGate);
+        ArgumentNullException.ThrowIfNull(clearRecoveryGate);
+        ArgumentNullException.ThrowIfNull(armourClass);
+        _hostilesPresent = hostilesPresent;
+        _armCombatResume = armCombatResume;
+        _assertRecoveryGate = assertRecoveryGate;
+        _clearRecoveryGate = clearRecoveryGate;
+        _armourClass = armourClass;
+    }
+
     // Bind the live inventory snapshot provider so SimulateDeath captures a
     // realistic deathpile. Real deaths capture via RoomTracker.NoteDeath; this is
     // only for the test button.
@@ -153,6 +206,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // newest-first for display.
     public IReadOnlyList<DeathRecord> Records =>
         _profile.Current?.DeathHistory is { } list ? list : Array.Empty<DeathRecord>();
+
+    // Worn pieces still queued for the combat-paced re-equip (0 when idle) — a
+    // bug report taken mid-recovery shows how far the in-combat burst has drained.
+    public int PendingReequipCount => _pendingEquip.Count;
 
     // Auto-grab a deathpile's lost items (ignoring per-item auto-get policy) when
     // re-entering the death room. Persisted per-character. The grab itself is
@@ -283,6 +340,14 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             _activeRecovery = null;
             _grabOnSurvey = false;
         }
+
+        // Left the room our paced re-equip pieces belong to (rare — the
+        // CorpseRecovery gate holds the walker while pieces are pending, so this is
+        // really only a manual move): stop equipping and release the gate rather
+        // than putting the rest on in the wrong room.
+        if (_pendingEquip.Count > 0 && _equipRoom is { } er
+            && (room is null || er.Map != room.Key.Map || er.Room != room.Key.Room))
+            AbandonPendingEquip();
 
         if (room is null || t.NewConfidence != RoomConfidence.Confirmed) return;
 
@@ -421,24 +486,127 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             total > 0 ? $"Recovered the corpse ({total} item(s))." : "Recovered the corpse.");
     }
 
-    // Re-equip every item worn at death after the corpse is recovered (Auto-Equip).
-    // The recover command drops everything back into the pack; this puts the worn
-    // half back on with its slot-correct verb. A held item (weapon / off-hand) is
-    // equipped with `eq` — matching EquipmentManager's wield path — NOT `hold`, which
-    // only carries the item in hand rather than wielding it (report: corpse recovery
-    // sent "hold platinum mace" for the weapon). Body armour uses `wear`. Lights
-    // never reach here: a readied light is tracked separately (not in the worn slot
-    // set), and it has its own `use` verb (see AutoLightProvisioner).
+    // Re-equip everything worn at death after the corpse is recovered (Auto-Equip).
+    // The recover command drops the whole pile back into the pack; this puts the
+    // worn half back on. Ordering is weapon(s) first then armour highest-AC-first
+    // (see OrderForReequip). When a hostile is in the room the wear/eq burst would
+    // repeatedly break the combat round, so we don't fire it all at once — enqueue
+    // it and pace it across rounds (OnRecoveryCombatRound), holding the walker on
+    // the CorpseRecovery gate meanwhile. No hostile (or interleaving unbound) →
+    // put everything on at once, as before.
     private void ReequipAllWorn(DeathRecord record)
     {
-        if (!AutoEquip || record.EquippedAtDeath is not { } worn) return;
-        foreach (DeathItem item in worn)
+        if (!AutoEquip || record.EquippedAtDeath is not { } worn || worn.Count == 0) return;
+
+        List<DeathItem> ordered = OrderForReequip(worn, _armourClass);
+
+        if (_hostilesPresent?.Invoke() == true && record.Room is { } room)
         {
-            if (string.IsNullOrWhiteSpace(item.Name)) continue;
-            string verb = item.IsHeld ? "eq" : "wear";
-            _log?.Info(LogCategory, $"auto-equip: {verb} {item.Name}");
-            Send($"{verb} {item.Name}");
+            _pendingEquip.Clear();
+            foreach (DeathItem item in ordered) _pendingEquip.Enqueue(item);
+            _equipRoom = (room.Map, room.Room);
+            AssertRecoveryGate();
+            _log?.Info(LogCategory,
+                $"auto-equip: hostile present — pacing {_pendingEquip.Count} piece(s) across combat rounds");
+            return;
         }
+
+        foreach (DeathItem item in ordered) SendEquip(item);
+    }
+
+    // Order the worn set for re-equip: weapon(s) first — so our swings do real
+    // damage sooner while the fight's still on — then armour highest-AC-first
+    // (weakest last). Weapon Hand precedes Off-Hand; armour AC is the item's
+    // game-data ArmourClass (0 when the lookup is unbound or the item's unknown,
+    // which sorts it last). Stable ordering keeps same-AC pieces in captured order.
+    // internal + static so a test can pin the order without a live manager.
+    internal static List<DeathItem> OrderForReequip(
+        IReadOnlyList<DeathItem> worn, Func<string, int>? armourClass)
+    {
+        List<DeathItem> named = worn.Where(i => !string.IsNullOrWhiteSpace(i.Name)).ToList();
+        List<DeathItem> ordered = named
+            .Where(i => i.IsHeld)
+            .OrderBy(i => i.Slot == "Off-Hand" ? 1 : 0)
+            .ToList();
+        ordered.AddRange(named
+            .Where(i => !i.IsHeld)
+            .OrderByDescending(i => armourClass?.Invoke(i.Name) ?? 0));
+        return ordered;
+    }
+
+    // Send one piece's slot-correct equip verb. A held item (weapon / off-hand) is
+    // wielded with `eq` — matching EquipmentManager's wield path — NOT `hold`,
+    // which only carries it in hand rather than wielding it (report: corpse
+    // recovery sent "hold platinum mace" for the weapon). Body armour uses `wear`.
+    // Lights never reach here: a readied light is tracked separately (not in the
+    // worn slot set) and has its own `use` verb (see AutoLightProvisioner).
+    private void SendEquip(DeathItem item)
+    {
+        string verb = item.IsHeld ? "eq" : "wear";
+        _log?.Info(LogCategory, $"auto-equip: {verb} {item.Name}");
+        Send($"{verb} {item.Name}");
+    }
+
+    // Combat-round pulse (TickEngine.CombatTickElapsed, ~5 s, driven by damage
+    // lines — NOT by the *Combat Off* our own equips emit, so it can't re-enter
+    // mid-burst). Put the next handful of pieces on, then nudge the engine to
+    // re-attack on the *Combat Off* they cause. Once the room is clear (the mob
+    // died) or the queue empties, the remainder goes on at once. No-op when nothing
+    // is pending.
+    public void OnRecoveryCombatRound()
+    {
+        if (_pendingEquip.Count == 0) return;
+        if (_hostilesPresent?.Invoke() != true) { FlushEquipQueue(); return; }
+
+        for (int i = 0; i < EquipBurstPerRound && _pendingEquip.Count > 0; i++)
+            SendEquip(_pendingEquip.Dequeue());
+        _armCombatResume?.Invoke();
+
+        if (_pendingEquip.Count == 0) ReleaseRecoveryGate();
+    }
+
+    // 1 s heartbeat — only used to flush the remaining pieces the instant the room
+    // clears (a kill between combat rounds), rather than waiting up to a full round
+    // for the next combat pulse. No-op while a hostile is still up (the combat
+    // pulse paces those) or nothing is pending.
+    public void OnRecoveryHeartbeat()
+    {
+        if (_pendingEquip.Count == 0 || _hostilesPresent?.Invoke() == true) return;
+        FlushEquipQueue();
+    }
+
+    private void FlushEquipQueue()
+    {
+        while (_pendingEquip.Count > 0) SendEquip(_pendingEquip.Dequeue());
+        _equipRoom = null;
+        ReleaseRecoveryGate();
+    }
+
+    // Give up on the remaining pieces (we left the recovery room) — drop them and
+    // release the gate. The items are back in the pack either way; the user can
+    // re-equip manually.
+    private void AbandonPendingEquip()
+    {
+        if (_pendingEquip.Count > 0)
+            _log?.Info(LogCategory,
+                $"auto-equip: left the room with {_pendingEquip.Count} piece(s) unequipped — abandoning");
+        _pendingEquip.Clear();
+        _equipRoom = null;
+        ReleaseRecoveryGate();
+    }
+
+    private void AssertRecoveryGate()
+    {
+        if (_recoveryGateHeld) return;
+        _recoveryGateHeld = true;
+        _assertRecoveryGate?.Invoke();
+    }
+
+    private void ReleaseRecoveryGate()
+    {
+        if (!_recoveryGateHeld) return;
+        _recoveryGateHeld = false;
+        _clearRecoveryGate?.Invoke();
     }
 
     private void FinalizeRecovered(DeathRecord record, string message)
@@ -622,6 +790,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _lines = null;
         if (_groundItems is not null) _groundItems.SurveyUpdated -= OnSurveyUpdated;
         _groundItems = null;
+        AbandonPendingEquip();   // never strand the CorpseRecovery gate asserted
     }
 
     // A floor-survey entry naming our deathpile corpse: "corpse of <given-name>"
