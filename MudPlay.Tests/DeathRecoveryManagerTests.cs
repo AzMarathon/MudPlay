@@ -433,6 +433,28 @@ public sealed class DeathRecoveryManagerTests
         Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);   // helm still out → Partial
     }
 
+    [Fact]
+    public void Stock_PassThrough_GrabsSpilloverFromAdjacentRoom()
+    {
+        using GraphHarness h = new();
+        Die(h, new[] { new EquippedItem("steel helm", "Head") }, Array.Empty<string>());
+        // Simulate a pile whose helm overflowed into the room next door.
+        h.Latest.UnrecoveredItems = new List<string> { "steel helm" };
+        h.Latest.Status = DeathRecoveryStatus.Partial;
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+
+        // Walk into North Square (1/3), which borders the death room (1/1).
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.FeedSurvey("a steel helm");                 // our overflow is on this floor
+        Assert.Contains("get steel helm", h.Sent);    // grabbed in-stride, no detour
+
+        h.Recovery.FeedTestLine("You took a steel helm.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Contains("wear steel helm", h.Sent);   // recovered gear re-worn
+    }
+
     // North Square (1/3) — the adjacent room, used to leave and re-enter the death room.
     private static RoomObservation Obs3()
         => new("North Square", new HashSet<Direction>(new[] { Direction.S }));

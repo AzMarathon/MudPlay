@@ -233,7 +233,4 @@ public sealed class DeathGroundSweep
         _log?.Info(LogCategory, $"stock-sweep complete: {_want.Count} item(s) still missing");
         cb?.Invoke();
     }
-
-    // Test seam — drive the heartbeat pump deterministically.
-    internal void PumpForTests() => OnHeartbeat();
 }

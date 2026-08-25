@@ -4,8 +4,10 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.27.0
 
-- New feature: **combat-aware corpse re-equip** — when Auto-Equip on recovery is on and you recover your pile in a room with a live hostile, MudPlay no longer dumps the whole wear/eq burst at once (each equip breaks the combat round). It engages the hostile, grabs the pile (which doesn't interrupt the fight), then puts a few pieces on between combat rounds — weapon first, then armour heaviest-first — re-attacking after each burst, and equips whatever's left the instant the room clears
-- Bug report: new **Re-equip pieces pending** field (shown mid-recovery) so a "recovered but not fully re-equipped" capture is legible
+- New feature: **realm-complete, combat-aware death recovery** — recovery now works on both realms: Paradigm recovers your `corpse` in one command; Stock `get`s your items loose off the floor (previously Stock recovered nothing)
+- Recovering with a hostile present: engage first, grab the pile (which doesn't break combat), then pace the re-equip between rounds — weapon first, then armour heaviest-first — re-attacking after each burst; whatever's left goes on the instant the room clears
+- Stock spillover: a deliberate recovery (Recover Now / walked to the death room) sweeps each exit and walks to collect items that overflowed into adjacent rooms; an auto-recover walk that passes through a death room grabs your overflow from the rooms right before and after it in-stride, no detour
+- Bug report: new **Re-equip pieces pending** field (shown mid-recovery)
 
 ## 3.26.0
 
