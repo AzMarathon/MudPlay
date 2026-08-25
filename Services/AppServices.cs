@@ -4938,6 +4938,14 @@ public sealed class AppServices
         RoomTracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
         RoomTracker.PlayerDeathObserved += () => CastDirector.ResetBuffTracking();
 
+        // Death drops us from the party server-side — a follower is removed, a
+        // leader's party disbands. PlayerDroppedGate already clears our roster on the
+        // HP<=0 drop, but an INSTANT death (`suicide`) skips mortally-wounded, so that
+        // hook never fires and a leader gets no "no longer following" line either.
+        // Clear on the death event too, so `@join`/`@invite` don't keep replying
+        // "I'm following someone; denied." (report: died via suicide, still following).
+        RoomTracker.PlayerDeathObserved += () => Party.NoteSelfDropped();
+
         // Party-death roster-cleanup bridge. Leader-side: when an active party
         // member dies mid-route it lingers as an [Invited] par slot; we uninvite
         // that phantom once combat clears so the loop / walk-to doesn't stall on

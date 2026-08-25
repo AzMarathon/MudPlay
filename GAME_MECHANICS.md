@@ -1033,6 +1033,12 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   the client still believed it was partied and following the leader. The **only** reason a dropped
   character still tracks the leader's room is that the leader `drag`s them — following is an artifact
   of the drag, not live party membership.
+- **`suicide` / instant death also removes you — with no drop stage** *([CONFIRMED 2026-08-25, user])*.
+  A `suicide` (or any instant death that costs a life) skips the mortally-wounded / 0-HP drop entirely:
+  it goes straight to `After a LONG thought, you take your own life.` → `You now have N lives remaining.`
+  → respawn. Party removal still happens — a **follower** sees `You are no longer following <leader>.`
+  and is out of the party; a **leader**'s party **disbands** — but there's no `<name> drops to the
+  ground!` line, since the character never passed through the mortally-wounded state.
 - While dropped / mortally wounded the game **rejects every action command**: movement, casting,
   aiding, telepaths all bounce with `You may not do that while you are mortally wounded!`,
   `Your command had no effect.`, or (for remote / telepath commands) `{command invalid or not

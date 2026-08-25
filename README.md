@@ -6,6 +6,7 @@
 > - Recovering with a hostile present: engage first, grab the pile (which doesn't break combat), then pace the re-equip between rounds — weapon first, then armour heaviest-first — re-attacking after each burst; whatever's left goes on the instant the room clears
 > - Stock spillover: a deliberate recovery sweeps each exit and walks to collect items that overflowed into adjacent rooms; an auto-recover walk that passes through a death room grabs your overflow from the rooms right before and after it in-stride
 > - Bug report: new **Re-equip pieces pending** field
+> - Party: dying (including an instant `suicide`) now clears your party state — a follower is removed, a leader's party disbands — so `@join`/`@invite` stop replying "I'm following someone; denied." after a death
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
