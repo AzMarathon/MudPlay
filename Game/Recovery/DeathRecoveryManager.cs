@@ -725,10 +725,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             neighbours[dir] = exit.Target;
         if (neighbours.Count == 0) return false;
 
-        AssertRecoveryGate();   // hold the walker's own routing until the sweep ends
+        // NOTE: do NOT assert the CorpseRecovery gate here — it pauses movement, so
+        // it would block the sweep's own WalkTo out to a neighbour (the sweep "looked,
+        // saw items, and sat"). The sweep drives the walker directly; the _sweep.Active
+        // guard in OnRoomChanged already stops recovery re-arming while it runs.
         bool started = _sweep.Begin(here.Key, neighbours, remaining, () => OnStockSweepComplete(record));
-        if (!started) ReleaseRecoveryGate();
-        else _log?.Info(LogCategory, "stock-recover: spillover sweep started");
+        if (started) _log?.Info(LogCategory, "stock-recover: spillover sweep started");
         return started;
     }
 
@@ -738,7 +740,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private void OnStockSweepComplete(DeathRecord record)
     {
         _stockSweepPending = false;
-        ReleaseRecoveryGate();
         ReequipAllWorn(record);
         if (record.UnrecoveredItems is not { Count: > 0 } left)
         {
@@ -785,11 +786,24 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private static List<string> PileNames(DeathRecord record)
     {
         var names = new List<string>();
-        if (record.EquippedAtDeath is { } worn)
-            names.AddRange(worn.Where(i => !string.IsNullOrWhiteSpace(i.Name)).Select(i => i.Name));
-        if (record.LostItems is { } lost)
-            names.AddRange(lost.Where(i => !string.IsNullOrWhiteSpace(i.Name)).Select(i => i.Name));
+        AddPileNames(names, record.EquippedAtDeath);
+        AddPileNames(names, record.LostItems);
         return names;
+    }
+
+    // Expand a captured stack ("15 torch") into per-unit bare names ("torch" ×15).
+    // Stock has no batched `get N <item>` — it'd send a malformed `get 15 torch` —
+    // so each unit needs its own `get torch` and matches its own "You took torch.".
+    // Worn gear is singular and passes through unchanged.
+    private static void AddPileNames(List<string> into, List<DeathItem>? items)
+    {
+        if (items is null) return;
+        foreach (DeathItem item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.Name)) continue;
+            (int count, string bare) = CountedCommand.SplitLeadingCount(item.Name.Trim());
+            for (int i = 0; i < Math.Max(1, count); i++) into.Add(bare);
+        }
     }
 
     // Recovery confirmations. Paradigm: the whole pile returns on one "You have
@@ -799,7 +813,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // took <item>." at a time — decrement the pile per confirmation.
     private void OnLine(LineExtractor.EmittedLine line)
     {
-        if (line.IsPromptLine) return;
+        // Do NOT skip IsPromptLine here: a `get` confirmation ("You took X.") is
+        // drawn by OVERWRITING the echoed command on the prompt row (the game sends
+        // ^[[K to clear it), so it's flagged as a prompt line — gating on that
+        // silently dropped every stock grab's decrement (reports stock-20260825-101612
+        // / -104351). The content regexes below never match a bare prompt, so it's
+        // safe to run them regardless.
 
         // While the sweep runs, its peeked-floor surveys arrive through
         // GroundItemTracker → OnSurveyUpdated (multi-line-safe); here we only need
@@ -822,7 +841,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         if (_activeRecovery is null) return;
 
-        if (CorpseRecoveredRegex().IsMatch(line.Text))
+        if (!line.IsPromptLine && CorpseRecoveredRegex().IsMatch(line.Text))
         {
             DeathRecord record = _activeRecovery;
             int total = PileNames(record).Count;
@@ -1033,9 +1052,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _wireSender(Encoding.Latin1.GetBytes(text + "\r"));
     }
 
-    // Test seam — feed a plain inbound line to the pickup parser.
-    internal void FeedTestLine(string text, DateTimeOffset? when = null)
-        => OnLine(new LineExtractor.EmittedLine(text, [], when ?? DateTimeOffset.UtcNow, false));
+    // Test seam — feed a plain inbound line to the pickup parser. isPromptLine
+    // exercises the "You took" confirmation arriving on a redrawn prompt row.
+    internal void FeedTestLine(string text, DateTimeOffset? when = null, bool isPromptLine = false)
+        => OnLine(new LineExtractor.EmittedLine(text, [], when ?? DateTimeOffset.UtcNow, isPromptLine));
 
     // Append a synthetic death record (the "Simulate Death" button) so the DEATH
     // grid + recovery flow can be exercised without dying in game. Decrements the

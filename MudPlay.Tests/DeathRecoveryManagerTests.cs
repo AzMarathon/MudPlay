@@ -434,6 +434,46 @@ public sealed class DeathRecoveryManagerTests
     }
 
     [Fact]
+    public void Stock_Recovery_StackedItem_GetsBareNamePerUnit_NotBatched()
+    {
+        using GraphHarness h = new();
+        Die(h, Array.Empty<EquippedItem>(), new[] { "3 torch" });   // captured as a stack
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+
+        h.EnterGates();
+        h.FeedSurvey("3 torch");
+
+        // Stock has no batched `get N item` — send bare `get torch`, once per unit.
+        Assert.Equal(3, h.Sent.Count(s => s == "get torch"));
+        Assert.DoesNotContain(h.Sent, s => s.Contains("get 3 torch"));
+
+        h.Recovery.FeedTestLine("You took torch.");
+        h.Recovery.FeedTestLine("You took torch.");
+        Assert.NotEqual(DeathRecoveryStatus.Recovered, h.Latest.Status);   // one still out
+        h.Recovery.FeedTestLine("You took torch.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
+    public void Stock_Recovery_YouTookOnPromptRow_StillDecrements()
+    {
+        using GraphHarness h = new();
+        Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
+        h.Paradigm = false;
+        h.Recovery.AutoRecover = true;
+
+        h.EnterGates();
+        h.FeedSurvey("a torch");
+        Assert.Contains("get torch", h.Sent);
+
+        // The get confirmation is redrawn onto the prompt row (IsPromptLine=true) —
+        // recovery must still count it (else the pile never finalises).
+        h.Recovery.FeedTestLine("You took torch.", isPromptLine: true);
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
     public void Stock_PassThrough_GrabsSpilloverFromAdjacentRoom()
     {
         using GraphHarness h = new();
