@@ -3941,7 +3941,11 @@ public sealed class AppServices
             // (Items.Worn == Off-Hand); OffHandNames is built straight from every
             // Items.json row (not the collision-prone by-name index), so it answers
             // correctly even for a display name shared with a non-wearable item.
-            isOffHandItem: name => ItemNames.OffHandNames.Contains(name, StringComparer.OrdinalIgnoreCase));
+            isOffHandItem: name => ItemNames.OffHandNames.Contains(name, StringComparer.OrdinalIgnoreCase),
+            // A two-handed wielded weapon fills both hands, so an off-hand buff item
+            // can't be equipped until it's removed — the reverse of a two-handed cast
+            // item. Same game-data 2H check the combat weapon-swap uses.
+            isWornWeaponTwoHanded: IsConfiguredWeaponTwoHanded);
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
 

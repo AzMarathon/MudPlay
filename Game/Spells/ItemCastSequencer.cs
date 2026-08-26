@@ -64,6 +64,11 @@ public sealed class ItemCastSequencer
     // Lets the two-handed branch recognize a Worn-bucketed off-hand blocker. Null
     // when unwired (tests) — the Worn slot is then never scanned.
     private readonly Func<string, bool>? _isOffHandItem;
+    // True when the named WIELDED weapon is two-handed in the active game data. A
+    // two-hander fills both hands, so an off-hand cast item can't be equipped while
+    // it's worn — the reverse of the two-handed-CAST-item case. Null when unwired
+    // (tests) — the reverse dance is then never taken.
+    private readonly Func<string, bool>? _isWornWeaponTwoHanded;
     // Invoked when a swap is about to hit the wire, so auto-equip can stand off the
     // borrowed slot while this sequence's own restore handles it (see
     // AutoEquipCoordinator.NoteItemCastSwap). Null when unwired (tests).
@@ -77,7 +82,8 @@ public sealed class ItemCastSequencer
         LogService? log = null,
         Func<string, string?>? desiredSlotItem = null,
         Action? onSwap = null,
-        Func<string, bool>? isOffHandItem = null)
+        Func<string, bool>? isOffHandItem = null,
+        Func<string, bool>? isWornWeaponTwoHanded = null)
     {
         ArgumentNullException.ThrowIfNull(castItems);
         ArgumentNullException.ThrowIfNull(inventory);
@@ -87,6 +93,7 @@ public sealed class ItemCastSequencer
         _desiredSlotItem = desiredSlotItem;
         _onSwap = onSwap;
         _isOffHandItem = isOffHandItem;
+        _isWornWeaponTwoHanded = isWornWeaponTwoHanded;
     }
 
     // Bind the wire sink (the wrapped engine sender).
@@ -156,6 +163,29 @@ public sealed class ItemCastSequencer
         // off-hand cast item that re-equipped the weapon would strand the buff item in
         // the off-hand and never put the shield back — the reported bug).
         string slot = string.IsNullOrWhiteSpace(item.WearSlot) ? WeaponHandSlot : item.WearSlot.Trim();
+
+        // Mirror of the two-handed-CAST dance: the cast item is a one-handed
+        // OFF-HAND item (a held tome, a warhorn) but the WIELDED weapon is
+        // two-handed. A two-hander fills both hands, so the game rejects
+        // `eq <off-hand item>` outright while it's worn. Free the weapon first,
+        // wield + use the item, then remove it to clear the off-hand and re-wield
+        // the two-hander (which the game likewise blocks while the off-hand is
+        // occupied). Confirmed MajorMUD equip order — see GAME_MECHANICS.md.
+        if (string.Equals(slot, OffHandSlot, StringComparison.OrdinalIgnoreCase)
+            && SlotItem(inv, WeaponHandSlot) is { } wornWeapon
+            && _isWornWeaponTwoHanded?.Invoke(wornWeapon) == true)
+        {
+            _wire.Send($"remove {wornWeapon}");
+            _wire.Send($"eq {name}");
+            _wire.Send($"use {name}");
+            _wire.Send($"remove {name}");
+            _wire.Send($"eq {wornWeapon}");
+            _log?.Info(LogCategory,
+                $"item-cast item=\"{name}\" 2h=False slot=Off-Hand casts={item.SpellName} " +
+                $"two-handed-weapon-worn={wornWeapon} (removed to free the off-hand, re-wielded after)");
+            return true;
+        }
+
         string? restore = RestoreTarget(inv, slot, name);
         // Skip a redundant re-equip when the cast item is already in its slot (left
         // there from a prior session) — the game would just answer "you do not have

@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.1**
-> - Terminal responsiveness: disabled Nagle (`TCP_NODELAY`) so keystrokes echo back without the socket batching them — snappier input round-trip
-> - Terminal rendering: cell brushes are cached instead of re-allocated every repaint, cutting allocation churn during heavy server output
-> - Terminal rendering: the cursor blink no longer forces a full-screen repaint twice a second when there's no visible caret to blink
+> **Version 3.28.2**
+> - Item buffs: a `#item` buff worn in the **off-hand** (a held tome, a warhorn) now works while you wield a **two-handed weapon** — the sequence removes the two-hander first instead of looping on a rejected `eq`
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
