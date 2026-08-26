@@ -1170,11 +1170,15 @@ public sealed class CombatManagerSpellsTests
         h.Overlays[1] = new MonsterOverlay { OverridePreAttackSpellId = 7, OverridePreAttackCount = 2 };
         h.AddMonster(1, "giant rat");
 
-        // A per-monster pre-attack override (a single-target debuff) fires BEFORE
-        // the attack on engage, keeping its mob ("curse giant rat").
+        // A per-monster pre-attack override (a single-target debuff) fires BEFORE the
+        // attack on engage, keeping its mob ("curse giant rat"), then the combat attack
+        // (here the weapon, no attack spell configured) fires immediately behind it in
+        // the SAME round — the debuff and the attack are independent slots (report
+        // paradigm-20260825-103417).
         h.Feed("Also here: giant rat.");
 
-        Assert.Equal("curse giant rat", h.LastSent);
+        Assert.Contains("curse giant rat", h.AllSent);
+        Assert.Equal("a giant rat", h.LastSent);
     }
 
     // ----- physical-first: weapon exhausted before spells -------------
@@ -1460,7 +1464,7 @@ public sealed class CombatManagerSpellsTests
     // ----- in-between debuff bridge ------------------------------------
 
     [Fact]
-    public void AreaDebuff_FiresBeforeAttack_ThenAttackResumes_OncePerRoom()
+    public void AreaDebuff_FiresBeforeAttack_ThenAttackImmediately_SameRound_OncePerRoom()
     {
         using Harness h = new();
         h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
@@ -1468,18 +1472,54 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "giant rat");
 
         // On engage the area debuff fires BEFORE the attack — cast bare, never
-        // "curse <mob>" — then the attack re-announces on the debuff's *Combat Off*.
-        // (No director wired here, so the pre-attack pass fires the debuff directly.)
+        // "curse <mob>" — and the combat attack fires IMMEDIATELY behind it in the
+        // SAME round rather than waiting a whole round for the debuff's *Combat Off*
+        // (report paradigm-20260825-103417). The between-round debuff and the combat
+        // attack are independent slots. (No director wired here, so the pre-attack
+        // pass fires the debuff directly; the switch-dispatch scheduler runs inline.)
         h.Feed("Also here: giant rat.");
-        Assert.Equal("curse", h.LastSent);
-
-        h.Feed("*Combat Off*");
+        Assert.Contains("curse", h.AllSent);
         Assert.Equal("blast", h.LastSent);
+
+        // The debuff's own *Combat Off* must NOT fire the attack a SECOND time —
+        // the immediate dispatch already sent it this round.
+        h.Feed("*Combat Off*");
+        Assert.Single(h.AllSent, s => s == "blast");
 
         // Once per room: later rounds keep attacking and never re-fire the debuff.
         h.Tick();
         Assert.Equal("blast", h.LastSent);
         Assert.Single(h.AllSent, s => s == "curse");
+    }
+
+    // The corpse-cast guard on the immediate post-debuff attack: an AoE debuff that
+    // kills the room drops the target in the gap before the deferred attack runs, so
+    // the attack must re-validate and skip rather than blast an empty room (report
+    // paradigm-20260825-103417). deferPost models the ~200ms spacing: the attack is
+    // queued, the kills land, then the window elapses.
+    [Fact]
+    public void PreAttackDebuff_KillsRoom_DeferredAttackSkips_NoCorpseCast()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "kobold");
+
+        // Engage: the debuff fires directly; the combat attack is scheduled behind it.
+        h.Feed("Also here: giant rat, kobold.");
+        Assert.Equal("curse", h.LastSent);
+        Assert.Single(h.Posted);
+
+        // The AoE debuff wiped the room — two exp gains this round force the roster
+        // re-parse that drops the current target before the deferred attack runs.
+        h.Feed("You gain 100 experience.");
+        h.Feed("You gain 100 experience.");
+
+        // The deferred attack re-validates, sees the target gone, and skips — no
+        // "blast" corpse-cast at the cleared room.
+        h.DrainPosted();
+        Assert.DoesNotContain("blast", h.AllSent);
     }
 
     [Fact]

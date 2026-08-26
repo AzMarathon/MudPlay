@@ -68,6 +68,13 @@ public sealed class EquipmentManager
     private DispatcherTimer? _applyTimer;
     private bool _isEquipping;
 
+    // True while a gear-set apply is streaming its paced `wear`/`rem` commands.
+    // HealthManager reads this to hold its rest re-issue during a swap: each `wear`
+    // stands the character, and without this the rest engine re-sends `rest` between
+    // every command — a rest/stand thrash for the whole burst (report
+    // paradigm-20260825-103537). The swap finishes, then rest resumes once.
+    public bool IsApplyingSet => _isEquipping;
+
     public EquipmentManager(
         Func<EquipmentSettings> readEquipment,
         Func<InventorySnapshot> getSnapshot,
@@ -521,7 +528,20 @@ public sealed class EquipmentManager
             Bump(used, family);
         }
 
-        return result;
+        // Free the paired finger / wrist slots BEFORE their new members go on — the
+        // same non-convergence guard the set-only path uses. This inventory-aware
+        // path otherwise emitted only wears, so swapping the SECOND ring / bracelet
+        // let the game's `wear` trade with the member the set keeps and never
+        // settled (report paradigm-20260825-103537). Only families actually gaining
+        // a member are pruned, so a loadout already in effect strips nothing.
+        var beingWorn = result
+            .Where(c => c.StartsWith("wear ", StringComparison.Ordinal))
+            .Select(c => c["wear ".Length..])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        List<string> rems = BuildPairedSlotRems(set, worn, beingWorn);
+        if (rems.Count == 0) return result;
+        rems.AddRange(result);
+        return rems;
     }
 
     // The game lists a stack of identical items as "<count> <name>" (e.g.

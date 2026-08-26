@@ -42,6 +42,11 @@ public sealed class HealthManagerTests
         /// touch it.</summary>
         public bool HostilesPresent { get; set; }
 
+        /// <summary>When true, a gear-set swap is streaming its wear/rem commands —
+        /// HealthManager holds its rest re-issue so it doesn't thrash the swap.
+        /// Mirrors EquipmentManager.IsApplyingSet. Defaults false.</summary>
+        public bool EquipmentApplying { get; set; }
+
         /// <summary>Hostile-in-room signal gating the emergency hangup —
         /// mirrors CombatStateTracker.HasHostileMonster (auto-attack
         /// independent). Defaults true so the existing hangup tests, which
@@ -116,6 +121,7 @@ public sealed class HealthManagerTests
                 isSolo: () => Solo,
                 onRecovered: () => ShadowRestResumeCount++);
             Health.SetDoNotRestSelector(() => SkipRestHere);
+            Health.SetEquipmentApplyingProbe(() => EquipmentApplying);
             Health.SetPartyRoleSync(
                 isPartyFollower: () => false,
                 requestPartyWait: () => { },
@@ -405,6 +411,28 @@ public sealed class HealthManagerTests
 
         Assert.True(h.Health.RestInFlight);
         Assert.Contains("rest", h.SentLines);
+    }
+
+    [Fact]
+    public void EquipmentApplying_HoldsRest_ThenRestsWhenSwapDone()
+    {
+        // A pre-rest gear swap streams paced wear/rem, each of which stands the
+        // character; without a hold the rest engine re-fires `rest` between every
+        // command — the rest/stand thrash of report paradigm-20260825-103537. Hold
+        // the rest while the swap is in flight, then rest once it finishes.
+        using Harness h = new() { EquipmentApplying = true };
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 50;
+        Assert.True(h.HealthGateHeld);
+        Assert.DoesNotContain("rest", h.SentLines);   // held during the swap
+        Assert.False(h.Health.RestInFlight);
+
+        h.EquipmentApplying = false;   // swap finished — character standing with new gear
+        h.Health.Evaluate();
+
+        Assert.Contains("rest", h.SentLines);          // now rests, one command
+        Assert.True(h.Health.RestInFlight);
     }
 
     [Fact]

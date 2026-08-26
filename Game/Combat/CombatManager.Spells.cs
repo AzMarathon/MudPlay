@@ -945,19 +945,69 @@ public sealed partial class CombatManager
 
         _spellChooser.MarkCast(decision, picked.RawName, ctx.RoomMobKeys);
         _currentTarget = picked.RawName;
-        // Arm the attack resume: the debuff's *Combat Off* re-announces the combat
-        // action through the combat-off resume path — mirroring the director's own
-        // debuff, whose CastFired arms this same signal.
+        // Stamp the between-round cast so the debuff's *Combat Off* is attributed to
+        // OUR cast (not misread as a kill by OnCombatStatus's no-between-round-cast
+        // branch). On a fresh engage _castingSpellTarget is null, so this does NOT arm
+        // _spellAttackOwed — we are firing the attack now, not owing it to a resume.
         NoteBetweenRoundCast();
         // Spend the round's between-round slot in the director too — this cast
         // fired directly (not via Evaluate), so without this the director could
         // queue a SECOND between-round cast this round and draw the "already cast
         // this round" rejection.
         _markBetweenRoundSlotUsed?.Invoke();
+        // Fire the combat attack in the SAME round, right behind the debuff, instead
+        // of waiting for the debuff's *Combat Off* (a whole wasted combat round —
+        // report paradigm-20260825-103417). The between-round debuff and the combat
+        // attack are independent slots, so both go out this round. DeferPostDebuffAttack
+        // spaces the attack a short window behind the debuff (so the two casts don't
+        // overrun the server's flood guard) and re-validates the target still lives (an
+        // AoE debuff may have killed it) so the attack never corpse-casts. Arming the
+        // suppress with this cast's between-round stamp stops the debuff's own *Combat
+        // Off* (and any quick Off from the attack itself) from ALSO firing the attack.
+        _suppressResumeForBetweenRoundStamp = _betweenRoundCastAt;
+        DeferPostDebuffAttack(settings, picked.RawName);
         _log?.Combat(LogCategory,
             $"pre-attack debuff {decision.Spell} at {picked.RawName} — " +
-            "attack resumes after its *Combat Off*");
+            "firing the combat attack immediately after (same round)");
         return true;
+    }
+
+    // Fire this round's combat attack a short window after a pre-attack debuff so both
+    // land in the SAME round. Re-uses the deferred-dispatch guard the cap-switch path
+    // trusts (DeferSwitchDispatch): re-validate the target still lives before firing so
+    // a debuff that killed it doesn't corpse-cast; the debuff is already MarkCast, so
+    // DispatchRoundAction now picks the attack. Unlike the old resume-after-*Combat
+    // Off* path this fires the attack proactively and pairs with
+    // _suppressResumeForBetweenRoundStamp so the debuff's Off can't fire it a second time.
+    private void DeferPostDebuffAttack(CombatSettings settings, string target)
+    {
+        void Dispatch()
+        {
+            if (_disposed || !_isEnabled()) return;
+            if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase)
+                || _classifier.Current is not { } obs
+                || !TargetPresent(obs, target))
+            {
+                _log?.Combat(LogCategory,
+                    $"post-debuff attack at '{target}' skipped — target gone before the "
+                    + "deferred dispatch (the debuff's kill landed first); no corpse-cast");
+                return;
+            }
+            // bypassRecastInterval: the attack lands right behind the debuff's own
+            // cast (within the ~200ms spacing), so without the bypass CastCoordinator's
+            // recast interval defers an attack SPELL to the next tick and the round is
+            // lost — the exact "missed a combat round" this fix removes. The debuff and
+            // the attack are independent slots server-side, so the back-to-back cast is
+            // legitimate (mirrors the between-round-cast spell-resume path).
+            if (TryBuildCandidate(obs, target) is { } cand)
+                DispatchRoundAction(settings, cand, CountEngageable(obs), obs,
+                    bypassRecastInterval: true);
+        }
+
+        if (_scheduleSwitchDispatch is { } schedule)
+            schedule(SwitchDispatchDelay, Dispatch);
+        else
+            _post(Dispatch);
     }
 
     // Answer the CastingDirector's "is there a debuff to fire this in-between

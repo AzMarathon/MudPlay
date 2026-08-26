@@ -12,6 +12,18 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Roomba: new **Start Inventory** mode — walks the same labeled circuit and feeds the item-location log exactly like a sweep's scan, but never dispatches a single get/drop; for logging a gang house without disturbing an existing manual sort
 - Roomba: new **Master List** button — a sortable table (click any column header) of every item Roomba has seen, where, and its outside market (which shops buy/sell it and for how much at 50 charm), automatically excluding any shop that sits inside the gang house's own labeled rooms
 
+## 3.27.10
+
+- Combat: a pre-attack debuff no longer wastes a combat round — after the debuff fires (an AoE or single-target weakening spell on engage), the combat attack now goes out immediately behind it in the SAME round instead of waiting for the debuff's `*Combat Off*` a round later (the debuff and the attack are independent slots server-side). If the debuff kills the room, the queued attack re-validates and skips rather than casting at an empty room
+- bug reports addressed: paradigm-20260825-103417
+
+## 3.27.9
+
+- Equipment: a pre-rest gear swap no longer thrashes rest — MudPlay holds the `rest` re-issue while the set's `wear`/`rem` commands stream (each stood the character up, so the rest engine was re-`rest`ing between every one), then rests once the swap finishes
+- Equipment: the manual **Equip All** / `@equip-<set>` path now frees a paired finger/wrist slot before wearing the set's **second** ring/bracelet, so the swap converges instead of the game's `wear` trading with the ring you're keeping
+- BBS: logging into the **wrong realm** is fixed — a BBS folder hand-duplicated to make a same-host sibling (e.g. "Paradigm PVE" copied from "Paradigm PVP") kept the original name inside its config, so its logon steps (and blacklist/leaderboard) resolved to the wrong BBS; the name is now reconciled to the folder on load, so the right realm-select step runs
+- bug reports addressed: paradigm-20260825-103537, paradigm-20260825-102259
+
 ## 3.27.7
 
 - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast (a heal/buff sent moments earlier) left the engine's `_combatOff` latch stuck true, which permanently blocked the spell-mode retry heartbeat since only a successful cast used to clear it; it's now cleared unconditionally the moment the engine commits to engaging
