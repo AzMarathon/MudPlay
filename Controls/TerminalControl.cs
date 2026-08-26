@@ -278,7 +278,17 @@ public sealed class TerminalControl : Control
         RecalculateMetrics();
         // Cursor blink: toggle on/off twice a second.
         _blinkTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        _blinkTimer.Tick += (_, _) => { _cursorBlinkOn = !_cursorBlinkOn; InvalidateVisual(); };
+        _blinkTimer.Tick += (_, _) =>
+        {
+            // Only repaint for the blink when there's actually a visible caret to
+            // toggle. A hidden cursor (server-drawn full-screen forms) or the
+            // splash has nothing to blink, so skip the otherwise-2Hz full-screen
+            // repaint — Avalonia has no partial invalidate, so each blink would
+            // otherwise redraw the whole grid for no visible change.
+            if (SplashActive || Emulator?.Screen.CursorVisible != true) return;
+            _cursorBlinkOn = !_cursorBlinkOn;
+            InvalidateVisual();
+        };
         _blinkTimer.Start();
         // Repaint the buffer overlay whenever the user types / backspaces
         // / flushes. Stored as a field so we can unsubscribe on detach
@@ -697,10 +707,20 @@ public sealed class TerminalControl : Control
             context.FillRectangle(fg, new Rect(left, top + _cellH - 1, width, 1));
     }
 
+    // Brush cache: DrawRun resolves a fg + bg brush for every same-attr run, on
+    // every repaint — a fresh ImmutableSolidColorBrush per run was pure allocation
+    // churn under heavy output. The ARGB space is bounded (the 16 base + 256 xterm
+    // palette entries), so caching them never grows unbounded. Render runs on the
+    // UI thread only, so a plain Dictionary needs no lock.
+    private static readonly Dictionary<uint, IBrush> _brushCache = new();
+
     private static IBrush ToBrush(uint argb)
     {
+        if (_brushCache.TryGetValue(argb, out IBrush? cached)) return cached;
         var (r, g, b) = AnsiPalette.ToRgb(argb);
-        return new ImmutableSolidColorBrush(Color.FromRgb(r, g, b));
+        IBrush brush = new ImmutableSolidColorBrush(Color.FromRgb(r, g, b));
+        _brushCache[argb] = brush;
+        return brush;
     }
 
     // ----- Input ---------------------------------------------------------

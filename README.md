@@ -1,19 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.0**
-> - Roomba: new `@roomba <item name>` remote command replies with one consolidated line per matching item — total quantity + room locators — instead of refusing when a loose query matches several similarly-named items, gated by its own per-player **Query Roomba** permission
-> - Roomba: every scan now feeds a persistent item-location log backing `@roomba`, tracked per room so an item stocked in several rooms at once reports all of them
-> - Roomba: room labels, hidden-search settings, and the item-location log are now shared **per BBS** rather than per character — every character on a BBS shares one gang house
-> - Roomba: new `@roomba sync` shares a client's item-location log with another MudPlay user directly in-game — grouped by room and packed into a handful of self-contained chat lines (a dropped line costs only its rooms, not the whole sync), no import/export files needed
-> - Roomba: new **Start Inventory** mode scans and logs a gang house without moving anything, for players with their own manual sort
-> - Roomba: new sortable **Master List** button tables every item seen, where, and its outside market value at 50 charm — gang-house shops excluded
-> - Ground items: a compound item name containing "and" (e.g. "rope and grapple") no longer mis-splits into two bogus floor entries
-> - Networking: outbound writes are serialized so two engine sends fired back-to-back can't interleave their bytes on the wire (rapid `@roomba sync` telepath replies were arriving with one line's data spliced into another)
-> - Roomba: `@roomba sync` paces its telepaths ~800ms apart and resends any the game drops to a rate limit, so a full-house sync trickles out in the background instead of flooding the channel; it now transfers the labeled gang-house rooms too, not just the item sightings
-> - Roomba: the whole `@roomba` feature (queries + sync) is now gated by the per-player **Query Roomba** permission alone (the separate "Enable @roomba responses" checkbox is gone) — you answer only senders you've granted it, and you adopt a sync reply only when *you* asked for it (sent `@roomba sync`), so a stray sync you never requested is ignored
-> - Roomba Master List: opens instantly on a big log (market prices computed lazily per visible row), plus a live filter box and double-click → item record
-> - Roomba tab: a **Roomba Data Timestamp** readout shows the newest sighting in the item-location log, so you can tell at a glance how current the gang-house data is
+> **Version 3.28.1**
+> - Terminal responsiveness: disabled Nagle (`TCP_NODELAY`) so keystrokes echo back without the socket batching them — snappier input round-trip
+> - Terminal rendering: cell brushes are cached instead of re-allocated every repaint, cutting allocation churn during heavy server output
+> - Terminal rendering: the cursor blink no longer forces a full-screen repaint twice a second when there's no visible caret to blink
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
