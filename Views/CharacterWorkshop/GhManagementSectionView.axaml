@@ -46,6 +46,8 @@
                     ToolTip.Tip="Scan and log room contents (feeds @roomba) without moving anything — safe to run alongside your own manual organization."/>
             <Button Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}" Margin="0,0,6,6"/>
             <Button Content="Roomba Log" Command="{Binding OpenRoombaLogCommand}" Margin="0,0,6,6"/>
+            <Button Content="Master List" Command="{Binding OpenMasterListCommand}" Margin="0,0,6,6"
+                    ToolTip.Tip="Every item Roomba has ever seen, where it was seen, and where it can be bought/sold outside this gang house at 50 charm."/>
             <TextBox Text="{Binding AddRoomInput}" PlaceholderText="map/room" Width="100"
                      VerticalAlignment="Center" Margin="12,0,6,6"/>
             <Button Content="Add Room" Command="{Binding AddRoomCommand}" IsEnabled="{Binding !IsRunning}" Margin="0,0,6,6"/>

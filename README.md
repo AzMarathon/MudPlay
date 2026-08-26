@@ -7,6 +7,7 @@
 > - Roomba: room labels, hidden-search settings, and the item-location log are now shared **per BBS** rather than per character — every character on a BBS shares one gang house
 > - Roomba: new `@roomba sync` shares a client's item-location log with another MudPlay user directly in-game — no import/export files needed
 > - Roomba: new **Start Inventory** mode scans and logs a gang house without moving anything, for players with their own manual sort
+> - Roomba: new **Master List** button tables every item seen, where, and its outside market value at 50 charm — gang-house shops excluded
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

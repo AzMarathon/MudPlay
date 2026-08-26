@@ -26,6 +26,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private readonly RoomGraphManager _roomGraph;
     private Control? _view;
     private RoombaLogWindow? _logWindow;
+    private RoombaMasterListWindow? _masterListWindow;
 
     public override string Id => "ghmanagement";
     public override string Title => "Roomba";
@@ -207,6 +208,19 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         _logWindow.Show();
     }
 
+    // Master inventory across every room Roomba has ever scanned (item, room,
+    // and outside market cross-reference), independent of any single sweep run.
+    [RelayCommand]
+    private void OpenMasterList()
+    {
+        if (_masterListWindow is { } open) { open.Activate(); return; }
+        AppServices svc = AppServices.Current;
+        RoombaMasterListViewModel vm = new(svc.GhItemLocations, _labels, svc.ItemNames, svc.GameData, _roomGraph);
+        _masterListWindow = new RoombaMasterListWindow { DataContext = vm };
+        _masterListWindow.Closed += (_, _) => _masterListWindow = null;
+        _masterListWindow.Show();
+    }
+
     // Add a room to the Roomba list by typed map/room number — opens the same rule
     // picker the map right-click uses, so the user still sets the room's sort rules.
     [RelayCommand]
@@ -247,5 +261,6 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         _sweep.PhaseChanged -= RefreshStatus;
         _sweep.SweepCompleted -= OnSweepCompleted;
         _logWindow?.Close();
+        _masterListWindow?.Close();
     }
 }

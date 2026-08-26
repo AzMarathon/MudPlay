@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="820" d:DesignHeight="560"
+        x:Class="MudPlay.Views.CharacterWorkshop.RoombaMasterListWindow"
+        x:DataType="vm:RoombaMasterListViewModel"
+        Title="Roomba Master List"
+        Width="820" Height="560"
+        MinWidth="480" MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Grid Margin="16" RowDefinitions="Auto,*">
+        <TextBlock Grid.Row="0" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   Text="Every item Roomba has ever seen across a scan, where it was seen, and where it can be bought/sold outside this gang house at 50 charm."/>
+
+        <DataGrid Grid.Row="1"
+                  ItemsSource="{Binding Rows}"
+                  Background="{StaticResource ChromeBgSunkenBrush}"
+                  BorderThickness="1"
+                  BorderBrush="{StaticResource ChromeBorderBrush}"
+                  IsReadOnly="True"
+                  AutoGenerateColumns="False"
+                  CanUserSortColumns="True"
+                  CanUserResizeColumns="True"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Item" Binding="{ReflectionBinding ItemName}"
+                                    Width="180" Foreground="{StaticResource ChromeFgBrush}"/>
+                <DataGridTextColumn Header="Qty" Binding="{ReflectionBinding Quantity}"
+                                    Width="60" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="Seen In" Binding="{ReflectionBinding SeenIn}"
+                                    Width="220" Foreground="{StaticResource ChromeFgBrush}"/>
+                <DataGridTextColumn Header="Market (outside this gang house)" Binding="{ReflectionBinding Market}"
+                                    Width="*" Foreground="{StaticResource ChromeFgBrush}"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Window>
