@@ -62,8 +62,22 @@ public sealed class RoombaSyncReceiver : IDisposable
         if (!TryParse(e.Message, out string blob)) return;   // cheap: an @roombadata line at all?
         // Adopt only from a sender we've granted "Query Roomba" — the same
         // per-player permission that gates answering their @roomba, so there's no
-        // separate opt-in and a stranger can't inject data into our log.
-        if (!_isSenderGranted(sender)) return;
+        // separate opt-in and a stranger can't inject data into our log. Logged at
+        // Debug (not silent) so a "nothing synced" report shows the missing grant.
+        if (!_isSenderGranted(sender))
+        {
+            _log?.Debug("RoombaSync",
+                $"ignoring @roomba sync line from {sender} — they aren't granted the Query Roomba permission");
+            return;
+        }
+
+        // End-of-sync sentinel (a plain marker, not a blob) — note it and stop, so
+        // it isn't mistaken for a malformed payload.
+        if (string.Equals(blob, RoombaQueryHandler.SyncCompleteMarker, StringComparison.OrdinalIgnoreCase))
+        {
+            _log?.Info("RoombaSync", $"{sender}'s @roomba sync complete");
+            return;
+        }
 
         try
         {

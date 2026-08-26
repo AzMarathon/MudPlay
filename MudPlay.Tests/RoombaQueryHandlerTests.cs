@@ -83,6 +83,10 @@ public sealed class RoombaQueryHandlerTests : IDisposable
                 int close = r.LastIndexOf('}');
                 return r[(open + 1)..close].Split(' ', 2)[1];
             })
+            // Drop the trailing "Sync Complete" sentinel and any label lines — this
+            // helper decodes only the item-sighting lines.
+            .Where(blob => !blob.Equals(RoombaQueryHandler.SyncCompleteMarker, StringComparison.Ordinal)
+                        && !GhItemSyncCodec.IsLabelLine(blob))
             .SelectMany(GhItemSyncCodec.DecodeLine)
             .ToList();
 
@@ -254,6 +258,19 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         engine.DispatchForTests(Gangpath("Friend", "@roomba sync"));
 
         Assert.Empty(DecodeSyncReplies(engine));
+    }
+
+    [Fact]
+    public void RoombaSync_EndsWithSyncCompleteSentinel()
+    {
+        var (engine, players, locations) = SetupWithItems();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        locations.RecordRoom(new RoomKey(1, 100), new[] { "torch" });
+
+        engine.DispatchForTests(Gangpath("Friend", "@roomba sync"));
+
+        string last = Replies(engine).Last(r => r.Contains(RoombaQueryHandler.SyncResponseToken));
+        Assert.Contains(RoombaQueryHandler.SyncCompleteMarker, last);
     }
 
     [Fact]

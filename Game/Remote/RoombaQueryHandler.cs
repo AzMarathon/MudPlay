@@ -57,6 +57,11 @@ public sealed class RoombaQueryHandler : IDisposable
     // its own ChatRouter subscription.
     public const string SyncResponseToken = "@roombadata";
 
+    // Final line of an @roomba sync — a plain sentinel (not a base64 blob) the
+    // requester recognizes to know the whole reply has landed. Sent last, after
+    // the labels and item lines, and paced like the rest.
+    public const string SyncCompleteMarker = "Sync Complete";
+
     private readonly RemoteCommandManager _engine;
     private readonly GhItemLocationStore _locations;
     private readonly GhRoomLabelStore _labels;
@@ -172,9 +177,10 @@ public sealed class RoombaQueryHandler : IDisposable
         // flood the channel or trip the game's burst rate limit — the sync is a
         // background courtesy to the requester, not something that should stall
         // this client's own combat/heal/movement sends.
-        List<string> wire = new(labelLines.Count + itemLines.Count);
+        List<string> wire = new(labelLines.Count + itemLines.Count + 1);
         foreach (string line in labelLines) wire.Add($"{SyncResponseToken} {line}");
         foreach (string line in itemLines) wire.Add($"{SyncResponseToken} {line}");
+        wire.Add($"{SyncResponseToken} {SyncCompleteMarker}");   // end-of-sync sentinel, sent last
         _sender.Enqueue(ctx.Reply, wire);
 
         _log?.Info("RoombaSync",
