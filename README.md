@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.28.19**
 > - Cash: "keep on hand" is now "Minimum cash to keep on hand (deposit)" — an amount plus a denomination dropdown (keep e.g. 1 runic on hand); it governs auto-deposit
-> - Cash: new "Only stash coin up to (stash)" filter — a stash hides only coins of the chosen denomination or lower and keeps the higher coins in hand
+> - Cash: new "Only stash coin up to (stash)" dropdown — Everything stashes every coin, or pick a denomination to stash up to it and keep the higher coins in hand
 > - Cash: new "Enable stashing as a follower" toggle — a party follower dragged through their marked stash rooms now stashes when it's on
 > - Equipment Manager: a "Currently Equipped:" readout next to the Item Finder button shows the last gear set the client equipped this session (via Equip Now or an auto-fire trigger)
 > - Gear sets: the pacing between each wear/remove during a swap is now 100 ms (was 200 ms) and holds that cadence under load — the paced sender used to get starved by the terminal redraw during a swap, stretching it to ~2.5× and making it feel laggy

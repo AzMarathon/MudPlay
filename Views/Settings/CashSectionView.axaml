@@ -125,15 +125,15 @@
                               Width="120" VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <!-- Only stash coin up to — STASHING only. A stash offloads coins of
-                     this denomination or lower and keeps the higher coins in hand. -->
-                <CheckBox Content="Only stash coin up to (stash)" Margin="0,10,0,0"
-                          IsChecked="{Binding OnlyStashUpToEnabled, Mode=TwoWay}"
-                          ToolTip.Tip="When checked, stashing hides only coins of the selected denomination or lower and keeps the higher coins in hand (e.g. 'up to Gold' hides copper/silver/gold, keeps platinum/runic). Unchecked stashes every denomination. Applies to stashing only."/>
-                <ComboBox ItemsSource="{Binding DenominationChoices}"
-                          SelectedItem="{Binding OnlyStashUpTo, Mode=TwoWay}"
-                          IsEnabled="{Binding OnlyStashUpToEnabled}"
-                          Width="120" HorizontalAlignment="Left" Margin="24,2,0,0"/>
+                <!-- Only stash coin up to — STASHING only. Everything stashes every
+                     denomination; a coin stashes it and everything below, keeping the
+                     higher coins in hand. -->
+                <TextBlock Classes="FieldLabel" Margin="0,10,0,2"
+                           Text="Only stash coin up to (stash)"/>
+                <ComboBox ItemsSource="{Binding StashCoinCutoffChoices}"
+                          SelectedItem="{Binding StashCoinCutoff, Mode=TwoWay}"
+                          Width="140" HorizontalAlignment="Left"
+                          ToolTip.Tip="Stashing hides coins up to the selected denomination and keeps the higher coins in hand — e.g. Gold hides copper/silver/gold and keeps platinum/runic. Everything stashes every denomination (no coin held back). Applies to stashing only."/>
 
                 <!-- Stash as a party follower -->
                 <CheckBox Content="Enable stashing as a follower" Margin="0,10,0,0"

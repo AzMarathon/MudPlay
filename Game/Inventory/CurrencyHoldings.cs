@@ -54,6 +54,17 @@ public readonly record struct CurrencyHoldings(
         _                         => 1,
     };
 
+    // The PlanOffloadAboveKeep maxUnit cap for a stash coin cutoff: Everything
+    // offloads all denominations; otherwise only coins at or below the named one.
+    public static long MaxUnitFor(StashCoinCutoff cutoff) => cutoff switch
+    {
+        StashCoinCutoff.Copper   => CopperUnit(CoinDenomination.Copper),
+        StashCoinCutoff.Silver   => CopperUnit(CoinDenomination.Silver),
+        StashCoinCutoff.Gold     => CopperUnit(CoinDenomination.Gold),
+        StashCoinCutoff.Platinum => CopperUnit(CoinDenomination.Platinum),
+        _                        => long.MaxValue,   // Everything
+    };
+
     // Decompose the coin above a raw copper-farthing keep floor into a set of
     // per-denomination offload commands. Hides the LOWEST denominations first
     // (copper → runic), so the coins left on hand are the fewest possible: for a

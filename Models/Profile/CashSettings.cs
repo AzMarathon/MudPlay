@@ -43,20 +43,19 @@ public sealed class CashSettings
     // the coin, so "1 runic" keeps 1,000,000 copper on hand. The engine converts
     // to copper (amount × the denomination's copper unit) and deposits the excess
     // as `dep <copper>`. Applies to BANKING only — stashing is gated by
-    // OnlyStashUpTo instead. Default 0 = deposit everything. (Legacy note:
+    // StashCoinCutoff instead. Default 0 = deposit everything. (Legacy note:
     // KeepOnHandWealth used to be a raw copper value; with the default Copper
     // denomination it still reads back as the same copper amount, so old
     // profiles migrate cleanly.)
     public long KeepOnHandWealth { get; set; }
     public CoinDenomination KeepOnHandDenomination { get; set; } = CoinDenomination.Copper;
 
-    // ----- Only stash coin up to (STASHING) --------------------------
-    // When enabled, a stash offloads only coin denominations at or below
-    // OnlyStashUpTo (e.g. "up to Gold" hides copper / silver / gold and keeps
-    // platinum / runic in hand). Disabled ⇒ stash every denomination. Applies to
-    // STASHING only — banking uses the keep-on-hand floor above.
-    public bool OnlyStashUpToEnabled { get; set; }
-    public CoinDenomination OnlyStashUpTo { get; set; } = CoinDenomination.Gold;
+    // ----- Stash coin up to (STASHING) -------------------------------
+    // A stash offloads only coin denominations at or below StashCoinCutoff and
+    // keeps the higher coins in hand (e.g. Gold hides copper / silver / gold and
+    // keeps platinum / runic). Everything (the default) stashes every denomination.
+    // Applies to STASHING only — banking uses the keep-on-hand floor above.
+    public StashCoinCutoff StashCoinCutoff { get; set; } = StashCoinCutoff.Everything;
 
     // Stash while being dragged through a marked stash room as a party follower
     // (in a party, not leading). A follower's own loop / auto-lair is held by the
@@ -128,4 +127,18 @@ public enum CoinDenomination
     Gold,
     Platinum,
     Runic,
+}
+
+// The highest coin denomination a stash will offload. Everything stashes them
+// all; otherwise every coin at or below the named denomination is stashed and the
+// higher coins stay in hand. Platinum is the top cutoff (below Runic), so picking
+// a cutoff always keeps at least the runic on hand — for "stash all", use
+// Everything.
+public enum StashCoinCutoff
+{
+    Everything,
+    Copper,
+    Silver,
+    Gold,
+    Platinum,
 }

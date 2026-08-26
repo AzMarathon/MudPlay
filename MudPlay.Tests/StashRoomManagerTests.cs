@@ -10,7 +10,7 @@ namespace MudPlay.Tests;
 
 // StashRoomManager on-entry stash dispatch driven by user-marked rooms from
 // CharacterProfile.StashRooms. The manager offloads every coin denomination at or
-// below CashSettings.OnlyStashUpTo (or all of them when that filter is off) into
+// below CashSettings.StashCoinCutoff (or all of them when it's Everything) into
 // lowest-denomination-first `hide N <coin>` commands, so the coins left on hand
 // are the fewest possible. The keep-on-hand floor is a BANKING rule (tested with
 // AutoDepositManager), not a stash rule. Held amounts come from the authoritative
@@ -99,8 +99,7 @@ public sealed class StashRoomManagerTests
         // platinum / runic in hand.
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
-        h.CashSettings.OnlyStashUpToEnabled = true;
-        h.CashSettings.OnlyStashUpTo = CoinDenomination.Gold;
+        h.CashSettings.StashCoinCutoff = StashCoinCutoff.Gold;
         h.Snapshot = Coins(silver: 30, gold: 40, platinum: 5, runic: 2);
 
         h.Stash.ExecuteStash(new RoomKey(1, 42));
@@ -117,8 +116,7 @@ public sealed class StashRoomManagerTests
         // Holding only platinum with "up to Gold" ⇒ nothing eligible, no coin hide.
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
-        h.CashSettings.OnlyStashUpToEnabled = true;
-        h.CashSettings.OnlyStashUpTo = CoinDenomination.Gold;
+        h.CashSettings.StashCoinCutoff = StashCoinCutoff.Gold;
         h.Snapshot = Coins(platinum: 5);
 
         h.Stash.ExecuteStash(new RoomKey(1, 42));
@@ -183,8 +181,7 @@ public sealed class StashRoomManagerTests
         // "Up to Platinum" stashes copper → platinum whole and keeps runic in hand.
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
-        h.CashSettings.OnlyStashUpToEnabled = true;
-        h.CashSettings.OnlyStashUpTo = CoinDenomination.Platinum;
+        h.CashSettings.StashCoinCutoff = StashCoinCutoff.Platinum;
         h.Snapshot = Coins(copper: 8_000, silver: 900, gold: 40, platinum: 3, runic: 2);
 
         h.Stash.ExecuteStash(new RoomKey(1, 42));

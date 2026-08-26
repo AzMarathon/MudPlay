@@ -1446,8 +1446,8 @@ Settings → Cash + Items.
 
 ### Only stash coin up to (stash)
 
-**Default:** off (stash every denomination)
-**What it does:** When checked, a **stash** hides only coins of the selected denomination *or lower* and keeps the higher coins in your pocket — e.g. "up to Gold" hides copper / silver / gold and keeps platinum / runic. It's the stash-side counterpart to the deposit keep-on-hand floor: use it to shed bulky low-value coin as you pass a stash room while keeping your compact high-value coin. Applies to **stashing only**.
+**Default:** Everything (stash every denomination)
+**What it does:** A dropdown that caps which coins a **stash** offloads. **Everything** stashes all of them; pick a denomination and a stash hides coins *up to* it and keeps the higher coins in your pocket — e.g. "Gold" hides copper / silver / gold and keeps platinum / runic. It's the stash-side counterpart to the deposit keep-on-hand floor: use it to shed bulky low-value coin as you pass a stash room while keeping your compact high-value coin. Applies to **stashing only**.
 
 ### Enable stashing as a follower
 

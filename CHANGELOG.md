@@ -5,7 +5,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 ## 3.28.19
 
 - Cash: "keep on hand" is now **Minimum cash to keep on hand (deposit)** — an amount plus a denomination dropdown, so you can keep e.g. 1 runic on hand; it applies to auto-**deposit** (banking)
-- Cash: new **Only stash coin up to (stash)** filter — a stash hides only coins of the chosen denomination or lower and keeps the higher coins in hand (e.g. up to Gold keeps platinum/runic); applies to **stashing** only
+- Cash: new **Only stash coin up to (stash)** dropdown — **Everything** stashes every coin (default), or pick a denomination to stash up to it and keep the higher coins in hand (e.g. Gold keeps platinum/runic); applies to **stashing** only
 - Cash: new **Enable stashing as a follower** toggle — a party follower dragged through their marked stash rooms by the leader now stashes when it's on (off by default)
 
 ## 3.28.16
