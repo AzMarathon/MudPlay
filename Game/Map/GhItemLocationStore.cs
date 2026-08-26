@@ -105,9 +105,13 @@ public sealed class GhItemLocationStore
     // Preference order: (1) canonical item-id match via ItemNameStore, so any
     // wording that resolves to the same game-data item hits regardless of how
     // it was recorded; (2) exact case-insensitive name match; (3) a substring
-    // match, but only when it's unique to one item NAME — an ambiguous partial
-    // (matches more than one distinct tracked item) reports nothing rather
-    // than guessing which one the sender meant. Empty when nothing matches.
+    // match against every tracked item NAME — a family of similarly-named
+    // items (e.g. "severed head of goru-nezar", "severed head of darksong")
+    // means a loose query like "severed" or "head" can match several distinct
+    // items at once, so ALL of them come back (the caller groups by ItemName;
+    // see RoombaQueryHandler) rather than this silently reporting nothing just
+    // because more than one name matched. Empty only when nothing matches at
+    // all.
     public IReadOnlyList<GhItemSighting> FindSightings(string query)
     {
         if (string.IsNullOrWhiteSpace(query)) return Array.Empty<GhItemSighting>();
@@ -122,10 +126,11 @@ public sealed class GhItemLocationStore
         if (_sightings.TryGetValue(query, out Dictionary<RoomKey, GhItemSighting>? exact))
             return Ordered(exact);
 
-        List<string> partialNames = _sightings.Keys
+        return _sightings.Keys
             .Where(name => name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(name => Ordered(_sightings[name]))
             .ToList();
-        return partialNames.Count == 1 ? Ordered(_sightings[partialNames[0]]) : Array.Empty<GhItemSighting>();
     }
 
     private static IReadOnlyList<GhItemSighting> Ordered(Dictionary<RoomKey, GhItemSighting> byRoom)

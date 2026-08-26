@@ -164,14 +164,32 @@ public sealed class GhItemLocationStoreTests : IDisposable
         Assert.Equal("long sword", sighting.ItemName);
     }
 
+    // A loose query can match a whole family of similarly-named items (e.g.
+    // "severed head of goru-nezar" and "severed head of darksong" both contain
+    // "severed" and "head"); FindSightings returns every match rather than
+    // refusing just because more than one distinct item matched — the caller
+    // (RoombaQueryHandler) groups by item name and reports each.
     [Fact]
-    public void FindSightings_AmbiguousSubstring_ReturnsEmpty()
+    public void FindSightings_AmbiguousSubstring_ReturnsAllMatchingItems()
     {
         GhItemLocationStore store = NewPinnedStore();
         store.RecordRoom(new RoomKey(1, 100), new[] { "long sword" });
         store.RecordRoom(new RoomKey(1, 200), new[] { "short sword" });
 
-        Assert.Empty(store.FindSightings("sword"));
+        var sightings = store.FindSightings("sword");
+
+        Assert.Equal(2, sightings.Count);
+        Assert.Contains(sightings, s => s.ItemName == "long sword");
+        Assert.Contains(sightings, s => s.ItemName == "short sword");
+    }
+
+    [Fact]
+    public void FindSightings_NoMatchAtAll_ReturnsEmpty()
+    {
+        GhItemLocationStore store = NewPinnedStore();
+        store.RecordRoom(new RoomKey(1, 100), new[] { "long sword" });
+
+        Assert.Empty(store.FindSightings("dagger"));
     }
 
     [Fact]

@@ -4,7 +4,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.28.0
 
-- Roomba: new `@roomba <item name>` remote command replies with one consolidated line — total quantity summed across every gang-house room that item is currently tracked in, plus the room locators — gated by its own "Query item location" permission and an opt-in **Enable @roomba responses** checkbox on the Roomba tab
+- Roomba: new `@roomba <item name>` remote command replies with one consolidated line per matching item — total quantity summed across every gang-house room it's currently tracked in, plus the room locators — instead of refusing to answer when a loose query (e.g. "head") matches a whole family of similarly-named items ("severed head of goru-nezar", "severed head of darksong"); gated by its own "Query item location" permission and an opt-in **Enable @roomba responses** checkbox on the Roomba tab
 - Ground items: an item whose own name contains "and" (e.g. "rope and grapple") no longer gets mis-split into two bogus entries when parsing a room's floor survey — affects Roomba's item log, `@what`, and `@get-all` alike
 - Roomba: every room floor Roomba observes during a scan now feeds a persistent BBS-tier item-location log backing `@roomba`, tracked per room (not collapsed to one "last seen" spot) so an item stocked in several rooms at once reports all of them; independent of the current sweep's own state
 - Roomba: room labels, hidden-search settings, and the new item-location log all moved from per-character to **per-BBS** storage — every character on a BBS now shares one gang house instead of re-labeling rooms per character; existing per-character labels are migrated automatically the first time each BBS loads post-upgrade

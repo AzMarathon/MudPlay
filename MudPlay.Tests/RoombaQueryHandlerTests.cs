@@ -173,6 +173,44 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         Assert.Contains("+2 more", reply);
     }
 
+    // A loose query matching a whole family of similarly-named items (report
+    // 20260825-174300: "@roomba severed" / "@roomba head" returned nothing for
+    // "severed head of goru-nezar" / "severed head of darksong") must report
+    // EVERY matching item, one line each — not silently nothing just because
+    // more than one name matched.
+    [Fact]
+    public void Roomba_QueryMatchesMultipleDistinctItems_ReportsOneLinePerItem()
+    {
+        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        locations.RecordRoom(new RoomKey(1, 100), new[] { "severed head of goru-nezar" });
+        locations.RecordRoom(new RoomKey(1, 200), new[] { "severed head of darksong" });
+
+        engine.DispatchForTests(Gangpath("Friend", "@roomba severed head"));
+
+        var replies = Replies(engine);
+        Assert.Equal(2, replies.Count);
+        Assert.Contains(replies, r => r.Contains("severed head of goru-nezar") && r.Contains("1/100"));
+        Assert.Contains(replies, r => r.Contains("severed head of darksong") && r.Contains("1/200"));
+    }
+
+    // Beyond MaxItemsShown distinct items, the overflow folds into one final
+    // line rather than flooding the channel with a line per item.
+    [Fact]
+    public void Roomba_QueryMatchesManyDistinctItems_CapsWithOverflowTail()
+    {
+        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        for (int i = 1; i <= 7; i++)
+            locations.RecordRoom(new RoomKey(1, i), new[] { $"severed head of npc{i}" });
+
+        engine.DispatchForTests(Gangpath("Friend", "@roomba severed"));
+
+        var replies = Replies(engine);
+        Assert.Equal(6, replies.Count);   // 5 item lines + one overflow line
+        Assert.Contains(replies, r => r.Contains("2 more matching item"));
+    }
+
     [Fact]
     public void Roomba_UnknownItem_ReportsNoRecord()
     {

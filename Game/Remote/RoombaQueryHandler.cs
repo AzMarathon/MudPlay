@@ -8,13 +8,19 @@ namespace MudPlay.Game.Remote;
 // Read-only handler for @roomba — reports every gang-house room a named item
 // is currently tracked in, per GhItemLocationStore's BBS-tier sighting log,
 // gated by the QueryItemLocation permission.
-//   @roomba <item name>   — ONE consolidated reply line: total quantity summed
-//                           across every room currently holding a match, and
-//                           the room locators — or "no record". Originally
-//                           replied with one chat line per room, which flooded
-//                           the channel for anything stocked in several rooms
-//                           (report 20260825-172400); a single line is both
-//                           quieter and reads more like an actual answer.
+//   @roomba <item name>   — one reply line PER DISTINCT MATCHING ITEM: total
+//                           quantity summed across every room currently
+//                           holding it, and the room locators — or "no
+//                           record". A loose query can match a whole family of
+//                           similarly-named items ("severed" / "head" both
+//                           match "severed head of goru-nezar" AND "severed
+//                           head of darksong"); FindSightings returns every
+//                           match rather than refusing on ambiguity, so this
+//                           groups by item and reports each (capped, with an
+//                           overflow tail) instead of silently saying nothing
+//                           just because more than one name matched. A query
+//                           that resolves to exactly one item — the common
+//                           case — is just one line, same as before.
 //   @roomba sync          — replies with this client's entire sighting log,
 //                           compactly encoded (see GhItemSyncCodec), for the
 //                           requester's RoombaSyncReceiver to merge in. Same
@@ -26,10 +32,15 @@ namespace MudPlay.Game.Remote;
 // it on.
 public sealed class RoombaQueryHandler : IDisposable
 {
-    // Cap on room locators shown in a single @roomba <item> reply line so an
-    // item scattered across a large gang house can't blow the line out to an
+    // Cap on distinct-item lines a single @roomba <item> reply sends, so a
+    // very loose query (matching a whole family of items) can't flood the
+    // channel; the overflow folds into one final "+N more" line.
+    private const int MaxItemsShown = 5;
+
+    // Cap on room locators shown within one item's reply line so an item
+    // scattered across a large gang house can't blow that line out to an
     // unreadable length; the overflow folds into a "+N more" tail instead of
-    // extra lines (the whole point of this format is ONE line per query).
+    // extra lines.
     private const int MaxRoomsShown = 10;
 
     // Cap on records per @roomba sync response so a very large gang-house
@@ -92,7 +103,16 @@ public sealed class RoombaQueryHandler : IDisposable
             return;
         }
 
-        ctx.Reply(FormatTotal(sightings));
+        List<IGrouping<string, GhItemSighting>> byItem = sightings
+            .GroupBy(s => s.ItemName, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (IGrouping<string, GhItemSighting> group in byItem.Take(MaxItemsShown))
+            ctx.Reply(FormatTotal(group.ToList()));
+
+        int extraItems = byItem.Count - MaxItemsShown;
+        if (extraItems > 0) ctx.Reply($"{extraItems} more matching item(s) — refine your search");
     }
 
     // One line: total quantity across every matching room, the item's
