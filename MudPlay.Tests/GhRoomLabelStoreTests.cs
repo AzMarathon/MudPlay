@@ -83,6 +83,39 @@ public sealed class GhRoomLabelStoreTests : IDisposable
     }
 
     [Fact]
+    public void MergeSyncLabels_AdoptsAbsent_KeepsLocal_OneCatchAll()
+    {
+        GhRoomLabelStore store = NewPinnedStore();
+        // A local label the sync must not clobber, and it already owns the catch-all.
+        store.SetLabel(new RoomKey(1, 100),
+            new List<GhCategoryRule> { GhCategoryRule.ForItemType(9) }, isCatchAll: true);
+
+        int fires = 0;
+        store.Changed += () => fires++;
+
+        int adopted = store.MergeSyncLabels(new List<GhRoomLabel>
+        {
+            // Same room as the local one — must be skipped (add-if-absent).
+            new GhRoomLabel(1, 100) { Rules = new() { GhCategoryRule.ForItemType(1) } },
+            // New room, wants catch-all — adopted, but demoted since one already exists.
+            new GhRoomLabel(1, 200) { IsCatchAll = true, Rules = new() { GhCategoryRule.ForWornSlot(2) } },
+            // New room, ordinary.
+            new GhRoomLabel(1, 300) { Rules = new() { GhCategoryRule.ForItemType(7) } },
+        });
+
+        Assert.Equal(2, adopted);       // 200 + 300; 100 skipped
+        Assert.Equal(1, fires);          // one Changed for the whole merge
+
+        Assert.True(store.TryGetLabel(new RoomKey(1, 100), out GhRoomLabel local));
+        Assert.Equal(9, local.Rules[0].ItemType);   // local kept, not clobbered
+        Assert.True(local.IsCatchAll);               // local still owns the catch-all
+
+        Assert.True(store.TryGetLabel(new RoomKey(1, 200), out GhRoomLabel adopted200));
+        Assert.False(adopted200.IsCatchAll);         // second catch-all demoted
+        Assert.Equal(2, adopted200.Rules[0].Worn);
+    }
+
+    [Fact]
     public void ResponsesEnabled_DefaultsOff_AndPersistsWhenSet()
     {
         GhRoomLabelStore store = NewPinnedStore();

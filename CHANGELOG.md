@@ -14,6 +14,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Networking: outbound writes are now serialized — two engine sends fired back-to-back (e.g. an `@roomba sync`'s rapid telepath replies) could previously race into the socket concurrently and interleave their bytes, splicing one line's data into another's command prefix; each write now completes before the next begins
 - Roomba: `@roomba sync` hands over the **entire** logged sighting set (dropped the old 500-record cap), packed even tighter (a single-item sighting no longer spends a byte on its quantity)
 - Roomba: `@roomba sync` now paces its telepaths ~800ms apart, and re-sends any the game drops with a rate-limit notice ("typing too quickly" / "too many messages sent") — so a big-house sync trickles out in the background instead of flooding the channel or stalling the responder's own combat/heal/movement
+- Roomba: `@roomba sync` now also hands over the **labeled gang-house rooms** (their sort rules + catch-all), not just the item sightings — so a fresh receiver's Roomba tab fills with the same rooms and can sweep them; a room the receiver has already labeled itself is left untouched
 
 ## 3.27.10
 

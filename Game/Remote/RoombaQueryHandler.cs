@@ -156,18 +156,25 @@ public sealed class RoombaQueryHandler : IDisposable
     // responder, same as @timer sync.
     private void OnSyncRequest(RemoteCommandContext ctx)
     {
+        // Hand over BOTH the labeled gang-house rooms and the item sightings, so a
+        // fresh receiver gets the whole gang house (rooms populate their Roomba tab,
+        // items back @roomba / the Master List). Labels first — they're few, and the
+        // rooms should appear before their contents stream in.
+        IReadOnlyList<GhRoomLabel> labels = _labels.Labels.ToList();
         IReadOnlyList<GhItemSyncRecord> records = _locations.ToSyncRecords();
-        IReadOnlyList<string> lines = GhItemSyncCodec.EncodeLines(records, MaxBlobCharsPerLine);
+        IReadOnlyList<string> labelLines = GhItemSyncCodec.EncodeLabelLines(labels, MaxBlobCharsPerLine);
+        IReadOnlyList<string> itemLines = GhItemSyncCodec.EncodeLines(records, MaxBlobCharsPerLine);
 
         // Paced out one telepath at a time (RoombaSyncSender) so a big log can't
         // flood the channel or trip the game's burst rate limit — the sync is a
         // background courtesy to the requester, not something that should stall
         // this client's own combat/heal/movement sends.
-        List<string> wire = new(lines.Count);
-        foreach (string line in lines) wire.Add($"{SyncResponseToken} {line}");
+        List<string> wire = new(labelLines.Count + itemLines.Count);
+        foreach (string line in labelLines) wire.Add($"{SyncResponseToken} {line}");
+        foreach (string line in itemLines) wire.Add($"{SyncResponseToken} {line}");
         _sender.Enqueue(ctx.Reply, wire);
 
         _log?.Info("RoombaSync",
-            $"answered @roomba sync for {ctx.Sender} on {ctx.Channel} — {records.Count} sighting(s) in {lines.Count} line(s), pacing out");
+            $"answered @roomba sync for {ctx.Sender} on {ctx.Channel} — {labels.Count} label(s) + {records.Count} sighting(s) in {wire.Count} line(s), pacing out");
     }
 }

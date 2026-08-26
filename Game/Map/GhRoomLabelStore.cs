@@ -119,6 +119,47 @@ public sealed class GhRoomLabelStore
         Changed?.Invoke();
     }
 
+    // Adopt gang-house room labels received via @roomba sync — ADD-IF-ABSENT, so a
+    // room the receiver has already labeled keeps its own (a shared gang house is
+    // the same for everyone, and this way a re-sync never clobbers local edits).
+    // Respects the single-catch-all invariant. Fires Changed once. Returns the
+    // count adopted, for the program log.
+    public int MergeSyncLabels(IReadOnlyList<GhRoomLabel> incoming)
+    {
+        ArgumentNullException.ThrowIfNull(incoming);
+        if (_activeBbs is null || incoming.Count == 0) return 0;
+
+        bool haveCatchAll = _labels.Values.Any(l => l.IsCatchAll);
+        int added = 0;
+        foreach (GhRoomLabel lbl in incoming)
+        {
+            if (lbl.Map <= 0 || lbl.Room <= 0) continue;
+            RoomKey key = new(lbl.Map, lbl.Room);
+            if (_labels.ContainsKey(key)) continue;   // don't overwrite a local label
+
+            bool catchAll = lbl.IsCatchAll && !haveCatchAll;   // at most one catch-all owner
+            if (catchAll) haveCatchAll = true;
+            GhRoomLabel adopted = new(key.Map, key.Room)
+            {
+                Rules = lbl.Rules ?? new List<GhCategoryRule>(),
+                IsCatchAll = catchAll,
+            };
+            _labels[key] = adopted;
+            _settings.RoomLabels ??= new List<GhRoomLabel>();
+            _settings.RoomLabels.RemoveAll(l => l.Map == key.Map && l.Room == key.Room);
+            _settings.RoomLabels.Add(adopted);
+            added++;
+        }
+
+        if (added > 0)
+        {
+            Persist();
+            _log?.Info("GhSweep", $"adopted {added} gang-house room label(s) from @roomba sync");
+            Changed?.Invoke();
+        }
+        return added;
+    }
+
     // Load the Roomba settings for the active BBS. Called by AppServices on
     // ProfileService.ProfileLoaded / BbsPinApplied with the resolved active BBS
     // name; resets the in-memory store when the pin clears (bbs is null / blank).

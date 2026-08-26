@@ -56,21 +56,31 @@ public sealed class RoombaSyncReceiver : IDisposable
         if (e.Speaker is not { Length: > 0 } sender) return;
         if (!TryParse(e.Message, out string blob)) return;
 
-        IReadOnlyList<GhItemSyncRecord> records;
         try
         {
-            records = GhItemSyncCodec.DecodeLine(blob);
+            // The same @roombadata stream carries both room-label lines and item
+            // sighting lines; route on the leading byte the codec exposes.
+            if (GhItemSyncCodec.IsLabelLine(blob))
+            {
+                IReadOnlyList<Models.Profile.GhRoomLabel> labels = GhItemSyncCodec.DecodeLabelLine(blob);
+                int adopted = _labels.MergeSyncLabels(labels);
+                if (adopted > 0)
+                    _log?.Info("RoombaSync",
+                        $"adopted {adopted} gang-house room label(s) from {sender}'s @roomba sync");
+            }
+            else
+            {
+                IReadOnlyList<GhItemSyncRecord> records = GhItemSyncCodec.DecodeLine(blob);
+                int applied = _locations.MergeSyncRecords(records);
+                if (applied > 0)
+                    _log?.Info("RoombaSync",
+                        $"merged {applied}/{records.Count} item sighting(s) from {sender}'s @roomba sync");
+            }
         }
         catch (FormatException ex)
         {
             _log?.Warn("RoombaSync", $"discarding malformed roomba-sync line from {sender}: {ex.Message}");
-            return;
         }
-
-        int applied = _locations.MergeSyncRecords(records);
-        if (applied > 0)
-            _log?.Info("RoombaSync",
-                $"merged {applied}/{records.Count} item sighting(s) from {sender}'s @roomba sync");
     }
 
     // Parse "@roombadata <blob>", tolerating the {} the remote reply path wraps a

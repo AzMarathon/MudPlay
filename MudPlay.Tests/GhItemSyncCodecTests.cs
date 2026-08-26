@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using MudPlay.Game.Remote;
+using MudPlay.Models.Profile;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -149,6 +150,64 @@ public sealed class GhItemSyncCodecTests
         List<GhItemSyncRecord> back = DecodeAll(
             GhItemSyncCodec.EncodeLines(new[] { new GhItemSyncRecord(1, 1, 1, 0, T("2026-08-22T12:00:00Z")) }, 120));
         Assert.Equal(1, back[0].Quantity);
+    }
+
+    [Fact]
+    public void LabelLines_RoundTrip_MapRoomRulesCatchAll()
+    {
+        List<GhRoomLabel> labels = new()
+        {
+            new GhRoomLabel(1, 100)
+            {
+                IsCatchAll = true,
+                Rules = new() { GhCategoryRule.ForWornSlot(3), GhCategoryRule.ForItemType(2, weaponType: 5) },
+            },
+            new GhRoomLabel(1, 200)
+            {
+                Rules = new() { GhCategoryRule.ForItemType(7) },
+            },
+        };
+
+        IReadOnlyList<string> lines = GhItemSyncCodec.EncodeLabelLines(labels, 200);
+        Assert.NotEmpty(lines);
+        Assert.All(lines, l => Assert.True(GhItemSyncCodec.IsLabelLine(l)));
+
+        List<GhRoomLabel> back = lines.SelectMany(GhItemSyncCodec.DecodeLabelLine).ToList();
+        Assert.Equal(2, back.Count);
+
+        GhRoomLabel a = back.Single(l => l.Room == 100);
+        Assert.True(a.IsCatchAll);
+        Assert.Equal(2, a.Rules.Count);
+        Assert.Equal(3, a.Rules[0].Worn);
+        Assert.Null(a.Rules[0].ItemType);
+        Assert.Equal(2, a.Rules[1].ItemType);
+        Assert.Equal(5, a.Rules[1].WeaponType);
+        Assert.Null(a.Rules[1].Worn);
+
+        GhRoomLabel b = back.Single(l => l.Room == 200);
+        Assert.False(b.IsCatchAll);
+        Assert.Equal(7, b.Rules[0].ItemType);
+    }
+
+    [Fact]
+    public void IsLabelLine_DistinguishesLabelFromItemLines()
+    {
+        string itemLine = GhItemSyncCodec.EncodeLines(
+            new[] { new GhItemSyncRecord(1, 1, 1, 1, T("2026-08-22T10:00:00Z")) }, 200)[0];
+        string labelLine = GhItemSyncCodec.EncodeLabelLines(
+            new[] { new GhRoomLabel(1, 1) { Rules = new() { GhCategoryRule.ForItemType(1) } } }, 200)[0];
+
+        Assert.False(GhItemSyncCodec.IsLabelLine(itemLine));
+        Assert.True(GhItemSyncCodec.IsLabelLine(labelLine));
+        // Each decoder rejects the other kind of line.
+        Assert.Throws<FormatException>(() => GhItemSyncCodec.DecodeLine(labelLine));
+        Assert.Throws<FormatException>(() => GhItemSyncCodec.DecodeLabelLine(itemLine));
+    }
+
+    [Fact]
+    public void EmptyLabels_EncodeToNoLines()
+    {
+        Assert.Empty(GhItemSyncCodec.EncodeLabelLines(Array.Empty<GhRoomLabel>(), 200));
     }
 
     [Fact]

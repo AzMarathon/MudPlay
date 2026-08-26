@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using MudPlay.Models.Profile;
 
 namespace MudPlay.Game.Remote;
 
@@ -40,7 +41,12 @@ namespace MudPlay.Game.Remote;
 // the blob length), and every field is range-checked back into int on the way in.
 public static class GhItemSyncCodec
 {
-    private const byte Version = 3;
+    private const byte Version = 4;
+
+    // Leading byte of a LABEL line (vs an item line's version 4), so the same
+    // @roombadata wire stream carries both — the receiver routes on this byte.
+    // Chosen well clear of the item-version range so the two can't be confused.
+    private const byte LabelMarker = 0x80;
 
     // Anchor for the per-line base timestamp. A fixed recent point keeps the base
     // varint itself small; each room then deltas off the LINE'S base (below), not
@@ -177,6 +183,104 @@ public static class GhItemSyncCodec
             }
         }
         return records;
+    }
+
+    // True if this line carries room LABELS rather than item sightings — the
+    // receiver peeks this to route the line. Returns false for an item line or
+    // anything that isn't valid base64url.
+    public static bool IsLabelLine(string blob)
+    {
+        ArgumentNullException.ThrowIfNull(blob);
+        try
+        {
+            byte[] bytes = FromBase64Url(blob);
+            return bytes.Length > 0 && bytes[0] == LabelMarker;
+        }
+        catch (FormatException) { return false; }
+    }
+
+    // Encode the gang-house room labels into self-contained lines (each ≤
+    // maxCharsPerLine). Labels are pure numbers — map/room, a catch-all flag, and
+    // rules of small ints (equip slot / item-type / weapon-type / armour-type) —
+    // so no string handling is needed. Returns empty when there are no labels.
+    public static IReadOnlyList<string> EncodeLabelLines(IReadOnlyList<GhRoomLabel> labels, int maxCharsPerLine)
+    {
+        ArgumentNullException.ThrowIfNull(labels);
+        if (maxCharsPerLine < 24) throw new ArgumentOutOfRangeException(nameof(maxCharsPerLine));
+        int lineByteBudget = maxCharsPerLine / 4 * 3;
+
+        List<byte[]> blocks = new();
+        foreach (GhRoomLabel lbl in labels.OrderBy(l => l.Map).ThenBy(l => l.Room))
+        {
+            List<byte> block = new();
+            WriteUVarint(block, (ulong)lbl.Map);
+            WriteUVarint(block, (ulong)lbl.Room);
+            block.Add((byte)(lbl.IsCatchAll ? 1 : 0));
+            IReadOnlyList<GhCategoryRule> rules = lbl.Rules ?? new List<GhCategoryRule>();
+            WriteUVarint(block, (ulong)rules.Count);
+            foreach (GhCategoryRule r in rules)
+            {
+                // Presence bitmask, then only the fields that are set (so a 0 value
+                // is preserved, unlike a "0 == unset" sentinel would).
+                int flags = (r.Worn.HasValue ? 1 : 0) | (r.ItemType.HasValue ? 2 : 0)
+                          | (r.WeaponType.HasValue ? 4 : 0) | (r.ArmourType.HasValue ? 8 : 0);
+                block.Add((byte)flags);
+                if (r.Worn.HasValue) WriteUVarint(block, (ulong)r.Worn.Value);
+                if (r.ItemType.HasValue) WriteUVarint(block, (ulong)r.ItemType.Value);
+                if (r.WeaponType.HasValue) WriteUVarint(block, (ulong)r.WeaponType.Value);
+                if (r.ArmourType.HasValue) WriteUVarint(block, (ulong)r.ArmourType.Value);
+            }
+            blocks.Add(block.ToArray());
+        }
+
+        List<string> lines = new();
+        List<byte> line = new() { LabelMarker };
+        foreach (byte[] block in blocks)
+        {
+            if (line.Count > 1 && line.Count + block.Length > lineByteBudget)
+            {
+                lines.Add(ToBase64Url(line.ToArray()));
+                line = new() { LabelMarker };
+            }
+            line.AddRange(block);
+        }
+        if (line.Count > 1) lines.Add(ToBase64Url(line.ToArray()));   // nothing to send when there are no labels
+        return lines;
+    }
+
+    // Decode one label line (marker 0x80) into room labels. Throws FormatException
+    // on a malformed / out-of-range payload so the caller discards just this line.
+    public static IReadOnlyList<GhRoomLabel> DecodeLabelLine(string blob)
+    {
+        ArgumentNullException.ThrowIfNull(blob);
+        byte[] bytes = FromBase64Url(blob);
+        int pos = 0;
+        if (bytes.Length == 0 || bytes[pos++] != LabelMarker)
+            throw new FormatException("roomba-sync label line: bad or missing marker byte");
+
+        List<GhRoomLabel> labels = new();
+        while (pos < bytes.Length)
+        {
+            int map = ReadUVarintAsInt(bytes, ref pos);
+            int room = ReadUVarintAsInt(bytes, ref pos);
+            if (pos >= bytes.Length) throw new FormatException("roomba-sync label line: truncated");
+            bool isCatchAll = bytes[pos++] != 0;
+            int ruleCount = ReadUVarintAsInt(bytes, ref pos);
+            List<GhCategoryRule> rules = new();
+            for (int k = 0; k < ruleCount; k++)
+            {
+                if (pos >= bytes.Length) throw new FormatException("roomba-sync label line: truncated rule");
+                int flags = bytes[pos++];
+                GhCategoryRule rule = new();
+                if ((flags & 1) != 0) rule.Worn = ReadUVarintAsInt(bytes, ref pos);
+                if ((flags & 2) != 0) rule.ItemType = ReadUVarintAsInt(bytes, ref pos);
+                if ((flags & 4) != 0) rule.WeaponType = ReadUVarintAsInt(bytes, ref pos);
+                if ((flags & 8) != 0) rule.ArmourType = ReadUVarintAsInt(bytes, ref pos);
+                rules.Add(rule);
+            }
+            labels.Add(new GhRoomLabel(map, room) { Rules = rules, IsCatchAll = isCatchAll });
+        }
+        return labels;
     }
 
     // ----- LEB128 varints ------------------------------------------------------
