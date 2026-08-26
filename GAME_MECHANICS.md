@@ -2300,8 +2300,13 @@ slot and displaces only what was there, so restore is **slot-specific**:
   a 1H buff swaps cleanly — `eq buff`, `use`, `eq <2H weapon>` — no off-hand step, the off-hand was
   empty under the two-hander.)
 - **Off-hand buff** (warhorn, a held item) → displaces the **off-hand**; restore the off-hand shield.
-  **The weapon is never touched.** (Restoring the weapon instead — the bug — strands the buff in the
-  off-hand and never puts the shield back.)
+  **The weapon is never touched** *when it's one-handed*. (Restoring the weapon instead — the bug —
+  strands the buff in the off-hand and never puts the shield back.)
+  - **Exception — off-hand buff while wielding a 2H weapon** *([CONFIRMED] 2026-08-26, user)*: a two-hander
+    fills **both** hands, so `eq <off-hand buff>` is **rejected outright** until it comes off — the mirror
+    of the 2H-buff case below. Order: `rem <2H weapon>` → `eq <buff>` → `use` → `rem <buff>` (frees the
+    off-hand) → `eq <2H weapon>` (the game likewise blocks the 2H wield while the off-hand is occupied, so
+    the buff must be removed first). Without this the sequence just loops on a rejected `eq <buff>`.
 - **Worn buff** (amulet/ring/etc.) → displaces **that worn slot**; restore that slot's item.
 - **2H weapon buff** while holding a 1H weapon + off-hand → it needs **both** hands, so the order is:
   `rem <off-hand>` → `eq <2H buff>` → `use` → `eq <1H weapon>` (this drops the two-hander and frees

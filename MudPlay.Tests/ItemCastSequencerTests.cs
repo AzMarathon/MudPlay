@@ -54,6 +54,15 @@ public sealed class ItemCastSequencerTests
         return (seq, seq.LastSentForTests);
     }
 
+    private static (ItemCastSequencer Seq, List<byte[]> Sent) NewSeqWithTwoHandedWorn(
+        InventorySnapshot inv, params string[] twoHandedWeapons)
+    {
+        ItemCastSequencer seq = new(() => Items, () => inv, isWornWeaponTwoHanded:
+            name => System.Array.Exists(twoHandedWeapons, n => string.Equals(n, name, System.StringComparison.OrdinalIgnoreCase)));
+        seq.SetWireSender(_ => { });
+        return (seq, seq.LastSentForTests);
+    }
+
     private static List<string> Decode(IEnumerable<byte[]> sent)
         => sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
 
@@ -206,6 +215,46 @@ public sealed class ItemCastSequencerTests
         // Off-hand empty: nothing to restore, and the weapon stays put.
         (ItemCastSequencer seq, List<byte[]> sent) =
             NewSeq(InvWith(new EquippedItem("throwing hammers", "Weapon Hand")));
+
+        Assert.True(seq.Execute("#engraved warhorn"));
+        Assert.Equal(new[]
+        {
+            "eq Engraved Warhorn",
+            "use Engraved Warhorn",
+        }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_OffHandItem_TwoHandedWeaponWorn_RemovesWeaponFirstAndReWields()
+    {
+        // The reported bug: an off-hand buff item (an arcane tome / warhorn) while a
+        // TWO-HANDED weapon is wielded. The two-hander fills both hands, so `eq` of
+        // the off-hand item is rejected outright — the sequence had been sending only
+        // "eq <item>" and looping. Correct order: drop the weapon, wield + use, then
+        // remove the item to free the off-hand and re-wield the two-hander.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeqWithTwoHandedWorn(
+            InvWith(new EquippedItem("skull-capped staff", "Weapon Hand")),
+            "skull-capped staff");
+
+        Assert.True(seq.Execute("#engraved warhorn"));
+        Assert.Equal(new[]
+        {
+            "remove skull-capped staff",
+            "eq Engraved Warhorn",
+            "use Engraved Warhorn",
+            "remove Engraved Warhorn",
+            "eq skull-capped staff",
+        }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_OffHandItem_OneHandedWeaponWorn_TakesNormalPath()
+    {
+        // Same wiring, but the wielded weapon is one-handed — the off-hand is free,
+        // so the reverse dance must NOT trigger; it's the ordinary eq/use/restore.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeqWithTwoHandedWorn(
+            InvWith(new EquippedItem("throwing hammers", "Weapon Hand")),
+            "skull-capped staff");   // the worn weapon isn't in the 2H set
 
         Assert.True(seq.Execute("#engraved warhorn"));
         Assert.Equal(new[]
