@@ -133,7 +133,7 @@
                 <ComboBox ItemsSource="{Binding StashCoinCutoffChoices}"
                           SelectedItem="{Binding StashCoinCutoff, Mode=TwoWay}"
                           Width="140" HorizontalAlignment="Left"
-                          ToolTip.Tip="Stashing hides coins up to the selected denomination and keeps the higher coins in hand — e.g. Gold hides copper/silver/gold and keeps platinum/runic. Everything stashes every denomination (no coin held back). Applies to stashing only."/>
+                          ToolTip.Tip="Caps which coins a stash offloads. Nothing stashes no coin at all (a stash still hides your flagged items). A denomination hides coins up to it and keeps the higher coins in hand — e.g. Gold hides copper/silver/gold and keeps platinum/runic. Everything stashes every denomination. Applies to stashing only."/>
 
                 <!-- Stash as a party follower -->
                 <CheckBox Content="Enable stashing as a follower" Margin="0,10,0,0"

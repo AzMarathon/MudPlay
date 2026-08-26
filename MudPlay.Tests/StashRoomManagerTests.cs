@@ -195,6 +195,23 @@ public sealed class StashRoomManagerTests
     }
 
     [Fact]
+    public void StashCoinCutoff_Nothing_StashesItemsButNoCoin()
+    {
+        // "Nothing" hides flagged items but leaves every coin in hand.
+        using Harness h = new();
+        h.MarkRoomAsStash(1, 42);
+        h.CashSettings.StashCoinCutoff = StashCoinCutoff.Nothing;
+        h.Snapshot = Coins(gold: 500, carried: new[] { "a torch" });
+        h.AutoStashItems.Add("a torch");
+
+        h.Stash.ExecuteStash(new RoomKey(1, 42));
+
+        Assert.Equal(new[] { "hide a torch" }, h.SentLines().ToList());   // item only, no coin
+        Assert.Empty(h.Executed[0].Currencies);
+        Assert.Equal(new[] { "a torch" }, h.Executed[0].Items);
+    }
+
+    [Fact]
     public void AutoGetCashOff_NoDispatch()
     {
         using Harness h = new() { AutoGetCashEnabled = false };

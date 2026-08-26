@@ -129,16 +129,15 @@ public enum CoinDenomination
     Runic,
 }
 
-// The highest coin denomination a stash will offload. Everything stashes them
-// all; otherwise every coin at or below the named denomination is stashed and the
-// higher coins stay in hand. Platinum is the top cutoff (below Runic), so picking
-// a cutoff always keeps at least the runic on hand — for "stash all", use
-// Everything.
+// The highest coin denomination a stash will offload, low → high. Nothing stashes
+// no coin (a stash still hides flagged items); a denomination stashes every coin
+// at or below it and keeps the higher coins in hand; Everything stashes them all.
 public enum StashCoinCutoff
 {
-    Everything,
+    Nothing,
     Copper,
     Silver,
     Gold,
     Platinum,
+    Everything,
 }
