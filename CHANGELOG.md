@@ -6,7 +6,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 - Buffs: a buff's recast duration is now **always** resolved from game data (the spell's own duration formula), even when it has no caster message in the Messages data — bladed sphere (`blsh`) and any other message-less buff were falling back to a wrong 60-second timer, which also made them expire and re-cast constantly as the top bless slot
 - Buffs: at login (and any time out of combat) the between-round cast loop now runs every round off the 1-second heartbeat, so configured buffs **queue up one-per-round in priority order** instead of trickling in ~30 s apart — the combat-round heartbeat that drives it only used to start once you were in a fight
-- Combat log: a new between-round line shows the queued spells' priority order and each buff slot's state (due / seconds-left) with the one that fired flagged, so you can see exactly what the caster picked and why
+- Combat log: a new between-round line lists every spell currently **queued** for the round (self/party heals, cure, and buffs) in type-priority order — e.g. `{spells queued=mihe(1), curp(5), bles(6-1), prev(6-2)}` — where the number is the spell-type priority and, for buffs, the second number is the bless-slot; a buff joins the queue as soon as it's within its recast window
 - bug reports addressed: paradigm-20260826-142652, paradigm-20260826-142928, paradigm-20260826-143143
 
 ## 3.28.4

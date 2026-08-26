@@ -820,6 +820,12 @@ public sealed class CastingDirector : IDisposable
 
         PartySettings? partySettings = _readPartySettings?.Invoke();
 
+        // Log the full between-round queue (all due candidates, priority-ordered) before
+        // firing the top one. Reached only when a cast can actually go out — Evaluate
+        // gates on the cast cooldown upstream — so it lands ~once per between-round, not
+        // every heartbeat poll.
+        LogDueQueue(spells, health, partySettings, healRestEnabled, blessEnabled);
+
         foreach (SpellCategory category in PrioritisedCategories(spells))
         {
             CastCandidate? pick = category switch
@@ -846,11 +852,7 @@ public sealed class CastingDirector : IDisposable
             // recast timer by the token. Only buff slots carry tokens.
             if (category == SpellCategory.Buffing && ItemCastToken.IsToken(cand.Spell))
             {
-                if (TryFireItemCast(cand.Spell, cand.RecastMarginSec))
-                {
-                    LogBetweenRoundQueue(spells, category, cand.Spell);
-                    return cand.Spell;
-                }
+                if (TryFireItemCast(cand.Spell, cand.RecastMarginSec)) return cand.Spell;
                 continue; // unresolved / non-buff item — let a later category try
             }
 
@@ -913,7 +915,6 @@ public sealed class CastingDirector : IDisposable
             _log?.Combat(LogCategory,
                 $"{category} fired spell={cand.Spell} target={cand.Target ?? "<self>"} " +
                 $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
-            LogBetweenRoundQueue(spells, category, cand.Spell);
             // Tell the combat engine a between-round cast went out so it can
             // resume our weapon attack on the *Combat Off* this cast triggers.
             CastFired?.Invoke();
@@ -923,39 +924,70 @@ public sealed class CastingDirector : IDisposable
         return null;
     }
 
-    // Combat-diagnostics snapshot of the between-round queue at the moment a cast
-    // fires: the category priority order (the Spells-tab type priorities that decide
-    // heal-vs-cure-vs-buff-vs-debuff), then the self-buff slots in slot order, each
-    // tagged DUE / Ns-left, with the one that just fired marked '*'. Answers "what was
-    // queued and why did it pick that" straight from the log. Read-only — no state is
-    // consumed here (unlike the pickers), so it's safe to run alongside the real pass.
-    private void LogBetweenRoundQueue(SpellsSettings spells, SpellCategory firedCategory, string firedSpell)
+    // Combat-diagnostics view of the between-round queue: every DUE candidate the
+    // engines want cast this round — self/party heals, a cure, and every buff inside
+    // its recast window — in type-priority order (the Spells-tab priorities), formatted
+    // `code(typePrio)`; buffs additionally carry their slot number as `code(typePrio-
+    // slot)`. Read-only: the heal/party/cure pickers don't mutate state, and buffs are
+    // enumerated directly (so PickSelfBuff's mana-regen-reroll consumption is untouched).
+    // Debuffs are omitted — they're the combat engine's decision and re-peeking it here
+    // is not guaranteed side-effect-free. Only logged when the queue is non-empty.
+    private void LogDueQueue(SpellsSettings spells, HealthSettings health, PartySettings? party,
+        bool healRestEnabled, bool blessEnabled)
     {
         if (_log is null) return;
-        List<string> buffs = new();
-        foreach (KeyValuePair<int, string> kv in spells.BlessSlots.OrderBy(k => k.Key))
+        List<(int Prio, int Slot, string Text)> q = new();
+
+        void AddSurvival(SpellCategory cat, string? spell)
         {
-            string? code = kv.Value?.Trim();
-            if (string.IsNullOrWhiteSpace(code)) continue;
-            string mark = string.Equals(code, firedSpell, StringComparison.OrdinalIgnoreCase) ? "*" : "";
-            buffs.Add($"{kv.Key}:{code}{mark}[{RecastState("", code)}]");
+            if (string.IsNullOrWhiteSpace(spell)) return;
+            int p = CategoryPriority(spells, cat);
+            string prioLabel = cat == SpellCategory.DownedAllyHeal ? "rescue" : p.ToString();
+            q.Add((p, -1, $"{spell.Trim()}({prioLabel})"));
         }
-        string cats = string.Join(" > ", PrioritisedCategories(spells));
-        _log.Combat(LogCategory,
-            $"between-round queue → fired {firedCategory}:{firedSpell}; category priority [{cats}]; "
-            + $"buff slots: {(buffs.Count > 0 ? string.Join(", ", buffs) : "(none configured)")}");
+        if (healRestEnabled)
+        {
+            AddSurvival(SpellCategory.DownedAllyHeal, PickDownedAllyHeal(party)?.Spell);
+            AddSurvival(SpellCategory.MinorPartyHeal, PickMinorPartyHeal(party)?.Spell);
+            AddSurvival(SpellCategory.MajorPartyHeal, PickMajorPartyHeal(party)?.Spell);
+            AddSurvival(SpellCategory.MinorSelfHeal, PickMinorSelfHeal(spells, health));
+            AddSurvival(SpellCategory.MajorSelfHeal, PickMajorSelfHeal(spells, health));
+            AddSurvival(SpellCategory.Curing, PickCure(spells)?.Spell);
+        }
+        if (blessEnabled)
+        {
+            int buffPrio = CategoryPriority(spells, SpellCategory.Buffing);
+            foreach (KeyValuePair<int, string> kv in spells.BlessSlots.OrderBy(k => k.Key))
+            {
+                string? code = kv.Value?.Trim();
+                if (string.IsNullOrWhiteSpace(code) || !IsRecastDue("", code)) continue;
+                q.Add((buffPrio, kv.Key, $"{code}({buffPrio}-{kv.Key})"));
+            }
+            // Regen / when-full downtime buffs have no slot number.
+            foreach (string? code in new[] { spells.MaRegenSpell, spells.WhenHpFullSpell, spells.WhenMaFullSpell })
+                if (!string.IsNullOrWhiteSpace(code) && IsRecastDue("", code.Trim()))
+                    q.Add((buffPrio, int.MaxValue, $"{code.Trim()}({buffPrio})"));
+        }
+
+        if (q.Count == 0) return;
+        string ordered = string.Join(", ", q.OrderBy(x => x.Prio).ThenBy(x => x.Slot).Select(x => x.Text));
+        _log.Combat(LogCategory, $"{{spells queued={ordered}}}");
     }
 
-    // Human-readable recast state of a keyed self-buff timer for the queue log: "DUE"
-    // when castable now (no timer, or now past its recast point Until-margin), else the
-    // whole-second countdown until that point.
-    private string RecastState(string target, string shortCode)
+    // The configured type-priority number for a between-round category (the Spells-tab
+    // priorities). DownedAllyHeal has none — it always leads — so it sorts first.
+    private static int CategoryPriority(SpellsSettings s, SpellCategory cat) => cat switch
     {
-        if (!_activeUntil.TryGetValue((target, shortCode), out (DateTime Until, int MarginSec, int TotalSec) t))
-            return "DUE";
-        double untilRecast = (t.Until.AddSeconds(-t.MarginSec) - _now()).TotalSeconds;
-        return untilRecast <= 0 ? "DUE" : $"{(int)untilRecast}s";
-    }
+        SpellCategory.DownedAllyHeal => int.MinValue,
+        SpellCategory.MinorPartyHeal => s.PriorityMinorPartyHeal,
+        SpellCategory.MajorPartyHeal => s.PriorityMajorPartyHeal,
+        SpellCategory.MinorSelfHeal => s.PriorityMinorSelfHeal,
+        SpellCategory.MajorSelfHeal => s.PriorityMajorSelfHeal,
+        SpellCategory.Curing => s.PriorityCuring,
+        SpellCategory.Buffing => s.PriorityBuffing,
+        SpellCategory.Debuffing => s.PriorityDebuffing,
+        _ => int.MaxValue,
+    };
 
     private static CastCandidate? Wrap(string? spell) =>
         string.IsNullOrWhiteSpace(spell) ? null : new CastCandidate(spell, Target: null);
