@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.27.10
+
+- Combat: a pre-attack debuff no longer wastes a combat round — after the debuff fires (an AoE or single-target weakening spell on engage), the combat attack now goes out immediately behind it in the SAME round instead of waiting for the debuff's `*Combat Off*` a round later (the debuff and the attack are independent slots server-side). If the debuff kills the room, the queued attack re-validates and skips rather than casting at an empty room
+- bug reports addressed: paradigm-20260825-103417
+
 ## 3.27.9
 
 - Equipment: a pre-rest gear swap no longer thrashes rest — MudPlay holds the `rest` re-issue while the set's `wear`/`rem` commands stream (each stood the character up, so the rest engine was re-`rest`ing between every one), then rests once the swap finishes

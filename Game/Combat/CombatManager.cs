@@ -469,6 +469,18 @@ public sealed partial class CombatManager : IDisposable
     // pending attack spell, not another survival cast.
     public bool IsSpellAttackOwed => _spellAttackOwed;
 
+    // A pre-attack DEBUFF fired the combat attack immediately this round
+    // (TryPreAttackInBetween → DeferPostDebuffAttack) instead of deferring it to the
+    // debuff's *Combat Off*. Every *Combat Off* carrying THIS between-round stamp must
+    // then be barred from the resume paths, or the attack fires a second time (the
+    // debuff and the attack are independent slots, report paradigm-20260825-103417).
+    // Keyed to the stamp, not a one-shot flag, because casting the attack between
+    // rounds can itself drop a quick second Off inside CastInterruptResumeWindow — a
+    // bool would only catch the first. A later genuine between-round cast re-stamps
+    // _betweenRoundCastAt, so its Off no longer matches and resumes normally; reset to
+    // MinValue on any target/round reset so a stale stamp can't bar a legit resume.
+    private DateTimeOffset _suppressResumeForBetweenRoundStamp = DateTimeOffset.MinValue;
+
     // When a monster death was last detected this burst (stamped by
     // NoteMonsterDied / NoteUnattributedDeath). The between-round-cast resume
     // must not fire when a kill just happened: a mob's dying *Combat Off* and a
@@ -1545,6 +1557,11 @@ public sealed partial class CombatManager : IDisposable
         _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
         _lastAttackTallyAt = DateTimeOffset.MinValue;
         _spellAttackOwed = false;
+        // Drop a pending pre-attack-debuff suppress: if the fight ended (room clear,
+        // combat off, death) before the debuff's *Combat Off* arrived, a stale stamp
+        // could bar the first legit resume in the NEXT fight (unlikely — a new cast
+        // re-stamps _betweenRoundCastAt — but cheap insurance).
+        _suppressResumeForBetweenRoundStamp = DateTimeOffset.MinValue;
         _attackSpellImmuneSpecies.Clear();
         _spellChooser.ResetForNewRoom();
     }
@@ -2765,6 +2782,22 @@ public sealed partial class CombatManager : IDisposable
             _combatOff = true;
             _engageConfirmed = false;
 
+            // A pre-attack debuff already fired this round's combat attack immediately
+            // (DeferPostDebuffAttack); every *Combat Off* carrying that debuff's
+            // between-round stamp must NOT run either resume below, or the attack
+            // double-fires. Matched by stamp (not a one-shot flag) so a quick second
+            // Off from casting the attack between rounds is caught too; a genuine later
+            // between-round cast re-stamps _betweenRoundCastAt and resumes normally. The
+            // MinValue guard keeps a fight that never armed the suppress (both fields at
+            // their MinValue default) from matching itself on every ordinary Off.
+            bool suppressBetweenRoundResume =
+                _suppressResumeForBetweenRoundStamp != DateTimeOffset.MinValue
+                && _betweenRoundCastAt == _suppressResumeForBetweenRoundStamp;
+            if (suppressBetweenRoundResume)
+                _log?.Combat(LogCategory,
+                    "*Combat Off* carries the pre-attack debuff's stamp — between-round-cast "
+                    + "resume suppressed (the combat attack already fired this round)");
+
             // Prompt kill drop. A fresh exp gain explains this Off (wire: death →
             // exp → Off) while NO between-round survival cast does — so it's our
             // kill's Off, not a mid-fight heal's. The custom per-monster death
@@ -2847,7 +2880,8 @@ public sealed partial class CombatManager : IDisposable
                     + $"castAtOrAfterLastSwing={_lastAttackSentAt <= _betweenRoundCastAt}, "
                     + $"spellResumeAlreadyFired={_betweenRoundCastAt == _lastSpellResumeForBetweenRoundCastAt}");
 
-            if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
+            if (!suppressBetweenRoundResume
+                && DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _castingSpellTarget is null
                 && _classifier.Current is { } live
                 && HasEngageable(live))
@@ -2900,7 +2934,8 @@ public sealed partial class CombatManager : IDisposable
                 && string.Equals(curT, _castingSpellTarget, StringComparison.OrdinalIgnoreCase);
             bool manualPaced = _lastBetweenRoundCastManual
                 && DateTimeOffset.Now - _lastManualCastResumeAt < ManualResumePacing;
-            if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
+            if (!suppressBetweenRoundResume
+                && DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _betweenRoundCastAt != _lastSpellResumeForBetweenRoundCastAt
                 && !manualPaced
                 && !_userAttackOverride   // user hand-typed this round's attack — hold our own until next round

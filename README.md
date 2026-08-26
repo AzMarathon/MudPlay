@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.27.9**
-> - Equipment: a pre-rest gear swap no longer thrashes rest — MudPlay holds the `rest` re-issue while the set's `wear`/`rem` commands stream, then rests once the swap finishes
-> - Equipment: the manual **Equip All** / `@equip-<set>` path now frees a paired finger/wrist slot before wearing the set's **second** ring/bracelet, so the swap converges instead of the game's `wear` trading with the ring you're keeping
-> - BBS: logging into the **wrong realm** is fixed — a BBS folder hand-duplicated to make a same-host sibling (e.g. "Paradigm PVE" copied from "Paradigm PVP") kept the original name inside its config, so its logon steps resolved to the wrong BBS; the name is now reconciled to the folder on load
+> **Version 3.27.10**
+> - Combat: a pre-attack debuff no longer wastes a combat round — after the debuff fires on engage, the combat attack now goes out immediately behind it in the **same** round instead of waiting a round for the debuff's `*Combat Off*` (they're independent slots server-side); if the debuff kills the room, the queued attack re-validates and skips rather than casting at an empty room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
