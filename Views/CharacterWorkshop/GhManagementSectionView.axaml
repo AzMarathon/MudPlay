@@ -95,7 +95,7 @@
                 <DataGridTextColumn Header="Map / Room #" Binding="{ReflectionBinding RoomKeyText}"
                                     Width="100" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTemplateColumn Header="Actively Manage" Width="120">
+                <DataGridTemplateColumn Header="Actively Manage" Width="150">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:GhRoomLabelRowViewModel">
                             <CheckBox IsChecked="{Binding ActivelyManaged, Mode=TwoWay}"
