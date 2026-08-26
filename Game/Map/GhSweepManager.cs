@@ -117,6 +117,7 @@ public sealed class GhSweepManager : IDisposable
     private readonly MovementCoordinator _coordinator;
     private readonly Func<bool> _isOtherEngineBusy;
     private readonly Func<bool> _isParadigm;
+    private readonly Func<RoomKey, bool> _isRoomActivelyManaged;
     private readonly InventoryManager? _inventory;
     private readonly GhItemLocationStore? _itemLocations;
     private readonly LogService? _log;
@@ -257,7 +258,8 @@ public sealed class GhSweepManager : IDisposable
         LogService? log = null,
         Func<bool>? isParadigm = null,
         InventoryManager? inventory = null,
-        GhItemLocationStore? itemLocations = null)
+        GhItemLocationStore? itemLocations = null,
+        Func<RoomKey, bool>? isRoomActivelyManaged = null)
     {
         ArgumentNullException.ThrowIfNull(labels);
         ArgumentNullException.ThrowIfNull(loopRunner);
@@ -280,6 +282,10 @@ public sealed class GhSweepManager : IDisposable
         _isParadigm = isParadigm ?? (static () => false);
         _inventory = inventory;
         _itemLocations = itemLocations;
+        // Which labeled rooms THIS character sweeps (per-character; labels are shared
+        // per-BBS). Defaults to "all managed" when unwired so tests that only label
+        // rooms sweep them exactly as before.
+        _isRoomActivelyManaged = isRoomActivelyManaged ?? (static _ => true);
         _log = log;
 
         _reconSearchSettle = new DispatcherTimer { Interval = ReconSearchSettle };
@@ -335,11 +341,14 @@ public sealed class GhSweepManager : IDisposable
             _log?.Warn(LogCategory, "start refused: a sweep is already running");
             return false;
         }
-        if (_labels.Labels.Count < 2)
+        int manageable = _labels.Labels.Count(l => _isRoomActivelyManaged(new RoomKey(l.Map, l.Room)));
+        if (manageable < 2)
         {
-            LastStartError = "Label at least 2 gang-house rooms on the map to start a sweep.";
+            LastStartError = manageable == 0
+                ? "No rooms are set to Actively Manage — check at least 2 on the Roomba tab."
+                : "Set at least 2 rooms to Actively Manage on the Roomba tab to start a sweep.";
             _log?.Warn(LogCategory,
-                $"start refused: {_labels.Labels.Count} labeled room(s); need at least 2");
+                $"start refused: {manageable} actively-managed room(s); need at least 2");
             return false;
         }
         if (_isOtherEngineBusy())
@@ -386,7 +395,7 @@ public sealed class GhSweepManager : IDisposable
 
         Phase = SweepPhase.Reconning;
         _log?.Info(LogCategory,
-            $"sweep started ({Mode}): {_labels.Labels.Count} labeled destination(s), "
+            $"sweep started ({Mode}): {manageable} actively-managed destination(s), "
             + $"{_sweepRooms.Count} circuit room(s), recon phase begins");
         PhaseChanged?.Invoke();
         return true;
@@ -400,8 +409,14 @@ public sealed class GhSweepManager : IDisposable
     // current room when known.
     private bool PlotAndStartCircuit()
     {
-        IReadOnlyList<RoomKey> allRooms =
-            _labels.Labels.Select(l => new RoomKey(l.Map, l.Room)).ToList();
+        // Only rooms THIS character actively manages — never the whole label set.
+        // Labels are per-BBS and can be adopted from another player's @roomba sync,
+        // so the full set may span separate gang houses; sweeping all of them would
+        // route Roomba house-to-house (or into one it can't enter).
+        IReadOnlyList<RoomKey> allRooms = _labels.Labels
+            .Select(l => new RoomKey(l.Map, l.Room))
+            .Where(_isRoomActivelyManaged)
+            .ToList();
         if (allRooms.Count == 0) return false;
         RoomKey startRoom = _tracker.State.CurrentRoom?.Key ?? allRooms[0];
         IReadOnlyList<RoomKey> orderedRooms =

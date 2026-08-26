@@ -2079,6 +2079,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_services.GhRoomLabels.TryGetLabel(k, out Models.Profile.GhRoomLabel existing))
         {
             _services.GhRoomLabels.ClearLabel(k);
+            _services.GhManagedRooms.SetManaged(k, false);   // drop this character's managed entry too
             return;
         }
         GhRoomLabelPickerDialogViewModel vm = new(ContextRoomName, k.Map, k.Room, existing);
@@ -2086,6 +2087,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             .OpenWindowAsync<GhRoomLabelPickerDialogViewModel, Models.Profile.GhRoomLabel?>(vm);
         if (result is null) return;   // cancelled
         _services.GhRoomLabels.SetLabel(k, result.Rules, result.IsCatchAll);
+        _services.GhManagedRooms.SetManaged(k, true);   // a room you label by hand is yours to sweep
     }
 
     // ----- "Use Teleport" (right-click a CMD/teleport room) ----------

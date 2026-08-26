@@ -23,10 +23,17 @@
         <!-- Header: instructions + live phase readout. -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,8">
             <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" TextWrapping="Wrap"
-                       Text="Right-click a map room → 'Toggle: Roomba Room' (or add one by number below) and set its sort rules, then Start Sweep to sort or Start Inventory to just scan and log without moving anything (needs 2+ rooms). Double-click a room for its contents; 'Roomba Log' has the full run."/>
+                       Text="Right-click a map room → 'Toggle: Roomba Room' (or add one by number below) and set its sort rules, then Start Sweep to sort or Start Inventory to just scan and log without moving anything (needs 2+ rooms set to Actively Manage). Only 'Actively Manage' rooms are visited — this is per character, so alts in different gang houses each pick their own; rooms adopted from a @roomba sync start off, so Roomba never walks to another gang house. Double-click a room for its contents; 'Roomba Log' has the full run."/>
             <TextBlock Text="{Binding PhaseText}"
                        Foreground="{StaticResource ChromeFgBrush}"
-                       FontWeight="SemiBold"/>
+                       FontWeight="SemiBold"
+                       IsVisible="{Binding !StartBlockedNoRooms}"/>
+            <!-- Replaces the "Idle" phase label when Start is pressed with nothing
+                 set to Actively Manage — red so it reads as a required action. -->
+            <TextBlock Text="Select rooms to actively manage"
+                       Foreground="{StaticResource SeverityErrorBrush}"
+                       FontWeight="SemiBold"
+                       IsVisible="{Binding StartBlockedNoRooms}"/>
             <TextBlock Text="{Binding StartHint}"
                        Foreground="{StaticResource SeverityWarnBrush}"
                        TextWrapping="Wrap"
@@ -88,6 +95,15 @@
                 <DataGridTextColumn Header="Map / Room #" Binding="{ReflectionBinding RoomKeyText}"
                                     Width="100" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTemplateColumn Header="Actively Manage" Width="120">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="vm:GhRoomLabelRowViewModel">
+                            <CheckBox IsChecked="{Binding ActivelyManaged, Mode=TwoWay}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      ToolTip.Tip="When on, Start Sweep / Start Inventory visits this room — per character, so alts on this BBS choose independently. Rooms adopted from a @roomba sync arrive off, so Roomba won't route to another gang house (or one you lack the emblem for)."/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Status" Binding="{ReflectionBinding Status}"
                                     Width="90" Foreground="{StaticResource ChromeFgBrush}"/>
                 <DataGridTextColumn Header="Sorts" Binding="{ReflectionBinding CategoryText}"

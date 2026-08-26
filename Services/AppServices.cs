@@ -1534,6 +1534,11 @@ public sealed class AppServices
     // character on the BBS.
     public Game.Map.GhRoomLabelStore GhRoomLabels { get; private set; } = null!;
 
+    // Which of the shared per-BBS labels THIS character actively sweeps. Per-character
+    // (so alts in different gang houses on one BBS each manage their own house);
+    // labels stay per-BBS above. See GhManagedRoomStore.
+    public Game.Map.GhManagedRoomStore GhManagedRooms { get; private set; } = null!;
+
     // Per-BBS "last seen this item in this room" log, fed by GhSweep and read by
     // RoombaQuery's @roomba handler.
     public Game.Map.GhItemLocationStore GhItemLocations { get; private set; } = null!;
@@ -2727,6 +2732,7 @@ public sealed class AppServices
         // per-character) — every character on a BBS shares the same gang house.
         // Loaded/reloaded via OnBbsPinApplied, same pattern as RoomBlacklist.
         GhRoomLabels = new Game.Map.GhRoomLabelStore(Profile, Log);
+        GhManagedRooms = new Game.Map.GhManagedRoomStore(Profile, Log);
         GhItemLocations = new Game.Map.GhItemLocationStore(ItemNames, Log);
         Profile.ProfileLoaded += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
         Profile.BbsPinApplied += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
@@ -4923,7 +4929,8 @@ public sealed class AppServices
             log: Log,
             isParadigm: onParadigm,
             inventory: Inventory,
-            itemLocations: GhItemLocations);
+            itemLocations: GhItemLocations,
+            isRoomActivelyManaged: GhManagedRooms.IsManaged);
 
         // A manually-typed movement step (one the walker / loop / auto-lair didn't
         // send — RoomTracker's echo-claim tells them apart) pauses the active nav

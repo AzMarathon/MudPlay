@@ -25,6 +25,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private readonly GhSweepManager _sweep;
     private readonly RoomGraphManager _roomGraph;
     private readonly GhItemLocationStore _items;
+    private readonly GhManagedRoomStore _managed;
     private Control? _view;
     private RoombaLogWindow? _logWindow;
     private RoombaMasterListWindow? _masterListWindow;
@@ -36,6 +37,11 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     public ObservableCollection<GhRoomLabelRowViewModel> Rooms { get; } = new();
 
     [ObservableProperty] private string _phaseText = "Idle";
+    // Start was pressed with NO room set to Actively Manage. Replaces the "Idle"
+    // phase label with a red "Select rooms to actively manage" prompt (see the view)
+    // so it's obvious why nothing happened. Cleared when a room is checked or a
+    // sweep actually starts.
+    [ObservableProperty] private bool _startBlockedNoRooms;
     // A refused Start's reason (null = none), shown as a warning line on the tab so
     // clicking Start with too few labeled rooms (etc.) isn't a silent no-op.
     [ObservableProperty] private string? _startHint;
@@ -77,22 +83,27 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     public bool SearchesEditable => !IsRunning && SearchForHidden;
 
     public GhManagementSectionViewModel(GhRoomLabelStore labels, GhSweepManager sweep, RoomGraphManager roomGraph,
-        GhItemLocationStore items)
+        GhItemLocationStore items, GhManagedRoomStore managed)
     {
         ArgumentNullException.ThrowIfNull(labels);
         ArgumentNullException.ThrowIfNull(sweep);
         ArgumentNullException.ThrowIfNull(roomGraph);
         ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(managed);
         _labels = labels;
         _sweep = sweep;
         _roomGraph = roomGraph;
         _items = items;
+        _managed = managed;
 
         SearchesPerRoom = _labels.SearchesPerRoom;
         SearchForHidden = _labels.SearchForHidden;
         _suppressSettingsWrite = false;
 
         _labels.Changed += RebuildRooms;
+        // Fires on a character swap (the per-character managed set changed), so the
+        // checkboxes re-reflect the new character's picks.
+        _managed.Changed += RebuildRooms;
         _sweep.PhaseChanged += RefreshStatus;
         _sweep.SweepCompleted += OnSweepCompleted;
         _items.Changed += RefreshRoombaDataTimestamp;
@@ -131,12 +142,26 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         {
             RoomKey key = new(label.Map, label.Room);
             string? name = _roomGraph.GetRoom(key)?.Name;
-            Rooms.Add(new GhRoomLabelRowViewModel(label, name, OnRemoveRow));
+            Rooms.Add(new GhRoomLabelRowViewModel(label, name, _managed.IsManaged(key), OnRemoveRow, OnToggleManage));
         }
         RefreshRoomStatuses();
     }
 
-    private void OnRemoveRow(GhRoomLabelRowViewModel row) => _labels.ClearLabel(row.Key);
+    private void OnRemoveRow(GhRoomLabelRowViewModel row)
+    {
+        _labels.ClearLabel(row.Key);
+        _managed.SetManaged(row.Key, false);   // drop the per-character managed entry too
+    }
+
+    // A row's "Actively Manage" checkbox toggled: persist it for THIS character, and
+    // clear the no-rooms-selected prompt the moment the user opts a room in.
+    private void OnToggleManage(RoomKey key, bool on)
+    {
+        _managed.SetManaged(key, on);
+        if (on) StartBlockedNoRooms = false;
+    }
+
+    private bool AnyRoomActivelyManaged() => _managed.Any;
 
     private void RefreshStatus()
     {
@@ -166,22 +191,29 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     };
 
     [RelayCommand]
-    private void Start()
-    {
-        RoomContentsTitle = null;
-        if (_sweep.Start(GhSweepManager.SweepMode.Sort)) { StartHint = null; CompletionSummary = null; }
-        else StartHint = _sweep.LastStartError;
-    }
+    private void Start() => BeginSweep(GhSweepManager.SweepMode.Sort);
 
     // Walks the same labeled circuit as Start (recon + hidden-item search per
     // the same settings) but never dispatches a get/drop — for a player who
     // wants @roomba's item-location log kept fresh without Roomba touching
     // (and potentially undoing) their own manual gang-house organization.
     [RelayCommand]
-    private void StartInventory()
+    private void StartInventory() => BeginSweep(GhSweepManager.SweepMode.InventoryOnly);
+
+    // Shared Start / Start Inventory entry. With NO room set to Actively Manage,
+    // surface the red "Select rooms to actively manage" prompt in the phase slot
+    // instead of silently doing nothing; otherwise hand off to the sweep engine and
+    // report any other refusal (already running, <2 managed, etc.) on the warning line.
+    private void BeginSweep(GhSweepManager.SweepMode mode)
     {
         RoomContentsTitle = null;
-        if (_sweep.Start(GhSweepManager.SweepMode.InventoryOnly)) { StartHint = null; CompletionSummary = null; }
+        if (!AnyRoomActivelyManaged())
+        {
+            StartBlockedNoRooms = true;
+            return;
+        }
+        StartBlockedNoRooms = false;
+        if (_sweep.Start(mode)) { StartHint = null; CompletionSummary = null; }
         else StartHint = _sweep.LastStartError;
     }
 
@@ -249,6 +281,8 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
             .OpenWindowAsync<GhRoomLabelPickerDialogViewModel, GhRoomLabel?>(picker);
         if (result is null) return;   // cancelled
         _labels.SetLabel(key, result.Rules, result.IsCatchAll);
+        _managed.SetManaged(key, true);   // a room you add by hand is yours to sweep
+        StartBlockedNoRooms = false;
         AddRoomInput = string.Empty;
         StartHint = null;
     }
@@ -269,6 +303,7 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     public override void Dispose()
     {
         _labels.Changed -= RebuildRooms;
+        _managed.Changed -= RebuildRooms;
         _sweep.PhaseChanged -= RefreshStatus;
         _sweep.SweepCompleted -= OnSweepCompleted;
         _items.Changed -= RefreshRoombaDataTimestamp;

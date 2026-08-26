@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.3**
-> - Roomba Master List: new **Export List…** button saves the whole item log to a text file grouped by room — one header per map/room with its name, then that room's items alphabetically with quantity
+> **Version 3.28.4**
+> - Roomba: sweeps now only visit rooms you tick **Actively Manage** on the Roomba tab, so Start Sweep / Start Inventory no longer route across the whole label set. The tick is **per character** (labels stay shared per-BBS), so alts in different gang houses on one BBS each manage their own house. Rooms you add by hand default on; rooms adopted from a `@roomba sync` default **off**, so Roomba never walks to another gang house. Pressing Start with nothing checked shows a red "Select rooms to actively manage" prompt
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
