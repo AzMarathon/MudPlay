@@ -3397,6 +3397,14 @@ public sealed class AppServices
         // is freed before this round's between-round evaluation runs.
         Tick.CombatTickElapsed += CastDirector.NotifyRoundComplete;
         Tick.CombatTickElapsed += CastDirector.OnCombatTick;
+        // Out of combat the combat tick doesn't free-run (it's only anchored once a
+        // combat line lands), so drive the between-round loop off the 1 s heartbeat
+        // while idle — buffs/cures then queue up one-per-cooldown from login instead
+        // of trickling in on sparse events. In combat OnIdleHeartbeat no-ops (the
+        // combat tick owns the cadence), so the combat engine's per-round economy is
+        // untouched. This drives ONLY the cast loop, not the whole combat tick, so
+        // CombatManager's per-round work never runs out of combat.
+        Tick.HeartbeatElapsed += CastDirector.OnIdleHeartbeat;
 
         // Mana-regen roll-spell reroll (Paradigm only). AbilBreakdown parses
         // `abil 145`; ManaRegen reads its rolled `spells:` slice after each
@@ -5596,8 +5604,6 @@ public sealed class AppServices
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
         {
             if (!string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase)) continue;
-            Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
-            if (rec is null || string.IsNullOrWhiteSpace(rec.CasterMessage)) return null;
             // An enemy-targeting spell (a debuff / attack scope) is never a self-buff,
             // even if it has a positive duration — so a hand-cast one (e.g. vuln,
             // Targets 8 Monster-or-User) must not arm a self-buff recast timer or show
@@ -5606,13 +5612,22 @@ public sealed class AppServices
             if (Game.Combat.DebuffTargeting.IsSingleTargetEnemy(s.Targets)
                 || Game.Combat.DebuffTargeting.IsAreaEnemy(s.Targets))
                 return null;
-            // Duration is in spell rounds; the recast clock wants wall-clock seconds.
-            // Uses the wall-clock per-round length so "recast within N s" fires at the
-            // buff's REAL remaining time, not ~1-2 s early off the nominal Dur×3.
+            // The real duration ALWAYS comes from game data (Spells.Dur formula), never
+            // the Messages caster line: a buff with no caster message (e.g. bladed
+            // sphere / blsh) still has a real duration and must not fall back to the
+            // 60s default — the fallback made it expire every 60s and, as bless-slot 1,
+            // starve the lower slots at login (report paradigm-20260826-142652). Wall-
+            // clock per-round length so "recast within N s" fires at the buff's REAL
+            // remaining time, not ~1-2 s early off the nominal Dur×3.
             long durSec = (long)System.Math.Round(
                 Game.Spells.SpellCalculator.Duration(s.Formula, Spellbook.Level)
                 * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock);
-            return (rec.CasterMessage, durSec);
+            if (durSec <= 0) return null;   // not a timed buff (an instant / combat spell)
+            // The caster message is only for message-based landing DETECTION (party
+            // confirm + applied-line) — optional; an empty template just skips it, the
+            // computed duration stays authoritative for the recast clock.
+            Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
+            return (rec?.CasterMessage ?? string.Empty, durSec);
         }
         return null;
     }

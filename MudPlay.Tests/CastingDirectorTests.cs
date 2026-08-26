@@ -769,6 +769,72 @@ public sealed class CastingDirectorTests
         Assert.Equal("bless", h.CastsSent[0]);
     }
 
+    // Out of combat the combat tick doesn't free-run, so the between-round loop is
+    // driven off the 1 s heartbeat instead — OnIdleHeartbeat runs the same decision
+    // pass so idle buffs queue up from login instead of trickling in.
+    [Fact]
+    public void OnIdleHeartbeat_OutOfCombat_DrivesBetweenRoundLoop()
+    {
+        using CureHarness h = new();
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        h.CastsSent.Clear();
+        h.Spells.BlessSlots[1] = "bless";   // configured after state — the setup cascade can't have cast it
+
+        h.Director.OnIdleHeartbeat();
+
+        Assert.Contains("bless", h.CastsSent);
+    }
+
+    // Disconnected: the whole loop pauses — a due buff must not cast (the send would
+    // no-op but TryCast would still arm a phantom recast timer). Reconnect resumes it.
+    [Fact]
+    public void Disconnected_PausesLoop_ResumesWhenReconnected()
+    {
+        using CureHarness h = new();
+        h.Director.SetConnectedGate(() => false);   // link down
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        h.CastsSent.Clear();
+        h.Spells.BlessSlots[1] = "bless";
+
+        h.Director.OnIdleHeartbeat();
+        Assert.Empty(h.CastsSent);      // disconnected → no cast, no timer armed
+
+        h.Director.SetConnectedGate(() => true);   // link restored
+        h.Director.OnIdleHeartbeat();
+        Assert.Contains("bless", h.CastsSent);      // resumes on reconnect
+    }
+
+    // In combat the combat tick owns the cadence, so the idle heartbeat must be a
+    // no-op (else a round would be double-evaluated). The OnCombatTick sanity check
+    // proves the buff WAS due — only the in-combat gate held it.
+    [Fact]
+    public void OnIdleHeartbeat_InCombat_NoOp_LeavesCadenceToCombatTick()
+    {
+        using CureHarness h = new();
+        h.State.InCombat = true;
+        h.Spells.SelfBlessDuringCombat = true;   // buffs allowed in combat — only the idle gate can stop this
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.Position = PlayerPosition.Standing;
+        h.CastsSent.Clear();
+        h.Spells.BlessSlots[1] = "bless";
+
+        h.Director.OnIdleHeartbeat();
+        Assert.Empty(h.CastsSent);          // idle heartbeat is out-of-combat only
+
+        h.Director.OnCombatTick();
+        Assert.Contains("bless", h.CastsSent);   // the combat tick DOES cast it (it was due)
+    }
+
     [Fact]
     public void Buff_InCombat_DuringCombatOff_NoCast()
     {

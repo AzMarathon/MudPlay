@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.7
+
+- Buffs: a buff's recast duration is now **always** resolved from game data (the spell's own duration formula), even when it has no caster message in the Messages data — bladed sphere (`blsh`) and any other message-less buff were falling back to a wrong 60-second timer, which also made them expire and re-cast constantly as the top bless slot
+- Buffs: at login (and any time out of combat) the between-round cast loop now runs every round off the 1-second heartbeat, so configured buffs **queue up one-per-round in priority order** instead of trickling in ~30 s apart — the combat-round heartbeat that drives it only used to start once you were in a fight. It pauses while disconnected and resumes on reconnect (the buff recast timers already freeze/resume across a link-drop)
+- Combat log: a new between-round line lists every spell currently **queued** for the round (self/party heals, cure, and buffs) in type-priority order — e.g. `{spells queued=mihe(1), curp(5), bles(6-1), prev(6-2)}` — where the number is the spell-type priority and, for buffs, the second number is the bless-slot; a buff joins the queue as soon as it's within its recast window
+- bug reports addressed: paradigm-20260826-142652, paradigm-20260826-142928, paradigm-20260826-143143
+
 ## 3.28.4
 
 - Roomba: sweeps now only visit rooms you tick **Actively Manage** on the Roomba tab — Start Sweep / Start Inventory no longer route across the whole label set. The tick is **per character** (the room labels stay shared per-BBS), so alts in **different gang houses on one BBS** each manage their own house. Rooms you add by hand default on for that character; rooms adopted from a `@roomba sync` default **off**, so Roomba never walks to another gang house (or one you lack the emblem for). Pressing Start with nothing checked shows a red "Select rooms to actively manage" prompt instead of doing nothing; the bug report now lists labeled / actively-managed / circuit room counts

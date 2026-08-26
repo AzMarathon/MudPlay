@@ -91,6 +91,11 @@ public sealed class CastingDirector : IDisposable
     private Func<bool>? _autoBlessEnabled;
     private Func<bool>? _attackOwed;
     private Func<bool>? _isTriggeredRest;
+    // True while the telnet link is up. Null (unwired, tests) = treat as connected.
+    // Gates the whole between-round loop: while disconnected the wire-send is a no-op
+    // but TryCast still returns true and arms the recast timer, so an ungated loop
+    // (now heartbeat-driven every 1s) would "cast" phantom buffs into a dead socket.
+    private Func<bool>? _isConnected;
     private Func<string, long?>? _itemCastDuration;
     private Func<string, bool>? _executeItemCast;
     private Func<string, int?>? _itemCastManaCost;
@@ -242,6 +247,20 @@ public sealed class CastingDirector : IDisposable
     // Hook to TickEngine.CombatTickElapsed — drives between-round evaluations.
     public void OnCombatTick() => Evaluate();
 
+    // Hook to TickEngine.HeartbeatElapsed (1 s) — drives the SAME between-round
+    // decision loop while OUT of combat. The combat tick only free-runs once a combat
+    // line has anchored it, so idle buffing/curing would otherwise fire only on sparse
+    // incidental events (~30 s apart at login). Off the 1 s heartbeat the loop drains
+    // one cast whenever the CastCoordinator's ~5 s cast cooldown clears, so a login's
+    // buffs queue up one-per-cooldown in priority order instead of trickling in. In
+    // combat the combat tick owns the cadence, so skip here to avoid double-evaluating
+    // a round (and to leave the in-combat between-round economy untouched).
+    public void OnIdleHeartbeat()
+    {
+        if (_state.InCombat) return;
+        Evaluate();
+    }
+
     // Raised the instant a between-round cast (self-heal / cure / buff / debuff) is
     // sent to the server. The combat engine listens so it can attribute the *Combat
     // Off* the server fires in response to THIS cast — and re-issue the weapon
@@ -310,6 +329,16 @@ public sealed class CastingDirector : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isEnabled);
         _autoBlessEnabled = isEnabled;
+    }
+
+    // Wire the connection state so the between-round loop pauses on a disconnect and
+    // resumes when the link's back — the buff timers already freeze/resume across the
+    // gap (PauseBuffTimers / ResumeBuffTimers), and this stops the loop from casting
+    // (and re-arming timers on a no-op send) while offline. Until called, fails open.
+    public void SetConnectedGate(Func<bool> isConnected)
+    {
+        ArgumentNullException.ThrowIfNull(isConnected);
+        _isConnected = isConnected;
     }
 
     // Wire CombatManager.IsSpellAttackOwed. The game allows exactly one cast per
@@ -753,6 +782,11 @@ public sealed class CastingDirector : IDisposable
     // if nothing matched.
     public string? Evaluate()
     {
+        // Disconnected — pause the whole loop. The link is down (an in-flight
+        // reconnect will restore it), sends no-op, and the buff timers are already
+        // frozen (PauseBuffTimers); casting now would only re-arm recast timers off
+        // phantom sends. Resumes when the gate reads connected again.
+        if (_isConnected?.Invoke() == false) return null;
         // Two independent masters share this loop: the heal / cure / rest
         // categories run under AutoHealRest (_isEnabled), buffing runs under
         // AutoBless (_autoBlessEnabled), and each is gated separately in the
@@ -805,6 +839,12 @@ public sealed class CastingDirector : IDisposable
         HealthSettings health = _readHealth();
 
         PartySettings? partySettings = _readPartySettings?.Invoke();
+
+        // Log the full between-round queue (all due candidates, priority-ordered) before
+        // firing the top one. Reached only when a cast can actually go out — Evaluate
+        // gates on the cast cooldown upstream — so it lands ~once per between-round, not
+        // every heartbeat poll.
+        LogDueQueue(spells, health, partySettings, healRestEnabled, blessEnabled);
 
         foreach (SpellCategory category in PrioritisedCategories(spells))
         {
@@ -903,6 +943,71 @@ public sealed class CastingDirector : IDisposable
 
         return null;
     }
+
+    // Combat-diagnostics view of the between-round queue: every DUE candidate the
+    // engines want cast this round — self/party heals, a cure, and every buff inside
+    // its recast window — in type-priority order (the Spells-tab priorities), formatted
+    // `code(typePrio)`; buffs additionally carry their slot number as `code(typePrio-
+    // slot)`. Read-only: the heal/party/cure pickers don't mutate state, and buffs are
+    // enumerated directly (so PickSelfBuff's mana-regen-reroll consumption is untouched).
+    // Debuffs are omitted — they're the combat engine's decision and re-peeking it here
+    // is not guaranteed side-effect-free. Only logged when the queue is non-empty.
+    private void LogDueQueue(SpellsSettings spells, HealthSettings health, PartySettings? party,
+        bool healRestEnabled, bool blessEnabled)
+    {
+        if (_log is null) return;
+        List<(int Prio, int Slot, string Text)> q = new();
+
+        void AddSurvival(SpellCategory cat, string? spell)
+        {
+            if (string.IsNullOrWhiteSpace(spell)) return;
+            int p = CategoryPriority(spells, cat);
+            string prioLabel = cat == SpellCategory.DownedAllyHeal ? "rescue" : p.ToString();
+            q.Add((p, -1, $"{spell.Trim()}({prioLabel})"));
+        }
+        if (healRestEnabled)
+        {
+            AddSurvival(SpellCategory.DownedAllyHeal, PickDownedAllyHeal(party)?.Spell);
+            AddSurvival(SpellCategory.MinorPartyHeal, PickMinorPartyHeal(party)?.Spell);
+            AddSurvival(SpellCategory.MajorPartyHeal, PickMajorPartyHeal(party)?.Spell);
+            AddSurvival(SpellCategory.MinorSelfHeal, PickMinorSelfHeal(spells, health));
+            AddSurvival(SpellCategory.MajorSelfHeal, PickMajorSelfHeal(spells, health));
+            AddSurvival(SpellCategory.Curing, PickCure(spells)?.Spell);
+        }
+        if (blessEnabled)
+        {
+            int buffPrio = CategoryPriority(spells, SpellCategory.Buffing);
+            foreach (KeyValuePair<int, string> kv in spells.BlessSlots.OrderBy(k => k.Key))
+            {
+                string? code = kv.Value?.Trim();
+                if (string.IsNullOrWhiteSpace(code) || !IsRecastDue("", code)) continue;
+                q.Add((buffPrio, kv.Key, $"{code}({buffPrio}-{kv.Key})"));
+            }
+            // Regen / when-full downtime buffs have no slot number.
+            foreach (string? code in new[] { spells.MaRegenSpell, spells.WhenHpFullSpell, spells.WhenMaFullSpell })
+                if (!string.IsNullOrWhiteSpace(code) && IsRecastDue("", code.Trim()))
+                    q.Add((buffPrio, int.MaxValue, $"{code.Trim()}({buffPrio})"));
+        }
+
+        if (q.Count == 0) return;
+        string ordered = string.Join(", ", q.OrderBy(x => x.Prio).ThenBy(x => x.Slot).Select(x => x.Text));
+        _log.Combat(LogCategory, $"{{spells queued={ordered}}}");
+    }
+
+    // The configured type-priority number for a between-round category (the Spells-tab
+    // priorities). DownedAllyHeal has none — it always leads — so it sorts first.
+    private static int CategoryPriority(SpellsSettings s, SpellCategory cat) => cat switch
+    {
+        SpellCategory.DownedAllyHeal => int.MinValue,
+        SpellCategory.MinorPartyHeal => s.PriorityMinorPartyHeal,
+        SpellCategory.MajorPartyHeal => s.PriorityMajorPartyHeal,
+        SpellCategory.MinorSelfHeal => s.PriorityMinorSelfHeal,
+        SpellCategory.MajorSelfHeal => s.PriorityMajorSelfHeal,
+        SpellCategory.Curing => s.PriorityCuring,
+        SpellCategory.Buffing => s.PriorityBuffing,
+        SpellCategory.Debuffing => s.PriorityDebuffing,
+        _ => int.MaxValue,
+    };
 
     private static CastCandidate? Wrap(string? spell) =>
         string.IsNullOrWhiteSpace(spell) ? null : new CastCandidate(spell, Target: null);

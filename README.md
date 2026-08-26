@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.4**
-> - Roomba: sweeps now only visit rooms you tick **Actively Manage** on the Roomba tab, so Start Sweep / Start Inventory no longer route across the whole label set. The tick is **per character** (labels stay shared per-BBS), so alts in different gang houses on one BBS each manage their own house. Rooms you add by hand default on; rooms adopted from a `@roomba sync` default **off**, so Roomba never walks to another gang house. Pressing Start with nothing checked shows a red "Select rooms to actively manage" prompt
+> **Version 3.28.7**
+> - Buffs: a buff's recast duration is now always resolved from game data even when it has no caster message — bladed sphere and other message-less buffs were falling back to a wrong 60-second timer (which also made them re-cast constantly as the top bless slot)
+> - Buffs: at login / out of combat, buffs now queue up one-per-round in priority order instead of trickling in ~30 s apart (the round loop that drives them used to start only once you were in a fight)
+> - Combat log: a new between-round line lists every spell currently queued for the round (heals, cure, buffs) in type-priority order — `{spells queued=mihe(1), curp(5), bles(6-1), prev(6-2)}`, where the number is the spell-type priority and, for buffs, the second is the bless-slot
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
