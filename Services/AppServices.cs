@@ -3870,8 +3870,31 @@ public sealed class AppServices
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
         DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
-        RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels, Log);
+        RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels, Log,
+            // Paced-send scheduler: a UI-thread one-shot (same shape as the combat
+            // switch-dispatch delay) so @roomba sync trickles its telepaths out
+            // ~800ms apart instead of flooding the channel.
+            paceScheduler: (delay, callback) =>
+            {
+                if (delay <= TimeSpan.Zero) { Avalonia.Threading.Dispatcher.UIThread.Post(callback); return; }
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+            });
         RoombaSync = new Game.Remote.RoombaSyncReceiver(Chat, GhItemLocations, GhRoomLabels, Log);
+
+        // Rate-limit clobber watcher: the game drops a command when we type too
+        // fast — stock says "You are typing too quickly - command ignored",
+        // paradigm "Too many messages sent - please wait …". Either one during a
+        // paced @roomba sync means the last telepath was lost, so poke the sender
+        // to back off and resend it (no-op when no sync is draining).
+        Router.LineDispatched += line =>
+        {
+            string t = line.Text;
+            if (t.Contains("typing too quickly", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("Too many messages sent", StringComparison.OrdinalIgnoreCase))
+                RoombaQuery.NoteRateLimitClobber();
+        };
 
         // Write-side inventory / cash actions — @get-all / @drop-all /
         // @deposit-all / @share emit get / drop / dep / with / give on the wire.

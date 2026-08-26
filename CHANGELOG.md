@@ -12,7 +12,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Roomba: new **Start Inventory** mode — walks the same labeled circuit and feeds the item-location log exactly like a sweep's scan, but never dispatches a single get/drop; for logging a gang house without disturbing an existing manual sort
 - Roomba: new **Master List** button — a sortable table (click any column header) of every item Roomba has seen, where, and its outside market (which shops buy/sell it and for how much at 50 charm), automatically excluding any shop that sits inside the gang house's own labeled rooms
 - Networking: outbound writes are now serialized — two engine sends fired back-to-back (e.g. an `@roomba sync`'s rapid telepath replies) could previously race into the socket concurrently and interleave their bytes, splicing one line's data into another's command prefix; each write now completes before the next begins
-- Roomba: `@roomba sync` hands over the **entire** logged sighting set (dropped the old 500-record cap)
+- Roomba: `@roomba sync` hands over the **entire** logged sighting set (dropped the old 500-record cap), packed even tighter (a single-item sighting no longer spends a byte on its quantity)
+- Roomba: `@roomba sync` now paces its telepaths ~800ms apart, and re-sends any the game drops with a rate-limit notice ("typing too quickly" / "too many messages sent") — so a big-house sync trickles out in the background instead of flooding the channel or stalling the responder's own combat/heal/movement
 
 ## 3.27.10
 

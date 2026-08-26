@@ -23,11 +23,13 @@ namespace MudPlay.Game.Remote;
 //     than the old blind slicing, AND partial delivery still merges what arrived.
 //
 // Byte layout PER LINE (all ints LEB128 unsigned varints unless noted), base64url'd:
-//   [version=3]
+//   [version=4]
 //   [baseSeenAt: signed varint, seconds delta from BaseEpoch]  — one per line
 //   then, until the buffer ends, one or more ROOM BLOCKS:
 //     [map] [room] [seenAt: signed varint, seconds delta from THIS LINE'S baseSeenAt] [itemCount]
-//     then itemCount times: [itemNumber delta from the previous item in THIS block] [quantity]
+//     then itemCount times: [(itemNumber delta << 1) | quantity-follows] [quantity, only if that low bit is set]
+// The low bit of the item-delta varint says whether a quantity varint follows;
+// a single-item sighting (about half of them) then costs no quantity byte at all.
 // The base timestamp is the newest sweep in the payload; a room swept in that
 // same session encodes its time as a ~1-byte delta (often 0) instead of the
 // ~4-byte absolute it used to carry — the sweep-time was still the biggest
@@ -107,9 +109,14 @@ public static class GhItemSyncCodec
                 while (i < room.Items.Count)
                 {
                     (int Number, int Quantity) it = room.Items[i];
+                    // The item-number delta carries a low "quantity follows" bit:
+                    // ~half of all sightings are a single item, so omitting a whole
+                    // byte for the common quantity==1 case is the biggest remaining
+                    // per-item saving. A quantity varint follows only when > 1.
+                    bool hasQty = it.Quantity > 1;
                     List<byte> enc = new();
-                    WriteUVarint(enc, (ulong)(it.Number - prev));
-                    WriteUVarint(enc, (ulong)it.Quantity);
+                    WriteUVarint(enc, (ulong)(((it.Number - prev) << 1) | (hasQty ? 1 : 0)));
+                    if (hasQty) WriteUVarint(enc, (ulong)it.Quantity);
                     // Keep at least one item per block even if it overflows the
                     // budget (pathologically tiny lines) so the loop can't stall.
                     if (added > 0 && block.Count + enc.Count > blockByteBudget) break;
@@ -163,8 +170,9 @@ public static class GhItemSyncCodec
             int prev = 0;
             for (int k = 0; k < itemCount; k++)
             {
-                prev += ReadUVarintAsInt(bytes, ref pos);   // delta from the previous item in this block
-                int quantity = ReadUVarintAsInt(bytes, ref pos);
+                int tagged = ReadUVarintAsInt(bytes, ref pos);   // (delta << 1) | quantity-follows
+                prev += tagged >> 1;
+                int quantity = (tagged & 1) != 0 ? ReadUVarintAsInt(bytes, ref pos) : 1;
                 records.Add(new GhItemSyncRecord(map, room, prev, Math.Max(1, quantity), seenAt));
             }
         }

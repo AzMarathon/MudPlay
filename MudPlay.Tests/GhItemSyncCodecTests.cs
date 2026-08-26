@@ -167,8 +167,8 @@ public sealed class GhItemSyncCodecTests
     {
         // A short blob claiming a giant itemCount must throw (varint overruns the
         // buffer long before any large structure is built), not allocate for it.
-        // version=3, base=0, map=1, room=1, seenAtDelta=0, itemCount=0xFFFFFFFF...
-        byte[] bytes = { 3, 0, 1, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F };
+        // version=4, base=0, map=1, room=1, seenAtDelta=0, itemCount=0xFFFFFFFF...
+        byte[] bytes = { 4, 0, 1, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F };
         string blob = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
         Assert.Throws<FormatException>(() => GhItemSyncCodec.DecodeLine(blob));

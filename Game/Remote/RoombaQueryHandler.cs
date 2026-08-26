@@ -61,9 +61,11 @@ public sealed class RoombaQueryHandler : IDisposable
     private readonly GhItemLocationStore _locations;
     private readonly GhRoomLabelStore _labels;
     private readonly LogService? _log;
+    private readonly RoombaSyncSender _sender;
     private bool _disposed;
 
-    public RoombaQueryHandler(RemoteCommandManager engine, GhItemLocationStore locations, GhRoomLabelStore labels, LogService? log = null)
+    public RoombaQueryHandler(RemoteCommandManager engine, GhItemLocationStore locations, GhRoomLabelStore labels,
+        LogService? log = null, Action<TimeSpan, Action>? paceScheduler = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(locations);
@@ -72,6 +74,7 @@ public sealed class RoombaQueryHandler : IDisposable
         _locations = locations;
         _labels = labels;
         _log = log;
+        _sender = new RoombaSyncSender(paceScheduler, log);
 
         if (!RemoteCommandCatalog.TryGetCategory("@roomba", out PlayerRemoteControls category))
             throw new InvalidOperationException(
@@ -85,6 +88,11 @@ public sealed class RoombaQueryHandler : IDisposable
         _disposed = true;
         _engine.UnregisterHandler("@roomba");
     }
+
+    // Poke from the rate-limit-line watcher (wired in AppServices): the game just
+    // dropped a command because we typed too fast, so back off and resend the last
+    // sync line. No-op unless a sync is actively draining.
+    public void NoteRateLimitClobber() => _sender.NoteClobber();
 
     private void OnRoomba(RemoteCommandContext ctx)
     {
@@ -150,10 +158,16 @@ public sealed class RoombaQueryHandler : IDisposable
     {
         IReadOnlyList<GhItemSyncRecord> records = _locations.ToSyncRecords();
         IReadOnlyList<string> lines = GhItemSyncCodec.EncodeLines(records, MaxBlobCharsPerLine);
-        foreach (string line in lines)
-            ctx.Reply($"{SyncResponseToken} {line}");
+
+        // Paced out one telepath at a time (RoombaSyncSender) so a big log can't
+        // flood the channel or trip the game's burst rate limit — the sync is a
+        // background courtesy to the requester, not something that should stall
+        // this client's own combat/heal/movement sends.
+        List<string> wire = new(lines.Count);
+        foreach (string line in lines) wire.Add($"{SyncResponseToken} {line}");
+        _sender.Enqueue(ctx.Reply, wire);
 
         _log?.Info("RoombaSync",
-            $"answered @roomba sync for {ctx.Sender} on {ctx.Channel} — {records.Count} sighting(s) in {lines.Count} line(s)");
+            $"answered @roomba sync for {ctx.Sender} on {ctx.Channel} — {records.Count} sighting(s) in {lines.Count} line(s), pacing out");
     }
 }
