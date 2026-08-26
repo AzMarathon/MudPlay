@@ -3881,19 +3881,11 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); callback(); };
                 timer.Start();
             });
-        RoombaSync = new Game.Remote.RoombaSyncReceiver(Chat, GhItemLocations, GhRoomLabels,
-            // Adopt a sync reply only from a sender this client has granted the
-            // "Query Roomba" (QueryItemLocation) permission — the same per-player
-            // grant RemoteCommandManager checks before answering their @roomba.
-            isSenderGranted: sender =>
-            {
-                foreach (Models.GameData.PlayerRecord rec in Players.Players)
-                    if (rec.DisplayName.Equals(sender, StringComparison.OrdinalIgnoreCase)
-                        || rec.GivenName.Equals(sender, StringComparison.OrdinalIgnoreCase))
-                        return rec.RemoteControls.HasFlag(Models.GameData.PlayerRemoteControls.QueryItemLocation);
-                return false;
-            },
-            log: Log);
+        // Adopt an @roomba sync reply only inside the window our own outbound
+        // `@roomba sync` opens (NoteSyncRequested, wired from the outbound-chat
+        // watcher in MainWindowViewModel). The permission gate is on the responder
+        // side, so a reply arriving already proves we're authorized.
+        RoombaSync = new Game.Remote.RoombaSyncReceiver(Chat, GhItemLocations, GhRoomLabels, Log);
 
         // Rate-limit clobber watcher: the game drops a command when we type too
         // fast — stock says "You are typing too quickly - command ignored",

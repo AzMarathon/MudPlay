@@ -15,26 +15,31 @@ namespace MudPlay.Game.Remote;
 // flood-control dropped costs only the rooms it carried — the rest still land —
 // instead of the old "one missing chunk discards the whole sync". There's also
 // no meaningful "conflict" for a room-contents sighting (newest wins silently —
-// see GhItemLocationStore.MergeSyncRecords), so this listens continuously with
-// no merge-review window and adopts a reply only from a sender we've granted the
-// "Query Roomba" permission (isSenderGranted) — the same per-player gate that
-// governs answering their @roomba, so there's no separate opt-in.
+// see GhItemLocationStore.MergeSyncRecords), so there's no merge-review window.
+//
+// A reply is adopted only inside a REQUEST WINDOW opened by our OWN outbound
+// `@roomba sync` (NoteSyncRequested, called from the outbound-chat watcher). The
+// permission gate lives entirely on the RESPONDER: another client answers our
+// request only if they've granted us "Query Roomba", so a reply arriving at all
+// already proves we're authorized — the receiver just has to confirm we asked,
+// not re-check a (reverse-direction) grant we'd otherwise need against them.
 public sealed class RoombaSyncReceiver : IDisposable
 {
+    // How long after we send `@roomba sync` incoming replies are adopted. A big
+    // gang house paces ~20 telepaths ~800ms apart once the responder starts, so
+    // the window is generous enough for the whole reply (and a slow responder) to
+    // land; it then goes stale so a much-later stray line isn't adopted.
+    private static readonly TimeSpan RequestWindow = TimeSpan.FromMinutes(2);
+
     private readonly ChatRouter _chat;
     private readonly GhItemLocationStore _locations;
     private readonly GhRoomLabelStore _labels;
-    private readonly Func<string, bool> _isSenderGranted;
     private readonly LogService? _log;
+    private DateTimeOffset _acceptUntil = DateTimeOffset.MinValue;
     private bool _disposed;
 
-    // isSenderGranted: whether this client has granted the named sender the
-    // per-player "Query Roomba" permission. A sync reply is adopted only from a
-    // sender we'd answer ourselves — same grant, both directions — so a stranger
-    // can't push sightings/labels into our log. Defaults to "deny everyone" when
-    // unwired (tests that don't care about the gate pass their own).
     public RoombaSyncReceiver(ChatRouter chat, GhItemLocationStore locations, GhRoomLabelStore labels,
-        Func<string, bool>? isSenderGranted = null, LogService? log = null)
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         ArgumentNullException.ThrowIfNull(locations);
@@ -42,10 +47,14 @@ public sealed class RoombaSyncReceiver : IDisposable
         _chat = chat;
         _locations = locations;
         _labels = labels;
-        _isSenderGranted = isSenderGranted ?? (_ => false);
         _log = log;
         _chat.EntryClassified += Ingest;
     }
+
+    // Called when WE send `@roomba sync` — opens the window during which incoming
+    // replies are adopted. (They reply only because they've granted us, so the
+    // reply itself is the authorization; we gate merely on having asked.)
+    public void NoteSyncRequested() => _acceptUntil = DateTimeOffset.Now + RequestWindow;
 
     public void Dispose()
     {
@@ -60,14 +69,12 @@ public sealed class RoombaSyncReceiver : IDisposable
             return;
         if (e.Speaker is not { Length: > 0 } sender) return;
         if (!TryParse(e.Message, out string blob)) return;   // cheap: an @roombadata line at all?
-        // Adopt only from a sender we've granted "Query Roomba" — the same
-        // per-player permission that gates answering their @roomba, so there's no
-        // separate opt-in and a stranger can't inject data into our log. Logged at
-        // Debug (not silent) so a "nothing synced" report shows the missing grant.
-        if (!_isSenderGranted(sender))
+        // Only adopt inside a window we opened by sending `@roomba sync`. Logged at
+        // Debug (not silent) so a "nothing synced" report shows we hadn't asked.
+        if (DateTimeOffset.Now > _acceptUntil)
         {
             _log?.Debug("RoombaSync",
-                $"ignoring @roomba sync line from {sender} — they aren't granted the Query Roomba permission");
+                $"ignoring @roomba sync line from {sender} — no @roomba sync requested recently");
             return;
         }
 
