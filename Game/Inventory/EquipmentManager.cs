@@ -365,7 +365,7 @@ public sealed class EquipmentManager
     // haveInventory is false) and what an auto-fire uses.
     private List<string> BuildApplyCommands(
         EquipmentSet set, InventorySnapshot snap, bool fillFromInventory, bool armorOnly = false)
-        => PrependTwoHandRemForOffHand(set, snap.EquippedItems, _isTwoHanded,
+        => PrependTwoHandOffHandConflictRems(set, snap.EquippedItems, _isTwoHanded,
             BuildApplyCommandsCore(set, snap, fillFromInventory, armorOnly));
 
     private List<string> BuildApplyCommandsCore(
@@ -474,40 +474,61 @@ public sealed class EquipmentManager
         return rems;
     }
 
-    // A two-handed weapon fills both hands, so the game rejects an off-hand wear
-    // while it's readied ("You may not wear an off-hand item while you have a
-    // 2-handed weapon readied."). When a set brings an off-hand item on and a
-    // two-hander is still worn, strip the two-hander first so the off-hand wear
-    // lands in the SAME apply pass — otherwise it fails and only sticks on a later
-    // re-apply, leaving the off-hand slot empty in between (report
-    // paradigm-20260826-132742: swapping Default's 2H quarterstaff → the pre-rest
-    // set's throwing hammers + griffon shield tripped this). Mirrors SwapWeapon's
-    // reverse guard (rem the worn off-hand before wielding a two-hander). Only the
-    // set's own off-hand pick is considered — the following wear/eq of the set's
-    // one-handed weapon re-arms the hand after the rem.
-    internal static List<string> PrependTwoHandRemForOffHand(
+    // A two-handed weapon and an off-hand item can't coexist — the game rejects
+    // whichever wear would violate that, so a set swap that changes the hands must
+    // strip the conflicting worn piece FIRST or the wear fails and only sticks on a
+    // later re-apply. Two symmetric cases (both mirror SwapWeapon's own guards):
+    //   1. The set brings an OFF-HAND item on while a two-hander is worn — "You may
+    //      not wear an off-hand item while you have a 2-handed weapon readied."
+    //      (report paradigm-20260826-132742). Rem the worn two-hander first; the
+    //      set's own one-handed weapon re-arms the hand after.
+    //   2. The set wields a TWO-HANDER while an off-hand is worn — "You may not
+    //      ready a 2-handed weapon with your <item> worn!" (report
+    //      paradigm-20260826-142732). Rem the worn off-hand first.
+    // Only fires when the plan actually wears the conflicting piece this pass (an
+    // already-worn item isn't re-issued, so there's nothing to clear).
+    internal static List<string> PrependTwoHandOffHandConflictRems(
         EquipmentSet set, IReadOnlyList<EquippedItem> worn,
         Func<string?, bool> isTwoHanded, List<string> cmds)
     {
-        string? offHand = set.Slots
+        string? wornWeapon = WornSlotItem(worn, "Weapon Hand");
+        string? wornOffHand = WornSlotItem(worn, "Off-Hand");
+
+        // Case 1: set wears an off-hand while a two-hander is worn → rem the 2H.
+        string? setOffHand = set.Slots
             .FirstOrDefault(e => e.Slot == EquipmentSlot.OffHand)?.ItemName?.Trim();
-        if (string.IsNullOrEmpty(offHand)) return cmds;
-        // Only when the plan actually wears the off-hand this pass (an already-worn
-        // off-hand isn't re-issued, so there's nothing to clear the hand for).
-        bool wearingOffHand = cmds.Any(c =>
-            c.StartsWith("wear ", StringComparison.Ordinal)
-            && string.Equals(c["wear ".Length..], offHand, StringComparison.OrdinalIgnoreCase));
-        if (!wearingOffHand) return cmds;
+        if (!string.IsNullOrEmpty(setOffHand) && PlanEquips(cmds, setOffHand)
+            && !string.IsNullOrWhiteSpace(wornWeapon) && isTwoHanded(wornWeapon))
+        {
+            cmds.Insert(0, $"rem {wornWeapon.Trim()}");
+            return cmds;
+        }
 
-        string? wornWeapon = worn
-            .Where(e => string.Equals(e.Slot, "Weapon Hand", StringComparison.OrdinalIgnoreCase))
-            .Select(e => e.Name)
-            .FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(wornWeapon) || !isTwoHanded(wornWeapon)) return cmds;
-
-        cmds.Insert(0, $"rem {wornWeapon.Trim()}");
+        // Case 2: set wields a two-hander while an off-hand is worn → rem the off-hand.
+        string? setWeapon = set.Slots
+            .FirstOrDefault(e => e.Slot == EquipmentSlot.Weapon)?.ItemName?.Trim();
+        if (!string.IsNullOrEmpty(setWeapon) && PlanEquips(cmds, setWeapon) && isTwoHanded(setWeapon)
+            && !string.IsNullOrWhiteSpace(wornOffHand))
+        {
+            cmds.Insert(0, $"rem {wornOffHand.Trim()}");
+        }
         return cmds;
     }
+
+    // The item worn in a real slot label ("Weapon Hand" / "Off-Hand"), or null.
+    private static string? WornSlotItem(IReadOnlyList<EquippedItem> worn, string slot)
+        => worn
+            .Where(e => string.Equals(e.Slot, slot, StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.Name)
+            .FirstOrDefault();
+
+    // Whether the plan wears/wields the named item this pass — either verb, since a
+    // weapon takes `eq` on the inventory-aware path and `wear` on the set-only diff.
+    private static bool PlanEquips(List<string> cmds, string name) => cmds.Any(c =>
+        (c.StartsWith("wear ", StringComparison.Ordinal)
+            && string.Equals(c["wear ".Length..], name, StringComparison.OrdinalIgnoreCase))
+        || (c.StartsWith("eq ", StringComparison.Ordinal)
+            && string.Equals(c["eq ".Length..], name, StringComparison.OrdinalIgnoreCase)));
 
     // Inventory-aware apply plan for the user-initiated equip paths (Equip All /
     // @equip-<set>). Honors the set's picks the character actually carries (or

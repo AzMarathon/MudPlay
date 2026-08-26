@@ -2,12 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.28.9
+## 3.28.12
 
-- Gear sets: swapping to a set that wears an off-hand item now removes a readied two-handed weapon **first**, so the off-hand actually goes on in the same swap instead of being rejected and only landing on a later re-apply
+- Gear sets: a swap now removes the conflicting worn piece **first** in both directions — a readied two-handed weapon comes off before an off-hand item goes on, and a worn off-hand comes off before a two-hander is wielded — so neither wear is rejected and stranded to a later re-apply
 - Gear sets: your Default set now auto-equips **only** when you've finished resting (recovered to rest-max, and only if you use pre-rest swap sets), when a loop or Auto-Lair run starts, or on death-pile recovery if that's enabled — it no longer flips back to Default mid-rest (a between-round cast or loot grab that briefly stood you up used to thrash Default↔pre-rest) and no longer swaps on combat entry (a fight interrupting a rest now keeps your pre-rest loadout until you've recovered)
 - Gear sets: the Default swap after resting now finishes **before** you step out of the room — the loop holds in place while any gear set streams its wear/rem commands, so you no longer finish resting, walk into the next room, and only then swap to Default in the middle of a fight
-- bug reports addressed: paradigm-20260826-132742, paradigm-20260826-140341
+- Rest: `rest` now goes out the instant a pre-rest gear swap finishes instead of after a multi-second gap
+- Item buffs: a `#item` buff no longer fires before the game has told the client what you're wearing (right after login) — it used to blindly try to equip the cast item while a two-handed weapon was readied, fail, and still track the buff as active; it now waits for your inventory to be known, then equips the two-hander out of the way correctly
+- bug reports addressed: paradigm-20260826-132742, paradigm-20260826-140341, paradigm-20260826-142625, paradigm-20260826-142732
 
 ## 3.28.7
 

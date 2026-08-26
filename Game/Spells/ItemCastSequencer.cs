@@ -76,6 +76,11 @@ public sealed class ItemCastSequencer
     private readonly WireSender _wire = new();
     private readonly LogService? _log;
 
+    // Set once we've asked for an 'i' because the worn loadout wasn't known yet
+    // (see Execute). Cleared the moment a dump lands, so the request fires once per
+    // unknown window rather than every deferred round.
+    private bool _requestedInventoryRefresh;
+
     public ItemCastSequencer(
         Func<IReadOnlyList<ClassCastItem>> castItems,
         Func<InventorySnapshot> inventory,
@@ -125,6 +130,28 @@ public sealed class ItemCastSequencer
         string name = item.ItemName.Trim();
         InventorySnapshot inv = _inventory();
 
+        // The equip/restore plan below reads the worn loadout — which weapon is
+        // wielded (to run the two-handed dance) and what to put back. Before the
+        // first 'i' dump that snapshot is empty, so firing here would `eq` the cast
+        // item blind: on a character with a two-hander worn, an off-hand cast item is
+        // rejected outright ("You may not wear an off-hand item while you have a
+        // 2-handed weapon readied."), the use then fails, yet CastingDirector still
+        // arms the buff timer — the false "buffed" state reported on login. Defer
+        // until the loadout is known (request one 'i' so it resolves promptly), the
+        // same gate AutoEquipCoordinator applies to its own fires.
+        if (inv.LastUpdated == DateTimeOffset.MinValue)
+        {
+            if (!_requestedInventoryRefresh)
+            {
+                _requestedInventoryRefresh = true;
+                _wire.Send("i");
+            }
+            _log?.Debug(LogCategory,
+                $"item-cast deferred: worn loadout unknown (no inventory dump yet) — item=\"{name}\"");
+            return false;
+        }
+        _requestedInventoryRefresh = false;
+
         // Tell auto-equip a slot swap is starting so it stands off the borrowed slot
         // — this sequence restores it itself, and the rest this swap breaks would
         // otherwise trip a redundant re-equip that doubles the restore.
@@ -171,7 +198,10 @@ public sealed class ItemCastSequencer
         // wield + use the item, then remove it to clear the off-hand and re-wield
         // the two-hander (which the game likewise blocks while the off-hand is
         // occupied). Confirmed MajorMUD equip order — see GAME_MECHANICS.md.
-        if (string.Equals(slot, OffHandSlot, StringComparison.OrdinalIgnoreCase)
+        bool castItemIsOffHand =
+            string.Equals(slot, OffHandSlot, StringComparison.OrdinalIgnoreCase)
+            || _isOffHandItem?.Invoke(name) == true;
+        if (castItemIsOffHand
             && SlotItem(inv, WeaponHandSlot) is { } wornWeapon
             && _isWornWeaponTwoHanded?.Invoke(wornWeapon) == true)
         {

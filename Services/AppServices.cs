@@ -4021,8 +4021,16 @@ public sealed class AppServices
                 MovementCoordinator.AssertGate(
                     Game.Map.MovementCoordinator.GearSwapGate, "EquipmentManager", "gear-set swap streaming");
             else
+            {
                 MovementCoordinator.ClearGate(
                     Game.Map.MovementCoordinator.GearSwapGate, "EquipmentManager", "gear-set swap complete");
+                // Re-evaluate health the instant the swap finishes so a held rest
+                // fires now instead of waiting for the next incidental prompt — the
+                // ~8-second swap→rest gap in report paradigm-20260826-142625 (rest is
+                // held while a swap streams, and nothing re-triggered Evaluate when it
+                // ended).
+                Health.Evaluate();
+            }
         };
 
         // EquipmentManager is the sole gear actuator: the combat engine decides

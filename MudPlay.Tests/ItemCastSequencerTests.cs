@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -27,8 +28,10 @@ public sealed class ItemCastSequencerTests
             WearSlot: "Neck"),
     };
 
+    // LastUpdated is set so the snapshot reads as an observed (parsed-'i') loadout:
+    // Execute defers when it's MinValue (no dump yet — see the login-race gate).
     private static InventorySnapshot InvWith(params EquippedItem[] equipped)
-        => InventorySnapshot.Empty with { EquippedItems = equipped };
+        => InventorySnapshot.Empty with { EquippedItems = equipped, LastUpdated = DateTimeOffset.UtcNow };
 
     private static (ItemCastSequencer Seq, List<byte[]> Sent) NewSeq(InventorySnapshot inv)
     {
@@ -67,6 +70,23 @@ public sealed class ItemCastSequencerTests
         => sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
 
     [Fact]
+    public void Execute_InventoryUnknown_DefersAndRequestsOneDump()
+    {
+        // No 'i' parsed yet (LastUpdated == MinValue): firing here would eq the cast
+        // item blind and mis-handle a worn two-hander. Defer and request one dump —
+        // the false-buff-on-login case (report screenshot).
+        InventorySnapshot unknown = InventorySnapshot.Empty;   // LastUpdated == MinValue
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeq(unknown);
+
+        Assert.False(seq.Execute("#emerald tipped crozier"));
+        Assert.Equal(new[] { "i" }, Decode(sent));   // one refresh request, no eq/use
+
+        // A second attempt while still unknown doesn't re-spam the request.
+        Assert.False(seq.Execute("#emerald tipped crozier"));
+        Assert.Equal(new[] { "i" }, Decode(sent));
+    }
+
+    [Fact]
     public void Execute_UnlimitedItem_EquipsUsesAndRestoresWeapon()
     {
         (ItemCastSequencer seq, List<byte[]> sent) =
@@ -85,7 +105,8 @@ public sealed class ItemCastSequencerTests
     [Fact]
     public void Execute_NoWeaponEquipped_SkipsRestore()
     {
-        (ItemCastSequencer seq, List<byte[]> sent) = NewSeq(InventorySnapshot.Empty);
+        // Observed inventory (InvWith sets LastUpdated) with nothing worn.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeq(InvWith());
 
         Assert.True(seq.Execute("#emerald tipped crozier"));
         Assert.Equal(new[]
