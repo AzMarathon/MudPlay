@@ -14,6 +14,12 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,12,0,4"/>
         </Style>
+        <!-- Trim the rooms grid's header padding so a tight column (e.g. the
+             "Actively Manage" checkbox column) shows its full header without
+             widening the column to fit the default padding. -->
+        <Style Selector="DataGrid#RoomsGrid DataGridColumnHeader">
+            <Setter Property="Padding" Value="4,0,4,0"/>
+        </Style>
     </UserControl.Styles>
 
     <!-- MaxWidth keeps the tab from forcing the workshop window ultra-wide: without
@@ -95,7 +101,7 @@
                 <DataGridTextColumn Header="Map / Room #" Binding="{ReflectionBinding RoomKeyText}"
                                     Width="100" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTemplateColumn Header="Actively Manage" Width="150">
+                <DataGridTemplateColumn Header="Actively Manage" Width="Auto">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:GhRoomLabelRowViewModel">
                             <CheckBox IsChecked="{Binding ActivelyManaged, Mode=TwoWay}"
