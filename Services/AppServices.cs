@@ -3870,7 +3870,7 @@ public sealed class AppServices
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
         DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
-        RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels);
+        RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels, Log);
         RoombaSync = new Game.Remote.RoombaSyncReceiver(Chat, GhItemLocations, GhRoomLabels, Log);
 
         // Write-side inventory / cash actions — @get-all / @drop-all /

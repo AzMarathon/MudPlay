@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.Game.Remote;
@@ -11,12 +13,14 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// Requester-side @roomba sync: reassembles "@roombadata i/n <blob>" chat lines
-// and merges the decoded sightings into GhItemLocationStore, gated on the same
-// ResponsesEnabled opt-in @roomba itself answers behind. Ingest is exercised
-// directly (an internal test seam, same idea as RemoteCommandManager.
-// DispatchForTests) except for the Dispose test, which needs the real
-// MessageRouter → ChatRouter → EntryClassified path to prove unsubscription.
+// Requester-side @roomba sync: decodes each self-contained "@roombadata <blob>"
+// chat line on its own and merges its sightings into GhItemLocationStore, gated
+// on the same ResponsesEnabled opt-in @roomba itself answers behind. Because
+// every line stands alone (no reassembly), a line the game drops costs only its
+// rooms — the rest still merge. Ingest is exercised directly (an internal test
+// seam, same idea as RemoteCommandManager.DispatchForTests) except for the
+// Dispose test, which needs the real MessageRouter → ChatRouter → EntryClassified
+// path to prove unsubscription.
 public sealed class RoombaSyncReceiverTests : IDisposable
 {
     private static readonly DateTime Now = new(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc);
@@ -66,21 +70,29 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     private static ChatLogEntry Gangpath(string sender, string msg) =>
         new(Now, ChatChannel.Gangpath, sender, msg, $"{sender} gangpaths: {msg}");
 
-    private static string SyncLine(string blob, int index = 1, int count = 1) =>
-        $"{{{RoombaQueryHandler.SyncResponseToken} {index}/{count} {blob}}}";
+    private static string SyncLine(string blob) =>
+        $"{{{RoombaQueryHandler.SyncResponseToken} {blob}}}";
 
-    private static string OnePayload() => GhItemSyncCodec.Encode(new[]
+    private static string OneLine() => GhItemSyncCodec.EncodeLines(new[]
     {
         new GhItemSyncRecord(1, 100, 1, 4, DateTimeOffset.Now),
-    });
+    }, 120)[0];
+
+    // Two torch sightings in two rooms, forced onto one self-contained line per
+    // room by a tiny char budget.
+    private static IReadOnlyList<string> TwoRoomLines() => GhItemSyncCodec.EncodeLines(new[]
+    {
+        new GhItemSyncRecord(1, 100, 1, 4, DateTimeOffset.Now),
+        new GhItemSyncRecord(1, 200, 1, 2, DateTimeOffset.Now),
+    }, 24);
 
     [Fact]
-    public void Ingest_SingleChunkPayload_MergesIntoLocations()
+    public void Ingest_SingleLine_MergesIntoLocations()
     {
         var (_, chat, locations, labels) = Setup(responsesEnabled: true);
         RoombaSyncReceiver receiver = new(chat, locations, labels);
 
-        receiver.Ingest(Gangpath("Buddy", SyncLine(OnePayload())));
+        receiver.Ingest(Gangpath("Buddy", SyncLine(OneLine())));
 
         GhItemSighting sighting = Assert.Single(locations.FindSightings("torch"));
         Assert.Equal(100, sighting.Room);
@@ -88,18 +100,34 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     }
 
     [Fact]
-    public void Ingest_MultiChunkPayload_WaitsForAllChunksBeforeMerging()
+    public void Ingest_EachLineMergesIndependently_NoWaiting()
     {
         var (_, chat, locations, labels) = Setup(responsesEnabled: true);
         RoombaSyncReceiver receiver = new(chat, locations, labels);
-        string payload = OnePayload();
-        string first = payload[..(payload.Length / 2)];
-        string second = payload[(payload.Length / 2)..];
+        IReadOnlyList<string> lines = TwoRoomLines();
+        Assert.True(lines.Count >= 2);
 
-        receiver.Ingest(Gangpath("Buddy", SyncLine(first, 1, 2)));
-        Assert.Empty(locations.FindSightings("torch"));   // not merged yet — still missing chunk 2
+        receiver.Ingest(Gangpath("Buddy", SyncLine(lines[0])));
+        Assert.Single(locations.FindSightings("torch"));      // first line merged on its own — no waiting
 
-        receiver.Ingest(Gangpath("Buddy", SyncLine(second, 2, 2)));
+        foreach (string line in lines.Skip(1))
+            receiver.Ingest(Gangpath("Buddy", SyncLine(line)));
+        Assert.Equal(2, locations.FindSightings("torch").Count);
+    }
+
+    [Fact]
+    public void Ingest_DroppedLine_SurvivingLineStillMerges()
+    {
+        var (_, chat, locations, labels) = Setup(responsesEnabled: true);
+        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        IReadOnlyList<string> lines = TwoRoomLines();
+        Assert.True(lines.Count >= 2);
+
+        // Simulate the game's flood-control dropping every line but the last.
+        receiver.Ingest(Gangpath("Buddy", SyncLine(lines[^1])));
+
+        // The surviving line still merged its room, rather than being discarded
+        // for want of the dropped ones.
         Assert.Single(locations.FindSightings("torch"));
     }
 
@@ -109,7 +137,7 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         var (_, chat, locations, labels) = Setup(responsesEnabled: false);
         RoombaSyncReceiver receiver = new(chat, locations, labels);
 
-        receiver.Ingest(Gangpath("Buddy", SyncLine(OnePayload())));
+        receiver.Ingest(Gangpath("Buddy", SyncLine(OneLine())));
 
         Assert.Empty(locations.FindSightings("torch"));
     }
@@ -149,7 +177,7 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         // internal Ingest seam) on the SAME router/chat the receiver was
         // subscribed to, so this actually exercises whether Dispose's -=
         // took effect — a still-subscribed receiver would merge this in.
-        string wire = $"Buddy gangpaths: {SyncLine(OnePayload())}";
+        string wire = $"Buddy gangpaths: {SyncLine(OneLine())}";
         router.Dispatch(new LineExtractor.EmittedLine(
             wire, new CellAttributes[wire.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false));
 

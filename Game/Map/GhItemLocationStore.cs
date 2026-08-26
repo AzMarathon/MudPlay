@@ -166,9 +166,15 @@ public sealed class GhItemLocationStore
         int applied = 0;
         foreach (GhItemSyncRecord r in records)
         {
+            // Reject implausible coordinates / stack sizes before they reach the
+            // store. The codec already rejects out-of-int wire values, but a peer's
+            // payload can still name an in-range but nonsensical room; bound it so a
+            // crafted or corrupt sighting can't pollute @roomba / the Master List.
+            if (r.Map is <= 0 or > 100_000 || r.Room is <= 0 or > 1_000_000) continue;
             string? name = _itemNames.GetName(r.ItemNumber);
             if (name is null) continue;
             RoomKey room = new(r.Map, r.Room);
+            int quantity = Math.Clamp(r.Quantity, 1, 1_000_000);
 
             if (!_sightings.TryGetValue(name, out Dictionary<RoomKey, GhItemSighting>? byRoom))
             {
@@ -182,7 +188,7 @@ public sealed class GhItemLocationStore
                 ItemName = name,
                 Map = r.Map,
                 Room = r.Room,
-                Quantity = r.Quantity,
+                Quantity = quantity,
                 SeenAt = r.SeenAt,
             };
             applied++;

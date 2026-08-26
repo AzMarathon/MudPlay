@@ -73,23 +73,20 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     private static IReadOnlyList<string> Replies(RemoteCommandManager e) =>
         e.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToList();
 
-    // Reassemble every "bg {@roombadata i/n <blob>}" gangpath reply line into
-    // the decoded record set — mirrors RoombaSyncReceiver's own chunk-
-    // reassembly, but synchronous (a test dispatch produces every chunk in one
-    // call).
+    // Decode every "bg {@roombadata <blob>}" gangpath reply line on its own and
+    // flatten — mirrors RoombaSyncReceiver, which merges each self-contained line
+    // as it arrives (no cross-line reassembly).
     private static IReadOnlyList<GhItemSyncRecord> DecodeSyncReplies(RemoteCommandManager e)
-    {
-        List<string> blobs = Replies(e)
+        => Replies(e)
             .Where(r => r.Contains(RoombaQueryHandler.SyncResponseToken))
             .Select(r =>
             {
                 int open = r.IndexOf('{');
                 int close = r.LastIndexOf('}');
-                return r[(open + 1)..close].Split(' ', 3)[2];
+                return r[(open + 1)..close].Split(' ', 2)[1];
             })
+            .SelectMany(GhItemSyncCodec.DecodeLine)
             .ToList();
-        return GhItemSyncCodec.Decode(string.Concat(blobs));
-    }
 
     private (RemoteCommandManager engine, PlayerDatabase players, GhItemLocationStore locations)
         SetupWithItems(bool responsesEnabled)

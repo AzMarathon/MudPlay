@@ -1,82 +1,156 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace MudPlay.Game.Remote;
 
-// Compact, chat-safe codec for the @roomba sync payload. Same shape of problem
-// as BossTimerSyncCodec (pack records tight, base64url the blob, chunk for the
-// wire) but simpler: an item sighting always carries a resolvable record
-// NUMBER (no name-fallback tag needed) plus a room, so each record is smaller
-// — a handful of bytes versus a boss name that can run to 16 characters.
-// Self-contained rather than sharing BossTimerSyncCodec's private varint/
-// base64url helpers — pulling those out into a shared type would mean
-// touching working, already-shipped code for a second caller; duplicating a
-// few bytes of bit-fiddling is the smaller change.
+// Compact, chat-safe codec for the @roomba sync payload. Packs an item-sighting
+// log into as few chat lines as possible, and makes each LINE independently
+// decodable so a telepath the game's flood-control drops loses only that line's
+// rooms, not the whole sync. (A freshly-swept house tried to burst ~56 lines,
+// ~10 arrived, and the old all-or-nothing reassembly discarded the lot — this
+// format turns that into "you keep the rooms that made it".)
 //
-// Byte layout (all integers LEB128 unsigned varints except seenAt, which
-// zig-zags first):
-//   [version=1] [count]
-//   then per record: [map] [room] [itemNumber] [quantity] [seenAt delta, signed varint]
+// Two structural wins over a flat [map][room][item][qty][seenAt]-per-record list:
+//   * ROOM-GROUPED — a room's map/room and its ONE sweep-time are written once,
+//     then just [item][qty] per item (item numbers delta-encoded). A sweep
+//     stamps every item in a room with the same time (GhItemLocationStore
+//     .RecordRoom), so a per-room timestamp is exact, not lossy, and keeps
+//     newest-wins working on the far side. This is the bulk of the shrink — the
+//     per-item ~4-byte timestamp was the single biggest field and pure repetition.
+//   * SELF-CONTAINED LINES — whole rooms are bin-packed into each line; a line
+//     decodes and merges on its own with no cross-line reassembly. Fewer lines
+//     than the old blind slicing, AND partial delivery still merges what arrived.
+//
+// Byte layout PER LINE (all ints LEB128 unsigned varints unless noted), base64url'd:
+//   [version=2]
+//   then, until the buffer ends, one or more ROOM BLOCKS:
+//     [map] [room] [seenAt: signed varint, seconds delta from BaseEpoch] [itemCount]
+//     then itemCount times: [itemNumber delta from the previous item in THIS block] [quantity]
+// Decoding loops room blocks until the buffer is exhausted — there is NO
+// wire-supplied record count, so a crafted payload can't drive an oversized
+// allocation (every item consumes ≥ 2 bytes, so the record count is bounded by
+// the blob length), and every field is range-checked back into int on the way in.
 public static class GhItemSyncCodec
 {
-    private const byte Version = 1;
+    private const byte Version = 2;
 
-    // Same rationale as BossTimerSyncCodec.BaseEpoch: a delta from a fixed
-    // recent point keeps the varint small (sightings are hours/days old, not
-    // decades).
+    // Same rationale as BossTimerSyncCodec.BaseEpoch: a delta from a fixed recent
+    // point keeps the per-room timestamp varint small (sweeps are hours/days old).
     private static readonly DateTimeOffset BaseEpoch = new(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    public static string Encode(IReadOnlyList<GhItemSyncRecord> records)
+    // Encode `records` into the fewest self-contained lines that each stay within
+    // maxCharsPerLine base64url characters. Records are grouped by room; a room
+    // too big to fit one line is split across lines (its header repeats), so a
+    // single dropped line never strands more than the rooms it carried. Always
+    // returns at least one line (an empty log encodes to a single version-only line).
+    public static IReadOnlyList<string> EncodeLines(IReadOnlyList<GhItemSyncRecord> records, int maxCharsPerLine)
     {
         ArgumentNullException.ThrowIfNull(records);
-        List<byte> buf = new(records.Count * 6 + 2);
-        buf.Add(Version);
-        WriteUVarint(buf, (ulong)records.Count);
-        foreach (GhItemSyncRecord r in records)
+        // A room header alone runs ~8 bytes (~11 base64 chars); demand enough room
+        // for a minimal one-item block so packing can always make progress.
+        if (maxCharsPerLine < 24) throw new ArgumentOutOfRangeException(nameof(maxCharsPerLine));
+
+        // base64url of B bytes is at most ceil(B/3)*4 chars (we trim '='), so
+        // B = maxChars/4*3 bytes is the largest that always fits. Reserve the
+        // 1-byte version header every line carries.
+        int lineByteBudget = maxCharsPerLine / 4 * 3;
+        int blockByteBudget = lineByteBudget - 1;
+
+        // Group by room: one block per (map, room), sweep-time = the most recent
+        // sighting in that room, items sorted by number so their deltas stay tiny.
+        var rooms = records
+            .GroupBy(r => (r.Map, r.Room))
+            .OrderBy(g => g.Key.Map).ThenBy(g => g.Key.Room)
+            .Select(g => (
+                g.Key.Map,
+                g.Key.Room,
+                SeenAt: g.Max(r => r.SeenAt),
+                Items: g.GroupBy(r => r.ItemNumber)
+                        .Select(ig => (Number: ig.Key, Quantity: Math.Max(1, ig.Max(r => r.Quantity))))
+                        .OrderBy(it => it.Number)
+                        .ToList()))
+            .ToList();
+
+        // Encode each room to one or more byte-blocks that each fit a line, then
+        // next-fit pack the blocks into lines.
+        List<byte[]> blocks = new();
+        foreach (var room in rooms)
         {
-            WriteUVarint(buf, (ulong)r.Map);
-            WriteUVarint(buf, (ulong)r.Room);
-            WriteUVarint(buf, (ulong)r.ItemNumber);
-            WriteUVarint(buf, (ulong)Math.Max(1, r.Quantity));
-            long seconds = (long)Math.Round((r.SeenAt - BaseEpoch).TotalSeconds);
-            WriteSVarint(buf, seconds);
+            long seconds = (long)Math.Round((room.SeenAt - BaseEpoch).TotalSeconds);
+            int i = 0;
+            do
+            {
+                List<byte> block = new();
+                WriteUVarint(block, (ulong)room.Map);
+                WriteUVarint(block, (ulong)room.Room);
+                WriteSVarint(block, seconds);
+                int countPos = block.Count;
+                block.Add(0);                 // itemCount placeholder — never ≥ 128 at these budgets
+                int prev = 0, added = 0;
+                while (i < room.Items.Count)
+                {
+                    (int Number, int Quantity) it = room.Items[i];
+                    List<byte> enc = new();
+                    WriteUVarint(enc, (ulong)(it.Number - prev));
+                    WriteUVarint(enc, (ulong)it.Quantity);
+                    // Keep at least one item per block even if it overflows the
+                    // budget (pathologically tiny lines) so the loop can't stall.
+                    if (added > 0 && block.Count + enc.Count > blockByteBudget) break;
+                    block.AddRange(enc);
+                    prev = it.Number;
+                    added++;
+                    i++;
+                }
+                block[countPos] = (byte)added;
+                blocks.Add(block.ToArray());
+            } while (i < room.Items.Count);
         }
-        return ToBase64Url(buf.ToArray());
+
+        List<string> lines = new();
+        List<byte> line = new() { Version };
+        foreach (byte[] block in blocks)
+        {
+            if (line.Count > 1 && line.Count + block.Length > lineByteBudget)
+            {
+                lines.Add(ToBase64Url(line.ToArray()));
+                line = new() { Version };
+            }
+            line.AddRange(block);
+        }
+        if (line.Count > 1 || lines.Count == 0)
+            lines.Add(ToBase64Url(line.ToArray()));   // always emit ≥ 1 line (possibly version-only)
+        return lines;
     }
 
-    public static IReadOnlyList<GhItemSyncRecord> Decode(string payload)
+    // Decode ONE self-contained line into flat sightings — every item in a room
+    // block inherits that block's single sweep-time. Throws FormatException on any
+    // malformed / out-of-range payload so the caller discards just this line.
+    public static IReadOnlyList<GhItemSyncRecord> DecodeLine(string blob)
     {
-        ArgumentNullException.ThrowIfNull(payload);
-        byte[] bytes = FromBase64Url(payload);
+        ArgumentNullException.ThrowIfNull(blob);
+        byte[] bytes = FromBase64Url(blob);
         int pos = 0;
         if (bytes.Length == 0 || bytes[pos++] != Version)
-            throw new FormatException("roomba-sync payload: bad or missing version byte");
+            throw new FormatException("roomba-sync line: bad or missing version byte");
 
-        ulong count = ReadUVarint(bytes, ref pos);
-        List<GhItemSyncRecord> records = new((int)Math.Min(count, 4096));
-        for (ulong i = 0; i < count; i++)
+        List<GhItemSyncRecord> records = new();
+        while (pos < bytes.Length)
         {
-            int map = (int)ReadUVarint(bytes, ref pos);
-            int room = (int)ReadUVarint(bytes, ref pos);
-            int itemNumber = (int)ReadUVarint(bytes, ref pos);
-            int quantity = (int)ReadUVarint(bytes, ref pos);
+            int map = ReadUVarintAsInt(bytes, ref pos);
+            int room = ReadUVarintAsInt(bytes, ref pos);
             long seconds = ReadSVarint(bytes, ref pos);
-            records.Add(new GhItemSyncRecord(map, room, itemNumber, quantity, BaseEpoch.AddSeconds(seconds)));
+            DateTimeOffset seenAt = BaseEpoch.AddSeconds(seconds);
+            int itemCount = ReadUVarintAsInt(bytes, ref pos);
+            int prev = 0;
+            for (int k = 0; k < itemCount; k++)
+            {
+                prev += ReadUVarintAsInt(bytes, ref pos);   // delta from the previous item in this block
+                int quantity = ReadUVarintAsInt(bytes, ref pos);
+                records.Add(new GhItemSyncRecord(map, room, prev, Math.Max(1, quantity), seenAt));
+            }
         }
         return records;
-    }
-
-    // Split an encoded payload into pieces no longer than maxChunkChars, in order.
-    // Reassembly is a plain string concat of the ordered pieces.
-    public static IReadOnlyList<string> Chunk(string payload, int maxChunkChars)
-    {
-        ArgumentNullException.ThrowIfNull(payload);
-        if (maxChunkChars <= 0) throw new ArgumentOutOfRangeException(nameof(maxChunkChars));
-        List<string> chunks = new();
-        for (int i = 0; i < payload.Length; i += maxChunkChars)
-            chunks.Add(payload.Substring(i, Math.Min(maxChunkChars, payload.Length - i)));
-        if (chunks.Count == 0) chunks.Add(string.Empty); // an empty sighting set is still one (empty) chunk
-        return chunks;
     }
 
     // ----- LEB128 varints ------------------------------------------------------
@@ -97,14 +171,24 @@ public static class GhItemSyncCodec
         int shift = 0;
         while (true)
         {
-            if (pos >= bytes.Length) throw new FormatException("roomba-sync payload: varint overruns buffer");
+            if (pos >= bytes.Length) throw new FormatException("roomba-sync line: varint overruns buffer");
             byte b = bytes[pos++];
             result |= (ulong)(b & 0x7F) << shift;
             if ((b & 0x80) == 0) break;
             shift += 7;
-            if (shift > 63) throw new FormatException("roomba-sync payload: varint too long");
+            if (shift > 63) throw new FormatException("roomba-sync line: varint too long");
         }
         return result;
+    }
+
+    // Read a varint that must fit a non-negative int — a value that would wrap to
+    // a negative/garbage int is rejected outright (no "-2000000000" room polluting
+    // the store from a crafted payload).
+    private static int ReadUVarintAsInt(byte[] bytes, ref int pos)
+    {
+        ulong v = ReadUVarint(bytes, ref pos);
+        if (v > int.MaxValue) throw new FormatException("roomba-sync line: value out of range");
+        return (int)v;
     }
 
     private static void WriteSVarint(List<byte> buf, long value)
@@ -126,6 +210,6 @@ public static class GhItemSyncCodec
         string b64 = s.Replace('-', '+').Replace('_', '/');
         b64 += (b64.Length % 4) switch { 2 => "==", 3 => "=", _ => string.Empty };
         try { return Convert.FromBase64String(b64); }
-        catch (FormatException ex) { throw new FormatException("roomba-sync payload: not valid base64url", ex); }
+        catch (FormatException ex) { throw new FormatException("roomba-sync line: not valid base64url", ex); }
     }
 }

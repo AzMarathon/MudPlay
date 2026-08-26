@@ -2,6 +2,7 @@ using System;
 using MudPlay.Game.Map;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
+using MudPlay.Services;
 
 namespace MudPlay.Game.Remote;
 
@@ -45,8 +46,8 @@ public sealed class RoombaQueryHandler : IDisposable
 
     // Cap on records per @roomba sync response so a very large gang-house
     // sighting log can't flood the channel; conservative per-line character
-    // budget for the compressed blob keeps the wrapped wire line
-    // ("bg {@roombadata i/n <blob>}") well under the game's chat-line limit.
+    // budget for each self-contained blob keeps the wrapped wire line
+    // ("bg {@roombadata <blob>}") well under the game's chat-line limit.
     private const int MaxSyncRecords = 500;
     private const int MaxBlobCharsPerLine = 120;
 
@@ -59,9 +60,10 @@ public sealed class RoombaQueryHandler : IDisposable
     private readonly RemoteCommandManager _engine;
     private readonly GhItemLocationStore _locations;
     private readonly GhRoomLabelStore _labels;
+    private readonly LogService? _log;
     private bool _disposed;
 
-    public RoombaQueryHandler(RemoteCommandManager engine, GhItemLocationStore locations, GhRoomLabelStore labels)
+    public RoombaQueryHandler(RemoteCommandManager engine, GhItemLocationStore locations, GhRoomLabelStore labels, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(locations);
@@ -69,6 +71,7 @@ public sealed class RoombaQueryHandler : IDisposable
         _engine = engine;
         _locations = locations;
         _labels = labels;
+        _log = log;
 
         if (!RemoteCommandCatalog.TryGetCategory("@roomba", out PlayerRemoteControls category))
             throw new InvalidOperationException(
@@ -137,19 +140,23 @@ public sealed class RoombaQueryHandler : IDisposable
     }
 
     // Reply to `@roomba sync` with this client's entire sighting log, encoded
-    // compactly and chunked to fit the wire: `@roombadata <i>/<n> <blob>`. No
-    // correlation token — every reply line carries the responder's name, so a
-    // shared gang/local channel yields one set per responder, same as
-    // @timer sync.
+    // compactly into self-contained `@roombadata <blob>` lines (see
+    // GhItemSyncCodec — room-grouped, one sweep-time per room, whole rooms packed
+    // per line). Each line decodes on its own, so one the game drops costs only
+    // its rooms, not the whole reply. No correlation token — every reply carries
+    // the responder's name, so a shared gang/local channel yields one set per
+    // responder, same as @timer sync.
     private void OnSyncRequest(RemoteCommandContext ctx)
     {
         var records = _locations.ToSyncRecords();
         if (records.Count > MaxSyncRecords)
             records = records.Take(MaxSyncRecords).ToList();
 
-        string payload = GhItemSyncCodec.Encode(records);
-        IReadOnlyList<string> chunks = GhItemSyncCodec.Chunk(payload, MaxBlobCharsPerLine);
-        for (int i = 0; i < chunks.Count; i++)
-            ctx.Reply($"{SyncResponseToken} {i + 1}/{chunks.Count} {chunks[i]}");
+        IReadOnlyList<string> lines = GhItemSyncCodec.EncodeLines(records, MaxBlobCharsPerLine);
+        foreach (string line in lines)
+            ctx.Reply($"{SyncResponseToken} {line}");
+
+        _log?.Info("RoombaSync",
+            $"answered @roomba sync for {ctx.Sender} on {ctx.Channel} — {records.Count} sighting(s) in {lines.Count} line(s)");
     }
 }
