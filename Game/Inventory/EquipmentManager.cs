@@ -716,7 +716,12 @@ public sealed class EquipmentManager
         bool wasEquipping = _isEquipping;
         _isEquipping = true;
         if (!wasEquipping) ApplyingChanged?.Invoke(true);
-        _applyTimer = new DispatcherTimer(ApplyStep, DispatcherPriority.Background,
+        // Normal priority, not Background: the swap's echoes drive a burst of
+        // terminal renders, and a Background tick yields to them — stretching the
+        // ApplyStep pacing to ~2.5x under load and making the swap feel laggy
+        // (report paradigm-20260826-150539). Normal keeps each send on schedule;
+        // the tick only enqueues one command, so it doesn't disrupt rendering.
+        _applyTimer = new DispatcherTimer(ApplyStep, DispatcherPriority.Normal,
             (_, _) => SendNext());
         _applyTimer.Start();
     }

@@ -28,8 +28,9 @@ public sealed class ItemCastSequencerTests
             WearSlot: "Neck"),
     };
 
-    // LastUpdated is set so the snapshot reads as an observed (parsed-'i') loadout:
-    // Execute defers when it's MinValue (no dump yet — see the login-race gate).
+    // A realistic observed snapshot. NewSeq leaves the worn-loadout-known gate
+    // unwired, so these fire without deferring; the defer path is covered by its
+    // own test wiring wornLoadoutKnown explicitly.
     private static InventorySnapshot InvWith(params EquippedItem[] equipped)
         => InventorySnapshot.Empty with { EquippedItems = equipped, LastUpdated = DateTimeOffset.UtcNow };
 
@@ -70,13 +71,15 @@ public sealed class ItemCastSequencerTests
         => sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
 
     [Fact]
-    public void Execute_InventoryUnknown_DefersAndRequestsOneDump()
+    public void Execute_LoadoutNotKnown_DefersAndRequestsOneDump()
     {
-        // No 'i' parsed yet (LastUpdated == MinValue): firing here would eq the cast
-        // item blind and mis-handle a worn two-hander. Defer and request one dump —
-        // the false-buff-on-login case (report screenshot).
-        InventorySnapshot unknown = InventorySnapshot.Empty;   // LastUpdated == MinValue
-        (ItemCastSequencer seq, List<byte[]> sent) = NewSeq(unknown);
+        // No full 'i' parsed this session (IsLoaded false — e.g. login / reconnect):
+        // firing would eq the cast item blind and mis-handle a worn two-hander.
+        // Defer and request one dump (the false-buff-on-login case, reports
+        // -144339 / -150242).
+        ItemCastSequencer seq = new(() => Items, () => InvWith(), wornLoadoutKnown: () => false);
+        seq.SetWireSender(_ => { });
+        List<byte[]> sent = seq.LastSentForTests;
 
         Assert.False(seq.Execute("#emerald tipped crozier"));
         Assert.Equal(new[] { "i" }, Decode(sent));   // one refresh request, no eq/use
@@ -84,6 +87,17 @@ public sealed class ItemCastSequencerTests
         // A second attempt while still unknown doesn't re-spam the request.
         Assert.False(seq.Execute("#emerald tipped crozier"));
         Assert.Equal(new[] { "i" }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_LoadoutKnown_FiresNormally()
+    {
+        ItemCastSequencer seq = new(
+            () => Items, () => InvWith(new EquippedItem("long sword", "Weapon Hand")),
+            wornLoadoutKnown: () => true);
+        seq.SetWireSender(_ => { });
+
+        Assert.True(seq.Execute("#emerald tipped crozier"));
     }
 
     [Fact]

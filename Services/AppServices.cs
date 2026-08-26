@@ -3969,7 +3969,11 @@ public sealed class AppServices
             // A two-handed wielded weapon fills both hands, so an off-hand buff item
             // can't be equipped until it's removed — the reverse of a two-handed cast
             // item. Same game-data 2H check the combat weapon-swap uses.
-            isWornWeaponTwoHanded: IsConfiguredWeaponTwoHanded);
+            isWornWeaponTwoHanded: IsConfiguredWeaponTwoHanded,
+            // Defer the whole sequence until a full 'i' is parsed this session, so it
+            // never fires against an empty / stale snapshot on login or reconnect
+            // (report paradigm-20260826-150242). Same signal AutoEquip gates on.
+            wornLoadoutKnown: () => Inventory.IsLoaded);
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
 
