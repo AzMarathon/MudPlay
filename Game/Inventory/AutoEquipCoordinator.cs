@@ -145,6 +145,21 @@ public sealed class AutoEquipCoordinator : IDisposable
     // wearing while idle / resting beforehand.
     public void OnLoopStarted() => Fire(EquipTriggerType.Default);
 
+    // Recovery just topped off to rest-max (a held rest gate cleared), fired from
+    // HealthManager while the character is STILL resting in the room — before the
+    // loop's deferred step-out. Swapping back to Default here (rather than on the
+    // later stand, which IS the move) lets the swap complete in-room; the paced
+    // apply holds the loop via the gear-swap movement gate, so we step out already
+    // in Default gear instead of streaming the wears into the next room mid-combat
+    // (report paradigm-20260826-140341). Gated on using rest swap sets (else there's
+    // nothing to revert) and skipped in combat — a fight that interrupted recovery
+    // is fought in the current loadout, per the rule.
+    public void OnRecoveryComplete()
+    {
+        if (_player.InCombat || !UsingRestingSwapSets()) return;
+        Fire(EquipTriggerType.Default);
+    }
+
     private void OnPositionChanged(PlayerPosition from, PlayerPosition to)
     {
         if (from == to) return;

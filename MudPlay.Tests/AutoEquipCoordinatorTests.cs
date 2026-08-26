@@ -272,6 +272,73 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Empty(applied);
     }
 
+    // Recovery topping off to rest-max swaps back to Default (fired while still
+    // resting, before the loop steps out) when a pre-rest set is in use and we're
+    // not in combat.
+    [Fact]
+    public void OnRecoveryComplete_UsingRestSets_NotInCombat_FiresDefault()
+    {
+        var player = new PlayerState { InCombat = false };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "hp-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        coord.OnRecoveryComplete();
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    [Fact]
+    public void OnRecoveryComplete_InCombat_DoesNotFire()
+    {
+        var player = new PlayerState { InCombat = true };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "hp-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        coord.OnRecoveryComplete();
+        Assert.Empty(applied);
+    }
+
+    [Fact]
+    public void OnRecoveryComplete_NotUsingRestSets_DoesNotFire()
+    {
+        var player = new PlayerState { InCombat = false };
+        EquipmentSettings cfg = Config(SetFor(EquipTriggerType.Default, enabled: true, "default-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        coord.OnRecoveryComplete();
+        Assert.Empty(applied);
+    }
+
     // A loop / Auto-Lair run beginning swaps to the Default set.
     [Fact]
     public void OnLoopStarted_FiresDefault()

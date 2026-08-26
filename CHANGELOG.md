@@ -2,11 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.28.8
+## 3.28.9
 
 - Gear sets: swapping to a set that wears an off-hand item now removes a readied two-handed weapon **first**, so the off-hand actually goes on in the same swap instead of being rejected and only landing on a later re-apply
 - Gear sets: your Default set now auto-equips **only** when you've finished resting (recovered to rest-max, and only if you use pre-rest swap sets), when a loop or Auto-Lair run starts, or on death-pile recovery if that's enabled — it no longer flips back to Default mid-rest (a between-round cast or loot grab that briefly stood you up used to thrash Default↔pre-rest) and no longer swaps on combat entry (a fight interrupting a rest now keeps your pre-rest loadout until you've recovered)
-- bug reports addressed: paradigm-20260826-132742
+- Gear sets: the Default swap after resting now finishes **before** you step out of the room — the loop holds in place while any gear set streams its wear/rem commands, so you no longer finish resting, walk into the next room, and only then swap to Default in the middle of a fight
+- bug reports addressed: paradigm-20260826-132742, paradigm-20260826-140341
 
 ## 3.28.7
 

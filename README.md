@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.8**
+> **Version 3.28.9**
 > - Gear sets: swapping to a set that wears an off-hand item now removes a readied two-handed weapon first, so the off-hand actually goes on in the same swap instead of being rejected and only landing on a later re-apply
 > - Gear sets: your Default set now auto-equips only when you've finished resting (recovered to rest-max, if you use pre-rest swap sets), when a loop or Auto-Lair run starts, or on death-pile recovery if enabled — it no longer thrashes Default↔pre-rest mid-rest and no longer swaps on combat entry (a fight interrupting a rest keeps your pre-rest loadout until you've recovered)
+> - Gear sets: the after-rest Default swap now finishes before you step out of the room — the loop holds while any gear swap streams, so you no longer walk into the next room and swap to Default mid-fight
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

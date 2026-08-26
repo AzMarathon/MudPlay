@@ -75,6 +75,11 @@ public sealed class EquipmentManager
     // paradigm-20260825-103537). The swap finishes, then rest resumes once.
     public bool IsApplyingSet => _isEquipping;
 
+    // Fires true when a paced apply starts streaming its `wear`/`rem` commands and
+    // false when it finishes. Wired to a MovementCoordinator gear-swap gate so the
+    // loop holds in-room until the swap completes (report paradigm-20260826-140341).
+    public event Action<bool>? ApplyingChanged;
+
     public EquipmentManager(
         Func<EquipmentSettings> readEquipment,
         Func<InventorySnapshot> getSnapshot,
@@ -666,7 +671,9 @@ public sealed class EquipmentManager
         _pending.Clear();
         foreach (string c in cmds) _pending.Enqueue(c);
         if (_pending.Count == 0) return;
+        bool wasEquipping = _isEquipping;
         _isEquipping = true;
+        if (!wasEquipping) ApplyingChanged?.Invoke(true);
         _applyTimer = new DispatcherTimer(ApplyStep, DispatcherPriority.Background,
             (_, _) => SendNext());
         _applyTimer.Start();
@@ -685,7 +692,9 @@ public sealed class EquipmentManager
     private void FinishEquip()
     {
         StopTimer();
+        bool wasEquipping = _isEquipping;
         _isEquipping = false;
+        if (wasEquipping) ApplyingChanged?.Invoke(false);
     }
 
     private void StopTimer()

@@ -3568,7 +3568,17 @@ public sealed class AppServices
             recoveryPending:     () => Health.IsRecoveringRest,
             hasAttackingHostile: () => CombatTracker.HasHostileMonster,
             clearInCombat:       CombatTracker.ClearInCombatForRecoveryHold);
-        Health.SetRecoveryCompleteCallback(Combat.ResumeAfterRecovery);
+        // Recovery topped off to rest-max (a held rest gate cleared): re-open a held
+        // neutral engage AND — while still resting in the room, before the loop's
+        // deferred step-out — swap back to the Default set, so the swap streams here
+        // and holds the loop via the gear-swap gate instead of landing in the next
+        // room mid-combat (report paradigm-20260826-140341). AutoEquip resolves later
+        // than this wiring point but the callback reads the property at fire time.
+        Health.SetRecoveryCompleteCallback(() =>
+        {
+            Combat.ResumeAfterRecovery();
+            AutoEquip.OnRecoveryComplete();
+        });
 
         // Deterministic magic eligibility — weapon HitMagic ≥ monster Magical
         // picks normal-vs-alternate, spell ReqLevel ≥ monster SpellImmu gates
@@ -3998,6 +4008,22 @@ public sealed class AppServices
         // `rest` between every command (the rest/stand thrash of a pre-rest gear swap,
         // report paradigm-20260825-103537).
         Health.SetEquipmentApplyingProbe(() => Equipment.IsApplyingSet);
+
+        // Hold every movement engine while a paced gear-set apply streams, so the
+        // loop never steps out of a room mid-swap — the "finished resting, moved,
+        // then swapped to Default in the next room mid-combat" report
+        // (paradigm-20260826-140341). The gate clears the instant the swap finishes,
+        // so the step-out lands already in the new set. Engine-wait tier — doesn't
+        // touch the toolbar's user-pause face.
+        Equipment.ApplyingChanged += applying =>
+        {
+            if (applying)
+                MovementCoordinator.AssertGate(
+                    Game.Map.MovementCoordinator.GearSwapGate, "EquipmentManager", "gear-set swap streaming");
+            else
+                MovementCoordinator.ClearGate(
+                    Game.Map.MovementCoordinator.GearSwapGate, "EquipmentManager", "gear-set swap complete");
+        };
 
         // EquipmentManager is the sole gear actuator: the combat engine decides
         // which weapon it wants and hands the act off here. The backstab-set
