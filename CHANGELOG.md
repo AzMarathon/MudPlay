@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.3
+
+- Roomba Master List: new **Export List…** button (right of the filter) saves the whole item log to a text file grouped by room — one header per map/room with its name, then that room's items alphabetically with quantity
+
 ## 3.28.2
 
 - Item buffs: a `#item` buff that lives in the **off-hand** (a held tome, a warhorn) now works while you wield a **two-handed weapon** — the two-hander fills both hands, so the sequence now removes it first (`rem weapon → eq buff → use → rem buff → eq weapon`) instead of looping on a rejected `eq buff`

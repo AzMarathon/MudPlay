@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.2**
-> - Item buffs: a `#item` buff worn in the **off-hand** (a held tome, a warhorn) now works while you wield a **two-handed weapon** — the sequence removes the two-hander first instead of looping on a rejected `eq`
+> **Version 3.28.3**
+> - Roomba Master List: new **Export List…** button saves the whole item log to a text file grouped by room — one header per map/room with its name, then that room's items alphabetically with quantity
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

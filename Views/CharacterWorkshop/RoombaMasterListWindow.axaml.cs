@@ -1,7 +1,9 @@
 using System;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
 using MudPlay.ViewModels.CharacterWorkshop;
 
 namespace MudPlay.Views.CharacterWorkshop;
@@ -32,5 +34,27 @@ public partial class RoombaMasterListWindow : Window
         if (DataContext is RoombaMasterListViewModel vm
             && sender is DataGrid { SelectedItem: RoombaMasterListRowViewModel row })
             _ = vm.OpenItemRecordAsync(row);
+    }
+
+    // Export the whole logged list to a text file, room-grouped. The VM builds the
+    // text; the window owns the save picker + file write (same shape as
+    // WireInspectorWindow's export).
+    private async void OnExport(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not RoombaMasterListViewModel vm) return;
+        string text = vm.BuildExportText();
+
+        IStorageFile? file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export Roomba master list",
+            SuggestedFileName = $"roomba-master-list-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+            DefaultExtension = "txt",
+            FileTypeChoices = [new FilePickerFileType("Plain text (.txt)") { Patterns = ["*.txt"] }],
+        });
+        if (file is null) return;
+
+        await using System.IO.Stream stream = await file.OpenWriteAsync();
+        await using System.IO.StreamWriter writer = new(stream);
+        await writer.WriteAsync(text);
     }
 }

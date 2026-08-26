@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game.Map;
@@ -125,6 +126,37 @@ public sealed partial class RoombaMasterListViewModel : ObservableObject, IDispo
     {
         if (row is null || row.ItemNumber < 0) return;
         await ItemRecordOpener.OpenAsync(row.ItemNumber, row.ItemName);
+    }
+
+    // The room-grouped export the Export List button writes: one header per gang-
+    // house room (map/room — name), then that room's items alphabetically with
+    // quantity. Covers the whole logged set (not the live filter) — an export is a
+    // complete manifest, and each item appears once per room already (sightings key
+    // on item+room). Rooms ordered map-then-room; the file save is the window's job.
+    public string BuildExportText()
+    {
+        var byRoom = _locations.Sightings
+            .GroupBy(s => new RoomKey(s.Map, s.Room))
+            .OrderBy(g => g.Key.Map).ThenBy(g => g.Key.Room)
+            .ToList();
+
+        StringBuilder sb = new();
+        sb.AppendLine("Roomba Master List");
+        sb.AppendLine(
+            $"Exported {DateTime.Now:yyyy-MM-dd HH:mm} · {byRoom.Count} room(s) · " +
+            $"{_locations.Sightings.Count} item sighting(s)");
+        sb.AppendLine();
+
+        foreach (IGrouping<RoomKey, GhItemSighting> room in byRoom)
+        {
+            string? name = _roomGraph.GetRoom(room.Key)?.Name;
+            sb.AppendLine(name is { Length: > 0 } ? $"{room.Key} — {name}" : room.Key.ToString());
+            foreach (GhItemSighting s in room.OrderBy(s => s.ItemName, StringComparer.OrdinalIgnoreCase))
+                sb.AppendLine($"  {s.Quantity}x {s.ItemName}");
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
     }
 
     // Reuses ItemMdbViewBuilder's Obtained-From shop resolution (same buy/sell
