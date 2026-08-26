@@ -13,12 +13,15 @@
         ShowInTaskbar="False">
 
     <Grid Margin="16" RowDefinitions="Auto,*">
-        <TextBlock Grid.Row="0" Margin="0,0,0,8" TextWrapping="Wrap"
-                   Foreground="{StaticResource ChromeFgMutedBrush}"
-                   Text="Every item Roomba has ever seen across a scan, where it was seen, and where it can be bought/sold outside this gang house at 50 charm."/>
+        <TextBox Grid.Row="0" Margin="0,0,0,8"
+                 Text="{Binding Filter, Mode=TwoWay}"
+                 PlaceholderText="Filter by item name, quantity, or map/room (e.g. 15/12)…"
+                 ToolTip.Tip="Narrows the list live. Double-click a row to open that item's record."/>
 
         <DataGrid Grid.Row="1"
+                  x:Name="RowsGrid"
                   ItemsSource="{Binding Rows}"
+                  DoubleTapped="OnRowDoubleTapped"
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="1"
                   BorderBrush="{StaticResource ChromeBorderBrush}"

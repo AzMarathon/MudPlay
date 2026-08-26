@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -19,7 +21,12 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // labeled as part of THIS gang house (that market isn't a useful outside
 // reference point, and it's the definition of "gang house" this app already
 // tracks — see GhRoomLabelStore).
-public sealed class RoombaMasterListViewModel : IDisposable
+//
+// The market resolution is expensive per item, so it's built lazily per row
+// (RoombaMasterListRowViewModel.Market) — the list opens instantly even on a
+// large log. A filter box narrows the rows live; a double-click opens the
+// item's record.
+public sealed partial class RoombaMasterListViewModel : ObservableObject, IDisposable
 {
     // The reference point the user asked for — MajorMUD's neutral "retail"
     // charm (GAME_MECHANICS.md: Charm 50 leaves BUY at retail and both SELL
@@ -33,7 +40,13 @@ public sealed class RoombaMasterListViewModel : IDisposable
     private readonly GameDataCache _gameData;
     private readonly RoomGraphManager _roomGraph;
 
+    // All rows, unfiltered; Rows is the filtered view bound to the grid.
+    private readonly List<RoombaMasterListRowViewModel> _allRows = new();
     public ObservableCollection<RoombaMasterListRowViewModel> Rows { get; } = new();
+
+    // Filters the rows live by item name, quantity, or the "seen in" text
+    // (which carries the map/room, so "15/12" matches).
+    [ObservableProperty] private string _filter = string.Empty;
 
     public RoombaMasterListViewModel(
         GhItemLocationStore locations, GhRoomLabelStore labels, ItemNameStore itemNames,
@@ -56,14 +69,17 @@ public sealed class RoombaMasterListViewModel : IDisposable
 
     public void Dispose() => _locations.Changed -= Rebuild;
 
+    partial void OnFilterChanged(string value) => ApplyFilter();
+
     private void Rebuild()
     {
-        Rows.Clear();
+        _allRows.Clear();
 
         HashSet<RoomKey> ghRooms = new(_labels.Labels.Select(l => new RoomKey(l.Map, l.Room)));
-        // One shop cross-reference per distinct item, reused across every room
-        // that item was seen in — Obtained From doesn't vary by sighting.
-        Dictionary<int, string> marketByItemNumber = new();
+        // One lazy market per distinct item, shared by every row for that item —
+        // Obtained From doesn't vary by sighting, and the value is only computed
+        // if/when a row for it is actually rendered.
+        Dictionary<int, Lazy<string>> marketByItem = new();
 
         foreach (GhItemSighting sighting in _locations.Sightings
                      .OrderBy(s => s.ItemName, StringComparer.OrdinalIgnoreCase)
@@ -73,14 +89,42 @@ public sealed class RoombaMasterListViewModel : IDisposable
             string? roomName = _roomGraph.GetRoom(seenIn)?.Name;
             string seenInText = roomName is { Length: > 0 } ? $"{roomName} ({seenIn})" : seenIn.ToString();
 
-            string market = _itemNames.FindByName(sighting.ItemName) is int number
-                ? marketByItemNumber.TryGetValue(number, out string? cached)
+            int number = _itemNames.FindByName(sighting.ItemName) is int n ? n : -1;
+            Lazy<string> market = number >= 0
+                ? marketByItem.TryGetValue(number, out Lazy<string>? cached)
                     ? cached
-                    : marketByItemNumber[number] = BuildMarketText(number, ghRooms)
-                : "(unresolved item)";
+                    : marketByItem[number] = new Lazy<string>(() => BuildMarketText(number, ghRooms))
+                : UnresolvedMarket;
 
-            Rows.Add(new RoombaMasterListRowViewModel(sighting.ItemName, sighting.Quantity, seenInText, market));
+            _allRows.Add(new RoombaMasterListRowViewModel(
+                sighting.ItemName, sighting.Quantity, seenInText, number, market));
         }
+
+        ApplyFilter();
+    }
+
+    private static readonly Lazy<string> UnresolvedMarket = new(() => "(unresolved item)");
+
+    private void ApplyFilter()
+    {
+        Rows.Clear();
+        string f = Filter?.Trim() ?? string.Empty;
+        foreach (RoombaMasterListRowViewModel r in _allRows)
+        {
+            if (f.Length == 0
+                || r.ItemName.Contains(f, StringComparison.OrdinalIgnoreCase)
+                || r.SeenIn.Contains(f, StringComparison.OrdinalIgnoreCase)
+                || r.Quantity.ToString(CultureInfo.InvariantCulture).Contains(f))
+                Rows.Add(r);
+        }
+    }
+
+    // Double-click a row → open that item's record (the same ItemEditDialog the
+    // Game Data Browser opens). No-op for an unresolved item.
+    public async Task OpenItemRecordAsync(RoombaMasterListRowViewModel? row)
+    {
+        if (row is null || row.ItemNumber < 0) return;
+        await ItemRecordOpener.OpenAsync(row.ItemNumber, row.ItemName);
     }
 
     // Reuses ItemMdbViewBuilder's Obtained-From shop resolution (same buy/sell

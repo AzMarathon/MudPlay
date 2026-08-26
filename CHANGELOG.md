@@ -16,6 +16,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Roomba: `@roomba sync` now paces its telepaths ~800ms apart, and re-sends any the game drops with a rate-limit notice ("typing too quickly" / "too many messages sent") — so a big-house sync trickles out in the background instead of flooding the channel or stalling the responder's own combat/heal/movement
 - Roomba: `@roomba sync` now also hands over the **labeled gang-house rooms** (their sort rules + catch-all), not just the item sightings — so a fresh receiver's Roomba tab fills with the same rooms and can sweep them; a room the receiver has already labeled itself is left untouched
 - Roomba: dropped the separate "Enable @roomba responses" checkbox — the whole feature (answering `@roomba`, and adopting a sync) is now gated solely by the per-player **Query Roomba** permission (renamed from "Query item location"); a client adopts a sync only from a sender it has granted that permission, so a stranger can't push data into your log
+- Roomba Master List: opens instantly even on a big synced log (each item's outside-market value is now priced only when its row scrolls into view, instead of pricing every item up front), gained a **filter box** (by item name, quantity, or seen-in map/room), and **double-clicking a row opens that item's record**
 
 ## 3.27.10
 
