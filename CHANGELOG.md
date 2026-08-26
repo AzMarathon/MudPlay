@@ -2,8 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.28.12
+## 3.28.14
 
+- Equipment Manager: a **Currently Equipped:** readout next to the Item Finder button shows the last gear set the client equipped this session (via Equip Now or an auto-fire trigger)
+- Gear sets: the pacing between each `wear`/`rem` during a swap is now 100 ms (was 200 ms), so a full set change goes on twice as fast
 - Gear sets: a swap now removes the conflicting worn piece **first** in both directions — a readied two-handed weapon comes off before an off-hand item goes on, and a worn off-hand comes off before a two-hander is wielded — so neither wear is rejected and stranded to a later re-apply
 - Gear sets: your Default set now auto-equips **only** when you've finished resting (recovered to rest-max, and only if you use pre-rest swap sets), when a loop or Auto-Lair run starts, or on death-pile recovery if that's enabled — it no longer flips back to Default mid-rest (a between-round cast or loot grab that briefly stood you up used to thrash Default↔pre-rest) and no longer swaps on combat entry (a fight interrupting a rest now keeps your pre-rest loadout until you've recovered)
 - Gear sets: the Default swap after resting now finishes **before** you step out of the room — the loop holds in place while any gear set streams its wear/rem commands, so you no longer finish resting, walk into the next room, and only then swap to Default in the middle of a fight

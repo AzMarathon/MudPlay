@@ -1,7 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.12**
+> **Version 3.28.14**
+> - Equipment Manager: a "Currently Equipped:" readout next to the Item Finder button shows the last gear set the client equipped this session (via Equip Now or an auto-fire trigger)
+> - Gear sets: the pacing between each wear/remove during a swap is now 100 ms (was 200 ms), so a full set change goes on twice as fast
 > - Gear sets: a swap now removes the conflicting worn piece first in both directions — a two-handed weapon comes off before an off-hand goes on, and an off-hand comes off before a two-hander is wielded — so neither wear is rejected and stranded to a later re-apply
 > - Gear sets: your Default set now auto-equips only when you've finished resting (recovered to rest-max, if you use pre-rest swap sets), when a loop or Auto-Lair run starts, or on death-pile recovery if enabled — it no longer thrashes Default↔pre-rest mid-rest and no longer swaps on combat entry (a fight interrupting a rest keeps your pre-rest loadout until you've recovered)
 > - Gear sets: the after-rest Default swap now finishes before you step out of the room — the loop holds while any gear swap streams, so you no longer walk into the next room and swap to Default mid-fight

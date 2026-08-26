@@ -413,6 +413,54 @@ public sealed class EquipmentManagerTests
         Assert.Equal(EquipResult.NoChange, mgr.ApplyByKeyword("armor"));
     }
 
+    // ===== CurrentSetId tracking (Currently Equipped readout) =====
+
+    [Fact]
+    public void ApplyBySetId_RecordsCurrentSet_FiresChangedOnlyOnChange()
+    {
+        EquipmentSettings settings = new()
+        {
+            Sets =
+            {
+                SetWithId("set-1", "Combat", Entry(EquipmentSlot.AlternateWeapon, "bow")),
+                SetWithId("set-2", "Backstab", Entry(EquipmentSlot.AlternateWeapon, "dagger")),
+            },
+        };
+        EquipmentManager mgr = Manager(settings, InventorySnapshot.Empty, new CombatSettings());
+        int fired = 0;
+        mgr.CurrentSetChanged += () => fired++;
+
+        Assert.Null(mgr.CurrentSetId);
+
+        mgr.ApplyBySetId("set-1");
+        Assert.Equal("set-1", mgr.CurrentSetId);
+        Assert.Equal(1, fired);
+
+        // Re-applying the same set doesn't re-fire.
+        mgr.ApplyBySetId("set-1");
+        Assert.Equal("set-1", mgr.CurrentSetId);
+        Assert.Equal(1, fired);
+
+        // A different set updates and fires once.
+        mgr.ApplyBySetId("set-2");
+        Assert.Equal("set-2", mgr.CurrentSetId);
+        Assert.Equal(2, fired);
+    }
+
+    [Fact]
+    public void ApplyBySetId_UnknownId_LeavesCurrentSetUnchanged()
+    {
+        EquipmentSettings settings = new()
+        {
+            Sets = { SetWithId("set-1", "Combat", Entry(EquipmentSlot.AlternateWeapon, "bow")) },
+        };
+        EquipmentManager mgr = Manager(settings, InventorySnapshot.Empty, new CombatSettings());
+        mgr.ApplyBySetId("set-1");
+
+        mgr.ApplyBySetId("nope");   // NotFound — never reaches the apply
+        Assert.Equal("set-1", mgr.CurrentSetId);
+    }
+
     // ===== ApplyBySetId resolution (trigger coordinator entry point) =====
 
     private static EquipmentSet SetWithId(string id, string name, params EquipmentSlotEntry[] slots)

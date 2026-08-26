@@ -25,7 +25,7 @@ public sealed class EquipmentManager
 
     // Spacing between successive wear commands. The game's flood / spam guards
     // dislike a burst of ~20 wears, so drain the queue one step at a time.
-    private static readonly TimeSpan ApplyStep = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan ApplyStep = TimeSpan.FromMilliseconds(100);
 
     private readonly Func<EquipmentSettings> _readEquipment;
     private readonly Func<InventorySnapshot> _getSnapshot;
@@ -79,6 +79,13 @@ public sealed class EquipmentManager
     // false when it finishes. Wired to a MovementCoordinator gear-swap gate so the
     // loop holds in-room until the swap completes (report paradigm-20260826-140341).
     public event Action<bool>? ApplyingChanged;
+
+    // The id of the last gear set the engine applied (or confirmed already worn) —
+    // the "last set applied" the Workshop surfaces as Currently Equipped. Null until
+    // the first apply this session; a stale id (after a profile swap) simply resolves
+    // to no set name at the display side. CurrentSetChanged fires when it changes.
+    public string? CurrentSetId { get; private set; }
+    public event Action? CurrentSetChanged;
 
     public EquipmentManager(
         Func<EquipmentSettings> readEquipment,
@@ -292,8 +299,22 @@ public sealed class EquipmentManager
     // slot wrote CombatSettings. False when the set is already fully in effect.
     // fillFromInventory lets the user-initiated paths top empty / unowned slots up
     // from carried gear (see BuildApplyCommands); auto-fires pass it false.
+    // Note a set as the current loadout and fire CurrentSetChanged when it differs
+    // from the last. An empty id (an unsaved set) is ignored.
+    private void SetCurrentSet(EquipmentSet set)
+    {
+        if (string.IsNullOrEmpty(set.Id) || string.Equals(CurrentSetId, set.Id, StringComparison.Ordinal))
+            return;
+        CurrentSetId = set.Id;
+        CurrentSetChanged?.Invoke();
+    }
+
     private bool ApplySet(EquipmentSet set, bool fillFromInventory)
     {
+        // Record it as the current loadout — whether it needs commands (a real
+        // swap) or is already fully worn (a no-op Equip Now still confirms it's on).
+        SetCurrentSet(set);
+
         bool combatChanged = false;
         CombatSettings combat = _readCombat();
         if (ApplyVirtualSlots(set, combat))

@@ -106,6 +106,11 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     [NotifyPropertyChangedFor(nameof(HasApplyStatus))]
     private string _applyStatus = string.Empty;
 
+    // The last gear set the engine equipped (or confirmed already worn) — shown
+    // next to the Item Finder button. "—" before any apply this session, or when
+    // the tracked id no longer matches a set (e.g. after a profile swap).
+    [ObservableProperty] private string _currentlyEquipped = "—";
+
     // False with no character loaded — gates the set list and the empty state.
     [ObservableProperty] private bool _hasProfile;
 
@@ -145,12 +150,28 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
 
         BuildRows();
         ReloadFromProfile();
+        RefreshCurrentlyEquipped();
 
         _profile.ProfileLoaded += OnProfileLoaded;
         _gameData.ActiveSetChanged += OnActiveSetChanged;
         _stats.PropertyChanged += OnStatsChanged;
         _players.ObservationRecorded += OnObservationRecorded;
         _questBonuses.Changed += OnQuestBonusesChanged;
+        _equipment.CurrentSetChanged += OnCurrentSetChanged;
+    }
+
+    // The engine equipped a different set (Equip Now or an auto-fire trigger) —
+    // re-resolve the Currently Equipped name. Fires on the UI thread (all applies
+    // are UI-thread), so the property update is safe without marshalling.
+    private void OnCurrentSetChanged() => RefreshCurrentlyEquipped();
+
+    private void RefreshCurrentlyEquipped()
+    {
+        string? id = _equipment.CurrentSetId;
+        string? name = string.IsNullOrEmpty(id)
+            ? null
+            : SetRows.FirstOrDefault(r => string.Equals(r.Set.Id, id, StringComparison.Ordinal))?.Set.Name;
+        CurrentlyEquipped = string.IsNullOrWhiteSpace(name) ? "—" : name!;
     }
 
     // ----- enable / disable / apply ---------------------------------------
@@ -311,6 +332,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
 
         LoadSelectedSetIntoRows();
         RefreshAvailableItems();
+        RefreshCurrentlyEquipped();
     }
 
     // Reconcile the persisted set blob to exactly the four roster entries, one per
@@ -646,5 +668,6 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         _stats.PropertyChanged -= OnStatsChanged;
         _players.ObservationRecorded -= OnObservationRecorded;
         _questBonuses.Changed -= OnQuestBonusesChanged;
+        _equipment.CurrentSetChanged -= OnCurrentSetChanged;
     }
 }
