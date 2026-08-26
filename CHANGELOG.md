@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.27.9
+
+- Equipment: a pre-rest gear swap no longer thrashes rest — MudPlay holds the `rest` re-issue while the set's `wear`/`rem` commands stream (each stood the character up, so the rest engine was re-`rest`ing between every one), then rests once the swap finishes
+- Equipment: the manual **Equip All** / `@equip-<set>` path now frees a paired finger/wrist slot before wearing the set's **second** ring/bracelet, so the swap converges instead of the game's `wear` trading with the ring you're keeping
+- BBS: logging into the **wrong realm** is fixed — a BBS folder hand-duplicated to make a same-host sibling (e.g. "Paradigm PVE" copied from "Paradigm PVP") kept the original name inside its config, so its logon steps (and blacklist/leaderboard) resolved to the wrong BBS; the name is now reconciled to the folder on load, so the right realm-select step runs
+- bug reports addressed: paradigm-20260825-103537, paradigm-20260825-102259
+
 ## 3.27.7
 
 - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast (a heal/buff sent moments earlier) left the engine's `_combatOff` latch stuck true, which permanently blocked the spell-mode retry heartbeat since only a successful cast used to clear it; it's now cleared unconditionally the moment the engine commits to engaging

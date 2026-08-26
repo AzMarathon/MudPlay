@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.27.7**
-> - Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast left the engine's combat-off latch stuck true, permanently blocking the retry heartbeat; it's now cleared the moment the engine commits to engaging
-> - Combat: a locally blocked initial attack spell now seeds the five-second combat heartbeat on a fresh session where no prior combat line anchored the cadence, and reserves that retry round from automatic buffs so offense gets its turn back
-> - Combat: a self-buff/heal (e.g. `vlwa`) no longer gets spammed after it already landed — an unrelated attack-spell cast losing the same round's slot was mistaken for the buff failing and dropping its timer; rejections now carry the cast code they apply to
+> **Version 3.27.9**
+> - Equipment: a pre-rest gear swap no longer thrashes rest — MudPlay holds the `rest` re-issue while the set's `wear`/`rem` commands stream, then rests once the swap finishes
+> - Equipment: the manual **Equip All** / `@equip-<set>` path now frees a paired finger/wrist slot before wearing the set's **second** ring/bracelet, so the swap converges instead of the game's `wear` trading with the ring you're keeping
+> - BBS: logging into the **wrong realm** is fixed — a BBS folder hand-duplicated to make a same-host sibling (e.g. "Paradigm PVE" copied from "Paradigm PVP") kept the original name inside its config, so its logon steps resolved to the wrong BBS; the name is now reconciled to the folder on load
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
