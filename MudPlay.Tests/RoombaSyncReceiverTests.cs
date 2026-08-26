@@ -82,7 +82,7 @@ public sealed class RoombaSyncReceiverTests : IDisposable
 
         receiver.Ingest(Gangpath("Buddy", SyncLine(OnePayload())));
 
-        Assert.True(locations.TryFindLastSeen("torch", out GhItemSighting sighting));
+        GhItemSighting sighting = Assert.Single(locations.FindSightings("torch"));
         Assert.Equal(100, sighting.Room);
         Assert.Equal(4, sighting.Quantity);
     }
@@ -97,10 +97,10 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         string second = payload[(payload.Length / 2)..];
 
         receiver.Ingest(Gangpath("Buddy", SyncLine(first, 1, 2)));
-        Assert.False(locations.TryFindLastSeen("torch", out _));   // not merged yet — still missing chunk 2
+        Assert.Empty(locations.FindSightings("torch"));   // not merged yet — still missing chunk 2
 
         receiver.Ingest(Gangpath("Buddy", SyncLine(second, 2, 2)));
-        Assert.True(locations.TryFindLastSeen("torch", out _));
+        Assert.Single(locations.FindSightings("torch"));
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public sealed class RoombaSyncReceiverTests : IDisposable
 
         receiver.Ingest(Gangpath("Buddy", SyncLine(OnePayload())));
 
-        Assert.False(locations.TryFindLastSeen("torch", out _));
+        Assert.Empty(locations.FindSightings("torch"));
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public sealed class RoombaSyncReceiverTests : IDisposable
             receiver.Ingest(Gangpath("Buddy", SyncLine("!!!not-valid-base64url!!!"))));
 
         Assert.Null(ex);
-        Assert.False(locations.TryFindLastSeen("torch", out _));
+        Assert.Empty(locations.FindSightings("torch"));
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public sealed class RoombaSyncReceiverTests : IDisposable
 
         receiver.Ingest(Gangpath("Buddy", "just chatting about the weather"));
 
-        Assert.False(locations.TryFindLastSeen("torch", out _));
+        Assert.Empty(locations.FindSightings("torch"));
     }
 
     [Fact]
@@ -153,6 +153,6 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         router.Dispatch(new LineExtractor.EmittedLine(
             wire, new CellAttributes[wire.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false));
 
-        Assert.False(locations.TryFindLastSeen("torch", out _));
+        Assert.Empty(locations.FindSightings("torch"));
     }
 }

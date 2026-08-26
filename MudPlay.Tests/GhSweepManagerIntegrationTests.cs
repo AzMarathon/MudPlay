@@ -657,9 +657,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // The staged arrival survey attaches to the room being entered when the
         // transition confirms — "war hammer" was fed before the C transition, so
         // it lands on C (room 3); "chain shirt" before B, so it lands on B (room 2).
-        Assert.True(locations.TryFindLastSeen("war hammer", out GhItemSighting hammer));
+        GhItemSighting hammer = Assert.Single(locations.FindSightings("war hammer"));
         Assert.Equal(3, hammer.Room);
-        Assert.True(locations.TryFindLastSeen("chain shirt", out GhItemSighting shirt));
+        GhItemSighting shirt = Assert.Single(locations.FindSightings("chain shirt"));
         Assert.Equal(2, shirt.Room);
 
         sweep.Dispose();

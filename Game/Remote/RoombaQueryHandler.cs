@@ -5,11 +5,14 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.Game.Remote;
 
-// Read-only handler for @roomba — reports the last gang-house room a named
-// item was seen in, per GhItemLocationStore's BBS-tier sighting log, gated by
-// the QueryItemLocation permission.
-//   @roomba <item name>   — the item's last known room, quantity, and how
-//                           long ago, or "no record".
+// Read-only handler for @roomba — reports every gang-house room a named item
+// is currently tracked in, per GhItemLocationStore's BBS-tier sighting log,
+// gated by the QueryItemLocation permission.
+//   @roomba <item name>   — one reply line per room currently holding a
+//                           match (quantity + how long ago), or "no record".
+//                           A gang house can stock the same item in more than
+//                           one room, so every match is reported, not just
+//                           the most recently scanned.
 //   @roomba sync          — replies with this client's entire sighting log,
 //                           compactly encoded (see GhItemSyncCodec), for the
 //                           requester's RoombaSyncReceiver to merge in. Same
@@ -21,6 +24,11 @@ namespace MudPlay.Game.Remote;
 // it on.
 public sealed class RoombaQueryHandler : IDisposable
 {
+    // Cap on reply lines for a single @roomba <item> query so an item stocked
+    // in many rooms can't flood the channel; the overflow is summarised as a
+    // final line, same pattern as @death all / @timer.
+    private const int MaxLines = 5;
+
     // Cap on records per @roomba sync response so a very large gang-house
     // sighting log can't flood the channel; conservative per-line character
     // budget for the compressed blob keeps the wrapped wire line
@@ -78,17 +86,25 @@ public sealed class RoombaQueryHandler : IDisposable
         string query = string.Join(' ', ctx.Args).Trim();
         if (query.Length == 0) { ctx.Reply("usage: @roomba <item name>"); return; }
 
-        if (!_locations.TryFindLastSeen(query, out GhItemSighting sighting))
+        IReadOnlyList<GhItemSighting> sightings = _locations.FindSightings(query);
+        if (sightings.Count == 0)
         {
             ctx.Reply($"no record of \"{query}\"");
             return;
         }
 
+        foreach (GhItemSighting s in sightings.Take(MaxLines)) ctx.Reply(Format(s));
+        int extra = sightings.Count - MaxLines;
+        if (extra > 0) ctx.Reply($"{extra} more room(s) — refine your search");
+    }
+
+    private string Format(GhItemSighting sighting)
+    {
         RoomKey room = new(sighting.Map, sighting.Room);
         string? name = _roomGraph.GetRoom(room)?.Name;
         string where = name is { Length: > 0 } ? $"{name} ({room})" : room.ToString();
         string qty = sighting.Quantity > 1 ? $"{sighting.Quantity}x " : string.Empty;
-        ctx.Reply($"{qty}{sighting.ItemName} last seen in {where}, {FormatAge(DateTimeOffset.Now - sighting.SeenAt)} ago");
+        return $"{qty}{sighting.ItemName} last seen in {where}, {FormatAge(DateTimeOffset.Now - sighting.SeenAt)} ago";
     }
 
     // Reply to `@roomba sync` with this client's entire sighting log, encoded

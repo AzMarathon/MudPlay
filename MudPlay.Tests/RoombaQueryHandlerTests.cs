@@ -137,6 +137,23 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         Assert.Contains(Replies(engine), r => r.Contains("long sword") && r.Contains("1/100"));
     }
 
+    // A gang house can stock the same item in more than one room — every
+    // room a sweep actually saw it in must come back, not just one.
+    [Fact]
+    public void Roomba_ItemSeenInMultipleRooms_ReportsEveryRoom()
+    {
+        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        locations.RecordRoom(new RoomKey(1, 100), new[] { "4 long sword" });
+        locations.RecordRoom(new RoomKey(1, 200), new[] { "2 long sword" });
+
+        engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
+
+        var replies = Replies(engine);
+        Assert.Contains(replies, r => r.Contains("4x long sword") && r.Contains("1/100"));
+        Assert.Contains(replies, r => r.Contains("2x long sword") && r.Contains("1/200"));
+    }
+
     [Fact]
     public void Roomba_UnknownItem_ReportsNoRecord()
     {

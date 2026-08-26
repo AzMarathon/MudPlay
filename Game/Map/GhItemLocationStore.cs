@@ -7,24 +7,27 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
 
-// Per-BBS "last seen this item in this room" log for Roomba Mode, persisted to
-// Data/BBS/{bbs}/roomba_items.json. Fed by GhSweepManager every time it merges
-// a fresh floor survey into a labeled gang-house room (recon or the post-sort
-// final recon pass); read by RoombaQueryHandler to answer @roomba <item>.
-// BBS-scoped for the same reason GhRoomLabelStore is — one shared gang house
-// per board, so a sighting recorded by any character is visible to every other
-// character on that BBS. Mirrors RoomBlacklistStore's per-BBS load/persist
-// shape (OnBbsPinApplied + a Changed event).
+// Per-BBS "which rooms currently hold this item" log for Roomba Mode,
+// persisted to Data/BBS/{bbs}/roomba_items.json. Fed by GhSweepManager every
+// time it merges a fresh floor survey into a labeled gang-house room (recon,
+// an Inventory-only lap, or the post-sort final recon pass); read by
+// RoombaQueryHandler to answer @roomba <item>. BBS-scoped for the same reason
+// GhRoomLabelStore is — one shared gang house per board, so a sighting
+// recorded by any character is visible to every other character on that BBS.
+// Mirrors RoomBlacklistStore's per-BBS load/persist shape (OnBbsPinApplied +
+// a Changed event).
+//
+// Keyed two levels deep — canonical item name, then RoomKey — because a gang
+// house can legitimately stock the same item in several rooms at once (e.g.
+// torches in both a lighting-supplies room and a catch-all overflow room); a
+// query needs every room a sweep actually found it in, not just whichever was
+// scanned most recently.
 public sealed class GhItemLocationStore
 {
     private readonly ItemNameStore _itemNames;
     private readonly LogService? _log;
     private string? _activeBbs;
-    // Keyed by the canonical (GhSurveyMerger.Canonical) item name — the same
-    // normalization GhSweepManager's room-observation ledger uses, so a
-    // recorded sighting and a later @roomba query of any wording of the same
-    // item resolve to one entry.
-    private readonly Dictionary<string, GhItemSighting> _sightings =
+    private readonly Dictionary<string, Dictionary<RoomKey, GhItemSighting>> _sightings =
         new(StringComparer.OrdinalIgnoreCase);
 
     // Fires after every mutation, including a BBS-pin reload.
@@ -37,28 +40,40 @@ public sealed class GhItemLocationStore
         _log = log;
     }
 
-    // Read-only snapshot of every item currently on record, most recent first.
+    // Read-only snapshot of every (item, room) sighting currently on record,
+    // most recent first.
     public IReadOnlyList<GhItemSighting> Sightings
-        => _sightings.Values.OrderByDescending(s => s.SeenAt).ToList();
+        => _sightings.Values.SelectMany(byRoom => byRoom.Values)
+            .OrderByDescending(s => s.SeenAt).ToList();
 
-    // Record every item on `room`'s currently-known floor as last-seen there,
-    // now. Called by GhSweepManager right after it merges a fresh survey into
-    // its own _observedByRoom ledger for `room` — `items` is that room's full
-    // accumulated floor list (count-prefixed entries allowed; the count is
-    // stripped, only identity + location matter here). A room re-observed
-    // later (recon's next lap, or final recon after sorting) simply overwrites
-    // the same entries with a fresher timestamp — no explicit "item moved"
-    // tracking needed.
+    // Record `room`'s currently-known floor as-is: every item in `items` gets
+    // (or refreshes) its (item, room) sighting, and any item this room USED to
+    // hold but that isn't in this fresh list anymore has its sighting for THIS
+    // room dropped — a room's entry always reflects the last survey actually
+    // taken of it, not everything ever seen there. Other rooms' sightings of
+    // the same item name are untouched either way. Called by GhSweepManager
+    // right after it merges a fresh survey into its own _observedByRoom ledger
+    // for `room` — `items` is that room's full accumulated floor list
+    // (count-prefixed entries allowed; the count becomes Quantity).
     public void RecordRoom(RoomKey room, IReadOnlyList<string> items)
     {
-        if (_activeBbs is null || items.Count == 0) return;
+        if (_activeBbs is null) return;
 
         DateTimeOffset now = DateTimeOffset.Now;
+        HashSet<string> freshNames = new(StringComparer.OrdinalIgnoreCase);
+
         foreach (string entry in items)
         {
             (int count, _) = CountedCommand.SplitLeadingCount(entry);
             string canonical = GhSurveyMerger.Canonical(entry, _itemNames);
-            _sightings[canonical] = new GhItemSighting
+            freshNames.Add(canonical);
+
+            if (!_sightings.TryGetValue(canonical, out Dictionary<RoomKey, GhItemSighting>? byRoom))
+            {
+                byRoom = new Dictionary<RoomKey, GhItemSighting>();
+                _sightings[canonical] = byRoom;
+            }
+            byRoom[room] = new GhItemSighting
             {
                 ItemName = canonical,
                 Map = room.Map,
@@ -67,48 +82,54 @@ public sealed class GhItemLocationStore
                 Quantity = Math.Max(1, count),
             };
         }
+
+        // Drop this room's stale entry for anything it previously held but
+        // this fresh survey no longer shows — items is always the room's full
+        // current accumulated knowledge (not a delta), so anything absent here
+        // is genuinely gone from the floor. Prune an item name entirely once
+        // no room holds it anymore, so a stale key doesn't linger empty.
+        List<string> emptied = new();
+        foreach ((string name, Dictionary<RoomKey, GhItemSighting> byRoom) in _sightings)
+        {
+            if (freshNames.Contains(name)) continue;
+            if (byRoom.Remove(room) && byRoom.Count == 0) emptied.Add(name);
+        }
+        foreach (string name in emptied) _sightings.Remove(name);
+
         Persist();
         Changed?.Invoke();
     }
 
     // Resolve query (a player-typed item name, possibly partial or differently
-    // worded) to its last-known sighting. Preference order: (1) canonical
-    // item-id match via ItemNameStore, so any wording that resolves to the same
-    // game-data item hits regardless of how it was recorded; (2) exact
-    // case-insensitive name match; (3) a substring match, but only when it's
-    // unique — an ambiguous partial (matches more than one tracked item) reports
-    // not-found rather than guessing which one the sender meant.
-    public bool TryFindLastSeen(string query, out GhItemSighting sighting)
+    // worded) to every room currently holding a match, ordered by map/room.
+    // Preference order: (1) canonical item-id match via ItemNameStore, so any
+    // wording that resolves to the same game-data item hits regardless of how
+    // it was recorded; (2) exact case-insensitive name match; (3) a substring
+    // match, but only when it's unique to one item NAME — an ambiguous partial
+    // (matches more than one distinct tracked item) reports nothing rather
+    // than guessing which one the sender meant. Empty when nothing matches.
+    public IReadOnlyList<GhItemSighting> FindSightings(string query)
     {
-        sighting = null!;
-        if (string.IsNullOrWhiteSpace(query)) return false;
+        if (string.IsNullOrWhiteSpace(query)) return Array.Empty<GhItemSighting>();
 
         if (_itemNames.FindByName(query) is int number)
         {
             string canonical = _itemNames.GetName(number) ?? query;
-            if (_sightings.TryGetValue(canonical, out GhItemSighting? byId))
-            {
-                sighting = byId;
-                return true;
-            }
+            if (_sightings.TryGetValue(canonical, out Dictionary<RoomKey, GhItemSighting>? byId))
+                return Ordered(byId);
         }
 
-        if (_sightings.TryGetValue(query, out GhItemSighting? exact))
-        {
-            sighting = exact;
-            return true;
-        }
+        if (_sightings.TryGetValue(query, out Dictionary<RoomKey, GhItemSighting>? exact))
+            return Ordered(exact);
 
-        List<GhItemSighting> partial = _sightings.Values
-            .Where(s => s.ItemName.Contains(query, StringComparison.OrdinalIgnoreCase))
+        List<string> partialNames = _sightings.Keys
+            .Where(name => name.Contains(query, StringComparison.OrdinalIgnoreCase))
             .ToList();
-        if (partial.Count == 1)
-        {
-            sighting = partial[0];
-            return true;
-        }
-        return false;
+        return partialNames.Count == 1 ? Ordered(_sightings[partialNames[0]]) : Array.Empty<GhItemSighting>();
     }
+
+    private static IReadOnlyList<GhItemSighting> Ordered(Dictionary<RoomKey, GhItemSighting> byRoom)
+        => byRoom.Values.OrderBy(s => s.Map).ThenBy(s => s.Room).ToList();
 
     // This client's sightings encoded for the @roomba sync wire — only the ones
     // whose canonical name resolves back to an item record number (the sync
@@ -118,21 +139,22 @@ public sealed class GhItemLocationStore
     public IReadOnlyList<GhItemSyncRecord> ToSyncRecords()
     {
         List<GhItemSyncRecord> records = new();
-        foreach (GhItemSighting s in _sightings.Values)
+        foreach ((string canonical, Dictionary<RoomKey, GhItemSighting> byRoom) in _sightings)
         {
-            if (_itemNames.FindByName(s.ItemName) is not int number) continue;
-            records.Add(new GhItemSyncRecord(s.Map, s.Room, number, s.Quantity, s.SeenAt));
+            if (_itemNames.FindByName(canonical) is not int number) continue;
+            foreach (GhItemSighting s in byRoom.Values)
+                records.Add(new GhItemSyncRecord(s.Map, s.Room, number, s.Quantity, s.SeenAt));
         }
         return records;
     }
 
     // Merge sightings received from another MudPlay client's @roomba sync
-    // reply. Newest SeenAt per item wins — unlike a boss kill time there's no
-    // meaningful "conflict" for a room-contents sighting, so this never needs a
-    // user-facing merge decision, just silent adoption of whichever side saw it
-    // more recently. Records naming an item number outside our active game-data
-    // set are skipped (nothing to resolve a name from). Returns the count
-    // actually applied, for the program log.
+    // reply. Newest SeenAt per (item, room) wins — unlike a boss kill time
+    // there's no meaningful "conflict" for a room-contents sighting, so this
+    // never needs a user-facing merge decision, just silent adoption of
+    // whichever side saw that room more recently. Records naming an item
+    // number outside our active game-data set are skipped (nothing to resolve
+    // a name from). Returns the count actually applied, for the program log.
     public int MergeSyncRecords(IReadOnlyList<GhItemSyncRecord> records)
     {
         if (_activeBbs is null) return 0;
@@ -141,9 +163,16 @@ public sealed class GhItemLocationStore
         {
             string? name = _itemNames.GetName(r.ItemNumber);
             if (name is null) continue;
-            if (_sightings.TryGetValue(name, out GhItemSighting? existing) && existing.SeenAt >= r.SeenAt) continue;
+            RoomKey room = new(r.Map, r.Room);
 
-            _sightings[name] = new GhItemSighting
+            if (!_sightings.TryGetValue(name, out Dictionary<RoomKey, GhItemSighting>? byRoom))
+            {
+                byRoom = new Dictionary<RoomKey, GhItemSighting>();
+                _sightings[name] = byRoom;
+            }
+            if (byRoom.TryGetValue(room, out GhItemSighting? existing) && existing.SeenAt >= r.SeenAt) continue;
+
+            byRoom[room] = new GhItemSighting
             {
                 ItemName = name,
                 Map = r.Map,
@@ -177,13 +206,24 @@ public sealed class GhItemLocationStore
         _sightings.Clear();
         List<GhItemSighting>? loaded = JsonStore.Load<List<GhItemSighting>>(AppPaths.BbsRoombaItemsFile(bbs));
         if (loaded is not null)
-            foreach (GhItemSighting s in loaded) _sightings[s.ItemName] = s;
+        {
+            foreach (GhItemSighting s in loaded)
+            {
+                if (!_sightings.TryGetValue(s.ItemName, out Dictionary<RoomKey, GhItemSighting>? byRoom))
+                {
+                    byRoom = new Dictionary<RoomKey, GhItemSighting>();
+                    _sightings[s.ItemName] = byRoom;
+                }
+                byRoom[new RoomKey(s.Map, s.Room)] = s;
+            }
+        }
         Changed?.Invoke();
     }
 
     private void Persist()
     {
         if (_activeBbs is null) return;
-        JsonStore.Save(AppPaths.BbsRoombaItemsFile(_activeBbs), _sightings.Values.ToList());
+        List<GhItemSighting> flat = _sightings.Values.SelectMany(byRoom => byRoom.Values).ToList();
+        JsonStore.Save(AppPaths.BbsRoombaItemsFile(_activeBbs), flat);
     }
 }

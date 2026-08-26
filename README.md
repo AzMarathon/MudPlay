@@ -2,8 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.28.0**
-> - Roomba: new `@roomba <item name>` remote command replies with the gang-house room an item was last seen in (and how long ago), gated by its own permission and an opt-in **Enable @roomba responses** checkbox on the Roomba tab
-> - Roomba: every scan now feeds a persistent item-location log backing `@roomba`
+> - Roomba: new `@roomba <item name>` remote command replies with every gang-house room that item is currently tracked in (quantity + how long ago each), gated by its own permission and an opt-in **Enable @roomba responses** checkbox on the Roomba tab
+> - Roomba: every scan now feeds a persistent item-location log backing `@roomba`, tracked per room so an item stocked in several rooms at once reports all of them
 > - Roomba: room labels, hidden-search settings, and the item-location log are now shared **per BBS** rather than per character — every character on a BBS shares one gang house
 > - Roomba: new `@roomba sync` shares a client's item-location log with another MudPlay user directly in-game — no import/export files needed
 > - Roomba: new **Start Inventory** mode scans and logs a gang house without moving anything, for players with their own manual sort
