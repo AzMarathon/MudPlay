@@ -360,6 +360,11 @@ public sealed class EquipmentManager
     // haveInventory is false) and what an auto-fire uses.
     private List<string> BuildApplyCommands(
         EquipmentSet set, InventorySnapshot snap, bool fillFromInventory, bool armorOnly = false)
+        => PrependTwoHandRemForOffHand(set, snap.EquippedItems, _isTwoHanded,
+            BuildApplyCommandsCore(set, snap, fillFromInventory, armorOnly));
+
+    private List<string> BuildApplyCommandsCore(
+        EquipmentSet set, InventorySnapshot snap, bool fillFromInventory, bool armorOnly = false)
     {
         bool haveInventory = snap.LastUpdated != DateTimeOffset.MinValue;
         if (fillFromInventory && haveInventory
@@ -462,6 +467,41 @@ public sealed class EquipmentManager
             }
         }
         return rems;
+    }
+
+    // A two-handed weapon fills both hands, so the game rejects an off-hand wear
+    // while it's readied ("You may not wear an off-hand item while you have a
+    // 2-handed weapon readied."). When a set brings an off-hand item on and a
+    // two-hander is still worn, strip the two-hander first so the off-hand wear
+    // lands in the SAME apply pass — otherwise it fails and only sticks on a later
+    // re-apply, leaving the off-hand slot empty in between (report
+    // paradigm-20260826-132742: swapping Default's 2H quarterstaff → the pre-rest
+    // set's throwing hammers + griffon shield tripped this). Mirrors SwapWeapon's
+    // reverse guard (rem the worn off-hand before wielding a two-hander). Only the
+    // set's own off-hand pick is considered — the following wear/eq of the set's
+    // one-handed weapon re-arms the hand after the rem.
+    internal static List<string> PrependTwoHandRemForOffHand(
+        EquipmentSet set, IReadOnlyList<EquippedItem> worn,
+        Func<string?, bool> isTwoHanded, List<string> cmds)
+    {
+        string? offHand = set.Slots
+            .FirstOrDefault(e => e.Slot == EquipmentSlot.OffHand)?.ItemName?.Trim();
+        if (string.IsNullOrEmpty(offHand)) return cmds;
+        // Only when the plan actually wears the off-hand this pass (an already-worn
+        // off-hand isn't re-issued, so there's nothing to clear the hand for).
+        bool wearingOffHand = cmds.Any(c =>
+            c.StartsWith("wear ", StringComparison.Ordinal)
+            && string.Equals(c["wear ".Length..], offHand, StringComparison.OrdinalIgnoreCase));
+        if (!wearingOffHand) return cmds;
+
+        string? wornWeapon = worn
+            .Where(e => string.Equals(e.Slot, "Weapon Hand", StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.Name)
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(wornWeapon) || !isTwoHanded(wornWeapon)) return cmds;
+
+        cmds.Insert(0, $"rem {wornWeapon.Trim()}");
+        return cmds;
     }
 
     // Inventory-aware apply plan for the user-initiated equip paths (Equip All /

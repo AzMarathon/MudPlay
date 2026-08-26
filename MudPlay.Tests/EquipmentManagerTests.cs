@@ -164,6 +164,73 @@ public sealed class EquipmentManagerTests
         Assert.Equal(new[] { "wear iron helm", "wear plate mail" }, cmds);
     }
 
+    // ===== PrependTwoHandRemForOffHand (pure) =====
+
+    private static IReadOnlyList<EquippedItem> WornSlots(params (string Slot, string Name)[] items)
+        => items.Select(i => new EquippedItem(i.Name, i.Slot)).ToList();
+
+    [Fact]
+    public void PrependTwoHandRem_OffHandWornWhileTwoHander_RemsTheTwoHanderFirst()
+    {
+        // The reported failure: swapping the Default set's 2H quarterstaff to the
+        // pre-rest set's off-hand + 1H — the off-hand wear is rejected unless the
+        // two-hander comes off first.
+        EquipmentSet set = Set("prerest", "Pre-rest",
+            Entry(EquipmentSlot.OffHand, "griffon shield"),
+            Entry(EquipmentSlot.Weapon, "throwing hammers"));
+        var cmds = new List<string> { "wear griffon shield", "wear throwing hammers" };
+
+        List<string> result = EquipmentManager.PrependTwoHandRemForOffHand(
+            set, WornSlots(("Weapon Hand", "quarterstaff")),
+            w => string.Equals(w, "quarterstaff", StringComparison.OrdinalIgnoreCase), cmds);
+
+        Assert.Equal(
+            new[] { "rem quarterstaff", "wear griffon shield", "wear throwing hammers" }, result);
+    }
+
+    [Fact]
+    public void PrependTwoHandRem_OneHandedWeaponWorn_LeavesCommandsUnchanged()
+    {
+        EquipmentSet set = Set("prerest", "Pre-rest",
+            Entry(EquipmentSlot.OffHand, "griffon shield"),
+            Entry(EquipmentSlot.Weapon, "throwing hammers"));
+        var cmds = new List<string> { "wear griffon shield", "wear throwing hammers" };
+
+        List<string> result = EquipmentManager.PrependTwoHandRemForOffHand(
+            set, WornSlots(("Weapon Hand", "long sword")), _ => false, cmds);
+
+        Assert.Equal(new[] { "wear griffon shield", "wear throwing hammers" }, result);
+    }
+
+    [Fact]
+    public void PrependTwoHandRem_OffHandNotBeingWorn_NoRem()
+    {
+        // Off-hand already on (not in the wear list) ⇒ nothing to clear the hand
+        // for, so a worn two-hander is left alone.
+        EquipmentSet set = Set("prerest", "Pre-rest",
+            Entry(EquipmentSlot.OffHand, "griffon shield"),
+            Entry(EquipmentSlot.Weapon, "throwing hammers"));
+        var cmds = new List<string> { "wear throwing hammers" };
+
+        List<string> result = EquipmentManager.PrependTwoHandRemForOffHand(
+            set, WornSlots(("Weapon Hand", "quarterstaff")), _ => true, cmds);
+
+        Assert.Equal(new[] { "wear throwing hammers" }, result);
+    }
+
+    [Fact]
+    public void PrependTwoHandRem_SetHasNoOffHand_LeavesCommandsUnchanged()
+    {
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Weapon, "quarterstaff"));
+        var cmds = new List<string> { "wear quarterstaff" };
+
+        List<string> result = EquipmentManager.PrependTwoHandRemForOffHand(
+            set, WornSlots(("Weapon Hand", "long sword")), _ => true, cmds);
+
+        Assert.Equal(new[] { "wear quarterstaff" }, result);
+    }
+
     // ===== ApplyVirtualSlots (pure) =====
 
     [Fact]

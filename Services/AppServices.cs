@@ -4870,6 +4870,10 @@ public sealed class AppServices
         LoopRunner.Event += e =>
         {
             if (e.Kind != Game.Map.LoopEventKind.ReachedFirstWaypoint) return;
+            // A loop actually beginning is one of the moments the Default gear set
+            // may auto-equip (we're moving out under normal combat gear). Auto-Lair
+            // start does the same via AutoLair.ActiveChanged below.
+            AutoEquip.OnLoopStarted();
             // The HP/MA-history profile is per-loop by definition — a new circuit
             // makes the old step-indexed bands meaningless — so it re-anchors on
             // every loop start, independent of the ResetStatisticsOnLoopStart
@@ -4919,6 +4923,10 @@ public sealed class AppServices
         // at a wait-room one hop short, then steps in on the tick.
         AutoLair = new Game.Map.AutoLairManager(
             Walker, RoomTracker, RoomGraph, Bfs, LairTimers, Log, MovementCoordinator);
+
+        // Auto-Lair beginning a run is a loop-start for gear purposes — swap to the
+        // Default set, same as LoopRunner's ReachedFirstWaypoint above.
+        AutoLair.ActiveChanged += active => { if (active) AutoEquip.OnLoopStarted(); };
 
         // Always-alive control surface over the three movement engines.
         // Backs the toolbar Start / Pause / Stop buttons (which outlive

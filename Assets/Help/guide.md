@@ -357,9 +357,9 @@ Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a
 
 Your gear lives in **four fixed sets**, each auto-equipped at a specific moment:
 
-- **Default** — your baseline loadout (and backstab fallback).
+- **Default** — your baseline loadout (and backstab fallback). It auto-equips when a **loop or Auto-Lair run starts**, when you've **finished resting** (recovered to your rest-max — but only if you actually use the pre-rest swap sets below, so a rest that never left Default isn't disturbed), and on **death-pile recovery** if *Auto-Equip on recovery* is on. It does **not** swap on combat entry — if a fight interrupts a rest, you keep your pre-rest loadout until you've recovered.
 - **Backstab** — worn for the opening backstab round.
-- **Pre-rest HP** / **Pre-rest Mana** — swapped in out of combat before resting.
+- **Pre-rest HP** / **Pre-rest Mana** — swapped in out of combat before resting, and kept on for the whole rest: MudPlay won't revert to your Default set until you've actually recovered to your rest-max (so a between-round buff or a loot grab that briefly stands you up doesn't flip your gear back and forth). If a set carries an off-hand item while a two-handed weapon is still readied, the two-hander is removed first so the off-hand actually goes on.
 
 You don't create sets, you fill them. Pick a set on the left, then either click **Update from live** (fills it from what you're wearing) or type items into the **Item** boxes on the slot grid — each box only suggests gear your character can actually wear in that slot, and a blank slot means *{no change}* (left as-is). Click **Enable** so automation may use the set, and **Equip Now** to wear it at once. The **Equipment Bonuses** panel shows the set's projected AC and stat totals.
 
