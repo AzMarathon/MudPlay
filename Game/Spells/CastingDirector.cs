@@ -91,6 +91,11 @@ public sealed class CastingDirector : IDisposable
     private Func<bool>? _autoBlessEnabled;
     private Func<bool>? _attackOwed;
     private Func<bool>? _isTriggeredRest;
+    // True while the telnet link is up. Null (unwired, tests) = treat as connected.
+    // Gates the whole between-round loop: while disconnected the wire-send is a no-op
+    // but TryCast still returns true and arms the recast timer, so an ungated loop
+    // (now heartbeat-driven every 1s) would "cast" phantom buffs into a dead socket.
+    private Func<bool>? _isConnected;
     private Func<string, long?>? _itemCastDuration;
     private Func<string, bool>? _executeItemCast;
     private Func<string, int?>? _itemCastManaCost;
@@ -324,6 +329,16 @@ public sealed class CastingDirector : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isEnabled);
         _autoBlessEnabled = isEnabled;
+    }
+
+    // Wire the connection state so the between-round loop pauses on a disconnect and
+    // resumes when the link's back — the buff timers already freeze/resume across the
+    // gap (PauseBuffTimers / ResumeBuffTimers), and this stops the loop from casting
+    // (and re-arming timers on a no-op send) while offline. Until called, fails open.
+    public void SetConnectedGate(Func<bool> isConnected)
+    {
+        ArgumentNullException.ThrowIfNull(isConnected);
+        _isConnected = isConnected;
     }
 
     // Wire CombatManager.IsSpellAttackOwed. The game allows exactly one cast per
@@ -767,6 +782,11 @@ public sealed class CastingDirector : IDisposable
     // if nothing matched.
     public string? Evaluate()
     {
+        // Disconnected — pause the whole loop. The link is down (an in-flight
+        // reconnect will restore it), sends no-op, and the buff timers are already
+        // frozen (PauseBuffTimers); casting now would only re-arm recast timers off
+        // phantom sends. Resumes when the gate reads connected again.
+        if (_isConnected?.Invoke() == false) return null;
         // Two independent masters share this loop: the heal / cure / rest
         // categories run under AutoHealRest (_isEnabled), buffing runs under
         // AutoBless (_autoBlessEnabled), and each is gated separately in the

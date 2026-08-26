@@ -789,6 +789,29 @@ public sealed class CastingDirectorTests
         Assert.Contains("bless", h.CastsSent);
     }
 
+    // Disconnected: the whole loop pauses — a due buff must not cast (the send would
+    // no-op but TryCast would still arm a phantom recast timer). Reconnect resumes it.
+    [Fact]
+    public void Disconnected_PausesLoop_ResumesWhenReconnected()
+    {
+        using CureHarness h = new();
+        h.Director.SetConnectedGate(() => false);   // link down
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        h.CastsSent.Clear();
+        h.Spells.BlessSlots[1] = "bless";
+
+        h.Director.OnIdleHeartbeat();
+        Assert.Empty(h.CastsSent);      // disconnected → no cast, no timer armed
+
+        h.Director.SetConnectedGate(() => true);   // link restored
+        h.Director.OnIdleHeartbeat();
+        Assert.Contains("bless", h.CastsSent);      // resumes on reconnect
+    }
+
     // In combat the combat tick owns the cadence, so the idle heartbeat must be a
     // no-op (else a round would be double-evaluated). The OnCombatTick sanity check
     // proves the buff WAS due — only the in-combat gate held it.

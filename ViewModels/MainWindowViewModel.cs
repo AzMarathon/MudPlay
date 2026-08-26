@@ -1236,6 +1236,10 @@ public partial class MainWindowViewModel : ObservableObject
             () => !AppServices.Current.CombatTracker.HasEngageableHostiles
                 && !AppServices.Current.PlayerState.InCombat);
         AppServices.Current.CleanupLogout.SetConnectedCheck(() => IsConnected);
+        // Pause the between-round cast loop while the link is down (its heartbeat
+        // driver keeps firing regardless of connection); the buff timers already
+        // freeze/resume across the gap.
+        AppServices.Current.CastDirector.SetConnectedGate(() => IsConnected);
         AppServices.Current.CleanupLogout.SetAutoLogoutEnabledCheck(
             () => ResolveActiveBbs()?.ReconnectAfterCleanup ?? false);
         AppServices.Current.CleanupLogout.SetDisconnectCallback(
