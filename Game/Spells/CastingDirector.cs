@@ -242,6 +242,20 @@ public sealed class CastingDirector : IDisposable
     // Hook to TickEngine.CombatTickElapsed — drives between-round evaluations.
     public void OnCombatTick() => Evaluate();
 
+    // Hook to TickEngine.HeartbeatElapsed (1 s) — drives the SAME between-round
+    // decision loop while OUT of combat. The combat tick only free-runs once a combat
+    // line has anchored it, so idle buffing/curing would otherwise fire only on sparse
+    // incidental events (~30 s apart at login). Off the 1 s heartbeat the loop drains
+    // one cast whenever the CastCoordinator's ~5 s cast cooldown clears, so a login's
+    // buffs queue up one-per-cooldown in priority order instead of trickling in. In
+    // combat the combat tick owns the cadence, so skip here to avoid double-evaluating
+    // a round (and to leave the in-combat between-round economy untouched).
+    public void OnIdleHeartbeat()
+    {
+        if (_state.InCombat) return;
+        Evaluate();
+    }
+
     // Raised the instant a between-round cast (self-heal / cure / buff / debuff) is
     // sent to the server. The combat engine listens so it can attribute the *Combat
     // Off* the server fires in response to THIS cast — and re-issue the weapon
@@ -832,7 +846,11 @@ public sealed class CastingDirector : IDisposable
             // recast timer by the token. Only buff slots carry tokens.
             if (category == SpellCategory.Buffing && ItemCastToken.IsToken(cand.Spell))
             {
-                if (TryFireItemCast(cand.Spell, cand.RecastMarginSec)) return cand.Spell;
+                if (TryFireItemCast(cand.Spell, cand.RecastMarginSec))
+                {
+                    LogBetweenRoundQueue(spells, category, cand.Spell);
+                    return cand.Spell;
+                }
                 continue; // unresolved / non-buff item — let a later category try
             }
 
@@ -895,6 +913,7 @@ public sealed class CastingDirector : IDisposable
             _log?.Combat(LogCategory,
                 $"{category} fired spell={cand.Spell} target={cand.Target ?? "<self>"} " +
                 $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+            LogBetweenRoundQueue(spells, category, cand.Spell);
             // Tell the combat engine a between-round cast went out so it can
             // resume our weapon attack on the *Combat Off* this cast triggers.
             CastFired?.Invoke();
@@ -902,6 +921,40 @@ public sealed class CastingDirector : IDisposable
         }
 
         return null;
+    }
+
+    // Combat-diagnostics snapshot of the between-round queue at the moment a cast
+    // fires: the category priority order (the Spells-tab type priorities that decide
+    // heal-vs-cure-vs-buff-vs-debuff), then the self-buff slots in slot order, each
+    // tagged DUE / Ns-left, with the one that just fired marked '*'. Answers "what was
+    // queued and why did it pick that" straight from the log. Read-only — no state is
+    // consumed here (unlike the pickers), so it's safe to run alongside the real pass.
+    private void LogBetweenRoundQueue(SpellsSettings spells, SpellCategory firedCategory, string firedSpell)
+    {
+        if (_log is null) return;
+        List<string> buffs = new();
+        foreach (KeyValuePair<int, string> kv in spells.BlessSlots.OrderBy(k => k.Key))
+        {
+            string? code = kv.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(code)) continue;
+            string mark = string.Equals(code, firedSpell, StringComparison.OrdinalIgnoreCase) ? "*" : "";
+            buffs.Add($"{kv.Key}:{code}{mark}[{RecastState("", code)}]");
+        }
+        string cats = string.Join(" > ", PrioritisedCategories(spells));
+        _log.Combat(LogCategory,
+            $"between-round queue → fired {firedCategory}:{firedSpell}; category priority [{cats}]; "
+            + $"buff slots: {(buffs.Count > 0 ? string.Join(", ", buffs) : "(none configured)")}");
+    }
+
+    // Human-readable recast state of a keyed self-buff timer for the queue log: "DUE"
+    // when castable now (no timer, or now past its recast point Until-margin), else the
+    // whole-second countdown until that point.
+    private string RecastState(string target, string shortCode)
+    {
+        if (!_activeUntil.TryGetValue((target, shortCode), out (DateTime Until, int MarginSec, int TotalSec) t))
+            return "DUE";
+        double untilRecast = (t.Until.AddSeconds(-t.MarginSec) - _now()).TotalSeconds;
+        return untilRecast <= 0 ? "DUE" : $"{(int)untilRecast}s";
     }
 
     private static CastCandidate? Wrap(string? spell) =>
