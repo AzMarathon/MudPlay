@@ -84,7 +84,7 @@
                                           ToolTip.Tip="{Binding RcQueryBossTimersTip}"/>
                                 <CheckBox Content="Query deaths"         IsChecked="{Binding RcQueryDeaths, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcQueryDeathsTip}"/>
-                                <CheckBox Content="Query item location"  IsChecked="{Binding RcQueryItemLocation, Mode=TwoWay}"
+                                <CheckBox Content="Query Roomba"  IsChecked="{Binding RcQueryItemLocation, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcQueryItemLocationTip}"/>
                                 <CheckBox Content="Request invite"       IsChecked="{Binding RcRequestInvite, Mode=TwoWay}"
                                           ToolTip.Tip="{Binding RcRequestInviteTip}"/>

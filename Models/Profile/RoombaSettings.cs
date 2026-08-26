@@ -20,8 +20,4 @@ public sealed class RoombaSettings
     // Whether recon searches (`sea`) each room for hidden items during recon.
     // null/false = sort visible floor items only.
     public bool? SearchForHidden { get; set; }
-
-    // Whether the @roomba remote command replies with an item's last-seen
-    // room. Off by default — the feature is opt-in per BBS.
-    public bool ResponsesEnabled { get; set; }
 }

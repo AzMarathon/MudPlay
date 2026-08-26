@@ -22,15 +22,15 @@ namespace MudPlay.Game.Remote;
 //                           just because more than one name matched. A query
 //                           that resolves to exactly one item — the common
 //                           case — is just one line, same as before.
-//   @roomba sync          — replies with this client's entire sighting log,
-//                           compactly encoded (see GhItemSyncCodec), for the
-//                           requester's RoombaSyncReceiver to merge in. Same
-//                           permission as the rest of @roomba — mirrors
-//                           BossTimerQueryHandler's `@timer sync`.
-// Silent (no reply at all, not even a denial) when GhRoomLabelStore's
-// ResponsesEnabled toggle is off — the feature is opt-in per BBS, and staying
-// silent while off avoids advertising the command to a gang that hasn't turned
-// it on.
+//   @roomba sync          — replies with this client's entire sighting log AND
+//                           its labeled gang-house rooms, compactly encoded (see
+//                           GhItemSyncCodec), for the requester's
+//                           RoombaSyncReceiver to merge in. Same permission as
+//                           the rest of @roomba — mirrors BossTimerQueryHandler's
+//                           `@timer sync`.
+// The sole gate is the per-player "Query Roomba" (QueryItemLocation) permission:
+// RemoteCommandManager only routes @roomba here for a sender who holds it, so
+// there is no separate opt-in toggle. Ungranted senders are denied upstream.
 public sealed class RoombaQueryHandler : IDisposable
 {
     // Cap on distinct-item lines a single @roomba <item> reply sends, so a
@@ -96,7 +96,10 @@ public sealed class RoombaQueryHandler : IDisposable
 
     private void OnRoomba(RemoteCommandContext ctx)
     {
-        if (!_labels.ResponsesEnabled) return;
+        // No separate opt-in: the engine only routes @roomba here when the sender
+        // holds the per-player "Query Roomba" (QueryItemLocation) permission, so
+        // that grant IS the gate. Never-seen / ungranted senders are already
+        // denied upstream by RemoteCommandManager.
 
         if (ctx.Args.Count > 0 && ctx.Args[0].Equals("sync", StringComparison.OrdinalIgnoreCase))
         {

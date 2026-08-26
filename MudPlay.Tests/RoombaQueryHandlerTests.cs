@@ -15,8 +15,7 @@ namespace MudPlay.Tests;
 
 // Pins the read-only @roomba handler: replies with ONE consolidated line —
 // total quantity + every room GhItemLocationStore currently tracks for a named
-// item — gated on the QueryItemLocation grant AND GhRoomLabelStore.
-// ResponsesEnabled (the BBS-tier opt-in toggle).
+// item — gated solely on the per-player QueryItemLocation ("Query Roomba") grant.
 public sealed class RoombaQueryHandlerTests : IDisposable
 {
     private static readonly DateTime Now = new(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc);
@@ -37,7 +36,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     }
 
     private (RemoteCommandManager engine, PlayerDatabase players, GhRoomLabelStore labels, GhItemLocationStore locations)
-        Setup(bool responsesEnabled)
+        Setup()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -50,7 +49,6 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
         labels.OnBbsPinApplied(_scratchBbs);
-        if (responsesEnabled) labels.SetResponsesEnabled(true);
 
         ItemNameStore itemNames = new(new GameDataCache());
         GhItemLocationStore locations = new(itemNames);
@@ -89,7 +87,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
             .ToList();
 
     private (RemoteCommandManager engine, PlayerDatabase players, GhItemLocationStore locations)
-        SetupWithItems(bool responsesEnabled)
+        SetupWithItems()
     {
         Directory.CreateDirectory(Path.Combine(_gameDataRoot, "alpha"));
         File.WriteAllText(Path.Combine(_gameDataRoot, "alpha", "Items.json"), """
@@ -111,7 +109,6 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
         labels.OnBbsPinApplied(_scratchBbs);
-        if (responsesEnabled) labels.SetResponsesEnabled(true);
 
         GhItemLocationStore locations = new(itemNames);
         locations.OnBbsPinApplied(_scratchBbs);
@@ -122,9 +119,9 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     }
 
     [Fact]
-    public void Roomba_ResponsesEnabled_ReportsTotalAndRoom()
+    public void Roomba_Granted_ReportsTotalAndRoom()
     {
-        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        var (engine, players, _, locations) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
         locations.RecordRoom(new RoomKey(1, 100), new[] { "long sword" });
 
@@ -139,7 +136,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     [Fact]
     public void Roomba_ItemSeenInMultipleRooms_ReportsOneConsolidatedLine()
     {
-        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        var (engine, players, _, locations) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
         locations.RecordRoom(new RoomKey(1, 100), new[] { "4 long sword" });
         locations.RecordRoom(new RoomKey(1, 200), new[] { "2 long sword" });
@@ -158,7 +155,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     [Fact]
     public void Roomba_ItemInManyRooms_CapsRoomListWithOverflowTail()
     {
-        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        var (engine, players, _, locations) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
         for (int room = 1; room <= 12; room++)
             locations.RecordRoom(new RoomKey(1, room), new[] { "long sword" });
@@ -178,7 +175,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     [Fact]
     public void Roomba_QueryMatchesMultipleDistinctItems_ReportsOneLinePerItem()
     {
-        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        var (engine, players, _, locations) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
         locations.RecordRoom(new RoomKey(1, 100), new[] { "severed head of goru-nezar" });
         locations.RecordRoom(new RoomKey(1, 200), new[] { "severed head of darksong" });
@@ -196,7 +193,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     [Fact]
     public void Roomba_QueryMatchesManyDistinctItems_CapsWithOverflowTail()
     {
-        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        var (engine, players, _, locations) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
         for (int i = 1; i <= 7; i++)
             locations.RecordRoom(new RoomKey(1, i), new[] { $"severed head of npc{i}" });
@@ -211,7 +208,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     [Fact]
     public void Roomba_UnknownItem_ReportsNoRecord()
     {
-        var (engine, players, _, _) = Setup(responsesEnabled: true);
+        var (engine, players, _, _) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba nonexistent item"));
@@ -220,21 +217,9 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     }
 
     [Fact]
-    public void Roomba_ResponsesDisabled_StaysSilent()
-    {
-        var (engine, players, _, locations) = Setup(responsesEnabled: false);
-        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
-        locations.RecordRoom(new RoomKey(1, 100), new[] { "long sword" });
-
-        engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
-
-        Assert.Empty(engine.LastSentForTests);
-    }
-
-    [Fact]
     public void Roomba_WithoutGrant_StaysDenied()
     {
-        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        var (engine, players, _, locations) = Setup();
         SeedPlayer(players, "Stranger", PlayerRemoteControls.None);
         locations.RecordRoom(new RoomKey(1, 100), new[] { "long sword" });
 
@@ -246,7 +231,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     [Fact]
     public void RoombaSync_RepliesWithDecodableEncodingOfSightings()
     {
-        var (engine, players, locations) = SetupWithItems(responsesEnabled: true);
+        var (engine, players, locations) = SetupWithItems();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
         locations.RecordRoom(new RoomKey(1, 100), new[] { "3 torch" });
 
@@ -263,7 +248,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     [Fact]
     public void RoombaSync_NoSightings_RepliesWithDecodableEmptySet()
     {
-        var (engine, players, _) = SetupWithItems(responsesEnabled: true);
+        var (engine, players, _) = SetupWithItems();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba sync"));
@@ -272,21 +257,9 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     }
 
     [Fact]
-    public void RoombaSync_ResponsesDisabled_StaysSilent()
-    {
-        var (engine, players, locations) = SetupWithItems(responsesEnabled: false);
-        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
-        locations.RecordRoom(new RoomKey(1, 100), new[] { "torch" });
-
-        engine.DispatchForTests(Gangpath("Friend", "@roomba sync"));
-
-        Assert.Empty(engine.LastSentForTests);
-    }
-
-    [Fact]
     public void RoombaSync_WithoutGrant_StaysDenied()
     {
-        var (engine, players, locations) = SetupWithItems(responsesEnabled: true);
+        var (engine, players, locations) = SetupWithItems();
         SeedPlayer(players, "Stranger", PlayerRemoteControls.None);
         locations.RecordRoom(new RoomKey(1, 100), new[] { "torch" });
 

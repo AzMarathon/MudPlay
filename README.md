@@ -11,6 +11,7 @@
 > - Ground items: a compound item name containing "and" (e.g. "rope and grapple") no longer mis-splits into two bogus floor entries
 > - Networking: outbound writes are serialized so two engine sends fired back-to-back can't interleave their bytes on the wire (rapid `@roomba sync` telepath replies were arriving with one line's data spliced into another)
 > - Roomba: `@roomba sync` paces its telepaths ~800ms apart and resends any the game drops to a rate limit, so a full-house sync trickles out in the background instead of flooding the channel; it now transfers the labeled gang-house rooms too, not just the item sightings
+> - Roomba: the whole `@roomba` feature (queries + sync) is now gated by the per-player **Query Roomba** permission alone (the separate "Enable @roomba responses" checkbox is gone); a sync is adopted only from a sender you've granted it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -116,16 +116,6 @@ public sealed class GhRoomLabelStoreTests : IDisposable
     }
 
     [Fact]
-    public void ResponsesEnabled_DefaultsOff_AndPersistsWhenSet()
-    {
-        GhRoomLabelStore store = NewPinnedStore();
-        Assert.False(store.ResponsesEnabled);
-
-        store.SetResponsesEnabled(true);
-        Assert.True(store.ResponsesEnabled);
-    }
-
-    [Fact]
     public void SetSearchesPerRoom_WithoutBbsPin_IsNoOp()
     {
         ProfileService profile = new();
@@ -143,7 +133,6 @@ public sealed class GhRoomLabelStoreTests : IDisposable
         GhRoomLabelStore first = NewPinnedStore();
         first.SetSearchesPerRoom(7);
         first.SetSearchForHidden(true);
-        first.SetResponsesEnabled(true);
 
         ProfileService profile = new();
         profile.LoadBlank();
@@ -152,7 +141,6 @@ public sealed class GhRoomLabelStoreTests : IDisposable
 
         Assert.Equal(7, second.SearchesPerRoom);
         Assert.True(second.SearchForHidden);
-        Assert.True(second.ResponsesEnabled);
     }
 
     [Fact]

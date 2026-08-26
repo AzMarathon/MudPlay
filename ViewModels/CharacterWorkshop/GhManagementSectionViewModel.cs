@@ -66,10 +66,6 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     [NotifyPropertyChangedFor(nameof(SearchesEditable))]
     private bool _searchForHidden;
 
-    // Whether @roomba <item> replies with the item's last-seen room. Off by
-    // default — opt-in per BBS, shared by every character on it.
-    [ObservableProperty] private bool _responsesEnabled;
-
     // The searches-per-room count only matters while hidden-item search is on and
     // the sweep isn't running — grey the ticker out otherwise.
     public bool SearchesEditable => !IsRunning && SearchForHidden;
@@ -85,7 +81,6 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
 
         SearchesPerRoom = _labels.SearchesPerRoom;
         SearchForHidden = _labels.SearchForHidden;
-        ResponsesEnabled = _labels.ResponsesEnabled;
         _suppressSettingsWrite = false;
 
         _labels.Changed += RebuildRooms;
@@ -105,12 +100,6 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     {
         if (_suppressSettingsWrite) return;
         _labels.SetSearchForHidden(value);
-    }
-
-    partial void OnResponsesEnabledChanged(bool value)
-    {
-        if (_suppressSettingsWrite) return;
-        _labels.SetResponsesEnabled(value);
     }
 
     private void RebuildRooms()

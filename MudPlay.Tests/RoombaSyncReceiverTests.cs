@@ -15,7 +15,7 @@ namespace MudPlay.Tests;
 
 // Requester-side @roomba sync: decodes each self-contained "@roombadata <blob>"
 // chat line on its own and merges its sightings into GhItemLocationStore, gated
-// on the same ResponsesEnabled opt-in @roomba itself answers behind. Because
+// on whether the sender holds our "Query Roomba" grant (isSenderGranted). Because
 // every line stands alone (no reassembly), a line the game drops costs only its
 // rooms — the rest still merge. Ingest is exercised directly (an internal test
 // seam, same idea as RemoteCommandManager.DispatchForTests) except for the
@@ -40,7 +40,7 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         catch { /* best-effort */ }
     }
 
-    private (MessageRouter router, ChatRouter chat, GhItemLocationStore locations, GhRoomLabelStore labels) Setup(bool responsesEnabled)
+    private (MessageRouter router, ChatRouter chat, GhItemLocationStore locations, GhRoomLabelStore labels) Setup()
     {
         Directory.CreateDirectory(Path.Combine(_gameDataRoot, "alpha"));
         File.WriteAllText(Path.Combine(_gameDataRoot, "alpha", "Items.json"), """
@@ -59,7 +59,6 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         profile.LoadBlank();
         GhRoomLabelStore labels = new(profile);
         labels.OnBbsPinApplied(_scratchBbs);
-        if (responsesEnabled) labels.SetResponsesEnabled(true);
 
         GhItemLocationStore locations = new(itemNames);
         locations.OnBbsPinApplied(_scratchBbs);
@@ -89,8 +88,8 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     [Fact]
     public void Ingest_SingleLine_MergesIntoLocations()
     {
-        var (_, chat, locations, labels) = Setup(responsesEnabled: true);
-        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        var (_, chat, locations, labels) = Setup();
+        RoombaSyncReceiver receiver = new(chat, locations, labels, isSenderGranted: _ => true);
 
         receiver.Ingest(Gangpath("Buddy", SyncLine(OneLine())));
 
@@ -102,8 +101,8 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     [Fact]
     public void Ingest_EachLineMergesIndependently_NoWaiting()
     {
-        var (_, chat, locations, labels) = Setup(responsesEnabled: true);
-        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        var (_, chat, locations, labels) = Setup();
+        RoombaSyncReceiver receiver = new(chat, locations, labels, isSenderGranted: _ => true);
         IReadOnlyList<string> lines = TwoRoomLines();
         Assert.True(lines.Count >= 2);
 
@@ -118,8 +117,8 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     [Fact]
     public void Ingest_DroppedLine_SurvivingLineStillMerges()
     {
-        var (_, chat, locations, labels) = Setup(responsesEnabled: true);
-        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        var (_, chat, locations, labels) = Setup();
+        RoombaSyncReceiver receiver = new(chat, locations, labels, isSenderGranted: _ => true);
         IReadOnlyList<string> lines = TwoRoomLines();
         Assert.True(lines.Count >= 2);
 
@@ -132,10 +131,11 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     }
 
     [Fact]
-    public void Ingest_ResponsesDisabled_NeverMerges()
+    public void Ingest_SenderNotGranted_NeverMerges()
     {
-        var (_, chat, locations, labels) = Setup(responsesEnabled: false);
-        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        var (_, chat, locations, labels) = Setup();
+        // Sender lacks the "Query Roomba" grant — their sync must not be adopted.
+        RoombaSyncReceiver receiver = new(chat, locations, labels, isSenderGranted: _ => false);
 
         receiver.Ingest(Gangpath("Buddy", SyncLine(OneLine())));
 
@@ -145,8 +145,8 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     [Fact]
     public void Ingest_MalformedPayload_IsDiscardedWithoutThrowing()
     {
-        var (_, chat, locations, labels) = Setup(responsesEnabled: true);
-        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        var (_, chat, locations, labels) = Setup();
+        RoombaSyncReceiver receiver = new(chat, locations, labels, isSenderGranted: _ => true);
 
         Exception? ex = Record.Exception(() =>
             receiver.Ingest(Gangpath("Buddy", SyncLine("!!!not-valid-base64url!!!"))));
@@ -158,8 +158,8 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     [Fact]
     public void Ingest_NonMatchingLine_IsIgnored()
     {
-        var (_, chat, locations, labels) = Setup(responsesEnabled: true);
-        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        var (_, chat, locations, labels) = Setup();
+        RoombaSyncReceiver receiver = new(chat, locations, labels, isSenderGranted: _ => true);
 
         receiver.Ingest(Gangpath("Buddy", "just chatting about the weather"));
 
@@ -169,8 +169,8 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     [Fact]
     public void Dispose_UnsubscribesFromChat_RealDispatchPath()
     {
-        var (router, chat, locations, labels) = Setup(responsesEnabled: true);
-        RoombaSyncReceiver receiver = new(chat, locations, labels);
+        var (router, chat, locations, labels) = Setup();
+        RoombaSyncReceiver receiver = new(chat, locations, labels, isSenderGranted: _ => true);
         receiver.Dispose();
 
         // Drive through the real MessageRouter → ChatRouter path (not the

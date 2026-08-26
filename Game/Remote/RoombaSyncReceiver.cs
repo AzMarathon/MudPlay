@@ -16,17 +16,25 @@ namespace MudPlay.Game.Remote;
 // instead of the old "one missing chunk discards the whole sync". There's also
 // no meaningful "conflict" for a room-contents sighting (newest wins silently —
 // see GhItemLocationStore.MergeSyncRecords), so this listens continuously with
-// no merge-review window: opt in once via GhRoomLabelStore.ResponsesEnabled and
-// everything else is automatic, the same way the rest of @roomba works.
+// no merge-review window and adopts a reply only from a sender we've granted the
+// "Query Roomba" permission (isSenderGranted) — the same per-player gate that
+// governs answering their @roomba, so there's no separate opt-in.
 public sealed class RoombaSyncReceiver : IDisposable
 {
     private readonly ChatRouter _chat;
     private readonly GhItemLocationStore _locations;
     private readonly GhRoomLabelStore _labels;
+    private readonly Func<string, bool> _isSenderGranted;
     private readonly LogService? _log;
     private bool _disposed;
 
-    public RoombaSyncReceiver(ChatRouter chat, GhItemLocationStore locations, GhRoomLabelStore labels, LogService? log = null)
+    // isSenderGranted: whether this client has granted the named sender the
+    // per-player "Query Roomba" permission. A sync reply is adopted only from a
+    // sender we'd answer ourselves — same grant, both directions — so a stranger
+    // can't push sightings/labels into our log. Defaults to "deny everyone" when
+    // unwired (tests that don't care about the gate pass their own).
+    public RoombaSyncReceiver(ChatRouter chat, GhItemLocationStore locations, GhRoomLabelStore labels,
+        Func<string, bool>? isSenderGranted = null, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         ArgumentNullException.ThrowIfNull(locations);
@@ -34,6 +42,7 @@ public sealed class RoombaSyncReceiver : IDisposable
         _chat = chat;
         _locations = locations;
         _labels = labels;
+        _isSenderGranted = isSenderGranted ?? (_ => false);
         _log = log;
         _chat.EntryClassified += Ingest;
     }
@@ -47,14 +56,14 @@ public sealed class RoombaSyncReceiver : IDisposable
 
     internal void Ingest(ChatLogEntry e)
     {
-        // Gate on the same opt-in @roomba itself answers behind — a user who
-        // hasn't turned the feature on never has sightings silently adopted
-        // from someone else's client either.
-        if (!_labels.ResponsesEnabled) return;
         if (e.Channel is not (ChatChannel.TelepathIncoming or ChatChannel.Gangpath or ChatChannel.Local))
             return;
         if (e.Speaker is not { Length: > 0 } sender) return;
-        if (!TryParse(e.Message, out string blob)) return;
+        if (!TryParse(e.Message, out string blob)) return;   // cheap: an @roombadata line at all?
+        // Adopt only from a sender we've granted "Query Roomba" — the same
+        // per-player permission that gates answering their @roomba, so there's no
+        // separate opt-in and a stranger can't inject data into our log.
+        if (!_isSenderGranted(sender)) return;
 
         try
         {

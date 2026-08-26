@@ -49,10 +49,6 @@ public sealed class GhRoomLabelStore
     // Roomba sorts only the visible floor unless the user opts in.
     public bool SearchForHidden => _settings.SearchForHidden ?? false;
 
-    // Whether @roomba <item> replies with the item's last known room. Off by
-    // default — opt-in per BBS.
-    public bool ResponsesEnabled => _settings.ResponsesEnabled;
-
     public void SetSearchesPerRoom(int count)
     {
         if (_activeBbs is null) return;
@@ -68,15 +64,6 @@ public sealed class GhRoomLabelStore
         _settings.SearchForHidden = on;
         Persist();
         _log?.Info("GhSweep", $"search for hidden items {(on ? "enabled" : "disabled")}");
-        Changed?.Invoke();
-    }
-
-    public void SetResponsesEnabled(bool on)
-    {
-        if (_activeBbs is null) return;
-        _settings.ResponsesEnabled = on;
-        Persist();
-        _log?.Info("GhSweep", $"@roomba responses {(on ? "enabled" : "disabled")}");
         Changed?.Invoke();
     }
 
