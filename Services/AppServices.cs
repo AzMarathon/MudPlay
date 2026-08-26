@@ -5166,7 +5166,10 @@ public sealed class AppServices
             lightShop: AutoLightShopRouter,
             carriedCount: CountItemCarried,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
-            log: Log);
+            log: Log,
+            // Party follower = in a party and not the leader; gates the opt-in
+            // follower pass-through stash (Cash → "stash as follower").
+            isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader);
         // Return-leg light provisioning: the reroute owns the walker end-to-end, so
         // the reactive shop router is suppressed (IsRerouting) — this manager runs
         // its own bank -> shop -> origin light detour and needs the `i` dump to

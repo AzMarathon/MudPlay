@@ -189,7 +189,10 @@ public sealed class InventoryActionHandler : IDisposable
     public string DepositAll()
     {
         if (!_inventory.IsLoaded) return "wealth unknown - parse inventory first (type i)";
-        long keep = _readCash().KeepOnHandWealth;
+        Models.Profile.CashSettings cash = _readCash();
+        // Keep-on-hand is an amount of a chosen denomination — convert to copper.
+        long keep = cash.KeepOnHandWealth
+            * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
         long held = _inventory.Snapshot.Currency.TotalCopperValue;
         long delta = held - keep;
         if (delta > 0)

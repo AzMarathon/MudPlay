@@ -1,3 +1,5 @@
+using MudPlay.Models.Profile;
+
 namespace MudPlay.Game.Inventory;
 
 // Per-denomination coin counts the player is carrying, plus the consolidated
@@ -39,6 +41,19 @@ public readonly record struct CurrencyHoldings(
             _          => 0,
         };
 
+    // Copper-farthing value of one coin of a denomination — the single source of
+    // the ratio ladder for the settings layer (keep-on-hand amount → copper, and
+    // the "only stash up to" denomination → its offload cutoff).
+    public static long CopperUnit(CoinDenomination denom) => denom switch
+    {
+        CoinDenomination.Copper   => 1,
+        CoinDenomination.Silver   => 10,
+        CoinDenomination.Gold     => 100,
+        CoinDenomination.Platinum => 10_000,
+        CoinDenomination.Runic    => 1_000_000,
+        _                         => 1,
+    };
+
     // Decompose the coin above a raw copper-farthing keep floor into a set of
     // per-denomination offload commands. Hides the LOWEST denominations first
     // (copper → runic), so the coins left on hand are the fewest possible: for a
@@ -56,31 +71,39 @@ public readonly record struct CurrencyHoldings(
     // dropping below the floor. Returns the canonical "runic" name — callers map
     // it to the board-specific word at send time. Empty when nothing sits above
     // the floor.
-    public IReadOnlyList<(string Currency, long Count)> PlanOffloadAboveKeep(long keepCopper)
+    // maxUnit caps which denominations are eligible to offload: only those whose
+    // copper unit is <= maxUnit are considered (the "only stash up to X" filter —
+    // long.MaxValue = no cap). Denominations above it are neither offloaded nor
+    // counted toward the keep floor; they simply stay in hand. keepCopper is a
+    // floor on the ELIGIBLE pool (the stash path passes 0 — its keep-on-hand
+    // rule lives on the banking side).
+    public IReadOnlyList<(string Currency, long Count)> PlanOffloadAboveKeep(
+        long keepCopper, long maxUnit = long.MaxValue)
     {
-        long held =
-            ToCopper("copper", Copper)
-            + ToCopper("silver", Silver)
-            + ToCopper("gold", Gold)
-            + ToCopper("platinum", Platinum)
-            + ToCopper("runic", Runic);
-
-        long excess = held - Math.Max(0, keepCopper);
-        if (excess <= 0)
-            return Array.Empty<(string, long)>();
-
-        List<(string Currency, long Count)> plan = new();
-        foreach ((string name, long unit, long available) in new[]
+        (string name, long unit, long available)[] ladder =
         {
             ("copper", 1L, (long)Copper),
             ("silver", 10L, (long)Silver),
             ("gold", 100L, (long)Gold),
             ("platinum", 10_000L, (long)Platinum),
             ("runic", 1_000_000L, (long)Runic),
-        })
+        };
+
+        long eligibleHeld = 0;
+        foreach ((_, long unit, long available) in ladder)
+            if (unit <= maxUnit) eligibleHeld += available * unit;
+
+        long excess = eligibleHeld - Math.Max(0, keepCopper);
+        if (excess <= 0)
+            return Array.Empty<(string, long)>();
+
+        List<(string Currency, long Count)> plan = new();
+        foreach ((string name, long unit, long available) in ladder)
         {
             if (excess <= 0)
                 break;
+            if (unit > maxUnit)
+                continue;
 
             long count = Math.Min(available, excess / unit);
             if (count <= 0)

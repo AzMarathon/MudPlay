@@ -97,6 +97,9 @@ public sealed class AutoDepositManager : IDisposable
     private readonly AutoLightShopRouter _lightShop;
     private readonly Func<int, int> _carriedCount;
     private readonly Action<Action> _post;
+    // True while we're a party follower (in a party, not leading). Gates the
+    // opt-in follower pass-through stash. Unbound (tests) ⇒ never a follower.
+    private readonly Func<bool> _isFollower;
     private readonly TimeSpan _buyTimeout;
     private readonly Timer _buyTimer;
     // Bounds the wait for the fresh `i` on bank arrival (see DepositSyncTimeout).
@@ -151,7 +154,8 @@ public sealed class AutoDepositManager : IDisposable
         Func<int, int> carriedCount,
         Action<Action> post,
         LogService? log = null,
-        TimeSpan? buyTimeout = null)
+        TimeSpan? buyTimeout = null,
+        Func<bool>? isFollower = null)
     {
         ArgumentNullException.ThrowIfNull(cash);
         ArgumentNullException.ThrowIfNull(readCash);
@@ -183,6 +187,7 @@ public sealed class AutoDepositManager : IDisposable
         _lightShop = lightShop;
         _carriedCount = carriedCount;
         _post = post;
+        _isFollower = isFollower ?? (static () => false);
         _buyTimeout = buyTimeout ?? TimeSpan.FromSeconds(8);
         _buyTimer = new Timer(_ => _post(OnBuyTimeout), null,
             Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
@@ -344,8 +349,19 @@ public sealed class AutoDepositManager : IDisposable
         if (t.NewRoom is not { } room) return;
         if (t.PreviousRoom is { } prev && prev.Key.Equals(room.Key)) return;
         if (!IsStashRoom(room.Key)) return;
-        if (SnapshotRunningEngine().Kind == ResumeKind.None) return;
-        _log?.Info(LogCategory, $"passed through stash room {room.Key} during automation — stashing");
+        if (SnapshotRunningEngine().Kind == ResumeKind.None)
+        {
+            // No local engine drives us. A party follower dragged through their own
+            // stash room by the leader still stashes when opted in — their loop /
+            // auto-lair is held by the leader-drag gate, so the running-engine check
+            // never passes for them.
+            if (!(_readCash().StashAsFollower && _isFollower())) return;
+            _log?.Info(LogCategory, $"passed through stash room {room.Key} as a follower — stashing");
+        }
+        else
+        {
+            _log?.Info(LogCategory, $"passed through stash room {room.Key} during automation — stashing");
+        }
         _stash.ExecuteStash(room.Key);
     }
 
@@ -565,7 +581,9 @@ public sealed class AutoDepositManager : IDisposable
     {
         CashSettings cash = _readCash();
         CurrencyHoldings held = _getSnapshot().Currency;
-        long keepValue = cash.KeepOnHandWealth;
+        // Keep-on-hand is an amount of a chosen denomination (e.g. 1 runic) —
+        // convert to copper against the ratio ladder before comparing to wealth.
+        long keepValue = cash.KeepOnHandWealth * CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
         long depositValue = held.TotalCopperValue - keepValue;
         if (depositValue <= 0)
         {

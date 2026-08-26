@@ -37,17 +37,33 @@ public sealed class CashSettings
     // (bank). v1 just stores it; the reroute itself is unwired.
     public string BankRoomKey { get; set; } = string.Empty;
 
-    // ----- Wealth to keep on hand ------------------------------------
-    // The floor the character keeps after offloading coin, expressed as a
-    // single raw copper-farthing value — the SAME unit as the Wealth line
-    // and AutoDepositIfWealthExceeds, so the two thresholds compare directly.
-    // Applied to BOTH banking (auto-deposit) and stashing. The engine
-    // converts as needed: the auto-deposit reroute passes this straight to
-    // `dep <copper>` (the game auto-picks denominations), while
-    // StashRoomManager decomposes held - keep into per-denomination
-    // `hide N <coin>` commands (largest-first, exact because each MajorMUD
-    // denomination divides the next). Default 0 = offload everything.
+    // ----- Minimum cash to keep on hand (BANKING) --------------------
+    // The floor the character keeps after an auto-deposit, as an amount of a
+    // chosen denomination: KeepOnHandWealth counts, KeepOnHandDenomination names
+    // the coin, so "1 runic" keeps 1,000,000 copper on hand. The engine converts
+    // to copper (amount × the denomination's copper unit) and deposits the excess
+    // as `dep <copper>`. Applies to BANKING only — stashing is gated by
+    // OnlyStashUpTo instead. Default 0 = deposit everything. (Legacy note:
+    // KeepOnHandWealth used to be a raw copper value; with the default Copper
+    // denomination it still reads back as the same copper amount, so old
+    // profiles migrate cleanly.)
     public long KeepOnHandWealth { get; set; }
+    public CoinDenomination KeepOnHandDenomination { get; set; } = CoinDenomination.Copper;
+
+    // ----- Only stash coin up to (STASHING) --------------------------
+    // When enabled, a stash offloads only coin denominations at or below
+    // OnlyStashUpTo (e.g. "up to Gold" hides copper / silver / gold and keeps
+    // platinum / runic in hand). Disabled ⇒ stash every denomination. Applies to
+    // STASHING only — banking uses the keep-on-hand floor above.
+    public bool OnlyStashUpToEnabled { get; set; }
+    public CoinDenomination OnlyStashUpTo { get; set; } = CoinDenomination.Gold;
+
+    // Stash while being dragged through a marked stash room as a party follower
+    // (in a party, not leading). A follower's own loop / auto-lair is held by the
+    // leader-drag gate, so the normal "passing through during automation" trigger
+    // never fires for them; this opts a follower's pass-through back in. Default
+    // off. Banking (which needs its own walk to the bank) is unaffected.
+    public bool StashAsFollower { get; set; }
 
     // ----- Coin encumbrance gate + cascade ---------------------------
     // The "Cash + Items" tab exposes these; CashManager.CollectCoins gates coin
@@ -99,4 +115,17 @@ public enum CashPolicy
 
     // If we already hold any of this currency, drop it. Doesn't pick up new piles.
     Discard,
+}
+
+// A MajorMUD coin denomination, low to high. The copper-farthing unit of each
+// (1 / 10 / 100 / 10,000 / 1,000,000) lives with the rest of the ratio ladder in
+// Game.Inventory.CurrencyHoldings; declared low→high so the enum order matches
+// value order (an "up to X" stash filter compares by it).
+public enum CoinDenomination
+{
+    Copper,
+    Silver,
+    Gold,
+    Platinum,
+    Runic,
 }
