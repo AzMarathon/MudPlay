@@ -6,11 +6,12 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Cash;
 
-// Stash dispatch for user-marked stash rooms. Decomposes the coin held above
-// the single raw CashSettings.KeepOnHandWealth floor into one `hide N <coin>`
-// command per denomination (lowest denomination first, so the coins left on
-// hand are the fewest possible), then one `hide <item>` per carried item
-// flagged ItemOverlay.AutoStash.
+// Stash dispatch for user-marked stash rooms. Offloads every coin denomination
+// at or below CashSettings.StashCoinCutoff (or all of them when it's Everything)
+// into one `hide N <coin>` command per denomination (lowest denomination first,
+// so the coins left on hand are the fewest possible), then one `hide <item>` per
+// carried item flagged ItemOverlay.AutoStash. The keep-on-hand floor is a banking
+// rule (see CashSettings) — a stash keeps only the higher, filtered-out coins.
 //
 // Two triggers. A stash fires either as a step of an auto-deposit reroute (when
 // the wealth / coin gate trips while a Loop or Auto-Lair is running and the
@@ -22,8 +23,8 @@ namespace MudPlay.Game.Cash;
 //
 // Room set lives on CharacterProfile.StashRooms — the same list MovementFilter
 // uses, populated by the right-click "Toggle: Stash room" on the Navigation map.
-// Keep-on-hand lives on CashSettings as a single raw wealth floor so the rule
-// applies uniformly across every stash room (no per-room rules).
+// The coin-type filter (StashCoinCutoff) lives on CashSettings so the rule applies
+// uniformly across every stash room (no per-room rules).
 //
 // Stash rooms hold cash and items (banks are cash-only): every carried, unworn
 // item whose game-data AutoStash flag is set is hidden by its canonical name. The
@@ -132,8 +133,13 @@ public sealed class StashRoomManager : IDisposable
         _log?.Debug(LogCategory,
             $"entered stash room map={enteredRoom.Map} room={enteredRoom.Room}");
 
+        // Stashing offloads all coin at or below the "stash coin up to" cutoff and
+        // keeps everything above it — the keep-on-hand floor is a banking rule, so
+        // the stash plan passes a zero floor. Everything ⇒ no cap.
+        long maxUnit = CurrencyHoldings.MaxUnitFor(cash.StashCoinCutoff);
+
         List<(string Currency, long Amount)> dispatched = new();
-        foreach ((string denom, long count) in held.PlanOffloadAboveKeep(cash.KeepOnHandWealth))
+        foreach ((string denom, long count) in held.PlanOffloadAboveKeep(0, maxUnit))
         {
             // Hide names the coins by their full two-word noun, same as the
             // get / drop paths — a bare denomination adjective binds

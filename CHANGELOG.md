@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.19
+
+- Cash: "keep on hand" is now **Minimum cash to keep on hand (deposit)** — an amount plus a denomination dropdown, so you can keep e.g. 1 runic on hand; it applies to auto-**deposit** (banking)
+- Cash: new **Only stash coin up to (stash)** dropdown — **Everything** stashes every coin (default), **Nothing** stashes items only (no coin), or pick a denomination to stash up to it and keep the higher coins in hand (e.g. Gold keeps platinum/runic); applies to **stashing** only
+- Cash: new **Enable stashing as a follower** toggle — a party follower dragged through their marked stash rooms by the leader now stashes when it's on (off by default)
+
 ## 3.28.16
 
 - Equipment Manager: a **Currently Equipped:** readout next to the Item Finder button shows the last gear set the client equipped this session (via Equip Now or an auto-fire trigger)

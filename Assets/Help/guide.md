@@ -1439,10 +1439,20 @@ Settings → Cash + Items.
 **Default:** empty (auto-deposit disabled)
 **What it does:** Picks the destination for the auto-deposit trips above — either an in-game bank, or one of your own map-marked stash rooms. Banks receive a deposit command; stash rooms get individual "hide" commands for each coin type.
 
-### Keep wealth (copper) — "Keep on hand"
+### Minimum cash to keep on hand (deposit)
 
 **Default:** `0`
-**What it does:** The minimum amount of wealth you want left in your pocket after an auto-deposit or auto-stash trip — i.e., don't offload everything, keep this much.
+**What it does:** The minimum cash to leave in your pocket after an **auto-deposit** — an amount plus a denomination, so you can type `1` and pick **Runic** to always keep 1 runic (1,000,000 copper) on hand. The deposit sends everything above this floor. `0` deposits everything. This applies to **banking only** — stashing is governed by the coin-type filter below.
+
+### Only stash coin up to (stash)
+
+**Default:** Everything (stash every denomination)
+**What it does:** A dropdown that caps which coins a **stash** offloads. **Nothing** stashes no coin at all — a stash then only puts away your flagged items. **Everything** stashes all of your coin. In between, pick a denomination and a stash hides coins *up to* it and keeps the higher coins in your pocket — e.g. "Gold" hides copper / silver / gold and keeps platinum / runic. It's the stash-side counterpart to the deposit keep-on-hand floor: use it to shed bulky low-value coin as you pass a stash room while keeping your compact high-value coin. Applies to **stashing only**.
+
+### Enable stashing as a follower
+
+**Default:** off
+**What it does:** When you're a **party follower** (in a party, not leading), lets you stash currency as the leader drags you through your marked stash rooms. Normally a follower's own movement is held by the leader's drag, so the usual "stash while looping through" trigger never fires for them; this opts their pass-through back in. Marking stash rooms and the coin-type filter above work the same as when you're solo.
 
 ### Don't collect if it makes you Light / Medium / Heavy
 
