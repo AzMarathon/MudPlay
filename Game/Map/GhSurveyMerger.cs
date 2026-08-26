@@ -65,7 +65,10 @@ internal static class GhSurveyMerger
 
     // The canonical (game-data) name an observed floor entry resolves to, falling
     // back to the count-stripped raw text when the name isn't in the item table.
-    private static string Canonical(string entry, ItemNameStore itemNames)
+    // Internal (not private) — GhItemLocationStore reuses it so a persisted
+    // item sighting keys on the exact same canonicalization as the in-memory
+    // room-observation ledger.
+    internal static string Canonical(string entry, ItemNameStore itemNames)
     {
         (int _, string parsedName) = CountedCommand.SplitLeadingCount(entry);
         return itemNames.FindByName(entry) is int number

@@ -34,7 +34,9 @@ public sealed partial class RoombaLogViewModel : ObservableObject, IDisposable
     private void Refresh()
     {
         MovementLog = _sweep.MovedSoFar.Count == 0
-            ? "(nothing moved yet)"
+            ? (_sweep.Mode == GhSweepManager.SweepMode.InventoryOnly
+                ? "(inventory-only run — nothing is ever moved)"
+                : "(nothing moved yet)")
             : string.Join("\n", _sweep.MovedSoFar.Select(m => $"{m.Count}x {m.ItemName}: {m.From} → {m.To}"));
 
         LeftBehind = _sweep.LeftInPlace.Count == 0
@@ -46,6 +48,8 @@ public sealed partial class RoombaLogViewModel : ObservableObject, IDisposable
         var unmovable = _sweep.LeftInPlace.Where(f => f.Reason == GhLeftReason.TooHeavy).ToList();
 
         StringBuilder sb = new();
+        if (_sweep.Mode == GhSweepManager.SweepMode.InventoryOnly)
+            sb.AppendLine("Mode: inventory only — rooms observed and logged, nothing moved");
         sb.AppendLine($"Rooms sorted: {roomsSorted}");
         sb.AppendLine($"Items sorted: {itemsSorted}");
         if (unmovable.Count == 0)

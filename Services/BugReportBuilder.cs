@@ -764,6 +764,7 @@ public static class BugReportBuilder
         // Roomba Mode (GhSweepManager) — a "sweep won't start / got stuck"
         // report needs the phase, lap count, and how much of the sort queue
         // is still outstanding.
+        Kv(sb, "Roomba mode", svc.GhSweep.Mode.ToString());
         Kv(sb, "Roomba sweep phase", svc.GhSweep.Phase.ToString());
         Kv(sb, "Roomba recon laps done", svc.GhSweep.CompletedReconLaps.ToString());
         Kv(sb, "Roomba completed sort laps", svc.GhSweep.CompletedSortLaps.ToString());

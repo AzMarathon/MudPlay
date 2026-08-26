@@ -970,6 +970,9 @@ public partial class MainWindowViewModel : ObservableObject
         // should still surface the responses — auto-open the merge window when we see
         // our own request go out on chat. See OnChatForTimerSync.
         AppServices.Current.Chat.EntryClassified += OnChatForTimerSync;
+        // Same idea for `@roomba sync`: seeing our own request go out opens the
+        // receiver's adopt window so the replies aren't ignored. See OnChatForRoombaSync.
+        AppServices.Current.Chat.EntryClassified += OnChatForRoombaSync;
         // Poller needs the same wire-sender to send @health round-trip
         // requests and the periodic par poll.
         AppServices.Current.PartyPoller.SetWireSender(engineSend);
@@ -2980,6 +2983,21 @@ public partial class MainWindowViewModel : ObservableObject
         if (string.IsNullOrEmpty(self)) return false;
         static string Given(string n) { int s = n.IndexOf(' '); return s >= 0 ? n[..s] : n; }
         return Given(self).Equals(Given(speaker), StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Our own outbound `@roomba sync` opens the receiver's adopt window, so the
+    // responders' `@roombadata` replies are accepted (the reply proves they've
+    // granted us — the receiver only needs to know we asked). Same self-outgoing
+    // detection as OnChatForTimerSync.
+    private void OnChatForRoombaSync(MudPlay.Game.ChatLogEntry e)
+    {
+        bool selfSpoke = e.Speaker is null || IsSelfName(e.Speaker);
+        bool outgoing = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing
+                     || ((e.Channel == MudPlay.Game.ChatChannel.Gangpath
+                          || e.Channel == MudPlay.Game.ChatChannel.Local) && selfSpoke);
+        if (!outgoing) return;
+        if (!e.Message.TrimStart().StartsWith("@roomba sync", StringComparison.OrdinalIgnoreCase)) return;
+        AppServices.Current.RoombaSync.NoteSyncRequested();
     }
 
     private async void OpenTimerSyncWindow()

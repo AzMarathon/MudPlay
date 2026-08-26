@@ -23,7 +23,7 @@
         <!-- Header: instructions + live phase readout. -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,8">
             <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" TextWrapping="Wrap"
-                       Text="Right-click a map room → 'Toggle: Roomba Room' (or add one by number below) and set its sort rules, then Start (needs 2+ rooms). Double-click a room for its contents; 'Roomba Log' has the full run."/>
+                       Text="Right-click a map room → 'Toggle: Roomba Room' (or add one by number below) and set its sort rules, then Start Sweep to sort or Start Inventory to just scan and log without moving anything (needs 2+ rooms). Double-click a room for its contents; 'Roomba Log' has the full run."/>
             <TextBlock Text="{Binding PhaseText}"
                        Foreground="{StaticResource ChromeFgBrush}"
                        FontWeight="SemiBold"/>
@@ -40,9 +40,14 @@
         <!-- Action buttons + add-room + hidden-search tuning (WrapPanel so a narrow
              window wraps the controls instead of forcing the tab wider). -->
         <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
-            <Button Content="Start Sweep" Command="{Binding StartCommand}" IsEnabled="{Binding !IsRunning}" Margin="0,0,6,6"/>
+            <Button Content="Start Sweep" Command="{Binding StartCommand}" IsEnabled="{Binding !IsRunning}" Margin="0,0,6,6"
+                    ToolTip.Tip="Scan, then move misplaced items into their labeled rooms."/>
+            <Button Content="Start Inventory" Command="{Binding StartInventoryCommand}" IsEnabled="{Binding !IsRunning}" Margin="0,0,6,6"
+                    ToolTip.Tip="Scan and log room contents (feeds @roomba) without moving anything — safe to run alongside your own manual organization."/>
             <Button Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}" Margin="0,0,6,6"/>
             <Button Content="Roomba Log" Command="{Binding OpenRoombaLogCommand}" Margin="0,0,6,6"/>
+            <Button Content="Master List" Command="{Binding OpenMasterListCommand}" Margin="0,0,6,6"
+                    ToolTip.Tip="Every item Roomba has ever seen, where it was seen, and where it can be bought/sold outside this gang house at 50 charm."/>
             <TextBox Text="{Binding AddRoomInput}" PlaceholderText="map/room" Width="100"
                      VerticalAlignment="Center" Margin="12,0,6,6"/>
             <Button Content="Add Room" Command="{Binding AddRoomCommand}" IsEnabled="{Binding !IsRunning}" Margin="0,0,6,6"/>
@@ -55,6 +60,12 @@
                        IsEnabled="{Binding SearchesEditable}"/>
             <NumericUpDown Value="{Binding SearchesPerRoom}" Minimum="1" Maximum="20" Increment="1"
                            Width="100" FormatString="0" IsEnabled="{Binding SearchesEditable}" Margin="0,0,0,6"/>
+            <TextBlock VerticalAlignment="Center" Margin="24,0,6,6"
+                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                       ToolTip.Tip="Newest sighting in the item-location log backing @roomba — from a local sweep/inventory or an adopted @roomba sync. Tells you how current this gang house's data is.">
+                <Run Text="Roomba Data Timestamp:"/>
+                <Run Text="{Binding RoombaDataTimestamp}" FontFamily="{StaticResource FontMono}" Foreground="{StaticResource ChromeFgBrush}"/>
+            </TextBlock>
         </WrapPanel>
 
         <!-- Labeled rooms grid (double-click a row → its current contents below) -->

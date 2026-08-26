@@ -172,19 +172,14 @@ public sealed class CharacterProfile
     // null or empty = no stash rooms flagged.
     public List<RoomRef>? StashRooms { get; set; }
 
-    // Gang-house room labels for Roomba Mode. Per-character only, one active
-    // layout at a time — re-labeling a room overwrites its entry. null or
-    // empty = GH not set up yet.
+    // LEGACY Roomba Mode fields — superseded by the BBS-tier RoombaSettings
+    // (Data/BBS/{bbs}/roomba.json; see GhRoomLabelStore) since every character
+    // on a BBS shares one gang house. Kept ONLY so GhRoomLabelStore can lift an
+    // existing user's pre-upgrade data into the new BBS-tier file on first load
+    // after upgrading; cleared (nulled + saved) once migrated. Never written to
+    // after that point — do not read these directly outside that migration.
     public List<GhRoomLabel>? GhRoomLabels { get; set; }
-
-    // Roomba Mode's per-room hidden-search count — null = GhRoomLabelStore's
-    // default (3). Only applies when hidden-item search is on. Recon always walks
-    // the circuit exactly once (no lap-count setting). Adjustable from the tab.
     public int? GhSearchesPerRoom { get; set; }
-
-    // Whether Roomba searches (`sea`) each room for hidden items during recon.
-    // null/false = sort visible floor items only (never search); true = also
-    // reveal + sort items hidden in the rooms. Off by default. Per-character.
     public bool? GhSearchForHidden { get; set; }
 
     // Recent walk-to destinations, newest first, capped at 10. Each entry is a

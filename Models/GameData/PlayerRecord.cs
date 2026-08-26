@@ -266,11 +266,15 @@ public enum PlayerRemoteControls
     // Unrecovered deaths in the recovery log — @death.
     QueryDeaths         = 1 << 13,
 
+    // Item last-seen-in-room queries against the Roomba item-sighting log —
+    // @roomba.
+    QueryItemLocation   = 1 << 14,
+
     // Convenience — every category above flipped on.
     All = QueryVersion | QueryExperience | QueryHealthStatus | QueryLocation
         | QueryInventory | RequestInvite | MovePlayer | ExecuteCommands
         | HangupDisconnect | AlterSettings | DivertConversations | SysopCommands
-        | QueryBossTimers | QueryDeaths,
+        | QueryBossTimers | QueryDeaths | QueryItemLocation,
 }
 
 // One equipment slot's contents from a look <player> response. SlotLabel

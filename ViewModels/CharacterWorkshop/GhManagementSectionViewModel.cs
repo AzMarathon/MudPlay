@@ -24,8 +24,10 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private readonly GhRoomLabelStore _labels;
     private readonly GhSweepManager _sweep;
     private readonly RoomGraphManager _roomGraph;
+    private readonly GhItemLocationStore _items;
     private Control? _view;
     private RoombaLogWindow? _logWindow;
+    private RoombaMasterListWindow? _masterListWindow;
 
     public override string Id => "ghmanagement";
     public override string Title => "Roomba";
@@ -53,13 +55,19 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     // going to the map (e.g. "1/384").
     [ObservableProperty] private string _addRoomInput = string.Empty;
 
+    // Freshness readout for the item-location log backing @roomba — the newest
+    // sighting's timestamp (from a local sweep or an adopted @roomba sync). Lets
+    // you tell at a glance whether the gang-house data is current or stale.
+    [ObservableProperty] private string _roombaDataTimestamp = string.Empty;
+
     // The per-room hidden-search count, editable here. _suppressSettingsWrite guards
     // the constructor's initial seed from the change hook that persists user edits.
     private bool _suppressSettingsWrite = true;
     [ObservableProperty] private int _searchesPerRoom;
 
     // Whether recon searches (`sea`) each room for hidden items. Off by default —
-    // Roomba sorts the visible floor only unless the user opts in. Per-character.
+    // Roomba sorts the visible floor only unless the user opts in. BBS-wide
+    // (shared by every character on this BBS).
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchesEditable))]
     private bool _searchForHidden;
@@ -68,14 +76,17 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     // the sweep isn't running — grey the ticker out otherwise.
     public bool SearchesEditable => !IsRunning && SearchForHidden;
 
-    public GhManagementSectionViewModel(GhRoomLabelStore labels, GhSweepManager sweep, RoomGraphManager roomGraph)
+    public GhManagementSectionViewModel(GhRoomLabelStore labels, GhSweepManager sweep, RoomGraphManager roomGraph,
+        GhItemLocationStore items)
     {
         ArgumentNullException.ThrowIfNull(labels);
         ArgumentNullException.ThrowIfNull(sweep);
         ArgumentNullException.ThrowIfNull(roomGraph);
+        ArgumentNullException.ThrowIfNull(items);
         _labels = labels;
         _sweep = sweep;
         _roomGraph = roomGraph;
+        _items = items;
 
         SearchesPerRoom = _labels.SearchesPerRoom;
         SearchForHidden = _labels.SearchForHidden;
@@ -84,8 +95,21 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         _labels.Changed += RebuildRooms;
         _sweep.PhaseChanged += RefreshStatus;
         _sweep.SweepCompleted += OnSweepCompleted;
+        _items.Changed += RefreshRoombaDataTimestamp;
         RebuildRooms();
         RefreshStatus();
+        RefreshRoombaDataTimestamp();
+    }
+
+    // Newest sighting time in the item-location log, as a friendly local stamp.
+    // Fires off the store's Changed event (sweep, sync merge, or BBS load), so it
+    // stays in step with the data without a per-second ticker.
+    private void RefreshRoombaDataTimestamp()
+    {
+        DateTimeOffset? newest = _items.LatestSeenAt;
+        RoombaDataTimestamp = newest is { } at
+            ? at.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            : "no data yet";
     }
 
     partial void OnSearchesPerRoomChanged(int value)
@@ -117,9 +141,10 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private void RefreshStatus()
     {
         IsRunning = _sweep.Phase != GhSweepManager.SweepPhase.Idle;
+        bool inventoryOnly = _sweep.Mode == GhSweepManager.SweepMode.InventoryOnly;
         PhaseText = _sweep.Phase switch
         {
-            GhSweepManager.SweepPhase.Reconning => "Scanning rooms…",
+            GhSweepManager.SweepPhase.Reconning => inventoryOnly ? "Inventorying rooms…" : "Scanning rooms…",
             GhSweepManager.SweepPhase.Sorting => $"Sorting ({_sweep.MovedSoFar.Count} moved so far)",
             GhSweepManager.SweepPhase.FinalRecon => "Final scan…",
             _ => "Idle",
@@ -144,7 +169,19 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private void Start()
     {
         RoomContentsTitle = null;
-        if (_sweep.Start()) { StartHint = null; CompletionSummary = null; }
+        if (_sweep.Start(GhSweepManager.SweepMode.Sort)) { StartHint = null; CompletionSummary = null; }
+        else StartHint = _sweep.LastStartError;
+    }
+
+    // Walks the same labeled circuit as Start (recon + hidden-item search per
+    // the same settings) but never dispatches a get/drop — for a player who
+    // wants @roomba's item-location log kept fresh without Roomba touching
+    // (and potentially undoing) their own manual gang-house organization.
+    [RelayCommand]
+    private void StartInventory()
+    {
+        RoomContentsTitle = null;
+        if (_sweep.Start(GhSweepManager.SweepMode.InventoryOnly)) { StartHint = null; CompletionSummary = null; }
         else StartHint = _sweep.LastStartError;
     }
 
@@ -152,9 +189,10 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     // so setting the observables directly is safe.
     private void OnSweepCompleted(GhSweepReport report)
     {
-        CompletionSummary =
-            $"Sweep complete — {report.Moved.Count} move(s), {report.LeftInPlace.Count} left in place, "
-            + $"{report.Stranded.Count} still carried.";
+        CompletionSummary = _sweep.Mode == GhSweepManager.SweepMode.InventoryOnly
+            ? $"Inventory scan complete — {_sweep.CircuitRoomCount} room(s) logged, nothing moved."
+            : $"Sweep complete — {report.Moved.Count} move(s), {report.LeftInPlace.Count} left in place, "
+              + $"{report.Stranded.Count} still carried.";
         RefreshRoomStatuses();
     }
 
@@ -179,6 +217,19 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         _logWindow = new RoombaLogWindow { DataContext = new RoombaLogViewModel(_sweep) };
         _logWindow.Closed += (_, _) => _logWindow = null;
         _logWindow.Show();
+    }
+
+    // Master inventory across every room Roomba has ever scanned (item, room,
+    // and outside market cross-reference), independent of any single sweep run.
+    [RelayCommand]
+    private void OpenMasterList()
+    {
+        if (_masterListWindow is { } open) { open.Activate(); return; }
+        AppServices svc = AppServices.Current;
+        RoombaMasterListViewModel vm = new(svc.GhItemLocations, _labels, svc.ItemNames, svc.GameData, _roomGraph);
+        _masterListWindow = new RoombaMasterListWindow { DataContext = vm };
+        _masterListWindow.Closed += (_, _) => _masterListWindow = null;
+        _masterListWindow.Show();
     }
 
     // Add a room to the Roomba list by typed map/room number — opens the same rule
@@ -220,6 +271,8 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         _labels.Changed -= RebuildRooms;
         _sweep.PhaseChanged -= RefreshStatus;
         _sweep.SweepCompleted -= OnSweepCompleted;
+        _items.Changed -= RefreshRoombaDataTimestamp;
         _logWindow?.Close();
+        _masterListWindow?.Close();
     }
 }

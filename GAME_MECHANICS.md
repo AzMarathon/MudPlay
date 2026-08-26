@@ -2161,6 +2161,26 @@ wave grin bow bleed nod laugh … smile … tickle`) that wraps across lines, wi
   known green status prefixes (`You are/have/notice/feel/…`); others' `<known room player>
   <lowercase verb>…` minus enter/exit/follow/logon/chat lines (see `ActionEmoteClassifier`).
 
+## Command rate limit — typing/sending too fast *([CONFIRMED] 2026-08-25, user)*
+
+The game throttles how fast a client may send commands (typed input or telepaths).
+Exceeding it **drops** the offending command silently on the game side — it is never
+processed — and the wording of the notice is **realm-specific**:
+
+- **Stock realms** are stricter and give a two-tier signal. As you approach the limit
+  the game nudges: **`Why don't you slow down for a few seconds?`**. If you push past
+  it, the command is dropped with **`You are typing too quickly - command ignored`**.
+- **Paradigm realms** accept moderately-paced rapid input without complaint and give
+  **no** early warning; they only object to a **burst of more than ~10 lines at once**,
+  with the red line **`Too many messages sent - please wait for a few moments before
+  trying again`**. Any lines beyond the burst allowance are dropped.
+
+Implication for bulk sends (e.g. `@roomba sync`, which can be ~20 telepaths): pace them
+out (MudPlay uses ~800ms between telepaths) so a burst never forms, and treat the
+"command ignored" / "too many messages" lines as a signal that the last send was lost
+and should be re-sent. This is distinct from the outbound-write **interleaving** bug
+(that was a client-side concurrency defect in `TelnetClient`, not a game rate limit).
+
 ## Spell targeting: monster type tags
 
 A spell's eligibility against a monster is a match between a **spell-side targeting tag** and a

@@ -16,6 +16,13 @@ public sealed class ShopSaleRow
     public string Price { get; }
     public bool HasPrice => Price.Length > 0;
 
+    // The shop's host room, for callers that need to cross-reference by
+    // location rather than just display it (e.g. the Roomba Master List
+    // excluding shops that sit inside a labeled gang-house room). 0 when
+    // CanOpen is false — same "unresolved" convention as the fallback row.
+    public int Map { get; }
+    public int Room { get; }
+
     // False when the shop's host room couldn't be resolved (map <= 0) — the row
     // still shows the raw "Shop #N" fallback but has nothing to navigate to, so
     // the view greys the link.
@@ -31,6 +38,8 @@ public sealed class ShopSaleRow
     {
         Location = location;
         Price = price;
+        Map = map;
+        Room = room;
         CanOpen = map > 0 && room > 0;
         Open = new RelayCommand(
             () => AppServices.Current.OpenRoomGameData(map, room),

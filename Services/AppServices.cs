@@ -761,6 +761,16 @@ public sealed class AppServices
     // recovery log. App-lifetime, like the other query handlers.
     public Game.Remote.DeathQueryHandler DeathQuery { get; private set; } = null!;
 
+    // @roomba read-only query handler — reports an item's last-seen gang-house
+    // room from GhItemLocations. App-lifetime, like the other query handlers.
+    public Game.Remote.RoombaQueryHandler RoombaQuery { get; private set; } = null!;
+
+    // Requester-side @roomba sync listener — merges another MudPlay client's
+    // sighting log into GhItemLocations as replies arrive. App-lifetime; unlike
+    // BossTimerSyncCollector it isn't gated to a merge-review window (see the
+    // class comment), so it's always live once constructed.
+    public Game.Remote.RoombaSyncReceiver RoombaSync { get; private set; } = null!;
+
     // Runtime keystroke → macro → wire-send bridge. Constructed up-
     // front; MacroDispatcher.SetSender gets bound from
     // MainWindowViewModel after the telnet client is
@@ -1519,9 +1529,14 @@ public sealed class AppServices
     // it into Bfs without further wiring.
     public MovementFilter Movement { get; private set; } = null!;
 
-    // Per-character gang-house room labels for Roomba Mode (right-click map
-    // labeling + the GH Management workshop tab read/write through this).
+    // Per-BBS gang-house room labels for Roomba Mode (right-click map labeling +
+    // the GH Management workshop tab read/write through this) — shared by every
+    // character on the BBS.
     public Game.Map.GhRoomLabelStore GhRoomLabels { get; private set; } = null!;
+
+    // Per-BBS "last seen this item in this room" log, fed by GhSweep and read by
+    // RoombaQuery's @roomba handler.
+    public Game.Map.GhItemLocationStore GhItemLocations { get; private set; } = null!;
 
     // Per-character favourite-room bookmarks. Wires Navigation's
     // GOTO pane + the map's "Add to favorites" context menu;
@@ -1913,6 +1928,7 @@ public sealed class AppServices
         // scrapes itself (BossTimerSyncCollector); reserve the token so the engine
         // swallows it instead of bouncing "{command invalid}" at each responder.
         RemoteCommands.RegisterIgnored(Game.Remote.BossTimerQueryHandler.SyncResponseToken);
+        RemoteCommands.RegisterIgnored(Game.Remote.RoombaQueryHandler.SyncResponseToken);
         // Stat-screen parser ahead of LivesProvider hookup below so
         // both the engine's @suicide hard-block and the @lives reply
         // path share the same "unknown until first stat poll" source.
@@ -2707,7 +2723,15 @@ public sealed class AppServices
         // Constructor subscribes ProfileLoaded / ProfileClosed and
         // hydrates from the currently-loaded profile if there is one.
         Movement = new MovementFilter(Profile, Log);
+        // GH room labels + the Roomba item-sighting log are BBS-tier (not
+        // per-character) — every character on a BBS shares the same gang house.
+        // Loaded/reloaded via OnBbsPinApplied, same pattern as RoomBlacklist.
         GhRoomLabels = new Game.Map.GhRoomLabelStore(Profile, Log);
+        GhItemLocations = new Game.Map.GhItemLocationStore(ItemNames, Log);
+        Profile.ProfileLoaded += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.ProfileLoaded += _ => GhItemLocations.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => GhItemLocations.OnBbsPinApplied(ResolveActiveBbs()?.Name);
         // Feed the player's level into Form-A exit level-gate evaluation.
         // null until a stat screen parses — IsExitBlocked never gates on
         // an unknown level, so an unparsed character walks unrestricted.
@@ -3846,6 +3870,35 @@ public sealed class AppServices
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
         DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
+        RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels, Log,
+            // Paced-send scheduler: a UI-thread one-shot (same shape as the combat
+            // switch-dispatch delay) so @roomba sync trickles its telepaths out
+            // ~800ms apart instead of flooding the channel.
+            paceScheduler: (delay, callback) =>
+            {
+                if (delay <= TimeSpan.Zero) { Avalonia.Threading.Dispatcher.UIThread.Post(callback); return; }
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+            });
+        // Adopt an @roomba sync reply only inside the window our own outbound
+        // `@roomba sync` opens (NoteSyncRequested, wired from the outbound-chat
+        // watcher in MainWindowViewModel). The permission gate is on the responder
+        // side, so a reply arriving already proves we're authorized.
+        RoombaSync = new Game.Remote.RoombaSyncReceiver(Chat, GhItemLocations, GhRoomLabels, Log);
+
+        // Rate-limit clobber watcher: the game drops a command when we type too
+        // fast — stock says "You are typing too quickly - command ignored",
+        // paradigm "Too many messages sent - please wait …". Either one during a
+        // paced @roomba sync means the last telepath was lost, so poke the sender
+        // to back off and resend it (no-op when no sync is draining).
+        Router.LineDispatched += line =>
+        {
+            string t = line.Text;
+            if (t.Contains("typing too quickly", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("Too many messages sent", StringComparison.OrdinalIgnoreCase))
+                RoombaQuery.NoteRateLimitClobber();
+        };
 
         // Write-side inventory / cash actions — @get-all / @drop-all /
         // @deposit-all / @share emit get / drop / dep / with / give on the wire.
@@ -4865,7 +4918,8 @@ public sealed class AppServices
             isOtherEngineBusy: () => MovementControl.IsActive,
             log: Log,
             isParadigm: onParadigm,
-            inventory: Inventory);
+            inventory: Inventory,
+            itemLocations: GhItemLocations);
 
         // A manually-typed movement step (one the walker / loop / auto-lair didn't
         // send — RoomTracker's echo-claim tells them apart) pauses the active nav
