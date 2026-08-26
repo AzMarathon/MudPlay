@@ -4,12 +4,13 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.28.0
 
-- Roomba: new `@roomba <item name>` remote command replies with every gang-house room that item is currently tracked in — a room per line, with quantity and how long ago — gated by its own "Query item location" permission and an opt-in **Enable @roomba responses** checkbox on the Roomba tab
+- Roomba: new `@roomba <item name>` remote command replies with one consolidated line — total quantity summed across every gang-house room that item is currently tracked in, plus the room locators — gated by its own "Query item location" permission and an opt-in **Enable @roomba responses** checkbox on the Roomba tab
+- Ground items: an item whose own name contains "and" (e.g. "rope and grapple") no longer gets mis-split into two bogus entries when parsing a room's floor survey — affects Roomba's item log, `@what`, and `@get-all` alike
 - Roomba: every room floor Roomba observes during a scan now feeds a persistent BBS-tier item-location log backing `@roomba`, tracked per room (not collapsed to one "last seen" spot) so an item stocked in several rooms at once reports all of them; independent of the current sweep's own state
 - Roomba: room labels, hidden-search settings, and the new item-location log all moved from per-character to **per-BBS** storage — every character on a BBS now shares one gang house instead of re-labeling rooms per character; existing per-character labels are migrated automatically the first time each BBS loads post-upgrade
 - Roomba: new `@roomba sync` replies with a client's whole item-location log, compressed, for another MudPlay user to merge straight in — no import/export files, same idea as `@timer sync` but without a merge-review window (a sighting has no meaningful "conflict"; newest wins silently)
 - Roomba: new **Start Inventory** mode — walks the same labeled circuit and feeds the item-location log exactly like a sweep's scan, but never dispatches a single get/drop; for logging a gang house without disturbing an existing manual sort
-- Roomba: new **Master List** button — a table of every item Roomba has seen, where, and its outside market (which shops buy/sell it and for how much at 50 charm), automatically excluding any shop that sits inside the gang house's own labeled rooms
+- Roomba: new **Master List** button — a sortable table (click any column header) of every item Roomba has seen, where, and its outside market (which shops buy/sell it and for how much at 50 charm), automatically excluding any shop that sits inside the gang house's own labeled rooms
 
 ## 3.27.7
 

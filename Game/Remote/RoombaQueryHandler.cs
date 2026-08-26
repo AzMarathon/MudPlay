@@ -8,11 +8,13 @@ namespace MudPlay.Game.Remote;
 // Read-only handler for @roomba — reports every gang-house room a named item
 // is currently tracked in, per GhItemLocationStore's BBS-tier sighting log,
 // gated by the QueryItemLocation permission.
-//   @roomba <item name>   — one reply line per room currently holding a
-//                           match (quantity + how long ago), or "no record".
-//                           A gang house can stock the same item in more than
-//                           one room, so every match is reported, not just
-//                           the most recently scanned.
+//   @roomba <item name>   — ONE consolidated reply line: total quantity summed
+//                           across every room currently holding a match, and
+//                           the room locators — or "no record". Originally
+//                           replied with one chat line per room, which flooded
+//                           the channel for anything stocked in several rooms
+//                           (report 20260825-172400); a single line is both
+//                           quieter and reads more like an actual answer.
 //   @roomba sync          — replies with this client's entire sighting log,
 //                           compactly encoded (see GhItemSyncCodec), for the
 //                           requester's RoombaSyncReceiver to merge in. Same
@@ -24,10 +26,11 @@ namespace MudPlay.Game.Remote;
 // it on.
 public sealed class RoombaQueryHandler : IDisposable
 {
-    // Cap on reply lines for a single @roomba <item> query so an item stocked
-    // in many rooms can't flood the channel; the overflow is summarised as a
-    // final line, same pattern as @death all / @timer.
-    private const int MaxLines = 5;
+    // Cap on room locators shown in a single @roomba <item> reply line so an
+    // item scattered across a large gang house can't blow the line out to an
+    // unreadable length; the overflow folds into a "+N more" tail instead of
+    // extra lines (the whole point of this format is ONE line per query).
+    private const int MaxRoomsShown = 10;
 
     // Cap on records per @roomba sync response so a very large gang-house
     // sighting log can't flood the channel; conservative per-line character
@@ -45,20 +48,16 @@ public sealed class RoombaQueryHandler : IDisposable
     private readonly RemoteCommandManager _engine;
     private readonly GhItemLocationStore _locations;
     private readonly GhRoomLabelStore _labels;
-    private readonly RoomGraphManager _roomGraph;
     private bool _disposed;
 
-    public RoombaQueryHandler(
-        RemoteCommandManager engine, GhItemLocationStore locations, GhRoomLabelStore labels, RoomGraphManager roomGraph)
+    public RoombaQueryHandler(RemoteCommandManager engine, GhItemLocationStore locations, GhRoomLabelStore labels)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(locations);
         ArgumentNullException.ThrowIfNull(labels);
-        ArgumentNullException.ThrowIfNull(roomGraph);
         _engine = engine;
         _locations = locations;
         _labels = labels;
-        _roomGraph = roomGraph;
 
         if (!RemoteCommandCatalog.TryGetCategory("@roomba", out PlayerRemoteControls category))
             throw new InvalidOperationException(
@@ -93,18 +92,28 @@ public sealed class RoombaQueryHandler : IDisposable
             return;
         }
 
-        foreach (GhItemSighting s in sightings.Take(MaxLines)) ctx.Reply(Format(s));
-        int extra = sightings.Count - MaxLines;
-        if (extra > 0) ctx.Reply($"{extra} more room(s) — refine your search");
+        ctx.Reply(FormatTotal(sightings));
     }
 
-    private string Format(GhItemSighting sighting)
+    // One line: total quantity across every matching room, the item's
+    // canonical name, and the room locators (map/room only — a room NAME per
+    // entry is what made the old per-room reply so long). Every sighting in
+    // `sightings` names the same item (FindSightings resolves to one item
+    // per query), so summing quantity across them is always meaningful.
+    private static string FormatTotal(IReadOnlyList<GhItemSighting> sightings)
     {
-        RoomKey room = new(sighting.Map, sighting.Room);
-        string? name = _roomGraph.GetRoom(room)?.Name;
-        string where = name is { Length: > 0 } ? $"{name} ({room})" : room.ToString();
-        string qty = sighting.Quantity > 1 ? $"{sighting.Quantity}x " : string.Empty;
-        return $"{qty}{sighting.ItemName} last seen in {where}, {FormatAge(DateTimeOffset.Now - sighting.SeenAt)} ago";
+        int total = sightings.Sum(s => s.Quantity);
+        string name = sightings[0].ItemName;
+        List<string> locators = sightings
+            .OrderBy(s => s.Map).ThenBy(s => s.Room)
+            .Select(s => new RoomKey(s.Map, s.Room).ToString())
+            .ToList();
+
+        string rooms = string.Join(", ", locators.Take(MaxRoomsShown));
+        int extra = locators.Count - MaxRoomsShown;
+        if (extra > 0) rooms += $", +{extra} more";
+
+        return $"total: {total}x {name} - seen in {rooms}";
     }
 
     // Reply to `@roomba sync` with this client's entire sighting log, encoded
@@ -122,15 +131,5 @@ public sealed class RoombaQueryHandler : IDisposable
         IReadOnlyList<string> chunks = GhItemSyncCodec.Chunk(payload, MaxBlobCharsPerLine);
         for (int i = 0; i < chunks.Count; i++)
             ctx.Reply($"{SyncResponseToken} {i + 1}/{chunks.Count} {chunks[i]}");
-    }
-
-    // Coarse, single-unit age ("3h", "2d") — a @roomba answer only needs to
-    // convey roughly how stale a sighting is, not exact elapsed time.
-    private static string FormatAge(TimeSpan age)
-    {
-        if (age.TotalDays >= 1) return $"{(int)age.TotalDays}d";
-        if (age.TotalHours >= 1) return $"{(int)age.TotalHours}h";
-        if (age.TotalMinutes >= 1) return $"{(int)age.TotalMinutes}m";
-        return "<1m";
     }
 }

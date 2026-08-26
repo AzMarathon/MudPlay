@@ -29,13 +29,13 @@
                   HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Auto">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Item" Binding="{ReflectionBinding ItemName}"
+                <DataGridTextColumn Header="Item" Binding="{ReflectionBinding ItemName}" SortMemberPath="ItemName"
                                     Width="180" Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="Qty" Binding="{ReflectionBinding Quantity}"
+                <DataGridTextColumn Header="Qty" Binding="{ReflectionBinding Quantity}" SortMemberPath="Quantity"
                                     Width="60" Foreground="{StaticResource ChromeFgSecBrush}"/>
-                <DataGridTextColumn Header="Seen In" Binding="{ReflectionBinding SeenIn}"
+                <DataGridTextColumn Header="Seen In" Binding="{ReflectionBinding SeenIn}" SortMemberPath="SeenIn"
                                     Width="220" Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="Market (outside this gang house)" Binding="{ReflectionBinding Market}"
+                <DataGridTextColumn Header="Market (outside this gang house)" Binding="{ReflectionBinding Market}" SortMemberPath="Market"
                                     Width="*" Foreground="{StaticResource ChromeFgBrush}"/>
             </DataGrid.Columns>
         </DataGrid>

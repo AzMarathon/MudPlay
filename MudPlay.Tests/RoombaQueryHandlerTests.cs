@@ -13,9 +13,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// Pins the read-only @roomba handler: reports GhItemLocationStore's last-known
-// room for a named item, gated on the QueryItemLocation grant AND
-// GhRoomLabelStore.ResponsesEnabled (the BBS-tier opt-in toggle).
+// Pins the read-only @roomba handler: replies with ONE consolidated line —
+// total quantity + every room GhItemLocationStore currently tracks for a named
+// item — gated on the QueryItemLocation grant AND GhRoomLabelStore.
+// ResponsesEnabled (the BBS-tier opt-in toggle).
 public sealed class RoombaQueryHandlerTests : IDisposable
 {
     private static readonly DateTime Now = new(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc);
@@ -55,8 +56,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         GhItemLocationStore locations = new(itemNames);
         locations.OnBbsPinApplied(_scratchBbs);
 
-        RoomGraphManager roomGraph = new(new GameDataCache());
-        _ = new RoombaQueryHandler(engine, locations, labels, roomGraph);
+        _ = new RoombaQueryHandler(engine, locations, labels);
 
         return (engine, players, labels, locations);
     }
@@ -119,14 +119,13 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         GhItemLocationStore locations = new(itemNames);
         locations.OnBbsPinApplied(_scratchBbs);
 
-        RoomGraphManager roomGraph = new(cache);
-        _ = new RoombaQueryHandler(engine, locations, labels, roomGraph);
+        _ = new RoombaQueryHandler(engine, locations, labels);
 
         return (engine, players, locations);
     }
 
     [Fact]
-    public void Roomba_ResponsesEnabled_ReportsLastSeenRoom()
+    public void Roomba_ResponsesEnabled_ReportsTotalAndRoom()
     {
         var (engine, players, _, locations) = Setup(responsesEnabled: true);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
@@ -137,10 +136,11 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         Assert.Contains(Replies(engine), r => r.Contains("long sword") && r.Contains("1/100"));
     }
 
-    // A gang house can stock the same item in more than one room — every
-    // room a sweep actually saw it in must come back, not just one.
+    // A gang house can stock the same item in more than one room — the reply
+    // is ONE consolidated line (not one line per room, which used to flood
+    // the channel — report 20260825-172400): summed quantity + every room.
     [Fact]
-    public void Roomba_ItemSeenInMultipleRooms_ReportsEveryRoom()
+    public void Roomba_ItemSeenInMultipleRooms_ReportsOneConsolidatedLine()
     {
         var (engine, players, _, locations) = Setup(responsesEnabled: true);
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
@@ -149,9 +149,28 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
 
-        var replies = Replies(engine);
-        Assert.Contains(replies, r => r.Contains("4x long sword") && r.Contains("1/100"));
-        Assert.Contains(replies, r => r.Contains("2x long sword") && r.Contains("1/200"));
+        string reply = Assert.Single(Replies(engine));
+        Assert.Contains("6x long sword", reply);   // 4 + 2 summed
+        Assert.Contains("1/100", reply);
+        Assert.Contains("1/200", reply);
+    }
+
+    // Beyond MaxRoomsShown, the room list folds into a "+N more" tail instead
+    // of further lines — the whole point of consolidating is staying at one
+    // line even for an item scattered across many rooms.
+    [Fact]
+    public void Roomba_ItemInManyRooms_CapsRoomListWithOverflowTail()
+    {
+        var (engine, players, _, locations) = Setup(responsesEnabled: true);
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        for (int room = 1; room <= 12; room++)
+            locations.RecordRoom(new RoomKey(1, room), new[] { "long sword" });
+
+        engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
+
+        string reply = Assert.Single(Replies(engine));
+        Assert.Contains("12x long sword", reply);
+        Assert.Contains("+2 more", reply);
     }
 
     [Fact]

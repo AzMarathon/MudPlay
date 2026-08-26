@@ -200,6 +200,73 @@ public sealed class GroundItemTrackerTests
         Assert.Empty(ground.Items);
     }
 
+    // ----- compound item names containing " and " (report 20260825-172400) --
+
+    // An item whose own canonical name contains "and" ("rope and grapple", MDB
+    // #191) must survive as one entry, not split at its internal "and" the way
+    // a genuine list separator would be.
+    [Fact]
+    public void CompoundItemName_SoleFloorItem_StaysWhole_WithItemTable()
+    {
+        var (ground, router, _) = Setup(isKnownItem: KnownItems("rope and grapple"));
+
+        FeedRoom(router, "You notice a rope and grapple here.");
+
+        Assert.Equal(new[] { "a rope and grapple" }, ground.Items);
+    }
+
+    // Comma already separates it from an unrelated item — the and-split still
+    // must not break the compound name's own internal "and".
+    [Fact]
+    public void CompoundItemName_AfterComma_StaysWhole_WithItemTable()
+    {
+        var (ground, router, _) = Setup(isKnownItem: KnownItems("rope and grapple"));
+
+        FeedRoom(router, "You notice a torch, a rope and grapple here.");
+
+        Assert.Equal(new[] { "a torch", "a rope and grapple" }, ground.Items);
+    }
+
+    // The 2-item list form ("X and Y", no comma) where Y is itself a compound
+    // name — naive splitting sees three " and "-delimited pieces; the merge
+    // pass must recover exactly the two real items.
+    [Fact]
+    public void CompoundItemName_AsSecondOfTwoItems_StaysWhole_WithItemTable()
+    {
+        var (ground, router, _) = Setup(isKnownItem: KnownItems("rope and grapple"));
+
+        FeedRoom(router, "You notice a torch and a rope and grapple here.");
+
+        Assert.Equal(new[] { "a torch", "a rope and grapple" }, ground.Items);
+    }
+
+    // Two genuinely separate items joined by the real "and" separator must NOT
+    // be merged just because they're adjacent — only a pairing that itself
+    // resolves to a known item is ever rejoined.
+    [Fact]
+    public void TwoRealItems_JoinedByAnd_AreNotIncorrectlyMerged()
+    {
+        var (ground, router, _) = Setup(isKnownItem: KnownItems("torch", "dagger"));
+
+        FeedRoom(router, "You notice a torch and a dagger here.");
+
+        Assert.Equal(new[] { "a torch", "a dagger" }, ground.Items);
+    }
+
+    // Without an item table wired (no game data), the merge heuristic has
+    // nothing to check against and the naive split stands alone — documents
+    // the fallback the injected predicate exists to fix, same pattern as the
+    // cash-tiebreaker fallback test above.
+    [Fact]
+    public void CompoundItemName_MisparsedIntoTwoEntries_WithoutItemTable()
+    {
+        var (ground, router, _) = Setup();
+
+        FeedRoom(router, "You notice a rope and grapple here.");
+
+        Assert.Equal(new[] { "a rope", "grapple" }, ground.Items);
+    }
+
     // Test double for the item table: matches an entry to a known item name after
     // the same article/count stripping the real ItemNameStore.Normalize applies.
     private static Func<string, bool> KnownItems(params string[] names)
