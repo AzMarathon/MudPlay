@@ -60,6 +60,12 @@
                        IsEnabled="{Binding SearchesEditable}"/>
             <NumericUpDown Value="{Binding SearchesPerRoom}" Minimum="1" Maximum="20" Increment="1"
                            Width="100" FormatString="0" IsEnabled="{Binding SearchesEditable}" Margin="0,0,0,6"/>
+            <TextBlock VerticalAlignment="Center" Margin="24,0,6,6"
+                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                       ToolTip.Tip="Newest sighting in the item-location log backing @roomba — from a local sweep/inventory or an adopted @roomba sync. Tells you how current this gang house's data is.">
+                <Run Text="Roomba Data Timestamp:"/>
+                <Run Text="{Binding RoombaDataTimestamp}" FontFamily="{StaticResource FontMono}" Foreground="{StaticResource ChromeFgBrush}"/>
+            </TextBlock>
         </WrapPanel>
 
         <!-- Labeled rooms grid (double-click a row → its current contents below) -->

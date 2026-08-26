@@ -335,4 +335,29 @@ public sealed class GhItemLocationStoreTests : IDisposable
 
         Assert.Equal(0, applied);
     }
+
+    [Fact]
+    public void LatestSeenAt_EmptyStore_IsNull()
+    {
+        GhItemLocationStore store = NewPinnedStore();
+        Assert.Null(store.LatestSeenAt);
+    }
+
+    // The Roomba-tab freshness readout is the newest SeenAt across the whole log,
+    // regardless of which item or room it belongs to — a later sighting in ANY
+    // room advances it.
+    [Fact]
+    public void LatestSeenAt_ReturnsNewestSightingAcrossAllRoomsAndItems()
+    {
+        (GhItemLocationStore store, _) = NewPinnedStoreWithItems();
+        DateTimeOffset older = new(2026, 6, 1, 8, 0, 0, TimeSpan.Zero);
+        DateTimeOffset newer = new(2026, 6, 2, 9, 30, 0, TimeSpan.Zero);
+        store.MergeSyncRecords(new[]
+        {
+            new GhItemSyncRecord(1, 100, 1, 4, older),   // torch, room 100
+            new GhItemSyncRecord(1, 200, 2, 1, newer),   // long sword, room 200 — the newest
+        });
+
+        Assert.Equal(newer, store.LatestSeenAt);
+    }
 }

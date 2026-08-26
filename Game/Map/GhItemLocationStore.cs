@@ -46,6 +46,22 @@ public sealed class GhItemLocationStore
         => _sightings.Values.SelectMany(byRoom => byRoom.Values)
             .OrderByDescending(s => s.SeenAt).ToList();
 
+    // Freshest observation across the whole log — how current this gang house's
+    // item data is. A sync merges in other clients' SeenAt (newest wins), so this
+    // reflects the newest sighting from any source, not just local sweeps. Null
+    // when the log is empty.
+    public DateTimeOffset? LatestSeenAt
+    {
+        get
+        {
+            DateTimeOffset? newest = null;
+            foreach (Dictionary<RoomKey, GhItemSighting> byRoom in _sightings.Values)
+                foreach (GhItemSighting s in byRoom.Values)
+                    if (newest is null || s.SeenAt > newest) newest = s.SeenAt;
+            return newest;
+        }
+    }
+
     // Record `room`'s currently-known floor as-is: every item in `items` gets
     // (or refreshes) its (item, room) sighting, and any item this room USED to
     // hold but that isn't in this fresh list anymore has its sighting for THIS

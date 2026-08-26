@@ -18,6 +18,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Roomba: dropped the separate "Enable @roomba responses" checkbox — answering `@roomba` / `@roomba sync` is now gated solely by the per-player **Query Roomba** permission (renamed from "Query item location"): a client answers a query or hands over its log only to a sender it has granted that permission, and a sender you haven't granted it gets a denial. Adopting a sync reply, in turn, only needs that *you asked* — a `@roombadata` line is merged only inside a short window opened by your own outbound `@roomba sync` (the reply arrives only because they've granted you, so having requested it is the whole gate); a stray sync line you never requested is ignored
 - Roomba Master List: opens instantly even on a big synced log (each item's outside-market value is now priced only when its row scrolls into view, instead of pricing every item up front), gained a **filter box** (by item name, quantity, or seen-in map/room), and **double-clicking a row opens that item's record**
 - Roomba: `@roomba sync` now ends with a `Sync Complete` marker line so the requester can see the whole reply landed; and a sync line arriving when you hadn't requested a sync is now logged (at debug) instead of vanishing silently
+- Roomba tab: a **Roomba Data Timestamp** readout beside "Searches per room" shows the newest sighting in the item-location log (from a local sweep/inventory or an adopted `@roomba sync`), so you can tell at a glance how current the gang house's data is
 
 ## 3.27.10
 

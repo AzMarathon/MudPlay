@@ -13,6 +13,7 @@
 > - Roomba: `@roomba sync` paces its telepaths ~800ms apart and resends any the game drops to a rate limit, so a full-house sync trickles out in the background instead of flooding the channel; it now transfers the labeled gang-house rooms too, not just the item sightings
 > - Roomba: the whole `@roomba` feature (queries + sync) is now gated by the per-player **Query Roomba** permission alone (the separate "Enable @roomba responses" checkbox is gone) — you answer only senders you've granted it, and you adopt a sync reply only when *you* asked for it (sent `@roomba sync`), so a stray sync you never requested is ignored
 > - Roomba Master List: opens instantly on a big log (market prices computed lazily per visible row), plus a live filter box and double-click → item record
+> - Roomba tab: a **Roomba Data Timestamp** readout shows the newest sighting in the item-location log, so you can tell at a glance how current the gang-house data is
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
