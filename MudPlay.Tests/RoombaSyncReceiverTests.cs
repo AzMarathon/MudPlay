@@ -78,13 +78,13 @@ public sealed class RoombaSyncReceiverTests : IDisposable
         new GhItemSyncRecord(1, 100, 1, 4, DateTimeOffset.Now),
     }, 120)[0];
 
-    // Two torch sightings in two rooms, forced onto one self-contained line per
-    // room by a tiny char budget.
-    private static IReadOnlyList<string> TwoRoomLines() => GhItemSyncCodec.EncodeLines(new[]
-    {
-        new GhItemSyncRecord(1, 100, 1, 4, DateTimeOffset.Now),
-        new GhItemSyncRecord(1, 200, 1, 2, DateTimeOffset.Now),
-    }, 24);
+    // Two torch sightings in two rooms as two genuinely independent lines (each
+    // room encoded on its own), so the tests exercise per-line merge / drop
+    // without depending on the packer's line-splitting threshold.
+    private static IReadOnlyList<string> TwoRoomLines() =>
+        GhItemSyncCodec.EncodeLines(new[] { new GhItemSyncRecord(1, 100, 1, 4, DateTimeOffset.Now) }, 200)
+            .Concat(GhItemSyncCodec.EncodeLines(new[] { new GhItemSyncRecord(1, 200, 1, 2, DateTimeOffset.Now) }, 200))
+            .ToList();
 
     [Fact]
     public void Ingest_SingleLine_MergesIntoLocations()

@@ -23,20 +23,26 @@ namespace MudPlay.Game.Remote;
 //     than the old blind slicing, AND partial delivery still merges what arrived.
 //
 // Byte layout PER LINE (all ints LEB128 unsigned varints unless noted), base64url'd:
-//   [version=2]
+//   [version=3]
+//   [baseSeenAt: signed varint, seconds delta from BaseEpoch]  — one per line
 //   then, until the buffer ends, one or more ROOM BLOCKS:
-//     [map] [room] [seenAt: signed varint, seconds delta from BaseEpoch] [itemCount]
+//     [map] [room] [seenAt: signed varint, seconds delta from THIS LINE'S baseSeenAt] [itemCount]
 //     then itemCount times: [itemNumber delta from the previous item in THIS block] [quantity]
+// The base timestamp is the newest sweep in the payload; a room swept in that
+// same session encodes its time as a ~1-byte delta (often 0) instead of the
+// ~4-byte absolute it used to carry — the sweep-time was still the biggest
+// remaining per-room field, and a whole house is usually one sweep.
 // Decoding loops room blocks until the buffer is exhausted — there is NO
 // wire-supplied record count, so a crafted payload can't drive an oversized
 // allocation (every item consumes ≥ 2 bytes, so the record count is bounded by
 // the blob length), and every field is range-checked back into int on the way in.
 public static class GhItemSyncCodec
 {
-    private const byte Version = 2;
+    private const byte Version = 3;
 
-    // Same rationale as BossTimerSyncCodec.BaseEpoch: a delta from a fixed recent
-    // point keeps the per-room timestamp varint small (sweeps are hours/days old).
+    // Anchor for the per-line base timestamp. A fixed recent point keeps the base
+    // varint itself small; each room then deltas off the LINE'S base (below), not
+    // this, so same-sweep rooms cost ~1 byte for their time.
     private static readonly DateTimeOffset BaseEpoch = new(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     // Encode `records` into the fewest self-contained lines that each stay within
@@ -51,11 +57,21 @@ public static class GhItemSyncCodec
         // for a minimal one-item block so packing can always make progress.
         if (maxCharsPerLine < 24) throw new ArgumentOutOfRangeException(nameof(maxCharsPerLine));
 
+        // The line header every line repeats: version + the payload's base
+        // timestamp (its newest sweep). Each room deltas its own time off this, so
+        // a house swept in one session costs ~1 byte per room for its time.
+        long baseSeconds = records.Count == 0
+            ? 0
+            : (long)Math.Round((records.Max(r => r.SeenAt) - BaseEpoch).TotalSeconds);
+        List<byte> header = new() { Version };
+        WriteSVarint(header, baseSeconds);
+        byte[] headerBytes = header.ToArray();
+
         // base64url of B bytes is at most ceil(B/3)*4 chars (we trim '='), so
         // B = maxChars/4*3 bytes is the largest that always fits. Reserve the
-        // 1-byte version header every line carries.
+        // per-line header (version + base timestamp) every line carries.
         int lineByteBudget = maxCharsPerLine / 4 * 3;
-        int blockByteBudget = lineByteBudget - 1;
+        int blockByteBudget = lineByteBudget - headerBytes.Length;
 
         // Group by room: one block per (map, room), sweep-time = the most recent
         // sighting in that room, items sorted by number so their deltas stay tiny.
@@ -77,7 +93,7 @@ public static class GhItemSyncCodec
         List<byte[]> blocks = new();
         foreach (var room in rooms)
         {
-            long seconds = (long)Math.Round((room.SeenAt - BaseEpoch).TotalSeconds);
+            long seconds = (long)Math.Round((room.SeenAt - BaseEpoch).TotalSeconds) - baseSeconds;
             int i = 0;
             do
             {
@@ -108,18 +124,18 @@ public static class GhItemSyncCodec
         }
 
         List<string> lines = new();
-        List<byte> line = new() { Version };
+        List<byte> line = new(headerBytes);
         foreach (byte[] block in blocks)
         {
-            if (line.Count > 1 && line.Count + block.Length > lineByteBudget)
+            if (line.Count > headerBytes.Length && line.Count + block.Length > lineByteBudget)
             {
                 lines.Add(ToBase64Url(line.ToArray()));
-                line = new() { Version };
+                line = new(headerBytes);
             }
             line.AddRange(block);
         }
-        if (line.Count > 1 || lines.Count == 0)
-            lines.Add(ToBase64Url(line.ToArray()));   // always emit ≥ 1 line (possibly version-only)
+        if (line.Count > headerBytes.Length || lines.Count == 0)
+            lines.Add(ToBase64Url(line.ToArray()));   // always emit ≥ 1 line (possibly header-only)
         return lines;
     }
 
@@ -134,12 +150,14 @@ public static class GhItemSyncCodec
         if (bytes.Length == 0 || bytes[pos++] != Version)
             throw new FormatException("roomba-sync line: bad or missing version byte");
 
+        long baseSeconds = ReadSVarint(bytes, ref pos);   // the line's base timestamp
+
         List<GhItemSyncRecord> records = new();
         while (pos < bytes.Length)
         {
             int map = ReadUVarintAsInt(bytes, ref pos);
             int room = ReadUVarintAsInt(bytes, ref pos);
-            long seconds = ReadSVarint(bytes, ref pos);
+            long seconds = baseSeconds + ReadSVarint(bytes, ref pos);   // delta off the line's base
             DateTimeOffset seenAt = BaseEpoch.AddSeconds(seconds);
             int itemCount = ReadUVarintAsInt(bytes, ref pos);
             int prev = 0;

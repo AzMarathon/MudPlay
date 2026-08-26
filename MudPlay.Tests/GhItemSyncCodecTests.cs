@@ -100,6 +100,25 @@ public sealed class GhItemSyncCodecTests
         Assert.All(back, r => Assert.Contains(r, records));   // but everything recovered is real
     }
 
+    // A realistic freshly-swept house — many rooms, all from one sweep — packs
+    // into a handful of lines at the responder's ~200-char telepath budget (the
+    // burst that used to be ~56 lines). Per-line base timestamp + higher cap.
+    [Fact]
+    public void FullHouse_SameSweep_PacksIntoFewLines_AtTelepathBudget()
+    {
+        DateTimeOffset seen = T("2026-08-24T00:00:00Z");
+        List<GhItemSyncRecord> records = Enumerable.Range(1, 40)
+            .SelectMany(room => Enumerable.Range(0, 8)
+                .Select(k => new GhItemSyncRecord(1, room, 500 + room * 8 + k, (k % 4) + 1, seen)))
+            .ToList();
+
+        IReadOnlyList<string> lines = GhItemSyncCodec.EncodeLines(records, 200);
+
+        Assert.All(lines, l => Assert.True(l.Length <= 200, $"line too long: {l.Length}"));
+        Assert.True(lines.Count <= 12, $"expected a dense pack, got {lines.Count} lines for {records.Count} sightings");
+        Assert.Equal(records.Count, DecodeAll(lines).Count);
+    }
+
     [Fact]
     public void EmptySet_EncodesToOneLine_ThatDecodesToEmpty()
     {
@@ -148,8 +167,8 @@ public sealed class GhItemSyncCodecTests
     {
         // A short blob claiming a giant itemCount must throw (varint overruns the
         // buffer long before any large structure is built), not allocate for it.
-        // version=2, map=1, room=1, seenAt=0 (zig-zag 0), itemCount=0xFFFFFFFF...
-        byte[] bytes = { 2, 1, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F };
+        // version=3, base=0, map=1, room=1, seenAtDelta=0, itemCount=0xFFFFFFFF...
+        byte[] bytes = { 3, 0, 1, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F };
         string blob = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
         Assert.Throws<FormatException>(() => GhItemSyncCodec.DecodeLine(blob));

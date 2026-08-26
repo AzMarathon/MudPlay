@@ -45,11 +45,13 @@ public sealed class RoombaQueryHandler : IDisposable
     private const int MaxRoomsShown = 10;
 
     // Cap on records per @roomba sync response so a very large gang-house
-    // sighting log can't flood the channel; conservative per-line character
-    // budget for each self-contained blob keeps the wrapped wire line
-    // ("bg {@roombadata <blob>}") well under the game's chat-line limit.
+    // sighting log can't flood the channel; per-line character budget for each
+    // self-contained blob keeps the wrapped wire line ("bg {@roombadata <blob>}")
+    // under the realm's 245-char telepath limit with margin for the wrapper and
+    // the send-command prefix. Bigger lines = fewer telepaths per sync, which is
+    // what keeps a freshly-swept house from tripping the game's burst flood guard.
     private const int MaxSyncRecords = 500;
-    private const int MaxBlobCharsPerLine = 120;
+    private const int MaxBlobCharsPerLine = 200;
 
     // The chat token a sync RESPONSE rides on. Registered ignored in AppServices
     // (via this const, not an inline literal) so the remote engine swallows it
