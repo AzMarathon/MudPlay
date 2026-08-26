@@ -119,7 +119,7 @@
                                    Minimum="0" Maximum="100000000" Increment="1"
                                    FormatString="0" ParsingNumberStyle="Integer"
                                    Width="160"
-                                   ToolTip.Tip="Amount to keep after an auto-deposit, in the denomination beside it (e.g. 1 Runic keeps 1,000,000 copper). 0 = deposit everything. Applies to depositing only — stashing uses the coin-type filter below."/>
+                                   ToolTip.Tip="The minimum cash to leave in your pocket after a deposit — the auto-deposit trip, the Deposit All button, and the @deposit-all remote all bank everything above this floor. Enter an amount and pick the denomination beside it: e.g. 1 Runic keeps 1,000,000 copper on hand; 0 keeps nothing. Governs depositing only — stashing is controlled by the coin-type filter below."/>
                     <ComboBox ItemsSource="{Binding DenominationChoices}"
                               SelectedItem="{Binding KeepOnHandDenomination, Mode=TwoWay}"
                               Width="120" VerticalAlignment="Center"/>
