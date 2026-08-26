@@ -784,6 +784,28 @@ public sealed class EquipmentManagerTests
     }
 
     [Fact]
+    public void BuildEquipCommands_SecondPairedSlot_RemsOddWornRingFirst()
+    {
+        // The manual / inventory-aware path (Equip All / @equip) must also free the
+        // odd worn finger before wearing the set's SECOND ring, or the game's `wear`
+        // trades with the kept ring and the pair never converges — the same thrash
+        // the set-only path already guards (report paradigm-20260825-103537).
+        // Set wants pearl (F1) + silver (F2); worn is pearl + gold jeweled; carrying silver.
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Finger1, "pearl ring"),
+            Entry(EquipmentSlot.Finger2, "silver ring"));
+        var carried = new[] { "silver ring" };
+        IReadOnlyList<EquippedItem> worn = WornList(
+            ("pearl ring", "Finger"), ("gold jeweled ring", "Finger"));
+        Func<string, EquipmentSlot?> resolve = Resolver(("silver ring", EquipmentSlot.Finger1));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(set, carried, worn, resolve, EquipAll);
+
+        // rem the odd worn ring FIRST, then wear the set's second ring onto the freed finger.
+        Assert.Equal(new[] { "rem gold jeweled ring", "wear silver ring" }, cmds);
+    }
+
+    [Fact]
     public void BuildEquipCommands_Weapon_UsesEqVerb()
     {
         EquipmentSet set = Set("default", "Default");
