@@ -170,4 +170,30 @@ public sealed class RoombaMasterListViewModelTests : IDisposable
 
         Assert.Empty(vm.Rows);
     }
+
+    [Fact]
+    public void BuildExportText_GroupsByRoom_ItemsAlphabeticalWithQuantity()
+    {
+        var (locations, labels, itemNames, cache, roomGraph) = Setup();
+        // Room 1/1 holds two items out of alphabetical order; 1/2 holds one.
+        locations.RecordRoom(new RoomKey(1, 1), new[] { "3 torch", "gh only trinket" });
+        locations.RecordRoom(new RoomKey(1, 2), new[] { "2 torch" });
+
+        using RoombaMasterListViewModel vm = new(locations, labels, itemNames, cache, roomGraph);
+        string export = vm.BuildExportText();
+        var lines = export.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+
+        // Room headers carry the map/room and its resolved name.
+        Assert.Contains("1/1 — Gang House Storage", lines);
+        Assert.Contains("1/2 — Gang House Vault", lines);
+
+        // Within 1/1, items are alphabetical ("gh only trinket" before "torch"),
+        // each with its quantity, indented under the header.
+        int header11 = lines.IndexOf("1/1 — Gang House Storage");
+        Assert.Equal("  1x gh only trinket", lines[header11 + 1]);
+        Assert.Equal("  3x torch", lines[header11 + 2]);
+
+        // 1/1 (room 1) is listed before 1/2 (room 2).
+        Assert.True(header11 < lines.IndexOf("1/2 — Gang House Vault"));
+    }
 }
