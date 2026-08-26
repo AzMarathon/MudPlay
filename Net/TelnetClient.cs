@@ -83,6 +83,10 @@ public sealed class TelnetClient : IAsyncDisposable
     {
         await _tcp.ConnectAsync(host, port, ct);
         _stream = _tcp.GetStream();
+        // Disable Nagle: a BBS is interactive, so coalescing our small keystroke
+        // writes to save packets just adds round-trip latency to the echo. Cheap
+        // and universally correct for a terminal — every char should go out now.
+        _tcp.NoDelay = true;
         ApplyDeadConnectionTimeouts();
         _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _readLoop = Task.Run(() => ReadLoopAsync(_cts.Token));

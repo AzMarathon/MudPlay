@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.1
+
+- Terminal responsiveness: disabled Nagle on the connection (`TCP_NODELAY`) so keystrokes echo back without the socket batching them — snappier input round-trip
+- Terminal rendering: cell background/foreground brushes are now cached instead of re-allocated for every run on every repaint, cutting allocation churn during heavy server output
+- Terminal rendering: the cursor blink no longer forces a full-screen repaint twice a second when there's no visible caret to blink (server-drawn forms, splash)
+
 ## 3.28.0
 
 - Roomba: new `@roomba <item name>` remote command replies with one consolidated line per matching item — total quantity summed across every gang-house room it's currently tracked in, plus the room locators — instead of refusing to answer when a loose query (e.g. "head") matches a whole family of similarly-named items ("severed head of goru-nezar", "severed head of darksong"); gated by its own per-player **Query Roomba** permission
