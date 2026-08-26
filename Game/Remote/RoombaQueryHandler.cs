@@ -44,13 +44,11 @@ public sealed class RoombaQueryHandler : IDisposable
     // extra lines.
     private const int MaxRoomsShown = 10;
 
-    // Cap on records per @roomba sync response so a very large gang-house
-    // sighting log can't flood the channel; per-line character budget for each
-    // self-contained blob keeps the wrapped wire line ("bg {@roombadata <blob>}")
-    // under the realm's 245-char telepath limit with margin for the wrapper and
-    // the send-command prefix. Bigger lines = fewer telepaths per sync, which is
-    // what keeps a freshly-swept house from tripping the game's burst flood guard.
-    private const int MaxSyncRecords = 500;
+    // Per-line character budget for each self-contained blob — keeps the wrapped
+    // wire line ("bg {@roombadata <blob>}") under the realm's 245-char telepath
+    // limit with margin for the wrapper and the send-command prefix. Bigger lines
+    // = fewer telepaths per sync. The whole logged sighting set is sent (no record
+    // cap): the sync's job is to hand over everything the responder has.
     private const int MaxBlobCharsPerLine = 200;
 
     // The chat token a sync RESPONSE rides on. Registered ignored in AppServices
@@ -150,10 +148,7 @@ public sealed class RoombaQueryHandler : IDisposable
     // responder, same as @timer sync.
     private void OnSyncRequest(RemoteCommandContext ctx)
     {
-        var records = _locations.ToSyncRecords();
-        if (records.Count > MaxSyncRecords)
-            records = records.Take(MaxSyncRecords).ToList();
-
+        IReadOnlyList<GhItemSyncRecord> records = _locations.ToSyncRecords();
         IReadOnlyList<string> lines = GhItemSyncCodec.EncodeLines(records, MaxBlobCharsPerLine);
         foreach (string line in lines)
             ctx.Reply($"{SyncResponseToken} {line}");

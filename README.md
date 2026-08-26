@@ -9,6 +9,7 @@
 > - Roomba: new **Start Inventory** mode scans and logs a gang house without moving anything, for players with their own manual sort
 > - Roomba: new sortable **Master List** button tables every item seen, where, and its outside market value at 50 charm — gang-house shops excluded
 > - Ground items: a compound item name containing "and" (e.g. "rope and grapple") no longer mis-splits into two bogus floor entries
+> - Networking: outbound writes are serialized so two engine sends fired back-to-back can't interleave their bytes on the wire (rapid `@roomba sync` telepath replies were arriving with one line's data spliced into another)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -23,6 +23,15 @@ public sealed class TelnetClient : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private Task? _readLoop;
 
+    // Serializes outbound writes. Engine sends are fire-and-forget
+    // (MainWindowViewModel.FireSendAsync uses `_ = …`), so without this two sends
+    // issued back-to-back race into _stream.WriteAsync concurrently and .NET does
+    // NOT keep their bytes contiguous — they interleave on the wire. A @roomba
+    // sync firing 11 telepath replies in a tight loop came out with one reply's
+    // data spliced into another's "/name {@roombadata" prefix. One write must
+    // finish before the next starts.
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
+
     // Per-option negotiation state. A byte slot per option is enough because
     // options are 0–255 and we only remember the *last* settled command.
     //   _localOpt[opt]  == DO / DONT  → peer's instruction about *us*.
@@ -147,26 +156,54 @@ public sealed class TelnetClient : IAsyncDisposable
     public async Task SendAsync(ReadOnlyMemory<byte> data, CancellationToken ct = default)
     {
         if (_stream is null) return;
-        if (data.Span.IndexOf(IAC) < 0)
+        // Hold the send lock across the whole write so concurrent callers can't
+        // interleave their bytes on the stream (see _sendLock).
+        await _sendLock.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            // Fast path: no escaping needed.
-            await _stream.WriteAsync(data, ct);
-            return;
+            if (_stream is null) return;
+            if (data.Span.IndexOf(IAC) < 0)
+            {
+                // Fast path: no escaping needed.
+                await _stream.WriteAsync(data, ct).ConfigureAwait(false);
+                return;
+            }
+            // Slow path: copy through, doubling every IAC.
+            var buf = new byte[data.Length * 2];
+            int o = 0;
+            foreach (var b in data.Span)
+            {
+                buf[o++] = b;
+                if (b == IAC) buf[o++] = IAC;
+            }
+            await _stream.WriteAsync(buf.AsMemory(0, o), ct).ConfigureAwait(false);
         }
-        // Slow path: copy through, doubling every IAC.
-        var buf = new byte[data.Length * 2];
-        int o = 0;
-        foreach (var b in data.Span)
+        finally
         {
-            buf[o++] = b;
-            if (b == IAC) buf[o++] = IAC;
+            _sendLock.Release();
         }
-        await _stream.WriteAsync(buf.AsMemory(0, o), ct);
     }
 
     // Convenience: send a string as Latin-1 (8-bit "ANSI") bytes.
     public Task SendTextAsync(string text, CancellationToken ct = default)
         => SendAsync(Encoding.Latin1.GetBytes(text), ct);
+
+    // Locked write for pre-formed protocol frames (NAWS, TERM-TYPE) whose IAC
+    // bytes are already correct and must NOT be doubled the way SendAsync does.
+    // Shares _sendLock so a negotiation frame can't interleave with a data write.
+    private async Task WriteRawAsync(ReadOnlyMemory<byte> frame, CancellationToken ct = default)
+    {
+        if (_stream is null) return;
+        await _sendLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_stream is not null) await _stream.WriteAsync(frame, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
+    }
 
     // Cancel the read loop, close the socket.
     public async Task DisconnectAsync()
@@ -184,6 +221,7 @@ public sealed class TelnetClient : IAsyncDisposable
         await DisconnectAsync();
         _cts?.Dispose();
         _tcp.Dispose();
+        _sendLock.Dispose();
     }
 
     // Tell the server about a (new) window size via NAWS. Only sent if NAWS
@@ -210,7 +248,7 @@ public sealed class TelnetClient : IAsyncDisposable
             if (r == IAC) buf[p++] = IAC;
         }
         buf[p++] = IAC; buf[p++] = SE;
-        await _stream.WriteAsync(buf.AsMemory(0, p), ct);
+        await WriteRawAsync(buf.AsMemory(0, p), ct);
     }
 
     // ----- Read loop -----------------------------------------------------
@@ -354,7 +392,7 @@ public sealed class TelnetClient : IAsyncDisposable
             Array.Copy(name, 0, buf, p, name.Length);
             p += name.Length;
             buf[p++] = IAC; buf[p++] = SE;
-            _ = _stream!.WriteAsync(buf.AsMemory(0, p)).AsTask();
+            _ = WriteRawAsync(buf.AsMemory(0, p));
             Log?.Invoke($"TX: TermType IS {TerminalType}");
         }
     }
@@ -364,7 +402,7 @@ public sealed class TelnetClient : IAsyncDisposable
     {
         if (_stream is null) return;
         var buf = new byte[3] { IAC, cmd, opt };
-        _ = _stream.WriteAsync(buf).AsTask();
+        _ = WriteRawAsync(buf);
         Log?.Invoke($"TX: {CmdName(cmd)} {OptName(opt)}");
     }
 

@@ -11,6 +11,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Roomba: new `@roomba sync` hands a client's whole item-location log to another MudPlay user in-game — grouped by room with one sweep-time per room and packed into a handful of **self-contained** chat lines, so it's a fraction of the size and a line the game's telepath flood-control drops costs only its own rooms instead of discarding the whole sync; merged straight in (newest wins silently), no import/export files or merge-review window
 - Roomba: new **Start Inventory** mode — walks the same labeled circuit and feeds the item-location log exactly like a sweep's scan, but never dispatches a single get/drop; for logging a gang house without disturbing an existing manual sort
 - Roomba: new **Master List** button — a sortable table (click any column header) of every item Roomba has seen, where, and its outside market (which shops buy/sell it and for how much at 50 charm), automatically excluding any shop that sits inside the gang house's own labeled rooms
+- Networking: outbound writes are now serialized — two engine sends fired back-to-back (e.g. an `@roomba sync`'s rapid telepath replies) could previously race into the socket concurrently and interleave their bytes, splicing one line's data into another's command prefix; each write now completes before the next begins
+- Roomba: `@roomba sync` hands over the **entire** logged sighting set (dropped the old 500-record cap)
 
 ## 3.27.10
 
