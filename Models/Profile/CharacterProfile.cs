@@ -182,6 +182,14 @@ public sealed class CharacterProfile
     public int? GhSearchesPerRoom { get; set; }
     public bool? GhSearchForHidden { get; set; }
 
+    // Gang-house rooms THIS character actively manages — the ones Start Sweep /
+    // Start Inventory visit. The room labels themselves are shared per-BBS (every
+    // character sees the same labeled rooms), but which subset a character sweeps
+    // is per-character, so alts in different gang houses on one BBS each manage
+    // their own house. Each entry is a "map/room" coordinate string. Maintained by
+    // GhManagedRoomStore; null or empty = this character manages nothing yet.
+    public List<string>? GhManagedRooms { get; set; }
+
     // Recent walk-to destinations, newest first, capped at 10. Each entry is a
     // "map/room" coordinate string. Maintained by GotoHistoryStore; drives the
     // Navigation goto-button dropdown. null or empty = no history yet.

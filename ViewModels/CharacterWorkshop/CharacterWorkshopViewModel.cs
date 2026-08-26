@@ -76,7 +76,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
 
         Sections.Add(new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick));
 
-        Sections.Add(new GhManagementSectionViewModel(AppServices.Current.GhRoomLabels, AppServices.Current.GhSweep, AppServices.Current.RoomGraph, AppServices.Current.GhItemLocations));
+        Sections.Add(new GhManagementSectionViewModel(AppServices.Current.GhRoomLabels, AppServices.Current.GhSweep, AppServices.Current.RoomGraph, AppServices.Current.GhItemLocations, AppServices.Current.GhManagedRooms));
 
         SelectedSection = initialSectionId is not null
             ? Sections.FirstOrDefault(s => string.Equals(s.Id, initialSectionId, StringComparison.OrdinalIgnoreCase))

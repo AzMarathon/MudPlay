@@ -666,4 +666,72 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ground.Dispose();
         inventory.Dispose();
     }
+
+    // The gang-house scoping fix: only rooms set to Actively Manage count toward
+    // the sweep. Two labeled rooms with one turned off (or adopted via sync, which
+    // arrives off) leaves just one manageable → Start refuses rather than walking a
+    // one-room "circuit" or reaching toward the disabled room's (possibly foreign)
+    // gang house. This path returns before any route plotting, so the setup is minimal.
+    [Fact]
+    public void Start_FewerThanTwoActivelyManagedRooms_Refuses()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "A", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "1/2", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 2, "Name": "B", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "1/1", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), "[]");
+
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        ItemNameStore names = new(cache);
+        names.OnActiveSetChanged("alpha");
+
+        ProfileService profile = new();
+        profile.LoadBlank();
+        GhRoomLabelStore labels = new(profile);
+        labels.OnBbsPinApplied(_scratchBbs);
+        labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
+        labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
+
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        GroundItemTracker ground = new(router, new CurrencyNaming(),
+            entry => names.FindByName(entry) is not null);
+        InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
+        RoomTracker tracker = new(graph);
+        MovementCoordinator coordinator = new();
+        BfsMapper bfs = new(graph);
+        LoopRunner runner = new(tracker, coordinator, graph: graph, bfs: bfs, postToUi: action => action());
+        // The per-character managed set (stand-in for GhManagedRoomStore) — mutable so
+        // we can drop one room between the two Start attempts.
+        HashSet<RoomKey> managed = new() { new RoomKey(1, 1), new RoomKey(1, 2) };
+        GhSweepManager sweep = new(labels, runner, tracker, bfs, ground, names,
+            router, coordinator, isOtherEngineBusy: () => false,
+            isParadigm: () => true, inventory: inventory,
+            isRoomActivelyManaged: managed.Contains);
+        sweep.SetWireSender(_ => { });
+        runner.SetWireSender(_ => { });
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        // Both managed → starts fine.
+        Assert.True(sweep.Start());
+        sweep.Stop("test reset");
+
+        // Un-manage one (mirrors a synced / other-character room) → only one
+        // manageable → refused.
+        managed.Remove(new RoomKey(1, 2));
+        Assert.False(sweep.Start());
+        Assert.Contains("Actively Manage", sweep.LastStartError);
+
+        sweep.Dispose();
+        ground.Dispose();
+        inventory.Dispose();
+    }
 }

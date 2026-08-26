@@ -23,19 +23,42 @@ public sealed partial class GhRoomLabelRowViewModel : ObservableObject
     // before the first sweep. Written by GhManagementSectionViewModel.
     [ObservableProperty] private string _status = string.Empty;
 
-    private readonly Action<GhRoomLabelRowViewModel> _onRemove;
+    // "Actively Manage" checkbox: whether Start Sweep / Start Inventory visits this
+    // room for THIS character. Two-way bound; a user toggle writes back through
+    // _onManageToggle to the per-character GhManagedRoomStore. Sourced from that
+    // store (not the shared label), so alts on the same BBS manage independently;
+    // rooms adopted via @roomba sync arrive unchecked.
+    [ObservableProperty] private bool _activelyManaged;
 
-    public GhRoomLabelRowViewModel(GhRoomLabel label, string? roomName, Action<GhRoomLabelRowViewModel> onRemove)
+    private readonly Action<GhRoomLabelRowViewModel> _onRemove;
+    private readonly Action<RoomKey, bool> _onManageToggle;
+    // Guards the ctor's initial assignment from writing back to the store — rows are
+    // rebuilt on every label/managed-set change, so a write there would loop.
+    private readonly bool _loaded;
+
+    public GhRoomLabelRowViewModel(GhRoomLabel label, string? roomName, bool activelyManaged,
+        Action<GhRoomLabelRowViewModel> onRemove, Action<RoomKey, bool> onManageToggle)
     {
         ArgumentNullException.ThrowIfNull(onRemove);
+        ArgumentNullException.ThrowIfNull(onManageToggle);
         Key = new RoomKey(label.Map, label.Room);
         RoomName = string.IsNullOrWhiteSpace(roomName) ? "(unknown)" : roomName;
         _onRemove = onRemove;
+        _onManageToggle = onManageToggle;
 
         string rules = label.Rules.Count == 0
             ? "(no rules)"
             : string.Join("; ", label.Rules.Select(DescribeRule));
         CategoryText = label.IsCatchAll ? $"{rules} [catch-all]" : rules;
+
+        _activelyManaged = activelyManaged;
+        _loaded = true;
+    }
+
+    partial void OnActivelyManagedChanged(bool value)
+    {
+        if (!_loaded) return;
+        _onManageToggle(Key, value);
     }
 
     private static string DescribeRule(GhCategoryRule rule)

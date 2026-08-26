@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.4
+
+- Roomba: sweeps now only visit rooms you tick **Actively Manage** on the Roomba tab — Start Sweep / Start Inventory no longer route across the whole label set. The tick is **per character** (the room labels stay shared per-BBS), so alts in **different gang houses on one BBS** each manage their own house. Rooms you add by hand default on for that character; rooms adopted from a `@roomba sync` default **off**, so Roomba never walks to another gang house (or one you lack the emblem for). Pressing Start with nothing checked shows a red "Select rooms to actively manage" prompt instead of doing nothing; the bug report now lists labeled / actively-managed / circuit room counts
+
 ## 3.28.3
 
 - Roomba Master List: new **Export List…** button (right of the filter) saves the whole item log to a text file grouped by room — one header per map/room with its name, then that room's items alphabetically with quantity
