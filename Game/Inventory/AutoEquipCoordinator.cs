@@ -6,20 +6,26 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Inventory;
 
-// Watches the live character posture / combat state and auto-swaps the
-// trigger-purposed gear sets at the moments the Equipment Manager arms. It is a
-// pure subscriber — it reads PlayerState (position / combat) and the
-// HealthManager's recovery gates, and never writes any observed field, so it
-// sits outside the single-writer ownership model. When a moment fires it
-// resolves the matching enabled EquipmentSet through the live EquipmentSettings
-// and hands its id to EquipmentManager.ApplyBySetId.
+// Watches the live character posture and auto-swaps the trigger-purposed gear
+// sets at the moments the Equipment Manager arms. It is a pure subscriber — it
+// reads PlayerState (position) and the HealthManager's recovery gates, and never
+// writes any observed field, so it sits outside the single-writer ownership
+// model. When a moment fires it resolves the matching enabled EquipmentSet
+// through the live EquipmentSettings and hands its id to
+// EquipmentManager.ApplyBySetId.
 //
 // Signal mapping:
 //   - Pre-rest HP / Mana: position goes to Resting; the held recovery gate
 //     (HP vs MA) disambiguates which set is wanted. Meditating is a mana
 //     recovery, so it maps to Pre-rest Mana.
-//   - Default: InCombat goes true (re-entering normal combat), or the character
-//     stands up out of a rest (back to baseline).
+//   - Default: only when the character is DONE recovering (stands up out of a
+//     rest with neither rest gate still held) AND a pre-rest swap set is enabled
+//     (so we're actually swapping back from one), or when a loop / Auto-Lair run
+//     begins (OnLoopStarted). Combat entry deliberately does NOT swap to Default
+//     — if a fight interrupts a rest-if-below the character keeps its pre-rest
+//     loadout and only reverts once recovered, per the user's rule (report
+//     paradigm-20260826-132742). The remaining Default path — re-wearing on death-
+//     pile recovery — lives in the recovery engine, gated by its own setting.
 //
 // The Backstab set isn't auto-fired here yet — it needs the combat engine's
 // "room clear → sneak → surprise round" sequencing that isn't built; until then
@@ -47,12 +53,11 @@ public sealed class AutoEquipCoordinator : IDisposable
     private readonly Func<DateTimeOffset> _now;
 
     private PlayerPosition _lastPosition;
-    private bool _lastInCombat;
 
     // An item-cast buff (ItemCastSequencer) temporarily borrows an equip slot: it
     // removes the worn gear, wields the cast item, uses it, then re-equips the gear
-    // itself. That transient swap — and the rest it breaks — can trip a posture /
-    // combat auto-equip fire that ALSO restores the slot, double-sending the wear
+    // itself. That transient swap — and the rest it breaks — can trip a posture
+    // auto-equip fire that ALSO restores the slot, double-sending the wear
     // (report paradigm-20260815-130733: an "eq griffon shield" restore followed by a
     // redundant "wear griffon shield" the game rejects). Hold auto-equip fires briefly
     // after an item-cast swap so the sequencer's own restore owns the slot — the same
@@ -90,7 +95,6 @@ public sealed class AutoEquipCoordinator : IDisposable
         _now = now ?? (() => DateTimeOffset.Now);
 
         _lastPosition = player.Position;
-        _lastInCombat = player.InCombat;
         _player.PropertyChanged += OnPlayerChanged;
     }
 
@@ -129,17 +133,31 @@ public sealed class AutoEquipCoordinator : IDisposable
 
     private void OnPlayerChanged(object? sender, PropertyChangedEventArgs e)
     {
-        switch (e.PropertyName)
-        {
-            case nameof(PlayerState.Position):
-                OnPositionChanged(_lastPosition, _player.Position);
-                _lastPosition = _player.Position;
-                break;
-            case nameof(PlayerState.InCombat):
-                OnInCombatChanged(_lastInCombat, _player.InCombat);
-                _lastInCombat = _player.InCombat;
-                break;
-        }
+        if (e.PropertyName != nameof(PlayerState.Position)) return;
+        OnPositionChanged(_lastPosition, _player.Position);
+        _lastPosition = _player.Position;
+    }
+
+    // A loop or Auto-Lair run just began — swap to the Default (baseline) set.
+    // Wired from AppServices to LoopRunner's ReachedFirstWaypoint and AutoLair's
+    // ActiveChanged(true). Unconditional (subject only to Fire's own gates): a run
+    // starting means we're moving out under normal combat gear, whatever we were
+    // wearing while idle / resting beforehand.
+    public void OnLoopStarted() => Fire(EquipTriggerType.Default);
+
+    // Recovery just topped off to rest-max (a held rest gate cleared), fired from
+    // HealthManager while the character is STILL resting in the room — before the
+    // loop's deferred step-out. Swapping back to Default here (rather than on the
+    // later stand, which IS the move) lets the swap complete in-room; the paced
+    // apply holds the loop via the gear-swap movement gate, so we step out already
+    // in Default gear instead of streaming the wears into the next room mid-combat
+    // (report paradigm-20260826-140341). Gated on using rest swap sets (else there's
+    // nothing to revert) and skipped in combat — a fight that interrupted recovery
+    // is fought in the current loadout, per the rule.
+    public void OnRecoveryComplete()
+    {
+        if (_player.InCombat || !UsingRestingSwapSets()) return;
+        Fire(EquipTriggerType.Default);
     }
 
     private void OnPositionChanged(PlayerPosition from, PlayerPosition to)
@@ -148,12 +166,39 @@ public sealed class AutoEquipCoordinator : IDisposable
         if (ClassifyRest(to, _hpGateAsserted(), _maGateAsserted()) is { } restType)
             Fire(restType);
         else if (to == PlayerPosition.Standing && IsRestPosture(from))
-            Fire(EquipTriggerType.Default);   // stood up from a rest — back to baseline
+        {
+            // Only revert to Default when we're actually swapping BACK from a
+            // pre-rest set — i.e. a pre-rest swap set is enabled. Without one the
+            // rest never left Default (or the user hand-equipped some other set),
+            // so a Default fire here would clobber that loadout for nothing.
+            if (!UsingRestingSwapSets()) return;
+            // Standing up mid-recovery is transient — a between-round cast, a loot
+            // grab, or the pre-rest swap's own wear breaks rest, and the
+            // HealthManager immediately re-issues it. Reverting to Default here
+            // starts a swap→stand→swap thrash that re-arms the pre-rest set every
+            // cycle and never lets the character actually recover (report
+            // paradigm-20260826-132742). Only fall back to Default once recovery is
+            // done — neither rest gate is still held, i.e. the pool has reached
+            // rest-max (the gates clear at rest-target; see HealthManager).
+            if (_hpGateAsserted() || _maGateAsserted())
+            {
+                _log?.Debug(EquipmentManager.LogCategory,
+                    "auto-equip 'Default' held: still recovering (rest gate asserted) — "
+                    + "not reverting the pre-rest set until the pool reaches rest-max");
+                return;
+            }
+            Fire(EquipTriggerType.Default);   // recovered — back to baseline
+        }
     }
 
-    private void OnInCombatChanged(bool from, bool to)
+    // True when a pre-rest swap set (HP or Mana) is enabled — i.e. resting swaps
+    // the loadout, so finishing a rest should swap it back. Read live off the
+    // config so enabling / disabling a set takes effect without a restart.
+    private bool UsingRestingSwapSets()
     {
-        if (from != to && to) Fire(EquipTriggerType.Default);
+        EquipmentSettings cfg = _readEquipment();
+        return cfg.Sets.Any(s => s.Enabled
+            && (s.Trigger == EquipTriggerType.PreRestHp || s.Trigger == EquipTriggerType.PreRestMana));
     }
 
     private static bool IsRestPosture(PlayerPosition p) =>
@@ -162,8 +207,8 @@ public sealed class AutoEquipCoordinator : IDisposable
     private void Fire(EquipTriggerType type)
     {
         // Respect the automation master switch — with the Auto-All kill-switch
-        // engaged the user has silenced every engine, so a posture/combat
-        // transition must not auto-swap gear. Explicit applies (Workshop "Apply
+        // engaged the user has silenced every engine, so a posture transition or
+        // loop start must not auto-swap gear. Explicit applies (Workshop "Apply
         // Now", "Equip All", @equip-<set>) don't flow through here, so they still
         // work with the kill-switch on.
         if (!_isAutoEnabled()) return;

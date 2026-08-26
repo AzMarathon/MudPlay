@@ -2,6 +2,17 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.16
+
+- Equipment Manager: a **Currently Equipped:** readout next to the Item Finder button shows the last gear set the client equipped this session (via Equip Now or an auto-fire trigger)
+- Gear sets: the pacing between each `wear`/`rem` during a swap is now 100 ms (was 200 ms) **and holds that cadence under load** — the paced sender used to run at background priority and get starved by the terminal redraw during a swap, stretching a swap to ~2.5× and making it feel laggy
+- Gear sets: a swap now removes the conflicting worn piece **first** in both directions — a readied two-handed weapon comes off before an off-hand item goes on, and a worn off-hand comes off before a two-hander is wielded — so neither wear is rejected and stranded to a later re-apply
+- Gear sets: your Default set now auto-equips **only** when you've finished resting (recovered to rest-max, and only if you use pre-rest swap sets), when a loop or Auto-Lair run starts, or on death-pile recovery if that's enabled — it no longer flips back to Default mid-rest (a between-round cast or loot grab that briefly stood you up used to thrash Default↔pre-rest) and no longer swaps on combat entry (a fight interrupting a rest now keeps your pre-rest loadout until you've recovered)
+- Gear sets: the Default swap after resting now finishes **before** you step out of the room — the loop holds in place while any gear set streams its wear/rem commands, so you no longer finish resting, walk into the next room, and only then swap to Default in the middle of a fight
+- Rest: `rest` now goes out the instant a pre-rest gear swap finishes instead of after a multi-second gap
+- Item buffs: a `#item` buff no longer fires before the client knows what you're wearing — on login *or* reconnect — so it never blindly equips the cast item over a readied two-handed weapon, fails, and tracks the buff as active anyway; it now waits until a fresh inventory has actually been read this session (not just any stale copy), then equips the two-hander out of the way correctly
+- bug reports addressed: paradigm-20260826-132742, paradigm-20260826-140341, paradigm-20260826-142625, paradigm-20260826-142732, paradigm-20260826-144339, paradigm-20260826-150242, paradigm-20260826-150539
+
 ## 3.28.7
 
 - Buffs: a buff's recast duration is now **always** resolved from game data (the spell's own duration formula), even when it has no caster message in the Messages data — bladed sphere (`blsh`) and any other message-less buff were falling back to a wrong 60-second timer, which also made them expire and re-cast constantly as the top bless slot

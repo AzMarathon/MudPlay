@@ -3568,7 +3568,17 @@ public sealed class AppServices
             recoveryPending:     () => Health.IsRecoveringRest,
             hasAttackingHostile: () => CombatTracker.HasHostileMonster,
             clearInCombat:       CombatTracker.ClearInCombatForRecoveryHold);
-        Health.SetRecoveryCompleteCallback(Combat.ResumeAfterRecovery);
+        // Recovery topped off to rest-max (a held rest gate cleared): re-open a held
+        // neutral engage AND — while still resting in the room, before the loop's
+        // deferred step-out — swap back to the Default set, so the swap streams here
+        // and holds the loop via the gear-swap gate instead of landing in the next
+        // room mid-combat (report paradigm-20260826-140341). AutoEquip resolves later
+        // than this wiring point but the callback reads the property at fire time.
+        Health.SetRecoveryCompleteCallback(() =>
+        {
+            Combat.ResumeAfterRecovery();
+            AutoEquip.OnRecoveryComplete();
+        });
 
         // Deterministic magic eligibility — weapon HitMagic ≥ monster Magical
         // picks normal-vs-alternate, spell ReqLevel ≥ monster SpellImmu gates
@@ -3959,7 +3969,11 @@ public sealed class AppServices
             // A two-handed wielded weapon fills both hands, so an off-hand buff item
             // can't be equipped until it's removed — the reverse of a two-handed cast
             // item. Same game-data 2H check the combat weapon-swap uses.
-            isWornWeaponTwoHanded: IsConfiguredWeaponTwoHanded);
+            isWornWeaponTwoHanded: IsConfiguredWeaponTwoHanded,
+            // Defer the whole sequence until a full 'i' is parsed this session, so it
+            // never fires against an empty / stale snapshot on login or reconnect
+            // (report paradigm-20260826-150242). Same signal AutoEquip gates on.
+            wornLoadoutKnown: () => Inventory.IsLoaded);
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
 
@@ -3998,6 +4012,30 @@ public sealed class AppServices
         // `rest` between every command (the rest/stand thrash of a pre-rest gear swap,
         // report paradigm-20260825-103537).
         Health.SetEquipmentApplyingProbe(() => Equipment.IsApplyingSet);
+
+        // Hold every movement engine while a paced gear-set apply streams, so the
+        // loop never steps out of a room mid-swap — the "finished resting, moved,
+        // then swapped to Default in the next room mid-combat" report
+        // (paradigm-20260826-140341). The gate clears the instant the swap finishes,
+        // so the step-out lands already in the new set. Engine-wait tier — doesn't
+        // touch the toolbar's user-pause face.
+        Equipment.ApplyingChanged += applying =>
+        {
+            if (applying)
+                MovementCoordinator.AssertGate(
+                    Game.Map.MovementCoordinator.GearSwapGate, "EquipmentManager", "gear-set swap streaming");
+            else
+            {
+                MovementCoordinator.ClearGate(
+                    Game.Map.MovementCoordinator.GearSwapGate, "EquipmentManager", "gear-set swap complete");
+                // Re-evaluate health the instant the swap finishes so a held rest
+                // fires now instead of waiting for the next incidental prompt — the
+                // ~8-second swap→rest gap in report paradigm-20260826-142625 (rest is
+                // held while a swap streams, and nothing re-triggered Evaluate when it
+                // ended).
+                Health.Evaluate();
+            }
+        };
 
         // EquipmentManager is the sole gear actuator: the combat engine decides
         // which weapon it wants and hands the act off here. The backstab-set
@@ -4870,6 +4908,10 @@ public sealed class AppServices
         LoopRunner.Event += e =>
         {
             if (e.Kind != Game.Map.LoopEventKind.ReachedFirstWaypoint) return;
+            // A loop actually beginning is one of the moments the Default gear set
+            // may auto-equip (we're moving out under normal combat gear). Auto-Lair
+            // start does the same via AutoLair.ActiveChanged below.
+            AutoEquip.OnLoopStarted();
             // The HP/MA-history profile is per-loop by definition — a new circuit
             // makes the old step-indexed bands meaningless — so it re-anchors on
             // every loop start, independent of the ResetStatisticsOnLoopStart
@@ -4919,6 +4961,10 @@ public sealed class AppServices
         // at a wait-room one hop short, then steps in on the tick.
         AutoLair = new Game.Map.AutoLairManager(
             Walker, RoomTracker, RoomGraph, Bfs, LairTimers, Log, MovementCoordinator);
+
+        // Auto-Lair beginning a run is a loop-start for gear purposes — swap to the
+        // Default set, same as LoopRunner's ReachedFirstWaypoint above.
+        AutoLair.ActiveChanged += active => { if (active) AutoEquip.OnLoopStarted(); };
 
         // Always-alive control surface over the three movement engines.
         // Backs the toolbar Start / Pause / Stop buttons (which outlive

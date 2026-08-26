@@ -357,11 +357,11 @@ Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a
 
 Your gear lives in **four fixed sets**, each auto-equipped at a specific moment:
 
-- **Default** — your baseline loadout (and backstab fallback).
+- **Default** — your baseline loadout (and backstab fallback). It auto-equips when a **loop or Auto-Lair run starts**, when you've **finished resting** (recovered to your rest-max — but only if you actually use the pre-rest swap sets below, so a rest that never left Default isn't disturbed), and on **death-pile recovery** if *Auto-Equip on recovery* is on. It does **not** swap on combat entry — if a fight interrupts a rest, you keep your pre-rest loadout until you've recovered. When any set swaps, the loop holds in place until every wear/remove has streamed, so the swap always finishes **before** you step out — you never walk into the next room and change gear mid-fight.
 - **Backstab** — worn for the opening backstab round.
-- **Pre-rest HP** / **Pre-rest Mana** — swapped in out of combat before resting.
+- **Pre-rest HP** / **Pre-rest Mana** — swapped in out of combat before resting, and kept on for the whole rest: MudPlay won't revert to your Default set until you've actually recovered to your rest-max (so a between-round buff or a loot grab that briefly stands you up doesn't flip your gear back and forth). Two-handed weapons and off-hand items can't coexist, so a swap that changes your hands clears the conflicting piece first either way — a readied two-hander comes off before an off-hand goes on, and a worn off-hand comes off before a two-hander is wielded.
 
-You don't create sets, you fill them. Pick a set on the left, then either click **Update from live** (fills it from what you're wearing) or type items into the **Item** boxes on the slot grid — each box only suggests gear your character can actually wear in that slot, and a blank slot means *{no change}* (left as-is). Click **Enable** so automation may use the set, and **Equip Now** to wear it at once. The **Equipment Bonuses** panel shows the set's projected AC and stat totals.
+You don't create sets, you fill them. Pick a set on the left, then either click **Update from live** (fills it from what you're wearing) or type items into the **Item** boxes on the slot grid — each box only suggests gear your character can actually wear in that slot, and a blank slot means *{no change}* (left as-is). Click **Enable** so automation may use the set, and **Equip Now** to wear the selected set at once. The **Currently Equipped:** readout next to the Item Finder button names the last set the client put on this session — whether from Equip Now or an auto-fire trigger (loop start, pre-rest, recovery) — so you can see at a glance which loadout you're in. The **Equipment Bonuses** panel shows the set's projected AC and stat totals.
 
 ## Item Finder
 
@@ -1205,7 +1205,7 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 **Default:** all empty (10 rows on a Stock realm, 15 on ParaMud)
 **What it does:** A ranked list of self-buffs MudPlay recasts whenever they aren't currently active (the on-screen section is headed **Bless spells**, its rows labeled Bless 1, Bless 2, …). Row order is cast priority. Each row can hold a spell code or a `#item name` for a reusable buff item. The same learned-spell guard applies here, with one twist for the `#item` entries: an item-cast is only flagged (struck through / red-outlined) when you **aren't carrying or wearing that item** — a buff item you actually hold is treated as available, just like a learned spell.
 **How the options work:** Each row has its own "recast within (seconds)" — how early before the buff's tracked expiry MudPlay proactively recasts it. It defaults to **15**; set it to `0` to wait for the buff to actually wear off before recasting.
-**Important notes:** The visible row count matches your active realm's buff-slot cap; extra picks beyond that cap aren't lost, they just wait until you load a realm that supports more.
+**Important notes:** The visible row count matches your active realm's buff-slot cap; extra picks beyond that cap aren't lost, they just wait until you load a realm that supports more. An `#item` buff equips the item, uses it, and re-equips whatever it displaced — including juggling a two-handed weapon out of the way when the cast item is an off-hand piece. It waits until the client knows what you're wearing (the first inventory dump after login) before firing, so it never blindly equips over a readied two-hander.
 
 ### Bless self while resting / Bless self during combat
 

@@ -69,12 +69,23 @@ public sealed class ItemCastSequencer
     // it's worn — the reverse of the two-handed-CAST-item case. Null when unwired
     // (tests) — the reverse dance is then never taken.
     private readonly Func<string, bool>? _isWornWeaponTwoHanded;
+    // True once a full 'i' has been parsed THIS session (InventoryManager.IsLoaded).
+    // The equip plan reads the worn loadout, so we defer until it's real — and unlike
+    // the snapshot's LastUpdated, IsLoaded is reset (MarkStale) on death / disconnect,
+    // so a reconnect's stale-but-timestamped snapshot still reads as unknown (report
+    // paradigm-20260826-150242). Null when unwired (tests) — the gate is then off.
+    private readonly Func<bool>? _wornLoadoutKnown;
     // Invoked when a swap is about to hit the wire, so auto-equip can stand off the
     // borrowed slot while this sequence's own restore handles it (see
     // AutoEquipCoordinator.NoteItemCastSwap). Null when unwired (tests).
     private readonly Action? _onSwap;
     private readonly WireSender _wire = new();
     private readonly LogService? _log;
+
+    // Set once we've asked for an 'i' because the worn loadout wasn't known yet
+    // (see Execute). Cleared the moment a dump lands, so the request fires once per
+    // unknown window rather than every deferred round.
+    private bool _requestedInventoryRefresh;
 
     public ItemCastSequencer(
         Func<IReadOnlyList<ClassCastItem>> castItems,
@@ -83,7 +94,8 @@ public sealed class ItemCastSequencer
         Func<string, string?>? desiredSlotItem = null,
         Action? onSwap = null,
         Func<string, bool>? isOffHandItem = null,
-        Func<string, bool>? isWornWeaponTwoHanded = null)
+        Func<string, bool>? isWornWeaponTwoHanded = null,
+        Func<bool>? wornLoadoutKnown = null)
     {
         ArgumentNullException.ThrowIfNull(castItems);
         ArgumentNullException.ThrowIfNull(inventory);
@@ -94,6 +106,7 @@ public sealed class ItemCastSequencer
         _onSwap = onSwap;
         _isOffHandItem = isOffHandItem;
         _isWornWeaponTwoHanded = isWornWeaponTwoHanded;
+        _wornLoadoutKnown = wornLoadoutKnown;
     }
 
     // Bind the wire sink (the wrapped engine sender).
@@ -124,6 +137,30 @@ public sealed class ItemCastSequencer
 
         string name = item.ItemName.Trim();
         InventorySnapshot inv = _inventory();
+
+        // The equip/restore plan below reads the worn loadout — which weapon is
+        // wielded (to run the two-handed dance) and what to put back. Until a full
+        // 'i' has been parsed this session the snapshot is empty or stale, so firing
+        // here would `eq` the cast item blind: on a character with a two-hander worn,
+        // an off-hand cast item is rejected outright ("You may not wear an off-hand
+        // item while you have a 2-handed weapon readied."), the use then fails, yet
+        // CastingDirector still arms the buff timer — the false "buffed" state on
+        // login (reports -144339 / -150242). Defer until the loadout is known
+        // (IsLoaded, the same gate AutoEquipCoordinator uses — reset on death /
+        // disconnect, unlike the snapshot timestamp), requesting one 'i' so it
+        // resolves promptly.
+        if (_wornLoadoutKnown?.Invoke() == false)
+        {
+            if (!_requestedInventoryRefresh)
+            {
+                _requestedInventoryRefresh = true;
+                _wire.Send("i");
+            }
+            _log?.Debug(LogCategory,
+                $"item-cast deferred: worn loadout not yet known this session — item=\"{name}\"");
+            return false;
+        }
+        _requestedInventoryRefresh = false;
 
         // Tell auto-equip a slot swap is starting so it stands off the borrowed slot
         // — this sequence restores it itself, and the rest this swap breaks would
@@ -171,7 +208,10 @@ public sealed class ItemCastSequencer
         // wield + use the item, then remove it to clear the off-hand and re-wield
         // the two-hander (which the game likewise blocks while the off-hand is
         // occupied). Confirmed MajorMUD equip order — see GAME_MECHANICS.md.
-        if (string.Equals(slot, OffHandSlot, StringComparison.OrdinalIgnoreCase)
+        bool castItemIsOffHand =
+            string.Equals(slot, OffHandSlot, StringComparison.OrdinalIgnoreCase)
+            || _isOffHandItem?.Invoke(name) == true;
+        if (castItemIsOffHand
             && SlotItem(inv, WeaponHandSlot) is { } wornWeapon
             && _isWornWeaponTwoHanded?.Invoke(wornWeapon) == true)
         {

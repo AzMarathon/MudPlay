@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -27,8 +28,11 @@ public sealed class ItemCastSequencerTests
             WearSlot: "Neck"),
     };
 
+    // A realistic observed snapshot. NewSeq leaves the worn-loadout-known gate
+    // unwired, so these fire without deferring; the defer path is covered by its
+    // own test wiring wornLoadoutKnown explicitly.
     private static InventorySnapshot InvWith(params EquippedItem[] equipped)
-        => InventorySnapshot.Empty with { EquippedItems = equipped };
+        => InventorySnapshot.Empty with { EquippedItems = equipped, LastUpdated = DateTimeOffset.UtcNow };
 
     private static (ItemCastSequencer Seq, List<byte[]> Sent) NewSeq(InventorySnapshot inv)
     {
@@ -67,6 +71,36 @@ public sealed class ItemCastSequencerTests
         => sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
 
     [Fact]
+    public void Execute_LoadoutNotKnown_DefersAndRequestsOneDump()
+    {
+        // No full 'i' parsed this session (IsLoaded false — e.g. login / reconnect):
+        // firing would eq the cast item blind and mis-handle a worn two-hander.
+        // Defer and request one dump (the false-buff-on-login case, reports
+        // -144339 / -150242).
+        ItemCastSequencer seq = new(() => Items, () => InvWith(), wornLoadoutKnown: () => false);
+        seq.SetWireSender(_ => { });
+        List<byte[]> sent = seq.LastSentForTests;
+
+        Assert.False(seq.Execute("#emerald tipped crozier"));
+        Assert.Equal(new[] { "i" }, Decode(sent));   // one refresh request, no eq/use
+
+        // A second attempt while still unknown doesn't re-spam the request.
+        Assert.False(seq.Execute("#emerald tipped crozier"));
+        Assert.Equal(new[] { "i" }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_LoadoutKnown_FiresNormally()
+    {
+        ItemCastSequencer seq = new(
+            () => Items, () => InvWith(new EquippedItem("long sword", "Weapon Hand")),
+            wornLoadoutKnown: () => true);
+        seq.SetWireSender(_ => { });
+
+        Assert.True(seq.Execute("#emerald tipped crozier"));
+    }
+
+    [Fact]
     public void Execute_UnlimitedItem_EquipsUsesAndRestoresWeapon()
     {
         (ItemCastSequencer seq, List<byte[]> sent) =
@@ -85,7 +119,8 @@ public sealed class ItemCastSequencerTests
     [Fact]
     public void Execute_NoWeaponEquipped_SkipsRestore()
     {
-        (ItemCastSequencer seq, List<byte[]> sent) = NewSeq(InventorySnapshot.Empty);
+        // Observed inventory (InvWith sets LastUpdated) with nothing worn.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeq(InvWith());
 
         Assert.True(seq.Execute("#emerald tipped crozier"));
         Assert.Equal(new[]

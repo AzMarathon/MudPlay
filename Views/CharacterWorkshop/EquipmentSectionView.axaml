@@ -99,6 +99,13 @@
                         ToolTip.Tip="Wear this set now; blank ({no change}) slots are left untouched."/>
                 <Button Content="Item Finder" Command="{Binding OpenItemFinderCommand}"
                         ToolTip.Tip="Browse every equippable item in the game data, filtered by class, level, alignment, and stats."/>
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="12,0,0,0"
+                            ToolTip.Tip="The last gear set the client equipped this session (via Equip Now or an auto-fire trigger).">
+                    <TextBlock Text="Currently Equipped:" VerticalAlignment="Center"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    <TextBlock Text="{Binding CurrentlyEquipped}" VerticalAlignment="Center"
+                               FontWeight="SemiBold"/>
+                </StackPanel>
             </StackPanel>
 
             <!-- Apply result (own line so it doesn't reflow the action row). -->

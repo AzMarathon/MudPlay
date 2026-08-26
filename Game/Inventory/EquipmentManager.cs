@@ -25,7 +25,7 @@ public sealed class EquipmentManager
 
     // Spacing between successive wear commands. The game's flood / spam guards
     // dislike a burst of ~20 wears, so drain the queue one step at a time.
-    private static readonly TimeSpan ApplyStep = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan ApplyStep = TimeSpan.FromMilliseconds(100);
 
     private readonly Func<EquipmentSettings> _readEquipment;
     private readonly Func<InventorySnapshot> _getSnapshot;
@@ -74,6 +74,18 @@ public sealed class EquipmentManager
     // every command — a rest/stand thrash for the whole burst (report
     // paradigm-20260825-103537). The swap finishes, then rest resumes once.
     public bool IsApplyingSet => _isEquipping;
+
+    // Fires true when a paced apply starts streaming its `wear`/`rem` commands and
+    // false when it finishes. Wired to a MovementCoordinator gear-swap gate so the
+    // loop holds in-room until the swap completes (report paradigm-20260826-140341).
+    public event Action<bool>? ApplyingChanged;
+
+    // The id of the last gear set the engine applied (or confirmed already worn) —
+    // the "last set applied" the Workshop surfaces as Currently Equipped. Null until
+    // the first apply this session; a stale id (after a profile swap) simply resolves
+    // to no set name at the display side. CurrentSetChanged fires when it changes.
+    public string? CurrentSetId { get; private set; }
+    public event Action? CurrentSetChanged;
 
     public EquipmentManager(
         Func<EquipmentSettings> readEquipment,
@@ -287,8 +299,22 @@ public sealed class EquipmentManager
     // slot wrote CombatSettings. False when the set is already fully in effect.
     // fillFromInventory lets the user-initiated paths top empty / unowned slots up
     // from carried gear (see BuildApplyCommands); auto-fires pass it false.
+    // Note a set as the current loadout and fire CurrentSetChanged when it differs
+    // from the last. An empty id (an unsaved set) is ignored.
+    private void SetCurrentSet(EquipmentSet set)
+    {
+        if (string.IsNullOrEmpty(set.Id) || string.Equals(CurrentSetId, set.Id, StringComparison.Ordinal))
+            return;
+        CurrentSetId = set.Id;
+        CurrentSetChanged?.Invoke();
+    }
+
     private bool ApplySet(EquipmentSet set, bool fillFromInventory)
     {
+        // Record it as the current loadout — whether it needs commands (a real
+        // swap) or is already fully worn (a no-op Equip Now still confirms it's on).
+        SetCurrentSet(set);
+
         bool combatChanged = false;
         CombatSettings combat = _readCombat();
         if (ApplyVirtualSlots(set, combat))
@@ -359,6 +385,11 @@ public sealed class EquipmentManager
     // every existing test exercises (their snapshots are never-observed, so
     // haveInventory is false) and what an auto-fire uses.
     private List<string> BuildApplyCommands(
+        EquipmentSet set, InventorySnapshot snap, bool fillFromInventory, bool armorOnly = false)
+        => PrependTwoHandOffHandConflictRems(set, snap.EquippedItems, _isTwoHanded,
+            BuildApplyCommandsCore(set, snap, fillFromInventory, armorOnly));
+
+    private List<string> BuildApplyCommandsCore(
         EquipmentSet set, InventorySnapshot snap, bool fillFromInventory, bool armorOnly = false)
     {
         bool haveInventory = snap.LastUpdated != DateTimeOffset.MinValue;
@@ -463,6 +494,62 @@ public sealed class EquipmentManager
         }
         return rems;
     }
+
+    // A two-handed weapon and an off-hand item can't coexist — the game rejects
+    // whichever wear would violate that, so a set swap that changes the hands must
+    // strip the conflicting worn piece FIRST or the wear fails and only sticks on a
+    // later re-apply. Two symmetric cases (both mirror SwapWeapon's own guards):
+    //   1. The set brings an OFF-HAND item on while a two-hander is worn — "You may
+    //      not wear an off-hand item while you have a 2-handed weapon readied."
+    //      (report paradigm-20260826-132742). Rem the worn two-hander first; the
+    //      set's own one-handed weapon re-arms the hand after.
+    //   2. The set wields a TWO-HANDER while an off-hand is worn — "You may not
+    //      ready a 2-handed weapon with your <item> worn!" (report
+    //      paradigm-20260826-142732). Rem the worn off-hand first.
+    // Only fires when the plan actually wears the conflicting piece this pass (an
+    // already-worn item isn't re-issued, so there's nothing to clear).
+    internal static List<string> PrependTwoHandOffHandConflictRems(
+        EquipmentSet set, IReadOnlyList<EquippedItem> worn,
+        Func<string?, bool> isTwoHanded, List<string> cmds)
+    {
+        string? wornWeapon = WornSlotItem(worn, "Weapon Hand");
+        string? wornOffHand = WornSlotItem(worn, "Off-Hand");
+
+        // Case 1: set wears an off-hand while a two-hander is worn → rem the 2H.
+        string? setOffHand = set.Slots
+            .FirstOrDefault(e => e.Slot == EquipmentSlot.OffHand)?.ItemName?.Trim();
+        if (!string.IsNullOrEmpty(setOffHand) && PlanEquips(cmds, setOffHand)
+            && !string.IsNullOrWhiteSpace(wornWeapon) && isTwoHanded(wornWeapon))
+        {
+            cmds.Insert(0, $"rem {wornWeapon.Trim()}");
+            return cmds;
+        }
+
+        // Case 2: set wields a two-hander while an off-hand is worn → rem the off-hand.
+        string? setWeapon = set.Slots
+            .FirstOrDefault(e => e.Slot == EquipmentSlot.Weapon)?.ItemName?.Trim();
+        if (!string.IsNullOrEmpty(setWeapon) && PlanEquips(cmds, setWeapon) && isTwoHanded(setWeapon)
+            && !string.IsNullOrWhiteSpace(wornOffHand))
+        {
+            cmds.Insert(0, $"rem {wornOffHand.Trim()}");
+        }
+        return cmds;
+    }
+
+    // The item worn in a real slot label ("Weapon Hand" / "Off-Hand"), or null.
+    private static string? WornSlotItem(IReadOnlyList<EquippedItem> worn, string slot)
+        => worn
+            .Where(e => string.Equals(e.Slot, slot, StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.Name)
+            .FirstOrDefault();
+
+    // Whether the plan wears/wields the named item this pass — either verb, since a
+    // weapon takes `eq` on the inventory-aware path and `wear` on the set-only diff.
+    private static bool PlanEquips(List<string> cmds, string name) => cmds.Any(c =>
+        (c.StartsWith("wear ", StringComparison.Ordinal)
+            && string.Equals(c["wear ".Length..], name, StringComparison.OrdinalIgnoreCase))
+        || (c.StartsWith("eq ", StringComparison.Ordinal)
+            && string.Equals(c["eq ".Length..], name, StringComparison.OrdinalIgnoreCase)));
 
     // Inventory-aware apply plan for the user-initiated equip paths (Equip All /
     // @equip-<set>). Honors the set's picks the character actually carries (or
@@ -626,8 +713,15 @@ public sealed class EquipmentManager
         _pending.Clear();
         foreach (string c in cmds) _pending.Enqueue(c);
         if (_pending.Count == 0) return;
+        bool wasEquipping = _isEquipping;
         _isEquipping = true;
-        _applyTimer = new DispatcherTimer(ApplyStep, DispatcherPriority.Background,
+        if (!wasEquipping) ApplyingChanged?.Invoke(true);
+        // Normal priority, not Background: the swap's echoes drive a burst of
+        // terminal renders, and a Background tick yields to them — stretching the
+        // ApplyStep pacing to ~2.5x under load and making the swap feel laggy
+        // (report paradigm-20260826-150539). Normal keeps each send on schedule;
+        // the tick only enqueues one command, so it doesn't disrupt rendering.
+        _applyTimer = new DispatcherTimer(ApplyStep, DispatcherPriority.Normal,
             (_, _) => SendNext());
         _applyTimer.Start();
     }
@@ -645,7 +739,9 @@ public sealed class EquipmentManager
     private void FinishEquip()
     {
         StopTimer();
+        bool wasEquipping = _isEquipping;
         _isEquipping = false;
+        if (wasEquipping) ApplyingChanged?.Invoke(false);
     }
 
     private void StopTimer()
