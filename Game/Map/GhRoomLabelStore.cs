@@ -148,6 +148,13 @@ public sealed class GhRoomLabelStore
     // loaded character profile still carries the legacy fields. Clears the
     // character-tier copy afterward (and saves) so this never re-fires and the
     // old data doesn't linger duplicated in two places.
+    //
+    // First-writer-wins by design: if several characters on one BBS each labeled
+    // rooms before the per-character → per-BBS move, the first to load seeds the
+    // shared file and later characters' distinct labels aren't merged in (their
+    // legacy fields just sit unread). Collapsing per-char data into one shared
+    // gang house can't preserve conflicting sets, and in practice one character
+    // does the labeling — an accepted tradeoff, not a bug to reconcile.
     private void MigrateLegacyCharacterData()
     {
         if (_settings.RoomLabels is { Count: > 0 }) return;   // BBS file already has real data
