@@ -1,8 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.28**
-> - Pyramid solver: the timed floors (F1/F2) no longer fire movement faster than the server can process it — on Paradigm a hop is never faster than ~1s, so the old fixed 350 ms pace outran the server, flooded the type-ahead, and desynced the climb (usually failing on floor 1). Paradigm now paces each blind step at the character's real hop time plus a 10% lag buffer (the same rate the floor-1 timer check uses); stock uses a flat 400 ms. The computed pace is logged for bug-report checking
+> **Version 3.28.35**
+> - who list: the Players roster no longer stops short — an all-caps FIEND alignment row now parses (alignment matched case-insensitively), and a lone unreadable line is skipped instead of ending the whole list early
+> - Gear sets: swapping paired slots (both wrists / both fingers) now sends a single `rem` instead of two — the first `wear` evicts the first-slot item on its own, so only the second slot needs an explicit `rem` cleared ahead of its replacement
+> - @have now finds keys — it searches the key ring (the dump's own "You have the following keys:" list) alongside the pack and worn gear, so `@have black star key` answers "yes" instead of "no" when the key's on the ring
+> - Conversation: action / realm rows no longer leave a gap between the channel chip and the line (the empty speaker column is collapsed)
+> - Conversation: a realm / server line is coloured its chip's colour end-to-end instead of switching to white mid-sentence
+> - Remote commands: an @-command sent over say that draws a reply is now answered with a directed say (`>Name ...`) aimed back at the caller, on the same say channel it arrived on
+> - Conversation: directed says are logged with their target on both ends — the sender's window shows "You (to Name): ...", the recipient and any third party in the room show "Speaker (to Name): ..."
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

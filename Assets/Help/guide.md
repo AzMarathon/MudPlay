@@ -242,7 +242,7 @@ Active party members get a few things for free regardless of the grid: the party
 | `@what` | — | items on the room floor |
 | `@wealth` | — | your coins and total value |
 | `@enc` | — | encumbrance |
-| `@have` | `<item>` | whether you carry or wear a matching item |
+| `@have` | `<item>` | whether you carry, wear, or hold a matching item on the key ring |
 | `@inv` | — | your carried pack and keys |
 
 ### Move me around
