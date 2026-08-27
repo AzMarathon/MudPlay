@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.23
+
+- Navigation map: a walk-to route line no longer draws a stray straight segment across the map after you take manual control — the route now only connects rooms that are actually adjacent on the map graph, so an off-route manual step can't leave a dangling line to a stale next step
+- Navigation: `The gate is closed!` (and the `... in that direction` variant) is now recognized as a movement refusal just like a closed door — a winch/gate that opens a moment later no longer leaves the walker stalled thinking it already moved
+- Navigation: after a forced boat disembark into a duplicate-named room the client now auto-issues a `rm` to re-locate (Paradigm realms), so the map no longer desyncs and strands the walker when the game moves you without a normal step
+- Navigation: with Auto-Combat off, entering a room with a hostile no longer deadlocks the walker waiting for a fight that will never happen — the room search fires and pathing continues
+- bug reports addressed: paradigm-20260827-074607, paradigm-20260827-081044, paradigm-20260827-113513
+
 ## 3.28.19
 
 - Cash: "keep on hand" is now **Minimum cash to keep on hand (deposit)** — an amount plus a denomination dropdown, so you can keep e.g. 1 runic on hand; it applies to auto-**deposit** (banking)

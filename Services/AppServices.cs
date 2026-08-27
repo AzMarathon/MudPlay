@@ -4412,6 +4412,11 @@ public sealed class AppServices
             // on a left-behind target and made AutoSearch skip empty rooms; report
             // paradigm-20260820-090736).
             hasEngageableHostiles: () => Combat.HasEngageableIn(RoomClassifier.Current),
+            // Only defer the search for a fight the client will actually prosecute:
+            // the CombatGate is asserted only when auto-attack is armed. With
+            // auto-combat off, a hostile in the room never gets fought/cleared, so
+            // holding the search would deadlock the walker (report -074607).
+            isCombatEngaging: () => CombatTracker.HasEngageableHostiles,
             hasGetEngineArmed: () =>
                 ReadAutoModeFlag(d => d.AutoGetItems) || ReadAutoModeFlag(d => d.AutoGetCash),
             // Don't `sea` a transit room the player has already queued past — search
@@ -4522,6 +4527,16 @@ public sealed class AppServices
         // the solver's. On stock (no `rm`) the solver uses the look-sweep and this
         // gate no-ops anyway.
         Recovery.TryResync = reason => !MazeSolver.Active && ParadigmResync.TryRequestResync(reason);
+        // Engine-less resync gap: the recovery gate above asks for an `rm` on a
+        // mid-walk mismatch, but no-ops with no engine attached. A manual boat ride
+        // (no engine) that disembarks into a duplicated-name room strands the tracker
+        // in Suspect until the user hand-types `rm` (report paradigm-20260827-081044).
+        // Let the tracker request the fix itself, but ONLY in that no-engine gap so it
+        // can't race the gate's own resync; the maze solver drives its own `rm`, so
+        // stay out of its way too.
+        RoomTracker.RequestAuthoritativeResync = reason =>
+            Recovery.AttachedEngine is null && !MazeSolver.Active
+            && ParadigmResync.TryRequestResync(reason);
         // DeathRecoveryManager's Walk-to-Room / Recover-Now actions route
         // through the walker — attached here since the walker is built
         // after the manager.

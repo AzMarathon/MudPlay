@@ -53,6 +53,12 @@ public sealed class AutoSearchManager : IDisposable
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _isDemandActive;
     private readonly Func<bool> _hasEngageableHostiles;
+    // Whether the client will ACTUALLY fight the hostile (auto-attack armed) —
+    // distinct from _hasEngageableHostiles, which is a pure "is a hostile here"
+    // probe. Deferring the search for combat only makes sense when a fight will
+    // happen and clear the room; with auto-combat off, no attacks fly, the `sea`
+    // wouldn't be lost, and holding just deadlocks the walker (report -074607).
+    private readonly Func<bool> _isCombatEngaging;
     private readonly Func<bool> _hasGetEngineArmed;
     private readonly Func<bool> _hasQueuedMoves;
     private readonly MovementCoordinator? _coordinator;
@@ -77,6 +83,7 @@ public sealed class AutoSearchManager : IDisposable
         Func<bool> isEnabled,
         Func<bool>? isDemandActive = null,
         Func<bool>? hasEngageableHostiles = null,
+        Func<bool>? isCombatEngaging = null,
         Func<bool>? hasGetEngineArmed = null,
         Func<bool>? hasQueuedMoves = null,
         MovementCoordinator? coordinator = null,
@@ -86,6 +93,9 @@ public sealed class AutoSearchManager : IDisposable
         _isEnabled = isEnabled;
         _isDemandActive = isDemandActive ?? (static () => false);
         _hasEngageableHostiles = hasEngageableHostiles ?? (static () => false);
+        // Default true so an unwired manager (tests) keeps the original defer-on-
+        // hostile behaviour; production wires the auto-attack-aware flag.
+        _isCombatEngaging = isCombatEngaging ?? (static () => true);
         _hasGetEngineArmed = hasGetEngineArmed ?? (static () => false);
         _hasQueuedMoves = hasQueuedMoves ?? (static () => false);
         _coordinator = coordinator;
@@ -144,7 +154,10 @@ public sealed class AutoSearchManager : IDisposable
     // the moment the room clears.
     public void OnRoomObserved()
     {
-        if (_hasEngageableHostiles())
+        // Defer only when a hostile is present AND we'll actually fight it — with
+        // auto-attack off we never clear the room, so holding here deadlocks the
+        // walker (report -074607); fall through and let the classify timer search.
+        if (_hasEngageableHostiles() && _isCombatEngaging())
         {
             // Fight in the room — defer the still-owed search past it and hold the
             // walker so it can't step out before we've searched the cleared room.
@@ -171,7 +184,7 @@ public sealed class AutoSearchManager : IDisposable
     {
         _classify.Stop();
         if (_owedFor is null || _deferredForCombat) return;
-        if (_hasEngageableHostiles())
+        if (_hasEngageableHostiles() && _isCombatEngaging())
         {
             // A fight revealed right at the classify boundary — hand off to the
             // defer path. The Search gate we're already holding stays asserted and

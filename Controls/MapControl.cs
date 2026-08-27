@@ -1618,7 +1618,18 @@ public sealed class MapControl : Control
             // even placed in this layout (the hop is one-way), so the gap is
             // implicit — this also covers a two-way shortcut that lands both
             // endpoints on the same plane.
-            if (prev is { } p && !(prevKey is { } pk && IsTeleportHop(pk, key)))
+            // Only connect two consecutive rooms that share a real graph exit.
+            // A paused walker's RemainingRoomKeys prepends the LIVE room, so after
+            // a manual move OFF the route its first pair is the (off-route) current
+            // room and the stale next step — not adjacent, and without this guard
+            // that pair renders as a straight line clear across the map (report
+            // paradigm walk-to→manual artifact). Gap-bridged edges (graph-connected
+            // but not grid-adjacent) still carry an exit, so they stay drawn; only a
+            // genuinely unconnected pair is skipped. Teleport hops are excluded too
+            // — their two sides draw on their own planes.
+            if (prev is { } p && prevKey is { } pk
+                && !IsTeleportHop(pk, key)
+                && RoomsConnected(pk, key))
                 ctx.DrawLine(pen, p, here);
             prev = here;
             prevKey = key;
@@ -1629,6 +1640,21 @@ public sealed class MapControl : Control
         => Graph?.GetRoom(from) is { } room
            && room.Exits.TryGetValue(Direction.Teleport, out RoomExit tele)
            && tele.Target.Equals(to);
+
+    // Whether a graph exit joins the two rooms in either direction — the test for
+    // whether a route polyline segment between them is real (a valid walk step is
+    // always a graph edge) rather than a stale cross-map jump.
+    private bool RoomsConnected(RoomKey a, RoomKey b)
+    {
+        if (Graph is null) return false;
+        if (Graph.GetRoom(a) is { } ra)
+            foreach (RoomExit e in ra.Exits.Values)
+                if (e.Target.Equals(b)) return true;
+        if (Graph.GetRoom(b) is { } rb)
+            foreach (RoomExit e in rb.Exits.Values)
+                if (e.Target.Equals(a)) return true;
+        return false;
+    }
 
     private static void DrawAvoidX(DrawingContext ctx, Rect cell)
         => DrawCellX(ctx, cell, AvoidXPen);
