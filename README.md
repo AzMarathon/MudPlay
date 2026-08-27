@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.28.28**
-> - Pyramid solver: the timed floors (F1/F2) no longer fire movement faster than the server can process it — on Paradigm a hop is never faster than ~1s, so the old fixed 350 ms pace outran the server, flooded the type-ahead, and desynced the climb (usually failing on floor 1). It now paces each blind step at the character's real hop time plus a 10% lag buffer (the same rate the floor-1 timer check uses); the computed pace is logged for bug-report checking
+> - Pyramid solver: the timed floors (F1/F2) no longer fire movement faster than the server can process it — on Paradigm a hop is never faster than ~1s, so the old fixed 350 ms pace outran the server, flooded the type-ahead, and desynced the climb (usually failing on floor 1). Paradigm now paces each blind step at the character's real hop time plus a 10% lag buffer (the same rate the floor-1 timer check uses); stock uses a flat 400 ms. The computed pace is logged for bug-report checking
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

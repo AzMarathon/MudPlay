@@ -44,7 +44,14 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
 
     // Per-step pacing. Blind-fast floors fire the next step after a short settle;
     // paced floors wait a round-time before advancing.
-    private static readonly TimeSpan BlindSettle = TimeSpan.FromMilliseconds(350);
+    //
+    // BlindSettle is the STOCK blind-floor pace — stock's below-heavy hop is ~0.5-0.6s
+    // (and the stock preflight refuses Heavy leaders outright, so every stock climber
+    // is in that band), so 400ms stays a touch under the real hop for a small
+    // type-ahead lead without flooding. Paradigm doesn't use this — its ~1s hop floor
+    // made a fixed short settle fire ~3x too fast and desync (report -133835), so it
+    // paces at the real per-hop time in SettleFor instead.
+    private static readonly TimeSpan BlindSettle = TimeSpan.FromMilliseconds(400);
     private static readonly TimeSpan PacedSettle = TimeSpan.FromMilliseconds(700);
 
     // Floor 4 (the footpath) steps slower than the other paced floors for react
@@ -422,13 +429,13 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         if (floor == PyramidFloor.F4) return Floor4Settle;
         if (!PyramidScript.IsBlindFast(floor)) return PacedSettle;
         // Blind/timed floor (F1 timed, F2 damage-escalating — both fire ahead with no
-        // per-step confirmation). On Paradigm a hop is never faster than ~1s, so the
-        // fixed 350ms fires ~3x faster than the server can move, floods the type-ahead,
-        // and the climb desyncs (report paradigm-20260827-133835). Pace to the
-        // character's real lag-buffered hop time instead — the SAME value the F1
-        // preflight sized its timer estimate against, so it stays inside the 5-min
-        // budget. Stock movement isn't formula-tracked (and its hops are fast), so the
-        // short fixed settle stands there.
+        // per-step confirmation). Paradigm's ~1s hop floor made the old fixed short
+        // settle fire ~3x too fast, flooding the type-ahead into a desync (report
+        // paradigm-20260827-133835), so Paradigm paces at the character's real
+        // lag-buffered hop time — the SAME value the F1 preflight sized its 5-min timer
+        // estimate against. Stock isn't formula-tracked, but its below-heavy hop is
+        // ~0.5-0.6s (Heavy leaders are preflight-refused), so the flat BlindSettle
+        // (400ms) stays a touch under it without flooding.
         if (!_isParadigm()) return BlindSettle;
         double ms = PyramidPreflight.PacedPerMoveMs(_snapshot().Encumbrance.Percentage, _quickness());
         return TimeSpan.FromMilliseconds(ms);
