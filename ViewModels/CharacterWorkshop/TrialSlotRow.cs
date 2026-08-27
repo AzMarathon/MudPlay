@@ -5,11 +5,29 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// One row of the Item Finder's trial gearset: a slot, the item currently placed in
-// it, and a Hold lock that keeps Find Best from overwriting it. Options are the
+// One dropdown option in a Gear Finder slot: the item name plus a lazily-built
+// stat tooltip. Lazy because RebuildOptions runs on every filter keystroke — with
+// a slot's candidate pool sometimes in the dozens, eagerly aggregating every
+// candidate's stats on each keystroke would be wasted work; the tooltip is only
+// worth computing once the user actually hovers that option in the open dropdown.
+public sealed class TrialOption
+{
+    public string Name { get; }
+    public string Tooltip => _tooltip.Value;
+    private readonly Lazy<string> _tooltip;
+
+    public TrialOption(string name, Func<string, string> tooltipFactory)
+    {
+        Name = name;
+        _tooltip = new Lazy<string>(() => tooltipFactory(name));
+    }
+}
+
+// One row of the Item Finder's Gear Finder loadout: a slot, the item currently placed
+// in it, and a Hold lock that keeps Find Best from overwriting it. Options are the
 // currently-filtered results that fit this slot (plus the sentinel empty option and
 // whatever is already selected, so an out-of-filter pick still displays). The parent
-// VM owns Options content and recomputes the trial totals via the change callback.
+// VM owns Options content and recomputes the loadout totals via the change callback.
 public sealed partial class TrialSlotRow : ObservableObject
 {
     // The empty selection sentinel (a slot with nothing trialled). SelectedItem holds
@@ -17,28 +35,42 @@ public sealed partial class TrialSlotRow : ObservableObject
     public const string Empty = "(none)";
 
     private readonly Action _onChanged;
+    private readonly Func<string, string> _tooltipFactory;
     private bool _suppress;
 
     public EquipmentSlot Slot { get; }
     public string SlotLabel { get; }
-    public ObservableCollection<string> Options { get; } = new() { Empty };
+    public ObservableCollection<TrialOption> Options { get; } = new();
 
-    // The chosen item, or Empty for none. Bound to the slot's dropdown.
+    // The chosen item, or Empty for none. Bound to the slot's dropdown via
+    // SelectedValue/SelectedValuePath so the ComboBox can display TrialOption rows
+    // (name + lazy tooltip) while this stays a plain string everywhere else.
     [ObservableProperty] private string? _selectedItem = Empty;
     // Locks this slot against Find Best.
     [ObservableProperty] private bool _hold;
-    // Hover tooltip for the slot: the current item's stat lines (null when empty).
+    // Hover tooltip for the closed combo box: the current item's stat lines (null
+    // when empty). Distinct from each TrialOption's own tooltip, which covers the
+    // open dropdown's candidates.
     [ObservableProperty] private string? _itemTooltip;
 
-    public TrialSlotRow(EquipmentSlot slot, string slotLabel, Action onChanged)
+    public TrialSlotRow(EquipmentSlot slot, string slotLabel, Action onChanged, Func<string, string> tooltipFactory)
     {
         Slot = slot;
         SlotLabel = slotLabel;
         _onChanged = onChanged;
+        _tooltipFactory = tooltipFactory;
+        Options.Add(new TrialOption(Empty, static _ => string.Empty));
     }
 
     // The real item name, or null when the slot is empty.
     public string? ItemName => string.IsNullOrEmpty(SelectedItem) || SelectedItem == Empty ? null : SelectedItem;
+
+    private int IndexOfOption(string name)
+    {
+        for (int i = 0; i < Options.Count; i++)
+            if (string.Equals(Options[i].Name, name, StringComparison.Ordinal)) return i;
+        return -1;
+    }
 
     // Assign an item (or null → Empty) without firing the change callback — used by
     // bulk operations (import / find best / clear) that recompute once at the end. A
@@ -49,7 +81,7 @@ public sealed partial class TrialSlotRow : ObservableObject
         try
         {
             string val = string.IsNullOrEmpty(item) ? Empty : item;
-            if (val != Empty && !Options.Contains(val)) Options.Add(val);
+            if (val != Empty && IndexOfOption(val) < 0) Options.Add(new TrialOption(val, _tooltipFactory));
             SelectedItem = val;
         }
         finally { _suppress = false; }
@@ -72,9 +104,12 @@ public sealed partial class TrialSlotRow : ObservableObject
             if (!string.IsNullOrEmpty(sel) && sel != Empty && !desired.Contains(sel)) desired.Add(sel);
 
             for (int i = Options.Count - 1; i >= 0; i--)
-                if (!desired.Contains(Options[i])) Options.RemoveAt(i);
+                if (!desired.Contains(Options[i].Name)) Options.RemoveAt(i);
             foreach (string d in desired)
-                if (!Options.Contains(d)) Options.Add(d);
+                if (IndexOfOption(d) < 0)
+                    Options.Add(d == Empty
+                        ? new TrialOption(Empty, static _ => string.Empty)
+                        : new TrialOption(d, _tooltipFactory));
         }
         finally { _suppress = false; }
     }

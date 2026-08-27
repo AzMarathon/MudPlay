@@ -650,7 +650,9 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         foreach (EquipmentSlot s in EquipmentSlotMap.DisplayOrder)
         {
             if (EquipmentSlotMap.IsVirtual(s)) continue;
-            TrialSlots.Add(new TrialSlotRow(s, EquipmentSlotMap.Label(s), RecomputeTrial));
+            EquipmentSlot slot = s;
+            TrialSlots.Add(new TrialSlotRow(
+                slot, EquipmentSlotMap.Label(slot), RecomputeTrial, name => BuildItemTooltip(name, slot)));
         }
     }
 

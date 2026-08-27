@@ -230,9 +230,9 @@
                              PlaceholderText="Filter by name…" Width="240" HorizontalAlignment="Left"
                              VerticalAlignment="Center"
                              ToolTip.Tip="Show only items whose name contains this text."/>
-                    <Button Grid.Column="2" Content="Trial set ▸"
+                    <Button Grid.Column="2" Content="Gear Finder ▸"
                             Command="{Binding ToggleTrialPanelCommand}"
-                            ToolTip.Tip="Show / hide the trial gearset panel — plan a loadout and see its stats + encumbrance."/>
+                            ToolTip.Tip="Show / hide the Gear Finder panel — plan a loadout and see its stats + encumbrance."/>
                 </Grid>
 
                 <!-- ReflectionBinding: the non-generic DataGridCollectionView hides the
@@ -331,7 +331,7 @@
                 <Grid x:Name="TrialGrid" RowDefinitions="Auto,Auto,Auto,3*,Auto,2*" RowSpacing="0">
 
                     <StackPanel Grid.Row="0" Spacing="6">
-                        <TextBlock Classes="Group" Text="Trial gearset"/>
+                        <TextBlock Classes="Group" Text="Gear Finder"/>
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <Button Content="Import from live" Command="{Binding ImportFromLiveCommand}"
                                     ToolTip.Tip="Copy your currently-worn gear into the trial slots."/>
@@ -372,9 +372,16 @@
                                                   ToolTip.Tip="Lock this slot so Find Best won't change it."/>
                                         <TextBlock Grid.Column="1" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
                                         <ComboBox Grid.Column="2" ItemsSource="{Binding Options}"
-                                                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                                                  SelectedValue="{Binding SelectedItem, Mode=TwoWay}"
+                                                  SelectedValueBinding="{Binding Name}"
                                                   HorizontalAlignment="Stretch" MaxDropDownHeight="320"
-                                                  ToolTip.Tip="{Binding ItemTooltip}"/>
+                                                  ToolTip.Tip="{Binding ItemTooltip}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:TrialOption">
+                                                    <TextBlock Text="{Binding Name}" ToolTip.Tip="{Binding Tooltip}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
