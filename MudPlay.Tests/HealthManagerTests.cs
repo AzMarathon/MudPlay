@@ -507,6 +507,35 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void ForceClear_TimeoutReleases_RestsPastStaleHostileLatch()
+    {
+        // paradigm-20260827-082222: the idle-stall "room empty" force-clear does NOT
+        // clear the combat tracker's hostile latch (an empty room emits no occupant
+        // line to re-derive it), so it stays stuck true from the last hostile-filled
+        // room. A stationary character held below the trigger then sat forever — its
+        // meditate/rest blocked by the stale hostiles guard while it passively
+        // regenerated ("meditating state but not Medding / no gear swap"). After the
+        // reconfirm-timeout with no re-display, the room is safe: the held rest fires
+        // past the stale latch.
+        using Harness h = new() { HostilesPresent = true };  // stale latch, room really empty
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.Health.NoteCombatForceCleared();   // idle-stall "room empty" → hold armed
+        h.State.Hp = 50;                      // breach → held (stale hostile blocks the rest)
+
+        Assert.False(h.Health.RestInFlight);
+        Assert.DoesNotContain("rest", h.SentLines);
+
+        // Past the backstop with no re-display: release the hold AND bypass the stale
+        // hostile latch so the genuinely-clear room rests.
+        h.Clock += TimeSpan.FromSeconds(5);
+        h.Health.Evaluate();
+
+        Assert.True(h.Health.RestInFlight);
+        Assert.Contains("rest", h.SentLines);
+    }
+
+    [Fact]
     public void ForceClear_ThenRoomChange_ReleasesHoldAndRests()
     {
         // Dark-room force-clear sends no resync CR, so no EntitiesObserved arrives;

@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.26
+
+- Gear sets: the `wear`/`rem` commands during a swap now stream back-to-back with no delay (the 100 ms pacing is gone) — a full-loadout swap is near-instant, matching MegaMUD instead of feeling laggy
+- Meditate/rest: a character held below its mana (or HP) rest floor in a room it just cleared no longer sits doing nothing — the idle-stall "room empty" force-clear used to leave a stale hostile latch that blocked the meditate/rest until a fresh room display cleared it (which an empty static room never sends), so it just passively regenerated; after the short reconfirm timeout it now meditates/rests (and gear-swaps) as intended
+- Gear sets: finishing a rest no longer fires the Default swap twice — the in-room recovery-complete revert and the stand-up that follows were both swapping to Default (~1s apart); the redundant stand-up swap is now suppressed
+- bug reports addressed: paradigm-20260827-082222, paradigm-20260827-082305, paradigm-20260827-125103
+
 ## 3.28.23
 
 - Navigation map: a walk-to route line no longer draws a stray straight segment across the map after you take manual control — the route now only connects rooms that are actually adjacent on the map graph, so an off-route manual step can't leave a dangling line to a stale next step

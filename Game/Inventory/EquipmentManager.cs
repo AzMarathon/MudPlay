@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Avalonia.Threading;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 
@@ -23,9 +22,6 @@ public sealed class EquipmentManager
     // LogService category — [Equipment] rows per apply.
     public const string LogCategory = "Equipment";
 
-    // Spacing between successive wear commands. The game's flood / spam guards
-    // dislike a burst of ~20 wears, so drain the queue one step at a time.
-    private static readonly TimeSpan ApplyStep = TimeSpan.FromMilliseconds(100);
 
     private readonly Func<EquipmentSettings> _readEquipment;
     private readonly Func<InventorySnapshot> _getSnapshot;
@@ -53,8 +49,6 @@ public sealed class EquipmentManager
     // rather than clobbering its swap — see ApplySet.
     private Func<bool>? _combatOwnsWeaponSlot;
 
-    private readonly Queue<string> _pending = new();
-
     // Thrash guard: a gear set that keeps producing commands without converging (a
     // paired-slot swap the game won't satisfy, say) must not re-apply forever. Count
     // applies-that-produced-commands for the SAME set within a window; past the limit,
@@ -65,17 +59,16 @@ public sealed class EquipmentManager
     private string? _thrashSetId;
     private readonly Queue<DateTimeOffset> _thrashApplies = new();
     private bool _thrashHolding;
-    private DispatcherTimer? _applyTimer;
     private bool _isEquipping;
 
-    // True while a gear-set apply is streaming its paced `wear`/`rem` commands.
+    // True while a gear-set apply is streaming its `wear`/`rem` commands.
     // HealthManager reads this to hold its rest re-issue during a swap: each `wear`
     // stands the character, and without this the rest engine re-sends `rest` between
     // every command — a rest/stand thrash for the whole burst (report
     // paradigm-20260825-103537). The swap finishes, then rest resumes once.
     public bool IsApplyingSet => _isEquipping;
 
-    // Fires true when a paced apply starts streaming its `wear`/`rem` commands and
+    // Fires true when a gear-set apply starts streaming its `wear`/`rem` commands and
     // false when it finishes. Wired to a MovementCoordinator gear-swap gate so the
     // loop holds in-room until the swap completes (report paradigm-20260826-140341).
     public event Action<bool>? ApplyingChanged;
@@ -341,7 +334,7 @@ public sealed class EquipmentManager
             return combatChanged;
 
         _log?.Info(LogCategory, $"applying gear set '{set.Name}' — {cmds.Count} command(s)");
-        StartPacedSend(cmds);
+        SendSet(cmds);
         return true;
     }
 
@@ -705,48 +698,24 @@ public sealed class EquipmentManager
     private static bool IsVirtual(EquipmentSlot slot) =>
         slot is EquipmentSlot.AlternateWeapon or EquipmentSlot.AlternateOffHand;
 
-    // ----- paced send (UI plumbing — DispatcherTimer not pumped in tests) -
+    // ----- gear-set send -------------------------------------------------
 
-    private void StartPacedSend(IEnumerable<string> cmds)
+    // Stream a gear-set delta's wear/rem commands to the wire back-to-back, no
+    // inter-command spacing. MajorMUD/Paradigm buffers typed-ahead input, so a
+    // full-loadout swap goes out as one burst for Mega-parity speed (the old paced
+    // DispatcherTimer stretched a ~13-command swap to over a second and felt laggy);
+    // TelnetClient serialises the outbound writes, so command order is preserved.
+    // IsApplyingSet is true only for this synchronous span, so the GearSwap movement
+    // gate asserts and clears around it — a concurrent loop step still holds until
+    // the swap's commands are out, then steps out already in the new loadout.
+    private void SendSet(IReadOnlyList<string> cmds)
     {
-        StopTimer();
-        _pending.Clear();
-        foreach (string c in cmds) _pending.Enqueue(c);
-        if (_pending.Count == 0) return;
+        if (cmds.Count == 0) return;
         bool wasEquipping = _isEquipping;
         _isEquipping = true;
         if (!wasEquipping) ApplyingChanged?.Invoke(true);
-        // Normal priority, not Background: the swap's echoes drive a burst of
-        // terminal renders, and a Background tick yields to them — stretching the
-        // ApplyStep pacing to ~2.5x under load and making the swap feel laggy
-        // (report paradigm-20260826-150539). Normal keeps each send on schedule;
-        // the tick only enqueues one command, so it doesn't disrupt rendering.
-        _applyTimer = new DispatcherTimer(ApplyStep, DispatcherPriority.Normal,
-            (_, _) => SendNext());
-        _applyTimer.Start();
-    }
-
-    private void SendNext()
-    {
-        if (_pending.Count == 0)
-        {
-            FinishEquip();
-            return;
-        }
-        _wire.Send(_pending.Dequeue());
-    }
-
-    private void FinishEquip()
-    {
-        StopTimer();
-        bool wasEquipping = _isEquipping;
+        foreach (string c in cmds) _wire.Send(c);
         _isEquipping = false;
-        if (wasEquipping) ApplyingChanged?.Invoke(false);
-    }
-
-    private void StopTimer()
-    {
-        _applyTimer?.Stop();
-        _applyTimer = null;
+        if (!wasEquipping) ApplyingChanged?.Invoke(false);
     }
 }
