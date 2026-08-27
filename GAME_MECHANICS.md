@@ -93,6 +93,7 @@ it isn't here and you're unsure, ask.
   names are fine — a *silver bracelet* and an *ivory bracelet* equip together.
 - The **finger** and **wrist** families each hold **two** physical pieces (Finger1/Finger2,
   Wrist1/Wrist2), so long as the two are distinct names. Every other slot holds one.
+- **Eviction order when both slots are full** *([CONFIRMED] 2026-08-27, user — report `paradigm-20260827-082305`)*: with both paired slots occupied (e.g. bracelet1 + bracelet2), the **first** `wear` of a new piece evicts the **first-worn** member (the one listed first in `i`), and a **second** `wear` then evicts the **most-recently-worn** piece (the one you just put on). So to swap BOTH members (1,2 → 3,4) you can't just wear both — the second wear would knock off the third you just equipped. The minimal sequence is `wear 3` (evicts 1), `rem 2`, `wear 4` — **one** `rem`, not two. The client's swap builder (`EquipmentManager.ComposePairedSlotCommands`) emits exactly that for a both-members paired swap. Note the client only sees both worn pieces as `(Wrist)` / `(Finger)` in `i`, so it relies on `i`-list order to pick which one to `rem`.
 
 **Other**
 - **[CONFIRMED]** A weapon equip / swap prints a **single** line — `You are now holding <new>.`.
