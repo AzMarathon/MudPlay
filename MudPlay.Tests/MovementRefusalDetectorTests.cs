@@ -69,6 +69,9 @@ public sealed class MovementRefusalDetectorTests : IDisposable
     [InlineData("You can't see well enough to move.")]
     [InlineData("You are too encumbered to move.")]
     [InlineData("The door is closed.")]
+    [InlineData("The gate is closed!")]
+    [InlineData("The gate is closed.")]
+    [InlineData("The door is closed in that direction!")]
     // Paradigm terminates refusal lines with '!' — the confirmed capture that
     // stranded a Pending move, plus representative variants of the broadened set.
     [InlineData("There is no exit in that direction!")]

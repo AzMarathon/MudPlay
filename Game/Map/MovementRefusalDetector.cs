@@ -124,10 +124,15 @@ public sealed partial class MovementRefusalDetector : IDisposable
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex FlatOnYourBack();
 
-    // Door blocking — server returns this when the user issues a direction
-    // whose exit has a closed door.
+    // Door / gate blocking — server returns this when the user issues a direction
+    // whose exit is shut. Both the plain and the "in that direction" long form are
+    // covered, and "gate" as well as "door" (a fortress gate opened by a `pull
+    // winch` prerequisite bonks with "The gate is closed!" — without matching it,
+    // the pending move never reverts and the tracker latches in Pending, swallowing
+    // even the post-open redisplay: the walker stalls forever, report
+    // paradigm-20260827-113513).
     [GeneratedRegex(
-        @"^\s*The door is closed[.!]?\s*$",
+        @"^\s*The (?:door|gate) is closed(?: in that direction)?[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DoorIsClosed();
 

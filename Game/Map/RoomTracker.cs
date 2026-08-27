@@ -153,6 +153,17 @@ public sealed class RoomTracker
     // step. The engines' own moves are echo-claimed and never fire this.
     public event Action? ManualMoveObserved;
 
+    // Optional authoritative-position resync hook (Paradigm `rm`). Invoked when the
+    // tracker drops to Suspect on an AMBIGUOUS observation it can't self-resolve —
+    // e.g. a forced, non-directional transport (a boat disembark, a teleport-trap
+    // drag) into a duplicated-name room. The engine recovery gate already asks for a
+    // resync on a mid-walk mismatch, but it no-ops when no engine is attached — which
+    // is exactly the case during a manual boat ride, leaving the map stranded until
+    // the user hand-types `rm` (report paradigm-20260827-081044). AppServices wires
+    // this so it only fires in that engine-less gap; returns true when a resync was
+    // requested (false on stock realms / when throttled), and is otherwise a no-op.
+    public Func<string, bool>? RequestAuthoritativeResync { get; set; }
+
     public RoomTracker(RoomGraphManager graph) : this(graph, log: null) { }
 
     public RoomTracker(RoomGraphManager graph, LogService? log)
@@ -1307,6 +1318,12 @@ public sealed class RoomTracker
         State.LastUpdatedAt = when;
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"Suspect strike {strikes}/{SuspectStrikeLimit}: {reason}.");
+        // Ask for an authoritative `rm` fix on the way into Suspect. AppServices
+        // gates this to the no-engine case (the recovery gate covers engine-driven
+        // walks), and the resolver throttles + no-ops on stock realms, so this only
+        // rescues the manual-transport gap (boat disembark, teleport drag) that the
+        // gate can't see.
+        RequestAuthoritativeResync?.Invoke(reason);
         RaiseStateChanged(prev, RoomConfidence.Suspect, prevRoom, prevRoom);
     }
 

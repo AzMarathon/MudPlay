@@ -1,17 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.19**
-> - Cash: "keep on hand" is now "Minimum cash to keep on hand (deposit)" — an amount plus a denomination dropdown (keep e.g. 1 runic on hand); it governs auto-deposit
-> - Cash: new "Only stash coin up to (stash)" dropdown — Everything stashes every coin, Nothing stashes items only, or pick a denomination to stash up to it and keep the higher coins in hand
-> - Cash: new "Enable stashing as a follower" toggle — a party follower dragged through their marked stash rooms now stashes when it's on
-> - Equipment Manager: a "Currently Equipped:" readout next to the Item Finder button shows the last gear set the client equipped this session (via Equip Now or an auto-fire trigger)
-> - Gear sets: the pacing between each wear/remove during a swap is now 100 ms (was 200 ms) and holds that cadence under load — the paced sender used to get starved by the terminal redraw during a swap, stretching it to ~2.5× and making it feel laggy
-> - Gear sets: a swap now removes the conflicting worn piece first in both directions — a two-handed weapon comes off before an off-hand goes on, and an off-hand comes off before a two-hander is wielded — so neither wear is rejected and stranded to a later re-apply
-> - Gear sets: your Default set now auto-equips only when you've finished resting (recovered to rest-max, if you use pre-rest swap sets), when a loop or Auto-Lair run starts, or on death-pile recovery if enabled — it no longer thrashes Default↔pre-rest mid-rest and no longer swaps on combat entry (a fight interrupting a rest keeps your pre-rest loadout until you've recovered)
-> - Gear sets: the after-rest Default swap now finishes before you step out of the room — the loop holds while any gear swap streams, so you no longer walk into the next room and swap to Default mid-fight
-> - Rest: `rest` now goes out the instant a pre-rest gear swap finishes instead of after a multi-second gap
-> - Item buffs: a `#item` buff no longer fires before the client knows what you're wearing — on login or reconnect — so it can't equip the cast item over a two-handed weapon, fail, and still track the buff as active; it waits until a fresh inventory has actually been read this session, then handles the two-hander correctly
+> **Version 3.28.23**
+> - Navigation map: a walk-to route line no longer draws a stray straight segment across the map after you take manual control — the route only connects rooms actually adjacent on the map graph, so an off-route manual step can't leave a dangling line to a stale next step
+> - Navigation: `The gate is closed!` (and the `... in that direction` variant) is now recognized as a movement refusal like a closed door — a winch/gate that opens a moment later no longer leaves the walker stalled thinking it already moved
+> - Navigation: after a forced boat disembark into a duplicate-named room the client auto-issues a `rm` to re-locate (Paradigm realms), so the map no longer desyncs and strands the walker when the game moves you without a normal step
+> - Navigation: with Auto-Combat off, entering a room with a hostile no longer deadlocks the walker waiting for a fight that will never happen — the room search fires and pathing continues
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

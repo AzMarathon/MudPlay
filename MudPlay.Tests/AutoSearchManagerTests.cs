@@ -189,6 +189,33 @@ public sealed class AutoSearchManagerTests
     }
 
     [Fact]
+    public void HostilePresent_ButAutoCombatOff_Searches_InsteadOfDeadlocking()
+    {
+        // A hostile is in the room but auto-attack is off, so nothing will fight or
+        // clear it. Deferring the search here would hold the Search gate forever and
+        // deadlock the walker (report -074607). The manager must search instead and
+        // release the gate so pathing continues.
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(
+            isEnabled: () => true,
+            hasEngageableHostiles: () => true,
+            isCombatEngaging: () => false,   // auto-combat off — no fight incoming
+            hasGetEngineArmed: () => true,
+            coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged(Key());     // arm + assert the Search gate
+        mgr.OnRoomObserved();         // hostile seen but not engaging → must NOT defer
+        Assert.False(mgr.LastSentForTests.Count > 1);
+        mgr.OnClassifyElapsed();      // classify fires the search
+        Assert.Single(mgr.LastSentForTests);
+        Assert.Equal("sea", Decode(mgr.LastSentForTests[0]));
+
+        mgr.OnSettleElapsed();        // settle → release; walker proceeds
+        Assert.False(SearchHeld(coord));
+    }
+
+    [Fact]
     public void Fight_DoesNotSearchMidCombat_OnRepeatObservations()
     {
         var coord = new MovementCoordinator();
