@@ -11,7 +11,7 @@ namespace MudPlay.Game.Remote;
 // gated by the QueryItemLocation permission.
 //   @roomba <item name>   — one reply line PER DISTINCT MATCHING ITEM: total
 //                           quantity summed across every room currently
-//                           holding it, and the room locators — or "no
+//                           holding it, and each room's own quantity — or "no
 //                           record". A loose query can match a whole family of
 //                           similarly-named items ("severed" / "head" both
 //                           match "severed head of goru-nezar" AND "severed
@@ -135,17 +135,24 @@ public sealed class RoombaQueryHandler : IDisposable
     }
 
     // One line: total quantity across every matching room, the item's
-    // canonical name, and the room locators (map/room only — a room NAME per
-    // entry is what made the old per-room reply so long). Every sighting in
-    // `sightings` names the same item (FindSightings resolves to one item
-    // per query), so summing quantity across them is always meaningful.
+    // canonical name, and EACH room's own quantity (map/room only — a room
+    // NAME per entry is what made the old per-room reply so long). Every
+    // sighting in `sightings` names the same item (FindSightings resolves to
+    // one item per query), so summing quantity across them is always
+    // meaningful. The per-room breakdown (report 20260827: a gang recon
+    // reported implausibly high totals for hidden items, with no way to tell
+    // whether that was several genuinely separate stashes or one room's count
+    // gone wrong) is the diagnostic the flat "seen in" list never gave —
+    // GhSurveyMerger.Merge already maxes repeated-search counts within a
+    // single room, so an inflated total now shows exactly which room(s), if
+    // any, are the actual outlier.
     private static string FormatTotal(IReadOnlyList<GhItemSighting> sightings)
     {
         int total = sightings.Sum(s => s.Quantity);
         string name = sightings[0].ItemName;
         List<string> locators = sightings
             .OrderBy(s => s.Map).ThenBy(s => s.Room)
-            .Select(s => new RoomKey(s.Map, s.Room).ToString())
+            .Select(s => $"{new RoomKey(s.Map, s.Room)} ({s.Quantity})")
             .ToList();
 
         string rooms = string.Join(", ", locators.Take(MaxRoomsShown));
