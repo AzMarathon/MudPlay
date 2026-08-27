@@ -1153,6 +1153,14 @@ public partial class MainWindowViewModel : ObservableObject
         // uncovered with sea <dir> instead of failing the lap.
         AppServices.Current.LoopRunner.SetHiddenSearchEnqueuer(AppServices.Current.HiddenSearch.Enqueue);
         AppServices.Current.LoopRunner.SetHiddenSearchStopper(AppServices.Current.HiddenSearch.StopAll);
+        // WinchManager — same gate-wrapped sender so the pull + poll `l` can't land
+        // mid-password-prompt. Both engines route a winch gate here so it's pulled +
+        // waited-open instead of firing the move blindly into a still-closed gate.
+        AppServices.Current.Winch.SetWireSender(engineSend);
+        AppServices.Current.Walker.SetWinchEnqueuer(AppServices.Current.Winch.Enqueue);
+        AppServices.Current.Walker.SetWinchStopper(AppServices.Current.Winch.StopAll);
+        AppServices.Current.LoopRunner.SetWinchEnqueuer(AppServices.Current.Winch.Enqueue);
+        AppServices.Current.LoopRunner.SetWinchStopper(AppServices.Current.Winch.StopAll);
         // Teleport-exit wiring — walker resolves (source, destination)
         // → keyword via TBInfoTeleportResolver against the active
         // TBInfoStore, and pre-broadcasts the keyword to followers via

@@ -719,6 +719,16 @@ public static class DefaultPatterns
             @"\b(?:you have no |you don'?t have|nothing happens)\b",
             options: RegexOptions.IgnoreCase);
 
+        // Winch pull results (CONFIRMED Paradigm wording). Success = the winch winds
+        // up ("...and it begins to turn!"); the gate it controls opens a beat later.
+        // Failure = "...but it does not budge." — a retry, not a give-up.
+        yield return new RegexPattern(KnownPatterns.WinchTurned,
+            @"\bwinch\b.*\bbegins to turn\b",
+            options: RegexOptions.IgnoreCase);
+        yield return new RegexPattern(KnownPatterns.WinchWontBudge,
+            @"\bwinch\b.*\bdoes(?:n'?t| not) budge\b",
+            options: RegexOptions.IgnoreCase);
+
         // "You see <name> attempt to bash the door to the <dir>." — another
         // player (possibly our party leader) failing to force a door. Name
         // is the actor's given name; direction is the full word.

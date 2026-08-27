@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.26**
-> - Gear sets: the `wear`/`rem` commands during a swap now stream back-to-back with no delay (the 100 ms pacing is gone) — a full-loadout swap is near-instant, matching MegaMUD instead of feeling laggy
-> - Meditate/rest: a character held below its mana (or HP) rest floor in a room it just cleared no longer sits doing nothing — an idle-stall "room empty" force-clear used to leave a stale hostile latch that blocked the meditate/rest (which an empty static room never re-displays to clear), so it just passively regenerated; after the short reconfirm timeout it now meditates/rests (and gear-swaps) as intended
-> - Gear sets: finishing a rest no longer fires the Default swap twice — the in-room recovery-complete revert and the stand-up that follows were both swapping to Default; the redundant stand-up swap is now suppressed
+> **Version 3.28.27**
+> - Navigation: winch gates now cross reliably — a gate opened by pulling a winch is pulled (and re-pulled while it "does not budge" — the pull is a strength roll), and the walker waits for the gate to turn fully open before stepping through instead of walking into a still-closed gate and stalling. Also handles the cross-room case where the winch is in a different room than the gate it opens
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

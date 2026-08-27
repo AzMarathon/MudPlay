@@ -433,6 +433,13 @@ public static class KnownPatterns
     public const string DoorKeyUnlockSuccess  = "door.key.unlocked";       // "successfully unlocked" (after use <key> <dir>)
     public const string DoorKeyUnknown        = "door.key.unknown";        // "have no <item>" / "you don't have" (use <key> failed)
 
+    // ----- Winch (gate-controlling) — drives WinchManager ----------------
+    // A `pull winch` prerequisite that opens a gate a beat later. Success winds the
+    // winch up (retry until it turns); the gate then opens on a delay with no line
+    // of its own, so WinchManager polls the room's open-gate exit to confirm.
+    public const string WinchTurned           = "winch.turned";            // "You heave mightily on the winch, and it begins to turn!"
+    public const string WinchWontBudge        = "winch.wontbudge";         // "You heave mightily on the winch, but it does not budge."
+
     // ----- Another player forcing a door (LeaderDoorAssistManager) -------
     // Observer-side line emitted when another in-room player fails to bash
     // a door: "You see <name> attempt to bash the door to the <dir>."

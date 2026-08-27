@@ -43,6 +43,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<Direction, string, Action<HiddenSearchResult>>? _hiddenSearchEnqueuer;
     private Action? _hiddenSearchStopAll;
     private bool _awaitingHiddenReveal;
+    private Action<Direction, string, bool, string, Action<WinchResult>>? _winchEnqueuer;
+    private Action? _winchStopAll;
+    private bool _awaitingWinch;
     private Func<RoomKey, RoomKey, string?>? _teleportResolver;
     private Func<bool>? _isLeaderWithFollowers;
     // True when ANY nav engine is driving (loop / auto-lair / point-to-point walk).
@@ -507,6 +510,23 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(stopAll);
         _hiddenSearchStopAll = stopAll;
+    }
+
+    // Winch enqueuer — walker calls this for a MultiActionHidden winch exit to
+    // pull the winch, wait for it to turn + the gate to open, then move. Bound by
+    // MainWindowVM to WinchManager.Enqueue.
+    public void SetWinchEnqueuer(Action<Direction, string, bool, string, Action<WinchResult>> enqueuer)
+    {
+        ArgumentNullException.ThrowIfNull(enqueuer);
+        _winchEnqueuer = enqueuer;
+    }
+
+    // Winch teardown — bound to WinchManager.StopAll. Same stale-state cleanup
+    // rationale as SetDoorStopper.
+    public void SetWinchStopper(Action stopAll)
+    {
+        ArgumentNullException.ThrowIfNull(stopAll);
+        _winchStopAll = stopAll;
     }
 
     // Teleport-keyword resolver — given (source room, destination room)
@@ -1552,6 +1572,29 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
+        // Winch MultiActionHidden — route through WinchManager: pull the winch,
+        // wait for it to turn AND the gate to open, then move. Handled ahead of the
+        // synchronous dispatch below so a winch never fires its move blindly (the
+        // gate opens on a delay, so a blind move bonks "The gate is closed!"). Other
+        // MultiActionHidden exits (levers etc.) stay synchronous.
+        if (!step.SkipSpecialDispatch && _winchEnqueuer is not null
+            && WinchManager.IsWinchExit(exit) && WinchManager.PullCommand(exit) is { } winchPull)
+        {
+            if (_tracker.State.OpenDoorDirections is { } openGate && openGate.Contains(step.Direction))
+            {
+                _log?.Info("Walker",
+                    $"step {_index + 1}/{_path!.Count}: gate {step.Direction} already open — skipping winch FSM.");
+                _tracker.NoteMoveSent(step.Direction);
+                _recovery?.NoteEngineStepSent(step.Direction);
+                EmitMoveBytes(EncodeMove(step.Direction), $"move {step.Direction} (gate pre-open)");
+                return;
+            }
+            _awaitingWinch = true;
+            _log?.Info("Walker", $"step {_index + 1}/{_path!.Count}: winching gate {step.Direction} ('{winchPull}').");
+            _winchEnqueuer(step.Direction, winchPull, /*waitForGate:*/ true, "walker", OnWinchReply);
+            return;
+        }
+
         // Synchronous special exits — MultiActionHidden (same-room),
         // Text `(Text: ...)`, and Teleport `(Item: N)` — share one
         // emission path with the loop runner via SpecialExitDispatch so
@@ -1698,6 +1741,51 @@ public sealed class AutoWalkManager : IRecoverableEngine
         }
     }
 
+    private void OnWinchReply(WinchResult result)
+    {
+        if (!_awaitingWinch) return;
+        _awaitingWinch = false;
+
+        switch (result)
+        {
+            case WinchResult.Turned:
+                if (_path is null || _index >= _path.Count) { Reset(); return; }
+                // Cross-room detour pull (a CommandStep): the winch turned in this
+                // room; advance to the next detour step (walk toward the gate room),
+                // exactly as a plain command completion would.
+                if (_path[_index] is CommandStep)
+                {
+                    _stepInFlight = false;
+                    AdvanceStep();
+                    return;
+                }
+                if (_path[_index] is not MoveStep step)
+                {
+                    Reset();
+                    return;
+                }
+                Room? current = _tracker.State.CurrentRoom;
+                if (current is null
+                    || !current.Exits.TryGetValue(step.Direction, out RoomExit exit))
+                {
+                    Raise(new WalkEvent(WalkEventKind.Failed,
+                        "post-winch: step source has no matching exit", _destination));
+                    Reset();
+                    return;
+                }
+                _tracker.NoteMoveSent(step.Direction);
+                _recovery?.NoteEngineStepSent(step.Direction);
+                EmitMoveBytes(EncodeMove(step.Direction), $"move {step.Direction} (post-winch)");
+                return;
+
+            case WinchResult.Failed failed:
+                Raise(new WalkEvent(WalkEventKind.Failed,
+                    $"winch failed: {failed.Reason}", _destination));
+                Reset();
+                return;
+        }
+    }
+
     private void OnTrapReply(string reply)
     {
         if (!_awaitingTrapDisarm) return;
@@ -1767,8 +1855,21 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private void SendCommandStep(CommandStep step)
     {
         _stepInFlight = true;
-        _awaitingPromptForCommand = true;
 
+        // A cross-room detour's winch pull is a strength roll that can "not budge" —
+        // route it through WinchManager so it re-pulls until the winch turns, then
+        // advances (OnWinchReply's CommandStep branch), rather than firing once and
+        // walking on. Pull-only (no gate poll — the detour walks to the gate room
+        // next, covering the open delay). Falls back to fire-and-forget when unwired.
+        if (step.IsWinchPull && _winchEnqueuer is not null)
+        {
+            _awaitingWinch = true;
+            _log?.Info("Walker", $"detour winch pull ('{step.Command}') — re-pulling until it turns.");
+            _winchEnqueuer(Direction.N, step.Command, /*waitForGate:*/ false, "walker", OnWinchReply);
+            return;
+        }
+
+        _awaitingPromptForCommand = true;
         byte[] bytes = Encoding.Latin1.GetBytes(step.Command + "\r");
         WriteBytes(bytes, $"command '{step.Command}'");
     }
@@ -1940,7 +2041,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // the room we've since moved into. The sub-FSM clears its flag before
         // emitting the real move, so the genuine arrival transition still lands
         // here normally.
-        if (_awaitingDoorOpen || _awaitingTrapDisarm || _awaitingHiddenReveal)
+        if (_awaitingDoorOpen || _awaitingTrapDisarm || _awaitingHiddenReveal || _awaitingWinch)
             return;
 
         // Tracker lost confidence mid-step — defer to the
@@ -2320,6 +2421,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // skip the late reply that arrives after StopAll.
         if (_awaitingDoorOpen)      _doorStopAll?.Invoke();
         if (_awaitingHiddenReveal)  _hiddenSearchStopAll?.Invoke();
+        if (_awaitingWinch)         _winchStopAll?.Invoke();
         // Drop a pending party-delegation watch so a stray say reply can't
         // resume a superseded walk. Harmless when the trap was local-only.
         if (_awaitingTrapDisarm)    _trapDelegateStopAll?.Invoke();
@@ -2334,6 +2436,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _awaitingTrapDisarm = false;
         _awaitingDoorOpen = false;
         _awaitingHiddenReveal = false;
+        _awaitingWinch = false;
         _boatTimer?.Dispose();
         _boatTimer = null;
         _awaitingBoatArrival = false;

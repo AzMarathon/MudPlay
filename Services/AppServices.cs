@@ -499,6 +499,10 @@ public sealed class AppServices
     // Models.Profile.OtherSettings.MaxHiddenSearchAttempts.
     public Game.Map.HiddenExitRevealManager HiddenSearch { get; }
 
+    // Winch-gate crossing FSM (pull → turn → wait for gate → move), shared by the
+    // walker + loop the same way Door / HiddenSearch are.
+    public Game.Map.WinchManager Winch { get; }
+
     // Auth boundary + queue gate for @trap: parses the
     // direction, runs the channel-aware Traps-skill gate, and hands
     // off to TrapDisarm. @trap stop drains the
@@ -2713,6 +2717,23 @@ public sealed class AppServices
             RoomTracker,
             maxAttemptsProvider: () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").MaxHiddenSearchAttempts,
             router: Router,
+            log: Log);
+
+        // Winch gates — the nav engines pull a winch, wait for it to turn AND the
+        // gate to open (polling the room's open-gate exit, since there's no gate-open
+        // line), then move. isGateOpen reads the live open-door directions the room
+        // display parses "open gate <dir>" into; scheduleDelay is the same UI-thread
+        // one-shot the door FSM uses (null in tests — they drive lines synchronously).
+        Winch = new Game.Map.WinchManager(
+            Router,
+            isGateOpen: dir => RoomTracker.State.OpenDoorDirections?.Contains(dir) == true,
+            scheduleDelay: (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+                return new DispatcherTimerHandle(timer);
+            },
             log: Log);
 
         // BFS pathfinding + planar layout. Layout

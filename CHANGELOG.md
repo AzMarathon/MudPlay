@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.27
+
+- Navigation: winch gates now cross reliably — a gate opened by pulling a winch is pulled (and **re-pulled** while it "does not budge" — the pull is a strength roll), and the walker waits for the gate to turn fully open before stepping through instead of walking into a still-closed gate and stalling. Also handles the **cross-room** case, where the winch is in a different room than the gate it opens: the walk-to detour re-pulls the winch until it turns before walking on
+- bug reports addressed: paradigm-20260827-113513
+
 ## 3.28.26
 
 - Gear sets: the `wear`/`rem` commands during a swap now stream back-to-back with no delay (the 100 ms pacing is gone) — a full-loadout swap is near-instant, matching MegaMUD instead of feeling laggy
