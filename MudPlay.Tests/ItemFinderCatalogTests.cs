@@ -61,14 +61,15 @@ public sealed class ItemFinderCatalogTests : IDisposable
         //                 temple of fire fire) — exercises the Negates column/filter.
         " {\"Number\":11,\"Name\":\"phoenix charm\",\"ItemType\":0,\"Worn\":8,\"NegateSpell-0\":526,\"NegateSpell-1\":218,\"In Game\":1}," +
         // shocking gauntlet : hands armour stacking the newer combat-defense /
-        //                     martial-arts / thievery abilities — Dodge (34),
-        //                     Magic Resist (36), ShockShield (72), Thievery (39),
-        //                     and all six Punch/Kick/JumpKick Accy/Dmg codes
-        //                     (89-94) — exercises the columns those criteria read.
+        //                     martial-arts / thievery / VileWard abilities — Dodge
+        //                     (34), Magic Resist (36), ShockShield (72), Thievery
+        //                     (39), all six Punch/Kick/JumpKick Accy/Dmg codes
+        //                     (89-94), and VileWard (1113) — exercises the columns
+        //                     those criteria read.
         " {\"Number\":12,\"Name\":\"shocking gauntlet\",\"ItemType\":0,\"Worn\":3," +
         "\"Abil-0\":34,\"AbilVal-0\":6,\"Abil-1\":36,\"AbilVal-1\":8,\"Abil-2\":72,\"AbilVal-2\":10,\"Abil-3\":39,\"AbilVal-3\":2," +
         "\"Abil-4\":89,\"AbilVal-4\":11,\"Abil-5\":92,\"AbilVal-5\":12,\"Abil-6\":90,\"AbilVal-6\":13,\"Abil-7\":93,\"AbilVal-7\":14," +
-        "\"Abil-8\":91,\"AbilVal-8\":15,\"Abil-9\":94,\"AbilVal-9\":16,\"In Game\":1}]";
+        "\"Abil-8\":91,\"AbilVal-8\":15,\"Abil-9\":94,\"AbilVal-9\":16,\"Abil-10\":1113,\"AbilVal-10\":7,\"In Game\":1}]";
 
     private const string Spells =
         "[{\"Number\":526,\"Name\":\"magma heat\"},{\"Number\":218,\"Name\":\"temple of fire fire\"}]";
@@ -279,12 +280,15 @@ public sealed class ItemFinderCatalogTests : IDisposable
         Assert.Equal(14, gauntlet.KickDmg);
         Assert.Equal(15, gauntlet.JumpKickAccy);
         Assert.Equal(16, gauntlet.JumpKickDmg);
+        Assert.Equal(7, gauntlet.VileWard);
+        Assert.Equal("+7", gauntlet.VileWardText);
 
         // Gear without those abilities leaves each column blank.
         ItemFinderEntry dagger = catalog.Single(e => e.Name == "keen dagger");
         Assert.Equal(string.Empty, dagger.DodgeText);
         Assert.Equal(string.Empty, dagger.ShockShieldText);
         Assert.Equal(string.Empty, dagger.ThieveryText);
+        Assert.Equal(string.Empty, dagger.VileWardText);
     }
 
     [Fact]

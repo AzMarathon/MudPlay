@@ -149,6 +149,7 @@ public sealed class TrialGearFinderTests
     [InlineData("Thievery")]
     [InlineData("Prot. from Evil")]
     [InlineData("Prot. from Good")]
+    [InlineData("VileWard")]
     public void Filters_IncludesCriterion(string label)
     {
         Assert.Contains(TrialGearFinder.Filters, f => f.Label == label);
@@ -176,6 +177,14 @@ public sealed class TrialGearFinderTests
         TrialFindFilter thievery = TrialGearFinder.Filters.Single(f => f.Label == "Thievery");
         ItemFinderEntry item = Item("gloves", EquipmentSlot.Hands) with { Thievery = 4 };
         Assert.Equal(4, thievery.Score(item));
+    }
+
+    [Fact]
+    public void VileWard_ScoresVileWardField()
+    {
+        TrialFindFilter vileWard = TrialGearFinder.Filters.Single(f => f.Label == "VileWard");
+        ItemFinderEntry item = Item("dark amulet", EquipmentSlot.Neck) with { VileWard = 6 };
+        Assert.Equal(6, vileWard.Score(item));
     }
 
     [Fact]

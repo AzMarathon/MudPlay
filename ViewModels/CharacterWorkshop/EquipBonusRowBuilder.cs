@@ -59,6 +59,7 @@ public static class EquipBonusRowBuilder
         AddInt(rows, b, "Water Resist", t.PlusWaterResist);
         AddInt(rows, b, "Prot Evil", t.PlusProtEvil);
         AddInt(rows, b, "Prot Good", t.PlusProtGood);
+        AddInt(rows, b, "VileWard", t.PlusVileWard);
         AddInt(rows, b, "Punch Dmg", t.PlusPunchDmg);
         AddInt(rows, b, "Punch Accy", t.PlusPunchAccy);
         AddInt(rows, b, "Kick Dmg", t.PlusKickDmg);

@@ -155,6 +155,11 @@ public sealed record ItemFinderEntry
     public int ProtEvil { get; init; }
     public int ProtGood { get; init; }
 
+    // VileWard (Abil 1113) — an AC bonus whose magnitude scales with the wearer's
+    // own evil; the exact scale is unconfirmed, so this is the raw item value for
+    // planning/ranking, not a modelled AC contribution.
+    public int VileWard { get; init; }
+
     // Combat defense (Abil 34 / 36 / 72).
     public int Dodge { get; init; }
     public int MagicResist { get; init; }
@@ -248,6 +253,7 @@ public sealed record ItemFinderEntry
     public string ThieveryText => Signed(Thievery);
     public string ProtEvilText => Signed(ProtEvil);
     public string ProtGoodText => Signed(ProtGood);
+    public string VileWardText => Signed(VileWard);
     public string DodgeText => Signed(Dodge);
     public string MagicResistText => Signed(MagicResist);
     public string ShockShieldText => Signed(ShockShield);
@@ -389,6 +395,7 @@ public sealed record ItemFinderEntry
                 Thievery = t.PlusThievery,
                 ProtEvil = t.PlusProtEvil,
                 ProtGood = t.PlusProtGood,
+                VileWard = t.PlusVileWard,
                 Dodge = t.PlusDodge,
                 MagicResist = t.PlusMagicResist,
                 ShockShield = t.PlusShockShield,

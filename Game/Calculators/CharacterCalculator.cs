@@ -400,6 +400,7 @@ public static class CharacterCalculator
 
             case 24: totals.PlusProtEvil += abilVal; statKey = "Prot Evil"; break;
             case 25: totals.PlusProtGood += abilVal; statKey = "Prot Good"; break;
+            case 1113: totals.PlusVileWard += abilVal; statKey = "VileWard"; break;
 
             case 92: totals.PlusPunchDmg += abilVal; statKey = "Punch Dmg"; break;
             case 89: totals.PlusPunchAccy += abilVal; statKey = "Punch Accy"; break;

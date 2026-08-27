@@ -301,6 +301,7 @@
                         <DataGridTextColumn Header="Thievery"   Binding="{ReflectionBinding ThieveryText}"   SortMemberPath="Thievery"   Width="76"  Tag="ThieveryText"/>
                         <DataGridTextColumn Header="Prot Evil"  Binding="{ReflectionBinding ProtEvilText}"   SortMemberPath="ProtEvil"   Width="82"  Tag="ProtEvilText"/>
                         <DataGridTextColumn Header="Prot Good"  Binding="{ReflectionBinding ProtGoodText}"   SortMemberPath="ProtGood"   Width="82"  Tag="ProtGoodText"/>
+                        <DataGridTextColumn Header="VileWard"   Binding="{ReflectionBinding VileWardText}"   SortMemberPath="VileWard"   Width="82"  Tag="VileWardText"/>
                         <DataGridTextColumn Header="Dodge"      Binding="{ReflectionBinding DodgeText}"      SortMemberPath="Dodge"      Width="66"  Tag="DodgeText"/>
                         <DataGridTextColumn Header="Magic Res"  Binding="{ReflectionBinding MagicResistText}" SortMemberPath="MagicResist" Width="82"  Tag="MagicResistText"/>
                         <DataGridTextColumn Header="Shock Shld" Binding="{ReflectionBinding ShockShieldText}" SortMemberPath="ShockShield" Width="86"  Tag="ShockShieldText"/>

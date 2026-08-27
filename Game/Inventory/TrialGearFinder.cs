@@ -68,6 +68,7 @@ public static class TrialGearFinder
         new TrialFindFilter("Thievery",         e => e.Thievery),
         new TrialFindFilter("Prot. from Evil",  e => e.ProtEvil),
         new TrialFindFilter("Prot. from Good",  e => e.ProtGood),
+        new TrialFindFilter("VileWard",         e => e.VileWard),
         new TrialFindFilter("Cold Resist",      e => e.ColdResist),
         new TrialFindFilter("Fire Resist",      e => e.FireResist),
         new TrialFindFilter("Stone Resist",     e => e.StoneResist),

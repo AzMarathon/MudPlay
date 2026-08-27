@@ -72,6 +72,11 @@ public sealed class EquipmentStatSummary
     public int PlusProtEvil { get; set; }        // Abil 24
     public int PlusProtGood { get; set; }        // Abil 25
 
+    // VileWard — AC bonus whose magnitude scales with the wearer's own evil; the
+    // exact scale is unconfirmed (see GAME_MECHANICS.md), so this is the raw item
+    // value for planning/ranking, not a modelled AC contribution.
+    public int PlusVileWard { get; set; }        // Abil 1113
+
     // Weapon data (from item base fields, not abilities).
     public int WeaponHandAccy { get; set; }      // Accy field from Weapon Hand item
     public int OffHandAccy { get; set; }         // Accy field from Off-Hand item

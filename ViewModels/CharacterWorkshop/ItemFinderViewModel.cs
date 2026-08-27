@@ -105,6 +105,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ("ThieveryText",       static e => e.ThieveryText),
         ("ProtEvilText",       static e => e.ProtEvilText),
         ("ProtGoodText",       static e => e.ProtGoodText),
+        ("VileWardText",       static e => e.VileWardText),
         ("DodgeText",          static e => e.DodgeText),
         ("MagicResistText",    static e => e.MagicResistText),
         ("ShockShieldText",    static e => e.ShockShieldText),
