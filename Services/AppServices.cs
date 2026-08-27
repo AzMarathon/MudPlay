@@ -2781,6 +2781,7 @@ public sealed class AppServices
                 .ResolveClassProfile(GameData, PlayerStats.Class).ClassNumber;
             return n > 0 ? n : (int?)null;
         };
+        Movement.PartyAlignmentsProvider = PartyAlignmentValues;
         // Acquirable-gate providers — feed inventory / stats / hazard data into
         // item, ticket, locked-door, and hazard-room routing. Inventory readiness
         // and stat parsing gate each check so an unknown build walks unrestricted
@@ -6148,6 +6149,30 @@ public sealed class AppServices
     // lives in one place. Backs PathItemDemand's possession check and the
     // MovementFilter key/item gate.
     private bool IsItemCarried(int itemId) => CountItemHeld(itemId) > 0;
+
+    // Numeric alignment of every crosser for an "(Alignment: X to Y)" exit gate:
+    // the controlling character always, plus each follower when we LEAD the party
+    // through the gate together (whole-party — the game stops the party at the
+    // tightest member). Each entry is the member's alignment value resolved from the
+    // PlayerDatabase (who-title band → number via the confirmed ladder), or null
+    // when we don't know it yet. MovementFilter routes around a gate a KNOWN member
+    // can't cross and leaves an unknown member for the walker to halt on at the gate.
+    private System.Collections.Generic.IReadOnlyList<int?> PartyAlignmentValues()
+    {
+        var vals = new System.Collections.Generic.List<int?> { AlignmentValueOf(PlayerStats.Name) };
+        if (PartyState.IsInParty && PartyState.SelfIsLeader)
+            foreach (Game.PartyMember m in PartyState.Members)
+            {
+                if (m.IsSelf) continue;
+                vals.Add(AlignmentValueOf(m.Name));
+            }
+        return vals;
+    }
+
+    private int? AlignmentValueOf(string? name) =>
+        string.IsNullOrWhiteSpace(name)
+            ? null
+            : Game.Calculators.AlignmentBands.ValueOf(Players.Find(name!)?.Alignment);
 
     // Does 'name' as it appears in a spell line (e.g. "casts hold person on Jroc")
     // name a current party member? Party names can be one or two words and the wire

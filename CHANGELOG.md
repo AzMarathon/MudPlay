@@ -2,6 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.29.0
+
+- Navigation: **alignment-aware routing** — the good / evil `(Alignment: X to Y)` entrances are now honored. Routing is whole-party: the party routes **around** an entrance a member's alignment can't enter (the game would stop the party at that member); when a member's alignment isn't known yet it walks **up to** the gate and **halts** there rather than guessing
+- Navigation: an alignment-gated-exit refusal (`Your current alignment prevents you from entering this exit.`) is now recognized, so a mis-planned move reverts cleanly instead of stranding the tracker
+- Desert hazard: the auto waterskin counter no longer spends a charge when a sunstone wristband (or any full-immunity guard) is held or worn — it's a no-op, so it skips the `use`
+- Party: a member `@wait`-held by another now spends the wait resting toward **full** HP/mana (instead of stopping at the rest-max floor and standing idle), ending when the wait releases
+- Party recovery: after failing to reach a stranded follower twice, the leader **gives up** (sends `@forget`) instead of restarting a doomed recovery walk that keeps hijacking its own navigation
+- bug reports addressed: paradigm-20260827-144553, paradigm-20260827-112011, paradigm-20260827-132906, paradigm-20260827-154819
+
 ## 3.28.35
 
 - who list: the Players roster no longer stops short — an all-caps FIEND alignment row now parses (alignment matched case-insensitively), and a lone unreadable line is skipped instead of ending the whole list early

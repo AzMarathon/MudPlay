@@ -1281,6 +1281,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             parts.Add(DescribeDoorGate(doorGate));
         if (reasons.HasFlag(ExitBlockReason.Item)) parts.Add(DescribeMissingItems(missingItems));
         if (reasons.HasFlag(ExitBlockReason.Hazard)) parts.Add("a room hazard you can't survive");
+        if (reasons.HasFlag(ExitBlockReason.Alignment)) parts.Add("an alignment-gated entrance a party member can't enter");
         return "all routes blocked by " + string.Join(" or ", parts);
     }
 

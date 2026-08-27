@@ -327,6 +327,66 @@ public sealed class MovementFilterTests
         Assert.False(filter.IsExitBlocked(GatedExit(0, 0)));
     }
 
+    // ----- IsExitBlocked: (Alignment: X to Y) alignment-gate (report -144553) -----
+
+    // "(Alignment: Neutral to Fiend)" = numeric [0, 300] — the evil entrance.
+    private static RoomExit AlignmentGatedExit() =>
+        new(new RoomKey(1, 2), RoomExitHint.None, RawHint: null,
+            AlignmentGate: (0, 300));
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_NoProvider_DoesNotBlock()
+    {
+        (_, MovementFilter filter) = NewPair();
+        Assert.False(filter.IsExitBlocked(AlignmentGatedExit()));   // can't evaluate → don't gate
+    }
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_KnownExcludedMember_Blocks()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // A Good (-100) character can't enter a Neutral-to-Fiend [0,300] gate.
+        filter.PartyAlignmentsProvider = () => new int?[] { -100 };
+        Assert.True(filter.IsExitBlocked(AlignmentGatedExit()));
+    }
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_AllInside_Allows()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Neutral (0) and Fiend (300) both sit inside [0,300].
+        filter.PartyAlignmentsProvider = () => new int?[] { 0, 300 };
+        Assert.False(filter.IsExitBlocked(AlignmentGatedExit()));
+    }
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_WholeParty_BlocksOnTightestMember()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Leader Neutral (0, inside) but a follower Good (-100, outside) → the whole
+        // party is stopped at the tightest member.
+        filter.PartyAlignmentsProvider = () => new int?[] { 0, -100 };
+        Assert.True(filter.IsExitBlocked(AlignmentGatedExit()));
+    }
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_UnknownMember_DoesNotBlock()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Unknown alignment (null) doesn't route around — the walker walks up to the
+        // gate and halts there instead of detouring on a guess.
+        filter.PartyAlignmentsProvider = () => new int?[] { null };
+        Assert.False(filter.IsExitBlocked(AlignmentGatedExit()));
+    }
+
+    [Fact]
+    public void DescribeExitBlock_AlignmentGate_NamesAlignment()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.PartyAlignmentsProvider = () => new int?[] { -100 };
+        Assert.Equal(ExitBlockReason.Alignment, filter.DescribeExitBlock(AlignmentGatedExit()));
+    }
+
     // ----- IsExitBlocked: key-only door ------------------------------
 
     private static RoomExit KeyOnlyDoor(int keyItemId) =>
