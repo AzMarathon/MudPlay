@@ -226,6 +226,12 @@ public static class BugReportBuilder
         // for me" report needs both.
         Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember ?? "(none in flight)");
         Kv(sb, "Recovery reach (rooms)", svc.PartyComeback.ReturnDistanceRooms.ToString());
+        // Members we gave up chasing (return route un-crossable) — a "leader keeps
+        // abandoning me" report should show the give-up was deliberate.
+        var givenUp = svc.PartyComeback.GivenUpMembers;
+        Kv(sb, "Recovery given up on", givenUp.Count == 0
+            ? "(none)"
+            : string.Join(", ", givenUp.Select(kv => $"{kv.Key} ({kv.Value} fails)")));
         Kv(sb, "Probe stats on partying (@level/@version)", svc.PartyProbe.Enabled ? "on" : "off");
 
         sb.Append("\n**Members** (").Append(party.Members.Count).Append(")\n\n");
@@ -947,9 +953,20 @@ public static class BugReportBuilder
             string lapse = bc.LapseSpell > 0
                 ? bc.LapseSpell.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 : "none — reactive re-raise off";
+            // A held immunity guard (worn sunstone) makes the `use` a no-op — surface
+            // which guards exist and whether one is held, so a report shows WHY a buff
+            // was (or wasn't) raised.
+            List<string> immunityNames = bc.ImmunityItems
+                .Select(id => svc.ItemNames.GetName(id))
+                .Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!).ToList();
+            bool immune = immunityNames.Any(n => svc.Inventory.Snapshot.CarriedItems
+                .Any(c => c.Contains(n, StringComparison.OrdinalIgnoreCase)));
+            string immunity = immunityNames.Count > 0
+                ? $", immunity: {string.Join(" / ", immunityNames)} ({(immune ? "held — no `use` needed" : "not held")})"
+                : "";
             Kv(sb, $"Buff {bc.BuffSpell}",
                 $"{label} (dur ~{bc.DurationSeconds}s, carried: {(carried ? "yes" : "no")}, "
-                + $"lapse spell: {lapse})");
+                + $"lapse spell: {lapse}{immunity})");
         }
 
         // Random-teleport maze solver — a "walker never reaches the asylum room /

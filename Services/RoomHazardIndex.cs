@@ -61,8 +61,13 @@ public sealed class RoomHazardIndex
     // buff-absent branch; its game-data message is the reactive re-`use` trigger,
     // since the waterskin buff has no wear-off line to time off. 0 when the chain
     // casts nothing (or the target block couldn't be resolved).
+    // ImmunityItems are the passive failure-branch guards (the desert sunstone
+    // wristband) that make the whole hazard a no-op just by being held/worn — the
+    // provisioner skips the `use` entirely when one is carried, since spending a
+    // waterskin charge is pointless while a full-immunity guard is in effect.
     public readonly record struct BuffCounter(
-        int BuffSpell, int LapseSpell, int DurationSeconds, IReadOnlyList<int> SourceItems);
+        int BuffSpell, int LapseSpell, int DurationSeconds, IReadOnlyList<int> SourceItems,
+        IReadOnlyList<int> ImmunityItems);
 
     public sealed class RoomHazard
     {
@@ -418,8 +423,12 @@ public sealed class RoomHazardIndex
 
             durationSecondsBySpell.TryGetValue(buffSpellSeen, out int durSec);
             // Only the buff-SOURCE items drive the use-the-item provisioner; the
-            // immunity guards are passive (worn) and route-satisfy without a `use`.
-            buffCounters.Add(new BuffCounter(buffSpellSeen, lapseSpellSeen, durSec, checkspellCasters));
+            // immunity guards are passive (worn) and route-satisfy without a `use` —
+            // but the provisioner still needs to KNOW them, so it can skip the `use`
+            // when the player already holds one (a worn sunstone makes the waterskin
+            // swig pointless).
+            buffCounters.Add(new BuffCounter(
+                buffSpellSeen, lapseSpellSeen, durSec, checkspellCasters, immunityItems));
         }
     }
 

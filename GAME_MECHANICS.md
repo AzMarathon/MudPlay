@@ -617,10 +617,31 @@ the monster's alignment.**
 `0` Good · `1` Evil · `2` Chaotic Evil · `3` Neutral · `4` Lawful Good · `5` Neutral Evil ·
 `6` Lawful Evil.
 
-**Your alignment-title ladder** (lawful → evil, from the who column):
-Saint / Lawful → Good → Neutral → **Seedy → Outlaw → Criminal → Villain → Fiend**. The last five
+**Your alignment-title ladder** (good → evil, from the who column):
+Saint → Good → Neutral → **Seedy → Outlaw → Criminal → Villain → Fiend**. The last five
 (Seedy and worse) are the **"Evil bucket."** (`AlignmentBucket` collapses this to Good / Neutral /
 Evil for item filtering; the criminal layer below needs the finer title.)
+
+**Numeric alignment values** *([CONFIRMED by user 2026-08-27, capture `paradigm-20260827-144553`])* —
+the underlying alignment number per band, most-good (negative) → most-evil (positive):
+`Saint -201 · Good -100 · Neutral 0 · Seedy 40 · Outlaw 80 · Criminal 120 · Villain 180 · Fiend 300`.
+The **ladder is identical on stock and Paradigm** — the only difference is Paradigm shows your exact
+number where stock shows just the band title. **"Lawful" is NOT its own band**: it's a user-set flag
+that forbids the character from ever committing evil acts, and it's treated as **Good** (-100) for all
+alignment math. The finer evil titles (Villain / Fiend) matter mainly for item-equip gating on
+items in that range — a separate system from the exit gate below.
+
+**Exit alignment gates** *([CONFIRMED by user 2026-08-27] — mechanic for report `paradigm-20260827-144553`)* —
+a room exit can carry an `(Alignment: <low> to <high>)` restriction (e.g. `(Alignment: Neutral to
+Fiend)`), rare (only ~14 exits in the Paradigm dataset). The exit admits a character iff their numeric
+alignment falls **inclusively within [value(low), value(high)]**; outside that band the game refuses
+the move with **"Your current alignment prevents you from entering this exit."** So `Neutral to Fiend`
+= `[0, 300]`, which admits Neutral..Fiend and **blocks Good (-100) / Saint (-201)** (the "evil
+entrance" a Good character can't use). Enforcement is **whole-party** — the party is stopped if ANY
+member's alignment is excluded, so routing must consider every member's alignment (looked up from the
+PlayerDatabase, populated by `who` / look). When a member's alignment is **unknown**, the router does
+NOT detour around the gate; it walks **up to** the gate and **halts** there for the user to decide
+(rather than guessing or risking a bonk).
 
 **Layer 1 — alignment auto-aggro (every monster, straight from `Align`)** *([CONFIRMED])*
 - `Align` **1 / 2 / 5** (Evil / Chaotic Evil / Neutral Evil) — **opens on everyone**, every title.
@@ -1547,17 +1568,21 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
      - **[CONFIRMED by user 2026-07-28, report `paradigm-20260728-201619`] The desert spell does two
        things — damage AND a random teleport — and the two protections are NOT equivalent.** The waterskin
        buff (711) only stops the **damage** portion; it does not stop the random teleport. The **sunstone
-       wristband** (item 1180, worn) prevents the **entire** interaction (damage + teleport), so **if you
-       have the sunstone you don't need a waterskin at all.** In the data the wristband is a `failitem 1180`
+       wristband** (item 1180) prevents the **entire** interaction (damage + teleport), so **if you
+       have the sunstone you don't need a waterskin at all.** **[CONFIRMED by user 2026-08-27, report
+       `paradigm-20260827-112011`] The sunstone grants desert immunity by POSSESSION — it can be worn, but
+       the player only needs to *have* it (carried or worn), matching the `failitem` "if you HOLD the item"
+       mechanic.** In the data the wristband is a `failitem 1180`
        guard sitting one-to-two `random` hops below the `failspell` (e.g. `2653 → random 2655 → random 2700`
        and `2658 → random 2660`), guarding the sandstorm/sinkhole casts (713/714/743) — which are the only
        desert damage that fires above `maxlevel 19`, i.e. what actually hits a high-level character. (Its
        `NegateSpell` covers only 713; the reliable signal is the `failitem`, not the negator.) **Client
        encoding:** a `failitem` guard found by chasing a buff-gate's `random`-linked failure branch is
-       folded into the SAME requirement group as the buff source, so carrying **either** the waterskin **or**
-       the sunstone clears the desert for routing; the buff-refresh provisioner still only ever `use`s the
-       waterskin (the sunstone is passive/worn). This mirrors how the river raft/canoe `failitem` guards
-       (top-level, not nested) let a boat-carrier route the river.
+       folded into the SAME requirement group as the buff source, so having **either** the waterskin **or**
+       the sunstone clears the desert for routing. The `BuffCounter` also carries the immunity guards, so
+       the buff-refresh provisioner **skips the `use waterskin` entirely** when a sunstone is held (carried
+       or worn) rather than spending a pointless charge (report `paradigm-20260827-112011`). This mirrors
+       how the river raft/canoe `failitem` guards (top-level, not nested) let a boat-carrier route the river.
      - **[CONFIRMED by user]** Protection is *duration-based*, not carry-based. `use waterskin` applies
        buff 711, which lasts its listed `Dur` (600 = 10 min game-time). You are protected only **while
        the buff is up** — carrying the item alone does nothing. If you're still in a desert/hazard room

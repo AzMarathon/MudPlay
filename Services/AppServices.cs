@@ -3252,6 +3252,14 @@ public sealed class AppServices
             isLeaderWaited: () => PartyState.SelfIsLeader && PartyEssentials.IsPaused,
             isSelfPoisoned: () => Conditions.IsPoisoned);
 
+        // Wait-edge nudge: a standing-idle leader's PlayerState may not change
+        // between prompt ticks, so without this poke the leader-waited downtime rest
+        // wouldn't start until the next tick (and an HP-only deficit with no regen
+        // ticks could stall). Mirror the leader-rest nudge above — Evaluate on both
+        // the raise edge (start resting) and the clear edge (@ok / timer → post-rest
+        // stand). No-op for solo / followers (isLeaderWaited gates on SelfIsLeader).
+        PartyEssentials.PauseGateChanged += _ => Health.Evaluate();
+
         // Rest-skip has two independent sources, either one suppresses both rest
         // gates: (1) Sprint Mode — a global "never pause to rest" toggle (see
         // ReadSprintMode); (2) the per-waypoint "do not rest in this room" flag —

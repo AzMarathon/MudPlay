@@ -82,6 +82,10 @@ public sealed class MovementRefusalDetectorTests : IDisposable
     // way; recognizing it keeps the tracker from stranding on the unresolved step.
     [InlineData("You are flat on your back!")]
     [InlineData("You are flat on your back.")]
+    // Alignment-gated exit refusal (report -144553) — a route planned through an
+    // exit our alignment can't use bonks here; revert cleanly, don't strand.
+    [InlineData("Your current alignment prevents you from entering this exit.")]
+    [InlineData("Your current alignment prevents you from entering this exit!")]
     public void RefusalLines_RevertPendingToLocated(string line)
     {
         (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();

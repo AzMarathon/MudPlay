@@ -2635,6 +2635,56 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void LeaderWaited_AboveRestMax_StillRestsTowardFull()
+    {
+        // Report -132906: @wait-held leader already above its rest-max floor
+        // (HP 98% / MA 90%) but not full. The old rest-max ceiling left it standing
+        // idle through the whole wait; a wait is bounded downtime, so it now rests
+        // toward FULL (the wait's own release ends it, not the rest-max floor).
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Percentage, RestIfBelowHp = 30, RestMaxHp = 70,
+            MaThresholdMode = ThresholdMode.Percentage, RestIfBelowMa = 30, RestMaxMa = 50,
+            UseMeditateAbility = false,   // deterministic: rest, not meditate
+        };
+        using Harness h = new(s);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => false,
+            requestPartyWait: () => { },
+            requestPartyOk: () => { },
+            isLeaderWaited: () => true,
+            isSelfPoisoned: () => false);
+        h.SetPrompt(hp: 187, maxHp: 189, ma: 139, maxMa: 154);   // above rest-max, below full
+
+        Assert.False(h.HealthGateHeld);   // no floor breach → no gate
+        Assert.Contains("rest", h.SentLines);
+    }
+
+    [Fact]
+    public void LeaderWaited_AtFull_DoesNotRest()
+    {
+        // Nothing to recover at full → no rest even while @wait-held (the downtime
+        // top-off only fires while a pool is short of Max).
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Percentage, RestIfBelowHp = 30, RestMaxHp = 70,
+            MaThresholdMode = ThresholdMode.Percentage, RestIfBelowMa = 30, RestMaxMa = 50,
+            UseMeditateAbility = false,
+        };
+        using Harness h = new(s);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => false,
+            requestPartyWait: () => { },
+            requestPartyOk: () => { },
+            isLeaderWaited: () => true,
+            isSelfPoisoned: () => false);
+        h.SetPrompt(hp: 189, maxHp: 189, ma: 154, maxMa: 154);   // full
+
+        Assert.DoesNotContain("rest", h.SentLines);
+        Assert.DoesNotContain("meditate", h.SentLines);
+    }
+
+    [Fact]
     public void LeaderWaited_AtRestMax_DoesNotRest()
     {
         // Held but already topped off → nothing to recover, so no rest.
