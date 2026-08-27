@@ -810,16 +810,17 @@ public sealed class HealthManager : IDisposable
             && NeedsOpportunisticTopOff(s);
 
         // Leader-waited rest: WE lead and a member has @wait-held us, so we're
-        // stuck in this room anyway — use the forced downtime to top off. Same
-        // rest-max target and poison gate as the follower's opportunistic path;
-        // the only difference is the trigger (our own held state, not a leader's
-        // posture). A single `rest` emit is enough: the movement gate keeps us
-        // sitting until the @wait clears, at which point the resumed engine's next
-        // move stands us back up.
+        // stuck in this room anyway — use the forced downtime to top off. Unlike the
+        // follower's opportunistic path (which stops at rest-max), a @wait is bounded
+        // downtime the user wants spent fully: rest toward FULL for the whole wait,
+        // ending only when the wait itself releases (the member's @ok or the leading
+        // wait-window timer), not at an intermediate rest-max floor (report
+        // paradigm-20260827-132906). The movement gate keeps us sitting until the
+        // @wait clears, at which point the resumed engine's next move stands us up.
         bool leaderWaitedRest = !anyGate
             && !selfPoisoned
             && (_isLeaderWaited?.Invoke() ?? false)
-            && NeedsOpportunisticTopOff(s);
+            && NeedsWaitDowntimeTopOff();
 
         bool shouldRest = anyGate || opportunistic || leaderWaitedRest;
 
@@ -1226,6 +1227,16 @@ public sealed class HealthManager : IDisposable
         bool needMa = _state.MaxMa > 0 && _state.Ma < maTarget;
         return needHp || needMa;
     }
+
+    // True while a @wait-held leader still has any pool short of FULL. Unlike
+    // NeedsOpportunisticTopOff (rest-max ceiling), a wait is bounded downtime the
+    // user wants spent recovering all the way — so the target is Max, not rest-max.
+    // The wait's own release (member @ok / wait-window timer) ends the rest; this
+    // only decides "is there anything left to recover". Each pool guards on Max > 0
+    // so a class with no mana pool never reports a phantom MA deficit.
+    private bool NeedsWaitDowntimeTopOff()
+        => (_state.MaxHp > 0 && _state.Hp < _state.MaxHp)
+        || (_state.MaxMa > 0 && _state.Ma < _state.MaxMa);
 
     // Rest-vs-meditate pick for the opportunistic (leader-resting) path: with no
     // meditate ability it's always rest; otherwise meditate when "meditate before

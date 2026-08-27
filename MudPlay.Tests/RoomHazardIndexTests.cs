@@ -280,7 +280,11 @@ public sealed class RoomHazardIndexTests : IDisposable
         Assert.True(h.IsSatisfiedBy(item => item == 99));   // wristband alone clears the route
         Assert.True(h.IsSatisfiedBy(item => item == 60));   // waterskin alone clears the route
         // The use-the-item provisioner stays tied to the buff source, not the passive guard.
-        Assert.Equal(new[] { 60 }, Assert.Single(h.BuffCounters).SourceItems);
+        RoomHazardIndex.BuffCounter bc = Assert.Single(h.BuffCounters);
+        Assert.Equal(new[] { 60 }, bc.SourceItems);
+        // ...but the counter also carries the immunity guard, so the provisioner can
+        // skip the `use` when the wristband is held (report -112011).
+        Assert.Contains(99, bc.ImmunityItems);
     }
 
     // A checkspell whose buff spell has no Dur in the data → DurationSeconds 0.

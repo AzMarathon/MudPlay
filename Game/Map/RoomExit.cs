@@ -100,7 +100,8 @@ public readonly partial record struct RoomExit(
     bool CastTeleportRandom = false,
     bool CastPocketEntrance = false,
     bool GatewayTeleport = false,
-    IReadOnlyList<RoomKey>? CastTeleportTargets = null)
+    IReadOnlyList<RoomKey>? CastTeleportTargets = null,
+    (int Lo, int Hi)? AlignmentGate = null)
 {
     // True when this exit carries a character-level window (either a floor, a
     // cap, or both).
@@ -108,6 +109,11 @@ public readonly partial record struct RoomExit(
 
     // True when this exit only admits a single character class.
     public bool HasClassGate => ClassGate > 0;
+
+    // True when this exit only admits a numeric alignment window (an evil / good
+    // entrance). The window's ends can be negative or zero, so this is an explicit
+    // presence flag rather than a 0-sentinel.
+    public bool HasAlignmentGate => AlignmentGate is not null;
 
     // True when stepping this exit fires a spell (before or after the move).
     // Drives the map's per-exit spell-wall glyph: the user sees which direction
@@ -165,13 +171,15 @@ public readonly partial record struct RoomExit(
             out int maxLevel,
             out int classGate,
             out int preCast,
-            out int postCast);
+            out int postCast,
+            out (int Lo, int Hi)? alignmentGate);
 
         exit = new RoomExit(key, hint, rawHint,
             statReq, canBash, keyItemId, toll, textCommands,
             MultiAction: null, TrapDamage: trapDamage,
             MinLevel: minLevel, MaxLevel: maxLevel, ClassGate: classGate,
-            PreCastSpell: preCast, PostCastSpell: postCast);
+            PreCastSpell: preCast, PostCastSpell: postCast,
+            AlignmentGate: alignmentGate);
         return true;
     }
 
@@ -188,7 +196,8 @@ public readonly partial record struct RoomExit(
         out int maxLevel,
         out int classGate,
         out int preCast,
-        out int postCast)
+        out int postCast,
+        out (int Lo, int Hi)? alignmentGate)
     {
         hint = RoomExitHint.None;
         statReq = 0;
@@ -202,6 +211,7 @@ public readonly partial record struct RoomExit(
         classGate = 0;
         preCast = 0;
         postCast = 0;
+        alignmentGate = null;
 
         if (string.IsNullOrEmpty(raw)) return;
 
@@ -360,9 +370,19 @@ public readonly partial record struct RoomExit(
             return;  // hint stays None — movement is still a plain cardinal step
         }
 
-        // Race / Alignment / Ability / Timed restrictions: walker treats as
-        // None for now (path-time gates are a later concern); RawHint carries
-        // the detail forward.
+        // "(Alignment: LOW to HIGH)" — an alignment-gated cardinal step (an evil /
+        // good entrance). The movement stays a plain cardinal (hint None); the
+        // numeric window captures who may traverse it. Parsed via the confirmed
+        // band→value ladder; an unrecognised band leaves the exit ungated rather
+        // than mis-gated.
+        if (raw.StartsWith("Alignment", StringComparison.OrdinalIgnoreCase))
+        {
+            alignmentGate = Calculators.AlignmentBands.ParseGate(raw);
+            return;  // hint stays None — movement is still a plain cardinal step
+        }
+
+        // Race / Ability / Timed restrictions: walker treats as None for now
+        // (path-time gates are a later concern); RawHint carries the detail forward.
     }
 
     // Pull "N picklocks" / "N picklocks/strength" out of a modifier string. Used

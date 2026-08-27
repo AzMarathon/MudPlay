@@ -110,6 +110,20 @@ public sealed class PartyComebackManager : IDisposable
     private readonly List<RoomKey> _backtrack = new();
     private int _backtrackIndex;
 
+    // Consecutive recovery walks that couldn't REACH a member, keyed by given name.
+    // A follower stranded past a gate the leader can't cross (an item / key / toll
+    // gate the return route runs through) fails the same walk every cycle, and each
+    // fresh @comeback restarts the doomed walk — hijacking the leader's own
+    // navigation over and over (report paradigm-20260827-154819: a manual walk-to
+    // was repeatedly yanked toward a reconnected-but-unreachable follower). After
+    // MaxFailedRecoveries failures we @forget the member so their next @comeback is
+    // declined outright instead of restarting the chase. Reset on a follow-confirm
+    // (they actually rejoined), which also un-strands a member who later returns by
+    // a reachable route. UI-thread only, like the rest of this manager.
+    private readonly Dictionary<string, int> _failedRecoveries =
+        new(StringComparer.OrdinalIgnoreCase);
+    private const int MaxFailedRecoveries = 2;
+
     // Backtrack budget — how many rooms back along the just-walked path the leader
     // will search for a stranded follower before giving up and going idle. Mirrors
     // OtherSettings.MaxComebackBacktrackRooms; clamped to 1..50 on use.
@@ -127,6 +141,15 @@ public sealed class PartyComebackManager : IDisposable
     // idle. Surfaced in the bug report's Party section so a "leader never came
     // back for me" report shows whether a recovery was in flight.
     public string? RecoveringMember => _busy ? _senderGiven : null;
+
+    // Members we've hit the failed-recovery cap on and are now declining outright
+    // (name → failure count). Surfaced in the bug report so a "leader keeps
+    // abandoning me" report shows we gave up because their return route was
+    // un-crossable, not by mistake. Empty in the common case.
+    public IReadOnlyDictionary<string, int> GivenUpMembers =>
+        _failedRecoveries
+            .Where(kv => kv.Value >= MaxFailedRecoveries)
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
 
     // Invoked with a leader's given name when a @forget teardown involves someone
     // we were following, so the follower-side rejoin memory
@@ -345,6 +368,19 @@ public sealed class PartyComebackManager : IDisposable
             return;
         }
 
+        // Repeated-failure backoff — a member we've failed to reach
+        // MaxFailedRecoveries times running is stranded past a gate we can't cross;
+        // stop chasing them so the doomed recovery walk can't keep hijacking our own
+        // navigation (report paradigm-20260827-154819). @forget them so they stop
+        // waiting; the count is left at the cap so a fresh @comeback keeps declining
+        // until they actually rejoin (which clears it in OnMemberFollowConfirmed).
+        if (_failedRecoveries.GetValueOrDefault(senderGiven) >= MaxFailedRecoveries)
+        {
+            reply($"tried reaching you {MaxFailedRecoveries}x and couldn't — forget me");
+            DeclineAndForget(senderGiven);
+            return;
+        }
+
         // Party-full gate — we backfilled the empty slot while they were gone, so
         // there's no seat to recover them into.
         if (_party.State.Members.Count >= MaxPartySize)
@@ -520,9 +556,24 @@ public sealed class PartyComebackManager : IDisposable
         // _phase is set above so that re-entry is handled correctly.
         if (!_walker.WalkTo(room))
         {
+            if (phase == ComebackPhase.WalkingToRoom) NoteRecoveryFailedToReach();
             _reply($"can't reach {room.Map}/{room.Room} — resuming");
             Resume();
         }
+    }
+
+    // Count a recovery walk that couldn't reach the member (plan-time no-path or a
+    // mid-route gate refusal). Drives the MaxFailedRecoveries backoff in
+    // BeginRecovery. A follow-confirm clears the count; only failures to REACH them
+    // count — a reach-but-no-follow (FollowTimeout) is a different problem and stays
+    // neutral.
+    private void NoteRecoveryFailedToReach()
+    {
+        if (string.IsNullOrEmpty(_senderGiven)) return;
+        int n = _failedRecoveries.GetValueOrDefault(_senderGiven) + 1;
+        _failedRecoveries[_senderGiven] = n;
+        _log?.Info(LogCategory,
+            $"recovery of {_senderGiven} failed to reach them ({n}/{MaxFailedRecoveries})");
     }
 
     private void OnWalkEvent(WalkEvent e)
@@ -532,7 +583,7 @@ public sealed class PartyComebackManager : IDisposable
         {
             case ComebackPhase.WalkingToRoom:
                 if (e.Kind == WalkEventKind.Finished) ReInviteAndAwait();
-                else if (e.Kind == WalkEventKind.Failed) { _reply("path failed — resuming"); Resume(); }
+                else if (e.Kind == WalkEventKind.Failed) { NoteRecoveryFailedToReach(); _reply("path failed — resuming"); Resume(); }
                 break;
             case ComebackPhase.WalkingBacktrack:
                 if (e.Kind == WalkEventKind.Finished) OnBacktrackArrival();
@@ -603,6 +654,12 @@ public sealed class PartyComebackManager : IDisposable
 
     private void OnMemberFollowConfirmed(string name)
     {
+        // Any successful (re)follow clears the member's failed-recovery count — they
+        // rejoined, so the backoff has served its purpose and a future strand starts
+        // fresh. Runs even outside an active recovery (e.g. a manual re-invite that
+        // succeeds), un-stranding a member we'd previously given up on.
+        _failedRecoveries.Remove(GivenName(name));
+
         if (!_busy || _phase != ComebackPhase.AwaitingFollow) return;
         if (!string.Equals(GivenName(name), _senderGiven, StringComparison.OrdinalIgnoreCase)) return;
         _reply("got you — resuming");

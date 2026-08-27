@@ -361,6 +361,59 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Contains("resuming", h.LastReply);
     }
 
+    // ----- repeated-failure backoff (report -154819) -----------------
+
+    [Fact]
+    public void RepeatedReachFailures_GivesUp_AndForgets()
+    {
+        using Harness h = NewHarness();
+        SeatFollower(h, "Tank");
+        StartLair(h);
+
+        // Two recovery walks that start then fail to reach Tank (as if stranded past
+        // a gate we can't cross). Each resumes the lair; the counter climbs to the
+        // cap. Without the backoff, every fresh @comeback would restart the doomed
+        // walk and keep hijacking our own navigation (report -154819).
+        for (int i = 0; i < MaxFailuresToTrip; i++)
+        {
+            h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+            Assert.Equal(WalkState.Walking, h.Walker.State);      // recovery walk owns the wire
+            h.Walker.AbortFromRecoveryFailure("gate we can't cross");   // → Failed → count++
+            Assert.True(h.Lair.IsActive);                          // resumed our own run
+        }
+
+        // Over the cap now — decline outright + @forget, without stopping our engine
+        // for another doomed walk.
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+        Assert.Contains("tried reaching you", h.LastReply);
+        Assert.True(Sent(h, "/Tank @forget"));
+        Assert.Equal(WalkState.Idle, h.Walker.State);   // no recovery walk started
+        Assert.True(h.Lair.IsActive);                    // our navigation left alone
+    }
+
+    [Fact]
+    public void FollowConfirm_ClearsFailedRecoveryBackoff()
+    {
+        using Harness h = NewHarness();
+        SeatFollower(h, "Tank");
+        StartLair(h);
+
+        // One failed reach (count below the cap), then Tank actually rejoins.
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+        h.Walker.AbortFromRecoveryFailure("gate");
+        h.Router.Dispatch(Line("Tank started to follow you."));   // clears the count
+
+        // The very next @comeback still tries (walks), not declines — the follow-
+        // confirm reset the backoff, so a later, reachable return isn't stranded.
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.DoesNotContain("tried reaching you", h.LastReply);
+    }
+
+    // Mirrors PartyComebackManager.MaxFailedRecoveries (private) — the number of
+    // failed reaches that trips the give-up.
+    private const int MaxFailuresToTrip = 2;
+
     // ----- backtrack path --------------------------------------------
 
     [Fact]

@@ -1,14 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.35**
-> - who list: the Players roster no longer stops short — an all-caps FIEND alignment row now parses (alignment matched case-insensitively), and a lone unreadable line is skipped instead of ending the whole list early
-> - Gear sets: swapping paired slots (both wrists / both fingers) now sends a single `rem` instead of two — the first `wear` evicts the first-slot item on its own, so only the second slot needs an explicit `rem` cleared ahead of its replacement
-> - @have now finds keys — it searches the key ring (the dump's own "You have the following keys:" list) alongside the pack and worn gear, so `@have black star key` answers "yes" instead of "no" when the key's on the ring
-> - Conversation: action / realm rows no longer leave a gap between the channel chip and the line (the empty speaker column is collapsed)
-> - Conversation: a realm / server line is coloured its chip's colour end-to-end instead of switching to white mid-sentence
-> - Remote commands: an @-command sent over say that draws a reply is now answered with a directed say (`>Name ...`) aimed back at the caller, on the same say channel it arrived on
-> - Conversation: directed says are logged with their target on both ends — the sender's window shows "You (to Name): ...", the recipient and any third party in the room show "Speaker (to Name): ..."
+> **Version 3.29.0**
+> - Navigation: **alignment-aware routing** — the good / evil `(Alignment: X to Y)` entrances are now honored. Routing is whole-party: the party routes **around** an entrance a member's alignment can't enter; when a member's alignment isn't known yet it walks **up to** the gate and **halts** there rather than guessing
+> - Navigation: an alignment-gated-exit refusal is now recognized, so a mis-planned move reverts cleanly instead of stranding the tracker
+> - Desert hazard: the auto waterskin counter no longer spends a charge when a sunstone wristband (or any full-immunity guard) is held or worn — it skips the `use`
+> - Party: a member `@wait`-held by another now spends the wait resting toward **full** HP/mana instead of stopping at the rest-max floor, ending when the wait releases
+> - Party recovery: after failing to reach a stranded follower twice, the leader **gives up** (sends `@forget`) instead of restarting a doomed recovery walk that keeps hijacking its own navigation
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

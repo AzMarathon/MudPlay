@@ -80,6 +80,7 @@ public sealed partial class MovementRefusalDetector : IDisposable
         CantSeeWellEnoughToMove(),
         TooEncumberedToMove(),
         FlatOnYourBack(),
+        AlignmentBlocksExit(),
     };
 
     [GeneratedRegex(
@@ -143,4 +144,14 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*The door to the (\w+) just closed[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DoorToDirectionJustClosed();
+
+    // Alignment-gated exit — Paradigm refuses an exit whose "(Alignment: X to Y)"
+    // band excludes the mover ("Your current alignment prevents you from entering
+    // this exit."). The router isn't alignment-aware yet, so a route planned through
+    // such an exit bonks here; recognizing it reverts the pending move cleanly
+    // instead of stranding the tracker (report paradigm-20260827-144553).
+    [GeneratedRegex(
+        @"^\s*Your current alignment prevents you from entering this exit[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex AlignmentBlocksExit();
 }
