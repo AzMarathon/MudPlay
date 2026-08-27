@@ -124,6 +124,7 @@ public sealed class TrialGearFinderTests
 
     [Theory]
     [InlineData("Armour Class")]
+    [InlineData("Effective AC vs Evil")]
     [InlineData("AC Blur")]
     [InlineData("AC/DR Combo")]
     [InlineData("Damage Resist")]
@@ -161,6 +162,16 @@ public sealed class TrialGearFinderTests
         TrialFindFilter combo = TrialGearFinder.Filters.Single(f => f.Label == "AC/DR Combo");
         ItemFinderEntry item = Item("plate", EquipmentSlot.Torso) with { Ac = 5, Dr = 3 };
         Assert.Equal(8, combo.Score(item));
+    }
+
+    [Fact]
+    public void EffectiveAcVsEvil_ScoresAcPlusProtEvil()
+    {
+        // Report 20260827: a low-AC item carrying Prot-Evil (a CONFIRMED 1 AC/point
+        // vs the majority of monsters) shouldn't look worse than its raw AC implies.
+        TrialFindFilter effectiveAc = TrialGearFinder.Filters.Single(f => f.Label == "Effective AC vs Evil");
+        ItemFinderEntry item = Item("witchwood bracelet", EquipmentSlot.Wrist1) with { Ac = 2, ProtEvil = 8 };
+        Assert.Equal(10, effectiveAc.Score(item));
     }
 
     [Fact]

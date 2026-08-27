@@ -345,7 +345,7 @@
                                       SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
                                       MinWidth="150"/>
                             <Button Content="Find Best" Command="{Binding FindBestCommand}"
-                                    ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat."/>
+                                    ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat (or, with a search order below, in that priority order)."/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Classes="FieldLabel" Text="Target weight" VerticalAlignment="Center"/>
@@ -354,6 +354,14 @@
                                       MinWidth="90"
                                       ToolTip.Tip="Cap Find Best's picks so the projected trial set stays within this encumbrance band."/>
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="+ Add to search order" Command="{Binding AddToChainCommand}"
+                                    ToolTip.Tip="Append the criterion above to a priority-ordered multi-stat search — e.g. VileWard, then Armour Class, then Spellcasting. Each slot goes to the highest-priority criterion that finds anything for it; lower ones only get a turn at what's left. Leave empty to just search by the single criterion above."/>
+                            <Button Content="Clear order" Command="{Binding ClearChainCommand}"
+                                    IsVisible="{Binding HasChain}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding ChainSummaryText}" TextWrapping="Wrap"
+                                   Classes="FieldLabel" IsVisible="{Binding HasChain}"/>
                     </StackPanel>
 
                     <Grid Grid.Row="2" ColumnDefinitions="44,72,*" Margin="0,0,0,4" ColumnSpacing="4">

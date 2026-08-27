@@ -269,6 +269,22 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         TrialGearFinder.Filters.Select(static f => f.Label).ToArray();
     [ObservableProperty] private string? _selectedTrialFilter;
 
+    // Priority-ordered multi-stat search: "Add to search order" appends the current
+    // dropdown pick here. An empty chain means Find Best runs the single dropdown
+    // criterion exactly as before this existed. A populated chain is resolved highest-
+    // priority first — each pass fills only the slots still unresolved, so a slot goes
+    // to whichever criterion earliest finds something for it and lower-priority
+    // criteria only get a turn at what's left (e.g. "VileWard, then AC, then
+    // Spellcasting" for a min-max build across all three). No cross-stat scale
+    // conversion is invented — this reuses the existing single-stat argmax per pass,
+    // the same as manually Holding a slot and re-running Find Best with a different
+    // criterion.
+    public ObservableCollection<string> CriteriaChain { get; } = new();
+    public bool HasChain => CriteriaChain.Count > 0;
+    public string ChainSummaryText => HasChain
+        ? "Search order: " + string.Join(" → ", CriteriaChain)
+        : string.Empty;
+
     // Find-Best target-weight dropdown: caps the projected trial-set encumbrance at
     // the chosen band (reusing the same None/Light/Medium/Heavy bracketing the live
     // character's own Encumbrance reading uses) instead of picking on raw score
@@ -306,6 +322,11 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         BuildOptionLists();
         BuildTrialSlots();
         SelectedTrialFilter = TrialFilterOptions.Count > 0 ? TrialFilterOptions[0] : null;
+        CriteriaChain.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasChain));
+            OnPropertyChanged(nameof(ChainSummaryText));
+        };
 
         // Open pre-narrowed to the live character — class / level / alignment — so
         // the first thing shown is "what can I wear", not the whole catalog. These
@@ -720,12 +741,41 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         RecomputeTrial();
     }
 
-    // Fill every non-held slot with the best equippable item for the chosen filter,
-    // searched within whatever the results grid currently shows — not the whole
-    // catalog. This is deliberate: a plate-capable class's "best AC" is plate almost
-    // by construction (nothing else comes close on raw AC), so with no way to
-    // restrict the search a player who explicitly wants "best AC in leather" (or
-    // any other narrower intent — a specific armour/weapon type, a stat floor, a
+    // Append the dropdown's current criterion to the priority chain (a no-op if it's
+    // already in there or nothing's selected).
+    [RelayCommand]
+    private void AddToChain()
+    {
+        if (SelectedTrialFilter is { } label && !CriteriaChain.Contains(label))
+            CriteriaChain.Add(label);
+    }
+
+    [RelayCommand]
+    private void ClearChain() => CriteriaChain.Clear();
+
+    // The chain resolves highest-priority-first; an empty chain falls back to the
+    // single dropdown criterion (Find Best's original, pre-chain behavior).
+    private List<TrialFindFilter> BuildChain()
+    {
+        if (CriteriaChain.Count == 0)
+            return TrialGearFinder.Filters.FirstOrDefault(f => f.Label == SelectedTrialFilter) is { } single
+                ? new List<TrialFindFilter> { single }
+                : new List<TrialFindFilter>();
+
+        var list = new List<TrialFindFilter>();
+        foreach (string label in CriteriaChain)
+            if (TrialGearFinder.Filters.FirstOrDefault(f => f.Label == label) is { } f)
+                list.Add(f);
+        return list;
+    }
+
+    // Fill every non-held slot with the best equippable item(s) for the chosen
+    // criterion (or, with a search order built, criteria in priority order — see
+    // AddToChain), searched within whatever the results grid currently shows — not
+    // the whole catalog. This is deliberate: a plate-capable class's "best AC" is
+    // plate almost by construction (nothing else comes close on raw AC), so with no
+    // way to restrict the search a player who explicitly wants "best AC in leather"
+    // (or any other narrower intent — a specific armour/weapon type, a stat floor, a
     // name substring) had no way to ask for it. Narrow the grid to what you want
     // Find Best to consider — set Armour Type to Leather, say — and it searches
     // exactly that; leave every filter at its default and it searches everything,
@@ -733,30 +783,48 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     // pick a None/Light/Medium/Heavy band and Find Best stops filling slots once the
     // projected trial set would push past it, so "best AC" can mean "best AC that
     // keeps me Light" instead of raw-highest regardless of what it weighs.
+    //
+    // With a search order built (e.g. VileWard, then Armour Class, then
+    // Spellcasting), each criterion runs in turn against only the slots the ones
+    // before it left unresolved — so a slot goes to the highest-priority criterion
+    // that finds anything for it, and lower-priority criteria only get a turn at
+    // whatever's left. This is exactly the manual Hold-then-rerun workflow, automated
+    // — no cross-stat conversion is invented to blend unrelated stats into one score.
     [RelayCommand]
     private void FindBest()
     {
-        if (TrialGearFinder.Filters.FirstOrDefault(f => f.Label == SelectedTrialFilter) is not { } filter)
-            return;
-        var held = new HashSet<EquipmentSlot>(TrialSlots.Where(r => r.Hold).Select(r => r.Slot));
+        List<TrialFindFilter> chain = BuildChain();
+        if (chain.Count == 0) return;
+
         var current = TrialSlots.ToDictionary(r => r.Slot, r => r.ItemName);
         var targets = TrialSlots.Select(r => r.Slot).ToList();
+        var filled = new HashSet<EquipmentSlot>(TrialSlots.Where(r => r.Hold).Select(r => r.Slot));
+        int? weightBudget = ComputeWeightBudget(filled, current);
 
         // PassesFilter already covers class / alignment / usable-level (via
         // _activeCharFilter + CanEquip) and the level-/strength-req ceilings, so
         // TrialGearFinder.FindBest's own matching checks on those inputs are a
         // harmless re-confirmation, not double-filtering against something new.
         List<ItemFinderEntry> candidates = _all.Where(PassesFilter).ToList();
-        Dictionary<EquipmentSlot, string> best = TrialGearFinder.FindBest(
-            candidates, targets, held, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
-            weightBudget: ComputeWeightBudget(held, current));
 
-        // Every non-held slot is cleared, then filled with this filter's best (null
-        // when it found nothing). Hold the keepers, run another filter, and repeat.
         foreach (TrialSlotRow row in TrialSlots)
+            if (!row.Hold) row.SetItemQuiet(null);
+
+        foreach (TrialFindFilter filter in chain)
         {
-            if (row.Hold) continue;
-            row.SetItemQuiet(best.TryGetValue(row.Slot, out string? name) ? name : null);
+            List<EquipmentSlot> remaining = targets.Where(t => !filled.Contains(t)).ToList();
+            if (remaining.Count == 0) break;
+            Dictionary<EquipmentSlot, string> best = TrialGearFinder.FindBest(
+                candidates, remaining, filled, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
+                weightBudget: weightBudget);
+            foreach ((EquipmentSlot slot, string name) in best)
+            {
+                TrialSlots.First(r => r.Slot == slot).SetItemQuiet(name);
+                filled.Add(slot);
+                current[slot] = name;
+                if (weightBudget.HasValue && _entryByName.TryGetValue(name, out ItemFinderEntry? e))
+                    weightBudget = Math.Max(0, weightBudget.Value - e.Encum);
+            }
         }
         RecomputeTrial();
     }

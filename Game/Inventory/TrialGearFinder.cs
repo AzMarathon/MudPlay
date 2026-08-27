@@ -25,6 +25,11 @@ public static class TrialGearFinder
     public static readonly IReadOnlyList<TrialFindFilter> Filters = new[]
     {
         new TrialFindFilter("Armour Class",     e => e.Ac),
+        // Prot-Evil is a CONFIRMED 1 AC/point vs evil monsters (the majority of
+        // monsters) — see GAME_MECHANICS.md. Plain "Armour Class" above stays raw-AC
+        // only so a witchwood-bracelet-style item (low Ac, high ProtEvil) isn't
+        // penalized for a stat that's genuinely AC almost all the time.
+        new TrialFindFilter("Effective AC vs Evil", e => e.Ac + e.ProtEvil),
         new TrialFindFilter("AC Blur",          e => e.AcBlur),
         new TrialFindFilter("AC/DR Combo",      e => e.Ac + e.Dr),
         new TrialFindFilter("Damage Resist",    e => e.Dr),
