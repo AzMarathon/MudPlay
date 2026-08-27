@@ -44,7 +44,14 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
 
     // Per-step pacing. Blind-fast floors fire the next step after a short settle;
     // paced floors wait a round-time before advancing.
-    private static readonly TimeSpan BlindSettle = TimeSpan.FromMilliseconds(350);
+    //
+    // BlindSettle is the STOCK blind-floor pace — stock's below-heavy hop is ~0.5-0.6s
+    // (and the stock preflight refuses Heavy leaders outright, so every stock climber
+    // is in that band), so 400ms stays a touch under the real hop for a small
+    // type-ahead lead without flooding. Paradigm doesn't use this — its ~1s hop floor
+    // made a fixed short settle fire ~3x too fast and desync (report -133835), so it
+    // paces at the real per-hop time in SettleFor instead.
+    private static readonly TimeSpan BlindSettle = TimeSpan.FromMilliseconds(400);
     private static readonly TimeSpan PacedSettle = TimeSpan.FromMilliseconds(700);
 
     // Floor 4 (the footpath) steps slower than the other paced floors for react
@@ -302,6 +309,17 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _doorPolls = 0;
         _phase = Phase.Climbing;
         _log?.Log(LogSeverity.Info, LogSource, $"driving {floor}");
+        // Surface the per-step pace for the timed/blind floors so a bug report can be
+        // checked against the movetime the solver actually used (report -133835).
+        if (PyramidScript.IsBlindFast(floor))
+        {
+            TimeSpan pace = SettleFor(floor);
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"{floor} blind pace = {pace.TotalMilliseconds:0} ms/step"
+                + (_isParadigm()
+                    ? $" (Paradigm hop for carry {_snapshot().Encumbrance.Percentage}%, quickness {_quickness()}, +10% lag buffer)"
+                    : " (stock fixed)"));
+        }
         DriveCurrent();
     }
 
@@ -406,9 +424,22 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         StartFloor(next);
     }
 
-    private static TimeSpan SettleFor(PyramidFloor floor)
-        => floor == PyramidFloor.F4 ? Floor4Settle
-         : PyramidScript.IsBlindFast(floor) ? BlindSettle : PacedSettle;
+    private TimeSpan SettleFor(PyramidFloor floor)
+    {
+        if (floor == PyramidFloor.F4) return Floor4Settle;
+        if (!PyramidScript.IsBlindFast(floor)) return PacedSettle;
+        // Blind/timed floor (F1 timed, F2 damage-escalating — both fire ahead with no
+        // per-step confirmation). Paradigm's ~1s hop floor made the old fixed short
+        // settle fire ~3x too fast, flooding the type-ahead into a desync (report
+        // paradigm-20260827-133835), so Paradigm paces at the character's real
+        // lag-buffered hop time — the SAME value the F1 preflight sized its 5-min timer
+        // estimate against. Stock isn't formula-tracked, but its below-heavy hop is
+        // ~0.5-0.6s (Heavy leaders are preflight-refused), so the flat BlindSettle
+        // (400ms) stays a touch under it without flooding.
+        if (!_isParadigm()) return BlindSettle;
+        double ms = PyramidPreflight.PacedPerMoveMs(_snapshot().Encumbrance.Percentage, _quickness());
+        return TimeSpan.FromMilliseconds(ms);
+    }
 
     // Floors where the solver waits on combat / holds (F1/F2 rush blind).
     private static bool IsPacedFloor(PyramidFloor f)
