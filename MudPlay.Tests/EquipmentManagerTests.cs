@@ -447,6 +447,29 @@ public sealed class EquipmentManagerTests
         Assert.Equal(2, fired);
     }
 
+    // A physical-slot apply now streams its wear burst synchronously (the paced
+    // DispatcherTimer is gone — report paradigm-20260827-082305 / equip-delay
+    // removal), so the whole delta lands on the wire in one call and the test can
+    // assert it directly (before, the unpumped timer meant nothing was sent).
+    [Fact]
+    public void ApplyByKeyword_PhysicalSet_StreamsWearBurstSynchronously()
+    {
+        EquipmentSettings settings = new()
+        {
+            Sets =
+            {
+                Set("armor", "Armor",
+                    Entry(EquipmentSlot.Head, "iron helm"),
+                    Entry(EquipmentSlot.Torso, "plate mail")),
+            },
+        };
+        EquipmentManager mgr = Manager(settings,
+            SnapshotHeld("iron helm", "plate mail"), new CombatSettings());
+
+        Assert.Equal(EquipResult.Applied, mgr.ApplyByKeyword("armor"));
+        Assert.Equal(new[] { "wear iron helm", "wear plate mail" }, Wire(mgr));
+    }
+
     [Fact]
     public void ApplyBySetId_UnknownId_LeavesCurrentSetUnchanged()
     {

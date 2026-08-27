@@ -66,6 +66,17 @@ public sealed class AutoEquipCoordinator : IDisposable
     private DateTimeOffset _lastItemCastSwapAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ItemCastSwapSuppressWindow = TimeSpan.FromSeconds(4);
 
+    // Recovery-complete swaps back to the Default set in-room (OnRecoveryComplete),
+    // and the stand-up that immediately follows would fire a SECOND, redundant
+    // Default swap (report paradigm-20260827-125103: the gear swapper double-swapping
+    // — a Default apply, then another ~1s later as the walker stepped out). Stamp
+    // when a Default actually applies and suppress the stand-up Default within a short
+    // window of it, so recovery→Default swaps exactly once. The stand-up path still
+    // fires when nothing recently swapped Default (a stand that OnRecoveryComplete
+    // didn't cover — e.g. recovery gated off in combat).
+    private DateTimeOffset _lastDefaultAppliedAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan DefaultReapplySuppressWindow = TimeSpan.FromSeconds(4);
+
     public AutoEquipCoordinator(
         PlayerState player,
         Func<EquipmentSettings> readEquipment,
@@ -187,6 +198,17 @@ public sealed class AutoEquipCoordinator : IDisposable
                     + "not reverting the pre-rest set until the pool reaches rest-max");
                 return;
             }
+            // OnRecoveryComplete already swapped back to Default in-room, just before
+            // this stand; don't fire a second, redundant Default swap on the stand-up
+            // (report paradigm-20260827-125103). Only fires here when nothing recently
+            // reverted Default — a stand OnRecoveryComplete didn't cover.
+            if (_now() - _lastDefaultAppliedAt < DefaultReapplySuppressWindow)
+            {
+                _log?.Debug(EquipmentManager.LogCategory,
+                    "auto-equip 'Default' held: recovery already reverted to Default in-room "
+                    + "(suppressing the redundant stand-up swap)");
+                return;
+            }
             Fire(EquipTriggerType.Default);   // recovered — back to baseline
         }
     }
@@ -232,7 +254,12 @@ public sealed class AutoEquipCoordinator : IDisposable
             return;
         }
         if (_applyBySetId(setId) == EquipResult.Applied)
+        {
+            // Stamp a real Default swap so the stand-up that follows a recovery-
+            // complete revert doesn't fire a second one (report -125103).
+            if (type == EquipTriggerType.Default) _lastDefaultAppliedAt = _now();
             _log?.Info(EquipmentManager.LogCategory, $"auto-equip '{type}' applied its set");
+        }
     }
 
     public void Dispose() => _player.PropertyChanged -= OnPlayerChanged;

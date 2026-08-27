@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.23**
-> - Navigation map: a walk-to route line no longer draws a stray straight segment across the map after you take manual control — the route only connects rooms actually adjacent on the map graph, so an off-route manual step can't leave a dangling line to a stale next step
-> - Navigation: `The gate is closed!` (and the `... in that direction` variant) is now recognized as a movement refusal like a closed door — a winch/gate that opens a moment later no longer leaves the walker stalled thinking it already moved
-> - Navigation: after a forced boat disembark into a duplicate-named room the client auto-issues a `rm` to re-locate (Paradigm realms), so the map no longer desyncs and strands the walker when the game moves you without a normal step
-> - Navigation: with Auto-Combat off, entering a room with a hostile no longer deadlocks the walker waiting for a fight that will never happen — the room search fires and pathing continues
+> **Version 3.28.26**
+> - Gear sets: the `wear`/`rem` commands during a swap now stream back-to-back with no delay (the 100 ms pacing is gone) — a full-loadout swap is near-instant, matching MegaMUD instead of feeling laggy
+> - Meditate/rest: a character held below its mana (or HP) rest floor in a room it just cleared no longer sits doing nothing — an idle-stall "room empty" force-clear used to leave a stale hostile latch that blocked the meditate/rest (which an empty static room never re-displays to clear), so it just passively regenerated; after the short reconfirm timeout it now meditates/rests (and gear-swaps) as intended
+> - Gear sets: finishing a rest no longer fires the Default swap twice — the in-room recovery-complete revert and the stand-up that follows were both swapping to Default; the redundant stand-up swap is now suppressed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
