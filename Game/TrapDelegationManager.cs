@@ -168,9 +168,10 @@ public sealed class TrapDelegationManager : System.IDisposable
     {
         if (_pendingReply is null) return;
 
-        // Group 0 = speaker (empty for our own "You say …"), group 1 = text.
+        // Group 0 = speaker (empty for our own "You say …"), group 1 = directed-say
+        // target (empty for an undirected say), group 2 = text.
         string? speaker = result.Groups.Count > 0 ? result.Groups[0] : null;
-        string? message = result.Groups.Count > 1 ? result.Groups[1] : null;
+        string? message = result.Groups.Count > 2 ? result.Groups[2] : null;
         if (string.IsNullOrEmpty(speaker) || string.IsNullOrEmpty(message)) return;
 
         // Only a party member's reply resumes us — ignore random room chatter.

@@ -352,8 +352,17 @@ public static class DefaultPatterns
         // non-capturing group swallows it so the directed reply still lands in
         // the say channel (and a directed @-command still routes) instead of
         // being dropped entirely.
+        // Say, incl. the DIRECTED form `X says (to Target) "msg"` (a directed say is
+        // seen by the target AND any third party in the room) — capture the target so
+        // the conversation window can show `X (to Target): msg`.
         yield return new RegexPattern(KnownPatterns.ConversationLocal,
-            @"^(?:(?<player>\w+) says|You say)(?: \(to [^)]+\))? ""(?<message>.+)""");
+            @"^(?:(?<player>\w+) says|You say)(?: \(to (?<directed>[^)]+)\))? ""(?<message>.+)""");
+        // Our OWN outgoing directed say — the server confirms only the target
+        // (`--- Message Directed to X ---`), never the message; ChatRouter pairs it
+        // with the typed `>X message` line to log `You (to X): message`.
+        yield return new RegexPattern(KnownPatterns.ConversationDirectedSayOut,
+            @"^--- Message Directed to (?<player>\w+) ---$",
+            options: System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         // Paradigm's server PvP announcements. Every one leads with the
         // paradigm-specific "Server PvP Message: " literal — a kill is one form
         // ("X just killed Y!") but there are others — so match the prefix and

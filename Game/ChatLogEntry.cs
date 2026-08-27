@@ -16,9 +16,13 @@ namespace MudPlay.Game;
 // RawText: the original LineExtractor.EmittedLine.Text so downstream consumers
 //   can fall back to the verbatim form when the classified split isn't
 //   sufficient.
+// DirectedTo: for a directed say (`X says (to Target) "msg"`, or our own outgoing
+//   `>Target msg`), the target the say is aimed at. null for an undirected say and
+//   every other channel. The conversation window renders it as `X (to Target)`.
 public readonly record struct ChatLogEntry(
     DateTimeOffset Timestamp,
     ChatChannel Channel,
     string? Speaker,
     string Message,
-    string RawText);
+    string RawText,
+    string? DirectedTo = null);

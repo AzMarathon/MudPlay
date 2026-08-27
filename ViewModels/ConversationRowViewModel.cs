@@ -67,6 +67,12 @@ public sealed class ConversationRowViewModel
         // a consistent "<who>" prefix.
         string speaker = string.IsNullOrEmpty(entry.Speaker) ? "You" : entry.Speaker!;
 
+        // A directed say names its target so the reader knows who it's aimed at, even
+        // as a third party overhearing it: "Suijin (to Fujin): hi", or "You (to Fujin):
+        // hi" for our own outgoing one.
+        if (!string.IsNullOrEmpty(entry.DirectedTo))
+            return $"{speaker} (to {entry.DirectedTo}):";
+
         // RealmEvent rows read as a sentence ("Raijin entered the Realm")
         // so the trailing colon would feel wrong. Every other channel
         // pairs "<who>" with the message body and gets the colon.
