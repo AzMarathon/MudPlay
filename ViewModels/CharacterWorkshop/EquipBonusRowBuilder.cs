@@ -39,6 +39,7 @@ public static class EquipBonusRowBuilder
         AddInt(rows, b, "Hit Magic", t.WeaponHitMagic);
         AddInt(rows, b, "Dodge", t.PlusDodge);
         AddInt(rows, b, "Magic Resist", t.PlusMagicResist);
+        AddInt(rows, b, "ShockShield", t.PlusShockShield);
         AddInt(rows, b, "BS Accuracy", t.PlusBSAccuracy);
         AddInt(rows, b, "BS Min Dmg", t.PlusBSMin);
         AddInt(rows, b, "BS Max Dmg", t.PlusBSMax);
@@ -50,6 +51,7 @@ public static class EquipBonusRowBuilder
         AddInt(rows, b, "Picklocks", t.PlusPicklocks);
         AddInt(rows, b, "Illuminate", t.PlusIlluminate);
         AddInt(rows, b, "Quickness", t.PlusQuickness);
+        AddInt(rows, b, "Thievery", t.PlusThievery);
         AddInt(rows, b, "Cold Resist", t.PlusColdResist);
         AddInt(rows, b, "Fire Resist", t.PlusFireResist);
         AddInt(rows, b, "Stone Resist", t.PlusStoneResist);

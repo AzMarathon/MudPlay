@@ -59,7 +59,16 @@ public sealed class ItemFinderCatalogTests : IDisposable
         " {\"Number\":10,\"Name\":\"warding ring\",\"ItemType\":0,\"Worn\":4,\"Abil-0\":28,\"AbilVal-0\":5,\"In Game\":1}," +
         // phoenix charm : neck armour negating two spells (526 magma heat, 218
         //                 temple of fire fire) — exercises the Negates column/filter.
-        " {\"Number\":11,\"Name\":\"phoenix charm\",\"ItemType\":0,\"Worn\":8,\"NegateSpell-0\":526,\"NegateSpell-1\":218,\"In Game\":1}]";
+        " {\"Number\":11,\"Name\":\"phoenix charm\",\"ItemType\":0,\"Worn\":8,\"NegateSpell-0\":526,\"NegateSpell-1\":218,\"In Game\":1}," +
+        // shocking gauntlet : hands armour stacking the newer combat-defense /
+        //                     martial-arts / thievery abilities — Dodge (34),
+        //                     Magic Resist (36), ShockShield (72), Thievery (39),
+        //                     and all six Punch/Kick/JumpKick Accy/Dmg codes
+        //                     (89-94) — exercises the columns those criteria read.
+        " {\"Number\":12,\"Name\":\"shocking gauntlet\",\"ItemType\":0,\"Worn\":3," +
+        "\"Abil-0\":34,\"AbilVal-0\":6,\"Abil-1\":36,\"AbilVal-1\":8,\"Abil-2\":72,\"AbilVal-2\":10,\"Abil-3\":39,\"AbilVal-3\":2," +
+        "\"Abil-4\":89,\"AbilVal-4\":11,\"Abil-5\":92,\"AbilVal-5\":12,\"Abil-6\":90,\"AbilVal-6\":13,\"Abil-7\":93,\"AbilVal-7\":14," +
+        "\"Abil-8\":91,\"AbilVal-8\":15,\"Abil-9\":94,\"AbilVal-9\":16,\"In Game\":1}]";
 
     private const string Spells =
         "[{\"Number\":526,\"Name\":\"magma heat\"},{\"Number\":218,\"Name\":\"temple of fire fire\"}]";
@@ -248,6 +257,34 @@ public sealed class ItemFinderCatalogTests : IDisposable
         Assert.Equal(string.Empty, dagger.StrengthText);
         Assert.Equal(string.Empty, dagger.MinDamageBonusText);
         Assert.Equal(string.Empty, dagger.ShadowResistText);
+    }
+
+    [Fact]
+    public void BuildCatalog_SurfacesDodgeMagicResistShockShieldThieveryAndMartialArtsBonuses()
+    {
+        IReadOnlyList<ItemFinderEntry> catalog = ItemFinderEntry.BuildCatalog(SeededCache());
+
+        ItemFinderEntry gauntlet = catalog.Single(e => e.Name == "shocking gauntlet");
+        Assert.Equal(6, gauntlet.Dodge);
+        Assert.Equal("+6", gauntlet.DodgeText);
+        Assert.Equal(8, gauntlet.MagicResist);
+        Assert.Equal("+8", gauntlet.MagicResistText);
+        Assert.Equal(10, gauntlet.ShockShield);
+        Assert.Equal("+10", gauntlet.ShockShieldText);
+        Assert.Equal(2, gauntlet.Thievery);
+        Assert.Equal("+2", gauntlet.ThieveryText);
+        Assert.Equal(11, gauntlet.PunchAccy);
+        Assert.Equal(12, gauntlet.PunchDmg);
+        Assert.Equal(13, gauntlet.KickAccy);
+        Assert.Equal(14, gauntlet.KickDmg);
+        Assert.Equal(15, gauntlet.JumpKickAccy);
+        Assert.Equal(16, gauntlet.JumpKickDmg);
+
+        // Gear without those abilities leaves each column blank.
+        ItemFinderEntry dagger = catalog.Single(e => e.Name == "keen dagger");
+        Assert.Equal(string.Empty, dagger.DodgeText);
+        Assert.Equal(string.Empty, dagger.ShockShieldText);
+        Assert.Equal(string.Empty, dagger.ThieveryText);
     }
 
     [Fact]

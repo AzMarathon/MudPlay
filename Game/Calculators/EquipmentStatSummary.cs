@@ -55,8 +55,10 @@ public sealed class EquipmentStatSummary
     public int PlusPicklocks { get; set; }       // Abil 37 + 180 (sum)
     public int PlusIlluminate { get; set; }      // Abil 13 + 14 (sum)
     public int PlusQuickness { get; set; }       // Abil 67
+    public int PlusThievery { get; set; }        // Abil 39
     public int PlusHitMagic { get; set; }        // Abil 28 + 142 (sum from ALL equipped items)
     public int WeaponHitMagic { get; set; }      // Abil 28 + 142 from Weapon Hand only
+    public int PlusShockShield { get; set; }     // Abil 72
 
     // Resistances.
     public int PlusColdResist { get; set; }      // Abil 3

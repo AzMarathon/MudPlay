@@ -42,6 +42,9 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     private const string AnyType = "(Any)";
     // Negate dropdown's "no filter" sentinel — the default; shows every item.
     private const string NoNegate = "(none)";
+    // Target-weight dropdown's "no cap" sentinel — the default; Find Best spends no
+    // regard to projected encumbrance, same as before this control existed.
+    private const string AnyTargetWeight = "(Any)";
 
     // The catch-all slot option — every non-weapon item at once, so weapons drop
     // out. The mirror image of the "(All weapons)" weapon-type option below.
@@ -99,8 +102,18 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ("QuicknessText",      static e => e.QuicknessText),
         ("TrapsText",          static e => e.TrapsText),
         ("PicklocksText",      static e => e.PicklocksText),
+        ("ThieveryText",       static e => e.ThieveryText),
         ("ProtEvilText",       static e => e.ProtEvilText),
         ("ProtGoodText",       static e => e.ProtGoodText),
+        ("DodgeText",          static e => e.DodgeText),
+        ("MagicResistText",    static e => e.MagicResistText),
+        ("ShockShieldText",    static e => e.ShockShieldText),
+        ("PunchAccyText",      static e => e.PunchAccyText),
+        ("PunchDmgText",       static e => e.PunchDmgText),
+        ("KickAccyText",       static e => e.KickAccyText),
+        ("KickDmgText",        static e => e.KickDmgText),
+        ("JumpKickAccyText",   static e => e.JumpKickAccyText),
+        ("JumpKickDmgText",    static e => e.JumpKickDmgText),
         ("ColdResistText",      static e => e.ColdResistText),
         ("FireResistText",      static e => e.FireResistText),
         ("StoneResistText",     static e => e.StoneResistText),
@@ -254,6 +267,14 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     public IReadOnlyList<string> TrialFilterOptions { get; } =
         TrialGearFinder.Filters.Select(static f => f.Label).ToArray();
     [ObservableProperty] private string? _selectedTrialFilter;
+
+    // Find-Best target-weight dropdown: caps the projected trial-set encumbrance at
+    // the chosen band (reusing the same None/Light/Medium/Heavy bracketing the live
+    // character's own Encumbrance reading uses) instead of picking on raw score
+    // alone. "(Any)" is uncapped — the original behavior.
+    public IReadOnlyList<string> TargetWeightOptions { get; } =
+        new[] { AnyTargetWeight, "None", "Light", "Medium", "Heavy" };
+    [ObservableProperty] private string? _selectedTargetWeight = AnyTargetWeight;
 
     // Projected worn-item stat readout for the trial set (same rows as the Equipment
     // Manager's Bonuses), and the encumbrance overlay vs the live character.
@@ -696,7 +717,19 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         RecomputeTrial();
     }
 
-    // Fill every non-held slot with the best equippable item for the chosen filter.
+    // Fill every non-held slot with the best equippable item for the chosen filter,
+    // searched within whatever the results grid currently shows — not the whole
+    // catalog. This is deliberate: a plate-capable class's "best AC" is plate almost
+    // by construction (nothing else comes close on raw AC), so with no way to
+    // restrict the search a player who explicitly wants "best AC in leather" (or
+    // any other narrower intent — a specific armour/weapon type, a stat floor, a
+    // name substring) had no way to ask for it. Narrow the grid to what you want
+    // Find Best to consider — set Armour Type to Leather, say — and it searches
+    // exactly that; leave every filter at its default and it searches everything,
+    // same as before. The target-weight dropdown layers a second constraint on top:
+    // pick a None/Light/Medium/Heavy band and Find Best stops filling slots once the
+    // projected trial set would push past it, so "best AC" can mean "best AC that
+    // keeps me Light" instead of raw-highest regardless of what it weighs.
     [RelayCommand]
     private void FindBest()
     {
@@ -706,13 +739,14 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         var current = TrialSlots.ToDictionary(r => r.Slot, r => r.ItemName);
         var targets = TrialSlots.Select(r => r.Slot).ToList();
 
-        // Honor the finder's requirement gates too (class / alignment / usable-at-level
-        // ride CanEquip via the args above; the level- and strength-req ceilings are
-        // finder-only filters, so they come in as an extra predicate).
+        // PassesFilter already covers class / alignment / usable-level (via
+        // _activeCharFilter + CanEquip) and the level-/strength-req ceilings, so
+        // TrialGearFinder.FindBest's own matching checks on those inputs are a
+        // harmless re-confirmation, not double-filtering against something new.
+        List<ItemFinderEntry> candidates = _all.Where(PassesFilter).ToList();
         Dictionary<EquipmentSlot, string> best = TrialGearFinder.FindBest(
-            _all, targets, held, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
-            e => (MaxLevelReq <= 0 || e.LevelReq <= MaxLevelReq)
-              && (MaxStrReq <= 0 || e.StrReq <= MaxStrReq));
+            candidates, targets, held, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
+            weightBudget: ComputeWeightBudget(held, current));
 
         // Every non-held slot is cleared, then filled with this filter's best (null
         // when it found nothing). Hold the keepers, run another filter, and repeat.
@@ -722,6 +756,30 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
             row.SetItemQuiet(best.TryGetValue(row.Slot, out string? name) ? name : null);
         }
         RecomputeTrial();
+    }
+
+    // Translates the target-weight dropdown into an absolute weight budget for
+    // FindBest's non-held slots: the chosen band's ceiling percentage of the live
+    // character's MaxWeight, minus everything already spoken for — non-gear carry
+    // (bags/loose items, via CurrentWornWeight) plus whatever the held trial slots
+    // are keeping. Null (uncapped) for "(Any)" or when live capacity isn't known yet
+    // (not connected, or inventory never parsed this session).
+    private int? ComputeWeightBudget(ISet<EquipmentSlot> held, IReadOnlyDictionary<EquipmentSlot, string?> current)
+    {
+        if (SelectedTargetWeight is null || SelectedTargetWeight == AnyTargetWeight) return null;
+        EncumbranceReading enc = _inventory.Snapshot.Encumbrance;
+        if (enc.MaxWeight <= 0) return null;
+        if (!Enum.TryParse(SelectedTargetWeight, out EncumbranceLevel band)) return null;
+
+        int heldWeight = 0;
+        foreach (EquipmentSlot slot in held)
+            if (current.TryGetValue(slot, out string? name) && name is not null
+                && _entryByName.TryGetValue(name, out ItemFinderEntry? e))
+                heldWeight += e.Encum;
+
+        int baseline = Math.Max(0, enc.CurrentWeight - CurrentWornWeight()) + heldWeight;
+        int ceilingWeight = (int)((long)enc.MaxWeight * EncumbranceCategory.CeilingPercent(band) / 100);
+        return Math.Max(0, ceilingWeight - baseline);
     }
 
     // Right-click "Trial-Equip this Item" on a results row — drop it into its slot,
@@ -762,10 +820,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         {
             CurrentEncumbranceText = string.Create(CultureInfo.InvariantCulture,
                 $"Current: {enc.CurrentWeight:N0}/{enc.MaxWeight:N0}  ({enc.Percentage}%)  {enc.Category}");
-            int currentWorn = 0;
-            foreach (EquippedItem we in _inventory.Snapshot.EquippedItems)
-                if (_entryByName.TryGetValue(we.Name, out ItemFinderEntry? e)) currentWorn += e.Encum;
-            int projected = Math.Max(0, enc.CurrentWeight - currentWorn) + trialWeight;
+            int projected = Math.Max(0, enc.CurrentWeight - CurrentWornWeight()) + trialWeight;
             int pct = (int)((long)projected * 100 / enc.MaxWeight);
             TrialEncumbranceText = string.Create(CultureInfo.InvariantCulture,
                 $"With trial set: {projected:N0}/{enc.MaxWeight:N0}  ({pct}%)  {EncumbranceCategory.ForPercent(pct)}");
@@ -777,6 +832,18 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
                 ? string.Create(CultureInfo.InvariantCulture, $"Trial set weight: {trialWeight:N0}")
                 : "—";
         }
+    }
+
+    // Weight of the real character's currently-equipped gear (live inventory, not
+    // the trial set) — the baseline both RecomputeTrial's encumbrance overlay and
+    // FindBest's weight-budget calculation subtract from live carry weight to
+    // isolate non-gear carry (bags/loose items).
+    private int CurrentWornWeight()
+    {
+        int total = 0;
+        foreach (EquippedItem we in _inventory.Snapshot.EquippedItems)
+            if (_entryByName.TryGetValue(we.Name, out ItemFinderEntry? e)) total += e.Encum;
+        return total;
     }
 
     // The AggregateEquipmentStats slot tag: weapon / off-hand fold accuracy into

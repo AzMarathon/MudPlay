@@ -298,8 +298,18 @@
                         <DataGridTextColumn Header="Quick"      Binding="{ReflectionBinding QuicknessText}"  SortMemberPath="Quickness"  Width="64"  Tag="QuicknessText"/>
                         <DataGridTextColumn Header="Traps"      Binding="{ReflectionBinding TrapsText}"      SortMemberPath="Traps"      Width="64"  Tag="TrapsText"/>
                         <DataGridTextColumn Header="Locks"      Binding="{ReflectionBinding PicklocksText}"  SortMemberPath="Picklocks"  Width="64"  Tag="PicklocksText"/>
+                        <DataGridTextColumn Header="Thievery"   Binding="{ReflectionBinding ThieveryText}"   SortMemberPath="Thievery"   Width="76"  Tag="ThieveryText"/>
                         <DataGridTextColumn Header="Prot Evil"  Binding="{ReflectionBinding ProtEvilText}"   SortMemberPath="ProtEvil"   Width="82"  Tag="ProtEvilText"/>
                         <DataGridTextColumn Header="Prot Good"  Binding="{ReflectionBinding ProtGoodText}"   SortMemberPath="ProtGood"   Width="82"  Tag="ProtGoodText"/>
+                        <DataGridTextColumn Header="Dodge"      Binding="{ReflectionBinding DodgeText}"      SortMemberPath="Dodge"      Width="66"  Tag="DodgeText"/>
+                        <DataGridTextColumn Header="Magic Res"  Binding="{ReflectionBinding MagicResistText}" SortMemberPath="MagicResist" Width="82"  Tag="MagicResistText"/>
+                        <DataGridTextColumn Header="Shock Shld" Binding="{ReflectionBinding ShockShieldText}" SortMemberPath="ShockShield" Width="86"  Tag="ShockShieldText"/>
+                        <DataGridTextColumn Header="Punch Accy" Binding="{ReflectionBinding PunchAccyText}"  SortMemberPath="PunchAccy"  Width="88"  Tag="PunchAccyText"/>
+                        <DataGridTextColumn Header="Punch Dmg"  Binding="{ReflectionBinding PunchDmgText}"   SortMemberPath="PunchDmg"   Width="84"  Tag="PunchDmgText"/>
+                        <DataGridTextColumn Header="Kick Accy"  Binding="{ReflectionBinding KickAccyText}"   SortMemberPath="KickAccy"   Width="82"  Tag="KickAccyText"/>
+                        <DataGridTextColumn Header="Kick Dmg"   Binding="{ReflectionBinding KickDmgText}"    SortMemberPath="KickDmg"    Width="78"  Tag="KickDmgText"/>
+                        <DataGridTextColumn Header="JKick Accy" Binding="{ReflectionBinding JumpKickAccyText}" SortMemberPath="JumpKickAccy" Width="90"  Tag="JumpKickAccyText"/>
+                        <DataGridTextColumn Header="JKick Dmg"  Binding="{ReflectionBinding JumpKickDmgText}" SortMemberPath="JumpKickDmg" Width="86"  Tag="JumpKickDmgText"/>
                         <DataGridTextColumn Header="Cold"       Binding="{ReflectionBinding ColdResistText}" SortMemberPath="ColdResist" Width="60"  Tag="ColdResistText"/>
                         <DataGridTextColumn Header="Fire"       Binding="{ReflectionBinding FireResistText}" SortMemberPath="FireResist" Width="60"  Tag="FireResistText"/>
                         <DataGridTextColumn Header="Stone"      Binding="{ReflectionBinding StoneResistText}" SortMemberPath="StoneResist" Width="62"  Tag="StoneResistText"/>
@@ -328,12 +338,21 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,8,0,6">
-                        <ComboBox ItemsSource="{Binding TrialFilterOptions}"
-                                  SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
-                                  MinWidth="150"/>
-                        <Button Content="Find Best" Command="{Binding FindBestCommand}"
-                                ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat."/>
+                    <StackPanel Grid.Row="1" Spacing="6" Margin="0,8,0,6">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <ComboBox ItemsSource="{Binding TrialFilterOptions}"
+                                      SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
+                                      MinWidth="150"/>
+                            <Button Content="Find Best" Command="{Binding FindBestCommand}"
+                                    ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat."/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Classes="FieldLabel" Text="Target weight" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding TargetWeightOptions}"
+                                      SelectedItem="{Binding SelectedTargetWeight, Mode=TwoWay}"
+                                      MinWidth="90"
+                                      ToolTip.Tip="Cap Find Best's picks so the projected trial set stays within this encumbrance band."/>
+                        </StackPanel>
                     </StackPanel>
 
                     <Grid Grid.Row="2" ColumnDefinitions="44,72,*" Margin="0,0,0,4" ColumnSpacing="4">
