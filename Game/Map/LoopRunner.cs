@@ -76,6 +76,14 @@ public sealed class LoopRunner : IRecoverableEngine
     private Action? _hiddenSearchStopAll;
     private bool _awaitingHiddenReveal;
 
+    // Winch enqueuer — mirrors the door/hidden integration for a MultiActionHidden
+    // winch exit crossed mid-circuit: pull the winch, wait for it to turn + the gate
+    // to open, then cross from OnWinchReply. Null until wired (unit harnesses leave it
+    // unbound and keep the synchronous dispatch).
+    private Action<Direction, string, string, Action<WinchResult>>? _winchEnqueuer;
+    private Action? _winchStopAll;
+    private bool _awaitingWinch;
+
     private Loop? _loop;
     private int _index;
 
@@ -521,6 +529,21 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(stopAll);
         _hiddenSearchStopAll = stopAll;
+    }
+
+    // Winch enqueuer — mirrors AutoWalkManager.SetWinchEnqueuer. Both engines bind
+    // to the same WinchManager so a loop crosses a winch gate the same way.
+    public void SetWinchEnqueuer(Action<Direction, string, string, Action<WinchResult>> enqueuer)
+    {
+        ArgumentNullException.ThrowIfNull(enqueuer);
+        _winchEnqueuer = enqueuer;
+    }
+
+    // Winch teardown — mirrors AutoWalkManager.SetWinchStopper.
+    public void SetWinchStopper(Action stopAll)
+    {
+        ArgumentNullException.ThrowIfNull(stopAll);
+        _winchStopAll = stopAll;
     }
 
     // Start running loop. If a loop is already running, it is stopped first. Returns
@@ -1026,6 +1049,26 @@ public sealed class LoopRunner : IRecoverableEngine
             return;
         }
 
+        // Winch MultiActionHidden: pull the winch, wait for it to turn AND the gate
+        // to open, then cross from OnWinchReply — a winch gate opens on a delay, so
+        // firing the move blindly (the synchronous path below) bonks "The gate is
+        // closed!". Only when an enqueuer is bound; unwired harnesses fall through to
+        // the synchronous dispatch (fire-and-forget pull + move) unchanged.
+        if (_winchEnqueuer is not null && WinchManager.IsWinchExit(exit)
+            && WinchManager.PullCommand(exit) is { } winchPull)
+        {
+            if (_tracker.State.OpenDoorDirections is { } openGate && openGate.Contains(step.Direction))
+            {
+                EmitCardinal(step.Direction, exit.Target, "gate pre-open");
+                return;
+            }
+            _awaitingWinch = true;
+            _log?.Info("LoopRunner",
+                $"step {_index + 1}/{_expandedSteps.Count}: winching gate {step.Direction} ('{winchPull}').");
+            _winchEnqueuer(step.Direction, winchPull, "loop", OnWinchReply);
+            return;
+        }
+
         // Synchronous special exits (Text / Teleport / same-room
         // MultiActionHidden) share the walker's emission path so both
         // engines cross them identically — the fix that makes a circuit
@@ -1106,6 +1149,40 @@ public sealed class LoopRunner : IRecoverableEngine
 
             case DoorOpenResult.Failed failed:
                 FailStep($"door open failed: {failed.Reason}");
+                return;
+        }
+    }
+
+    // Terminal callback from WinchManager for a winch-gate circuit step. Mirrors
+    // OnDoorReply: on Turned re-fetch the exit (the step index hasn't advanced) and
+    // cross with the cardinal; on failure fail the lap.
+    private void OnWinchReply(WinchResult result)
+    {
+        if (!_awaitingWinch) return;
+        _awaitingWinch = false;
+
+        switch (result)
+        {
+            case WinchResult.Turned:
+                if (_loop is null || State != LoopState.Running
+                    || _index >= _expandedSteps.Count
+                    || _expandedSteps[_index] is not MoveLoopStep step)
+                {
+                    return;
+                }
+                if (_tracker.State.CurrentRoom is not { } current
+                    || !current.Exits.TryGetValue(step.Direction, out RoomExit exit))
+                {
+                    FailStep($"post-winch: no exit {step.Direction} from {_tracker.State.CurrentRoom?.Key.ToString() ?? "(unknown)"}");
+                    return;
+                }
+                _expectedMoveTarget = exit.Target;
+                _stepInFlight = true;
+                EmitCardinal(step.Direction, exit.Target, "post-winch");
+                return;
+
+            case WinchResult.Failed failed:
+                FailStep($"winch failed: {failed.Reason}");
                 return;
         }
     }
@@ -1289,7 +1366,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // blocked-at-source and spuriously enter recovery. The FSM clears its
         // await flag before emitting the real move, so the genuine arrival still
         // lands here.
-        if (_awaitingDoorOpen || _awaitingHiddenReveal) return;
+        if (_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch) return;
 
         // Suspect / Lost / Unknown are real confidence drops we forward
         // to the recovery gate. Pending is the normal Confirmed →
@@ -1405,6 +1482,7 @@ public sealed class LoopRunner : IRecoverableEngine
         StopDelayTimer();
         if (_awaitingDoorOpen) { _doorStopAll?.Invoke(); _awaitingDoorOpen = false; }
         if (_awaitingHiddenReveal) { _hiddenSearchStopAll?.Invoke(); _awaitingHiddenReveal = false; }
+        if (_awaitingWinch) { _winchStopAll?.Invoke(); _awaitingWinch = false; }
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         _expectedMoveTarget = null;
@@ -1642,6 +1720,9 @@ public sealed class LoopRunner : IRecoverableEngine
         // Same for a hidden-reveal FSM opening on our behalf.
         if (_awaitingHiddenReveal) _hiddenSearchStopAll?.Invoke();
         _awaitingHiddenReveal = false;
+        // Same for a winch FSM turning a gate on our behalf.
+        if (_awaitingWinch) _winchStopAll?.Invoke();
+        _awaitingWinch = false;
         _loop = null;
         _index = 0;
         _expandedSteps = new List<LoopStep>();

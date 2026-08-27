@@ -1140,6 +1140,17 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 
 ## Movement & navigation
 
+### Winch gates *([CONFIRMED] 2026-08-27, user — report `paradigm-20260827-113513` + wire capture)*
+
+Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit whose prerequisite is `pull winch`), e.g. the Entrance Hall fortress gate west (`iron gates … a heavy wooden winch`).
+
+- `pull winch` yields exactly one of two lines:
+  - **success:** `You heave mightily on the winch, and it begins to turn!`
+  - **failure:** `You heave mightily on the winch, but it does not budge.`
+- The winch **often needs several pulls** — it can "not budge" one or more times before it "begins to turn". So failure is a **retry**, not a give-up.
+- After it turns the gate opens on a **short delay**, and there is **no "the gate opens" line** — the gate only reads `open gate <dir>` in a room re-display (a bare `l` / look refreshes it). Moving before the gate is actually open bonks `The gate is closed!` (which the movement-refusal detector reverts).
+- Client handling (`WinchManager`, wired into the walker + loop like the door/hidden FSMs): send the pull, retry on "does not budge", and on "begins to turn" poll a look until the gate direction reads open, THEN send the move — never fire the move blindly.
+
 - **[CONFIRMED — user, 2026-07-22] Per-hop movement speed is realm-specific, and the two realms
   differ enough that no single fixed movement timer can be right for both.**
   - **Paradigm** paces each hop by a deterministic server formula (no lag term):
