@@ -494,6 +494,29 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
+    public void TargetNotHere_DarkRoom_ReEngagesPresentAttacker()
+    {
+        // Report paradigm-20260827-133337: after a dark room-move the old target
+        // lingers in the roster (the CR refresh is a no-op in the dark), so
+        // "You don't see X here!" used to just null the target and FREEZE — a
+        // different attacker already in the room never got engaged, and the client
+        // sat taking hits while only self-healing. Dropping the phantom directly
+        // re-fires an observation that re-picks the present attacker.
+        using Harness h = new();
+        h.AddMonster(1, "big zombie cat", killable: true);
+        h.AddMonster(2, "angry zombie cat", killable: true);
+        h.Feed("Also here: big zombie cat, angry zombie cat.");   // engage the first
+        Assert.Equal("big zombie cat", h.Combat.CurrentTarget);
+
+        // In the dark, the big zombie cat didn't follow us into the new room.
+        h.Dark = true;
+        h.Feed("You don't see big zombie cat here!");
+
+        Assert.Equal("angry zombie cat", h.Combat.CurrentTarget);   // re-engaged, not frozen
+        Assert.Equal(0, h.CrRefreshSends);                          // still no blind CR
+    }
+
+    [Fact]
     public void PrefixedDisplay_AttackUsesPrefixedName()
     {
         // Critical for ambiguity resolution: when two variants of the

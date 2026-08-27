@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.29.3
+
+- Combat: when a spell draws "no effect" on the target, the switch to your **Alt Attack** now fires the **same round** instead of lagging ~a round behind the 500 ms burst guard
+- Combat (dark rooms): a target that didn't follow you through no longer **freezes the fight** — the client drops the gone target and engages the attacker actually in the room with you, instead of sitting there only self-healing
+- Buffs: a self-buff's recast timer is no longer dropped by an **unrelated** "already cast this round" rejection (e.g. from manually spam-healing a dying party member), which had made the buff recast over and over while it was still up
+- bug reports addressed: paradigm-20260827-081223, paradigm-20260827-133337, paradigm-20260827-130111
+
 ## 3.29.0
 
 - Navigation: **alignment-aware routing** — the good / evil `(Alignment: X to Y)` entrances are now honored. Routing is whole-party: the party routes **around** an entrance a member's alignment can't enter (the game would stop the party at that member); when a member's alignment isn't known yet it walks **up to** the gate and **halts** there rather than guessing

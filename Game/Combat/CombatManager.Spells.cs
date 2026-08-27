@@ -844,7 +844,7 @@ public sealed partial class CombatManager
             if (TryBuildCandidate(obs, target) is { } cand)
             {
                 LogSpellReannounce(reason, from, to, target, obs);
-                DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
+                DispatchRoundAction(settings, cand, CountEngageable(obs), obs, bypassRecastInterval: true);
             }
         }
 
@@ -1414,7 +1414,7 @@ public sealed partial class CombatManager
         if (_classifier.Current is not { } obs) return false;
         if (TryBuildCandidate(obs, target) is not { } cand) return false;
 
-        DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
+        DispatchRoundAction(settings, cand, CountEngageable(obs), obs, bypassRecastInterval: true);
         return _castingSpellTarget is not null;
     }
 
@@ -1839,12 +1839,20 @@ public sealed partial class CombatManager
     // now-immune-marked context, so it uniformly picks the alternate spell, the
     // weapon, or (both out) concedes. The per-round guard in OnSpellNoEffect keeps
     // this to once per round, so the alternate isn't re-marked by the same burst.
+    //
+    // bypassRecastInterval is REQUIRED here, not just bypassRoundCooldown: the
+    // primary was sent < 500 ms ago (same server burst as the no-effect reply), so
+    // without it CastCoordinator's MinRecastInterval defers the alternate SPELL to the
+    // next combat tick and the round is lost anyway — the alt still lagged ~one round
+    // (report paradigm-20260827-081223). The primary is already server-confirmed (the
+    // no-effect line proves it) and spent no round, so the alternate is entitled to
+    // this round's cast slot — the same reasoning DeferPostDebuffAttack already uses.
     private void ReDecideAfterImmunity(CombatSettings settings)
     {
         if (_castingSpellTarget is not { } target) return;
         if (_classifier.Current is not { } obs) return;
         if (!TargetPresent(obs, target)) return;
         if (TryBuildCandidate(obs, target) is { } cand)
-            DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
+            DispatchRoundAction(settings, cand, CountEngageable(obs), obs, bypassRecastInterval: true);
     }
 }

@@ -2316,14 +2316,29 @@ public sealed partial class CombatManager : IDisposable
         if (_wireSender is null) return;
         if (_currentTarget is null) return;
 
+        string gone = _currentTarget;
         _log?.Combat(LogCategory,
-            $"target-not-here — dropping target={_currentTarget} + refreshing room");
+            $"target-not-here — dropping target={gone} + refreshing room");
         _currentTarget = null;
         // The server says the named target isn't here — a guarded priority we were
         // chasing is genuinely gone, so end the redirect chase (breaks the retry
         // loop if a guard-retry "aa <priority>" was what drew this line).
         _guardBlockedTarget = null;
         ClearBackstabResolution();
+
+        // In a DARK room TrySendRoomRefresh is a no-op (a bare CR returns no "Also
+        // here:" line to rebuild the roster), so the named-gone target would linger in
+        // the classifier roster and every re-pick would re-choose it → "You don't see
+        // X here!" forever, while a DIFFERENT attacker already in the room never gets
+        // engaged (report paradigm-20260827-133337: sat taking hits from a zombie cat,
+        // only self-healing). Drop the phantom directly so the classifier re-fires an
+        // observation and re-picks the present attacker. Lit rooms still use the CR
+        // re-display, which rebuilds the roster and masks this.
+        if (_isInDarkRoom?.Invoke() == true)
+        {
+            _classifier.RemoveDepartedEntity(gone);
+            return;
+        }
 
         // Force a refresh (debounce shared with OnCombatLine so a
         // simultaneous miss-line + target-not-here doesn't double-send).
@@ -2348,8 +2363,9 @@ public sealed partial class CombatManager : IDisposable
         if (_wireSender is null) return;
         if (_currentTarget is null) return;
 
+        string gone = _currentTarget;
         _log?.Combat(LogCategory,
-            $"command-no-effect — dropping target={_currentTarget} + refreshing room");
+            $"command-no-effect — dropping target={gone} + refreshing room");
         _currentTarget = null;
         // A no-effect swing / cast means the named target isn't hittable now — a
         // spell→weapon switch that raced the kill fires `aa <corpse>` and lands
@@ -2360,6 +2376,15 @@ public sealed partial class CombatManager : IDisposable
         // that won't resolve.
         _guardBlockedTarget = null;
         ClearBackstabResolution();
+
+        // Dark-room path (same as target-not-here): the CR refresh can't rebuild the
+        // roster in the dark, so drop the phantom directly to re-fire an observation
+        // and re-pick a present attacker instead of freezing on the gone target.
+        if (_isInDarkRoom?.Invoke() == true)
+        {
+            _classifier.RemoveDepartedEntity(gone);
+            return;
+        }
 
         TrySendRoomRefresh("command-no-effect");
     }
