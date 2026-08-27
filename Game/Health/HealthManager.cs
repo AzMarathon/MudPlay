@@ -129,6 +129,16 @@ public sealed class HealthManager : IDisposable
     // real hostile (which the hostiles guard then blocks). Kept short.
     private DateTimeOffset _restHoldSetAt;
     private static readonly TimeSpan RestReconfirmTimeout = TimeSpan.FromSeconds(3);
+    // Armed when the reconfirm hold times out (the room's stayed empty for the
+    // window, so it's safe to rest). The idle-stall force-clear that set the hold
+    // does NOT clear CombatStateTracker's hostile latch — that only re-derives on a
+    // fresh room observation, which an empty static room never emits — so a
+    // stationary character held below the mana trigger would sit forever, its
+    // meditate/rest blocked by a stale hostiles guard while it passively regens
+    // (report paradigm-20260827-082222: "meditating state but not Medding / no gear
+    // swap"). This bypasses that stale guard for the held rest; cleared on the next
+    // genuine observation / room change (which re-derives presence for real).
+    private bool _restHostilesBypassArmed;
     private readonly Func<DateTimeOffset> _now;
     private bool _fledThisCombat;        // reacted to run-trigger (flee OR @heal), awaiting combat end
     private bool _hangFired;             // emergency-hangup latch; re-arms when danger passes
@@ -855,6 +865,10 @@ public sealed class HealthManager : IDisposable
         if (_restHeldPendingReconfirm && _now() - _restHoldSetAt > RestReconfirmTimeout)
         {
             _restHeldPendingReconfirm = false;
+            // The room stayed empty for the window — arm the hostiles-guard bypass so
+            // the held rest actually fires past a stale hostile latch the empty-room
+            // re-display never cleared (report paradigm-20260827-082222).
+            _restHostilesBypassArmed = true;
             _log?.Combat(LogCategory,
                 "rest reconfirm-hold timed out — no room re-display re-asserted a hostile, releasing to rest");
         }
@@ -870,7 +884,7 @@ public sealed class HealthManager : IDisposable
                 $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
         }
         else if (shouldRest && !_state.InCombat && !_restInFlight && !equipmentApplying
-            && (!hostilesPresent || shadowRest))
+            && (!hostilesPresent || shadowRest || _restHostilesBypassArmed))
         {
             // Pick rest vs meditate based on user settings + which
             // pool is the proximate trigger.
@@ -1253,6 +1267,10 @@ public sealed class HealthManager : IDisposable
     // rest; a genuinely empty room lets the held rest through.
     public void NoteRoomEntitiesReconfirmed()
     {
+        // A genuine occupant observation re-derives the hostile latch, so the
+        // post-timeout bypass has done its job — retire it and let the real guard
+        // be authoritative again (a hostile that re-appeared now blocks the rest).
+        _restHostilesBypassArmed = false;
         if (!_restHeldPendingReconfirm) return;
         _restHeldPendingReconfirm = false;
         Evaluate();
@@ -1289,8 +1307,10 @@ public sealed class HealthManager : IDisposable
 
         // A move re-observes the room, so any post-force-clear rest hold is resolved
         // by the new room's observation — drop it here too (covers the dark-room
-        // force-clear that sends no resync CR).
+        // force-clear that sends no resync CR). The stale-hostiles bypass retires
+        // with it: the new room re-derives presence from scratch.
         _restHeldPendingReconfirm = false;
+        _restHostilesBypassArmed = false;
 
         // Re-arm a rest that a do-not-rest room forced us to skip: the hop out of
         // that room carries no prompt change to re-run Evaluate on its own, so do

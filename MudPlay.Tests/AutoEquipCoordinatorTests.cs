@@ -359,4 +359,36 @@ public sealed class AutoEquipCoordinatorTests
         coord.OnLoopStarted();
         Assert.Equal(new[] { "default-set" }, applied);
     }
+
+    // Recovery-complete reverts to Default in-room; the stand-up that immediately
+    // follows must NOT fire a second, redundant Default swap (report
+    // paradigm-20260827-125103 — the gear swapper double-swapping).
+    [Fact]
+    public void RecoveryComplete_ThenStandUp_FiresDefaultOnce_NotTwice()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Meditating, InCombat = false };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestMana, enabled: true, "mana-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,   // recovery done (gates cleared)
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true);
+
+        // Recovery tops off while still meditating in-room → Default swap.
+        coord.OnRecoveryComplete();
+        Assert.Equal(new[] { "default-set" }, applied);
+
+        // The walker resumes and the character stands up; the stand-up Default is
+        // suppressed as redundant (recovery already reverted to Default in-room).
+        applied.Clear();
+        player.Position = PlayerPosition.Standing;
+        Assert.Empty(applied);
+    }
 }
