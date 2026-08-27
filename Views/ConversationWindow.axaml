@@ -183,6 +183,7 @@
                             </Border>
                             <TextBlock Grid.Column="2"
                                        Text="{Binding SpeakerText}"
+                                       IsVisible="{Binding HasSpeaker}"
                                        Foreground="{Binding ChannelBrush}"
                                        FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
                                        FontSize="{Binding DataContext.MetaFontSize, ElementName=RowsList}"

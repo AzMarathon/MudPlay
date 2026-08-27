@@ -906,6 +906,44 @@ public sealed class EquipmentManagerTests
             set, worn, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
     }
 
+    // ===== ComposePairedSlotCommands (both-swap single-rem optimization) =====
+
+    [Fact]
+    public void ComposePairedSlotCommands_BothWristsSwap_InterleavesOneRem_NotTwo()
+    {
+        // Both bracelets swap (worn b1,b2 → set b3,b4): the first `wear` auto-evicts
+        // the first-worn (b1), so only b2 needs an explicit rem — interleaved before
+        // b4's wear. One rem, not two (report paradigm-20260827-082305).
+        EquipmentSet set = Set("mana", "Pre-rest Mana",
+            Entry(EquipmentSlot.Wrist1, "b3"),
+            Entry(EquipmentSlot.Wrist2, "b4"));
+        IReadOnlyList<EquippedItem> worn = WornList(("b1", "Wrist"), ("b2", "Wrist"));
+        var beingWorn = new HashSet<string>(new[] { "b3", "b4" }, StringComparer.OrdinalIgnoreCase);
+        var wears = new List<string> { "wear b3", "wear b4" };
+
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, beingWorn, wears);
+
+        Assert.Equal(new[] { "wear b3", "rem b2", "wear b4" }, cmds);
+    }
+
+    [Fact]
+    public void ComposePairedSlotCommands_OneWristSwap_KeepsPrependedFree()
+    {
+        // Only Wrist1 changes (b1 → b3); the set keeps b2 on the other wrist, so the
+        // single-swap path stands: free the odd b1 up front (can't rely on the wear
+        // trading with the right member).
+        EquipmentSet set = Set("mana", "Pre-rest Mana",
+            Entry(EquipmentSlot.Wrist1, "b3"),
+            Entry(EquipmentSlot.Wrist2, "b2"));
+        IReadOnlyList<EquippedItem> worn = WornList(("b1", "Wrist"), ("b2", "Wrist"));
+        var beingWorn = new HashSet<string>(new[] { "b3" }, StringComparer.OrdinalIgnoreCase);
+        var wears = new List<string> { "wear b3" };
+
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, beingWorn, wears);
+
+        Assert.Equal(new[] { "rem b1", "wear b3" }, cmds);
+    }
+
     [Fact]
     public void BuildEquipCommands_EmptySet_FillsFromCarriedInOrder()
     {

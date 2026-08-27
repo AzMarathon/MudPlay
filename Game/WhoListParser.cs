@@ -40,6 +40,12 @@ public sealed partial class WhoListParser : IDisposable
     // Players.Count at block start — used to split added vs updated counts in the
     // end-of-block log line.
     private int _playersCountAtBlockStart;
+    // Consecutive non-parseable rows since the last parsed one. A single odd row
+    // (unusual name/title/alignment) is skipped, not treated as the table's end, so
+    // it can't truncate the whole list; only a run of them (the table really ended:
+    // a footer + chat) closes the block. Reset on every parsed row.
+    private int _consecutiveSkips;
+    private const int MaxConsecutiveSkips = 3;
 
     // Alignment words that can appear in the left column of the who table. Order
     // goes from most-Good to most-Evil per MajorMUD convention; Neutral isn't
@@ -111,6 +117,7 @@ public sealed partial class WhoListParser : IDisposable
                 {
                     _state = State.Reading;
                     _rowsThisBlock = 0;
+                    _consecutiveSkips = 0;
                     _playersCountAtBlockStart = _db.Players.Count;
                 }
                 else if (!HeaderPattern().IsMatch(text))
@@ -151,12 +158,20 @@ public sealed partial class WhoListParser : IDisposable
                         role:      row.Role,
                         nowUtc:    nowUtc);
                     _rowsThisBlock++;
+                    _consecutiveSkips = 0;
+                }
+                else if (++_consecutiveSkips <= MaxConsecutiveSkips)
+                {
+                    // A lone unparseable row (an unusual name / title / alignment)
+                    // must NOT truncate the table — skip it and keep reading. The
+                    // blank-line / prompt terminators still close the block at the
+                    // real end; only a RUN of misses (a footer then chat) does here.
+                    _log?.Debug("WhoListParser", $"skipping unparseable who row: {text.Trim()}");
                 }
                 else
                 {
-                    // First non-blank, non-row line ends the block —
-                    // typically a "Total:" footer or the next who's
-                    // header (back-to-back calls). Re-feed through the
+                    // Several non-row lines in a row — the table has ended (footer /
+                    // next who's header on a back-to-back call). Re-feed through the
                     // now-Idle state so we don't drop it.
                     EndBlock();
                     HandleLine(text, isPromptLine, nowUtc);
@@ -188,8 +203,10 @@ public sealed partial class WhoListParser : IDisposable
             return false;
         }
 
+        // Normalize the matched align to its canonical casing (an ALL-CAPS "FIEND"
+        // stores as "Fiend"); a blank column is Neutral.
         string alignment = m.Groups["align"].Success && m.Groups["align"].Value.Length > 0
-            ? m.Groups["align"].Value
+            ? NormalizeAlignment(m.Groups["align"].Value)
             : "Neutral";
         string given  = m.Groups["given"].Value;
         string family = m.Groups["family"].Success ? m.Groups["family"].Value : string.Empty;
@@ -202,6 +219,16 @@ public sealed partial class WhoListParser : IDisposable
 
         row = new PlayerRowMatch(alignment, given, family, title, gang, role);
         return true;
+    }
+
+    // Map a matched align token (any casing) to its canonical AlignmentWords entry,
+    // e.g. "FIEND" -> "Fiend". Unrecognized falls back to Neutral (the regex only
+    // feeds recognized words, so that branch is defensive).
+    private static string NormalizeAlignment(string raw)
+    {
+        foreach (string w in AlignmentWords)
+            if (string.Equals(w, raw, StringComparison.OrdinalIgnoreCase)) return w;
+        return "Neutral";
     }
 
     // "Current Adventurers" header — case-sensitive per server output.
@@ -225,8 +252,13 @@ public sealed partial class WhoListParser : IDisposable
     // truncated the table after a handful of names. The lazy quantifier still
     // peels a trailing single-letter role (M/S/V) off the end for realms that
     // print one; .Trim() in TryParseRow strips any edge whitespace.
+    // The align alternation is case-insensitive: the extreme alignments print in
+    // ALL CAPS (e.g. "FIEND", "SAINT") as a highlight while the rest are title case,
+    // and a case-sensitive match dropped the all-caps rows. A dropped row used to
+    // truncate the whole table (see the Reading state's skip tolerance), so one FIEND
+    // player cut the list off after a handful of names (report paradigm-20260827-103227).
     [GeneratedRegex(
-        @"^\s*(?:(?<align>Saint|Lawful|Good|Seedy|Outlaw|Criminal|Villain|Fiend)\s+)?(?<given>[A-Za-z][A-Za-z'\-]*)(?:\s+(?<family>[A-Za-z][A-Za-z0-9'\-]*))?\s*[-x]\s+(?<title>[A-Za-z][A-Za-z '\-]*?)(?:\s+of\s+(?<gang>\S[^\r\n]*?))?(?:\s+(?<role>[MSV]))?\s*$",
+        @"^\s*(?:(?<align>(?i:Saint|Lawful|Good|Seedy|Outlaw|Criminal|Villain|Fiend))\s+)?(?<given>[A-Za-z][A-Za-z'\-]*)(?:\s+(?<family>[A-Za-z][A-Za-z0-9'\-]*))?\s*[-x]\s+(?<title>[A-Za-z][A-Za-z '\-]*?)(?:\s+of\s+(?<gang>\S[^\r\n]*?))?(?:\s+(?<role>[MSV]))?\s*$",
         RegexOptions.CultureInvariant)]
     private static partial Regex PlayerRowPattern();
 

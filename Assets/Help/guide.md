@@ -212,7 +212,7 @@ With party heal spells configured (Settings → Party), members watch each other
 
 ## Remote @-commands
 
-Party members can drive each other with `@`-commands sent over chat. Commands are accepted on three channels — **telepath**, **gangpath**, and **say (local)** — and the reply always comes back on the same channel it arrived on. (Gossip, yell, and broadcast are ignored for `@`-commands; there's no separate "page" channel — pages count as telepaths.)
+Party members can drive each other with `@`-commands sent over chat. Commands are accepted on three channels — **telepath**, **gangpath**, and **say (local)** — and the reply always comes back on the same channel it arrived on. A reply to a **say**-channel command is a **directed say** (`>Name <reply>`) aimed at whoever sent it, so in a room with several players that person knows the answer is for them. (Gossip, yell, and broadcast are ignored for `@`-commands; there's no separate "page" channel — pages count as telepaths.)
 
 **What's allowed** is gated per character. Every remote command belongs to a permission *category* (query health, move me, alter settings, execute commands, and so on), and you grant those categories per player in **Game Data Browser → Players** — the edit dialog's permission grid, where the high-trust ones sit under "Elevated Commands." A never-seen player has no grants, so their commands are refused.
 
@@ -242,7 +242,7 @@ Active party members get a few things for free regardless of the grid: the party
 | `@what` | — | items on the room floor |
 | `@wealth` | — | your coins and total value |
 | `@enc` | — | encumbrance |
-| `@have` | `<item>` | whether you carry or wear a matching item |
+| `@have` | `<item>` | whether you carry, wear, or hold a matching item on the key ring |
 | `@inv` | — | your carried pack and keys |
 
 ### Move me around

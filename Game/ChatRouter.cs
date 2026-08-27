@@ -29,6 +29,9 @@ public sealed class ChatRouter : IDisposable
     // correlate with the typed command on the line above. Cleared after each
     // consume so we don't re-attribute it to a later telepath.
     private string? _pendingTelepathMessage;
+    // Same pairing for an outgoing directed say: the typed `>Target message` carries
+    // the message, the server's `--- Message Directed to X ---` confirmation the target.
+    private string? _pendingDirectedMessage;
 
     // Board-specific disconnect line, for the conversation window's realm
     // category. Returns the active BBS's raw DisconnectPattern ({name}/* syntax,
@@ -65,8 +68,38 @@ public sealed class ChatRouter : IDisposable
 
         Subscribe(router, KnownPatterns.ConversationGossip,
                   ChatChannel.Gossip,         groupPlayer: 0, groupMessage: 1);
-        Subscribe(router, KnownPatterns.ConversationLocal,
-                  ChatChannel.Local,          groupPlayer: 0, groupMessage: 1);
+        // Say — custom sub (not the generic player+message helper) so it can carry
+        // the directed-say target (group 1): a directed say `X says (to Target) "msg"`
+        // is seen by the target AND third parties, so the window shows "X (to Target)".
+        _subs.Add(router.Subscribe(KnownPatterns.ConversationLocal, result =>
+        {
+            string? speaker  = SafeGroup(result, 0);
+            string? directed = SafeGroup(result, 1);
+            string  message  = SafeGroup(result, 2) ?? string.Empty;
+            EntryClassified?.Invoke(new ChatLogEntry(
+                result.Line.Timestamp,
+                ChatChannel.Local,
+                NullIfEmpty(speaker),
+                message,
+                result.Line.Text,
+                DirectedTo: NullIfEmpty(directed)));
+        }));
+        // Our OWN outgoing directed say: the server confirms only the target
+        // (`--- Message Directed to X ---`), so pair it with the typed `>X message`
+        // line captured below to log "You (to X): message".
+        _subs.Add(router.Subscribe(KnownPatterns.ConversationDirectedSayOut, result =>
+        {
+            string? target = SafeGroup(result, 0);
+            string message = _pendingDirectedMessage ?? string.Empty;
+            _pendingDirectedMessage = null;
+            EntryClassified?.Invoke(new ChatLogEntry(
+                result.Line.Timestamp,
+                ChatChannel.Local,
+                null,                       // us — renders as "You"
+                message,
+                result.Line.Text,
+                DirectedTo: NullIfEmpty(target)));
+        }));
         Subscribe(router, KnownPatterns.ConversationTelepathIn,
                   ChatChannel.TelepathIncoming, groupPlayer: 0, groupMessage: 1);
         // Outgoing telepath is special: the server's "--- Telepath Sent
@@ -124,6 +157,7 @@ public sealed class ChatRouter : IDisposable
     private void OnLineDispatched(Terminal.LineExtractor.EmittedLine line)
     {
         TryCaptureTelepath(line.Text);
+        TryCaptureDirectedSay(line.Text);
         TryCustomDisconnectLine(line);
         TryActionEmote(line);
     }
@@ -220,7 +254,10 @@ public sealed class ChatRouter : IDisposable
         string text = System.Text.Encoding.Latin1.GetString(data);
         foreach (string outLine in text.Split(LineBreaks,
                      StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
             TryCaptureTelepath(outLine);
+            TryCaptureDirectedSay(outLine);
+        }
     }
 
     private static readonly char[] LineBreaks = { '\r', '\n' };
@@ -238,6 +275,18 @@ public sealed class ChatRouter : IDisposable
         int sp = text.IndexOf(' ');
         if (sp <= 1 || sp == text.Length - 1) return;
         _pendingTelepathMessage = text[(sp + 1)..];
+    }
+
+    // Form is ">Target message" — the directed-say verb. Same pairing rationale as
+    // TryCaptureTelepath: the typed line carries the message, the server's later
+    // "--- Message Directed to X ---" confirmation supplies the target + fires the
+    // conversation entry. Overwritten by the next `>`-line if no confirmation follows.
+    private void TryCaptureDirectedSay(string text)
+    {
+        if (text.Length < 3 || text[0] != '>') return;
+        int sp = text.IndexOf(' ');
+        if (sp <= 1 || sp == text.Length - 1) return;
+        _pendingDirectedMessage = text[(sp + 1)..];
     }
 
     private void Subscribe(

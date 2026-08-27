@@ -409,10 +409,7 @@ public sealed class EquipmentManager
             .Where(c => c.StartsWith("wear ", StringComparison.Ordinal))
             .Select(c => c["wear ".Length..])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        List<string> rems = BuildPairedSlotRems(set, snap.EquippedItems, beingWorn);
-        if (rems.Count == 0) return wears;
-        rems.AddRange(wears);
-        return rems;
+        return ComposePairedSlotCommands(set, snap.EquippedItems, beingWorn, wears);
     }
 
     // ----- pure apply logic (unit-tested directly) ------------------------
@@ -485,6 +482,61 @@ public sealed class EquipmentManager
                     rems.Add($"rem {wornName}");
             }
         }
+        return rems;
+    }
+
+    // Compose the paired finger / wrist frees around the set's wears. Starts from the
+    // full odd-out rem list (BuildPairedSlotRems), then optimizes each family that's
+    // swapping BOTH of its members: the game's first `wear` into a full paired family
+    // auto-evicts the FIRST-worn member, so only the SECOND worn member needs an
+    // explicit `rem` — interleaved right before its replacement's wear rather than
+    // prepending both frees. Saves one `rem` line per such family (report
+    // paradigm-20260827-082305). A single-member swap (or a slot already free) keeps
+    // the prepend-all-frees form, which converges safely.
+    //
+    // LIVE-TEST / mechanic: rests on `wear` evicting the FIRST-listed worn member of
+    // the family (worn order = the game's `i` order). worn must be in that order.
+    internal static List<string> ComposePairedSlotCommands(
+        EquipmentSet set, IReadOnlyList<EquippedItem> worn, ISet<string> beingWorn, List<string> wears)
+    {
+        List<string> rems = BuildPairedSlotRems(set, worn, beingWorn);
+        var result = new List<string>(wears);
+
+        foreach (EquipmentSlot family in PairedFamilies)
+        {
+            var setMembers = set.Slots
+                .Where(e => !IsVirtual(e.Slot) && FamilyOf(e.Slot) == family
+                            && !string.IsNullOrWhiteSpace(e.ItemName))
+                .Select(e => e.ItemName!.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (setMembers.Count == 0) continue;
+
+            // Worn members of this family the set doesn't want, in `i` (worn) order.
+            var oddOuts = worn
+                .Where(e => EquipmentSlotMap.FromWornString(e.Slot) is { } s && FamilyOf(s) == family
+                            && !setMembers.Contains(e.Name.Trim()))
+                .Select(e => e.Name.Trim())
+                .ToList();
+            // The family's new-member wears actually queued (set-slot order).
+            var familyWears = result
+                .Where(c => c.StartsWith("wear ", StringComparison.Ordinal)
+                            && setMembers.Contains(c["wear ".Length..]))
+                .ToList();
+
+            // Both members swapping: the first wear evicts oddOuts[0]; drop both
+            // prepended frees and interleave a single `rem oddOuts[1]` before the
+            // second replacement's wear.
+            if (oddOuts.Count >= 2 && familyWears.Count >= 2)
+            {
+                rems.RemoveAll(r =>
+                    string.Equals(r, $"rem {oddOuts[0]}", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(r, $"rem {oddOuts[1]}", StringComparison.OrdinalIgnoreCase));
+                int idxSecondWear = result.IndexOf(familyWears[1]);
+                result.Insert(idxSecondWear, $"rem {oddOuts[1]}");
+            }
+        }
+
+        rems.AddRange(result);
         return rems;
     }
 
@@ -618,10 +670,7 @@ public sealed class EquipmentManager
             .Where(c => c.StartsWith("wear ", StringComparison.Ordinal))
             .Select(c => c["wear ".Length..])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        List<string> rems = BuildPairedSlotRems(set, worn, beingWorn);
-        if (rems.Count == 0) return result;
-        rems.AddRange(result);
-        return rems;
+        return ComposePairedSlotCommands(set, worn, beingWorn, result);
     }
 
     // The game lists a stack of identical items as "<count> <name>" (e.g.

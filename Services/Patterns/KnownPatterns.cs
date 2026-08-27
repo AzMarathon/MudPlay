@@ -242,6 +242,7 @@ public static class KnownPatterns
     public const string ConversationTelepathOut = "conversation.telepath-out";   // outgoing "--- Telepath sent to X ---"
     public const string ConversationYell        = "conversation.yell";           // both "X yells" and "You yell"
     public const string ConversationLocal       = "conversation.local";
+    public const string ConversationDirectedSayOut = "conversation.directed-say-out";  // outgoing "--- Message Directed to X ---"
     // Paradigm-only server PvP announcements — every one leads with the
     // "Server PvP Message: " prefix (a kill, "X just killed Y!", is one form).
     // ChatRouter realm-gates these to paradigm before emitting.
