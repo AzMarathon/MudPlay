@@ -4,7 +4,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.28.27
 
-- Navigation: winch gates now cross reliably — a fortress-style gate opened by pulling a winch in the room is pulled (and re-pulled while it "does not budge"), and the walker waits for the gate to turn fully open before stepping through instead of walking into a still-closed gate and stalling
+- Navigation: winch gates now cross reliably — a gate opened by pulling a winch is pulled (and **re-pulled** while it "does not budge" — the pull is a strength roll), and the walker waits for the gate to turn fully open before stepping through instead of walking into a still-closed gate and stalling. Also handles the **cross-room** case, where the winch is in a different room than the gate it opens: the walk-to detour re-pulls the winch until it turns before walking on
 - bug reports addressed: paradigm-20260827-113513
 
 ## 3.28.26

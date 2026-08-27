@@ -80,7 +80,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // winch exit crossed mid-circuit: pull the winch, wait for it to turn + the gate
     // to open, then cross from OnWinchReply. Null until wired (unit harnesses leave it
     // unbound and keep the synchronous dispatch).
-    private Action<Direction, string, string, Action<WinchResult>>? _winchEnqueuer;
+    private Action<Direction, string, bool, string, Action<WinchResult>>? _winchEnqueuer;
     private Action? _winchStopAll;
     private bool _awaitingWinch;
 
@@ -533,7 +533,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
     // Winch enqueuer — mirrors AutoWalkManager.SetWinchEnqueuer. Both engines bind
     // to the same WinchManager so a loop crosses a winch gate the same way.
-    public void SetWinchEnqueuer(Action<Direction, string, string, Action<WinchResult>> enqueuer)
+    public void SetWinchEnqueuer(Action<Direction, string, bool, string, Action<WinchResult>> enqueuer)
     {
         ArgumentNullException.ThrowIfNull(enqueuer);
         _winchEnqueuer = enqueuer;
@@ -1065,7 +1065,7 @@ public sealed class LoopRunner : IRecoverableEngine
             _awaitingWinch = true;
             _log?.Info("LoopRunner",
                 $"step {_index + 1}/{_expandedSteps.Count}: winching gate {step.Direction} ('{winchPull}').");
-            _winchEnqueuer(step.Direction, winchPull, "loop", OnWinchReply);
+            _winchEnqueuer(step.Direction, winchPull, /*waitForGate:*/ true, "loop", OnWinchReply);
             return;
         }
 

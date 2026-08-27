@@ -290,7 +290,11 @@ public static class RemoteActionPathExpander
                 cursor = issueRoom;
             }
 
-            steps.Add(new CommandStep(action.Commands[0]));
+            // A winch pull is a strength roll that can "not budge" — flag it so the
+            // walker re-pulls until it turns (via WinchManager) instead of firing once
+            // fire-and-forget and walking on to a still-closed gate.
+            string cmd = action.Commands[0];
+            steps.Add(new CommandStep(cmd, IsWinchPull: WinchManager.IsWinchPullCommand(cmd)));
         }
 
         if (!cursor.Equals(anchor))

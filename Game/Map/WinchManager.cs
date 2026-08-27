@@ -105,10 +105,20 @@ public sealed class WinchManager : IDisposable
         return null;
     }
 
-    private static bool LooksLikeWinchPull(string command) =>
+    // Whether a prerequisite command operates a winch (pull/turn/move/push winch) —
+    // used both to detect a same-room winch exit and to flag a cross-room detour's
+    // pull step for result-aware retry.
+    public static bool IsWinchPullCommand(string command) =>
         command.Contains("winch", StringComparison.OrdinalIgnoreCase);
 
-    public void Enqueue(Direction direction, string pullCommand, string sender, Action<WinchResult> reply)
+    private static bool LooksLikeWinchPull(string command) => IsWinchPullCommand(command);
+
+    // waitForGate = true (same-room winch): after it turns, poll a look until the
+    // gate direction reads open, then report Turned. waitForGate = false (cross-room
+    // detour, direction irrelevant): report Turned the instant it begins to turn —
+    // the caller walks to the gate room afterward, which covers the open delay.
+    public void Enqueue(Direction direction, string pullCommand, bool waitForGate,
+        string sender, Action<WinchResult> reply)
     {
         ArgumentNullException.ThrowIfNull(reply);
         if ((_current is { } cur && cur.Direction == direction)
@@ -118,8 +128,8 @@ public sealed class WinchManager : IDisposable
                 $"winch {DirectionShort(direction)} already in progress — ignoring duplicate (sender={sender}).");
             return;
         }
-        _queue.Enqueue(new WinchRequest(direction, pullCommand, sender, reply));
-        _log?.Info(LogCategory, $"winch {DirectionShort(direction)} queued (sender={sender}, depth={_queue.Count}).");
+        _queue.Enqueue(new WinchRequest(direction, pullCommand, waitForGate, sender, reply));
+        _log?.Info(LogCategory, $"winch {DirectionShort(direction)} queued (sender={sender}, waitForGate={waitForGate}, depth={_queue.Count}).");
         TryStartNext();
     }
 
@@ -176,6 +186,14 @@ public sealed class WinchManager : IDisposable
     private void OnWinchTurned(MatchResult _)
     {
         if (_state != WinchState.WaitingPull || _current is null) return;
+        // Pull-only (cross-room detour): the gate is in another room, so there's
+        // nothing to poll here — report Turned and let the caller walk to it.
+        if (!_current.WaitForGate)
+        {
+            _log?.Info(LogCategory, "winch began to turn (pull-only — gate is in another room).");
+            SucceedCurrent();
+            return;
+        }
         _log?.Info(LogCategory, "winch began to turn — waiting for the gate to open.");
         _state = WinchState.WaitingGateOpen;
         _gatePolls = 0;
@@ -291,5 +309,5 @@ public sealed class WinchManager : IDisposable
     }
 
     private sealed record WinchRequest(
-        Direction Direction, string PullCommand, string Sender, Action<WinchResult> Reply);
+        Direction Direction, string PullCommand, bool WaitForGate, string Sender, Action<WinchResult> Reply);
 }

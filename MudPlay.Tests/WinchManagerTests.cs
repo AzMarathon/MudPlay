@@ -64,7 +64,7 @@ public sealed class WinchManagerTests
     {
         using Harness h = new() { GateOpen = true };
         WinchResult? result = null;
-        h.Mgr.Enqueue(Direction.W, "pull winch", "walker", r => result = r);
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "walker", r => result = r);
 
         Assert.Equal("pull winch", h.AllSent[0]);
         h.Line(TurnLine);
@@ -78,7 +78,7 @@ public sealed class WinchManagerTests
     {
         using Harness h = new() { GateOpen = false };
         WinchResult? result = null;
-        h.Mgr.Enqueue(Direction.W, "pull winch", "walker", r => result = r);
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "walker", r => result = r);
 
         h.Line(TurnLine);                  // turned, but gate not open yet → poll
         Assert.Null(result);
@@ -96,7 +96,7 @@ public sealed class WinchManagerTests
     {
         using Harness h = new() { GateOpen = true };
         WinchResult? result = null;
-        h.Mgr.Enqueue(Direction.W, "pull winch", "walker", r => result = r);
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "walker", r => result = r);
 
         h.Line(BudgeLine);                 // first pull didn't budge → schedule re-pull
         Assert.Null(result);
@@ -112,7 +112,7 @@ public sealed class WinchManagerTests
     {
         using Harness h = new();
         WinchResult? result = null;
-        h.Mgr.Enqueue(Direction.W, "pull winch", "walker", r => result = r);
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "walker", r => result = r);
 
         // Keep refusing: each budge either schedules a re-pull (fire it) or, once the
         // attempt cap is hit, fails. Bounded loop well past the cap.
@@ -130,12 +130,30 @@ public sealed class WinchManagerTests
     {
         using Harness h = new() { GateOpen = false };   // gate never opens
         WinchResult? result = null;
-        h.Mgr.Enqueue(Direction.W, "pull winch", "walker", r => result = r);
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "walker", r => result = r);
 
         h.Line(TurnLine);
         for (int i = 0; i < 20 && result is null && h.HasPending; i++) h.Fire();
 
         Assert.IsType<WinchResult.Failed>(result);
+    }
+
+    [Fact]
+    public void PullOnly_Turns_ReportsTurnedWithoutPollingGate()
+    {
+        // Cross-room detour: no gate in this room to poll — report Turned the instant
+        // it begins to turn (retrying "does not budge" first), never sending a look.
+        using Harness h = new() { GateOpen = false };
+        WinchResult? result = null;
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: false, "loop", r => result = r);
+
+        h.Line(BudgeLine);                 // strength roll missed → re-pull
+        h.Fire();
+        Assert.Equal(2, h.Count("pull winch"));
+        h.Line(TurnLine);                  // turned
+
+        Assert.IsType<WinchResult.Turned>(result);
+        Assert.Equal(0, h.Count("l"));     // pull-only never polls the gate
     }
 
     [Fact]

@@ -1144,12 +1144,14 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 
 Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit whose prerequisite is `pull winch`), e.g. the Entrance Hall fortress gate west (`iron gates … a heavy wooden winch`).
 
-- `pull winch` yields exactly one of two lines:
+- The winch is operated by any of **`pull` / `turn` / `move` / `push` winch** (aliases for the same TBInfo action), yielding exactly one of two lines:
   - **success:** `You heave mightily on the winch, and it begins to turn!`
   - **failure:** `You heave mightily on the winch, but it does not budge.`
-- The winch **often needs several pulls** — it can "not budge" one or more times before it "begins to turn". So failure is a **retry**, not a give-up.
-- After it turns the gate opens on a **short delay**, and there is **no "the gate opens" line** — the gate only reads `open gate <dir>` in a room re-display (a bare `l` / look refreshes it). Moving before the gate is actually open bonks `The gate is closed!` (which the movement-refusal detector reverts).
-- Client handling (`WinchManager`, wired into the walker + loop like the door/hidden FSMs): send the pull, retry on "does not budge", and on "begins to turn" poll a look until the gate direction reads open, THEN send the move — never fire the move blindly.
+- **"Does not budge" is a strength roll, not randomness.** The TBInfo action is `testskill strength 20 …` — a strength check on each pull. **Higher strength = more likely to pass**; a roll can still miss. So failure is a **retry** (keep pulling), not a give-up. (All races start ≥20 strength, so no character is hard-blocked — it just takes more pulls at low strength.)
+- After it turns the gate opens on a **short delay** (the action carries `adddelay 3` ≈ 3s), and there is **no "the gate opens" line** — the gate only reads `open gate <dir>` in a room re-display (a bare `l` / look refreshes it). Moving before the gate is actually open bonks `The gate is closed!` (which the movement-refusal detector reverts).
+- **Same-room vs cross-room.** Most winches sit in the same room as the gate they open. But a winch can `remoteaction` a gate in a **different** room (in Paradigm 1.9.1, the winch in `12/2118` opens the gate off `12/2122`). Then the gate exit is a cross-room remote-action detour, not a same-room exit.
+- Client handling: **same-room** → `WinchManager` (walker + loop) sends the pull, retries on "does not budge", and on "begins to turn" polls a look until the gate reads open, THEN moves — never fires the move blindly. **Cross-room** → the `RemoteActionPathExpander` detour's `pull winch` step is flagged `IsWinchPull` and routed through `WinchManager` pull-only (retry until it turns, no gate poll — the walk back to the gate room covers the open delay).
+- **Paradigm 1.9.1 winches (3):** `12/2099` (Entrance Hall, same-room), `12/2123` (Narrow Precipice, same-room), and `12/2118`→gate off `12/2122` (cross-room).
 
 - **[CONFIRMED — user, 2026-07-22] Per-hop movement speed is realm-specific, and the two realms
   differ enough that no single fixed movement timer can be right for both.**

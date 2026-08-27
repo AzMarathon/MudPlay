@@ -53,7 +53,14 @@ public sealed record MoveStep(Direction Direction, RoomKey ExpectedTarget, strin
 // follow when game data describes the prerequisite.
 //
 // Command is the exact text to send (no trailing CR — the walker appends it).
-public sealed record CommandStep(string Command) : WalkStep
+//
+// IsWinchPull marks a `pull winch` prerequisite in a cross-room detour (the winch
+// is in a different room than the gate it opens). The walker routes it through
+// WinchManager so it RE-PULLS until the winch turns (the pull is a strength roll
+// that can "not budge") instead of firing once fire-and-forget — the gate poll
+// isn't needed because the detour walks back to the gate room afterward, covering
+// the open delay. A plain CommandStep (IsWinchPull=false) is fire-and-forget.
+public sealed record CommandStep(string Command, bool IsWinchPull = false) : WalkStep
 {
     public override string Display => Command;
 }

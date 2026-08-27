@@ -43,7 +43,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<Direction, string, Action<HiddenSearchResult>>? _hiddenSearchEnqueuer;
     private Action? _hiddenSearchStopAll;
     private bool _awaitingHiddenReveal;
-    private Action<Direction, string, string, Action<WinchResult>>? _winchEnqueuer;
+    private Action<Direction, string, bool, string, Action<WinchResult>>? _winchEnqueuer;
     private Action? _winchStopAll;
     private bool _awaitingWinch;
     private Func<RoomKey, RoomKey, string?>? _teleportResolver;
@@ -515,7 +515,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // Winch enqueuer — walker calls this for a MultiActionHidden winch exit to
     // pull the winch, wait for it to turn + the gate to open, then move. Bound by
     // MainWindowVM to WinchManager.Enqueue.
-    public void SetWinchEnqueuer(Action<Direction, string, string, Action<WinchResult>> enqueuer)
+    public void SetWinchEnqueuer(Action<Direction, string, bool, string, Action<WinchResult>> enqueuer)
     {
         ArgumentNullException.ThrowIfNull(enqueuer);
         _winchEnqueuer = enqueuer;
@@ -1591,7 +1591,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
             _awaitingWinch = true;
             _log?.Info("Walker", $"step {_index + 1}/{_path!.Count}: winching gate {step.Direction} ('{winchPull}').");
-            _winchEnqueuer(step.Direction, winchPull, "walker", OnWinchReply);
+            _winchEnqueuer(step.Direction, winchPull, /*waitForGate:*/ true, "walker", OnWinchReply);
             return;
         }
 
@@ -1749,8 +1749,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         switch (result)
         {
             case WinchResult.Turned:
-                if (_path is null || _index >= _path.Count
-                    || _path[_index] is not MoveStep step)
+                if (_path is null || _index >= _path.Count) { Reset(); return; }
+                // Cross-room detour pull (a CommandStep): the winch turned in this
+                // room; advance to the next detour step (walk toward the gate room),
+                // exactly as a plain command completion would.
+                if (_path[_index] is CommandStep)
+                {
+                    _stepInFlight = false;
+                    AdvanceStep();
+                    return;
+                }
+                if (_path[_index] is not MoveStep step)
                 {
                     Reset();
                     return;
@@ -1846,8 +1855,21 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private void SendCommandStep(CommandStep step)
     {
         _stepInFlight = true;
-        _awaitingPromptForCommand = true;
 
+        // A cross-room detour's winch pull is a strength roll that can "not budge" —
+        // route it through WinchManager so it re-pulls until the winch turns, then
+        // advances (OnWinchReply's CommandStep branch), rather than firing once and
+        // walking on. Pull-only (no gate poll — the detour walks to the gate room
+        // next, covering the open delay). Falls back to fire-and-forget when unwired.
+        if (step.IsWinchPull && _winchEnqueuer is not null)
+        {
+            _awaitingWinch = true;
+            _log?.Info("Walker", $"detour winch pull ('{step.Command}') — re-pulling until it turns.");
+            _winchEnqueuer(Direction.N, step.Command, /*waitForGate:*/ false, "walker", OnWinchReply);
+            return;
+        }
+
+        _awaitingPromptForCommand = true;
         byte[] bytes = Encoding.Latin1.GetBytes(step.Command + "\r");
         WriteBytes(bytes, $"command '{step.Command}'");
     }
