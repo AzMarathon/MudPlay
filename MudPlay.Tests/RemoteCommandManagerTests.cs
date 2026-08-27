@@ -753,7 +753,7 @@ public sealed class RemoteCommandManagerTests
         Assert.Equal(3, engine.LastSentForTests.Count);
         Assert.Equal("/Friend {plain}\r", Encoding.Latin1.GetString(engine.LastSentForTests[0]));
         Assert.Equal("bg {plain}\r",      Encoding.Latin1.GetString(engine.LastSentForTests[1]));
-        Assert.Equal(".{plain}\r",        Encoding.Latin1.GetString(engine.LastSentForTests[2]));
+        Assert.Equal(">Friend {plain}\r", Encoding.Latin1.GetString(engine.LastSentForTests[2]));
     }
 
     [Fact]
@@ -789,7 +789,7 @@ public sealed class RemoteCommandManagerTests
     }
 
     [Fact]
-    public void Reply_LocalRoutesViaSayPrecursor()
+    public void Reply_LocalRoutesViaDirectedSay_AtTheSender()
     {
         var (engine, _, players) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
@@ -799,8 +799,9 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Local("Friend", "@health"));
 
         string wire = Encoding.Latin1.GetString(engine.LastSentForTests[0]);
-        // Say channel answers with the period say-precursor, not the `say` verb.
-        Assert.Equal(".{hi}\r", wire);
+        // Say is room-wide, so a say-channel @-command is answered with a DIRECTED
+        // say (`>Name <msg>`) aimed at the sender, not an undirected `.<msg>`.
+        Assert.Equal(">Friend {hi}\r", wire);
     }
 
     // ===== Channel scope — noise-channel ignores =====

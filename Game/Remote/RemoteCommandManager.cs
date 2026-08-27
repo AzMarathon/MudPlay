@@ -707,11 +707,12 @@ public sealed class RemoteCommandManager : IDisposable
     // the given-name strip is a no-op for the engine but the rule's worth stating
     // for any future callers.
     //
-    // Local (say) replies use the period say-precursor (`.<msg>`), not the `say`
-    // verb: on this realm the keyboard period is the say precursor (confirmed
-    // mechanic), and a command arriving on say must be answered back on say the
-    // same way the player would. Every @-command reply routes through here, so
-    // this one switch fixes the channel for all of them.
+    // Local (say) replies are DIRECTED at the sender with the `>` verb
+    // (`><name> <msg>`, confirmed mechanic): say is room-wide, so in a room with
+    // several players the `>name` prefix tells the specific player who used the
+    // @-command that the reply is for them. (The period say-precursor `.<msg>` is the
+    // UNDIRECTED say form; the `>` directed verb needs no precursor.) Every @-command
+    // reply routes through here, so this one switch fixes the channel for all of them.
     //
     // Reply payload is encapsulated in { } braces — every remote-command response
     // carries the curly-brace meta-line convention so the recipient's terminal
@@ -727,7 +728,7 @@ public sealed class RemoteCommandManager : IDisposable
         {
             RemoteChannel.Telepath => $"/{given} {payload}",
             RemoteChannel.Gangpath => $"bg {payload}",   // gang-channel speak verb is `bg`, not `gang`
-            RemoteChannel.Local    => $".{payload}",
+            RemoteChannel.Local    => $">{given} {payload}",   // directed say at the @-command's sender
             _                      => payload,
         };
         byte[] bytes = Encoding.Latin1.GetBytes(wire + "\r");

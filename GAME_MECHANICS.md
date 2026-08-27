@@ -2616,6 +2616,10 @@ fresh `@level` lands ≥ 10.)
 
 - **[CONFIRMED]** Talk modes (say / talk-fast / slow) differ **per realm** — that's game
   configuration, not a client bug. The keyboard period is a say-precursor and stays unbindable.
+- **[CONFIRMED] 2026-08-27, user** — a **directed say** is `><name> <message>` (`>` verb + name,
+  no precursor): it says the message TO one person in the room, so in a crowded room they know it's
+  aimed at them. Distinct from the undirected say-precursor `.<message>` (room-wide). The client
+  answers a say-channel `@`-command with a directed say at the sender (`RemoteCommandManager.SendReply`).
 - **[CONFIRMED] 2026-08-04, user** — the **gang-channel speak verb is `bg`** (broadcast-gang), with
   `gb` and the `broadg…`/`broadgang` long forms as equivalents. **`gang` is NOT a speak command** —
   sending `gang <msg>` does not reach the gang. Anything we emit on the gangpath channel (remote
