@@ -20,6 +20,24 @@ public static class PyramidPreflight
     // lands right at the edge is refused rather than sent to a coin-flip.
     private static readonly System.TimeSpan Margin = System.TimeSpan.FromSeconds(20);
 
+    // Pace the blind/timed floors 10% SLOWER than the raw hop time so each blind
+    // step lands a beat behind the server instead of racing ahead of it — firing at
+    // the raw rate (or worse, a fixed 350ms) floods the type-ahead and the climb
+    // desyncs (report paradigm-20260827-133835). The solver paces to this value and
+    // the F1 timer estimate below sizes against the SAME value, so a climb the
+    // preflight passes actually paces within the 5-min budget.
+    private const double LagBufferFactor = 1.10;
+
+    // The Paradigm per-hop pacing interval for the blind/timed floors: the game's own
+    // movement formula (never below the 1-second cap) plus the lag buffer. Paradigm
+    // only — stock movement isn't formula-tracked (the solver keeps its short fixed
+    // settle there, and this preflight gates stock on the encumbrance band instead).
+    public static double PacedPerMoveMs(int encumbrancePercent, int quickness)
+    {
+        MovementSpeedResult res = MovementSpeedCalculator.Compute(encumbrancePercent, quickness, slowness: 0);
+        return System.Math.Max(res.SpeedMillis, MovementSpeedCalculator.CapMillis) * LagBufferFactor;
+    }
+
     public static PyramidPreflightResult Evaluate(
         bool isParadigm, int encumbrancePercent, EncumbranceLevel level, int quickness)
     {
@@ -32,10 +50,10 @@ public static class PyramidPreflight
                 : new PyramidPreflightResult(true, "encumbrance within floor-1 timer budget");
         }
 
-        // Paradigm: the movement formula clamps at the 1-second cap, so a hop is
-        // never faster than that; slowness isn't tracked live (pass 0).
-        MovementSpeedResult res = MovementSpeedCalculator.Compute(encumbrancePercent, quickness, slowness: 0);
-        double perMoveMs = System.Math.Max(res.SpeedMillis, MovementSpeedCalculator.CapMillis);
+        // Paradigm: estimate against the SAME lag-buffered per-move pace the solver
+        // actually fires at (see PacedPerMoveMs), so a climb we pass paces within the
+        // 5-min budget rather than blowing it a beat per room.
+        double perMoveMs = PacedPerMoveMs(encumbrancePercent, quickness);
         double estimateMs = PyramidScript.Floor1MoveCount * perMoveMs
                           + PyramidScript.Floor1ActionCount * PyramidScript.ActionMillis;
         double budgetMs = PyramidScript.Floor1Budget.TotalMilliseconds - Margin.TotalMilliseconds;

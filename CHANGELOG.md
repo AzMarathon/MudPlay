@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.28.28
+
+- Pyramid solver: the timed floors (F1/F2) no longer fire movement faster than the server can process it — on Paradigm a hop is never faster than ~1s, so the old fixed 350 ms pace outran the server, flooded the type-ahead, and desynced the climb (usually failing on floor 1). It now paces each blind step at the character's real hop time (from the movement formula) plus a 10% lag buffer, the same rate the floor-1 timer preflight already estimates against; the computed pace is logged so it can be checked against a bug report
+- bug reports addressed: paradigm-20260827-133835
+
 ## 3.28.27
 
 - Navigation: winch gates now cross reliably — a gate opened by pulling a winch is pulled (and **re-pulled** while it "does not budge" — the pull is a strength roll), and the walker waits for the gate to turn fully open before stepping through instead of walking into a still-closed gate and stalling. Also handles the **cross-room** case, where the winch is in a different room than the gate it opens: the walk-to detour re-pulls the winch until it turns before walking on

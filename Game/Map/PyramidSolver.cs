@@ -302,6 +302,17 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _doorPolls = 0;
         _phase = Phase.Climbing;
         _log?.Log(LogSeverity.Info, LogSource, $"driving {floor}");
+        // Surface the per-step pace for the timed/blind floors so a bug report can be
+        // checked against the movetime the solver actually used (report -133835).
+        if (PyramidScript.IsBlindFast(floor))
+        {
+            TimeSpan pace = SettleFor(floor);
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"{floor} blind pace = {pace.TotalMilliseconds:0} ms/step"
+                + (_isParadigm()
+                    ? $" (Paradigm hop for carry {_snapshot().Encumbrance.Percentage}%, quickness {_quickness()}, +10% lag buffer)"
+                    : " (stock fixed)"));
+        }
         DriveCurrent();
     }
 
@@ -406,9 +417,22 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         StartFloor(next);
     }
 
-    private static TimeSpan SettleFor(PyramidFloor floor)
-        => floor == PyramidFloor.F4 ? Floor4Settle
-         : PyramidScript.IsBlindFast(floor) ? BlindSettle : PacedSettle;
+    private TimeSpan SettleFor(PyramidFloor floor)
+    {
+        if (floor == PyramidFloor.F4) return Floor4Settle;
+        if (!PyramidScript.IsBlindFast(floor)) return PacedSettle;
+        // Blind/timed floor (F1 timed, F2 damage-escalating — both fire ahead with no
+        // per-step confirmation). On Paradigm a hop is never faster than ~1s, so the
+        // fixed 350ms fires ~3x faster than the server can move, floods the type-ahead,
+        // and the climb desyncs (report paradigm-20260827-133835). Pace to the
+        // character's real lag-buffered hop time instead — the SAME value the F1
+        // preflight sized its timer estimate against, so it stays inside the 5-min
+        // budget. Stock movement isn't formula-tracked (and its hops are fast), so the
+        // short fixed settle stands there.
+        if (!_isParadigm()) return BlindSettle;
+        double ms = PyramidPreflight.PacedPerMoveMs(_snapshot().Encumbrance.Percentage, _quickness());
+        return TimeSpan.FromMilliseconds(ms);
+    }
 
     // Floors where the solver waits on combat / holds (F1/F2 rush blind).
     private static bool IsPacedFloor(PyramidFloor f)

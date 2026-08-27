@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.28.27**
-> - Navigation: winch gates now cross reliably — a gate opened by pulling a winch is pulled (and re-pulled while it "does not budge" — the pull is a strength roll), and the walker waits for the gate to turn fully open before stepping through instead of walking into a still-closed gate and stalling. Also handles the cross-room case where the winch is in a different room than the gate it opens
+> **Version 3.28.28**
+> - Pyramid solver: the timed floors (F1/F2) no longer fire movement faster than the server can process it — on Paradigm a hop is never faster than ~1s, so the old fixed 350 ms pace outran the server, flooded the type-ahead, and desynced the climb (usually failing on floor 1). It now paces each blind step at the character's real hop time plus a 10% lag buffer (the same rate the floor-1 timer check uses); the computed pace is logged for bug-report checking
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
