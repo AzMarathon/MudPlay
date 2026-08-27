@@ -19,6 +19,11 @@ public sealed class ConversationRowViewModel
     public IBrush MessageBrush { get; }
     public bool IsDaySeparator => Entry.Channel == ChatChannel.DaySeparator;
 
+    // Whether this row has a speaker prefix. Actions/emotes and server notices have
+    // none, so the XAML collapses that column — otherwise its margin leaves an extra
+    // gap between the chip and the message.
+    public bool HasSpeaker => !string.IsNullOrEmpty(SpeakerText);
+
     // Plain-text form of the row for clipboard copy — the line as it reads on screen
     // (time + who + message), or just the date for a day separator.
     public string CopyText => IsDaySeparator
@@ -35,7 +40,12 @@ public sealed class ConversationRowViewModel
         SpeakerText   = FormatSpeaker(entry);
         MessageText   = entry.Message;
         ChannelBrush  = brushLookup(entry.Channel);
-        MessageBrush  = textBrushLookup(entry.Channel);
+        // Realm / server notices read as one coloured announcement — colour the whole
+        // message the chip's accent (e.g. red) rather than the body brush, which would
+        // leave the sentence white after a red "who". Other channels keep the body brush.
+        MessageBrush  = entry.Channel is ChatChannel.Server or ChatChannel.RealmEvent
+            ? ChannelBrush
+            : textBrushLookup(entry.Channel);
     }
 
     private static string FormatSpeaker(ChatLogEntry entry)
