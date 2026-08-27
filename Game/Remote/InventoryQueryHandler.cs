@@ -9,8 +9,8 @@ namespace MudPlay.Game.Remote;
 // carry weight / possession / room loot without touching the wire:
 //   - @wealth — coins on hand, broken down by denomination.
 //   - @enc — current / max carry weight, percentage, bracket.
-//   - @have <item> — yes + count, or no, for a name substring across carried and
-//     worn items.
+//   - @have <item> — yes + count, or no, for a name substring across carried,
+//     worn, and key-ring items.
 //   - @inv — the carried pack items + key ring: everything on us that another
 //     player CAN'T see by looking. Worn/wielded gear (EquippedItems) and a readied
 //     light are deliberately excluded — an onlooker sees those, so they add no
@@ -95,10 +95,11 @@ public sealed class InventoryQueryHandler : IDisposable
         ctx.Reply($"Encumbrance {e.CurrentWeight}/{e.MaxWeight} ({e.Percentage}%) - {e.Category}");
     }
 
-    // @have <item> — case-insensitive substring match across carried AND worn
-    // items (wearing a piece still counts as having it), replying yes + the match
-    // count or no. Substring rather than exact so a sender can ask "@have dagger"
-    // against "a rusty dagger".
+    // @have <item> — case-insensitive substring match across carried, worn, AND
+    // key-ring items (wearing a piece still counts as having it; keys live on the
+    // ring's own list, not in the pack), replying yes + the match count or no.
+    // Substring rather than exact so a sender can ask "@have dagger" against "a
+    // rusty dagger".
     private void OnHave(RemoteCommandContext ctx)
     {
         string query = string.Join(' ', ctx.Args).Trim();
@@ -118,6 +119,16 @@ public sealed class InventoryQueryHandler : IDisposable
         foreach (EquippedItem item in snap.EquippedItems)
             if (item.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
                 count++;   // a worn piece is a single item
+        // Keys ride the ring's separate "You have the following keys:" list, not the
+        // pack — @have missed them entirely, so "@have black star key" reported "no"
+        // with the key on the ring. ParseKeyEntry splits a stacked "3 iron key" into
+        // its count so a held stack tallies correctly.
+        foreach (string key in snap.Keys ?? Array.Empty<string>())
+        {
+            (int qty, string name) = InventorySnapshot.ParseKeyEntry(key);
+            if (name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                count += qty;
+        }
 
         // "yes - Nx '<item>'" — echoes the queried name (kept for the @party
         // inventory probe's per-item reply correlation) with the true carried count.

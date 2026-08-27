@@ -215,6 +215,39 @@ public sealed class InventoryQueryHandlerTests
         Assert.Equal("no - nothing matching 'longsword'", Assert.Single(Replies(engine)));
     }
 
+    [Fact]
+    public void Have_MatchesKeyRing_NotJustCarriedPack()
+    {
+        // Report: "@have black star key" replied "no" while the key sat on the ring.
+        // Keys live on the dump's separate "You have the following keys:" list, not in
+        // CarriedItems — @have has to search the ring too.
+        var (engine, _, lines, players, _, _) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryInventory);
+        Feed(lines, "You are carrying a brass lantern.");
+        Feed(lines, "You have the following keys:  black star key, brass key.");
+        Feed(lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        engine.DispatchForTests(Telepath("Bob", "@have black star key"));
+
+        Assert.Equal("yes - 1x 'black star key'", Assert.Single(Replies(engine)));
+    }
+
+    [Fact]
+    public void Have_StackedKey_ReportsRingQuantity()
+    {
+        // A duplicated key stacks behind a leading count ("3 iron key") — the reply
+        // must tally the stack, not report 1.
+        var (engine, _, lines, players, _, _) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryInventory);
+        Feed(lines, "You are carrying a brass lantern.");
+        Feed(lines, "You have the following keys:  3 large iron key, brass key.");
+        Feed(lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        engine.DispatchForTests(Telepath("Bob", "@have iron key"));
+
+        Assert.Equal("yes - 3x 'iron key'", Assert.Single(Replies(engine)));
+    }
+
     // ----- @inv --------------------------------------------------------
 
     [Fact]
