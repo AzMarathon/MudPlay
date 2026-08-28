@@ -179,6 +179,11 @@ public partial class App : Application
                 MudPlay.ViewModels.AvoidRoomsEditorDialogViewModel,
                 MudPlay.Views.AvoidRoomsEditorDialog>();
 
+            // Add party buff (Party window buff panel) — pick a buff + recast timer.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.AddPartyBuffDialogViewModel,
+                MudPlay.Views.AddPartyBuffDialog>();
+
             // Manage Sets… (Game Data menu) — copy/move a set's loop
             // library between sets, or delete a set (tables + loops).
             AppServices.Current.Dialogs.RegisterWindow<

@@ -54,15 +54,22 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
     private readonly Action<Models.Profile.CharacterProfile>? _profileMutatedHandler;
     private readonly Action? _profileClosedHandler;
 
+    // Live self-name source (given/full), preferred over the stored profile name
+    // for the self-row filter. Injected so it can stay null in tests (falls back
+    // to the profile name then).
+    private readonly Func<string?>? _liveSelfName;
+
     public PlayersSectionViewModel(
         PlayerDatabase db,
         DialogService? dialogs = null,
-        ProfileService? profile = null)
+        ProfileService? profile = null,
+        Func<string?>? liveSelfName = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         _db = db;
         _dialogs = dialogs;
         _profile = profile;
+        _liveSelfName = liveSelfName;
         _handler = (_, _) => Reload();
         _db.Players.CollectionChanged += _handler;
         // Refresh the filter when the loaded character swaps so a
@@ -111,7 +118,13 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         // row whether the BBS rendered it with or without the family
         // suffix this session. Null / blank when no profile is loaded
         // (draft) means "show everyone".
-        string? selfGiven = ExtractGiven(_profile?.Current?.Name);
+        //
+        // Use the LIVE character name (from `stat`) first, the stored profile name
+        // only as a fallback: a profile copied from another character keeps that
+        // character's stored Name, and trusting it would hide the REAL other player
+        // (report stock-20260828-104653 — a profile copied from "Fujin" hid Fujin
+        // from the player records, so their permissions couldn't be set).
+        string? selfGiven = ExtractGiven(_liveSelfName?.Invoke() ?? _profile?.Current?.Name);
         foreach (PlayerRecord p in _db.Players)
         {
             if (selfGiven is not null

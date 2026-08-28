@@ -6,25 +6,22 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.ViewModels;
 
-// One party-buff slot row in the Party window's buff panel. Wraps a PartyBuffSlot
-// DTO and writes edits straight through to it; the panel persists on any change.
-// Whether the slot is whole-party or single-target is derived live from the
-// spell's Targets scope (via the injected resolver), so the row shows the right
-// control — a Whole-party toggle vs an All-members / member checklist.
+// One party-buff slot row in the Party window's buff panel. The spell + recast
+// timer are set once via the Add dialog and shown read-only here; only the
+// targeting is edited in the row. Whether the slot is whole-party or single-target
+// is derived live from the spell's Targets scope (via the injected resolver), so
+// the row shows the right control — a Whole-party toggle vs an All-members /
+// member checklist. Edits write straight through to the PartyBuffSlot DTO and the
+// panel persists.
 public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
 {
     private readonly PartyBuffSlot _dto;
     private readonly Func<string?, bool> _isWholeParty;
+    private readonly Func<string?, string> _resolveName;
     private readonly Action _persist;
     private bool _suppress;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsWholeParty))]
-    [NotifyPropertyChangedFor(nameof(IsSingleTarget))]
-    [NotifyPropertyChangedFor(nameof(ShowMemberList))]
-    private string? _spell;
-
-    [ObservableProperty] private int _recastMarginSec;
+    // Editable targeting only — spell + recast are fixed at add time.
     [ObservableProperty] private bool _wholePartyOn;
 
     [ObservableProperty]
@@ -34,38 +31,30 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
     // Current party members as target checkboxes, for a single-target slot.
     public ObservableCollection<PartyBuffMemberToggle> MemberTargets { get; } = new();
 
+    public string? Spell => _dto.Spell;
+    public int RecastMarginSec => _dto.RecastMarginSec;
+    // Header: the buff's name (falls back to the cast code) + its recast timer.
+    public string HeaderText => $"{_resolveName(_dto.Spell)}  ·  recast {RecastMarginSec}s";
+
     public bool IsWholeParty => _isWholeParty(Spell);
     public bool IsSingleTarget => !string.IsNullOrWhiteSpace(Spell) && !IsWholeParty;
     public bool ShowMemberList => IsSingleTarget && !AllMembers;
 
-    public PartyBuffSlotRowViewModel(PartyBuffSlot dto, Func<string?, bool> isWholeParty, Action persist)
+    public PartyBuffSlotRowViewModel(
+        PartyBuffSlot dto, Func<string?, bool> isWholeParty,
+        Func<string?, string> resolveName, Action persist)
     {
         _dto = dto;
         _isWholeParty = isWholeParty;
+        _resolveName = resolveName;
         _persist = persist;
         _suppress = true;
-        _spell = dto.Spell;
-        _recastMarginSec = dto.RecastMarginSec;
         _wholePartyOn = dto.WholePartyOn;
         _allMembers = dto.AllMembers;
         _suppress = false;
     }
 
     internal PartyBuffSlot Dto => _dto;
-
-    partial void OnSpellChanged(string? value)
-    {
-        if (_suppress) return;
-        _dto.Spell = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-        _persist();
-    }
-
-    partial void OnRecastMarginSecChanged(int value)
-    {
-        if (_suppress) return;
-        _dto.RecastMarginSec = value;
-        _persist();
-    }
 
     partial void OnWholePartyOnChanged(bool value)
     {

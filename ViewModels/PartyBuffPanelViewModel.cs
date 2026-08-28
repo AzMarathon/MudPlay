@@ -77,13 +77,22 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     }
 
     private PartyBuffSlotRowViewModel MakeRow(PartyBuffSlot dto) =>
-        new(dto, IsWholePartyCode, Persist);
+        new(dto, IsWholePartyCode, ResolveName, Persist);
 
     // Resolve whether a cast code is a whole-party buff, live from the active set.
     private bool IsWholePartyCode(string? code) =>
         !string.IsNullOrWhiteSpace(code)
         && _spellbook.FindByCastCode(code.Trim()) is { } s
         && PartyBuffClassifier.IsWholeParty(s.Targets);
+
+    // The buff's spell name (for the compact row header); falls back to the cast
+    // code when the spell isn't in the active set.
+    private string ResolveName(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return "(no spell)";
+        string c = code.Trim();
+        return _spellbook.FindByCastCode(c) is { } s ? s.Name : c;
+    }
 
     private void RefreshBuffPicks()
     {
@@ -108,10 +117,17 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     private static string GivenLower(string name) =>
         (name.Split(' ') is { Length: > 0 } parts ? parts[0] : name).ToLowerInvariant();
 
+    // Open the Add-buff picker (spell + recast). On OK, add the slot; targeting
+    // (whole-party / all-members / member checklist) is then chosen in the row.
     [RelayCommand]
-    private void AddBuff()
+    private async System.Threading.Tasks.Task AddBuff()
     {
-        PartyBuffSlot dto = new();
+        AddPartyBuffDialogViewModel dlg = new(BuffPicks, SpellSuggestionFilter);
+        AddPartyBuffResult? result = await AppServices.Current.Dialogs
+            .OpenWindowAsync<AddPartyBuffDialogViewModel, AddPartyBuffResult>(dlg);
+        if (result is not { } r) return;
+
+        PartyBuffSlot dto = new() { Spell = r.Spell, RecastMarginSec = r.RecastMarginSec };
         _settings.Slots.Add(dto);
         PartyBuffSlotRowViewModel row = MakeRow(dto);
         Slots.Add(row);

@@ -3,7 +3,6 @@
         xmlns:vm="using:MudPlay.ViewModels"
         xmlns:game="using:MudPlay.Game"
         xmlns:profile="using:MudPlay.Models.Profile"
-        xmlns:spells="using:MudPlay.Game.Spells"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="360"
@@ -14,13 +13,6 @@
         MinWidth="720" MinHeight="120"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
-
-    <Window.Resources>
-        <!-- Spell-picker row: "code — name". -->
-        <DataTemplate x:Key="BuffPickItem" x:DataType="spells:SpellPick">
-            <TextBlock Text="{Binding Display}"/>
-        </DataTemplate>
-    </Window.Resources>
 
     <Window.Styles>
         <!-- Rank chip (F/M/B) — rendered per member.
@@ -108,34 +100,17 @@
                                         BorderThickness="1" CornerRadius="3"
                                         Padding="6" Margin="0,0,0,6">
                                     <StackPanel Spacing="4">
-                                        <!-- Spell picker + remove -->
+                                        <!-- Header: buff name + recast (set via the Add dialog), and remove -->
                                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                            <AutoCompleteBox VerticalAlignment="Center"
-                                                             Text="{Binding Spell, Mode=TwoWay}"
-                                                             ItemsSource="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).BuffPicks}"
-                                                             ValueMemberBinding="{ReflectionBinding Short}"
-                                                             ItemFilter="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).SpellSuggestionFilter}"
-                                                             ItemTemplate="{StaticResource BuffPickItem}"
-                                                             FilterMode="Contains"
-                                                             MinimumPrefixLength="0"
-                                                             PlaceholderText="Buff spell…"/>
+                                            <TextBlock Text="{Binding HeaderText}"
+                                                       FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
                                             <Button Grid.Column="1" Content="⨯" Width="24" Height="24"
                                                     Padding="0"
                                                     ToolTip.Tip="Remove this buff slot"
                                                     Command="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).RemoveBuffCommand}"
                                                     CommandParameter="{Binding}"/>
                                         </Grid>
-
-                                        <!-- Recast timer -->
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="recast within (s)" FontSize="11"
-                                                       Foreground="{StaticResource ChromeFgMutedBrush}"
-                                                       VerticalAlignment="Center"/>
-                                            <NumericUpDown Value="{Binding RecastMarginSec, Mode=TwoWay}"
-                                                           Minimum="0" Maximum="999" Increment="1"
-                                                           FormatString="0" Width="96"
-                                                           ToolTip.Tip="Recast when within this many seconds of expiring. 0 = wait for actual expiry."/>
-                                        </StackPanel>
 
                                         <!-- Whole-party buff: one on/off -->
                                         <CheckBox Content="Whole party (cast on the whole party)"
