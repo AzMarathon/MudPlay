@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.29.3**
-> - Combat: when a spell draws "no effect" on the target, the switch to your **Alt Attack** now fires the **same round** instead of lagging ~a round behind the burst guard
-> - Combat (dark rooms): a target that didn't follow you through no longer **freezes the fight** — the client drops the gone target and engages the attacker actually in the room with you
-> - Buffs: a self-buff's recast timer is no longer dropped by an **unrelated** "already cast this round" rejection (e.g. from manually spam-healing a party member), which had made the buff recast over and over while still up
+> **Version 3.29.5**
+> - Combat (life-drain slot): the drain now **releases at the trigger** — fires each round while HP is at/under the "Heal when ≤ HP" mark and stops the instant HP recovers above it, instead of a band that pinned to 100% HP and drained you to full
+> - Combat (life-drain slot): the drain's **Max casts is a clean per-target cap** (resets on target swap) and is **uncapped by default**, so left blank it keeps healing you every round while hurt (a saved cap of 1 was making it drain once then fall through to the normal attack)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

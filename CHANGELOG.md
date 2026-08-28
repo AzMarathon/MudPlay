@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.29.5
+
+- Combat (life-drain slot): the drain now **releases at the trigger** — it fires each round while HP is at/under the "Heal when ≤ HP" mark and hands the round straight back to your normal attack the instant HP recovers above it. The old hysteresis band pinned to 100% HP at a high trigger, so once engaged it drained you all the way to full (DTCH firing well above 80% HP)
+- Combat (life-drain slot): the drain's **Max casts is a clean per-target cap** (resets when you switch targets) and the row is **uncapped by default**, so left blank it keeps healing you every round while you're hurt — a saved cap of 1 was making the drain fire once per target then fall through to the normal attack while still low (chose LBOL over VAMP)
+- bug reports addressed: paradigm-20260827-153630, paradigm-20260827-101845
+
 ## 3.29.3
 
 - Combat: when a spell draws "no effect" on the target, the switch to your **Alt Attack** now fires the **same round** instead of lagging ~a round behind the 500 ms burst guard

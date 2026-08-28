@@ -345,7 +345,7 @@ public sealed partial class CombatManager
         if (!string.IsNullOrWhiteSpace(settings.DrainSpell.SpellName))
             _log?.Combat(LogCategory,
                 $"drain gate → action={decision.Action}: hp≤trigger={ctx.HpBelowDrainTrigger} "
-                + $"hp≤release={ctx.HpBelowDrainRelease} eligible={ctx.DrainTargetEligible} "
+                + $"eligible={ctx.DrainTargetEligible} "
                 + $"mana={ctx.Mana}/{ctx.MaxMana} overrideAoe={settings.DrainsOverrideAoe}");
 
         // A fresh dispatch supersedes any previously announced spell — clear it so a
@@ -1183,7 +1183,7 @@ public sealed partial class CombatManager
         (int ma, int maxMa) = _readMana!();
         (string? attackOverride, int? attackCap) = AttackOverrideFor(monsterNumber);
         (string? preAttackOverride, int? preAttackCap) = PreAttackOverrideFor(monsterNumber);
-        (bool hpBelowDrain, bool hpBelowDrainRelease, bool drainEligible) = DrainGates(settings, monsterNumber);
+        (bool hpBelowDrain, bool drainEligible) = DrainGates(settings, monsterNumber);
         return new CombatSpellContext(
             EnemyCount:          enemyCount,
             TargetRawName:       target,
@@ -1210,7 +1210,6 @@ public sealed partial class CombatManager
             AlternationPreferSpell: AlternationPreferSpell(settings),
             HpBelowDrainTrigger: hpBelowDrain,
             DrainTargetEligible: drainEligible,
-            HpBelowDrainRelease: hpBelowDrainRelease,
             RoomMobKeys:         CollectEngageableMobKeys(obs),
             ManaCostOf:          _spellManaCost);
     }
@@ -1220,31 +1219,25 @@ public sealed partial class CombatManager
     // AND not undead). Both are false when no drain spell is configured, so the
     // chooser's drain rung stays inert. Eligibility fails OPEN when the index is
     // unwired or the number is unknown (the reactive "no effect" line is the
-    // backstop); the HP gate fails CLOSED when the HP reader is unwired.
-    // Hysteresis margin (percentage points) above the drain trigger: once engaged,
-    // the drain keeps going until HP recovers to trigger + this, so a heal that lands
-    // right at the trigger can't thrash drain↔normal every round.
-    private const int DrainReleaseMarginPct = 20;
-
-    private (bool HpBelowTrigger, bool HpBelowRelease, bool Eligible) DrainGates(
+    // backstop); the HP gate fails CLOSED when the HP reader is unwired. There is no
+    // release band: the drain is a pure HP-driven survival cast that fires only while
+    // HP is at/under the trigger and hands the round back to the normal attack the
+    // moment HP recovers above it (report paradigm-20260827-153630).
+    private (bool HpBelowTrigger, bool Eligible) DrainGates(
         CombatSettings settings, int monsterNumber)
     {
-        if (string.IsNullOrWhiteSpace(settings.DrainSpell.SpellName)) return (false, false, false);
+        if (string.IsNullOrWhiteSpace(settings.DrainSpell.SpellName)) return (false, false);
 
-        bool hpBelowTrigger = false, hpBelowRelease = false;
+        bool hpBelowTrigger = false;
         if (_readHp is not null && settings.DrainHpTrigger > 0)
         {
             (int hp, int maxHp) = _readHp();
             if (maxHp > 0)
-            {
                 hpBelowTrigger = hp <= (int)Math.Round(maxHp * settings.DrainHpTrigger / 100.0);
-                int releasePct = Math.Min(100, settings.DrainHpTrigger + DrainReleaseMarginPct);
-                hpBelowRelease = hp <= (int)Math.Round(maxHp * releasePct / 100.0);
-            }
         }
 
         bool eligible = _monsterLife?.CanDrain(monsterNumber) ?? true;
-        return (hpBelowTrigger, hpBelowRelease, eligible);
+        return (hpBelowTrigger, eligible);
     }
 
     // This round's forced spell-vs-physical preference for the alternating /
