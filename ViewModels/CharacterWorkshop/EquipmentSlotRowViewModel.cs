@@ -39,6 +39,12 @@ public sealed partial class EquipmentSlotRowViewModel : ObservableObject
     // Defaults true; recomputed on each set switch.
     [ObservableProperty] private bool _applies = true;
 
+    // True when the live character can't wear this slot's item (alignment / level
+    // / class, or the game refused it) — the engine skips it on apply and the
+    // grid colours the row so the user knows to fix the pick. Driven from
+    // EquipmentManager's block set; recomputed on block changes + set switch.
+    [ObservableProperty] private bool _blocked;
+
     public EquipmentSlotRowViewModel(
         EquipmentSlot slot, string label, bool isVirtual,
         IReadOnlyList<string> availableItems, Action<EquipmentSlotRowViewModel> onEdited)

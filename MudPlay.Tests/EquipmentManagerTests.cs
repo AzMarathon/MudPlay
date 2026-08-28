@@ -1144,4 +1144,226 @@ public sealed class EquipmentManagerTests
 
         Assert.Equal(new[] { "wear padded helm" }, cmds);
     }
+
+    // ===== unwearable-slot blocks =====
+
+    private static EquipmentSet SetWithId(string id, params EquipmentSlotEntry[] slots)
+        => new() { Id = id, Keyword = "k", Name = "N", Slots = slots.ToList() };
+
+    // A manager wired for the block machinery: the restriction predicate decides
+    // which item names are "unwearable"; resolve/canEquip round out the inventory
+    // path but the set-only apply used by these tests doesn't need them.
+    private static EquipmentManager BlockManager(
+        EquipmentSettings settings, InventorySnapshot snapshot, Func<string, bool> restrictsEquip)
+        => new(
+            readEquipment: () => settings,
+            getSnapshot:   () => snapshot,
+            readCombat:    () => new CombatSettings(),
+            writeCombat:   _ => { },
+            canEquipItem:  static _ => true,
+            restrictsEquip: restrictsEquip);
+
+    [Fact]
+    public void BuildWearCommands_SkipsBlockedNames()
+    {
+        EquipmentSet set = Set("armor", "Armor",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "cursed plate"));
+
+        List<string> cmds = EquipmentManager.BuildWearCommands(
+            set, Worn(), blockedNames: Worn("cursed plate"));
+
+        Assert.Equal(new[] { "wear iron helm" }, cmds);
+    }
+
+    [Fact]
+    public void BuildEquipCommands_SkipsBlockedSetPick()
+    {
+        EquipmentSet set = Set("armor", "Armor",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "cursed plate"));
+        var carried = new[] { "iron helm", "cursed plate" };
+        Func<string, EquipmentSlot?> resolve = Resolver(
+            ("iron helm", EquipmentSlot.Head), ("cursed plate", EquipmentSlot.Torso));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(
+            set, carried, WornList(), resolve, EquipAll, blockedNames: Worn("cursed plate"));
+
+        Assert.Equal(new[] { "wear iron helm" }, cmds);
+    }
+
+    [Fact]
+    public void BuildEquipCommands_BlockedItemNotRefilledByFallback()
+    {
+        // The set doesn't name the piece, but it's carried and fits a slot — the
+        // fallback would fill it. A block must keep it out of the fallback too.
+        EquipmentSet set = Set("armor", "Armor");
+        var carried = new[] { "cursed plate" };
+        Func<string, EquipmentSlot?> resolve = Resolver(("cursed plate", EquipmentSlot.Torso));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(
+            set, carried, WornList(), resolve, EquipAll, blockedNames: Worn("cursed plate"));
+
+        Assert.Empty(cmds);
+    }
+
+    [Fact]
+    public void RefreshBlocksForSet_RestrictedItem_BlocksAndAnnounces()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: n => n == "evil cuirass");
+
+        EquipmentManager.EquipBlock? announced = null;
+        mgr.SlotBlockedAnnounced += b => announced = b;
+
+        mgr.RefreshBlocksForSet(set, announce: true);
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+        Assert.NotNull(announced);
+        Assert.Equal("evil cuirass", announced!.Value.ItemName);
+    }
+
+    [Fact]
+    public void RefreshBlocksForSet_SilentSeed_DoesNotAnnounce()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => true);
+
+        int announces = 0;
+        mgr.SlotBlockedAnnounced += _ => announces++;
+
+        mgr.RefreshBlocksForSet(set, announce: false);
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+        Assert.Equal(0, announces);
+    }
+
+    [Fact]
+    public void RefreshBlocksForSet_ItemBecomesWearable_ClearsProactiveBlock()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        bool restricted = true;
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => restricted);
+
+        mgr.RefreshBlocksForSet(set);
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+
+        restricted = false;                 // e.g. alignment returned
+        mgr.RefreshBlocksForSet(set);
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void Apply_RestrictedSetItem_IsBlockedAndNotSent()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: n => n == "evil cuirass");
+
+        mgr.ApplyBySetId("s1");
+
+        Assert.Contains("wear iron helm", Wire(mgr));
+        Assert.DoesNotContain("wear evil cuirass", Wire(mgr));
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void NoteWearRefused_BlocksTheAttemptedArmorSlot()
+    {
+        // Nothing restricted up front, so the wear is sent; the game then refuses
+        // it (a stale-alignment EP-zap the client couldn't predict).
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");
+        Assert.Contains("wear evil cuirass", Wire(mgr));
+
+        mgr.NoteWearRefused();
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void NoteEquipSucceeded_DequeuesSoNextRefusalBlocksTheNextPiece()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");                 // sends both wears, oldest first
+
+        mgr.NoteEquipSucceeded("iron helm");    // helm worn OK → drop it from pending
+        mgr.NoteWearRefused();                  // refusal now maps to the cuirass
+
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Head));
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void NoteWeaponRefused_BlocksWeaponSlotNotArmor()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Torso, "evil cuirass"),
+            Entry(EquipmentSlot.Weapon, "unholy blade"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");
+
+        mgr.NoteWeaponRefused();
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Weapon));
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void ServerConfirmedBlock_IsStickyAcrossRefresh_ButClearedByClearBlock()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);   // stub says wearable, but the game refused
+
+        mgr.ApplyBySetId("s1");
+        mgr.NoteWearRefused();
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+
+        // A re-eval that finds the item "wearable" must NOT lift a game-confirmed
+        // refusal — only the user editing the slot clears it.
+        mgr.RefreshBlocksForSet(set);
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+
+        mgr.ClearBlock("s1", EquipmentSlot.Torso);
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void ResetBlocks_ClearsEverything()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => true);
+
+        mgr.RefreshBlocksForSet(set);
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+
+        mgr.ResetBlocks();
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
 }

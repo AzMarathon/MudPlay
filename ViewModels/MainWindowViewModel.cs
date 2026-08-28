@@ -807,6 +807,11 @@ public partial class MainWindowViewModel : ObservableObject
         // Roomba sweep finished → a terminal notice, same style as the quest one.
         AppServices.Current.GhSweep.SweepCompleted += OnGhSweepCompleted;
 
+        // A gear-set slot got blocked (can't wear the item — alignment/level/class
+        // or the game refused the wear) → a yellow terminal notice so the user
+        // knows to adjust the set instead of the engine silently skipping it.
+        AppServices.Current.Equipment.SlotBlockedAnnounced += OnEquipSlotBlocked;
+
         // Room-display + movement-refusal parsers feeding RoomTracker.
         // Same per-session LineExtractor binding shape as the who/look
         // parsers above.
@@ -1544,6 +1549,12 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnQuestAvailable(string questName)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             WriteTerminalStatus($"[{questName} Quest is Now Available]", TerminalStatusKind.Notice));
+
+    private void OnEquipSlotBlocked(Game.Inventory.EquipmentManager.EquipBlock block)
+        => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            WriteTerminalStatus(
+                $"[{block.ItemName} skipped, unable to wear — adjust set and save to correct]",
+                TerminalStatusKind.Notice));
 
     private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
