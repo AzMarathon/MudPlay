@@ -172,6 +172,15 @@
                           ToolTip.Tip="When checked (default): the party-bless engine may cast beneficial spells on party members during combat rounds."/>
             </StackPanel>
 
+            <!-- Where the Party window docks its Party Buffs panel. -->
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                <TextBlock Classes="FieldLabel" Text="Party Buffs panel position" VerticalAlignment="Center"/>
+                <ComboBox MinWidth="110"
+                          ItemsSource="{Binding PartyBuffAnchorOptions}"
+                          SelectedItem="{Binding PartyBuffAnchor, Mode=TwoWay}"
+                          ToolTip.Tip="Where the Party window shows its Party Buffs panel: to the Right of the member list (default), Below it, or to the Left."/>
+            </StackPanel>
+
             <!-- ============ Options ============ -->
             <TextBlock Classes="SectionHeader" Text="Options"/>
             <StackPanel Spacing="2">

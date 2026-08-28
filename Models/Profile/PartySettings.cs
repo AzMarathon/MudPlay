@@ -168,9 +168,24 @@ public sealed class PartySettings
     // The two gates above (BlessWhileResting / BlessDuringCombat) stay here — the
     // Settings tab keeps them and Game.Spells.CastingDirector reads them from here.
 
+    // ----- Party window layout --------------------------------------
+
+    // Where the Party window docks its Party Buffs panel relative to the member
+    // list: to the Right (default), Below, or to the Left. Purely a layout
+    // preference; PartyViewModel translates it to the panel's DockPanel.Dock + size.
+    public PartyBuffAnchor PartyBuffAnchor { get; set; } = PartyBuffAnchor.Right;
+
     // Party-cure pickers ship in a follow-up commit — they need
     // per-member condition tracking, deferred until the spellbook
     // gamedata duration model lands.
+}
+
+// Where the Party Buffs panel sits in the Party window.
+public enum PartyBuffAnchor
+{
+    Right,
+    Below,
+    Left,
 }
 
 // Local character's combat rank within a party.

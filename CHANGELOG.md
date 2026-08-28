@@ -8,7 +8,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Whole-party buffs get a single on/off; single-target buffs bless **all members** or a checklist of specific players (targeting replaces the old per-class checkboxes)
 - Single-target casts now fire only for a member who is **both in your party and in the room** — never at someone who left, was uninvited, or wandered off; targets persist by name across parties dissolving and reforming
 - Party Buffs panel is a compact table: **＋ Add buff** opens a picker (spell + recast timer), each slot has ✎ edit / ⨯ remove, targeting is chosen inline, it's styled to match the member list, and it's hidden entirely for a class with no party-buff spells
-- Settings → Party keeps only the *bless while resting / during combat* gates
+- Settings → Party keeps the *bless while resting / during combat* gates, plus a **Party Buffs panel position** option (Right / Below / Left)
 - Party Buffs panel is now an aligned grid: edit/remove at the left, a `bless - 15s` label, an All/On toggle, and a checkbox column per party member (names as headers); whole-party buffs read "Party Wide" across the columns
 - A given party buff is one slot — a spell already slotted drops out of the Add picker, so it can't be double-added (which was double-tracking its recast timer in the Buff Watchdog)
 - Party Buffs can now be a **cast-on-use item** (e.g. a shimmering greatsword casting a party-wide bless): the picker offers whole-party cast items, auto-detected from the item's spell — a single-target item can't be aimed at a member, so only party-wide ones qualify

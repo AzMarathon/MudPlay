@@ -100,7 +100,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
             _profile.ProfileLoaded += OnProfileLoaded;
             _profile.ProfileMutated += OnProfileMutated;
             _profile.ProfileClosed += OnProfileClosed;
-            RefreshLocalRank();
+            RefreshFromPartySettings();
             // The buff panel needs live AppServices (spellbook / profile); build it
             // only on the production path (profile present), never in tests.
             Buffs = new PartyBuffPanelViewModel(State);
@@ -116,10 +116,11 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
     }
 
     // The window only needs to stay wide enough for the buff panel while it's
-    // actually shown; with no party-buff spells the panel is hidden, so the floor
-    // drops to just the member list — otherwise the window stays stuck at the
-    // panel-sized width with no way to shrink it.
-    public double WindowMinWidth => Buffs is { ShowPanel: true } ? 720 : 320;
+    // actually shown AND docked to a side; hidden (no party-buff spells) or docked
+    // below (full-width, no horizontal reservation), the floor drops to just the
+    // member list — otherwise the window stays stuck at the panel-sized width.
+    public double WindowMinWidth =>
+        Buffs is { ShowPanel: true } && _buffAnchor != PartyBuffAnchor.Below ? 720 : 320;
 
     public void Dispose()
     {
@@ -168,32 +169,64 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnProfileLoaded(CharacterProfile _) => RefreshLocalRank();
-    private void OnProfileMutated(CharacterProfile _) => RefreshLocalRank();
-    private void OnProfileClosed() => LocalRank = PartyRank.Mid;
-
-    private void RefreshLocalRank()
+    private void OnProfileLoaded(CharacterProfile _) => RefreshFromPartySettings();
+    private void OnProfileMutated(CharacterProfile _) => RefreshFromPartySettings();
+    private void OnProfileClosed()
     {
-        if (_profile?.Current is not { } profile)
-        {
-            LocalRank = PartyRank.Mid;
-            return;
-        }
-        if (profile.Settings is null
+        LocalRank = PartyRank.Mid;
+        SetAnchor(PartyBuffAnchor.Right);
+    }
+
+    private void RefreshFromPartySettings()
+    {
+        PartySettings dto = ReadPartySettings();
+        LocalRank = dto.Rank;
+        SetAnchor(dto.PartyBuffAnchor);
+    }
+
+    private PartySettings ReadPartySettings()
+    {
+        if (_profile?.Current is not { } profile
+            || profile.Settings is null
             || !profile.Settings.TryGetValue("Party", out JsonElement json))
-        {
-            LocalRank = PartyRank.Mid;
-            return;
-        }
-        try
-        {
-            PartySettings dto = JsonSerializer.Deserialize<PartySettings>(json) ?? new PartySettings();
-            LocalRank = dto.Rank;
-        }
-        catch
-        {
-            LocalRank = PartyRank.Mid;
-        }
+            return new PartySettings();
+        try { return JsonSerializer.Deserialize<PartySettings>(json) ?? new PartySettings(); }
+        catch { return new PartySettings(); }
+    }
+
+    // ----- Party Buffs panel placement (Settings → Party) -----
+    // The anchor picks which edge the buff panel docks to; the panel is
+    // width-constrained on a side (fixed 380, height stretches) and
+    // height-constrained below (stretches wide, fixed height).
+    private PartyBuffAnchor _buffAnchor = PartyBuffAnchor.Right;
+
+    public Avalonia.Controls.Dock BuffDock => _buffAnchor switch
+    {
+        PartyBuffAnchor.Left => Avalonia.Controls.Dock.Left,
+        PartyBuffAnchor.Below => Avalonia.Controls.Dock.Bottom,
+        _ => Avalonia.Controls.Dock.Right,
+    };
+
+    public double BuffWidth => _buffAnchor == PartyBuffAnchor.Below ? double.NaN : 380;
+    public double BuffHeight => _buffAnchor == PartyBuffAnchor.Below ? 240 : double.NaN;
+
+    // A 1px divider on the edge facing the member list.
+    public Avalonia.Thickness BuffBorderThickness => _buffAnchor switch
+    {
+        PartyBuffAnchor.Left => new Avalonia.Thickness(0, 0, 1, 0),
+        PartyBuffAnchor.Below => new Avalonia.Thickness(0, 1, 0, 0),
+        _ => new Avalonia.Thickness(1, 0, 0, 0),
+    };
+
+    private void SetAnchor(PartyBuffAnchor anchor)
+    {
+        if (anchor == _buffAnchor) return;
+        _buffAnchor = anchor;
+        OnPropertyChanged(nameof(BuffDock));
+        OnPropertyChanged(nameof(BuffWidth));
+        OnPropertyChanged(nameof(BuffHeight));
+        OnPropertyChanged(nameof(BuffBorderThickness));
+        OnPropertyChanged(nameof(WindowMinWidth));
     }
 
     // Per-row Uninvite. Sends uninvite X on the wire when the local character

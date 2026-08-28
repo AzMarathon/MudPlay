@@ -76,11 +76,12 @@
              edit. Hidden entirely for a class with no party-buff spells. Styled to
              sit alongside the member list (same sunken ground, bottom-ruled rows)
              rather than as a contrasting card. -->
-        <Border DockPanel.Dock="Right" Width="380"
+        <Border DockPanel.Dock="{Binding BuffDock}"
+                Width="{Binding BuffWidth}" Height="{Binding BuffHeight}"
                 IsVisible="{Binding Buffs.ShowPanel}"
                 Background="{StaticResource ChromeBgSunkenBrush}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
-                BorderThickness="1,0,0,0">
+                BorderThickness="{Binding BuffBorderThickness}">
             <Grid RowDefinitions="Auto,*"
                   DataContext="{Binding Buffs}" x:DataType="vm:PartyBuffPanelViewModel">
                 <Button Grid.Row="0" Content="＋ Add buff" Padding="8,2" Margin="8,8,8,4"

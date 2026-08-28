@@ -66,6 +66,12 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _rankMid = true;
     [ObservableProperty] private bool _rankBack;
 
+    // Where the Party window docks its Party Buffs panel (layout-only preference).
+    [ObservableProperty] private PartyBuffAnchor _partyBuffAnchor = PartyBuffAnchor.Right;
+
+    public IReadOnlyList<PartyBuffAnchor> PartyBuffAnchorOptions { get; } =
+        new[] { PartyBuffAnchor.Right, PartyBuffAnchor.Below, PartyBuffAnchor.Left };
+
     // ----- @join nag escalation -----
     // Delay after the initial invite before the first @join. Range 1..60.
     [ObservableProperty] private int _joinNagInitialDelaySec = 5;
@@ -196,11 +202,15 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
             HelpLeaderOpenDoors    = HelpLeaderOpenDoors,
             BlessWhileResting      = BlessWhileResting,
             BlessDuringCombat      = BlessDuringCombat,
+            PartyBuffAnchor        = PartyBuffAnchor,
         };
 
         profile.Settings ??= new();
         profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
         _profile.Save();
+        // Push the layout change to the live Party window (it re-reads the anchor
+        // from PartySettings on ProfileMutated).
+        _profile.NotifyMutated();
 
         // Push to live services so the user's edit takes effect without
         // requiring a profile-reload.
@@ -260,6 +270,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         HelpLeaderOpenDoors    = dto.HelpLeaderOpenDoors;
         BlessWhileResting      = dto.BlessWhileResting;
         BlessDuringCombat      = dto.BlessDuringCombat;
+        PartyBuffAnchor        = dto.PartyBuffAnchor;
 
         // Mirror loaded settings into the live services so they reflect
         // the profile from first connection, not just after the user
@@ -327,6 +338,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     partial void OnRankFrontChanged(bool value)                 => MarkDirty();
     partial void OnRankMidChanged(bool value)                   => MarkDirty();
     partial void OnRankBackChanged(bool value)                  => MarkDirty();
+    partial void OnPartyBuffAnchorChanged(PartyBuffAnchor value)=> MarkDirty();
     partial void OnJoinNagInitialDelaySecChanged(int value)     => MarkDirty();
     partial void OnJoinNagFrequencySecChanged(int value)        => MarkDirty();
     partial void OnJoinNagMaxTotalSecChanged(int value)         => MarkDirty();
