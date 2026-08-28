@@ -158,6 +158,20 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         _players.ObservationRecorded += OnObservationRecorded;
         _questBonuses.Changed += OnQuestBonusesChanged;
         _equipment.CurrentSetChanged += OnCurrentSetChanged;
+        _equipment.BlocksChanged += OnBlocksChanged;
+    }
+
+    // The engine's unwearable-slot block set changed (an apply, a refusal, an
+    // alignment drift / return) — recolour the selected set's rows.
+    private void OnBlocksChanged() => RefreshRowBlocks();
+
+    // Mark each visible row blocked when the engine can't wear its item. Read on
+    // the UI thread (all block mutations originate there), so no marshalling.
+    private void RefreshRowBlocks()
+    {
+        string? setId = SelectedSet?.Id;
+        foreach (EquipmentSlotRowViewModel row in Rows)
+            row.Blocked = setId is not null && _equipment.IsSlotBlocked(setId, row.Slot);
     }
 
     // The engine equipped a different set (Equip Now or an auto-fire trigger) —
@@ -277,6 +291,16 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     {
         if (_suppress) return;
         PersistRowsToSet();
+        if (SelectedSet is { } set)
+        {
+            // The user addressed this slot — drop any block on it (incl. a
+            // server-confirmed refusal), then re-check the new pick so an item
+            // the current alignment / level / class can't wear is flagged +
+            // skipped straight away (the add-time alignment check).
+            _equipment.ClearBlock(set.Id, row.Slot);
+            _equipment.RefreshBlocksForSet(set);
+        }
+        RefreshRowBlocks();
         RebuildBonusRows();
         ApplyStatus = string.Empty;
     }
@@ -389,6 +413,10 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         }
         finally { _suppress = false; }
 
+        // Colour the freshly-loaded set from the engine's block set — evaluate it
+        // silently first (no terminal notice for a set the user just clicked).
+        if (SelectedSet is { } loaded) _equipment.RefreshBlocksForSet(loaded, announce: false);
+        RefreshRowBlocks();
         RebuildBonusRows();
     }
 
@@ -669,5 +697,6 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         _players.ObservationRecorded -= OnObservationRecorded;
         _questBonuses.Changed -= OnQuestBonusesChanged;
         _equipment.CurrentSetChanged -= OnCurrentSetChanged;
+        _equipment.BlocksChanged -= OnBlocksChanged;
     }
 }

@@ -699,6 +699,23 @@ public static class BugReportBuilder
         sb.Append("**Gear sets (Equipment)**\n\n");
         sb.Append(profile.Equipment is { } equip ? Json(equip) : "_(none)_\n");
 
+        // Unwearable-slot blocks — items a set can't currently equip (alignment /
+        // level / class, or a game refusal). Skipped on apply until addressed, so
+        // a "set won't equip X" report is answered right here.
+        var blocks = svc.Equipment.BlockedSlotsSnapshot();
+        sb.Append("\n**Equipment slot blocks** (").Append(blocks.Count).Append(")\n\n");
+        if (blocks.Count == 0)
+            sb.Append("_(none)_\n");
+        else
+            foreach ((string setId, var slot, string item, bool refused) in blocks)
+            {
+                string setName = profile.Equipment?.Sets
+                    .FirstOrDefault(s => string.Equals(s.Id, setId, StringComparison.Ordinal))?.Name ?? setId;
+                sb.Append("- ").Append(setName).Append(" / ").Append(slot)
+                  .Append(": ").Append(item)
+                  .Append(refused ? " (game refused)" : " (restricted)").Append('\n');
+            }
+
         var plan = profile.CharacterPlan;
         sb.Append("\n**CP allocation plan (CharacterPlan)** (").Append(plan?.Count ?? 0).Append(")\n\n");
         sb.Append(plan is { Count: > 0 } ? Json(plan) : "_(none)_\n");

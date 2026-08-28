@@ -1171,6 +1171,13 @@ public sealed class AppServices
     // (AutoEquip).
     public Game.Inventory.EquipmentManager Equipment { get; private set; } = null!;
 
+    // Router subscriptions feeding the Equipment Manager's unwearable-slot blocks
+    // (wear-confirmed / armor-refused / weapon-refused). Held for the app lifetime
+    // — AppServices is the singleton, so these live as long as the router.
+    private IDisposable? _equipWearOkSub;
+    private IDisposable? _equipWearFailSub;
+    private IDisposable? _equipWieldFailSub;
+
     // Auto-equip trigger coordinator. Subscribes to
     // Game.PlayerState's position / combat signals and, when the
     // matching trigger-purposed Models.Profile.EquipmentSet is
@@ -4034,8 +4041,34 @@ public sealed class AppServices
             isTwoHanded: IsConfiguredWeaponTwoHanded,
             resolveItemSlot: ResolveEquipItemSlot,
             canEquipItem: CanCharacterEquipItem,
+            restrictsEquip: IsEquipRestricted,
             log: Log);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
+
+        // Unwearable-slot blocks: keep the Equipment tab's block set in sync with
+        // the live character. A profile swap clears the in-memory blocks; a `who`
+        // that refreshes OUR alignment re-evaluates every set (a drift re-blocks,
+        // a realignment lifts the proactive blocks). The game's own wear-result
+        // lines feed the reactive latch — a confirmed wear clears its pending
+        // attempt; a refusal ("You may not wear that item!" armor / "You may not
+        // use that weapon." weapon) blocks the slot it concerns so a swap stops
+        // re-bonking a piece the character can't wear (e.g. after an EP-zap).
+        Profile.ProfileLoaded += _ => Equipment.ResetBlocks();
+        Players.ObservationRecorded += givenName =>
+        {
+            (string self, _) = Models.GameData.PlayerRecord.SplitName(PlayerStats.Name);
+            if (!string.IsNullOrEmpty(self)
+                && string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
+                Equipment.ReevaluateAllBlocks();
+        };
+        _equipWearOkSub = Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipped, m =>
+        {
+            if (m.Groups.Count > 0) Equipment.NoteEquipSucceeded(m.Groups[0]);
+        });
+        _equipWearFailSub = Router.Subscribe(
+            Services.Patterns.KnownPatterns.UserEquipFailed, _ => Equipment.NoteWearRefused());
+        _equipWieldFailSub = Router.Subscribe(
+            Services.Patterns.KnownPatterns.UserWieldFailed, _ => Equipment.NoteWeaponRefused());
 
         // Hold auto-rest while a gear-set swap streams its paced wear/rem commands —
         // each stands the character up, and without this the rest engine re-sends
@@ -5601,6 +5634,22 @@ public sealed class AppServices
         Game.Calculators.AlignmentBucket? bucket =
             Game.Inventory.ItemEquipFilter.BucketForWord(Players.Find(PlayerStats.Name)?.Alignment);
         return Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
+    }
+
+    // True when the item EXISTS in game data but the live character can't wear it
+    // (alignment / level / class) — the Equipment Manager's block predicate. Unlike
+    // CanCharacterEquipItem, an UNKNOWN item resolves false here (not a block): a
+    // name that isn't in the active set's Items table just isn't a wearability
+    // problem to flag — it simply never queues. Only a real restriction blocks.
+    private bool IsEquipRestricted(string itemName)
+    {
+        if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row)
+            return false;
+        Game.Inventory.ClassEquipProfile cls =
+            Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
+        Game.Calculators.AlignmentBucket? bucket =
+            Game.Inventory.ItemEquipFilter.BucketForWord(Players.Find(PlayerStats.Name)?.Alignment);
+        return !Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
     }
 
     // Read a single boolean off the active profile's

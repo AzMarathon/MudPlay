@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.32.0**
-> - Game Data menu: new **Modify avoid/stash rooms…** editor listing your avoid rooms and stash rooms together, tagged by type with map/room and name
-> - Quick-add a room by type + map/room number, remove selected rows (multi-select), Save to apply or Cancel to discard
-> - Navigation Management → Go To tab: each saved room now shows its map/room number after the name
+> **Version 3.33.0**
+> - Equipment Manager: a gear slot holding an item your character can't wear (alignment / level / class) is flagged red with a ⚠ and skipped on swaps, instead of the engine repeatedly bonking the game with a wear it refuses
+> - Equipment Manager: when the game refuses a wear/wield ("You may not wear that item!" / "You may not use that weapon." — e.g. an alignment-drift EP-zap), the slot is blocked and a terminal notice tells you to adjust the set; change that slot to clear it
+> - Bug report: new "Equipment slot blocks" section listing any unwearable set slots
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

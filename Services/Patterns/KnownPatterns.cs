@@ -256,7 +256,8 @@ public static class KnownPatterns
     public const string PlayerGets        = "item.player-gets";     // combined: own + others
     public const string PlayerDrops       = "item.player-drops";    // combined: own + others
     public const string UserEquipped      = "item.user-equipped";   // wearing + lit (torches etc.)
-    public const string UserEquipFailed   = "item.user-equip-failed";
+    public const string UserEquipFailed   = "item.user-equip-failed";  // armor: "You may not wear that item!"
+    public const string UserWieldFailed   = "item.user-wield-failed";  // weapon EP-zap: "You may not use that weapon."
     public const string UserRemoved       = "item.user-removed";
     public const string HiddenItems       = "item.hidden-items";
     public const string ShopListHeader    = "item.shop-list-header";

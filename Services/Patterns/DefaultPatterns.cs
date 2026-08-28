@@ -388,6 +388,8 @@ public static class DefaultPatterns
             @"^(?:You are now wearing|You lit the) (?<item>[\w ]+)\.$");
         yield return new RegexPattern(KnownPatterns.UserEquipFailed,
             @"^You may not wear that item!$");
+        yield return new RegexPattern(KnownPatterns.UserWieldFailed,
+            @"^You may not use that weapon\.$");
         yield return new RegexPattern(KnownPatterns.UserRemoved,
             @"^You have removed (?<item>[\w ]+?)(?: and extinguished it)?\.$");
         yield return new RegexPattern(KnownPatterns.HiddenItems,

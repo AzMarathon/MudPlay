@@ -141,6 +141,12 @@ it isn't here and you're unsure, ask.
   `You may not use that weapon.` (weapon) / `You may not wear that item!` (armor). This is why the
   client must not fire a speculative `eq` before the first `i` dump lands — the desired gear is
   already worn, so a blind equip only draws the already-on refusal (or the EP-zap refusal).
+- **[CONFIRMED]** Item **wear-restrictions** aren't dedicated columns — they're MajorMUD
+  **ability-code flags** in an item's `Abil-N` slots (the `AbilVal-N` is presence noise).
+  Alignment: `97` Good-only, `98` Evil-only, `110` not-Good, `111` not-Evil, `112` Neutral-only,
+  `113` not-Neutral. Level: `135` min-level, `136` max-level. Class is a separate `ClassRest-0..9`
+  allow-list of class Numbers. `ItemEquipFilter.CanEquip` evaluates all of these against the live
+  character; the Equipment Manager blocks a slot whose item fails it (and on the EP-zap refusal).
 
 ## Character points (CP) & training
 
