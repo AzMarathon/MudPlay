@@ -74,6 +74,12 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         _settings = _profile.Current?.PartyBuffs ?? new PartyBuffSettings();
         if (_profile.Current is { } p) p.PartyBuffs = _settings;
 
+        // Drop any slot with no spell. There's no empty-slot workflow — every slot
+        // is created with a chosen buff via the Add dialog — so a blank slot is
+        // inert junk, and left in place it would force the panel open for a class
+        // that has no party-buff spells at all.
+        int pruned = _settings.Slots.RemoveAll(s => string.IsNullOrWhiteSpace(s.Spell));
+
         Slots.Clear();
         foreach (PartyBuffSlot dto in _settings.Slots)
             Slots.Add(MakeRow(dto));
@@ -82,6 +88,8 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         RefreshMemberTargets();
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
+
+        if (pruned > 0) Persist();
     }
 
     private PartyBuffSlotRowViewModel MakeRow(PartyBuffSlot dto) =>
