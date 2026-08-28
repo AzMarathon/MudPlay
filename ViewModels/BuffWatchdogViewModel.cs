@@ -121,14 +121,19 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
         foreach (BuffWatchdogRowViewModel row in PartyBuffs)
         {
-            // A party-bless slot can have one timer per matching member; show the
-            // soonest-expiring (the next one due to recast) and name that member.
+            // Match by cast code, respecting how each kind keys its timer: a whole-party
+            // (or #item) buff is one cast that lands on us too, keyed to self (""); a
+            // single-target buff has a timer per member (keyed by given name), so show
+            // the soonest-expiring — the next one due to recast — and name that member.
             ActiveBuffTimer? best = null;
             foreach (ActiveBuffTimer t in snap)
-                if (t.Target.Length > 0 && string.Equals(t.Short, row.CastCode, StringComparison.OrdinalIgnoreCase)
-                    && (best is null || t.Until < best.Value.Until))
-                    best = t;
-            row.Update(best, now, best?.Target);
+            {
+                if (!string.Equals(t.Short, row.CastCode, StringComparison.OrdinalIgnoreCase)) continue;
+                bool selfKeyed = t.Target.Length == 0;
+                if (row.IsWholeParty != selfKeyed) continue;   // whole-party ⇒ "" ; single ⇒ member
+                if (best is null || t.Until < best.Value.Until) best = t;
+            }
+            row.Update(best, now, row.IsWholeParty ? null : best?.Target);
         }
     }
 
@@ -149,8 +154,9 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
             {
                 if (string.IsNullOrWhiteSpace(p.Spell)) continue;
                 (string name, bool learned) = ResolveName(p.Spell);
+                bool wholeParty = IsWholePartySlot(p.Spell);
                 PartyBuffs.Add(new BuffWatchdogRowViewModel(
-                    p.Spell.Trim(), isParty: true, name, TargetLabel(p), learned));
+                    p.Spell.Trim(), isParty: true, name, TargetLabel(p, wholeParty), learned, wholeParty));
             }
 
         HasSelfBuffs = SelfBuffs.Count > 0;
@@ -183,13 +189,21 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
     // The target summary shown on a party-buff row: whole-party buffs read "party";
     // single-target buffs read "all" or the chosen given names.
-    private string TargetLabel(PartyBuffSlot p)
+    private string TargetLabel(PartyBuffSlot p, bool wholeParty)
     {
-        bool wholeParty = _spellbook.FindByCastCode((p.Spell ?? string.Empty).Trim()) is { } ks
-            && PartyBuffClassifier.IsWholeParty(ks.Targets);
         if (wholeParty) return "party";
         if (p.AllMembers) return "all";
         return p.Targets.Count > 0 ? string.Join(", ", p.Targets) : "(no targets)";
+    }
+
+    // Whether a party-buff slot's cast value is whole-party — a spell with a whole-party
+    // Targets scope, or a #item-cast whose item casts a whole-party spell.
+    private bool IsWholePartySlot(string? spell)
+    {
+        if (string.IsNullOrWhiteSpace(spell)) return false;
+        string s = spell.Trim();
+        if (ItemCastToken.IsToken(s)) return _spellbook.IsTokenWholeParty(s);
+        return _spellbook.FindByCastCode(s) is { } ks && PartyBuffClassifier.IsWholeParty(ks.Targets);
     }
 
     // Cheap fingerprint of the configured buff set — a change (live edit) triggers a

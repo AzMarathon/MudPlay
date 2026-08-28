@@ -208,7 +208,7 @@ The healing, ranks, nags, and re-invite behaviour the window reflects are all co
 
 The right side of the Party window is where you configure the beneficial spells the client casts on your party. Click **＋ Add buff** to open a small picker:
 
-- **Pick a buff** — it lists the buff spells you've learned that target another player or the whole party (attacks, heals, and self-only spells are filtered out).
+- **Pick a buff** — it lists the buff spells you've learned that target another player or the whole party (attacks, heals, and self-only spells are filtered out), plus any **whole-party cast-on-use item** you can use (an unlimited-use item like a *shimmering greatsword* that casts a party-wide buff when used). A single-target item can't be aimed at a specific member — `use <item>` takes no target — so only party-wide items are offered; those show as a `#item` slot and cast once to blanket the party.
 - **Set a recast timer** — "recast (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off).
 - **OK** adds it as a slot.
 

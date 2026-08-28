@@ -107,27 +107,42 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     private PartyBuffSlotRowViewModel MakeRow(PartyBuffSlot dto) =>
         new(dto, IsWholePartyCode, ResolveName, Persist);
 
-    // Resolve whether a cast code is a whole-party buff, live from the active set.
-    private bool IsWholePartyCode(string? code) =>
-        !string.IsNullOrWhiteSpace(code)
-        && _spellbook.FindByCastCode(code.Trim()) is { } s
-        && PartyBuffClassifier.IsWholeParty(s.Targets);
+    // Resolve whether a slot's cast value is a whole-party buff, live from the active
+    // set. A #item-cast slot classifies by the item's spell (only whole-party items
+    // are offered as party buffs — see AllPartyBuffPicks).
+    private bool IsWholePartyCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return false;
+        string c = code.Trim();
+        if (ItemCastToken.IsToken(c)) return _spellbook.IsTokenWholeParty(c);
+        return _spellbook.FindByCastCode(c) is { } s && PartyBuffClassifier.IsWholeParty(s.Targets);
+    }
 
-    // The buff's spell name (for the compact row header); falls back to the cast
-    // code when the spell isn't in the active set.
+    // The buff's display name (for the compact row header): a spell's name, an item's
+    // name for a #item-cast slot, or the raw code when neither resolves.
     private string ResolveName(string? code)
     {
         if (string.IsNullOrWhiteSpace(code)) return "(no spell)";
         string c = code.Trim();
+        if (ItemCastToken.ItemName(c) is { } item) return item;
         return _spellbook.FindByCastCode(c) is { } s ? s.Name : c;
     }
 
-    // Every learned party buff as a pick, de-duplicated by cast code.
-    private IEnumerable<SpellPick> AllPartyBuffPicks() =>
-        _spellbook.Available
+    // Every party buff the character can slot, de-duplicated by cast value: learned
+    // party-buff spells, plus whole-party cast-on-use items (a #item token). A
+    // single-target item can't be aimed at a member via `use`, so only whole-party
+    // items qualify (GetWholePartyCastItems already filters to those).
+    private IEnumerable<SpellPick> AllPartyBuffPicks()
+    {
+        IEnumerable<SpellPick> spells = _spellbook.Available
             .Where(s => PartyBuffClassifier.IsPartyBuff(s) && _spellbook.IsObtained(s.Number))
-            .Select(s => new SpellPick(s.Short, s.Name))
-            .DistinctBy(p => p.Short, StringComparer.OrdinalIgnoreCase);
+            .Select(s => new SpellPick(s.Short, s.Name));
+        IEnumerable<SpellPick> items = _spellbook.GetWholePartyCastItems()
+            .Select(ci => new SpellPick(
+                ItemCastToken.Format(ci.ItemName),
+                string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})"));
+        return spells.Concat(items).DistinctBy(p => p.Short, StringComparer.OrdinalIgnoreCase);
+    }
 
     // The cast codes already held by a slot (a spell can't be slotted twice).
     private HashSet<string> SlottedSpells() =>

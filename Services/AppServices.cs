@@ -5798,6 +5798,10 @@ public sealed class AppServices
     {
         if (string.IsNullOrWhiteSpace(castCode)) return false;
         string target = castCode.Trim();
+        // #item-cast slot: the item casts a spell on `use`, so classify by that
+        // spell's Targets scope (a whole-party item cast blankets everyone in one use).
+        if (Game.Spells.ItemCastToken.IsToken(target))
+            return Spellbook.IsTokenWholeParty(target);
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
             if (string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase))
                 return s.Targets is 10 or 13;

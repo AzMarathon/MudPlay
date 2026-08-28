@@ -1556,11 +1556,18 @@ public sealed class CastingDirector : IDisposable
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
             if (!IsBuffAffordable(slot.Spell, manaBuffsAllowed)) continue;
 
+            bool partyWide = _isPartyWideBuff?.Invoke(slot.Spell) == true;
+
+            // A #item-cast slot can only be whole-party: `use <item>` takes no target,
+            // so an item can't be aimed at a single member. (The picker only ever
+            // offers whole-party items, but guard the cast path regardless.)
+            if (ItemCastToken.IsToken(slot.Spell) && !partyWide) continue;
+
             // Whole-party buff (Targets 10 / 13) — one cast covers everyone, so
             // there's no per-member targeting; the slot's on/off is WholePartyOn.
             // Recast keyed to self ("") since it lands on us and confirms via the
-            // AppliedMessage path.
-            if (_isPartyWideBuff?.Invoke(slot.Spell) == true)
+            // AppliedMessage path (or, for an item, TryFireItemCast's proactive timer).
+            if (partyWide)
             {
                 if (!slot.WholePartyOn) continue;
                 if (!IsRecastDue("", slot.Spell)) continue;

@@ -11,6 +11,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Settings → Party keeps only the *bless while resting / during combat* gates
 - Party Buffs panel is now an aligned grid: edit/remove at the left, a `bless - 15s` label, an All/On toggle, and a checkbox column per party member (names as headers); whole-party buffs read "Party Wide" across the columns
 - A given party buff is one slot — a spell already slotted drops out of the Add picker, so it can't be double-added (which was double-tracking its recast timer in the Buff Watchdog)
+- Party Buffs can now be a **cast-on-use item** (e.g. a shimmering greatsword casting a party-wide bless): the picker offers whole-party cast items, auto-detected from the item's spell — a single-target item can't be aimed at a member, so only party-wide ones qualify
+- Buff Watchdog now shows whole-party (and item) party buffs, not just single-target ones
 - Fixed: the Party Buffs panel no longer appears for a class with no party-buff spells — a stray blank slot is pruned on load instead of forcing the panel open
 - Fixed: the Game Data → Players list hid the wrong person when a profile was copied from another character — it now identifies "self" by the live `stat` name, not the stored profile name, so a copied profile no longer omits the real other player from your player records
 - bug reports addressed: stock-20260828-104653, stock-20260828-113206

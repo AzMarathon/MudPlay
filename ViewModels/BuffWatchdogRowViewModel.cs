@@ -16,10 +16,13 @@ namespace MudPlay.ViewModels;
 public sealed partial class BuffWatchdogRowViewModel : ObservableObject
 {
     // Identity used to match a timer snapshot entry: the 4-letter cast code (or the
-    // #item-cast token). Self rows match a snapshot whose Target is ""; party rows
-    // match any member timer for this code (the soonest is chosen by the parent VM).
+    // #item-cast token). Self rows match a snapshot whose Target is ""; single-target
+    // party rows match a member timer for this code (the soonest is chosen by the
+    // parent VM); a whole-party party row (IsWholeParty) matches the self-keyed ("")
+    // timer, since one cast blankets the party and lands on us too.
     public string CastCode { get; }
     public bool IsParty { get; }
+    public bool IsWholeParty { get; }
 
     [ObservableProperty] private string _name;
     [ObservableProperty] private string _targetText;
@@ -42,10 +45,13 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     private static GridLength Full => new(1, GridUnitType.Star);
     private static GridLength Star(double weight) => new(weight, GridUnitType.Star);
 
-    public BuffWatchdogRowViewModel(string castCode, bool isParty, string name, string targetText, bool isLearned)
+    public BuffWatchdogRowViewModel(
+        string castCode, bool isParty, string name, string targetText, bool isLearned,
+        bool isWholeParty = false)
     {
         CastCode = castCode;
         IsParty = isParty;
+        IsWholeParty = isWholeParty;
         _name = name;
         _targetText = targetText;
         _isLearned = isLearned;
