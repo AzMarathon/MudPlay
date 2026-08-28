@@ -582,11 +582,11 @@ Open **Session Stats** from the **View** menu or its toolbar button (it has no d
 
 Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. It lists the buffs you've **configured** (never the whole spellbook) — your **self-bless slots**, the **HP/MA-regen** and **when-HP/MA-full** utility buffs, any `#item`-cast buffs, and your **party-bless slots** — each on its own row with a live timer bar:
 
-- Each row **is** the timer bar: the buff's 4-letter cast code (or a `#`-prefixed item name) sits **left-aligned inside the bar**, with the **time remaining** just after it. Party-buff rows also show the target member/class as a caption beneath the bar.
+- Each row **is** the timer bar: the buff's 4-letter cast code (or a `#`-prefixed item name) sits **left-aligned inside the bar**, with the **time remaining** just after it. Party-buff rows show the target beneath the bar.
 - The **bar fills as the buff ages** (empty just after it lands, full at wear-off), and a **vertical amber marker** shows where its **recast window** opens — the "recast within (seconds)" lead you set per slot. When the fill crosses the marker the bar turns amber: the buff is now due to be recast.
 - A buff that **isn't up** (worn off, or never cast) shows an empty bar labelled **not up**, so you can see at a glance which configured buffs are missing.
 - A configured buff your character **hasn't learned** is flagged **unlearned**.
-- Party-buff rows show the **soonest-expiring** member's timer (the next one due) and that member's name.
+- A **whole-party** buff (chant, mass frenzy, a party-wide cast item…) is one row — a single cast blankets the party. A **single-target** buff gets **one row per member** it's cast on (each member is blessed individually, so each has its own recast timer and name).
 
 **What it counts as "up".** A buff's timer is armed by the **cast code** — whether the client cast it or **you typed it by hand** — so a manual cast shows up here the same as an automated one. The client deliberately **ignores the `stat` screen's buff list** (Paradigm's `You feel …! (Ns)` lines): those shared effect messages can't say which buff is which, so they're never treated as a cast. **Any disconnect freezes the timers** (the display too) and reconnecting **resumes** them with the same remaining — a brief drop keeps your recast clock instead of restarting it. Switching characters (or a gap longer than the buff could last) starts the watchdog empty, with no buffs assumed.
 

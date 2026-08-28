@@ -240,6 +240,10 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         if (_profile.Current is not { } p) return;
         p.PartyBuffs = _settings;
         _profile.Save();
+        // Re-evaluate the caster now so a just-checked member's buff queues right away
+        // (assume-uncast → due) instead of waiting for the next idle heartbeat. No-op
+        // in combat, where the combat tick owns the cadence.
+        AppServices.Current.CastDirector.OnIdleHeartbeat();
     }
 
     public void Dispose()
