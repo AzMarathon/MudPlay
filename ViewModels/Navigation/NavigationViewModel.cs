@@ -407,7 +407,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             if (_services.AutoLair.LastDecision is not { } pick) return string.Empty;
             string lairLabel = FormatRoomRef(pick.Lair);
             string waitLabel = FormatRoomRef(pick.WaitRoom);
-            return _services.AutoLair.Phase switch
+            string baseText = _services.AutoLair.Phase switch
             {
                 AutoLairPhase.Approaching => $"{lairLabel} via wait-room {waitLabel}",
                 AutoLairPhase.Waiting     => $"Waiting at {waitLabel} → {lairLabel}",
@@ -415,6 +415,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 AutoLairPhase.Engaging    => $"Engaging at {lairLabel}",
                 _                         => string.Empty,
             };
+            // Auto-Lair retries a failed approach on its timer rather than aborting,
+            // so a walled lair would otherwise sit on a silent "Approaching". Name the
+            // last failure so the user sees it's stuck and why.
+            if (baseText.Length > 0
+                && _services.AutoLair.LastWalkerFailure is { Length: > 0 } fail)
+                return $"{baseText} · retrying: {fail}";
+            return baseText;
         }
     }
 
@@ -542,8 +549,27 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // died in) — clearing it here matches how Stop clears the queued destination.
     private void ClearNavIntentOnDeath() => QueuedDestination = null;
 
-    private void OnLoopRunnerEvent(LoopEvent _)
+    private void OnLoopRunnerEvent(LoopEvent e)
     {
+        // A failed circuit resets the loop to Idle; stash its reason so the top bar
+        // explains why it stopped — LoopRunner builds a specific detail (the blocking
+        // door / winch / hidden exit + room), which used to be dropped here, leaving
+        // the bar silently falling back to the current room. Cleared on any progress.
+        switch (e.Kind)
+        {
+            case LoopEventKind.Failed:
+                EngineError = e.Detail;
+                break;
+            case LoopEventKind.Started:
+            case LoopEventKind.Resumed:
+            case LoopEventKind.StepCompleted:
+            case LoopEventKind.RepeatStarted:
+            case LoopEventKind.ReachedFirstWaypoint:
+            case LoopEventKind.Stopped:
+                EngineError = null;
+                break;
+        }
+
         OnPropertyChanged(nameof(IsLoopRunning));
         RefreshLoopOverlays();
         RefreshEngineActionKind();
@@ -2922,16 +2948,25 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // ----- Top-bar activity status (moving / fighting / waiting-why) --
 
     // Human-readable "what is the movement engine doing right now" for the
-    // top-bar chip: Moving, Fighting, Paused (user), or Waiting with the
-    // reason. The reason comes straight from the MovementCoordinator gate that
-    // is holding the engine — the client never has to guess why a loop stalled.
-    private enum NavActivityKind { None, Moving, Fighting, Waiting, Paused }
-
+    // top-bar chip: Moving, Fighting, Paused (user), or Waiting with the reason.
+    // The reason comes straight from the MovementCoordinator gate that is holding
+    // the engine (see NavActivity) — the client never has to guess why a loop
+    // stalled.
     private string _activityStatus = string.Empty;
     private NavActivityKind _activityKind = NavActivityKind.None;
 
-    // Chip text ("Fighting", "Waiting — resting (low HP)", …). Empty when idle.
-    public string ActivityStatus => _activityStatus;
+    // Chip text — a short, colour-coded state word (Moving / Fighting / Waiting /
+    // Paused). The *reason* for a wait ("resting (low HP)") is folded into the
+    // top-bar status line itself (WithHold), so the chip stays a one-glance state
+    // pill instead of repeating the same phrase beside the line. Empty when idle.
+    public string ActivityStatus => _activityKind switch
+    {
+        NavActivityKind.Moving   => "Moving",
+        NavActivityKind.Fighting => "Fighting",
+        NavActivityKind.Waiting  => "Waiting",
+        NavActivityKind.Paused   => "Paused",
+        _                        => string.Empty,
+    };
     // Chip only shows while an engine is executing.
     public bool HasActivityStatus => _activityKind != NavActivityKind.None;
     // Colour-class selectors for the chip (green / red / amber / muted).
@@ -2943,6 +2978,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void RefreshActivityStatus()
     {
         (string text, NavActivityKind kind) = ComputeActivity();
+        // The hold reason is folded into the top-bar status line, and a queued-but-
+        // idle route reads its reason off the live gates even when the chip itself is
+        // empty — so refresh the line on every gate/held change, ahead of the chip's
+        // unchanged early-out below.
+        OnPropertyChanged(nameof(TopBarStatusText));
         if (text == _activityStatus && kind == _activityKind) return;
         _activityStatus = text;
         _activityKind   = kind;
@@ -2954,76 +2994,37 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ActivityIsPaused));
     }
 
-    // Map the live engine + gate state to the chip. Idle → hidden. Running with
-    // nothing gating → Moving. Otherwise the highest-priority reason wins: an
-    // explicit user pause is the headline (only the user can clear it), then
-    // combat (Fighting), then our own "held" ailment (blocks movement
-    // server-side even with no client gate asserted), then the recovery / party
-    // holds. Gate constants are matched by value so a future gate never silently
-    // maps to "Moving" — an unrecognized one still surfaces as "Waiting — <gate>".
+    // Map the live engine + gate state to the chip. Idle → hidden; otherwise the
+    // priority scan in NavActivity.Describe picks the highest-value reason. Held is
+    // read off the authoritative condition flag (SelfHeldResponder asserts HeldGate
+    // off the same edge, but the flag flips first).
     private (string Text, NavActivityKind Kind) ComputeActivity()
     {
         if (!IsAnyExecuting) return (string.Empty, NavActivityKind.None);
-
         Game.Map.MovementCoordinator mc = _services.MovementCoordinator;
-        IReadOnlyCollection<string> gates = mc.AssertedGates;
-
-        // User pause and combat outrank everything, including a held ailment:
-        // an explicit pause is the user's own doing, and mid-fight "Fighting" is
-        // the more useful readout than "Held". (Death no longer flavours this — it
-        // full-stops every engine and clears the gate rather than pausing.)
-        if (gates.Contains(Game.Map.MovementCoordinator.UserGate))
-            return ("Paused", NavActivityKind.Paused);
-        if (gates.Contains(Game.Map.MovementCoordinator.CombatGate))
-            return ("Fighting", NavActivityKind.Fighting);
-        // Engine-owned hold right after a walk left a room with an engaged
-        // hostile — auto-clears the instant the room settles, so this rarely
-        // lingers, but name it so it never falls through to the raw-gate label.
-        if (gates.Contains(Game.Map.MovementCoordinator.AbandonedCombatGate))
-            return ("Waiting — leaving a fight", NavActivityKind.Waiting);
-
-        // Our own held/entangled state stops movement at the server. The
-        // condition flag is the authoritative signal (SelfHeldResponder also
-        // asserts HeldGate off the same edge), read directly here so the label is
-        // right the instant we're knocked down, ahead of the gate scan below.
-        if (_services.Conditions.IsMovementPrevented)
-            return ("Waiting — held", NavActivityKind.Waiting);
-
-        if (!mc.IsPaused) return ("Moving", NavActivityKind.Moving);
-
-        // Our own confusion holds navigation locally (the leader/solo analogue of
-        // the @wait a confused follower sends). Rank it above the party-driven
-        // waits — it's our own affliction, same tier as "held" above.
-        if (gates.Contains(Game.Map.MovementCoordinator.ConfusionGate))
-            return ("Waiting — confused", NavActivityKind.Waiting);
-
-        if (gates.Contains(Game.Map.MovementCoordinator.HealthRecoveryGate))
-            return ("Waiting — resting (low HP)", NavActivityKind.Waiting);
-        if (gates.Contains(Game.Map.MovementCoordinator.ManaRecoveryGate))
-            return ("Waiting — meditating (low mana)", NavActivityKind.Waiting);
-        if (gates.Contains(Game.Map.MovementCoordinator.PartyWaitGate))
-            return ("Waiting — party asked to wait", NavActivityKind.Waiting);
-        if (gates.Contains(Game.Map.MovementCoordinator.PartyVitalsGate))
-            return ("Waiting — party member hurt", NavActivityKind.Waiting);
-        if (gates.Contains(Game.Map.MovementCoordinator.PartyInviteGate))
-            return ("Waiting — for invitee to join", NavActivityKind.Waiting);
-        if (gates.Contains(Game.Map.MovementCoordinator.FollowerGate))
-            return ("Waiting — following leader", NavActivityKind.Waiting);
-        if (gates.Contains(Game.Map.MovementCoordinator.CorpseRecoveryGate))
-            return ("Waiting — recovering corpse", NavActivityKind.Waiting);
-        if (gates.Contains(Game.Map.MovementCoordinator.SearchGate))
-            return ("Waiting — searching the room", NavActivityKind.Waiting);
-        if (gates.Contains(Game.Map.MovementCoordinator.AcquisitionGate))
-            return ("Waiting — looting", NavActivityKind.Waiting);
-        // Brief per-room hold while a dark room reveals its occupant. It's a beat
-        // in the middle of moving, not a real stop, so it reads as Moving and sits
-        // last — any more-meaningful wait above wins.
-        if (gates.Contains(Game.Map.MovementCoordinator.DarkRoomSettleGate))
-            return ("Moving — checking the dark", NavActivityKind.Moving);
-
-        string first = gates.FirstOrDefault() ?? "?";
-        return ($"Waiting — {first}", NavActivityKind.Waiting);
+        return NavActivity.Describe(
+            mc.AssertedGates, mc.IsPaused, _services.Conditions.IsMovementPrevented);
     }
+
+    // The hold reason to fold into the top-bar status line ("… — resting (low HP)"),
+    // or null when the engine isn't actually held. Reads the live gate state even
+    // when EngineActionKind is Idle, so a queued-but-gated route (e.g. Auto-All off)
+    // can still explain itself.
+    private string? CurrentHoldReason()
+    {
+        Game.Map.MovementCoordinator mc = _services.MovementCoordinator;
+        if (!mc.IsPaused && !_services.Conditions.IsMovementPrevented) return null;
+        (string text, NavActivityKind kind) = NavActivity.Describe(
+            mc.AssertedGates, mc.IsPaused, _services.Conditions.IsMovementPrevented);
+        return NavActivity.HoldSuffix(text, kind);
+    }
+
+    // Fold the live hold reason onto a running-engine status line, so the top bar
+    // reads as one sentence ("Looping Ring - step 4 of 12 … — resting (low HP)")
+    // rather than making the user cross-reference a separate chip. No-op while the
+    // engine is genuinely moving (CurrentHoldReason returns null).
+    private string WithHold(string baseText) =>
+        CurrentHoldReason() is { Length: > 0 } reason ? $"{baseText} — {reason}" : baseText;
 
     private void RefreshFromTracker()
     {
@@ -3395,7 +3396,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                     string dest = _services.Walker.Destination is { } k
                         ? FormatRoomRef(k)
                         : "?";
-                    return WalkToStatus(dest);
+                    return WithHold(WalkToStatus(dest));
                 }
                 case NavigationEngineKind.Looping:
                 {
@@ -3412,15 +3413,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                         // Same step/ETA readout as a plain walk-to (the walker drives
                         // the approach), with the loop intent appended until the loop
                         // starts cycling.
-                        return WalkToStatus(target, $" then looping {name}");
+                        return WithHold(WalkToStatus(target, $" then looping {name}"));
                     }
                     // Running circle — spell out where in the cycle we are. Step
                     // is CurrentIndex (next-to-send) as 1-based, clamped to the
                     // step count; lap is completed-laps + 1 (the lap in flight).
                     int total = lr.StepCount;
-                    if (total <= 0) return $"Looping {name}";
+                    if (total <= 0) return WithHold($"Looping {name}");
                     int step = Math.Min(total, lr.CurrentIndex + 1);
-                    return $"Looping {name} - step {step} of {total} on lap {lr.CompletedLaps + 1}";
+                    return WithHold(
+                        $"Looping {name} - step {step} of {total} on lap {lr.CompletedLaps + 1}");
                 }
                 case NavigationEngineKind.AutoLair:
                 {
@@ -3432,12 +3434,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                     string countLabel = $"cycling {n} marked lair{(n == 1 ? "" : "s")}";
                     if (_services.AutoLair.IsPaused) return $"{countLabel} · paused";
                     if (AutoLairStatusText is { Length: > 0 } status)
-                        return $"{AutoLairPhaseLabel} · {status}";
-                    return countLabel;
+                        return WithHold($"{AutoLairPhaseLabel} · {status}");
+                    return WithHold(countLabel);
                 }
                 default:
                 {
                     if (EngineError is { Length: > 0 } err) return $"⚠ {err}";
+                    // A route is armed but not running yet — say so, and why if
+                    // something already holds movement (e.g. Auto-All off), so a
+                    // queued walk that isn't going anywhere explains itself.
+                    if (QueuedDestination is { } q)
+                    {
+                        string qd = FormatRoomRef(q);
+                        return CurrentHoldReason() is { Length: > 0 } reason
+                            ? $"Queued: walk to {qd} — {reason}"
+                            : $"Queued: walk to {qd}";
+                    }
                     Room? here = _services.RoomTracker.State.CurrentRoom;
                     return here is null ? "—" : FormatRoomRef(here.Key);
                 }
