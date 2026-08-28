@@ -17,7 +17,9 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Party window: buff panel hidden for a class with no party buffs no longer leaves the window stuck at the panel-sized width; tighter member columns with centered, truncated names
 - Fixed: the Party Buffs panel no longer appears for a class with no party-buff spells — a stray blank slot is pruned on load instead of forcing the panel open
 - Fixed: the Game Data → Players list hid the wrong person when a profile was copied from another character — it now identifies "self" by the live `stat` name, not the stored profile name, so a copied profile no longer omits the real other player from your player records
-- bug reports addressed: stock-20260828-104653, stock-20260828-113206
+- Fixed: single-target party buffs never reached the **party leader you're following** — the leader isn't in the room's `Also here:` (the game shows "You are following …" instead), so the in-room check wrongly skipped them; the followed leader is now treated as present
+- The Party Buffs panel keeps its table layout when docked Below or Left (content pinned to its natural width instead of stretching across the window)
+- bug reports addressed: stock-20260828-104653, stock-20260828-113206, stock-20260828-124347
 
 
 

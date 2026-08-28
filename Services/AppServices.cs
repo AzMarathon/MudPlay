@@ -5815,8 +5815,20 @@ public sealed class AppServices
     // seen yet) ⇒ not present, so the buff waits rather than casting blind.
     private bool IsGivenNameInRoom(string givenName)
     {
-        if (RoomClassifier?.Current?.Entities is not { } entities) return false;
         string g = givenName.Trim();
+
+        // The leader we're FOLLOWING isn't listed in "Also here:" — the game prints
+        // "You are following <leader>." instead — yet we co-locate with them while
+        // following, so a room parse omits them even though they're right here
+        // (report stock-20260828-124347: bless never reached the followed leader).
+        // Treat the followed leader as present. (When WE lead, our followers DO show
+        // in Also-here, so this only covers the follower→leader direction.)
+        if (!PartyState.SelfIsLeader
+            && PartyState.LeaderName is { Length: > 0 } leader
+            && string.Equals(GivenNameOf(leader), g, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (RoomClassifier?.Current?.Entities is not { } entities) return false;
         foreach (Game.Combat.RoomEntity e in entities)
             if (e.Kind == Game.Combat.EntityKind.Player
                 && string.Equals(e.ResolvedName, g, StringComparison.OrdinalIgnoreCase))

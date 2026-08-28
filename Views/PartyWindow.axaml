@@ -82,7 +82,11 @@
                 Background="{StaticResource ChromeBgSunkenBrush}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="{Binding BuffBorderThickness}">
-            <Grid RowDefinitions="Auto,*"
+            <!-- Content pinned to its natural width + left, so the buff table looks
+                 the SAME in every anchor: docked below, the Border's background /
+                 separator still span the full width, but the table doesn't stretch
+                 across the window. -->
+            <Grid RowDefinitions="Auto,*" MaxWidth="380" HorizontalAlignment="Left"
                   DataContext="{Binding Buffs}" x:DataType="vm:PartyBuffPanelViewModel">
                 <Button Grid.Row="0" Content="＋ Add buff" Padding="8,2" Margin="8,8,8,4"
                         HorizontalAlignment="Left" IsEnabled="{Binding CanAddBuff}"

@@ -2568,6 +2568,7 @@ fresh `@level` lands ≥ 10.)
 ## Party
 
 - **[CONFIRMED]** Party size: minimum 2, maximum 6.
+- **[CONFIRMED]** *(2026-08-28, user — report `stock-20260828-124347` + scrollback)* **The leader you're FOLLOWING is not listed in the room's `Also here:` line.** The game prints `You are following <leader>.` as a separate status line instead, and `Also here:` lists only the *other* occupants — a follower's room shows the co-follower(s) but omits the leader. You still co-locate with the leader while following (you auto-move together). Reciprocal: when **you** lead, your followers **do** appear in your `Also here:` (you follow no one). Consequence for automation: any "is player X in the room?" check driven off `Also here:` must treat the **followed leader** as present, or it will wrongly conclude the leader is absent (this silently blocked single-target party buffs from ever reaching the leader).
 - **[CONFIRMED]** Losing the leader disbands the whole party — whether the leader **disconnects or
   dies**. No grace-window auto-invite for a lost leader; on the leader's own death the party is gone
   by the time they respawn in the graveyard.
