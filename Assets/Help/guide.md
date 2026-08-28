@@ -2011,7 +2011,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Rank | `Mid` | Front / Mid / Back | `Rank` | Models/Profile/PartySettings.cs |
 | Minor/Major party heal (single/AOE) | blank (all 4) | spell code | `MinorPartyHealSpell` etc. | Models/Profile/PartySettings.cs |
 | Minor/Major heal threshold %, AOE min members | 70/40/2 | 0–100 / 2–6 | `MinorHealMemberThresholdPercent` etc. / `AoeMinMembers` | Models/Profile/PartySettings.cs |
-| Party bless slots (10) | empty | spell + class list + recast sec | `BlessSlots` | Models/Profile/PartySettings.cs |
+| Party buff slots | empty | spell + per-member targets + recast sec | `PartyBuffs` | Models/Profile/PartyBuffSettings.cs (Party window) |
 | Bless while resting / during combat | false / false | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
 | Help leader open doors / Ignore @wait when leading / Reset stats on loop start | false/false/true | bool | `HelpLeaderOpenDoors`, `IgnoreWaitWhenLeading`, `ResetStatisticsOnLoopStart` | Models/Profile/PartySettings.cs |
 | Re-invite lost members / send @join nags / send @health nags / probe on join | true (all) | bool | `AutoInviteReconnecting`, `SendJoinToInvited`, `SendHealthToMembers`, `ProbeStatsOnPartyJoin` | Models/Profile/PartySettings.cs |
