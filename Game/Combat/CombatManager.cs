@@ -2768,6 +2768,27 @@ public sealed partial class CombatManager : IDisposable
         _castingSpellTarget = null;
         _inferredKillPendingRemoval = null;
         ClearBackstabResolution();
+
+        // When this round's kills account for EVERY engageable mob the roster still
+        // lists, the AoE emptied the room — drop the stale roster NOW (an empty
+        // observation) so the combat gate releases on the CR round-trip instead of
+        // waiting out the 6s idle-stall watchdog. An emptied room's bare-CR re-display
+        // carries no "Also here:" line, so without this the classifier fires no
+        // observation and the gate sits held ~6s after every AoE room-wipe (report
+        // paradigm-20260827-081208, an hsto mage's every fight). SAFE: it fires only
+        // when kills >= the listed roster, so a survivor (fewer kills than mobs) leaves
+        // the roster intact and the CR re-parse below still handles it; the CR also
+        // re-asserts any hostile that arrived unlisted, exactly the idle-stall
+        // watchdog's own optimistic-clear-plus-safety-probe pattern.
+        int listed = _classifier.Current is { } cur ? CountEngageable(cur) : 0;
+        if (listed > 0 && _expGainsThisRound >= listed)
+        {
+            _log?.Combat(LogCategory,
+                $"AoE multi-kill ({_expGainsThisRound} exp) cleared all {listed} listed hostile(s) — "
+                + "dropping the stale roster so the combat gate releases without the idle-stall wait");
+            _classifier.NoteRoomChanged();
+        }
+
         if (TrySendRoomRefresh(context))
             _log?.Combat(LogCategory,
                 $"AoE multi-kill ({_expGainsThisRound} exp this round) — re-parsing room with "
