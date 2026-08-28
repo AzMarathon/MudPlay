@@ -78,6 +78,12 @@ public sealed class CastingDirector : IDisposable
     // — the guard no longer matches and a fresh heal is free to fire.
     private static readonly TimeSpan SameSelfHealStaleGuard = TimeSpan.FromSeconds(8);
 
+    // How long after arming a self-buff's pending marker an AlreadyCastThisRound /
+    // fizzle rejection can still plausibly be about that send. Our recast draws its
+    // rejection within the same ~5-6s round; a later one is an unrelated cast the
+    // spell-less server line got misattributed. One generous round (report -130111).
+    private static readonly TimeSpan PendingSelfBuffRejectionWindow = TimeSpan.FromSeconds(7);
+
     private readonly PlayerState _state;
     private readonly CastCoordinator _cast;
     private readonly Conditions.ConditionTracker? _conditions;
@@ -127,6 +133,13 @@ public sealed class CastingDirector : IDisposable
     // dropped or the buff sits "active" for its whole assumed duration and never
     // re-attempts (an ~90s uptime hole after a single fizzle).
     private string? _pendingSelfBuffShort;
+
+    // When _pendingSelfBuffShort was armed. A between-round cast we just sent draws
+    // its AlreadyCastThisRound rejection within the same round, so a rejection
+    // arriving much later cannot be about that send — it's an unrelated cast the
+    // server's spell-less rejection line got misattributed to this buff. Guards the
+    // timer-drop in OnCastFailed against a stale marker (report -130111).
+    private DateTime _pendingSelfBuffArmedAt;
 
     // True once we've cast a between-round spell (heal / cure / buff / debuff /
     // item) THIS combat round. The game allows only ONE 0-energy between-round cast
@@ -635,6 +648,7 @@ public sealed class CastingDirector : IDisposable
         long seconds = resolved ? info!.Value.DurationSec : UnknownBuffRecastFallbackSec;
         _activeUntil[("", spellShort)] = (_now().AddSeconds(seconds), marginSec, (int)seconds);
         _pendingSelfBuffShort = spellShort;   // awaiting land / fail — cleared by either
+        _pendingSelfBuffArmedAt = _now();     // so a stale rejection can't drop this timer
         _log?.Combat(LogCategory,
             $"self-buff {spellShort} sent — optimistic timer {seconds}s"
             + (resolved ? "" : " (fallback — no resolved duration)")
@@ -695,6 +709,22 @@ public sealed class CastingDirector : IDisposable
             _betweenRoundSlotUsed = true;
         if (_pendingSelfBuffShort is not { } shortCode) return;
         if (!string.Equals(spell, shortCode, StringComparison.OrdinalIgnoreCase)) return;
+        // Only OUR just-sent recast draws a rejection worth acting on. A rejection
+        // arriving more than a round after the marker was armed can't be about a send
+        // we just made — it's an UNRELATED cast (e.g. a user-typed manual heal spammed
+        // at a dying party member) that the server's spell-less "already cast this
+        // round" line got misattributed to this buff (CastCoordinator's _lastSpellSent
+        // still holds our last own cast). Dropping the live buff's timer then forces a
+        // spurious recast cascade — report paradigm-20260827-130111: prev (protection
+        // from evil, ~152s) recast 5x in 25s while 75-150s still remained, driven by
+        // manual `mahe` rejections. Keep the timer when the marker is stale.
+        if (_now() - _pendingSelfBuffArmedAt > PendingSelfBuffRejectionWindow)
+        {
+            _log?.Combat(LogCategory,
+                $"self-buff {shortCode} rejection ignored — pending marker is "
+                + $"{(_now() - _pendingSelfBuffArmedAt).TotalSeconds:0}s stale; likely a misattributed unrelated cast");
+            return;
+        }
         _activeUntil.Remove(("", shortCode));
         _pendingSelfBuffShort = null;
         _log?.Combat(LogCategory,

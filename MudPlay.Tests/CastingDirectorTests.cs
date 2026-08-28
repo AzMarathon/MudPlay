@@ -1489,6 +1489,40 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void StaleRejection_DoesNotDropPendingSelfBuffTimer()
+    {
+        // Report paradigm-20260827-130111: prev's pending marker dangled (its applied
+        // line never cleared it), and long after, the user's manual `mahe` heals at a
+        // dying party member drew "You have already cast a spell this round!".
+        // CastCoordinator still held prev as its last OWN cast, so the spell-less
+        // rejection matched the pending buff and dropped its LIVE timer — forcing a 5x
+        // recast cascade while 75-150s still remained. A rejection this far past the
+        // arm can't be about our own send, so the buff's timer must survive.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = false;
+
+        h.Director.Evaluate();                 // casts bles → arms a 300s optimistic timer
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+
+        // 30s later (well past the rejection window), an unrelated manual cast spends
+        // the round. CastCoordinator still names bles (our last own cast), so the
+        // rejection carries "bles" and passes the name guard — but the marker is stale.
+        h.Now = h.Now.AddSeconds(30);
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You have already cast a spell this round!", Array.Empty<CellAttributes>(),
+            DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        // bles's timer survives — the stale rejection wasn't about our send.
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("bles", e.Short);
+    }
+
+    [Fact]
     public void NoteManualBuffCast_ArmsTimerByCastCode_WithSlotMargin()
     {
         // A hand-typed buff cast code arms its recast timer anchored on the code — so the

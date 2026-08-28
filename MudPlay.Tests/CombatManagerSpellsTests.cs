@@ -1606,6 +1606,35 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("a acid slime", h.LastSent);
     }
 
+    // Report paradigm-20260827-081223: the "no effect" reply arrives in the SAME
+    // server burst as the primary cast (< 500ms later), not a round later. Without
+    // bypassing CastCoordinator's MinRecastInterval, the alternate SPELL hit the
+    // 500ms burst guard and deferred a full round (~3-5s late). The re-decide now
+    // passes bypassRecastInterval, so the alternate fires THIS round with no defer.
+    [Fact]
+    public void SpellNoEffect_SameBurstAsPrimary_SwapsThisRound_NoRecastIntervalDefer()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "firebolt" };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "icebolt" };
+        h.AddMonster(1, "acid slime");
+
+        List<(CastFailureReason Reason, string Detail, string? Spell)> failures = new();
+        h.Cast.CastFailed += (reason, detail, spell) => failures.Add((reason, detail, spell));
+
+        h.Feed("Also here: acid slime.");                    // primary firebolt just sent
+        Assert.Equal("firebolt acid slime", h.LastSent);
+        int afterPrimary = h.Sent.Count;
+
+        // No Tick / no clock advance — the no-effect reply lands in the same burst,
+        // well within the 500ms MinRecastInterval window.
+        h.Feed("Your spell has no effect on acid slime.");
+
+        Assert.Equal("icebolt acid slime", h.LastSent);      // alternate fired THIS round
+        Assert.Equal(afterPrimary + 1, h.Sent.Count);        // not deferred to the next tick
+        Assert.DoesNotContain(failures, f => f.Detail == "recast-interval");
+    }
+
     [Fact]
     public void SpellNoEffect_SameRoundBurst_SwapsOnceNotStraightToWeapon()
     {

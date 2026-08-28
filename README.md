@@ -1,12 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.29.0**
-> - Navigation: **alignment-aware routing** — the good / evil `(Alignment: X to Y)` entrances are now honored. Routing is whole-party: the party routes **around** an entrance a member's alignment can't enter; when a member's alignment isn't known yet it walks **up to** the gate and **halts** there rather than guessing
-> - Navigation: an alignment-gated-exit refusal is now recognized, so a mis-planned move reverts cleanly instead of stranding the tracker
-> - Desert hazard: the auto waterskin counter no longer spends a charge when a sunstone wristband (or any full-immunity guard) is held or worn — it skips the `use`
-> - Party: a member `@wait`-held by another now spends the wait resting toward **full** HP/mana instead of stopping at the rest-max floor, ending when the wait releases
-> - Party recovery: after failing to reach a stranded follower twice, the leader **gives up** (sends `@forget`) instead of restarting a doomed recovery walk that keeps hijacking its own navigation
+> **Version 3.29.3**
+> - Combat: when a spell draws "no effect" on the target, the switch to your **Alt Attack** now fires the **same round** instead of lagging ~a round behind the burst guard
+> - Combat (dark rooms): a target that didn't follow you through no longer **freezes the fight** — the client drops the gone target and engages the attacker actually in the room with you
+> - Buffs: a self-buff's recast timer is no longer dropped by an **unrelated** "already cast this round" rejection (e.g. from manually spam-healing a party member), which had made the buff recast over and over while still up
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
