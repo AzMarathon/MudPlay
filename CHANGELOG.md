@@ -20,6 +20,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Fixed: single-target party buffs now target by **party membership** (a MajorMUD party is always in one room), not the room's `Also here:` list — which never lists the **leader you follow** (shown as "You are following …") and so silently blocked the leader's bless every round
 - A member who's **hiding** (the cast returns "You do not see … here!") is now backed off — the Buff Watchdog shows **"hidden — can't target"** — and retried when you move or they reappear, instead of re-firing the failing cast every round
 - Unticking a member you've already blessed no longer hides their Buff Watchdog timer — the running buff's countdown stays until it actually expires (unticking only stops future recasts)
+- Death and disconnect now match the game: **your death** clears your self-buff timers, a **party member's death** clears the timers you hold on them (death wipes buffs); and when **you** disconnect, party members' timers keep counting down (they stayed online) while only your own self-buff timers reset on reconnect — instead of freezing/preserving everyone's
 - The Party Buffs panel keeps its table layout when docked Below or Left (content pinned to its natural width instead of stretching across the window)
 - bug reports addressed: stock-20260828-104653, stock-20260828-113206, stock-20260828-124347
 

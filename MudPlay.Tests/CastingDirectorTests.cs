@@ -1551,39 +1551,21 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PauseResume_ShiftsTimerByOfflineGap_PreservingRemaining()
+    public void PauseResume_ClearsSelfTimersOnReconnect()
     {
-        // An unexpected drop freezes the timers; reconnect shifts each Until forward by
-        // the offline gap so the remaining at the drop is preserved (not counted down).
+        // WE were the one offline, so on reconnect our own buffs are uncertain — the
+        // self timers (keyed "") are cleared so they re-establish fresh.
         using CureHarness h = new();
         h.Spells.BlessSlots[1] = "bles";
         h.BuffInfo["bles"] = (string.Empty, 300);
-        h.Director.NoteManualBuffCast("bles");     // Until = Now + 300
-        DateTime armedUntil = Assert.Single(h.Director.SnapshotActiveBuffs()).Until;
+        h.Director.NoteManualBuffCast("bles");     // a self timer
+        Assert.Single(h.Director.SnapshotActiveBuffs());
 
         h.Director.PauseBuffTimers();              // drop
         h.Now = h.Now.AddSeconds(45);              // 45s offline
         h.Director.ResumeBuffTimers();             // reconnect
 
-        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
-        Assert.Equal(armedUntil.AddSeconds(45), e.Until);   // shifted forward by the gap
-    }
-
-    [Fact]
-    public void Resume_OfflineLongerThanLongestBuff_ClearsStaleTimers()
-    {
-        // Gone longer than any buff could possibly last ⇒ the buffs are surely off
-        // server-side now, so resume clears rather than resurrecting stale timers.
-        using CureHarness h = new();
-        h.Spells.BlessSlots[1] = "bles";
-        h.BuffInfo["bles"] = (string.Empty, 300);
-        h.Director.NoteManualBuffCast("bles");
-
-        h.Director.PauseBuffTimers();
-        h.Now = h.Now.AddSeconds(301);             // > 300s total
-        h.Director.ResumeBuffTimers();
-
-        Assert.Empty(h.Director.SnapshotActiveBuffs());
+        Assert.Empty(h.Director.SnapshotActiveBuffs());   // self cleared
     }
 
     [Fact]
@@ -2617,6 +2599,86 @@ public sealed class CastingDirectorTests
         h.Cast.OnCombatTick();
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_Reconnect_ClearsSelfKeepsPartyCountingDown()
+    {
+        // On OUR reconnect: self timers clear; the party member (online the whole time)
+        // keeps their ABSOLUTE expiry — it isn't shifted forward, so it now reads the
+        // real reduced remaining.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["mysh"] = (string.Empty, 200);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();                          // cast bles on Raijin
+        h.Confirm("You cast bless on Raijin!");         // arm ("raijin", bles)
+        h.Director.NoteManualBuffCast("mysh");          // arm a self buff ("")
+
+        DateTime partyUntil = default;
+        foreach (Game.Spells.ActiveBuffTimer t in h.Director.SnapshotActiveBuffs())
+            if (t.Target.Length > 0) partyUntil = t.Until;
+        Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(45);
+        h.Director.ResumeBuffTimers();
+
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("raijin", kept.Target);            // self gone, party kept
+        Assert.Equal(partyUntil, kept.Until);           // absolute expiry unchanged (not shifted)
+    }
+
+    [Fact]
+    public void PartyBless_OurDeath_ClearsSelfKeepsPartyTimers()
+    {
+        // OUR death wipes OUR buffs only — self timers clear, the (alive) party member's
+        // timer stays so we don't needlessly re-bless them.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["mysh"] = (string.Empty, 200);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        h.Director.NoteManualBuffCast("mysh");
+        Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
+
+        h.Director.ClearSelfBuffTracking();
+
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("raijin", kept.Target);
+    }
+
+    [Fact]
+    public void PartyBless_MemberDeath_ClearsThatMembersTimersOnly()
+    {
+        // A party member's death wipes THEIR buffs — clear the timers we hold on them;
+        // every other member's timer stays.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddAllMembersSlot("bles");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
+
+        h.Director.Evaluate();                           // casts on the first (Raijin)
+        h.Confirm("You cast bless on Raijin!");
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();                           // casts on Goldar
+        h.Confirm("You cast bless on Goldar!");
+        Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
+
+        h.Director.ClearMemberBuffTimers("Raijin");
+
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("goldar", kept.Target);
     }
 
     [Fact]

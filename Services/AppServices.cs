@@ -5160,7 +5160,16 @@ public sealed class AppServices
         // blocks every automatic heal/cure/bless, the latter suppresses a
         // legitimate recast (report paradigm-20260824-012300).
         RoomTracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
-        RoomTracker.PlayerDeathObserved += () => CastDirector.ResetBuffTracking();
+        // Our death wipes only OUR buffs — clear the self timers; party members stayed
+        // alive, so their buff timers we hold are kept (don't re-bless them because we
+        // died). A party MEMBER's death wipes THEIR buffs — clear the timers we hold on
+        // that name ("<Name> has died." also fires for mobs, but that's a no-op since we
+        // hold no timer for them).
+        RoomTracker.PlayerDeathObserved += () => CastDirector.ClearSelfBuffTracking();
+        Router.Subscribe(Services.Patterns.KnownPatterns.PartyMemberDied, r =>
+        {
+            if (r.Groups.Count > 0) CastDirector.ClearMemberBuffTimers(r.Groups[0]);
+        });
 
         // Death drops us from the party server-side — a follower is removed, a
         // leader's party disbands. PlayerDroppedGate already clears our roster on the

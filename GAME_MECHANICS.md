@@ -981,6 +981,19 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   - the character is **teleported to the graveyard room** appropriate to the **map** they died on.
 - Graveyard rooms are **per-map**; two known graveyards are **`1/2189`** (map 1, room 2189) and
   **`16/542`** (map 16, room 542).
+- **[CONFIRMED]** *(2026-08-28, user)* **Death wipes ALL magical effects on the character** — every
+  buff and debuff is removed. Consequence for a buff-maintaining automation: on **our own** death,
+  clear the timers for **our self-buffs** (they're gone) but **keep** the timers we hold on party
+  members (they didn't die — still buffed); on a **party member's** death (the `<Name> has died.`
+  line), clear the timers we hold **on that member** (their buffs are gone). Distinct from a
+  buff-strip room (which dispels on entry) — this is the death event doing it.
+- **[CONFIRMED]** *(2026-08-28, user)* **When WE (the caster) disconnect, only OUR OWN buffs are in
+  doubt.** The other party members stayed **online**, so their buffs kept **counting down in real
+  time** the whole time we were gone — their absolute expiry doesn't move. So on reconnect: clear our
+  self-buff timers (re-establish fresh), and **leave party-member timers at their real (absolute)
+  expiry** — they now read the correctly reduced remaining (any that lapsed while we were away recast).
+  Do **not** shift party timers forward by the offline gap (the old "freeze + preserve remaining"
+  model over-counted them).
 
 **Death fully clears all effects** *([CONFIRMED] 2026-08-09, user)*
 - Death **wipes every ailment, status effect, buff, and debuff** off the character — poison, disease,

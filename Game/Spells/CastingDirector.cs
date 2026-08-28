@@ -565,6 +565,48 @@ public sealed class CastingDirector : IDisposable
         _pausedAt = null;
     }
 
+    // OUR OWN death wiped OUR buffs — drop the self timers (keyed "") + any pending self
+    // cast. Party members are unaffected (they stayed alive, still buffed), so THEIR
+    // timers are kept: we shouldn't re-bless a party member just because we died. (A
+    // full character swap still clears everything via ProfileLoaded → ResetBuffTracking.)
+    public void ClearSelfBuffTracking()
+    {
+        int removed = RemoveTimersFor("");
+        _pendingSelfBuffShort = null;
+        _pendingManaRegenReroll = null;
+        _lastSelfHealCast = null;
+        _pendingPartyCast = null;   // a cast in flight when we died never landed
+        _log?.Info(LogCategory,
+            $"self died — cleared {removed} self-buff timer(s); party-buff timers kept (those members are alive).");
+    }
+
+    // A party member died — death wipes EVERY buff on them, so drop each timer we hold on
+    // that member + any hidden back-off for them. No-op for a name we hold no timer for
+    // (the "<Name> has died." line also fires for mobs / randos).
+    public void ClearMemberBuffTimers(string givenName)
+    {
+        if (string.IsNullOrWhiteSpace(givenName)) return;
+        string key = GivenName(givenName).ToLowerInvariant();
+        int removed = RemoveTimersFor(key);
+        _hiddenTargets.Remove(key);
+        if (removed > 0)
+            _log?.Info(LogCategory,
+                $"party member {key} died — cleared {removed} buff timer(s) on them (death wipes buffs).");
+    }
+
+    // Remove every active-timer entry whose target matches (case-insensitive); returns
+    // the count removed. target "" removes the self-keyed timers.
+    private int RemoveTimersFor(string target)
+    {
+        List<(string Target, string Short)>? doomed = null;
+        foreach ((string Target, string Short) key in _activeUntil.Keys)
+            if (string.Equals(key.Target, target, StringComparison.OrdinalIgnoreCase))
+                (doomed ??= new()).Add(key);
+        if (doomed is null) return 0;
+        foreach ((string, string) key in doomed) _activeUntil.Remove(key);
+        return doomed.Count;
+    }
+
     // The instant the timers were frozen on a disconnect, or null while running. The
     // Buff Watchdog reads this so its display freezes at the drop (the heartbeat is a
     // wall clock that keeps ticking while disconnected); the shift on resume then keeps
@@ -582,33 +624,29 @@ public sealed class CastingDirector : IDisposable
             _log?.Info(LogCategory, $"buff timers paused (drop) — {_activeUntil.Count} armed, frozen until reconnect");
     }
 
-    // Resume after a reconnect: shift every armed Until forward by the offline gap so
-    // each buff keeps the remaining it had at the drop. If we were gone longer than the
-    // longest buff could possibly last, the buffs are certainly off server-side now —
-    // clear instead of resurrecting stale timers.
+    // Resume after a reconnect. WE were the one offline, so our OWN buffs are uncertain —
+    // clear the self timers and re-establish them fresh. The other party members stayed
+    // ONLINE, so their buffs kept counting toward their real (absolute) expiry the whole
+    // time we were gone — so their timers are left exactly as they are (NOT shifted): they
+    // now read the correctly reduced remaining. Any whose absolute expiry has already
+    // passed while we were away are dropped so they show "not up" and recast.
     public void ResumeBuffTimers()
     {
-        if (_pausedAt is not { } pausedAt) return;
+        if (_pausedAt is null) return;
         _pausedAt = null;
-        System.TimeSpan gap = _now() - pausedAt;
-        if (gap <= System.TimeSpan.Zero || _activeUntil.Count == 0) return;
 
-        long maxTotal = 0;
-        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
-            maxTotal = System.Math.Max(maxTotal, kv.Value.TotalSec);
-        if (gap.TotalSeconds > maxTotal)
-        {
-            _log?.Info(LogCategory, $"buff timers cleared on resume — offline {(int)gap.TotalSeconds}s exceeds longest buff {maxTotal}s");
-            _activeUntil.Clear();
-            return;
-        }
+        int selfCleared = RemoveTimersFor("");
 
-        foreach ((string Target, string Short) key in new List<(string, string)>(_activeUntil.Keys))
-        {
-            (DateTime Until, int MarginSec, int TotalSec) v = _activeUntil[key];
-            _activeUntil[key] = (v.Until + gap, v.MarginSec, v.TotalSec);
-        }
-        _log?.Info(LogCategory, $"buff timers resumed — shifted {_activeUntil.Count} by offline {(int)gap.TotalSeconds}s");
+        List<(string Target, string Short)>? expired = null;
+        foreach ((string Target, string Short) key in _activeUntil.Keys)
+            if (_activeUntil[key].Until <= _now())
+                (expired ??= new()).Add(key);
+        if (expired is not null)
+            foreach ((string, string) key in expired) _activeUntil.Remove(key);
+
+        _log?.Info(LogCategory,
+            $"buff timers resumed — self cleared ({selfCleared}); party timers keep counting from real expiry "
+            + $"(dropped {expired?.Count ?? 0} that lapsed while offline).");
     }
 
     // A combat round tick elapsed (wired to TickEngine.CombatTickElapsed) — free the
