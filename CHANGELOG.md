@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.29.9
+
+- Windows: panel windows now snap **flush** to each other instead of leaving a small gap — the snap accounts for the invisible resize border Windows includes in a window's frame (Linux/macOS were already flush and are unchanged)
+- Windows: minimizing everything with **Win+D** (show desktop) then restarting the client no longer scrambles where the extra panes re-open — a minimized window's bogus off-screen position is no longer saved over its real spot
+- bug reports addressed: paradigm-20260827-062950, paradigm-20260827-081318
+
 ## 3.29.7
 
 - Combat: hunting the same species room-to-room, the **area-debuff** slot now fires in every room again — it was silently skipped after the first, because the room's per-room "already debuffed" tags carried into the next identical room (every crab shares the same name), so a back-to-back populated loop never reset them. The per-room cast economy is now cleared on each move, so the AoE debuff opens each room exactly once as configured

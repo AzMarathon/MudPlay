@@ -212,6 +212,15 @@ public sealed class WindowLayoutStore
 
     private void CaptureFrom(Window window, string id)
     {
+        // A minimized window reports a bogus off-screen position (Windows parks
+        // minimized windows at ~(-32000,-32000)), so capturing here would overwrite
+        // the real "where I left it" with garbage that ResolvePosition then treats as
+        // off-screen and re-anchors next to main — the panes "lose their memory" after
+        // a Win+D (show-desktop) minimize-all followed by a client restart (report
+        // paradigm-20260827-081318). Skip the capture and keep the last good bounds.
+        if (window.WindowState == WindowState.Minimized)
+            return;
+
         // Don't capture transient zero / collapsing sizes — those usually
         // happen during the teardown rather than reflecting where the
         // user actually left the window.
