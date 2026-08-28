@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.35.1**
-> - Monster Intel: new Your Matchup panel — whether your weapon is magical enough to hit the monster, incoming elemental threat vs your own resists, and your known attack spells ranked by effective damage against it, with clear reasons when something's blocked
+> **Version 3.35.2**
+> - Monster Intel: select 2+ monsters (Ctrl/Shift-click) to compare them side by side in a row of stat cards
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

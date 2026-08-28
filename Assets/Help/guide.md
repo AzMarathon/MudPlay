@@ -525,7 +525,9 @@ The left list is filterable by name, with the same core stats as the Browser's M
 - **Locations** — where it's placed, assigned, or spawns, from its raw *Summoned By* record.
 - **Automation** — a summary of its current Relationship / Priority / overrides, with an **Edit Automation…** button that opens the same overlay editor the Browser's Monsters tab uses (see **Overriding a record** above) — so you can inspect a monster and configure how MudPlay handles it without leaving this window.
 
-Monster Intel doesn't yet follow your current room or combat target automatically, and there's no side-by-side monster comparison — both are planned but not built.
+**Comparing monsters side by side**: Ctrl-click or Shift-click to select two or more rows in the list, and the detail panel switches to a row of cards — one per selected monster, each showing HP, Exp, AC/DR, Dodge, MR, Acc, Mag, SpellImmu, Resists, Casts, and Undead — so you can size up a few candidates at a glance without flipping back and forth. Drop back to one selected row to return to the full single-monster detail view.
+
+Monster Intel doesn't yet follow your current room or combat target automatically — that's planned but not built.
 
 ---
 

@@ -21,13 +21,13 @@ namespace MudPlay.ViewModels;
 
 // Modeless "Monster Intel" window — a searchable master list over
 // MonsterCatalog with a per-monster detail panel (Overview / Elemental
-// defenses / Attacks / Loot & locations / Automation / Your Matchup). Phases
-// 1-3 of the Monster Intel plan: read-only reference, the existing
-// per-monster automation overlay editor relocated here, and a live-
-// character-aware matchup preview (weapon eligibility, ranked spell
-// effectiveness, incoming elemental threat). The context bar (current room /
-// target following, pinning) and monster-vs-monster comparison are later
-// phases — not built yet.
+// defenses / Attacks / Loot & locations / Automation / Your Matchup) and a
+// multi-select side-by-side comparison view. Phase 1-3 of the Monster Intel
+// plan complete: read-only reference, the existing per-monster automation
+// overlay editor relocated here, a live-character-aware matchup preview
+// (weapon eligibility, ranked spell effectiveness, incoming elemental
+// threat), and monster-vs-monster comparison. The context bar (current room /
+// target following, pinning) is Phase 4 — not built yet.
 public sealed partial class MonsterIntelViewModel : ObservableObject
 {
     private readonly GameDataCache _gameData;
@@ -52,6 +52,30 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
     [ObservableProperty] private MonsterIntelEntry? _selectedEntry;
 
     public string CountText => $"{RowsView.Count} monster{(RowsView.Count == 1 ? "" : "s")}";
+
+    // ----- comparison (multi-select) -----
+    // Avalonia's DataGrid exposes SelectedItems as a non-bindable IList, so the
+    // window's code-behind syncs it into this collection on every
+    // SelectionChanged and calls NotifyComparisonChanged — see
+    // MonsterIntelWindow.axaml.cs (mirrors GameDataTableSectionView's own
+    // SelectedRows sync for the same Avalonia limitation).
+    public ObservableCollection<MonsterIntelEntry> SelectedEntries { get; } = new();
+    public bool HasComparison => SelectedEntries.Count >= 2;
+
+    public void NotifyComparisonChanged()
+    {
+        OnPropertyChanged(nameof(HasComparison));
+        OnPropertyChanged(nameof(ShowSingleDetail));
+        OnPropertyChanged(nameof(ShowPlaceholder));
+    }
+
+    // The single-monster detail panel yields to the comparison view once 2+
+    // rows are selected, rather than showing both at once.
+    public bool ShowSingleDetail => HasSelection && !HasComparison;
+
+    // The "select a monster" placeholder shows only when neither the single
+    // detail panel nor the comparison view has anything to show.
+    public bool ShowPlaceholder => !HasSelection && !HasComparison;
 
     public MonsterIntelViewModel(
         GameDataCache gameData, MonsterCatalog catalog,
@@ -120,7 +144,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
     public ObservableCollection<string> LootLines { get; } = new();
     public ObservableCollection<string> LocationLines { get; } = new();
     [ObservableProperty] private string _automationSummaryText = string.Empty;
-    [ObservableProperty] private bool _hasSelection;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowSingleDetail))]
+    [NotifyPropertyChangedFor(nameof(ShowPlaceholder))]
+    private bool _hasSelection;
 
     // ----- Your Matchup (Phase 3 — needs a live character; blank without one) -----
     public ObservableCollection<string> MatchupLines { get; } = new();
