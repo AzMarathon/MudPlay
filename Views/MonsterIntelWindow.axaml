@@ -98,15 +98,16 @@
                           Background="{StaticResource ChromeBgElevBrush}"
                           BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Name"   Binding="{ReflectionBinding Name}"          Width="*"    MinWidth="180" SortMemberPath="Name"/>
+                        <DataGridTextColumn Header="Name"   Binding="{ReflectionBinding Name}"          Width="*"    MinWidth="160" MaxWidth="260" SortMemberPath="Name"/>
                         <DataGridTextColumn Header="HP"     Binding="{ReflectionBinding HpText}"        Width="Auto" MinWidth="70"  SortMemberPath="Hp"/>
                         <DataGridTextColumn Header="Exp"    Binding="{ReflectionBinding ExpText}"       Width="Auto" MinWidth="80"  SortMemberPath="Exp"/>
-                        <DataGridTextColumn Header="AC/DR"  Binding="{ReflectionBinding AcDrText}"      Width="Auto" MinWidth="70"/>
-                        <DataGridTextColumn Header="Dodge"  Binding="{ReflectionBinding DodgeText}"     Width="Auto" MinWidth="65"/>
-                        <DataGridTextColumn Header="MR"     Binding="{ReflectionBinding MagicResText}"  Width="Auto" MinWidth="55"/>
-                        <DataGridTextColumn Header="Acc"    Binding="{ReflectionBinding AccuracyText}"  Width="Auto" MinWidth="70"/>
-                        <DataGridTextColumn Header="Mag"    Binding="{ReflectionBinding MagicalText}"   Width="Auto" MinWidth="55"/>
-                        <DataGridTextColumn Header="Undead" Binding="{ReflectionBinding UndeadText}"    Width="Auto" MinWidth="65"/>
+                        <DataGridTextColumn Header="AC"     Binding="{ReflectionBinding ArmourClass}"   Width="Auto" MinWidth="50"  SortMemberPath="ArmourClass"/>
+                        <DataGridTextColumn Header="DR"     Binding="{ReflectionBinding DamageResist}"  Width="Auto" MinWidth="50"  SortMemberPath="DamageResist"/>
+                        <DataGridTextColumn Header="Dodge"  Binding="{ReflectionBinding DodgeText}"     Width="Auto" MinWidth="65"  SortMemberPath="Dodge"/>
+                        <DataGridTextColumn Header="MR"     Binding="{ReflectionBinding MagicResText}"  Width="Auto" MinWidth="55"  SortMemberPath="MagicRes"/>
+                        <DataGridTextColumn Header="Acc"    Binding="{ReflectionBinding AccuracyText}"  Width="Auto" MinWidth="70"  SortMemberPath="Accuracy"/>
+                        <DataGridTextColumn Header="Mag"    Binding="{ReflectionBinding MagicalText}"   Width="Auto" MinWidth="55"  SortMemberPath="Magical"/>
+                        <DataGridTextColumn Header="Undead" Binding="{ReflectionBinding UndeadText}"    Width="Auto" MinWidth="65"  SortMemberPath="Undead"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>

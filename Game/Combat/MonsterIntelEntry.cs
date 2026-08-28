@@ -20,6 +20,16 @@ public sealed record MonsterIntelEntry
 
     // ----- grid display -----
 
+    // Plain numeric properties for the master list's per-column sort — the
+    // grid sorts on these (SortMemberPath), not on the formatted *Text
+    // strings below, so "10" doesn't lexically sort ahead of "9".
+    public int ArmourClass => Source.ArmourClass;
+    public int DamageResist => Source.DamageResist;
+    public int Dodge => Source.Dodge;
+    public int MagicRes => Source.MagicRes;
+    public int Magical => Source.Magical;
+    public int Accuracy => Source.PhysicalAccuracy?.Majority ?? 0;
+
     public string AcDrText => $"{Source.ArmourClass}/{Source.DamageResist}";
     public string DodgeText => Source.Dodge > 0 ? Source.Dodge.ToString(Inv) : string.Empty;
     public string MagicResText => Source.MagicRes.ToString(Inv);

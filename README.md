@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.36.1**
-> - Monster Intel: fixed the master list being too cramped to read — the window opens wider, the list/detail divider is now a draggable, per-character-remembered splitter, and the list's columns size themselves to their content instead of clipping headers
+> **Version 3.36.2**
+> - Monster Intel: every list column is now independently sortable (previously only Name/HP/Exp were; the rest silently sorted alphabetically on formatted text)
+> - AC and DR split into two separate sortable columns instead of one combined "AC/DR" column
+> - Name column capped so it can't balloon to take the whole pane
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
