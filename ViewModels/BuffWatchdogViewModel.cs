@@ -113,11 +113,12 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         if (_disposed) return;
         SpellsSettings spells = _readSpells();
         PartyBuffSettings? buffs = _readPartyBuffs();
+        IReadOnlyList<ActiveBuffTimer> snap = _castDirector.SnapshotActiveBuffs();
 
-        string sig = BuildSignature(spells, buffs);
+        string sig = BuildSignature(spells, buffs, snap);
         if (_needsRebuild || sig != _configSignature)
         {
-            RebuildRows(spells, buffs);
+            RebuildRows(spells, buffs, snap);
             _configSignature = sig;
             _needsRebuild = false;
         }
@@ -172,7 +173,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         }
     }
 
-    private void RebuildRows(SpellsSettings spells, PartyBuffSettings? buffs)
+    private void RebuildRows(SpellsSettings spells, PartyBuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
     {
         SelfBuffs.Clear();
         PartyBuffs.Clear();
@@ -187,6 +188,9 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         if (buffs is not null)
         {
             List<(string Display, string Given)> members = CurrentMembers();
+            Dictionary<string, string> displayByGiven = new(StringComparer.OrdinalIgnoreCase);
+            foreach ((string display, string given) in members) displayByGiven[given] = display;
+
             foreach (PartyBuffSlot p in buffs.Slots)
             {
                 if (string.IsNullOrWhiteSpace(p.Spell)) continue;
@@ -201,23 +205,41 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                     continue;
                 }
 
-                // Single-target: cast on each targeted member individually, so give
-                // each their OWN row + timer. Targets = everyone (AllMembers) or the
-                // slot's chosen given names, intersected with the current roster.
-                var targets = p.AllMembers
-                    ? members
-                    : members.Where(m => p.Targets.Contains(m.Given)).ToList();
-                if (targets.Count == 0)
+                // Single-target: one row per member, keyed by given name. Show a row for
+                // each CONFIGURED target (AllMembers = the whole roster, else the chosen
+                // names) PLUS any member who already has a LIVE timer for this spell — so
+                // a member you unticked (or who left the party) keeps their countdown
+                // visible until it actually expires, rather than the timer vanishing.
+                List<string> givens = new();
+                void AddGiven(string g)
                 {
-                    // Nothing to track yet (no members / none selected) — one placeholder
-                    // row so the configured buff still shows, with no timer.
+                    if (!givens.Any(x => x.Equals(g, StringComparison.OrdinalIgnoreCase))) givens.Add(g);
+                }
+
+                if (p.AllMembers)
+                    foreach ((string _, string given) in members) AddGiven(given);
+                else
+                    foreach ((string _, string given) in members.Where(m => p.Targets.Contains(m.Given)))
+                        AddGiven(given);
+
+                foreach (ActiveBuffTimer t in snap)
+                    if (t.Target.Length > 0 && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase))
+                        AddGiven(t.Target);   // already lower-cased
+
+                if (givens.Count == 0)
+                {
+                    // Nothing to track yet (no members / none selected, none active) — one
+                    // placeholder row so the configured buff still shows, with no timer.
                     PartyBuffs.Add(new BuffWatchdogRowViewModel(
                         code, isParty: true, name, TargetLabel(p, wholeParty: false), learned));
                     continue;
                 }
-                foreach ((string display, string given) in targets)
+                foreach (string given in givens)
+                {
+                    string display = displayByGiven.TryGetValue(given, out string? d) ? d : Capitalise(given);
                     PartyBuffs.Add(new BuffWatchdogRowViewModel(
                         code, isParty: true, name, display, learned, isWholeParty: false, memberKey: given));
+                }
             }
         }
 
@@ -225,6 +247,9 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         HasPartyBuffs = PartyBuffs.Count > 0;
         IsEmpty = !HasSelfBuffs && !HasPartyBuffs;
     }
+
+    private static string Capitalise(string given) =>
+        given.Length == 0 ? given : char.ToUpperInvariant(given[0]) + given[1..];
 
     private void AddSelf(string? code)
     {
@@ -268,9 +293,13 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         return _spellbook.FindByCastCode(s) is { } ks && PartyBuffClassifier.IsWholeParty(ks.Targets);
     }
 
-    // Cheap fingerprint of the configured buff set — a change (live edit) triggers a
-    // row rebuild on the next heartbeat.
-    private static string BuildSignature(SpellsSettings spells, PartyBuffSettings? buffs)
+    // Cheap fingerprint of the configured buff set AND the active party-buff timer keys
+    // — a config change (live edit) OR a timer arming / expiring triggers a rebuild. The
+    // timer keys matter so a member you blessed then unticked keeps a row until the timer
+    // actually expires (then the key drops → rebuild → row goes away). Only the KEY set
+    // (short@target), never the remaining time, so it doesn't churn every second.
+    private static string BuildSignature(
+        SpellsSettings spells, PartyBuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
     {
         StringBuilder sb = new();
         foreach (int slot in spells.BlessSlots.Keys.OrderBy(k => k))
@@ -281,6 +310,11 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
             foreach (PartyBuffSlot p in buffs.Slots)
                 sb.Append(p.Spell).Append(':').Append(p.WholePartyOn ? "W" : "")
                   .Append(p.AllMembers ? "A" : "").Append(string.Join(",", p.Targets)).Append('|');
+        sb.Append("||");
+        foreach (string k in snap.Where(t => t.Target.Length > 0)
+                                 .Select(t => t.Short + "@" + t.Target)
+                                 .OrderBy(k => k, StringComparer.Ordinal))
+            sb.Append(k).Append(';');
         return sb.ToString();
     }
 

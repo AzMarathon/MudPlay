@@ -10,6 +10,7 @@
 > - Party Buffs can now be a **whole-party cast-on-use item** (e.g. a shimmering greatsword), auto-detected from the item's spell; the Buff Watchdog now shows whole-party and item party buffs too, and gives a single-target buff **one timer row per member**
 > - Checking a member for a buff queues the cast immediately; the buff panel hidden for a non-buffing class no longer leaves the window stuck wide
 > - Fixed: single-target party buffs now target by **party membership** (a MajorMUD party is always one room), not `Also here:` — which never lists the **leader you follow**, so their bless was silently skipped every round; a **hiding** member (cast returns "You do not see … here!") is backed off and shown **"hidden — can't target"**, retried on move / reappear. The panel also keeps its layout when docked Below or Left
+> - Fixed: unticking a member you've already blessed no longer hides their Buff Watchdog timer — the running buff's countdown stays until it expires
 > - Settings → Party keeps the *bless while resting / during combat* gates, plus a **Party Buffs panel position** option (Right / Below / Left)
 > - Fixed: the Party Buffs panel no longer appears for a class with no party-buff spells — a stray blank slot is pruned on load instead of forcing the panel open
 > - Fixed: the Game Data → Players list hid the wrong person when a profile was copied from another character (it now identifies "self" by the live `stat` name, not the stored profile name)

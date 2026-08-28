@@ -19,6 +19,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Fixed: the Game Data → Players list hid the wrong person when a profile was copied from another character — it now identifies "self" by the live `stat` name, not the stored profile name, so a copied profile no longer omits the real other player from your player records
 - Fixed: single-target party buffs now target by **party membership** (a MajorMUD party is always in one room), not the room's `Also here:` list — which never lists the **leader you follow** (shown as "You are following …") and so silently blocked the leader's bless every round
 - A member who's **hiding** (the cast returns "You do not see … here!") is now backed off — the Buff Watchdog shows **"hidden — can't target"** — and retried when you move or they reappear, instead of re-firing the failing cast every round
+- Unticking a member you've already blessed no longer hides their Buff Watchdog timer — the running buff's countdown stays until it actually expires (unticking only stops future recasts)
 - The Party Buffs panel keeps its table layout when docked Below or Left (content pinned to its natural width instead of stretching across the window)
 - bug reports addressed: stock-20260828-104653, stock-20260828-113206, stock-20260828-124347
 
