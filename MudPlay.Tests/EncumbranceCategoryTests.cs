@@ -19,4 +19,14 @@ public sealed class EncumbranceCategoryTests
     [InlineData(150, EncumbranceLevel.Heavy)]
     public void ForPercent_MapsBands(int pct, EncumbranceLevel expected)
         => Assert.Equal(expected, EncumbranceCategory.ForPercent(pct));
+
+    [Theory]
+    [InlineData(EncumbranceLevel.None, 16)]
+    [InlineData(EncumbranceLevel.Light, 33)]
+    [InlineData(EncumbranceLevel.Medium, 66)]
+    [InlineData(EncumbranceLevel.Heavy, 100)]
+    [InlineData(EncumbranceLevel.Unknown, 100)]
+    [InlineData(EncumbranceLevel.Encumbered, 100)]
+    public void CeilingPercent_IsInverseOfForPercent(EncumbranceLevel level, int expected)
+        => Assert.Equal(expected, EncumbranceCategory.CeilingPercent(level));
 }

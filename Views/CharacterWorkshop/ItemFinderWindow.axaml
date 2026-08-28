@@ -230,9 +230,9 @@
                              PlaceholderText="Filter by name…" Width="240" HorizontalAlignment="Left"
                              VerticalAlignment="Center"
                              ToolTip.Tip="Show only items whose name contains this text."/>
-                    <Button Grid.Column="2" Content="Trial set ▸"
+                    <Button Grid.Column="2" Content="Gear Finder ▸"
                             Command="{Binding ToggleTrialPanelCommand}"
-                            ToolTip.Tip="Show / hide the trial gearset panel — plan a loadout and see its stats + encumbrance."/>
+                            ToolTip.Tip="Show / hide the Gear Finder panel — plan a loadout and see its stats + encumbrance."/>
                 </Grid>
 
                 <!-- ReflectionBinding: the non-generic DataGridCollectionView hides the
@@ -298,8 +298,19 @@
                         <DataGridTextColumn Header="Quick"      Binding="{ReflectionBinding QuicknessText}"  SortMemberPath="Quickness"  Width="64"  Tag="QuicknessText"/>
                         <DataGridTextColumn Header="Traps"      Binding="{ReflectionBinding TrapsText}"      SortMemberPath="Traps"      Width="64"  Tag="TrapsText"/>
                         <DataGridTextColumn Header="Locks"      Binding="{ReflectionBinding PicklocksText}"  SortMemberPath="Picklocks"  Width="64"  Tag="PicklocksText"/>
+                        <DataGridTextColumn Header="Thievery"   Binding="{ReflectionBinding ThieveryText}"   SortMemberPath="Thievery"   Width="76"  Tag="ThieveryText"/>
                         <DataGridTextColumn Header="Prot Evil"  Binding="{ReflectionBinding ProtEvilText}"   SortMemberPath="ProtEvil"   Width="82"  Tag="ProtEvilText"/>
                         <DataGridTextColumn Header="Prot Good"  Binding="{ReflectionBinding ProtGoodText}"   SortMemberPath="ProtGood"   Width="82"  Tag="ProtGoodText"/>
+                        <DataGridTextColumn Header="VileWard"   Binding="{ReflectionBinding VileWardText}"   SortMemberPath="VileWard"   Width="82"  Tag="VileWardText"/>
+                        <DataGridTextColumn Header="Dodge"      Binding="{ReflectionBinding DodgeText}"      SortMemberPath="Dodge"      Width="66"  Tag="DodgeText"/>
+                        <DataGridTextColumn Header="Magic Res"  Binding="{ReflectionBinding MagicResistText}" SortMemberPath="MagicResist" Width="82"  Tag="MagicResistText"/>
+                        <DataGridTextColumn Header="Shock Shld" Binding="{ReflectionBinding ShockShieldText}" SortMemberPath="ShockShield" Width="86"  Tag="ShockShieldText"/>
+                        <DataGridTextColumn Header="Punch Accy" Binding="{ReflectionBinding PunchAccyText}"  SortMemberPath="PunchAccy"  Width="88"  Tag="PunchAccyText"/>
+                        <DataGridTextColumn Header="Punch Dmg"  Binding="{ReflectionBinding PunchDmgText}"   SortMemberPath="PunchDmg"   Width="84"  Tag="PunchDmgText"/>
+                        <DataGridTextColumn Header="Kick Accy"  Binding="{ReflectionBinding KickAccyText}"   SortMemberPath="KickAccy"   Width="82"  Tag="KickAccyText"/>
+                        <DataGridTextColumn Header="Kick Dmg"   Binding="{ReflectionBinding KickDmgText}"    SortMemberPath="KickDmg"    Width="78"  Tag="KickDmgText"/>
+                        <DataGridTextColumn Header="JKick Accy" Binding="{ReflectionBinding JumpKickAccyText}" SortMemberPath="JumpKickAccy" Width="90"  Tag="JumpKickAccyText"/>
+                        <DataGridTextColumn Header="JKick Dmg"  Binding="{ReflectionBinding JumpKickDmgText}" SortMemberPath="JumpKickDmg" Width="86"  Tag="JumpKickDmgText"/>
                         <DataGridTextColumn Header="Cold"       Binding="{ReflectionBinding ColdResistText}" SortMemberPath="ColdResist" Width="60"  Tag="ColdResistText"/>
                         <DataGridTextColumn Header="Fire"       Binding="{ReflectionBinding FireResistText}" SortMemberPath="FireResist" Width="60"  Tag="FireResistText"/>
                         <DataGridTextColumn Header="Stone"      Binding="{ReflectionBinding StoneResistText}" SortMemberPath="StoneResist" Width="62"  Tag="StoneResistText"/>
@@ -320,7 +331,7 @@
                 <Grid x:Name="TrialGrid" RowDefinitions="Auto,Auto,Auto,3*,Auto,2*" RowSpacing="0">
 
                     <StackPanel Grid.Row="0" Spacing="6">
-                        <TextBlock Classes="Group" Text="Trial gearset"/>
+                        <TextBlock Classes="Group" Text="Gear Finder"/>
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <Button Content="Import from live" Command="{Binding ImportFromLiveCommand}"
                                     ToolTip.Tip="Copy your currently-worn gear into the trial slots."/>
@@ -328,12 +339,29 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,8,0,6">
-                        <ComboBox ItemsSource="{Binding TrialFilterOptions}"
-                                  SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
-                                  MinWidth="150"/>
-                        <Button Content="Find Best" Command="{Binding FindBestCommand}"
-                                ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat."/>
+                    <StackPanel Grid.Row="1" Spacing="6" Margin="0,8,0,6">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <ComboBox ItemsSource="{Binding TrialFilterOptions}"
+                                      SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
+                                      MinWidth="150"/>
+                            <Button Content="Find Best" Command="{Binding FindBestCommand}"
+                                    ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat (or, with a search order below, in that priority order)."/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Classes="FieldLabel" Text="Target weight" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding TargetWeightOptions}"
+                                      SelectedItem="{Binding SelectedTargetWeight, Mode=TwoWay}"
+                                      MinWidth="90"
+                                      ToolTip.Tip="Cap Find Best's picks so the projected trial set stays within this encumbrance band."/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="+ Add to search order" Command="{Binding AddToChainCommand}"
+                                    ToolTip.Tip="Append the criterion above to a priority-ordered multi-stat search — e.g. VileWard, then Armour Class, then Spellcasting. Each slot goes to the highest-priority criterion that finds anything for it; lower ones only get a turn at what's left. Leave empty to just search by the single criterion above."/>
+                            <Button Content="Clear order" Command="{Binding ClearChainCommand}"
+                                    IsVisible="{Binding HasChain}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding ChainSummaryText}" TextWrapping="Wrap"
+                                   Classes="FieldLabel" IsVisible="{Binding HasChain}"/>
                     </StackPanel>
 
                     <Grid Grid.Row="2" ColumnDefinitions="44,72,*" Margin="0,0,0,4" ColumnSpacing="4">
@@ -352,9 +380,16 @@
                                                   ToolTip.Tip="Lock this slot so Find Best won't change it."/>
                                         <TextBlock Grid.Column="1" Classes="FieldLabel" Text="{Binding SlotLabel}"/>
                                         <ComboBox Grid.Column="2" ItemsSource="{Binding Options}"
-                                                  SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                                                  SelectedValue="{Binding SelectedItem, Mode=TwoWay}"
+                                                  SelectedValueBinding="{Binding Name}"
                                                   HorizontalAlignment="Stretch" MaxDropDownHeight="320"
-                                                  ToolTip.Tip="{Binding ItemTooltip}"/>
+                                                  ToolTip.Tip="{Binding ItemTooltip}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:TrialOption">
+                                                    <TextBlock Text="{Binding Name}" ToolTip.Tip="{Binding Tooltip}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

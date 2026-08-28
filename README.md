@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.30.2**
-> - Toolbar buttons no longer steal keyboard focus — after clicking one, the **spacebar** (and every keystroke) goes to the terminal as before, instead of re-toggling the button
-> - Window **hotkeys register on the first press** again — keyboard focus now sits on the terminal from launch, so a shortcut no longer needs a second press to take (a focus issue seen on Windows)
+> **Version 3.31.0**
+> - Item Finder: the trial-set panel is now **Gear Finder**, and **Find Best searches whatever the results grid currently shows** instead of the whole catalog — so "best AC in Leather" for a plate-capable class is finally possible by narrowing Armour Type first
+> - Item Finder: Find Best's criterion dropdown gained many options (AC/DR combo, Dodge, Magic Resist, ShockShield, VileWard, backstab, martial-arts strikes, and more) each with a grid column, plus an **Effective AC vs Evil** criterion (`AC + Prot-Evil`)
+> - Item Finder: a **search order** (chain criteria, highest-priority-first) and a **Target weight** cap (None/Light/Medium/Heavy) for Find Best, and per-option stat tooltips on the slot dropdowns
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

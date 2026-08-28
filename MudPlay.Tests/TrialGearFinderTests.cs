@@ -16,8 +16,8 @@ public sealed class TrialGearFinderTests
 
     // With Unknown class + level 0 + null alignment, ItemEquipFilter.CanEquip disables
     // every gate, so an empty row is "equippable" — lets the tests focus on scoring.
-    private static ItemFinderEntry Item(string name, EquipmentSlot slot, int ac = 0)
-        => new() { Name = name, Slot = slot, SlotLabel = slot.ToString(), Row = EmptyRow, Ac = ac };
+    private static ItemFinderEntry Item(string name, EquipmentSlot slot, int ac = 0, int encum = 0)
+        => new() { Name = name, Slot = slot, SlotLabel = slot.ToString(), Row = EmptyRow, Ac = ac, Encum = encum };
 
     private static readonly IReadOnlyList<EquipmentSlot> Slots = new[]
     {
@@ -110,5 +110,167 @@ public sealed class TrialGearFinderTests
         var best = TrialGearFinder.FindBest(catalog, Slots, new HashSet<EquipmentSlot>(), NoCurrent(),
             Ac, level: 10, ClassEquipProfile.Unknown, null);
         Assert.False(best.ContainsKey(EquipmentSlot.Head));
+    }
+
+    // ----- expanded criterion set (full parity with, and beyond, the reference
+    // client's own Find Best nested-menu list) -----
+
+    [Fact]
+    public void Filters_HaveDistinctLabels()
+    {
+        var labels = TrialGearFinder.Filters.Select(f => f.Label).ToList();
+        Assert.Equal(labels.Count, labels.Distinct().Count());
+    }
+
+    [Theory]
+    [InlineData("Armour Class")]
+    [InlineData("Effective AC vs Evil")]
+    [InlineData("AC Blur")]
+    [InlineData("AC/DR Combo")]
+    [InlineData("Damage Resist")]
+    [InlineData("Dodge")]
+    [InlineData("Magic Resist")]
+    [InlineData("ShockShield")]
+    [InlineData("BS Accuracy")]
+    [InlineData("BS Min Damage")]
+    [InlineData("BS Max Damage")]
+    [InlineData("Punch Accuracy")]
+    [InlineData("Punch Damage")]
+    [InlineData("Kick Accuracy")]
+    [InlineData("Kick Damage")]
+    [InlineData("JumpKick Accuracy")]
+    [InlineData("JumpKick Damage")]
+    [InlineData("+Encumbrance")]
+    [InlineData("Illumination")]
+    [InlineData("Stealth")]
+    [InlineData("Spellcasting")]
+    [InlineData("Quickness")]
+    [InlineData("Traps")]
+    [InlineData("Picklocks")]
+    [InlineData("Thievery")]
+    [InlineData("Prot. from Evil")]
+    [InlineData("Prot. from Good")]
+    [InlineData("VileWard")]
+    public void Filters_IncludesCriterion(string label)
+    {
+        Assert.Contains(TrialGearFinder.Filters, f => f.Label == label);
+    }
+
+    [Fact]
+    public void AcDrCombo_ScoresSumOfAcAndDr()
+    {
+        TrialFindFilter combo = TrialGearFinder.Filters.Single(f => f.Label == "AC/DR Combo");
+        ItemFinderEntry item = Item("plate", EquipmentSlot.Torso) with { Ac = 5, Dr = 3 };
+        Assert.Equal(8, combo.Score(item));
+    }
+
+    [Fact]
+    public void EffectiveAcVsEvil_ScoresAcPlusProtEvil()
+    {
+        // Report 20260827: a low-AC item carrying Prot-Evil (a CONFIRMED 1 AC/point
+        // vs the majority of monsters) shouldn't look worse than its raw AC implies.
+        TrialFindFilter effectiveAc = TrialGearFinder.Filters.Single(f => f.Label == "Effective AC vs Evil");
+        ItemFinderEntry item = Item("witchwood bracelet", EquipmentSlot.Wrist1) with { Ac = 2, ProtEvil = 8 };
+        Assert.Equal(10, effectiveAc.Score(item));
+    }
+
+    [Fact]
+    public void Dodge_ScoresDodgeField()
+    {
+        TrialFindFilter dodge = TrialGearFinder.Filters.Single(f => f.Label == "Dodge");
+        ItemFinderEntry item = Item("cloak", EquipmentSlot.Back) with { Dodge = 7 };
+        Assert.Equal(7, dodge.Score(item));
+    }
+
+    [Fact]
+    public void Thievery_ScoresThieveryField()
+    {
+        TrialFindFilter thievery = TrialGearFinder.Filters.Single(f => f.Label == "Thievery");
+        ItemFinderEntry item = Item("gloves", EquipmentSlot.Hands) with { Thievery = 4 };
+        Assert.Equal(4, thievery.Score(item));
+    }
+
+    [Fact]
+    public void VileWard_ScoresVileWardField()
+    {
+        TrialFindFilter vileWard = TrialGearFinder.Filters.Single(f => f.Label == "VileWard");
+        ItemFinderEntry item = Item("dark amulet", EquipmentSlot.Neck) with { VileWard = 6 };
+        Assert.Equal(6, vileWard.Score(item));
+    }
+
+    [Fact]
+    public void ProtEvil_UsesFullSpelledOutLabel_NotAbbreviated()
+    {
+        // Report 20260827: mmud-planner's port uses "Armour: Prot. from Evil" /
+        // "...Good" verbatim from the reference client's own menu text — matched
+        // here (label only, no "Armour:" group prefix since this project uses one
+        // flat dropdown) rather than the shorter "Prot Evil" the results-grid
+        // COLUMN header uses, so the two aren't visually confused in the dropdown.
+        Assert.Contains(TrialGearFinder.Filters, f => f.Label == "Prot. from Evil");
+        Assert.DoesNotContain(TrialGearFinder.Filters, f => f.Label == "Prot Evil");
+    }
+
+    // Find Best searches the currently-filtered catalog (see
+    // ItemFinderViewModel.FindBest), so an armour-type-restricted search — the
+    // scenario that motivated this whole expansion (report 20260827: "find best AC
+    // in leather" for a plate-capable class) — is just FindBest called against a
+    // pre-narrowed candidate list. Pin that a narrowed candidate list correctly
+    // excludes what it doesn't contain, independent of any UI filtering code.
+    [Fact]
+    public void FindBest_OverPreNarrowedCandidates_OnlyConsidersWhatsIncluded()
+    {
+        var fullCatalog = new[]
+        {
+            Item("plate torso", EquipmentSlot.Torso, ac: 20),   // higher AC…
+            Item("leather torso", EquipmentSlot.Torso, ac: 8),  // …but this is the only "leather" candidate
+        };
+        // Simulates the Armour Type filter having already narrowed the catalog to
+        // just the leather piece before FindBest ever sees it.
+        var leatherOnly = fullCatalog.Where(e => e.Name == "leather torso").ToList();
+
+        var best = TrialGearFinder.FindBest(leatherOnly, Slots, new HashSet<EquipmentSlot>(), NoCurrent(),
+            Ac, 0, ClassEquipProfile.Unknown, null);
+
+        Assert.Equal("leather torso", best[EquipmentSlot.Torso]);
+    }
+
+    // ----- weight-target budget (report 20260827: "what weight are you trying to
+    // attain" — None/Light/Medium/Heavy cap on top of the score criterion) -----
+
+    [Fact]
+    public void FindBest_WeightBudget_SkipsCandidateOverBudget_PicksNextBest()
+    {
+        var catalog = new[]
+        {
+            Item("heavy helm", EquipmentSlot.Head, ac: 9, encum: 10),
+            Item("light helm", EquipmentSlot.Head, ac: 5, encum: 2),
+        };
+        var best = TrialGearFinder.FindBest(catalog, Slots, new HashSet<EquipmentSlot>(), NoCurrent(),
+            Ac, 0, ClassEquipProfile.Unknown, null, weightBudget: 5);
+        Assert.Equal("light helm", best[EquipmentSlot.Head]);
+    }
+
+    [Fact]
+    public void FindBest_WeightBudget_DeductsAcrossSlots_LeavesLaterSlotEmptyOnceSpent()
+    {
+        var catalog = new[]
+        {
+            Item("cap", EquipmentSlot.Head, ac: 5, encum: 6),
+            Item("robe", EquipmentSlot.Torso, ac: 5, encum: 6),
+        };
+        // Slots is visited Head-then-Torso; a budget of 6 covers only the first pick.
+        var best = TrialGearFinder.FindBest(catalog, Slots, new HashSet<EquipmentSlot>(), NoCurrent(),
+            Ac, 0, ClassEquipProfile.Unknown, null, weightBudget: 6);
+        Assert.True(best.ContainsKey(EquipmentSlot.Head));
+        Assert.False(best.ContainsKey(EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void FindBest_WeightBudget_Null_IsUncapped()
+    {
+        var catalog = new[] { Item("heavy plate", EquipmentSlot.Torso, ac: 20, encum: 500) };
+        var best = TrialGearFinder.FindBest(catalog, Slots, new HashSet<EquipmentSlot>(), NoCurrent(),
+            Ac, 0, ClassEquipProfile.Unknown, null, weightBudget: null);
+        Assert.Equal("heavy plate", best[EquipmentSlot.Torso]);
     }
 }

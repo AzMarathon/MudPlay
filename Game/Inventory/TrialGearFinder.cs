@@ -18,14 +18,24 @@ public sealed record TrialFindFilter(string Label, Func<ItemFinderEntry, double>
 // identically-named worn items.
 public static class TrialGearFinder
 {
-    // The starter filter set (MME-style; adjust as needed). Each scores an
-    // ItemFinderEntry field; a non-positive score means "doesn't contribute", so the
-    // slot is left untouched rather than filled with a zero-value item.
+    // Every worn-stat ItemFinderEntry field a criterion could reasonably score on —
+    // full parity with (and beyond) the MegaMUD reference client's own "Find Best"
+    // nested-menu criterion list. A non-positive score means "doesn't contribute",
+    // so the slot is left untouched rather than filled with a zero-value item.
     public static readonly IReadOnlyList<TrialFindFilter> Filters = new[]
     {
         new TrialFindFilter("Armour Class",     e => e.Ac),
+        // Prot-Evil is a CONFIRMED 1 AC/point vs evil monsters (the majority of
+        // monsters) — see GAME_MECHANICS.md. Plain "Armour Class" above stays raw-AC
+        // only so a witchwood-bracelet-style item (low Ac, high ProtEvil) isn't
+        // penalized for a stat that's genuinely AC almost all the time.
+        new TrialFindFilter("Effective AC vs Evil", e => e.Ac + e.ProtEvil),
         new TrialFindFilter("AC Blur",          e => e.AcBlur),
+        new TrialFindFilter("AC/DR Combo",      e => e.Ac + e.Dr),
         new TrialFindFilter("Damage Resist",    e => e.Dr),
+        new TrialFindFilter("Dodge",            e => e.Dodge),
+        new TrialFindFilter("Magic Resist",     e => e.MagicResist),
+        new TrialFindFilter("ShockShield",      e => e.ShockShield),
         // Total max-damage contribution: a weapon's base Max plus any item's +Max
         // Damage bonus — so armour / jewellery that carries +damage fills too, not
         // just the weapon slot (base Max is a weapon-only field).
@@ -33,6 +43,15 @@ public static class TrialGearFinder
         new TrialFindFilter("Min Damage",       e => e.MinDmg + e.MinDamageBonus),
         new TrialFindFilter("Accuracy",         e => e.Accuracy),
         new TrialFindFilter("Crits",            e => e.Crits),
+        new TrialFindFilter("BS Accuracy",      e => e.BsAccuracy),
+        new TrialFindFilter("BS Min Damage",    e => e.BsMin),
+        new TrialFindFilter("BS Max Damage",    e => e.BsMax),
+        new TrialFindFilter("Punch Accuracy",   e => e.PunchAccy),
+        new TrialFindFilter("Punch Damage",     e => e.PunchDmg),
+        new TrialFindFilter("Kick Accuracy",    e => e.KickAccy),
+        new TrialFindFilter("Kick Damage",      e => e.KickDmg),
+        new TrialFindFilter("JumpKick Accuracy", e => e.JumpKickAccy),
+        new TrialFindFilter("JumpKick Damage",  e => e.JumpKickDmg),
         new TrialFindFilter("Hit Points",       e => e.Hp),
         new TrialFindFilter("Mana",             e => e.Mana),
         new TrialFindFilter("HP Regen",         e => e.HpRegen),
@@ -44,6 +63,17 @@ public static class TrialGearFinder
         new TrialFindFilter("+Health",          e => e.Health),
         new TrialFindFilter("+Charm",           e => e.Charm),
         new TrialFindFilter("Spell Damage",     e => e.SpellDamage),
+        new TrialFindFilter("+Encumbrance",     e => e.EncumBonus),
+        new TrialFindFilter("Illumination",     e => e.Illuminate),
+        new TrialFindFilter("Stealth",          e => e.Stealth),
+        new TrialFindFilter("Spellcasting",     e => e.Spellcasting),
+        new TrialFindFilter("Quickness",        e => e.Quickness),
+        new TrialFindFilter("Traps",            e => e.Traps),
+        new TrialFindFilter("Picklocks",        e => e.Picklocks),
+        new TrialFindFilter("Thievery",         e => e.Thievery),
+        new TrialFindFilter("Prot. from Evil",  e => e.ProtEvil),
+        new TrialFindFilter("Prot. from Good",  e => e.ProtGood),
+        new TrialFindFilter("VileWard",         e => e.VileWard),
         new TrialFindFilter("Cold Resist",      e => e.ColdResist),
         new TrialFindFilter("Fire Resist",      e => e.FireResist),
         new TrialFindFilter("Stone Resist",     e => e.StoneResist),
@@ -56,7 +86,12 @@ public static class TrialGearFinder
     // character can equip. Held slots are left out of the result (the caller keeps
     // their current item); a slot whose best candidate scores ≤ 0 is also left out.
     // `current` supplies the present per-slot picks so a held ring/bracelet isn't
-    // handed out again to its paired partner.
+    // handed out again to its paired partner. `weightBudget`, when given, caps the
+    // total Encum this pass may spend across every slot it fills — slots are visited
+    // in `targetSlots` order and each pick deducts its weight from what's left, so a
+    // candidate that would blow the remaining budget is skipped in favor of the next-
+    // best one that fits (a slot with nothing left that fits is skipped, same as a
+    // slot with no positive-scoring candidate at all).
     public static Dictionary<EquipmentSlot, string> FindBest(
         IReadOnlyList<ItemFinderEntry> catalog,
         IReadOnlyList<EquipmentSlot> targetSlots,
@@ -64,7 +99,8 @@ public static class TrialGearFinder
         IReadOnlyDictionary<EquipmentSlot, string?> current,
         Func<ItemFinderEntry, double> score,
         int level, ClassEquipProfile cls, AlignmentBucket? alignment,
-        Func<ItemFinderEntry, bool>? extraFilter = null)
+        Func<ItemFinderEntry, bool>? extraFilter = null,
+        int? weightBudget = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(targetSlots);
@@ -101,6 +137,7 @@ public static class TrialGearFinder
                 Taken(EquipmentSlotMap.PrimarySlot(t)).Add(held!.Trim());
 
         var result = new Dictionary<EquipmentSlot, string>();
+        int? remaining = weightBudget;
         foreach (EquipmentSlot t in targetSlots)
         {
             if (heldSlots.Contains(t)) continue;
@@ -110,8 +147,10 @@ public static class TrialGearFinder
             foreach ((ItemFinderEntry e, double _) in list)
             {
                 if (taken.Contains(e.Name)) continue;
+                if (remaining is int budget && e.Encum > budget) continue;
                 taken.Add(e.Name);
                 result[t] = e.Name;
+                if (remaining.HasValue) remaining -= e.Encum;
                 break;
             }
         }
