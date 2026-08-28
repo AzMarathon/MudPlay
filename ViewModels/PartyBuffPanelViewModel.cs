@@ -26,14 +26,26 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
 
     public ObservableCollection<PartyBuffSlotRowViewModel> Slots { get; } = new();
 
-    // Buff-only picker source: LEARNED spells that are party buffs (zero energy,
-    // Targets 2 / 10 / 13 — cast on another player or the whole party).
+    // Current party's non-self members as column headers (capitalised given names),
+    // in the same order every row builds its target checkboxes — so the header
+    // names line up over the per-row checkbox columns in the grid.
+    public ObservableCollection<string> Members { get; } = new();
+
+    // Buff-only picker source: LEARNED party buffs (zero energy, Targets 2 / 10 / 13
+    // — cast on another player or the whole party) NOT already slotted. A given
+    // party buff is one slot: two slots of the same spell would double-track its
+    // recast timer, so a spell already in a slot drops out of the picker.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowPanel))]
+    [NotifyPropertyChangedFor(nameof(CanAddBuff))]
     private IReadOnlyList<SpellPick> _buffPicks = Array.Empty<SpellPick>();
 
     // True when no slot is configured yet — drives the empty-state hint.
     public bool HasSlots => Slots.Count > 0;
+
+    // Whether the Add button can do anything — every qualifying buff already
+    // slotted leaves nothing to add.
+    public bool CanAddBuff => BuffPicks.Count > 0;
 
     // Whether to show the buff panel at all: a class with no party-buff spells
     // (and no existing slots) hides it entirely, rather than showing an empty
@@ -110,28 +122,46 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         return _spellbook.FindByCastCode(c) is { } s ? s.Name : c;
     }
 
-    private void RefreshBuffPicks()
-    {
-        BuffPicks = _spellbook.Available
+    // Every learned party buff as a pick, de-duplicated by cast code.
+    private IEnumerable<SpellPick> AllPartyBuffPicks() =>
+        _spellbook.Available
             .Where(s => PartyBuffClassifier.IsPartyBuff(s) && _spellbook.IsObtained(s.Number))
             .Select(s => new SpellPick(s.Short, s.Name))
-            .DistinctBy(p => p.Short, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .DistinctBy(p => p.Short, StringComparer.OrdinalIgnoreCase);
+
+    // The cast codes already held by a slot (a spell can't be slotted twice).
+    private HashSet<string> SlottedSpells() =>
+        new(_settings.Slots.Where(s => !string.IsNullOrWhiteSpace(s.Spell)).Select(s => s.Spell!.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+    private void RefreshBuffPicks()
+    {
+        HashSet<string> slotted = SlottedSpells();
+        BuffPicks = AllPartyBuffPicks().Where(p => !slotted.Contains(p.Short)).ToList();
     }
 
-    // Rebuild every row's member checklist from the current (non-self) roster.
+    // Rebuild every row's member checklist — and the shared column headers — from
+    // the current (non-self) roster.
     private void RefreshMemberTargets()
     {
-        var members = _party.Members
-            .Where(m => !m.IsSelf)
-            .Select(m => (Display: m.Name, Given: GivenLower(m.Name)))
-            .ToList();
+        var members = CurrentMembers();
+        Members.Clear();
+        foreach ((string _, string given) in members) Members.Add(Capitalise(given));
         foreach (PartyBuffSlotRowViewModel row in Slots)
             row.RebuildMemberTargets(members);
     }
 
+    private List<(string Display, string Given)> CurrentMembers() =>
+        _party.Members
+            .Where(m => !m.IsSelf)
+            .Select(m => (Display: m.Name, Given: GivenLower(m.Name)))
+            .ToList();
+
     private static string GivenLower(string name) =>
         (name.Split(' ') is { Length: > 0 } parts ? parts[0] : name).ToLowerInvariant();
+
+    private static string Capitalise(string given) =>
+        given.Length == 0 ? given : char.ToUpperInvariant(given[0]) + given[1..];
 
     // Open the Add-buff picker (spell + recast). On OK, add the slot; targeting
     // (whole-party / all-members / member checklist) is then chosen in the row.
@@ -147,36 +177,34 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         _settings.Slots.Add(dto);
         PartyBuffSlotRowViewModel row = MakeRow(dto);
         Slots.Add(row);
-        var members = _party.Members
-            .Where(m => !m.IsSelf)
-            .Select(m => (Display: m.Name, Given: GivenLower(m.Name)))
-            .ToList();
-        row.RebuildMemberTargets(members);
+        row.RebuildMemberTargets(CurrentMembers());
+        RefreshBuffPicks();   // the just-slotted spell drops out of the picker
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
         Persist();
     }
 
     // Edit an existing slot's buff / recast — reopens the picker pre-filled, so
-    // the recast timer (or the buff) can change without a delete + re-add.
+    // the recast timer (or the buff) can change without a delete + re-add. The
+    // picker offers this slot's own spell plus any not held by another slot.
     [RelayCommand]
     private async System.Threading.Tasks.Task EditBuff(PartyBuffSlotRowViewModel? row)
     {
         if (row is null) return;
+        HashSet<string> others = SlottedSpells();
+        others.Remove((row.Spell ?? string.Empty).Trim());
+        var picks = AllPartyBuffPicks().Where(p => !others.Contains(p.Short)).ToList();
         AddPartyBuffDialogViewModel dlg = new(
-            BuffPicks, SpellSuggestionFilter, row.Spell, row.RecastMarginSec);
+            picks, SpellSuggestionFilter, row.Spell, row.RecastMarginSec);
         AddPartyBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddPartyBuffDialogViewModel, AddPartyBuffResult>(dlg);
         if (result is not { } r) return;
 
         row.Dto.Spell = r.Spell;
         row.Dto.RecastMarginSec = r.RecastMarginSec;
+        RefreshBuffPicks();   // a changed spell frees/consumes picker entries
         row.Refresh();   // re-derive header + whole-party/single-target after a spell change
-        var members = _party.Members
-            .Where(m => !m.IsSelf)
-            .Select(m => (Display: m.Name, Given: GivenLower(m.Name)))
-            .ToList();
-        row.RebuildMemberTargets(members);
+        row.RebuildMemberTargets(CurrentMembers());
         Persist();
     }
 
@@ -186,6 +214,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         if (row is null) return;
         _settings.Slots.Remove(row.Dto);
         Slots.Remove(row);
+        RefreshBuffPicks();   // the freed spell returns to the picker
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
         Persist();

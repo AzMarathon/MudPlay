@@ -25,8 +25,13 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
     [ObservableProperty] private bool _wholePartyOn;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowMemberList))]
+    [NotifyPropertyChangedFor(nameof(MembersEnabled))]
     private bool _allMembers;
+
+    // In the grid the per-member checkboxes stay visible even when "All" is set
+    // (so the columns line up), but greyed out — "All" overrides the individual
+    // picks, so editing them would be misleading.
+    public bool MembersEnabled => !AllMembers;
 
     // Current party members as target checkboxes, for a single-target slot.
     public ObservableCollection<PartyBuffMemberToggle> MemberTargets { get; } = new();
@@ -39,7 +44,6 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
 
     public bool IsWholeParty => _isWholeParty(Spell);
     public bool IsSingleTarget => !string.IsNullOrWhiteSpace(Spell) && !IsWholeParty;
-    public bool ShowMemberList => IsSingleTarget && !AllMembers;
 
     public PartyBuffSlotRowViewModel(
         PartyBuffSlot dto, Func<string?, bool> isWholeParty,
@@ -67,7 +71,6 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
         OnPropertyChanged(nameof(HeaderText));
         OnPropertyChanged(nameof(IsWholeParty));
         OnPropertyChanged(nameof(IsSingleTarget));
-        OnPropertyChanged(nameof(ShowMemberList));
     }
 
     partial void OnWholePartyOnChanged(bool value)

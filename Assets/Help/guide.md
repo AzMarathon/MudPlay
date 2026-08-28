@@ -212,13 +212,12 @@ The right side of the Party window is where you configure the beneficial spells 
 - **Set a recast timer** — "recast (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off).
 - **OK** adds it as a slot.
 
-Each slot then shows the buff name and recast timer as a table row, and you choose **who it's cast on** right there in the panel — the control depends on the spell:
+Each slot is a **row in a grid**: **✎** (edit the buff / recast timer — reopens the picker) and **⨯** (remove) sit at the left, then the buff's `name - recast` label (e.g. `bless - 15s`), a toggle column, and a column per party member — the member names run along the top as headers, so every row's checkboxes line up under them. You choose **who it's cast on** right there:
 
-- A **whole-party** buff (chant, mass frenzy, and the like — one cast blankets everyone) shows a single **Whole party** on/off toggle.
-- A **single-target** buff (frenzy, divine favour, regeneration…) shows **All members** — bless everyone present, auto-adapting to whatever party you're in — or, unticked, a **checklist** of the current party members so you pick exactly who gets it.
-- **✎** edits the slot's buff or recast timer (reopens the picker); **⨯** removes it.
+- A **whole-party** buff (chant, mass frenzy, and the like — one cast blankets everyone) has a single **on/off** toggle and reads **Party Wide** across the member columns.
+- A **single-target** buff (frenzy, divine favour, regeneration…) has an **All** toggle — bless everyone present, auto-adapting to whatever party you're in — and, when All is off, a **checkbox per member** so you pick exactly who gets it. (With All ticked the per-member boxes grey out, since All already covers everyone.)
 
-Everything saves as you edit it — there's no Save button. If your class has no spells that qualify as party buffs (nothing that targets another player or the whole party), the panel is hidden entirely. A single-target buff only ever fires for a member who is **both currently in your party and in the room**, so a member who leaves, is uninvited, or wanders to another room is never targeted, and a saved target who rejoins is blessed again automatically. Targets are remembered by name, so your setup survives parties dissolving and reforming. (The two **bless while resting / during combat** gates that decide *when* the buff engine may cast still live on **Settings → Party**.)
+A given buff is **one slot** — once a spell is slotted it drops out of the Add picker, so you can't accidentally double up (one slot's member checkboxes already cover as many members as you like). Everything saves as you edit it — there's no Save button. If your class has no spells that qualify as party buffs (nothing that targets another player or the whole party), the panel is hidden entirely. A single-target buff only ever fires for a member who is **both currently in your party and in the room**, so a member who leaves, is uninvited, or wanders to another room is never targeted, and a saved target who rejoins is blessed again automatically. Targets are remembered by name, so your setup survives parties dissolving and reforming. (The two **bless while resting / during combat** gates that decide *when* the buff engine may cast still live on **Settings → Party**.)
 
 ## Leaders and followers
 
