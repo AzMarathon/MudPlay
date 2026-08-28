@@ -146,8 +146,17 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
             row.Update(entry, now, coveredBy: coveredBy);
         }
 
+        IReadOnlyCollection<string> hidden = _castDirector.HiddenPartyTargets;
         foreach (BuffWatchdogRowViewModel row in PartyBuffs)
         {
+            // A single-target member who's HIDING (a cast came back "You do not see …
+            // here!") can't be reached — show that instead of a timer.
+            if (!row.IsWholeParty && row.MemberKey.Length > 0 && hidden.Contains(row.MemberKey))
+            {
+                row.Update(null, now, hidden: true);
+                continue;
+            }
+
             // Each row tracks one timer, keyed by (cast code, target): a whole-party
             // (or #item) buff is one cast keyed to self (MemberKey ""); a single-target
             // buff has its own per-member row keyed by that member's given name.

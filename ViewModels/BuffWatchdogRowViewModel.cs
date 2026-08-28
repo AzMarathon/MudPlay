@@ -41,6 +41,9 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // When set, a configured party buff supersedes this self-buff (RemovesSpell) while
     // in a party, so we don't self-cast it — the row shows "covered by <code>".
     [ObservableProperty] private bool _isCovered;
+    // When set, this member is HIDING (a cast returned "You do not see <name> here!"),
+    // so the buff can't reach them until they reappear or we move.
+    [ObservableProperty] private bool _isHidden;
 
     private static GridLength Empty => new(0, GridUnitType.Star);
     private static GridLength Full => new(1, GridUnitType.Star);
@@ -62,8 +65,25 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // Recompute the bar from a live timer (null ⇒ the buff isn't up). now is UTC to
     // match CastingDirector's clock. A memberName (party rows) overrides TargetText;
     // coveredBy (self rows) names a party buff that supersedes this self-buff.
-    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null)
+    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null, bool hidden = false)
     {
+        if (hidden)
+        {
+            // Member is hiding — the buff can't target them. Empty bar, labelled so.
+            IsHidden = true;
+            IsActive = false;
+            IsCovered = false;
+            InRecastWindow = false;
+            FillStar = Empty;
+            FillRestStar = Full;
+            ShowRecastMarker = false;
+            MarkerStar = Empty;
+            MarkerRestStar = Full;
+            TimeText = "hidden — can't target";
+            return;
+        }
+        IsHidden = false;
+
         if (coveredBy is { Length: > 0 })
         {
             // Superseded by a party-wide party buff — we don't self-cast it; the party

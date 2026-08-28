@@ -2548,38 +2548,75 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyBless_MemberNotInRoom_NoCast()
+    public void PartyBless_PartyMember_CastAttemptedRegardlessOfAlsoHere()
     {
-        // A selected member who's in the party but NOT in the room is skipped — the
-        // core robustness fix (never cast at someone who isn't here).
+        // Party = same room, so a roster member is castable even when they're NOT in
+        // the room's "Also here:" list (e.g. the leader we follow is never listed
+        // there). The old pre-emptive "Also here:" gate wrongly skipped them.
         using PartyBlessHarness h = new();
         h.Health.BlessIfAboveMa = 0;
         h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
         h.AddMember("Raijin");
-        h.InRoom.Clear();                    // Raijin wandered off / was uninvited
-
-        h.Director.Evaluate();
-
-        Assert.Empty(h.CastsSent);
-    }
-
-    [Fact]
-    public void PartyBless_AllMembers_OnlyBlessesInRoom()
-    {
-        // AllMembers blesses everyone present; a member out of the room is skipped.
-        using PartyBlessHarness h = new();
-        h.Health.BlessIfAboveMa = 0;
-        h.AddAllMembersSlot("bles");
-        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin");
-        h.AddMember("Goldar");
-        h.InRoom.Remove("Goldar");           // Goldar is elsewhere
+        h.InRoom.Clear();                    // not listed in "Also here:" — still cast
 
         h.Director.Evaluate();
 
         Assert.Single(h.CastsSent);
         Assert.Equal("bles Raijin", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyBless_HiddenMember_BacksOffThenRetriesOnMove()
+    {
+        // A HIDING member answers "You do not see <name> here!" to our cast — back off
+        // (no per-round spam) until we move, then retry.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.InRoom.Remove("Raijin");           // hiding ⇒ absent from "Also here:"
+
+        h.Director.Evaluate();               // attempt (in party ⇒ here)
+        Assert.Single(h.CastsSent);
+
+        h.Confirm("You do not see Raijin here!");   // hidden ⇒ back off
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);           // still hiding ⇒ skipped, no spam
+
+        h.Director.NoteRoomChanged();        // we moved ⇒ retry
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bles Raijin", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyBless_HiddenMember_RetriesWhenReappearsInAlsoHere()
+    {
+        // The other clear path: a backed-off hidden member is retried the moment they
+        // reappear in "Also here:" (they unhid).
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.InRoom.Remove("Raijin");           // hiding
+
+        h.Director.Evaluate();
+        h.Confirm("You do not see Raijin here!");
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);           // still hiding
+
+        h.InRoom.Add("Raijin");              // reappears in "Also here:" (unhid)
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
     }
 
     [Fact]

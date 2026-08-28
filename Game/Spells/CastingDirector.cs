@@ -170,10 +170,33 @@ public sealed class CastingDirector : IDisposable
     // The character's party-buff plan (Party window). Null / no reader ⇒ no party
     // buffs. Read live each pass so an edit in the Party window takes effect at once.
     private Func<Models.Profile.PartyBuffSettings?>? _readPartyBuffs;
-    // "Is this member (given name) currently in the room with us?" — the presence
-    // gate for single-target party buffs. Backed by the room-occupant list. Null ⇒
-    // presence unknown, so the gate stands down (tests / before wiring).
+    // "Is this member (given name) listed in the room's 'Also here:'?" — used ONLY to
+    // clear a hidden-target back-off when the member reappears. Party membership already
+    // guarantees same-room (if 'par' lists them they're here), so this is NOT a
+    // pre-emptive cast gate — a present-but-not-listed member is just hiding. Null ⇒
+    // no room list (tests / before wiring), so a hidden member stays backed off until
+    // we move.
     private Func<string, bool>? _isMemberInRoom;
+
+    // Given names (lower-cased) of party members a single-target buff couldn't reach
+    // because they're HIDING — the server answered "You do not see <name> here!" to
+    // our cast. We back off casting on them (no spam) until we MOVE (NoteRoomChanged
+    // clears all) or they reappear in "Also here:" (cleared in PickPartyBuff). The
+    // Buff Watchdog reads this to show "hidden — couldn't target".
+    private readonly HashSet<string> _hiddenTargets = new(StringComparer.OrdinalIgnoreCase);
+
+    // Given names (lower-cased) of members currently backed off as hidden — read by
+    // the Buff Watchdog.
+    public IReadOnlyCollection<string> HiddenPartyTargets => _hiddenTargets;
+
+    // A room change (we moved) — retry every hidden target, in case they're no longer
+    // hidden / no longer in the new room's occupancy.
+    public void NoteRoomChanged()
+    {
+        if (_hiddenTargets.Count == 0) return;
+        _hiddenTargets.Clear();
+        _log?.Combat(LogCategory, "moved rooms — cleared hidden party-buff back-offs, will retry.");
+    }
     // Self-buff cast code → the party-wide party buff that removes (supersedes) it while
     // in a party. PickSelfBuff skips a covered slot; the Buff Watchdog labels it.
     private Func<IReadOnlyDictionary<string, string>>? _selfBuffCoverage;
@@ -533,6 +556,7 @@ public sealed class CastingDirector : IDisposable
     public void ResetBuffTracking()
     {
         _activeUntil.Clear();
+        _hiddenTargets.Clear();
         _pendingPartyCast = null;
         _pendingSelfBuffShort = null;
         _pendingManaRegenReroll = null;
@@ -792,6 +816,22 @@ public sealed class CastingDirector : IDisposable
     private void OnLine(LineExtractor.EmittedLine line)
     {
         if (_pendingPartyCast is not { } p) return;
+
+        // "You do not see <target> here!" — the member is in the party (so in the room)
+        // but HIDING, so a single-target cast can't land and the confirm we were waiting
+        // for will never come. Back off casting on them (until we move / they reappear)
+        // instead of retrying — and firing the failure — every round.
+        if (IsTargetNotSeenLine(line.Text, p.Target))
+        {
+            // Store lower-cased: the recast key + the watchdog's lookup are both the
+            // lower given name, and the watchdog matches ordinally.
+            _hiddenTargets.Add(p.Target.Trim().ToLowerInvariant());
+            _log?.Info(LogCategory,
+                $"party-buff target {p.Target} is hidden (\"do not see … here\") — backing off until we move or they reappear.");
+            _pendingPartyCast = null;
+            return;
+        }
+
         if (!p.Matcher.ConfirmsTarget(line.Text, p.Target)) return;
 
         string key = p.Target.Trim().ToLowerInvariant();
@@ -805,6 +845,18 @@ public sealed class CastingDirector : IDisposable
             $"party-buff confirmed spell={p.Short} target={p.Target} " +
             $"duration={p.DurationSec}s — recast in {recastInSec}s.");
         _pendingPartyCast = null;
+    }
+
+    // The server's "you can't see the target" answer to a single-target cast:
+    // "You do not see <name> here!". Matched loosely (tolerates markup / spacing) but
+    // only ever consulted for the pending cast's own target, so a false match is moot.
+    private static bool IsTargetNotSeenLine(string text, string target)
+    {
+        string given = target.Trim();
+        return given.Length > 0
+            && text.Contains("do not see", StringComparison.OrdinalIgnoreCase)
+            && text.Contains(given, StringComparison.OrdinalIgnoreCase)
+            && text.Contains("here", StringComparison.OrdinalIgnoreCase);
     }
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -1575,11 +1627,13 @@ public sealed class CastingDirector : IDisposable
             }
 
             // Single-target buff — cast on the selected members, one per pass
-            // (cycling across passes). A member is eligible only when they're BOTH a
-            // current party member AND in the room, so a saved target who left / was
-            // uninvited / is elsewhere is skipped — churn never casts at the wrong
-            // person. AllMembers blesses everyone; otherwise only the slot's Targets
-            // (lower-cased given names).
+            // (cycling across passes). Eligibility is CURRENT PARTY MEMBERSHIP only:
+            // MajorMUD parties are co-located, so a name in the roster (_party.Members,
+            // from 'par') is in the room — a member who left / was uninvited is already
+            // gone from the roster. The one exception is a member who's HIDING: the cast
+            // returns "You do not see <name> here!" and we back off (_hiddenTargets)
+            // until we move or they reappear in "Also here:". AllMembers blesses
+            // everyone; otherwise only the slot's Targets (lower-cased given names).
             foreach (PartyMember m in _party.Members)
             {
                 if (m.IsSelf) continue;
@@ -1589,7 +1643,13 @@ public sealed class CastingDirector : IDisposable
                 string given = GivenName(m.Name);
                 string key = given.ToLowerInvariant();
                 if (!slot.AllMembers && !slot.Targets.Contains(key)) continue;   // not selected
-                if (_isMemberInRoom is { } inRoom && !inRoom(given)) continue;    // not in the room
+                if (_hiddenTargets.Contains(key))
+                {
+                    // Backed off as hidden — retry only once they're listed in
+                    // "Also here:" again (they unhid); otherwise keep skipping.
+                    if (_isMemberInRoom?.Invoke(given) != true) continue;
+                    _hiddenTargets.Remove(key);
+                }
                 if (!IsRecastDue(key, slot.Spell)) continue;
                 return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
             }

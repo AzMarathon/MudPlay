@@ -3290,6 +3290,8 @@ public sealed class AppServices
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
             if (t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
             Health.NoteRoomChanged(t.NewRoom.Key);
+            // A move retries any party-buff targets we'd backed off as hidden.
+            CastDirector.NoteRoomChanged();
         };
 
         // CastCoordinator. Subscribes to spell-failure
@@ -5808,26 +5810,15 @@ public sealed class AppServices
         return false;
     }
 
-    // True when a player with the given name is currently in the room — an occupant
-    // of the live "Also here:" list (RoomEntityClassifier). Case-insensitive on the
-    // resolved given name. Gates single-target party buffs so we never cast at a
-    // member who's been uninvited, left, or wandered off. Null observation (no room
-    // seen yet) ⇒ not present, so the buff waits rather than casting blind.
+    // True when a player with the given name is listed in the live "Also here:"
+    // (RoomEntityClassifier). Case-insensitive on the resolved given name. This is NOT
+    // a party-buff cast gate — party membership already means same room; it's only used
+    // to CLEAR a hidden-target back-off when the member reappears in Also-here (a member
+    // absent from Also-here but present in 'par' is simply hiding — including the leader
+    // we follow, who never appears there). Null observation ⇒ not listed.
     private bool IsGivenNameInRoom(string givenName)
     {
         string g = givenName.Trim();
-
-        // The leader we're FOLLOWING isn't listed in "Also here:" — the game prints
-        // "You are following <leader>." instead — yet we co-locate with them while
-        // following, so a room parse omits them even though they're right here
-        // (report stock-20260828-124347: bless never reached the followed leader).
-        // Treat the followed leader as present. (When WE lead, our followers DO show
-        // in Also-here, so this only covers the follower→leader direction.)
-        if (!PartyState.SelfIsLeader
-            && PartyState.LeaderName is { Length: > 0 } leader
-            && string.Equals(GivenNameOf(leader), g, StringComparison.OrdinalIgnoreCase))
-            return true;
-
         if (RoomClassifier?.Current?.Entities is not { } entities) return false;
         foreach (Game.Combat.RoomEntity e in entities)
             if (e.Kind == Game.Combat.EntityKind.Player
