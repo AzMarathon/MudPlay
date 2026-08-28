@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.36.3
+
+- Monster Intel: Locations panel no longer dumps the raw MDB "Summoned By" field (an unreadable room-code blob) — shows a quick "Placed in N rooms / Spawns in M lairs" count instead
+- For the full room-by-room list, use the Game Data Browser's Monsters tab or the Room Info panel — Monster Intel stays a fast-lookup summary
+
 ## 3.36.2
 
 - Monster Intel: every list column is now independently sortable (previously only Name/HP/Exp were; the rest silently sorted alphabetically on formatted text)

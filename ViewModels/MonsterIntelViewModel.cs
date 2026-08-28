@@ -341,8 +341,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             LootLines.Add(d.Percent > 0 ? $"{name} ({d.Percent}%)" : name);
         }
 
-        if (!string.IsNullOrWhiteSpace(m.SummonedBy)) LocationLines.Add(m.SummonedBy);
-
+        RebuildLocations(m.Number);
         RebuildAutomationSummary(m.Number);
         RebuildYourMatchup(m);
         RebuildObservations(m.Number);
@@ -491,6 +490,25 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         0 => "normal",
         _ => "vulnerable",
     };
+
+    // A quick room-placement count, not a full room list — Monster Intel is a
+    // fast-lookup surface, not a replacement for the Game Data Browser's
+    // Monsters tab / Room Info panel, which already list every room
+    // individually with clickable links and a lair breakdown. Reuses
+    // MonsterMdbInfoBuilder's own lair-tag matcher (internal, same
+    // assembly) rather than re-deriving that parsing here.
+    private void RebuildLocations(int monsterNumber)
+    {
+        if (_roomGraph is null) return;
+        int placed = 0, lairs = 0;
+        foreach (Room room in _roomGraph.Rooms)
+        {
+            if (room.Npc == monsterNumber) placed++;
+            if (MonsterMdbInfoBuilder.LairNamesMonster(room.RawLairTag, monsterNumber)) lairs++;
+        }
+        if (placed > 0) LocationLines.Add($"Placed in {placed} room{(placed == 1 ? "" : "s")}");
+        if (lairs > 0) LocationLines.Add($"Spawns in {lairs} lair{(lairs == 1 ? "" : "s")}");
+    }
 
     private void RebuildAutomationSummary(int monsterNumber)
     {

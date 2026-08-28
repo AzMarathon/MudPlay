@@ -69,7 +69,6 @@ public sealed record MonsterCatalogEntry(
     IReadOnlyList<MonsterMidSpellSlot> MidSpells,
     IReadOnlyList<MonsterDropSlot> Drops,
     IReadOnlyList<MonsterAbilitySlot> Abilities,
-    string SummonedBy,
     // Pre-resolved from Abilities — see MonsterResistIndex / MonsterMagicIndex
     // for the exact codes and why only these two damage flavors are
     // deterministic enough to index (elemental resist codes: Cold 3, Fire 5,
@@ -326,7 +325,6 @@ public sealed class MonsterCatalog
             MidSpells: midSpells,
             Drops: drops,
             Abilities: abilities,
-            SummonedBy: ReadString(row, "Summoned By"),
             ElementalResists: resists,
             Magical: magical,
             SpellImmunity: spellImmune,

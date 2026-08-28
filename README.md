@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.36.2**
-> - Monster Intel: every list column is now independently sortable (previously only Name/HP/Exp were; the rest silently sorted alphabetically on formatted text)
-> - AC and DR split into two separate sortable columns instead of one combined "AC/DR" column
-> - Name column capped so it can't balloon to take the whole pane
+> **Version 3.36.3**
+> - Monster Intel: Locations panel no longer dumps the raw MDB "Summoned By" field (an unreadable room-code blob) — shows a quick "Placed in N rooms / Spawns in M lairs" count instead
+> - For the full room-by-room list, use the Game Data Browser's Monsters tab or the Room Info panel — Monster Intel stays a fast-lookup summary
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
