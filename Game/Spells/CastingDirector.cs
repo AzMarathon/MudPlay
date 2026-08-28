@@ -166,8 +166,37 @@ public sealed class CastingDirector : IDisposable
 
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
     private Func<MessageRecord, string?>? _shortFromAppliedRecord;
-    private Func<int, string?>? _classNameByNumber;
     private Func<string, bool>? _isPartyWideBuff;
+    // The character's party-buff plan (Party window). Null / no reader ⇒ no party
+    // buffs. Read live each pass so an edit in the Party window takes effect at once.
+    private Func<Models.Profile.PartyBuffSettings?>? _readPartyBuffs;
+    // "Is this member (given name) listed in the room's 'Also here:'?" — used ONLY to
+    // clear a hidden-target back-off when the member reappears. Party membership already
+    // guarantees same-room (if 'par' lists them they're here), so this is NOT a
+    // pre-emptive cast gate — a present-but-not-listed member is just hiding. Null ⇒
+    // no room list (tests / before wiring), so a hidden member stays backed off until
+    // we move.
+    private Func<string, bool>? _isMemberInRoom;
+
+    // Given names (lower-cased) of party members a single-target buff couldn't reach
+    // because they're HIDING — the server answered "You do not see <name> here!" to
+    // our cast. We back off casting on them (no spam) until we MOVE (NoteRoomChanged
+    // clears all) or they reappear in "Also here:" (cleared in PickPartyBuff). The
+    // Buff Watchdog reads this to show "hidden — couldn't target".
+    private readonly HashSet<string> _hiddenTargets = new(StringComparer.OrdinalIgnoreCase);
+
+    // Given names (lower-cased) of members currently backed off as hidden — read by
+    // the Buff Watchdog.
+    public IReadOnlyCollection<string> HiddenPartyTargets => _hiddenTargets;
+
+    // A room change (we moved) — retry every hidden target, in case they're no longer
+    // hidden / no longer in the new room's occupancy.
+    public void NoteRoomChanged()
+    {
+        if (_hiddenTargets.Count == 0) return;
+        _hiddenTargets.Clear();
+        _log?.Combat(LogCategory, "moved rooms — cleared hidden party-buff back-offs, will retry.");
+    }
     // Self-buff cast code → the party-wide party buff that removes (supersedes) it while
     // in a party. PickSelfBuff skips a covered slot; the Buff Watchdog labels it.
     private Func<IReadOnlyDictionary<string, string>>? _selfBuffCoverage;
@@ -438,14 +467,24 @@ public sealed class CastingDirector : IDisposable
         _shortFromAppliedRecord = shortFromAppliedRecord;
     }
 
-    // Wire a class-number → class-name resolver (typically backed by Classes.json)
-    // so party-bless slots — which store the set of class numbers a buff applies to —
-    // can be matched against each PartyMember.Class (a class name). Optional — until
-    // wired, party-bless slots never match a member and the party-buff picker no-ops.
-    public void SetClassResolver(Func<int, string?> classNameByNumber)
+    // Wire the party-buff plan source (CharacterProfile.PartyBuffs) so the party-buff
+    // picker reads the user's configured slots. Optional — until wired, the picker
+    // no-ops. Read live each pass so a Party-window edit takes effect immediately.
+    public void SetPartyBuffSource(Func<Models.Profile.PartyBuffSettings?> readPartyBuffs)
     {
-        ArgumentNullException.ThrowIfNull(classNameByNumber);
-        _classNameByNumber = classNameByNumber;
+        ArgumentNullException.ThrowIfNull(readPartyBuffs);
+        _readPartyBuffs = readPartyBuffs;
+    }
+
+    // Wire the room-presence gate: "is this member (given name) currently in the
+    // room with us?" A single-target party buff only fires for a member who is both
+    // in the party AND in the room, so a saved target who left / was uninvited / is
+    // elsewhere is skipped. Optional — until wired, presence is unknown and the gate
+    // stands down (every selected member is treated as present).
+    public void SetRoomPresenceCheck(Func<string, bool> isMemberInRoom)
+    {
+        ArgumentNullException.ThrowIfNull(isMemberInRoom);
+        _isMemberInRoom = isMemberInRoom;
     }
 
     // Wire a "is this buff party-wide?" check (typically backed by the active set's
@@ -517,12 +556,76 @@ public sealed class CastingDirector : IDisposable
     public void ResetBuffTracking()
     {
         _activeUntil.Clear();
+        _hiddenTargets.Clear();
         _pendingPartyCast = null;
         _pendingSelfBuffShort = null;
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
         _betweenRoundSlotUsed = false;
         _pausedAt = null;
+    }
+
+    // OUR OWN death wiped OUR buffs — drop the self timers (keyed "") + any pending self
+    // cast. Party members are unaffected (they stayed alive, still buffed), so THEIR
+    // timers are kept: we shouldn't re-bless a party member just because we died. (A
+    // full character swap still clears everything via ProfileLoaded → ResetBuffTracking.)
+    public void ClearSelfBuffTracking()
+    {
+        int removed = RemoveTimersFor("");
+        _pendingSelfBuffShort = null;
+        _pendingManaRegenReroll = null;
+        _lastSelfHealCast = null;
+        _pendingPartyCast = null;   // a cast in flight when we died never landed
+        _log?.Info(LogCategory,
+            $"self died — cleared {removed} self-buff timer(s); party-buff timers kept (those members are alive).");
+    }
+
+    // A party member died — death wipes EVERY buff on them, so drop each timer we hold on
+    // that member + any hidden back-off for them. No-op for a name we hold no timer for
+    // (the "<Name> has died." line also fires for mobs / randos).
+    public void ClearMemberBuffTimers(string givenName)
+    {
+        if (string.IsNullOrWhiteSpace(givenName)) return;
+        string key = GivenName(givenName).ToLowerInvariant();
+        int removed = RemoveTimersFor(key);
+        _hiddenTargets.Remove(key);
+        if (removed > 0)
+            _log?.Info(LogCategory,
+                $"party member {key} died — cleared {removed} buff timer(s) on them (death wipes buffs).");
+    }
+
+    // Manually drop the timer for one (target, cast-code) — the user clicking the clear
+    // (✕) on a Buff Watchdog row. target "" is a self / whole-party buff; a given name is
+    // a single-target member. The next evaluation recasts it if it's still a configured,
+    // due buff; a phantom timer (e.g. an ex-member's) simply disappears. Case-insensitive
+    // so the row's stored key always matches.
+    public void ClearBuffTimer(string? target, string? shortCode)
+    {
+        string t = (target ?? string.Empty).Trim();
+        string s = (shortCode ?? string.Empty).Trim();
+        (string Target, string Short)? doomed = null;
+        foreach ((string Target, string Short) key in _activeUntil.Keys)
+            if (string.Equals(key.Target, t, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(key.Short, s, StringComparison.OrdinalIgnoreCase))
+            {
+                doomed = key;
+                break;
+            }
+        if (doomed is { } k && _activeUntil.Remove(k))
+            _log?.Info(LogCategory, $"buff timer manually cleared — target=\"{t}\" spell={s}.");
+    }
+
+    // Remove every active-timer entry whose target matches (case-insensitive); returns
+    // the count removed. target "" removes the self-keyed timers.
+    private int RemoveTimersFor(string target)
+    {
+        List<(string Target, string Short)>? doomed = null;
+        foreach ((string Target, string Short) key in _activeUntil.Keys)
+            if (string.Equals(key.Target, target, StringComparison.OrdinalIgnoreCase))
+                (doomed ??= new()).Add(key);
+        if (doomed is null) return 0;
+        foreach ((string, string) key in doomed) _activeUntil.Remove(key);
+        return doomed.Count;
     }
 
     // The instant the timers were frozen on a disconnect, or null while running. The
@@ -542,33 +645,29 @@ public sealed class CastingDirector : IDisposable
             _log?.Info(LogCategory, $"buff timers paused (drop) — {_activeUntil.Count} armed, frozen until reconnect");
     }
 
-    // Resume after a reconnect: shift every armed Until forward by the offline gap so
-    // each buff keeps the remaining it had at the drop. If we were gone longer than the
-    // longest buff could possibly last, the buffs are certainly off server-side now —
-    // clear instead of resurrecting stale timers.
+    // Resume after a reconnect. WE were the one offline, so our OWN buffs are uncertain —
+    // clear the self timers and re-establish them fresh. The other party members stayed
+    // ONLINE, so their buffs kept counting toward their real (absolute) expiry the whole
+    // time we were gone — so their timers are left exactly as they are (NOT shifted): they
+    // now read the correctly reduced remaining. Any whose absolute expiry has already
+    // passed while we were away are dropped so they show "not up" and recast.
     public void ResumeBuffTimers()
     {
-        if (_pausedAt is not { } pausedAt) return;
+        if (_pausedAt is null) return;
         _pausedAt = null;
-        System.TimeSpan gap = _now() - pausedAt;
-        if (gap <= System.TimeSpan.Zero || _activeUntil.Count == 0) return;
 
-        long maxTotal = 0;
-        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
-            maxTotal = System.Math.Max(maxTotal, kv.Value.TotalSec);
-        if (gap.TotalSeconds > maxTotal)
-        {
-            _log?.Info(LogCategory, $"buff timers cleared on resume — offline {(int)gap.TotalSeconds}s exceeds longest buff {maxTotal}s");
-            _activeUntil.Clear();
-            return;
-        }
+        int selfCleared = RemoveTimersFor("");
 
-        foreach ((string Target, string Short) key in new List<(string, string)>(_activeUntil.Keys))
-        {
-            (DateTime Until, int MarginSec, int TotalSec) v = _activeUntil[key];
-            _activeUntil[key] = (v.Until + gap, v.MarginSec, v.TotalSec);
-        }
-        _log?.Info(LogCategory, $"buff timers resumed — shifted {_activeUntil.Count} by offline {(int)gap.TotalSeconds}s");
+        List<(string Target, string Short)>? expired = null;
+        foreach ((string Target, string Short) key in _activeUntil.Keys)
+            if (_activeUntil[key].Until <= _now())
+                (expired ??= new()).Add(key);
+        if (expired is not null)
+            foreach ((string, string) key in expired) _activeUntil.Remove(key);
+
+        _log?.Info(LogCategory,
+            $"buff timers resumed — self cleared ({selfCleared}); party timers keep counting from real expiry "
+            + $"(dropped {expired?.Count ?? 0} that lapsed while offline).");
     }
 
     // A combat round tick elapsed (wired to TickEngine.CombatTickElapsed) — free the
@@ -776,6 +875,22 @@ public sealed class CastingDirector : IDisposable
     private void OnLine(LineExtractor.EmittedLine line)
     {
         if (_pendingPartyCast is not { } p) return;
+
+        // "You do not see <target> here!" — the member is in the party (so in the room)
+        // but HIDING, so a single-target cast can't land and the confirm we were waiting
+        // for will never come. Back off casting on them (until we move / they reappear)
+        // instead of retrying — and firing the failure — every round.
+        if (IsTargetNotSeenLine(line.Text, p.Target))
+        {
+            // Store lower-cased: the recast key + the watchdog's lookup are both the
+            // lower given name, and the watchdog matches ordinally.
+            _hiddenTargets.Add(p.Target.Trim().ToLowerInvariant());
+            _log?.Info(LogCategory,
+                $"party-buff target {p.Target} is hidden (\"do not see … here\") — backing off until we move or they reappear.");
+            _pendingPartyCast = null;
+            return;
+        }
+
         if (!p.Matcher.ConfirmsTarget(line.Text, p.Target)) return;
 
         string key = p.Target.Trim().ToLowerInvariant();
@@ -789,6 +904,18 @@ public sealed class CastingDirector : IDisposable
             $"party-buff confirmed spell={p.Short} target={p.Target} " +
             $"duration={p.DurationSec}s — recast in {recastInSec}s.");
         _pendingPartyCast = null;
+    }
+
+    // The server's "you can't see the target" answer to a single-target cast:
+    // "You do not see <name> here!". Matched loosely (tolerates markup / spacing) but
+    // only ever consulted for the pending cast's own target, so a false match is moot.
+    private static bool IsTargetNotSeenLine(string text, string target)
+    {
+        string given = target.Trim();
+        return given.Length > 0
+            && text.Contains("do not see", StringComparison.OrdinalIgnoreCase)
+            && text.Contains(given, StringComparison.OrdinalIgnoreCase)
+            && text.Contains("here", StringComparison.OrdinalIgnoreCase);
     }
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -1511,75 +1638,82 @@ public sealed class CastingDirector : IDisposable
         spells.BlessSlotRecastMargins.TryGetValue(slotIndex, out int m)
             ? m : DefaultRecastMarginSec;
 
-    // Walk the party-bless slots in priority order and pick one buff to cast. A
-    // party-wide buff (its Spells.Targets is Full / Divided Party Area — e.g. a
-    // mage's shimmering mirage or a chant) blankets the whole party in a single cast,
-    // so it's sent once with no target and no class filter, keyed for recast like a
-    // self-buff (it lands on us too). A single-target buff (e.g. a priest's bless) is
-    // cast on the first class-matched member due to recast — a member matches when
-    // their PartyMember.Class is in the slot's checked class set. Gated by the
-    // Other-tab "bless party while resting" / "bless party during combat" toggles.
+    // Walk the configured party-buff slots (CharacterProfile.PartyBuffs) in priority
+    // order and pick one buff to cast. A whole-party buff (Spells.Targets 10 / 13 —
+    // e.g. chant, mass frenzy) blankets the party in a single cast, sent once with no
+    // target when its WholePartyOn toggle is set, keyed for recast like a self-buff
+    // (it lands on us too). A single-target buff (Targets 2 — e.g. frenzy, divine
+    // favour) is cast on a selected member due for recast — a member is eligible only
+    // when they're BOTH in the party AND in the room (AllMembers = everyone; else the
+    // slot's chosen given names). Gated by the Settings → Party "bless while resting"
+    // / "bless during combat" toggles.
     private CastCandidate? PickPartyBuff(PartySettings? party, bool manaBuffsAllowed)
     {
         if (_party is null) return null;
-        if (party is null) return null;
         // Solo → the party-buff slots don't apply; only cast them once actually in a party.
         if (!_party.IsInParty) return null;
+        if (_readPartyBuffs?.Invoke() is not { } buffs) return null;
 
-        bool whileResting  = party.BlessWhileResting;
-        bool duringCombat  = party.BlessDuringCombat;
+        // Gates live on PartySettings (kept on the Settings → Party tab). A null
+        // settings read means gates default off (conservative: hold in combat / rest).
+        bool whileResting = party?.BlessWhileResting ?? false;
+        bool duringCombat = party?.BlessDuringCombat ?? false;
         if (_state.InCombat && !duringCombat) return null;
         // Same as self-bless: gate only a triggered recovery rest, not idle rest.
         if ((_isTriggeredRest?.Invoke() ?? false) && !whileResting) return null;
 
-        foreach (PartyBlessSlot slot in party.BlessSlots)
+        foreach (Models.Profile.PartyBuffSlot slot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
             if (!IsBuffAffordable(slot.Spell, manaBuffsAllowed)) continue;
 
-            // Party-wide buff — one cast covers everyone, so class checkboxes
-            // (which member to target) don't apply. Recast keyed to self ("")
-            // since it lands on us and confirms via the AppliedMessage path.
-            if (_isPartyWideBuff?.Invoke(slot.Spell) == true)
+            bool partyWide = _isPartyWideBuff?.Invoke(slot.Spell) == true;
+
+            // A #item-cast slot can only be whole-party: `use <item>` takes no target,
+            // so an item can't be aimed at a single member. (The picker only ever
+            // offers whole-party items, but guard the cast path regardless.)
+            if (ItemCastToken.IsToken(slot.Spell) && !partyWide) continue;
+
+            // Whole-party buff (Targets 10 / 13) — one cast covers everyone, so
+            // there's no per-member targeting; the slot's on/off is WholePartyOn.
+            // Recast keyed to self ("") since it lands on us and confirms via the
+            // AppliedMessage path (or, for an item, TryFireItemCast's proactive timer).
+            if (partyWide)
             {
+                if (!slot.WholePartyOn) continue;
                 if (!IsRecastDue("", slot.Spell)) continue;
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
             }
 
-            // Single-target buff — needs at least one class-matched member.
-            if (slot.ClassNumbers.Count == 0) continue;
+            // Single-target buff — cast on the selected members, one per pass
+            // (cycling across passes). Eligibility is CURRENT PARTY MEMBERSHIP only:
+            // MajorMUD parties are co-located, so a name in the roster (_party.Members,
+            // from 'par') is in the room — a member who left / was uninvited is already
+            // gone from the roster. The one exception is a member who's HIDING: the cast
+            // returns "You do not see <name> here!" and we back off (_hiddenTargets)
+            // until we move or they reappear in "Also here:". AllMembers blesses
+            // everyone; otherwise only the slot's Targets (lower-cased given names).
             foreach (PartyMember m in _party.Members)
             {
                 if (m.IsSelf) continue;
-                if (!MemberMatchesClasses(m, slot.ClassNumbers)) continue;
                 // Given name only: MajorMUD targets a cast by first name token, and
                 // the recast key must match the target we stash for confirmation so
                 // the buff doesn't re-fire every round on a "Given Family" mismatch.
                 string given = GivenName(m.Name);
                 string key = given.ToLowerInvariant();
+                if (!slot.AllMembers && !slot.Targets.Contains(key)) continue;   // not selected
+                if (_hiddenTargets.Contains(key))
+                {
+                    // Backed off as hidden — retry only once they're listed in
+                    // "Also here:" again (they unhid); otherwise keep skipping.
+                    if (_isMemberInRoom?.Invoke(given) != true) continue;
+                    _hiddenTargets.Remove(key);
+                }
                 if (!IsRecastDue(key, slot.Spell)) continue;
                 return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
             }
         }
         return null;
-    }
-
-    // True when the member's class name resolves to any of the slot's checked class
-    // numbers (case-insensitive). Requires the class-number → name resolver to be
-    // wired; no resolver => no match.
-    private bool MemberMatchesClasses(PartyMember m, IReadOnlyList<int> classNumbers)
-    {
-        if (_classNameByNumber is null) return false;
-        if (string.IsNullOrWhiteSpace(m.Class)) return false;
-        foreach (int n in classNumbers)
-        {
-            string? name = _classNameByNumber(n);
-            if (!string.IsNullOrWhiteSpace(name)
-                && string.Equals(name.Trim(), m.Class.Trim(),
-                    StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        return false;
     }
 
     // Arm the pending party-buff confirmation: resolve the buff's CasterMessage

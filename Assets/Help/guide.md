@@ -204,6 +204,21 @@ Open it from **View → Party**, a toolbar button, or **right-click the terminal
 
 The healing, ranks, nags, and re-invite behaviour the window reflects are all configured on **Settings → Party**.
 
+### Party Buffs panel
+
+The right side of the Party window is where you configure the beneficial spells the client casts on your party. Click **＋ Add buff** to open a small picker:
+
+- **Pick a buff** — it lists the buff spells you've learned that target another player or the whole party (attacks, heals, and self-only spells are filtered out), plus any **whole-party cast-on-use item** you can use (an unlimited-use item like a *shimmering greatsword* that casts a party-wide buff when used). A single-target item can't be aimed at a specific member — `use <item>` takes no target — so only party-wide items are offered; those show as a `#item` slot and cast once to blanket the party.
+- **Set a recast timer** — "recast (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off).
+- **OK** adds it as a slot.
+
+Each slot is a **row in a grid**: **✎** (edit the buff / recast timer — reopens the picker) and **⨯** (remove) sit at the left, then the buff's `name - recast` label (e.g. `bless - 15s`), a toggle column, and a column per party member — the member names run along the top as headers, so every row's checkboxes line up under them. You choose **who it's cast on** right there:
+
+- A **whole-party** buff (chant, mass frenzy, and the like — one cast blankets everyone) has a single **on/off** toggle and reads **Party Wide** across the member columns.
+- A **single-target** buff (frenzy, divine favour, regeneration…) has an **All** toggle — bless everyone present, auto-adapting to whatever party you're in — and, when All is off, a **checkbox per member** so you pick exactly who gets it. (With All ticked the per-member boxes grey out, since All already covers everyone.)
+
+A given buff is **one slot** — once a spell is slotted it drops out of the Add picker, so you can't accidentally double up (one slot's member checkboxes already cover as many members as you like). Everything saves as you edit it — there's no Save button. If your class has no spells that qualify as party buffs (nothing that targets another player or the whole party), the panel is hidden entirely. You can move the panel to the **Right** of the member list (default), **Below** it, or to the **Left** on **Settings → Party → Party Buffs panel position**. A single-target buff fires for any member who's **currently in your party** — a MajorMUD party is always in one room, so being in `par` means being in the room (a member who leaves or is uninvited drops out of the party and is no longer targeted). The one exception is a member who's **hiding**: the cast comes back *"You do not see … here!"*, so the client backs off that member — the Buff Watchdog marks them **"hidden — can't target"** — and retries the next time you **move** or they **reappear**. Targets are remembered by name, so your setup survives parties dissolving and reforming. (The two **bless while resting / during combat** gates that decide *when* the buff engine may cast still live on **Settings → Party**.)
+
 ## Leaders and followers
 
 One character leads; the rest follow. A follower tracks the leader's movement and holds position; if the leader disconnects, the party disbands. A party is 2–6 characters.
@@ -567,15 +582,17 @@ Open **Session Stats** from the **View** menu or its toolbar button (it has no d
 
 Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. It lists the buffs you've **configured** (never the whole spellbook) — your **self-bless slots**, the **HP/MA-regen** and **when-HP/MA-full** utility buffs, any `#item`-cast buffs, and your **party-bless slots** — each on its own row with a live timer bar:
 
-- Each row **is** the timer bar: the buff's 4-letter cast code (or a `#`-prefixed item name) sits **left-aligned inside the bar**, with the **time remaining** just after it. Party-buff rows also show the target member/class as a caption beneath the bar.
+- Each row **is** the timer bar: the buff's 4-letter cast code (or a `#`-prefixed item name) sits **left-aligned inside the bar**, with the **time remaining** just after it. Party-buff rows show the target beneath the bar.
 - The **bar fills as the buff ages** (empty just after it lands, full at wear-off), and a **vertical amber marker** shows where its **recast window** opens — the "recast within (seconds)" lead you set per slot. When the fill crosses the marker the bar turns amber: the buff is now due to be recast.
 - A buff that **isn't up** (worn off, or never cast) shows an empty bar labelled **not up**, so you can see at a glance which configured buffs are missing.
+- A single-target party-buff row whose member is **hiding** (the cast came back *"You do not see … here!"*) shows **hidden — can't target**; it clears and retries when you move or they reappear.
+- A small **✕** at the left of a live bar **clears that timer** — marks the buff off (e.g. when a dispel you didn't see stripped it). A configured buff that's still due recasts on the next pass; a leftover timer (say an ex-member's) just disappears. The ✕ only shows while a timer is actually up.
 - A configured buff your character **hasn't learned** is flagged **unlearned**.
-- Party-buff rows show the **soonest-expiring** member's timer (the next one due) and that member's name.
+- A **whole-party** buff (chant, mass frenzy, a party-wide cast item…) is one row — a single cast blankets the party. A **single-target** buff gets **one row per member** it's cast on (each member is blessed individually, so each has its own recast timer and name). If you untick a member you've already blessed, their row **stays until the buff actually expires** — unticking just stops future recasts, it doesn't cancel the running buff.
 
-**What it counts as "up".** A buff's timer is armed by the **cast code** — whether the client cast it or **you typed it by hand** — so a manual cast shows up here the same as an automated one. The client deliberately **ignores the `stat` screen's buff list** (Paradigm's `You feel …! (Ns)` lines): those shared effect messages can't say which buff is which, so they're never treated as a cast. **Any disconnect freezes the timers** (the display too) and reconnecting **resumes** them with the same remaining — a brief drop keeps your recast clock instead of restarting it. Switching characters (or a gap longer than the buff could last) starts the watchdog empty, with no buffs assumed.
+**What it counts as "up".** A buff's timer is armed by the **cast code** — whether the client cast it or **you typed it by hand** — so a manual cast shows up here the same as an automated one. The client deliberately **ignores the `stat` screen's buff list** (Paradigm's `You feel …! (Ns)` lines): those shared effect messages can't say which buff is which, so they're never treated as a cast. **Death and disconnect are handled to match the game:** dying wipes all your magical effects, so **your own death clears your self-buff timers** (a **party member's death** clears the timers you hold on that member); and when **you** disconnect, only **your own** buffs are in doubt — your **party's** buffs kept counting down while they stayed online, so on reconnect your **self** timers clear and re-establish, while **party** timers keep their real remaining (any that lapsed recast). Switching characters starts the watchdog empty.
 
-The window is a live view — it refreshes about once a second while open — and re-selecting the menu item (or toolbar button) toggles it closed. It's read-only: configure the buffs themselves on the Player Workshop (self-bless slots, regen, when-full) and Settings → Party (party-bless).
+The window is a live view — it refreshes about once a second while open — and re-selecting the menu item (or toolbar button) toggles it closed. It's read-only: configure the buffs themselves on the Player Workshop (self-bless slots, regen, when-full) and the **Party window's Party Buffs panel** (party buffs).
 
 ## Wire Inspector (F5)
 
@@ -1346,15 +1363,13 @@ Settings → Party.
 
 **Important notes:** This control exists in the UI but has no setting behind it — it's a placeholder for a future feature, currently fixed and greyed out.
 
-### Party bless (10 slots)
+### Party bless
 
-**Default:** all empty
-**What it does:** Up to 10 beneficial spells you want auto-cast on party members, each restricted to specific classes (e.g. cast a warrior buff only on Warriors and Barbarians). Row order is cast priority.
-**How the options work:** The first time you type a spell into an empty slot, every currently-known class gets auto-checked as a convenience — untick the ones you don't want it cast on. Each row also has its own **recast within (s)** — how early before the buff's tracked expiry to recast it; it defaults to **15**, and `0` waits for the buff to actually wear off.
+**Where it's configured:** the party-buff **slots** (which spells, which members, recast timers) live in the **Party window's Party Buffs panel** — see *The Party window → Party Buffs panel* above. This tab keeps only the two timing gates below.
 
-**Party-only, and targeting:** the party-bless slots are cast **only while you're actually in a party** — solo, none of them fire (your self-bless slots still do). A **party-wide** spell (chant and the like — one cast blankets the whole party, including you) is sent once with no target. A **single-target** spell is cast on each class-matched member individually with its own recast timer per person, and it is **not** cast on your own character — self comes from the self-bless slots.
+**Party-only, and targeting:** party buffs are cast **only while you're actually in a party** — solo, none fire (your self-bless slots still do). A **whole-party** spell (chant and the like) is sent once with no target and blankets the party, including you. A **single-target** spell is cast on each selected member individually with its own recast timer, is **not** cast on your own character (self comes from the self-bless slots), and only fires for a member who's both in your party and in the room.
 
-**Supersession:** if a party-wide party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
+**Supersession:** if a whole-party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
 
 ### Bless party while resting / Bless party during combat
 
@@ -1997,8 +2012,9 @@ This section is a compact, technical lookup table for every setting documented a
 | Rank | `Mid` | Front / Mid / Back | `Rank` | Models/Profile/PartySettings.cs |
 | Minor/Major party heal (single/AOE) | blank (all 4) | spell code | `MinorPartyHealSpell` etc. | Models/Profile/PartySettings.cs |
 | Minor/Major heal threshold %, AOE min members | 70/40/2 | 0–100 / 2–6 | `MinorHealMemberThresholdPercent` etc. / `AoeMinMembers` | Models/Profile/PartySettings.cs |
-| Party bless slots (10) | empty | spell + class list + recast sec | `BlessSlots` | Models/Profile/PartySettings.cs |
+| Party buff slots | empty | spell + per-member targets + recast sec | `PartyBuffs` | Models/Profile/PartyBuffSettings.cs (Party window) |
 | Bless while resting / during combat | false / false | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
+| Party Buffs panel position | `Right` | Right / Below / Left | `PartyBuffAnchor` | Models/Profile/PartySettings.cs |
 | Help leader open doors / Ignore @wait when leading / Reset stats on loop start | false/false/true | bool | `HelpLeaderOpenDoors`, `IgnoreWaitWhenLeading`, `ResetStatisticsOnLoopStart` | Models/Profile/PartySettings.cs |
 | Re-invite lost members / send @join nags / send @health nags / probe on join | true (all) | bool | `AutoInviteReconnecting`, `SendJoinToInvited`, `SendHealthToMembers`, `ProbeStatsOnPartyJoin` | Models/Profile/PartySettings.cs |
 | Nag initial delay / frequency / max window (s) | 5/10/55 | 1–60 / 1–60 / 5–600 | `JoinNagInitialDelaySec`, `JoinNagFrequencySec`, `JoinNagMaxTotalSec` | Models/Profile/PartySettings.cs |

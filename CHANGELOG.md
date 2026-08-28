@@ -2,7 +2,30 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.33.0
+## 3.34.0
+
+- Party blessing overhaul: buff slots moved from Settings → Party into a live **Party Buffs** panel in the Party window — add/remove slots, pick a learned buff, set a per-slot recast timer
+- Whole-party buffs get a single on/off; single-target buffs bless **all members** or a checklist of specific players (targeting replaces the old per-class checkboxes)
+- Single-target casts now fire only for a member who is **both in your party and in the room** — never at someone who left, was uninvited, or wandered off; targets persist by name across parties dissolving and reforming
+- Party Buffs panel is a compact table: **＋ Add buff** opens a picker (spell + recast timer), each slot has ✎ edit / ⨯ remove, targeting is chosen inline, it's styled to match the member list, and it's hidden entirely for a class with no party-buff spells
+- Settings → Party keeps the *bless while resting / during combat* gates, plus a **Party Buffs panel position** option (Right / Below / Left)
+- Party Buffs panel is now an aligned grid: edit/remove at the left, a `bless - 15s` label, an All/On toggle, and a checkbox column per party member (names as headers); whole-party buffs read "Party Wide" across the columns
+- A given party buff is one slot — a spell already slotted drops out of the Add picker, so it can't be double-added (which was double-tracking its recast timer in the Buff Watchdog)
+- Party Buffs can now be a **cast-on-use item** (e.g. a shimmering greatsword casting a party-wide bless): the picker offers whole-party cast items, auto-detected from the item's spell — a single-target item can't be aimed at a member, so only party-wide ones qualify
+- Buff Watchdog now shows whole-party (and item) party buffs, not just single-target ones, and gives a single-target buff **one timer row per member** (each member is cast individually, so each tracks its own recast) instead of collapsing them into one
+- Checking a member for a buff now queues the cast immediately (assume-uncast) instead of waiting for the next idle tick
+- Party window: buff panel hidden for a class with no party buffs no longer leaves the window stuck at the panel-sized width; tighter member columns with centered, truncated names
+- Fixed: the Party Buffs panel no longer appears for a class with no party-buff spells — a stray blank slot is pruned on load instead of forcing the panel open
+- Fixed: the Game Data → Players list hid the wrong person when a profile was copied from another character — it now identifies "self" by the live `stat` name, not the stored profile name, so a copied profile no longer omits the real other player from your player records
+- Fixed: single-target party buffs now target by **party membership** (a MajorMUD party is always in one room), not the room's `Also here:` list — which never lists the **leader you follow** (shown as "You are following …") and so silently blocked the leader's bless every round
+- A member who's **hiding** (the cast returns "You do not see … here!") is now backed off — the Buff Watchdog shows **"hidden — can't target"** — and retried when you move or they reappear, instead of re-firing the failing cast every round
+- Unticking a member you've already blessed no longer hides their Buff Watchdog timer — the running buff's countdown stays until it actually expires (unticking only stops future recasts)
+- Death and disconnect now match the game: **your death** clears your self-buff timers, a **party member's death** clears the timers you hold on them (death wipes buffs); and when **you** disconnect, party members' timers keep counting down (they stayed online) while only your own self-buff timers reset on reconnect — instead of freezing/preserving everyone's
+- Buff Watchdog: a **✕** on each live timer bar manually clears that buff timer (marks it off — a still-due buff recasts, a stale one just drops)
+- The Party Buffs panel keeps its table layout when docked Below or Left (content pinned to its natural width instead of stretching across the window)
+- bug reports addressed: stock-20260828-104653, stock-20260828-113206, stock-20260828-124347
+
+
 
 - Equipment Manager: a gear slot holding an item your character can't wear (alignment / level / class) is flagged red with a ⚠ and skipped on swaps, instead of the engine repeatedly bonking the game with a wear it refuses
 - Equipment Manager: when the game refuses a wear/wield ("You may not wear that item!" / "You may not use that weapon." — e.g. an alignment-drift EP-zap), the slot is blocked and a terminal notice tells you to adjust the set; change that slot to clear it

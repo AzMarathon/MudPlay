@@ -3290,6 +3290,8 @@ public sealed class AppServices
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
             if (t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
             Health.NoteRoomChanged(t.NewRoom.Key);
+            // A move retries any party-buff targets we'd backed off as hidden.
+            CastDirector.NoteRoomChanged();
         };
 
         // CastCoordinator. Subscribes to spell-failure
@@ -3410,9 +3412,13 @@ public sealed class AppServices
         // resurrect the old character's buffs. A same-character reconnect does NOT reload
         // the profile, so its paused timers survive to be resumed.
         Profile.ProfileLoaded += _ => CastDirector.ResetBuffTracking();
-        // Party-bless slots store class numbers; PartyMember.Class is a
-        // class name — resolve via the active set's Classes table.
-        CastDirector.SetClassResolver(SpellCatalog.ResolveClassName);
+        // Party-buff plan (Party window) — the dynamic list of buff slots the
+        // party-bless path casts, read live so a Party-window edit takes effect at once.
+        CastDirector.SetPartyBuffSource(() => Profile.Current?.PartyBuffs);
+        // Room-presence gate for single-target party buffs: a member is only blessed
+        // when they're both in the party AND in the room. Backed by the live
+        // room-occupant list (RoomEntityClassifier), matched by given name.
+        CastDirector.SetRoomPresenceCheck(IsGivenNameInRoom);
         // A party-wide buff (Spells.Targets = Full / Divided Party Area) is
         // cast once for the whole party; the picker checks this to skip the
         // per-member loop.
@@ -5154,7 +5160,16 @@ public sealed class AppServices
         // blocks every automatic heal/cure/bless, the latter suppresses a
         // legitimate recast (report paradigm-20260824-012300).
         RoomTracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
-        RoomTracker.PlayerDeathObserved += () => CastDirector.ResetBuffTracking();
+        // Our death wipes only OUR buffs — clear the self timers; party members stayed
+        // alive, so their buff timers we hold are kept (don't re-bless them because we
+        // died). A party MEMBER's death wipes THEIR buffs — clear the timers we hold on
+        // that name ("<Name> has died." also fires for mobs, but that's a no-op since we
+        // hold no timer for them).
+        RoomTracker.PlayerDeathObserved += () => CastDirector.ClearSelfBuffTracking();
+        Router.Subscribe(Services.Patterns.KnownPatterns.PartyMemberDied, r =>
+        {
+            if (r.Groups.Count > 0) CastDirector.ClearMemberBuffTimers(r.Groups[0]);
+        });
 
         // Death drops us from the party server-side — a follower is removed, a
         // leader's party disbands. PlayerDroppedGate already clears our roster on the
@@ -5794,9 +5809,30 @@ public sealed class AppServices
     {
         if (string.IsNullOrWhiteSpace(castCode)) return false;
         string target = castCode.Trim();
+        // #item-cast slot: the item casts a spell on `use`, so classify by that
+        // spell's Targets scope (a whole-party item cast blankets everyone in one use).
+        if (Game.Spells.ItemCastToken.IsToken(target))
+            return Spellbook.IsTokenWholeParty(target);
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
             if (string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase))
                 return s.Targets is 10 or 13;
+        return false;
+    }
+
+    // True when a player with the given name is listed in the live "Also here:"
+    // (RoomEntityClassifier). Case-insensitive on the resolved given name. This is NOT
+    // a party-buff cast gate — party membership already means same room; it's only used
+    // to CLEAR a hidden-target back-off when the member reappears in Also-here (a member
+    // absent from Also-here but present in 'par' is simply hiding — including the leader
+    // we follow, who never appears there). Null observation ⇒ not listed.
+    private bool IsGivenNameInRoom(string givenName)
+    {
+        string g = givenName.Trim();
+        if (RoomClassifier?.Current?.Entities is not { } entities) return false;
+        foreach (Game.Combat.RoomEntity e in entities)
+            if (e.Kind == Game.Combat.EntityKind.Player
+                && string.Equals(e.ResolvedName, g, StringComparison.OrdinalIgnoreCase))
+                return true;
         return false;
     }
 
@@ -5813,7 +5849,6 @@ public sealed class AppServices
         if (!PartyState.IsInParty) return map;
 
         Models.Profile.SpellsSettings spells = Resolver.Resolve<Models.Profile.SpellsSettings>("Spells");
-        Models.Profile.PartySettings party = Resolver.Resolve<Models.Profile.PartySettings>("Party");
 
         // Configured self-buffs → (cast code, spell number). #item-cast tokens resolve to
         // no spell and are skipped (an item buff isn't a RemovesSpell target).
@@ -5831,9 +5866,11 @@ public sealed class AppServices
         AddSelf(spells.WhenMaFullSpell);
         if (selfBuffs.Count == 0) return map;
 
-        foreach (Models.Profile.PartyBlessSlot pslot in party.BlessSlots)
+        if (Profile.Current?.PartyBuffs is not { } buffs) return map;
+        foreach (Models.Profile.PartyBuffSlot pslot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
+            if (!pslot.WholePartyOn) continue;             // toggled off → not cast → can't cover
             if (!IsPartyWideBuff(pslot.Spell)) continue;   // a single-target party buff never covers self
             HashSet<int> removed = RemovedSpellNumbers(pslot.Spell);
             if (removed.Count == 0) continue;

@@ -162,52 +162,30 @@ public sealed class PartySettings
     // default. Consumed by the party-bless path in Game.Spells.CastingDirector.
     public bool BlessDuringCombat { get; set; }
 
-    // ----- Party bless slots ----------------------------------------
+    // Party bless SLOTS moved out of here: they're now a dynamic, per-target
+    // buff plan on CharacterProfile.PartyBuffs (see Models/Profile/PartyBuffSettings.cs),
+    // configured live in the Party window rather than on the Settings → Party tab.
+    // The two gates above (BlessWhileResting / BlessDuringCombat) stay here — the
+    // Settings tab keeps them and Game.Spells.CastingDirector reads them from here.
 
-    // Up to 10 beneficial-spell slots cast on OTHER party members. Each slot
-    // pairs a spell short-code with the set of class numbers it applies to — a
-    // member receives the buff only when their class number is listed. Cast as
-    // <short> <given-name> (e.g. bles raijin). Row order is priority order; the
-    // party-bless path in Game.Spells.CastingDirector walks self buffs first,
-    // then these party slots top-to-bottom. Slots with no spell short are
-    // skipped. Always 10 entries so the UI rows bind one-to-one; empty trailing
-    // slots persist as blanks.
-    public List<PartyBlessSlot> BlessSlots { get; set; } = NewBlessSlots();
+    // ----- Party window layout --------------------------------------
 
-    // Builds a fresh list of 10 empty bless slots.
-    public static List<PartyBlessSlot> NewBlessSlots()
-    {
-        List<PartyBlessSlot> slots = new(PartyBlessSlotCount);
-        for (int i = 0; i < PartyBlessSlotCount; i++)
-            slots.Add(new PartyBlessSlot());
-        return slots;
-    }
-
-    // Fixed number of party-bless slots shown in the UI.
-    public const int PartyBlessSlotCount = 10;
+    // Where the Party window docks its Party Buffs panel relative to the member
+    // list: to the Right (default), Below, or to the Left. Purely a layout
+    // preference; PartyViewModel translates it to the panel's DockPanel.Dock + size.
+    public PartyBuffAnchor PartyBuffAnchor { get; set; } = PartyBuffAnchor.Right;
 
     // Party-cure pickers ship in a follow-up commit — they need
     // per-member condition tracking, deferred until the spellbook
     // gamedata duration model lands.
 }
 
-// One party-bless slot: a beneficial spell plus the class numbers it targets. A
-// party member gets the buff only when their class number is in ClassNumbers.
-// Mutable DTO so the Settings → Party UI can two-way bind each row.
-public sealed class PartyBlessSlot
+// Where the Party Buffs panel sits in the Party window.
+public enum PartyBuffAnchor
 {
-    // 4-letter spell short-code (e.g. bles), or null/empty for an unused slot.
-    public string? Spell { get; set; }
-
-    // Class numbers (from Classes.json) this buff applies to. Empty means the
-    // slot targets no one.
-    public List<int> ClassNumbers { get; set; } = new();
-
-    // Recast lead in seconds: how far before this buff's tracked expiry the
-    // CastingDirector recasts it on its party target. 0 = wait for actual expiry
-    // (a wear-off / the tracked timer running out). Defaults to the shared
-    // DefaultBlessRecastMarginSec.
-    public int RecastMarginSec { get; set; } = SpellsSettings.DefaultBlessRecastMarginSec;
+    Right,
+    Below,
+    Left,
 }
 
 // Local character's combat rank within a party.

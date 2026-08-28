@@ -15,11 +15,15 @@ namespace MudPlay.ViewModels;
 // runtime bounds probe; the outline always bounds exactly the real bar.
 public sealed partial class BuffWatchdogRowViewModel : ObservableObject
 {
-    // Identity used to match a timer snapshot entry: the 4-letter cast code (or the
-    // #item-cast token). Self rows match a snapshot whose Target is ""; party rows
-    // match any member timer for this code (the soonest is chosen by the parent VM).
+    // Identity used to match a timer snapshot entry. CastCode is the 4-letter cast
+    // code (or the #item-cast token). MemberKey is the timer's target: "" for a self
+    // row or a whole-party party buff (one cast, keyed to self, lands on everyone),
+    // or a member's lower-cased given name for a single-target party buff — those get
+    // ONE ROW PER MEMBER, each tracking that member's own recast timer.
     public string CastCode { get; }
+    public string MemberKey { get; }
     public bool IsParty { get; }
+    public bool IsWholeParty { get; }
 
     [ObservableProperty] private string _name;
     [ObservableProperty] private string _targetText;
@@ -37,15 +41,22 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // When set, a configured party buff supersedes this self-buff (RemovesSpell) while
     // in a party, so we don't self-cast it — the row shows "covered by <code>".
     [ObservableProperty] private bool _isCovered;
+    // When set, this member is HIDING (a cast returned "You do not see <name> here!"),
+    // so the buff can't reach them until they reappear or we move.
+    [ObservableProperty] private bool _isHidden;
 
     private static GridLength Empty => new(0, GridUnitType.Star);
     private static GridLength Full => new(1, GridUnitType.Star);
     private static GridLength Star(double weight) => new(weight, GridUnitType.Star);
 
-    public BuffWatchdogRowViewModel(string castCode, bool isParty, string name, string targetText, bool isLearned)
+    public BuffWatchdogRowViewModel(
+        string castCode, bool isParty, string name, string targetText, bool isLearned,
+        bool isWholeParty = false, string memberKey = "")
     {
         CastCode = castCode;
         IsParty = isParty;
+        IsWholeParty = isWholeParty;
+        MemberKey = memberKey;
         _name = name;
         _targetText = targetText;
         _isLearned = isLearned;
@@ -54,8 +65,25 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // Recompute the bar from a live timer (null ⇒ the buff isn't up). now is UTC to
     // match CastingDirector's clock. A memberName (party rows) overrides TargetText;
     // coveredBy (self rows) names a party buff that supersedes this self-buff.
-    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null)
+    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null, bool hidden = false)
     {
+        if (hidden)
+        {
+            // Member is hiding — the buff can't target them. Empty bar, labelled so.
+            IsHidden = true;
+            IsActive = false;
+            IsCovered = false;
+            InRecastWindow = false;
+            FillStar = Empty;
+            FillRestStar = Full;
+            ShowRecastMarker = false;
+            MarkerStar = Empty;
+            MarkerRestStar = Full;
+            TimeText = "hidden — can't target";
+            return;
+        }
+        IsHidden = false;
+
         if (coveredBy is { Length: > 0 })
         {
             // Superseded by a party-wide party buff — we don't self-cast it; the party

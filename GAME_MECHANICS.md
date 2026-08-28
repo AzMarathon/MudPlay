@@ -981,6 +981,19 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   - the character is **teleported to the graveyard room** appropriate to the **map** they died on.
 - Graveyard rooms are **per-map**; two known graveyards are **`1/2189`** (map 1, room 2189) and
   **`16/542`** (map 16, room 542).
+- **[CONFIRMED]** *(2026-08-28, user)* **Death wipes ALL magical effects on the character** — every
+  buff and debuff is removed. Consequence for a buff-maintaining automation: on **our own** death,
+  clear the timers for **our self-buffs** (they're gone) but **keep** the timers we hold on party
+  members (they didn't die — still buffed); on a **party member's** death (the `<Name> has died.`
+  line), clear the timers we hold **on that member** (their buffs are gone). Distinct from a
+  buff-strip room (which dispels on entry) — this is the death event doing it.
+- **[CONFIRMED]** *(2026-08-28, user)* **When WE (the caster) disconnect, only OUR OWN buffs are in
+  doubt.** The other party members stayed **online**, so their buffs kept **counting down in real
+  time** the whole time we were gone — their absolute expiry doesn't move. So on reconnect: clear our
+  self-buff timers (re-establish fresh), and **leave party-member timers at their real (absolute)
+  expiry** — they now read the correctly reduced remaining (any that lapsed while we were away recast).
+  Do **not** shift party timers forward by the offline gap (the old "freeze + preserve remaining"
+  model over-counted them).
 
 **Death fully clears all effects** *([CONFIRMED] 2026-08-09, user)*
 - Death **wipes every ailment, status effect, buff, and debuff** off the character — poison, disease,
@@ -2568,6 +2581,11 @@ fresh `@level` lands ≥ 10.)
 ## Party
 
 - **[CONFIRMED]** Party size: minimum 2, maximum 6.
+- **[CONFIRMED]** *(2026-08-28, user)* **Party members are always co-located — a party is a single room.** If a name shows in `par`, they are in your room, full stop. So the correct "is this member reachable?" gate is *party membership* (`par`), **not** the room's `Also here:` line.
+- **[CONFIRMED]** *(2026-08-28, user — report `stock-20260828-124347` + scrollback)* **A party member may be absent from `Also here:` for two reasons, neither meaning they left the room:**
+  1. **The leader you're FOLLOWING is never listed in `Also here:`** — the game prints `You are following <leader>.` as a separate status line instead, and `Also here:` shows only the *other* occupants. Reciprocal: when **you** lead, your followers **do** appear in your `Also here:` (you follow no one).
+  2. **A member who is HIDING** is removed from `Also here:` (see Stealth). They're still in the room and in `par`.
+- **[CONFIRMED]** *(2026-08-28, user + screenshot)* **The only time a targeted cast on a party member misses is when that member is HIDING.** The server answers **`You do not see <name> here!`** (and they aren't in `Also here:`). Automation handling: don't pre-gate single-target party casts on `Also here:` (it wrongly skips the followed leader and any hidden member) — attempt on party membership, and if `You do not see <name> here!` comes back, back that member off until you **move** or they **reappear in `Also here:`** (they unhid), rather than re-firing — and the failure — every round.
 - **[CONFIRMED]** Losing the leader disbands the whole party — whether the leader **disconnects or
   dies**. No grace-window auto-invite for a lost leader; on the leader's own death the party is gone
   by the time they respawn in the graveyard.
@@ -2914,15 +2932,25 @@ glass jug               5               2 gold crowns
   instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
   (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
   the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
-- **[user 2026-08-17] Party-buff slots are party-only, and a superseding party buff covers self.**
-  The party-bless slots are cast **only while in a party** (`PartyState.IsInParty`); solo, none fire —
-  self-buffs come from the self-bless slots. A **single-target** party buff is cast per class-matched
-  member and **never targets self** (self uses the self-slots); only a **party-wide** buff (`Spells.Targets`
-  = Full/Divided Party Area, scope 13/10) lands on self. **Supersession:** a spell that carries **RemovesSpell
-  (Abil 122)** removes the named spell (the Spell Book renders it "Removes <spell>"). So when a configured
-  **party-wide** party buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop
-  self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff
-  "covered by <party buff>". Only party-wide covers count (a single-target party buff can't cover self).
+- **[user 2026-08-17 / 2026-08-28] Party-buff slots are party-only; scope splits whole-party vs
+  single-target; targeting is per-member (not class).**
+  The party-buff slots (`CharacterProfile.PartyBuffs`, configured in the Party window) are cast **only
+  while in a party** (`PartyState.IsInParty`); solo, none fire — self-buffs come from the self-bless slots.
+  **Scope classification** (confirmed against stock + Paradigm data), gated first on **`EnergyCost == 0`**
+  (a buff, not an attack):
+  - **`Spells.Targets` = 2** (Self or User) → a **single-target** beneficial buff cast on ONE other member
+    (`frenzy`, `divine favour`, `blood ritual`, `regeneration`). Never targets self (self uses the self-slots).
+  - **`Spells.Targets` = 10 / 13** (Divided / Full Party Area) → a **whole-party** buff, one cast with no
+    target that blankets the party (`chant`, `mass frenzy`, `unholy fanaticism`, `rejuvenating field`). Lands
+    on self too. Scope 0/1 (self-only), 4/8/9/12 (enemy), 7 (item) are NOT party buffs.
+  - Single-target targeting is by **selected member (given name), not class** — a slot blesses "all members"
+    or a checklist of specific players, and only fires for a name that is BOTH a current `par` party member
+    AND in the room (never casts at someone absent / uninvited / in another room).
+  - **Supersession:** a spell that carries **RemovesSpell (Abil 122)** removes the named spell (the Spell Book
+    renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g.
+    **chant removes bless**), in a party we stop self-casting the removed one and let the party buff cover us —
+    the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a
+    single-target party buff can't cover self).
 
 ## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
 

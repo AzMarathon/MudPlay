@@ -1,9 +1,6 @@
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
 using System.Text.Json;
 using Avalonia.Controls;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -12,9 +9,10 @@ using MudPlay.Views.Settings;
 namespace MudPlay.ViewModels.Settings;
 
 // "Party" tab — bespoke layout. Knobs that map onto live services (par poll
-// cadence, auto-invite reconnecting member, reset statistics on loop start);
-// the party-heal pickers + thresholds + AOE-member count, and the 10
-// party-bless slots, feed CastingDirector's party-cast path. Persists per
+// cadence, auto-invite reconnecting member, reset statistics on loop start); the
+// party-heal pickers + thresholds + AOE-member count feed CastingDirector's
+// party-cast path. Party BUFF slots moved to the Party window (see
+// CharacterProfile.PartyBuffs); only the two bless GATES stay here. Persists per
 // character as the "Party" entry in CharacterProfile.Settings.
 public sealed partial class PartySectionViewModel : SettingsSectionViewModel
 {
@@ -22,7 +20,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
 
     private readonly ProfileService _profile;
     private readonly Game.Spells.SpellbookState _spellbook;
-    private readonly GameDataCache _gameData;
     private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
@@ -68,6 +65,12 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _rankFront;
     [ObservableProperty] private bool _rankMid = true;
     [ObservableProperty] private bool _rankBack;
+
+    // Where the Party window docks its Party Buffs panel (layout-only preference).
+    [ObservableProperty] private PartyBuffAnchor _partyBuffAnchor = PartyBuffAnchor.Right;
+
+    public IReadOnlyList<PartyBuffAnchor> PartyBuffAnchorOptions { get; } =
+        new[] { PartyBuffAnchor.Right, PartyBuffAnchor.Below, PartyBuffAnchor.Left };
 
     // ----- @join nag escalation -----
     // Delay after the initial invite before the first @join. Range 1..60.
@@ -136,19 +139,11 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
 
     // ----- Party bless gating (consumed by CastingDirector) ----------
     // Two coarse gates the party-bless path honors before casting a
-    // beneficial spell on a member. Both default ON.
+    // beneficial spell on a member. Both default ON. The buff SLOTS these gate
+    // now live in the Party window (CharacterProfile.PartyBuffs); only the gates
+    // remain on this tab.
     [ObservableProperty] private bool _blessWhileResting = true;
     [ObservableProperty] private bool _blessDuringCombat = true;
-
-    // ----- Party bless slots (consumed by CastingDirector) -----------
-    // 10 fixed rows; each pairs a spell short-code with the set of class
-    // numbers it targets. Rebuilt from the active set's Classes table on
-    // load + ActiveSetChanged so the per-class checkboxes track whatever
-    // classes the imported gamedata defines.
-
-    // The 10 editable party-bless rows. Always 10 entries so the UI binds
-    // one-to-one with the persisted slots.
-    public ObservableCollection<PartyBlessSlotViewModel> BlessSlots { get; } = new();
 
     public PartySectionViewModel() : this(AppServices.Current.Profile) { }
 
@@ -157,17 +152,14 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         ArgumentNullException.ThrowIfNull(profile);
         _profile = profile;
         _spellbook = AppServices.Current.Spellbook;
-        _gameData = AppServices.Current.GameData;
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
         _spellbook.Changed += OnSpellbookChanged;
-        _gameData.ActiveSetChanged += OnActiveSetChanged;
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
             _spellbook.Changed -= OnSpellbookChanged;
-            _gameData.ActiveSetChanged -= OnActiveSetChanged;
         });
         _suppressDirty = true;
         LoadFromProfile();
@@ -175,12 +167,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     }
 
     private void OnSpellbookChanged() => OnPropertyChanged(nameof(SpellSuggestions));
-
-    // Class roster changed (game-data set swap) — rebuild the bless rows
-    // preserving the user's current spell + checked-class edits. Marshalled
-    // because the cache fires this from its load path.
-    private void OnActiveSetChanged(string? _) =>
-        Dispatcher.UIThread.Post(() => RebuildBlessSlots(SnapshotBlessSlots()));
 
     public override void Apply()
     {
@@ -216,12 +202,15 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
             HelpLeaderOpenDoors    = HelpLeaderOpenDoors,
             BlessWhileResting      = BlessWhileResting,
             BlessDuringCombat      = BlessDuringCombat,
-            BlessSlots             = SnapshotBlessSlots(),
+            PartyBuffAnchor        = PartyBuffAnchor,
         };
 
         profile.Settings ??= new();
         profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
         _profile.Save();
+        // Push the layout change to the live Party window (it re-reads the anchor
+        // from PartySettings on ProfileMutated).
+        _profile.NotifyMutated();
 
         // Push to live services so the user's edit takes effect without
         // requiring a profile-reload.
@@ -281,7 +270,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         HelpLeaderOpenDoors    = dto.HelpLeaderOpenDoors;
         BlessWhileResting      = dto.BlessWhileResting;
         BlessDuringCombat      = dto.BlessDuringCombat;
-        RebuildBlessSlots(NormalizeSlots(dto.BlessSlots));
+        PartyBuffAnchor        = dto.PartyBuffAnchor;
 
         // Mirror loaded settings into the live services so they reflect
         // the profile from first connection, not just after the user
@@ -291,69 +280,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
 
     private static string? NullIfBlank(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-
-    // ----- Bless-slot rebuild / snapshot -----------------------------
-
-    // Snapshot the current bless rows to persistable DTOs. Always 10 entries —
-    // falls back to fresh empties before any row VM has been built (e.g. when
-    // Apply runs with no profile UI).
-    private List<PartyBlessSlot> SnapshotBlessSlots() =>
-        BlessSlots.Count == 0
-            ? PartySettings.NewBlessSlots()
-            : BlessSlots.Select(s => s.ToDto()).ToList();
-
-    // Pad / trim a deserialized slot list to exactly 10 entries so the UI always
-    // renders the full set even if an older profile stored fewer.
-    private static List<PartyBlessSlot> NormalizeSlots(List<PartyBlessSlot>? slots)
-    {
-        List<PartyBlessSlot> result = new(PartySettings.PartyBlessSlotCount);
-        for (int i = 0; i < PartySettings.PartyBlessSlotCount; i++)
-            result.Add(slots is not null && i < slots.Count ? slots[i] : new PartyBlessSlot());
-        return result;
-    }
-
-    // Rebuild the 10 row VMs against the active set's class roster, seeding each
-    // from slots. Suppresses dirty during the swap so a profile load / set swap
-    // doesn't mark the tab dirty.
-    private void RebuildBlessSlots(List<PartyBlessSlot> slots)
-    {
-        bool wasSuppressed = _suppressDirty;
-        _suppressDirty = true;
-        try
-        {
-            IReadOnlyList<(int Number, string Name)> classes = ReadClasses();
-            BlessSlots.Clear();
-            for (int i = 0; i < PartySettings.PartyBlessSlotCount; i++)
-                BlessSlots.Add(new PartyBlessSlotViewModel(i + 1, classes, slots[i], MarkDirty));
-        }
-        finally
-        {
-            _suppressDirty = wasSuppressed;
-        }
-    }
-
-    // Read the active set's Classes table as (Number, Name) pairs, ordered by
-    // Number. Empty when no set is loaded — the bless rows then render with no
-    // class checkboxes.
-    private IReadOnlyList<(int Number, string Name)> ReadClasses()
-    {
-        List<(int Number, string Name)> classes = new();
-        JsonDocument? doc = _gameData.GetRawTable("Classes");
-        if (doc is null) return classes;
-
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (!row.TryGetProperty("Number", out JsonElement numEl) ||
-                !numEl.TryGetInt32(out int number))
-                continue;
-            string name = row.TryGetProperty("Name", out JsonElement nameEl)
-                ? nameEl.GetString() ?? $"Class {number}"
-                : $"Class {number}";
-            classes.Add((number, name));
-        }
-        classes.Sort(static (a, b) => a.Number.CompareTo(b.Number));
-        return classes;
-    }
 
     private PartySettings ReadOrDefault()
     {
@@ -412,6 +338,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     partial void OnRankFrontChanged(bool value)                 => MarkDirty();
     partial void OnRankMidChanged(bool value)                   => MarkDirty();
     partial void OnRankBackChanged(bool value)                  => MarkDirty();
+    partial void OnPartyBuffAnchorChanged(PartyBuffAnchor value)=> MarkDirty();
     partial void OnJoinNagInitialDelaySecChanged(int value)     => MarkDirty();
     partial void OnJoinNagFrequencySecChanged(int value)        => MarkDirty();
     partial void OnJoinNagMaxTotalSecChanged(int value)         => MarkDirty();

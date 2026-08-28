@@ -106,11 +106,19 @@
                             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                     BorderThickness="0,0,0,1"
                                     Padding="6,4">
-                                <!-- Full-width bar: the light-green frame bounds it, the
+                                <!-- ✕ clears this timer (only while a timer is up); then the
+                                     full-width bar: the light-green frame bounds it, the
                                      star-weighted fill fills the elapsed fraction, and the
                                      recast marker sits on the fill/rest boundary. Name + time
                                      read left-aligned over the dark-green interior. -->
-                                <Border Classes="BuffBarFrame">
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="4">
+                                    <Button Grid.Column="0" Content="✕" Width="18" Height="18"
+                                            Padding="0" FontSize="10" VerticalAlignment="Center"
+                                            IsVisible="{Binding IsActive}"
+                                            ToolTip.Tip="Clear this buff timer (mark it off)"
+                                            Command="{Binding $parent[ItemsControl].((vm:BuffWatchdogViewModel)DataContext).ClearTimerCommand}"
+                                            CommandParameter="{Binding}"/>
+                                    <Border Grid.Column="1" Classes="BuffBarFrame">
                                     <Grid Height="20" Background="#FF1B2A1D" ClipToBounds="True">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -139,7 +147,8 @@
                                                        Text="{Binding TimeText}"/>
                                         </StackPanel>
                                     </Grid>
-                                </Border>
+                                    </Border>
+                                </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -157,7 +166,14 @@
                             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                     BorderThickness="0,0,0,1"
                                     Padding="6,4">
-                                <StackPanel VerticalAlignment="Center">
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="4">
+                                <Button Grid.Column="0" Content="✕" Width="18" Height="18"
+                                        Padding="0" FontSize="10" VerticalAlignment="Top"
+                                        IsVisible="{Binding IsActive}"
+                                        ToolTip.Tip="Clear this buff timer (mark it off)"
+                                        Command="{Binding $parent[ItemsControl].((vm:BuffWatchdogViewModel)DataContext).ClearTimerCommand}"
+                                        CommandParameter="{Binding}"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <Border Classes="BuffBarFrame">
                                         <Grid Height="20" Background="#FF1B2A1D" ClipToBounds="True">
                                             <Grid>
@@ -193,6 +209,7 @@
                                                Margin="2,1,0,0"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
                                 </StackPanel>
+                                </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

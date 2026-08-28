@@ -572,7 +572,8 @@ public static class BugReportBuilder
         });
 
         int partyBless = 0;
-        Group("Party bless", party.BlessSlots.Select(s => ($"party-bless {++partyBless}", s.Spell)));
+        if (svc.Profile.Current?.PartyBuffs is { } partyBuffs)
+            Group("Party bless", partyBuffs.Slots.Select(s => ($"party-bless {++partyBless}", s.Spell)));
 
         if (shown == 0) sb.Append("_(no spells configured)_\n");
         return sb.ToString();
