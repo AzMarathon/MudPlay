@@ -1523,6 +1523,56 @@ public sealed class CombatManagerSpellsTests
     }
 
     [Fact]
+    public void AoeMultiKill_AllListedHostilesDead_DropsRosterImmediately()
+    {
+        // Report -081208: an AoE that wipes the whole room used to leave the combat
+        // gate held until the 6s idle-stall watchdog — the empty re-display carries no
+        // "Also here:" line, so the classifier fired no observation. When this round's
+        // kills account for EVERY listed hostile, drop the roster now (an empty
+        // observation) so the gate can release on the CR round-trip instead of 6s.
+        using Harness h = new();
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 1 };
+        h.AddMonster(1, "scorpion crab");
+        h.AddMonster(2, "ironshell crab");
+
+        h.Feed("Also here: scorpion crab, ironshell crab.");   // engage; 2 hostiles listed
+
+        int lastMonsterCount = -1;
+        h.Classifier.EntitiesObserved += o =>
+            lastMonsterCount = o.Entities.Count(e => e.Kind == EntityKind.Monster);
+
+        // The AoE kills both this round → two exp gains == the whole listed roster.
+        h.Feed("You gain 100 experience.");
+        h.Feed("You gain 100 experience.");
+
+        Assert.Equal(0, lastMonsterCount);   // roster dropped to empty → gate can release now
+    }
+
+    [Fact]
+    public void AoeMultiKill_SurvivorRemains_DoesNotDropRoster()
+    {
+        // Two exp gains but THREE listed hostiles → a survivor remains, so the roster
+        // is NOT dropped early (the CR re-parse handles it); the gate must not release
+        // over a live mob.
+        using Harness h = new();
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 1 };
+        h.AddMonster(1, "scorpion crab");
+        h.AddMonster(2, "ironshell crab");
+        h.AddMonster(3, "giant crab");
+
+        h.Feed("Also here: scorpion crab, ironshell crab, giant crab.");   // 3 hostiles
+
+        int lastMonsterCount = 99;
+        h.Classifier.EntitiesObserved += o =>
+            lastMonsterCount = o.Entities.Count(e => e.Kind == EntityKind.Monster);
+
+        h.Feed("You gain 100 experience.");
+        h.Feed("You gain 100 experience.");   // 2 kills < 3 listed → survivor
+
+        Assert.NotEqual(0, lastMonsterCount);   // roster NOT wiped to empty (no premature clear)
+    }
+
+    [Fact]
     public void PreAttackDebuff_DefersToHigherPrioritySurvivalCast()
     {
         using Harness h = new();

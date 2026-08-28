@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.29.5**
-> - Combat (life-drain slot): the drain now **releases at the trigger** — fires each round while HP is at/under the "Heal when ≤ HP" mark and stops the instant HP recovers above it, instead of a band that pinned to 100% HP and drained you to full
-> - Combat (life-drain slot): the drain's **Max casts is a clean per-target cap** (resets on target swap) and is **uncapped by default**, so left blank it keeps healing you every round while hurt (a saved cap of 1 was making it drain once then fall through to the normal attack)
+> **Version 3.29.6**
+> - Combat: an AoE that **wipes the whole room** no longer leaves a ~6s pause before the next action — when the round's kills account for every hostile the room lists, the stale roster is dropped immediately so movement / loot / rest resume on the CR round-trip (~1s) instead of the post-combat idle-stall watchdog. A partial kill still waits until any survivor is confirmed gone
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
