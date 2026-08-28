@@ -4,8 +4,9 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.32.0
 
-- Game Data menu: new **Modify avoid rooms…** editor listing your avoid rooms and stash rooms together, tagged by type with map/room and name
+- Game Data menu: new **Modify avoid/stash rooms…** editor listing your avoid rooms and stash rooms together, tagged by type with map/room and name
 - Quick-add a room by type + map/room number, remove selected rows (multi-select), Save to apply or Cancel to discard
+- Navigation Management → Go To tab: each saved room now shows its map/room number after the name
 
 ## 3.31.3
 

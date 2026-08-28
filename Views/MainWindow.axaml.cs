@@ -279,7 +279,7 @@ public partial class MainWindow : Window
         });
         GameDataMenu.Items.Add(new MenuItem
         {
-            Header  = "Modify avoid rooms…",
+            Header  = "Modify avoid/stash rooms…",
             Command = vm.OpenAvoidRoomsEditorCommand,
         });
     }

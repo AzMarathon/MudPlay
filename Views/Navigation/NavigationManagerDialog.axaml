@@ -546,7 +546,7 @@
                                                                    Foreground="{StaticResource AccentAmberBrush}"
                                                                    ToolTip.Tip="In the right-click Favorites menu"/>
                                                         <TextBlock Grid.Column="1"
-                                                                   Text="{Binding Label}"
+                                                                   Text="{Binding LabelWithKey}"
                                                                    VerticalAlignment="Center"
                                                                    Foreground="{StaticResource ChromeFgBrush}"
                                                                    TextTrimming="CharacterEllipsis"/>
