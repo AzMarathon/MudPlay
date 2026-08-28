@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.29.11**
-> - Navigation: the top status line now says **why** an engine is held, folded right into the one line — e.g. *"Looping Ring - step 4 of 12 on lap 3 — resting (low HP)"* or *"Walking to (12/431) Tower — party asked to wait"* (the state chip already shows Fighting / Paused, so those aren't repeated on the line). A route that's queued but not moving names its hold (a common one: **auto-engines off**), and every movement gate that used to show a raw internal name now reads in plain English
-> - Navigation: loop and Auto-Lair **failures now surface their reason** instead of going silent — a blocked loop names the door / winch / hidden exit + room, and an Auto-Lair whose approach keeps failing shows *"retrying: …"*
-> - Navigation: the **"Lost — couldn't recover"** dialog now names the last room the engine was sure of, so you have a concrete place to right-click **"I am here"**
+> **Version 3.30.0**
+> - Navigation: the **Choose a route** picker gains a **Show steps…** button — click a route, then Show steps to see the full start-to-finish command sequence it will execute, every **detour** included (a lever pulled in another room, a winch cranked, a door opened), each shown as `12/431 Tower < s` (the room you're in, then the command sent). A gate the route must **buy/ask/hunt** an item to pass shows as its own step. It's the same expansion the walker runs, so what you read is what it does
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

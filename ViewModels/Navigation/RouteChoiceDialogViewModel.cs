@@ -104,8 +104,26 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(IsFreeSelected))]
     [NotifyPropertyChangedFor(nameof(IsGatedSelected))]
     [NotifyPropertyChangedFor(nameof(IsSendItSelected))]
+    [NotifyPropertyChangedFor(nameof(CurrentStepRows))]
+    [NotifyPropertyChangedFor(nameof(HasStepRows))]
+    [NotifyPropertyChangedFor(nameof(CanShowSteps))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
     private RouteChoiceResult? _selectedRoute;
+
+    // The full start-to-finish command sequence for each route (moves, lever/winch/
+    // door detours, and acquire steps), surfaced by the Show-steps flyout. Free
+    // traces the gate-free line; the two gated choices share the same physical route.
+    private readonly IReadOnlyList<RouteStepRow> _freeSteps;
+    private readonly IReadOnlyList<RouteStepRow> _gatedSteps;
+
+    public IReadOnlyList<RouteStepRow> CurrentStepRows =>
+        SelectedRoute == RouteChoiceResult.Free ? _freeSteps : _gatedSteps;
+
+    public bool HasStepRows => CurrentStepRows.Count > 0;
+
+    // The Show-steps button lights up once a route is picked and there's a sequence
+    // to show — clicking it opens the flyout listing that route's full step plan.
+    public bool CanShowSteps => SelectedRoute is not null && HasStepRows;
 
     public bool IsFreeSelected => SelectedRoute == RouteChoiceResult.Free;
     public bool IsGatedSelected => SelectedRoute == RouteChoiceResult.Gated;
@@ -120,10 +138,15 @@ public sealed partial class RouteChoiceDialogViewModel
         Func<int, string?>? dropNameForItem = null,
         TimeSpan freeEta = default,
         TimeSpan gatedEta = default,
-        string? hazardCounterSource = null)
+        string? hazardCounterSource = null,
+        IReadOnlyList<RouteStepRow>? freeSteps = null,
+        IReadOnlyList<RouteStepRow>? gatedSteps = null)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
+
+        _freeSteps = freeSteps ?? Array.Empty<RouteStepRow>();
+        _gatedSteps = gatedSteps ?? Array.Empty<RouteStepRow>();
 
         IsTeleportChoice = choice.Kind == RouteChoiceKind.Teleport;
         IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;

@@ -385,20 +385,36 @@ public static class RouteChoicePlanner
         IReadOnlyList<Direction> gated)
     {
         var reqs = new List<RouteRequirement>();
-        RoomKey cur = source;
+        foreach ((_, _, RouteRequirement req) in PositionedGates(graph, filter, source, gated))
+            if (!AlreadyHave(reqs, req)) reqs.Add(req);
+        return reqs;
+    }
 
+    // Every still-blocked hop on a direction path, WITH its position — the room it's
+    // crossed from and the direction — so the route step list can drop an acquire
+    // row at exactly the hop that needs it. Undeduped (a re-crossed gate lists twice;
+    // the step list announces it once). The positional twin of CollectRequirements.
+    public static IReadOnlyList<(RoomKey Room, Direction Dir, RouteRequirement Requirement)> PositionedGates(
+        RoomGraphManager graph,
+        MovementFilter filter,
+        RoomKey source,
+        IReadOnlyList<Direction> gated)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(gated);
+
+        var gates = new List<(RoomKey, Direction, RouteRequirement)>();
+        RoomKey cur = source;
         foreach (Direction dir in gated)
         {
             Room? room = graph.GetRoom(cur);
             if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
-
-            if (filter.IsExitBlocked(in exit) && Classify(filter, in exit) is { } req && !AlreadyHave(reqs, req))
-                reqs.Add(req);
-
+            if (filter.IsExitBlocked(in exit) && Classify(filter, in exit) is { } req)
+                gates.Add((cur, dir, req));
             cur = exit.Target;
         }
-
-        return reqs;
+        return gates;
     }
 
     private static RouteRequirement? Classify(MovementFilter filter, in RoomExit exit) => exit.Hint switch
