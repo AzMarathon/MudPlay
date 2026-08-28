@@ -221,6 +221,24 @@
                         </StackPanel>
                     </Border>
 
+                    <Border Classes="Group" IsVisible="{Binding HasObservations}">
+                        <StackPanel Spacing="6">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Classes="Group" Text="Your Observations"
+                                           ToolTip.Tip="What this character has actually seen happen in combat against this monster — kept separate from the game-data facts above."/>
+                                <Button Grid.Column="1" Content="Clear" Command="{Binding ClearObservationsCommand}"
+                                        ToolTip.Tip="Clear all recorded observations for every monster (not just this one)."/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding ObservationLines}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Classes="DetailLine" Text="{Binding}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
                     <Border Classes="Group" IsVisible="{Binding AttackRows.Count}">
                         <StackPanel>
                             <TextBlock Classes="Group" Text="Attacks"/>

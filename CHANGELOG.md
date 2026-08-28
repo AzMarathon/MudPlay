@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.36.0
+
+- Monster Intel: new **Your Observations** section — a per-character log of actual combat outcomes seen against a monster, kept visibly separate from the game-data facts elsewhere in the window
+- Tracks landed-hit damage extent/average, hit rate, and confirmed "no effect" discoveries (physical Magical-requirement gate, spell SpellImmunity gate); persists per character
+- Deliberately doesn't attempt to infer a "resisted" cast from a low damage roll — no wire line distinguishes the two, so only the confirmed no-effect case is tracked
+
 ## 3.35.3
 
 - Monster Intel: new context bar — shows every monster in your current room as clickable chips and your current combat target's name

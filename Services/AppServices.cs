@@ -861,6 +861,13 @@ public sealed class AppServices
     // on the loaded profile.
     public Game.PlayerSightingTracker PlayerSightings { get; private set; } = null!;
 
+    // Per-character log of actual combat outcomes observed against specific
+    // monsters — landed/whiffed swing damage extent and confirmed "no effect"
+    // (Magical / SpellImmunity gate) discoveries. Feeds Monster Intel's "Your
+    // Observations" section, kept visibly separate from MonsterCatalog's
+    // authoritative MDB facts. Persists on the loaded profile.
+    public Game.Combat.MonsterObservationTracker MonsterObservations { get; private set; } = null!;
+
     // Owns PlayerState.InCombat and
     // the Game.Map.MovementCoordinator.CombatGate hold
     // state. Cleared automatically when the room is free of
@@ -4363,6 +4370,11 @@ public sealed class AppServices
             selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
         RoomClassifier.EntitiesObserved += PlayerSightings.NoteAlsoHere;
         RoomEntry.ArrivalObserved += PlayerSightings.NoteArrival;
+        // Monster Intel's "Your Observations" — subscribes to the same fixed
+        // combat-line patterns CombatSessionTracker does, attributed per
+        // monster instead of session-wide; persists on the loaded profile.
+        MonsterObservations = new Game.Combat.MonsterObservationTracker(
+            Router, RoomClassifier, () => Combat.CurrentTarget, Profile);
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The

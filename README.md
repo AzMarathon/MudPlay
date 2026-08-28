@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.35.3**
-> - Monster Intel: new context bar — shows every monster in your current room as clickable chips and your current combat target's name
-> - **Follow target** (on by default) auto-selects whatever you're currently fighting as it changes targets mid-fight
-> - **Pin** holds the detail panel (or an in-progress comparison) steady, ignoring target changes
+> **Version 3.36.0**
+> - Monster Intel: new **Your Observations** section — a per-character log of actual combat outcomes seen against a monster, kept visibly separate from the game-data facts elsewhere in the window
+> - Tracks landed-hit damage extent/average, hit rate, and confirmed "no effect" discoveries (physical Magical-requirement gate, spell SpellImmunity gate); persists per character
+> - Deliberately doesn't attempt to infer a "resisted" cast from a low damage roll — no wire line distinguishes the two, so only the confirmed no-effect case is tracked
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

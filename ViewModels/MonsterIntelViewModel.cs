@@ -22,13 +22,15 @@ namespace MudPlay.ViewModels;
 
 // Modeless "Monster Intel" window — a searchable master list over
 // MonsterCatalog with a per-monster detail panel (Overview / Elemental
-// defenses / Attacks / Loot & locations / Automation / Your Matchup) and a
-// multi-select side-by-side comparison view. Phases 1-4 of the Monster Intel
-// plan complete: read-only reference, the existing per-monster automation
-// overlay editor relocated here, a live-character-aware matchup preview
-// (weapon eligibility, ranked spell effectiveness, incoming elemental
-// threat), monster-vs-monster comparison, and a context bar that follows the
-// current room's roster and combat target (pin to hold the detail steady).
+// defenses / Attacks / Loot & locations / Automation / Your Matchup / Your
+// Observations) and a multi-select side-by-side comparison view. Phases 1-5
+// of the Monster Intel plan complete: read-only reference, the existing
+// per-monster automation overlay editor relocated here, a live-character-
+// aware matchup preview (weapon eligibility, ranked spell effectiveness,
+// incoming elemental threat), monster-vs-monster comparison, a context bar
+// that follows the current room's roster and combat target (pin to hold the
+// detail steady), and a per-character log of actual combat outcomes this
+// character has observed against the selected monster.
 public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposable
 {
     private readonly GameDataCache _gameData;
@@ -43,6 +45,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly ItemMagicIndex? _itemMagic;
     private readonly RoomEntityClassifier? _roomClassifier;
     private readonly CombatManager? _combat;
+    private readonly MonsterObservationTracker? _observations;
     private readonly IReadOnlyList<MonsterIntelEntry> _all;
     private readonly Dictionary<int, MonsterIntelEntry> _byNumber;
     private readonly Dictionary<int, string> _itemNames;
@@ -90,7 +93,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         MonsterOverlaySeedStore? overlaySeed = null, RoomGraphManager? roomGraph = null,
         PlayerStats? stats = null, InventoryManager? inventory = null,
         SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null,
-        RoomEntityClassifier? roomClassifier = null, CombatManager? combat = null)
+        RoomEntityClassifier? roomClassifier = null, CombatManager? combat = null,
+        MonsterObservationTracker? observations = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -106,6 +110,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _itemMagic = itemMagic;
         _roomClassifier = roomClassifier;
         _combat = combat;
+        _observations = observations;
 
         _all = MonsterIntelEntry.BuildCatalog(catalog);
         _byNumber = _all.ToDictionary(e => e.Number);
@@ -131,6 +136,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             _targetPoll.Tick += (_, _) => PollCombatTarget();
             _targetPoll.Start();
         }
+
+        if (_observations is not null) _observations.Changed += OnObservationsChanged;
     }
 
     public void Dispose()
@@ -139,6 +146,15 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _disposed = true;
         _targetPoll?.Stop();
         if (_roomClassifier is not null) _roomClassifier.EntitiesObserved -= OnEntitiesObserved;
+        if (_observations is not null) _observations.Changed -= OnObservationsChanged;
+    }
+
+    // Live-refresh the observation lines while a monster's detail panel is
+    // open and a swing/no-effect line arrives for it — so a fight you're
+    // watching updates without reselecting the row.
+    private void OnObservationsChanged()
+    {
+        if (SelectedEntry is { } entry) RebuildObservations(entry.Number);
     }
 
     // ----- context bar (Phase 4: follow the current room/target) -----
@@ -268,6 +284,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     public ObservableCollection<string> IncomingThreatLines { get; } = new();
     [ObservableProperty] private bool _hasMatchupContext;
 
+    // ----- Your Observations (Phase 5 — actual combat outcomes this
+    // character has seen against the selected monster; blank until at least
+    // one has been recorded) -----
+    public ObservableCollection<string> ObservationLines { get; } = new();
+    [ObservableProperty] private bool _hasObservations;
+
     private void RebuildDetail()
     {
         OverviewLines.Clear();
@@ -280,6 +302,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         MatchupLines.Clear();
         SpellEffectiveness.Clear();
         IncomingThreatLines.Clear();
+        ObservationLines.Clear();
+        HasObservations = false;
         HasSelection = SelectedEntry is not null;
         if (SelectedEntry is not { } entry) return;
         MonsterCatalogEntry m = entry.Source;
@@ -321,7 +345,36 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         RebuildAutomationSummary(m.Number);
         RebuildYourMatchup(m);
+        RebuildObservations(m.Number);
     }
+
+    // Renders MonsterObservationTracker's per-monster record, if any, as plain
+    // display lines — deliberately its own group in the detail panel, never
+    // merged into Overview/Attacks, so it stays visibly "what I've actually
+    // seen" rather than "what the MDB says." Blank when no tracker was wired
+    // in or nothing's been observed against this monster yet.
+    private void RebuildObservations(int monsterNumber)
+    {
+        if (_observations?.For(monsterNumber) is not { } o) return;
+        HasObservations = true;
+
+        if (o.HitCount > 0)
+            ObservationLines.Add(
+                $"Landed hits: {o.HitCount}, {o.HitDamageMin}-{o.HitDamageMax} dmg (avg {o.AvgHitDamage:0.#})");
+        if (o.SwingCount > 0)
+            ObservationLines.Add($"Hit rate: {o.HitRatePercent:0.#}% ({o.HitCount}/{o.SwingCount} swings)");
+        if (o.PhysicalNoEffectCount > 0)
+            ObservationLines.Add(
+                $"Physical attacks had no effect {o.PhysicalNoEffectCount}x — your weapon/fists aren't magical enough for this monster");
+        if (o.SpellNoEffectCount > 0)
+            ObservationLines.Add(
+                $"Spells had no effect {o.SpellNoEffectCount}x — blocked by this monster's spell immunity");
+        ObservationLines.Add(
+            $"First observed {o.FirstObservedAt:g}, last {o.LastObservedAt:g}");
+    }
+
+    [RelayCommand]
+    private void ClearObservations() => _observations?.Clear();
 
     // Live-character matchup preview (Phase 3). Deliberately does NOT
     // reproduce the Calculators tab's melee hit%/DPS engine (weapon swing
