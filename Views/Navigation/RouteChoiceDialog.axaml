@@ -27,10 +27,52 @@
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
         <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="12">
-            <TextBlock Grid.Row="0"
-                       Text="{Binding Heading}"
-                       FontSize="13" FontWeight="SemiBold"
-                       Foreground="{StaticResource ChromeFgBrush}"/>
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Heading}"
+                           VerticalAlignment="Center"
+                           FontSize="13" FontWeight="SemiBold"
+                           Foreground="{StaticResource ChromeFgBrush}"/>
+                <!-- Show steps: enabled once a route is picked. Opens a flyout with
+                     the full start-to-finish command sequence for the selected
+                     route — detours and item-acquisitions included. Placed top-right
+                     with Placement="Right" so the flyout opens to the RIGHT of the
+                     dialog and never overlays the route cards. -->
+                <Button Grid.Column="1"
+                        Content="Show steps…"
+                        IsEnabled="{Binding CanShowSteps}"
+                        FontSize="11" Padding="8,4">
+                    <Button.Flyout>
+                        <Flyout Placement="Right">
+                            <Border MaxWidth="440" Padding="4">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Full step plan (detours and buys included)"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
+                                    <ScrollViewer MaxHeight="340"
+                                                  HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding CurrentStepRows}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:RouteStepRow">
+                                                    <TextBlock Text="{Binding Line}"
+                                                               Classes.acquire="{Binding IsAcquire}"
+                                                               FontFamily="{StaticResource FontMono}"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource ChromeFgBrush}"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <TextBlock Text="◆ marks a step that detours to buy/ask/hunt an item before crossing that room's gate — the walk to the shop is planned when the run gets there."
+                                               FontSize="10" TextWrapping="Wrap" MaxWidth="420"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
 
             <StackPanel Grid.Row="1" Spacing="10" VerticalAlignment="Center">
                 <Button Classes="route"
@@ -93,55 +135,18 @@
                        TextWrapping="Wrap"
                        Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
-            <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto,Auto">
-                <!-- Show steps: enabled once a route is picked; opens a flyout with
-                     the full start-to-finish command sequence for that route,
-                     detours and item-acquisitions included. -->
-                <Button Grid.Column="0"
-                        Content="Show steps…"
-                        IsEnabled="{Binding CanShowSteps}"
-                        MinWidth="90">
-                    <Button.Flyout>
-                        <Flyout Placement="Top">
-                            <Border MaxWidth="440" Padding="4">
-                                <StackPanel Spacing="6">
-                                    <TextBlock Text="Full step plan (detours and buys included)"
-                                               FontSize="11" FontWeight="SemiBold"
-                                               Foreground="{StaticResource ChromeFgBrush}"/>
-                                    <ScrollViewer MaxHeight="340"
-                                                  HorizontalScrollBarVisibility="Auto"
-                                                  VerticalScrollBarVisibility="Auto">
-                                        <ItemsControl ItemsSource="{Binding CurrentStepRows}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:RouteStepRow">
-                                                    <TextBlock Text="{Binding Line}"
-                                                               Classes.acquire="{Binding IsAcquire}"
-                                                               FontFamily="{StaticResource FontMono}"
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource ChromeFgBrush}"/>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
-                                    <TextBlock Text="Item buys are fetched automatically when the run reaches the gate; the walk to the shop is planned then."
-                                               FontSize="10" TextWrapping="Wrap" MaxWidth="420"
-                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                </StackPanel>
-                            </Border>
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-
-                <Button Grid.Column="2"
-                        Content="Cancel"
+            <StackPanel Grid.Row="3"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Spacing="8">
+                <Button Content="Cancel"
                         Command="{Binding CancelCommand}"
-                        IsCancel="True" MinWidth="80" Margin="0,0,8,0"/>
-                <Button Grid.Column="3"
-                        Content="Go"
+                        IsCancel="True" MinWidth="80"/>
+                <Button Content="Go"
                         Command="{Binding GoCommand}"
                         IsDefault="True" MinWidth="80"
                         Classes="accent"/>
-            </Grid>
+            </StackPanel>
         </Grid>
     </Border>
 </Window>

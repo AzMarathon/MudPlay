@@ -11,11 +11,12 @@ namespace MudPlay.ViewModels.Navigation;
 // unlocks rather than fabricated hop-by-hop.
 public sealed record RouteStepRow(int Number, string Location, string Command, bool IsAcquire = false)
 {
-    // "1> 13/497 Rugged Shoreline < s" for a move/detour; an acquire row reads
-    // "3> acquire a raft — buy at General Store" (no wire "<", it's a fetch, not a
-    // move). The one-line form the Show-steps flyout renders.
+    // "1> 13/497 Rugged Shoreline < s" for a move/detour. An acquire row is marked
+    // with a ◆ and names the room the obtain happens at, so you can see exactly
+    // which step in the plan detours to fetch an item:
+    // "3> ◆ 13/498 Sea Cavern — obtain a raft (buy at General Store)".
     public string Line => IsAcquire
-        ? $"{Number}> {Location} — {Command}"
+        ? $"{Number}> ◆ {Location} — {Command}"
         : $"{Number}> {Location} < {Command}";
 }
 
@@ -63,10 +64,17 @@ public static class RouteStepList
                 {
                     if (stop.Room.Equals(current) && stop.Dir == move.Direction
                         && announced.Add(stop.Requirement))
+                    {
+                        // The acquire step is marked at the room the run detours FROM
+                        // to fetch the item — the gate room the walker stands in when
+                        // it needs it (== current, the room before this crossing).
+                        string items = ItemsLabel(stop.Requirement, itemName);
+                        string command = obtainSource(stop.Requirement) is { Length: > 0 } src
+                            ? $"obtain {items} ({src})"
+                            : $"obtain {items} first";
                         rows.Add(new RouteStepRow(
-                            ++n, $"acquire {ItemsLabel(stop.Requirement, itemName)}",
-                            obtainSource(stop.Requirement) ?? "get it before crossing",
-                            IsAcquire: true));
+                            ++n, LocationLabel(current, roomName), command, IsAcquire: true));
+                    }
                 }
             }
 

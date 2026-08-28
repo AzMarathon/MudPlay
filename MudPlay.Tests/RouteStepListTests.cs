@@ -61,7 +61,9 @@ public sealed class RouteStepListTests
 
         Assert.Collection(rows,
             r => Assert.Equal("s", r.Command),
-            r => { Assert.True(r.IsAcquire); Assert.Equal("acquire a raft", r.Location); Assert.Equal("buy at General Store", r.Command); },
+            // The acquire row is marked at the gate room it detours from, and its
+            // ◆-marked Line names the item + source.
+            r => { Assert.True(r.IsAcquire); Assert.Equal("13/498 Sea Cavern", r.Location); Assert.Equal("obtain a raft (buy at General Store)", r.Command); Assert.Contains("◆", r.Line); },
             r => { Assert.False(r.IsAcquire); Assert.Equal("13/498 Sea Cavern", r.Location); Assert.Equal("e", r.Command); });
         // Numbered continuously, acquire row included.
         Assert.Equal(new[] { 1, 2, 3 }, rows.Select(r => r.Number));
