@@ -41,10 +41,58 @@
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
-        <Grid RowDefinitions="Auto,*">
+        <Grid RowDefinitions="Auto,Auto,*">
+
+            <!-- ===== Character bar: who you are, right now ===== -->
+            <Border Grid.Row="0" Classes="Group" Margin="0,0,0,10" IsVisible="{Binding HasCharacterContext}">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="28">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Classes="FieldLabel" Text="Character"/>
+                        <TextBlock Classes="DetailLine">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0} — Level {1} {2}">
+                                    <Binding Path="Stats.Name"/>
+                                    <Binding Path="Stats.Level"/>
+                                    <Binding Path="Stats.Class"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Classes="FieldLabel" Text="HP"/>
+                        <TextBlock Classes="DetailLine">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0}/{1}">
+                                    <Binding Path="Live.Hp"/>
+                                    <Binding Path="Live.MaxHp"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Classes="FieldLabel" Text="{Binding ManaLabel}"/>
+                        <TextBlock Classes="DetailLine">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0}/{1}">
+                                    <Binding Path="Live.Ma"/>
+                                    <Binding Path="Live.MaxMa"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel Grid.Column="3">
+                        <TextBlock Classes="FieldLabel" Text="Weapon"/>
+                        <TextBlock Classes="DetailLine" Text="{Binding WeaponSummaryText}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="4">
+                        <TextBlock Classes="FieldLabel" Text="Known attack spells"/>
+                        <TextBlock Classes="DetailLine" Text="{Binding KnownAttackSpellCount}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
 
             <!-- ===== Context bar: current room roster + combat target ===== -->
-            <Border Grid.Row="0" Classes="Group" Margin="0,0,0,10" IsVisible="{Binding HasContextBar}">
+            <Border Grid.Row="1" Classes="Group" Margin="0,0,0,10" IsVisible="{Binding HasContextBar}">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="*,Auto,Auto">
                         <TextBlock Grid.Column="0" Classes="FieldLabel" VerticalAlignment="Center">
@@ -76,10 +124,10 @@
                 </StackPanel>
             </Border>
 
-            <Grid Grid.Row="1" x:Name="PanesGrid" ColumnDefinitions="1.5*,6,*">
+            <Grid Grid.Row="2" x:Name="PanesGrid" ColumnDefinitions="1.5*,6,*">
 
             <!-- ===== Left: searchable master list ===== -->
-            <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,12,0">
+            <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*" Margin="0,0,12,0">
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
                     <TextBox Grid.Column="0" Classes="clearable" Text="{Binding NameFilter, Mode=TwoWay}"
                              PlaceholderText="Filter by name…"/>
@@ -89,7 +137,15 @@
                     <Button Grid.Column="2" Content="Close" Command="{Binding CloseCommand}" Margin="8,0,0,0"/>
                 </Grid>
 
-                <DataGrid Grid.Row="1" x:Name="MonsterGrid" ItemsSource="{Binding RowsView}"
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="14" Margin="0,0,0,8"
+                            IsVisible="{Binding HasCharacterContext}">
+                    <CheckBox Content="Hittable" IsChecked="{Binding HittableOnly, Mode=TwoWay}"
+                              ToolTip.Tip="Only show monsters your currently-equipped weapon is magical enough to hit physically."/>
+                    <CheckBox Content="Castable" IsChecked="{Binding CastableOnly, Mode=TwoWay}"
+                              ToolTip.Tip="Only show monsters where at least one of your known attack spells clears their spell immunity."/>
+                </StackPanel>
+
+                <DataGrid Grid.Row="2" x:Name="MonsterGrid" ItemsSource="{Binding RowsView}"
                           SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
                           SelectionMode="Extended" SelectionChanged="OnMonsterGridSelectionChanged"
                           AutoGenerateColumns="False" IsReadOnly="True"

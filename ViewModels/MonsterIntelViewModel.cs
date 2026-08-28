@@ -20,15 +20,18 @@ using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels;
 
-// Modeless "Monster Intel" window — a searchable master list over
-// MonsterCatalog with a per-monster detail panel (Overview / Elemental
-// defenses / Attacks / Loot & locations / Automation / Your Matchup / Your
-// Observations) and a multi-select side-by-side comparison view. Phases 1-5
-// of the Monster Intel plan complete: read-only reference, the existing
-// per-monster automation overlay editor relocated here, a live-character-
-// aware matchup preview (weapon eligibility, ranked spell effectiveness,
-// incoming elemental threat), monster-vs-monster comparison, a context bar
-// that follows the current room's roster and combat target (pin to hold the
+// Modeless "Monster Intel" window — character-centric: a persistent
+// character bar (level, live HP/mana, weapon HitMagic, known attack-spell
+// count) sits above a searchable master list over MonsterCatalog that can be
+// narrowed to what THIS character can actually fight (Hittable / Castable
+// filters), with a per-monster detail panel (Overview / Elemental defenses /
+// Attacks / Loot & locations / Automation / Your Matchup / Your Observations)
+// and a multi-select side-by-side comparison view. Phases 1-5 of the Monster
+// Intel plan complete: read-only reference, the existing per-monster
+// automation overlay editor relocated here, a live-character-aware matchup
+// preview (weapon eligibility, ranked spell effectiveness, incoming
+// elemental threat), monster-vs-monster comparison, a context bar that
+// follows the current room's roster and combat target (pin to hold the
 // detail steady), and a per-character log of actual combat outcomes this
 // character has observed against the selected monster.
 public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposable
@@ -40,6 +43,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly MonsterOverlaySeedStore? _overlaySeed;
     private readonly RoomGraphManager? _roomGraph;
     private readonly PlayerStats? _stats;
+    private readonly PlayerState? _playerState;
     private readonly InventoryManager? _inventory;
     private readonly SpellbookState? _spellbook;
     private readonly ItemMagicIndex? _itemMagic;
@@ -51,6 +55,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly Dictionary<int, string> _itemNames;
     private readonly Dictionary<int, int> _spellAttType;
     private readonly DispatcherTimer? _targetPoll;
+    private readonly bool _hasCharacterContext;
+    private readonly List<PlayerAttackSpell> _ownedAttackSpells = new();
+    private int _weaponHitMagic;
+    private int _maxKnownAttackSpellReqLevel = -1;
     private IReadOnlyList<RoomEntity> _lastRoomEntities = Array.Empty<RoomEntity>();
     private bool _disposed;
 
@@ -94,7 +102,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         PlayerStats? stats = null, InventoryManager? inventory = null,
         SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null,
         RoomEntityClassifier? roomClassifier = null, CombatManager? combat = null,
-        MonsterObservationTracker? observations = null)
+        MonsterObservationTracker? observations = null, PlayerState? playerState = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -105,12 +113,15 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _overlaySeed = overlaySeed;
         _roomGraph = roomGraph;
         _stats = stats;
+        _playerState = playerState;
         _inventory = inventory;
         _spellbook = spellbook;
         _itemMagic = itemMagic;
         _roomClassifier = roomClassifier;
         _combat = combat;
         _observations = observations;
+        _hasCharacterContext = _stats is not null && _inventory is not null
+            && _spellbook is not null && _itemMagic is not null;
 
         _all = MonsterIntelEntry.BuildCatalog(catalog);
         _byNumber = _all.ToDictionary(e => e.Number);
@@ -120,7 +131,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(NameFilter)) { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
+            if (e.PropertyName is nameof(NameFilter) or nameof(HittableOnly) or nameof(CastableOnly))
+            { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
             else if (e.PropertyName == nameof(SelectedEntry)) RebuildDetail();
         };
 
@@ -138,6 +150,19 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         }
 
         if (_observations is not null) _observations.Changed += OnObservationsChanged;
+
+        if (_hasCharacterContext)
+        {
+            RebuildCharacterCapabilities();
+            _inventory!.Changed += OnCharacterCapabilitiesChanged;
+            _spellbook!.Changed += OnCharacterCapabilitiesChanged;
+        }
+
+        if (_playerState is not null)
+        {
+            _playerState.PropertyChanged += OnPlayerStateChanged;
+            UpdateManaLabel();
+        }
     }
 
     public void Dispose()
@@ -147,6 +172,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _targetPoll?.Stop();
         if (_roomClassifier is not null) _roomClassifier.EntitiesObserved -= OnEntitiesObserved;
         if (_observations is not null) _observations.Changed -= OnObservationsChanged;
+        if (_hasCharacterContext)
+        {
+            _inventory!.Changed -= OnCharacterCapabilitiesChanged;
+            _spellbook!.Changed -= OnCharacterCapabilitiesChanged;
+        }
+        if (_playerState is not null) _playerState.PropertyChanged -= OnPlayerStateChanged;
     }
 
     // Live-refresh the observation lines while a monster's detail panel is
@@ -156,6 +187,67 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     {
         if (SelectedEntry is { } entry) RebuildObservations(entry.Number);
     }
+
+    // ----- character bar (who am I, right now) -----
+    // PlayerStats (Name/Level/Class) is stat-command-refreshed identity data;
+    // PlayerState (Live) carries the per-prompt live Hp/MaxHp/Ma/MaxMa — bound
+    // directly in XAML since both are ObservableObject, so the bar tracks HP
+    // ticks and level-ups without any VM-side polling.
+    public PlayerStats? Stats => _stats;
+    public PlayerState? Live => _playerState;
+    public bool HasCharacterContext => _hasCharacterContext;
+    [ObservableProperty] private string _manaLabel = "Mana";
+    [ObservableProperty] private string? _weaponSummaryText;
+    [ObservableProperty] private int _knownAttackSpellCount;
+
+    // ----- character-aware list filters -----
+    [ObservableProperty] private bool _hittableOnly;
+    [ObservableProperty] private bool _castableOnly;
+
+    // Recomputes weapon HitMagic + the owned-attack-spell set the Hittable /
+    // Castable filters and Your Matchup both read. Called once at startup and
+    // again whenever gear or the spellbook changes, so a mid-session weapon
+    // swap or a newly-obtained spell updates the character bar and re-filters
+    // the list without reselecting a monster.
+    private void RebuildCharacterCapabilities()
+    {
+        IReadOnlyList<EquippedItem> worn = _inventory!.Snapshot.EquippedItems;
+        string? weaponName = worn.FirstOrDefault(w => w.Slot == "Weapon Hand").Name;
+        _weaponHitMagic = string.IsNullOrEmpty(weaponName) ? 0 : _itemMagic!.HitMagic(weaponName);
+        WeaponSummaryText = string.IsNullOrEmpty(weaponName)
+            ? "No weapon equipped"
+            : $"{weaponName} (HitMagic {_weaponHitMagic})";
+
+        _ownedAttackSpells.Clear();
+        foreach (KnownSpell known in _spellbook!.Available)
+        {
+            if (!_spellbook.IsObtained(known.Number)) continue;
+            long maxDmg = SpellCalculator.MaxDamage(known.Formula, _stats!.Level);
+            if (maxDmg <= 0) continue;   // not an attack spell
+            int attType = _spellAttType.TryGetValue(known.Number, out int at) ? at : -1;
+            _ownedAttackSpells.Add(new PlayerAttackSpell(
+                known.Name, known.Short, known.ReqLevel, attType,
+                maxDmg, SpellCalculator.ManaCost(known.Formula)));
+        }
+        KnownAttackSpellCount = _ownedAttackSpells.Count;
+        _maxKnownAttackSpellReqLevel = _ownedAttackSpells.Count > 0
+            ? _ownedAttackSpells.Max(s => s.ReqLevel) : -1;
+    }
+
+    private void OnCharacterCapabilitiesChanged()
+    {
+        RebuildCharacterCapabilities();
+        RowsView.Refresh();
+        OnPropertyChanged(nameof(CountText));
+        if (SelectedEntry is not null) RebuildDetail();
+    }
+
+    private void OnPlayerStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PlayerState.ManaType)) UpdateManaLabel();
+    }
+
+    private void UpdateManaLabel() => ManaLabel = _playerState?.ManaType == ManaType.Kai ? "Kai" : "Mana";
 
     // ----- context bar (Phase 4: follow the current room/target) -----
 
@@ -232,8 +324,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private bool PassesFilter(object o)
     {
         if (o is not MonsterIntelEntry e) return false;
-        return string.IsNullOrWhiteSpace(NameFilter)
-            || e.Name.Contains(NameFilter, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(NameFilter)
+            && !e.Name.Contains(NameFilter, StringComparison.OrdinalIgnoreCase)) return false;
+        if (HittableOnly && e.Magical > _weaponHitMagic) return false;
+        if (CastableOnly && _maxKnownAttackSpellReqLevel < e.Source.SpellImmunity) return false;
+        return true;
     }
 
     private static Dictionary<int, string> BuildItemNames(GameDataCache cache)
@@ -387,18 +482,15 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // (e.g. no profile loaded).
     private void RebuildYourMatchup(MonsterCatalogEntry m)
     {
-        HasMatchupContext = _stats is not null && _inventory is not null
-            && _spellbook is not null && _itemMagic is not null;
+        HasMatchupContext = _hasCharacterContext;
         if (!HasMatchupContext) return;
 
         IReadOnlyList<EquippedItem> worn = _inventory!.Snapshot.EquippedItems;
-        string? weaponName = worn.FirstOrDefault(w => w.Slot == "Weapon Hand").Name;
-        int weaponHitMagic = string.IsNullOrEmpty(weaponName) ? 0 : _itemMagic!.HitMagic(weaponName);
-        bool canHitPhysically = MonsterMatchupCalculatorSpells.WeaponMeetsMagical(weaponHitMagic, m.Magical);
+        bool canHitPhysically = MonsterMatchupCalculatorSpells.WeaponMeetsMagical(_weaponHitMagic, m.Magical);
         MatchupLines.Add(m.Magical > 0
-            ? $"Weapon HitMagic {weaponHitMagic} vs required {m.Magical}: "
+            ? $"Weapon HitMagic {_weaponHitMagic} vs required {m.Magical}: "
               + (canHitPhysically ? "you can hit it physically" : "your weapon is NOT magical enough to hit it")
-            : $"Weapon HitMagic {weaponHitMagic}: no magical requirement, any weapon hits");
+            : $"Weapon HitMagic {_weaponHitMagic}: no magical requirement, any weapon hits");
 
         EquipmentStatBreakdown playerGear = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
         IReadOnlyDictionary<int, int> playerResists = new Dictionary<int, int>
@@ -419,19 +511,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 : $"{element}: your gear resists {myResist:+0;-0}%");
         }
 
-        List<PlayerAttackSpell> attackSpells = new();
-        foreach (KnownSpell known in _spellbook!.Available)
-        {
-            if (!_spellbook.IsObtained(known.Number)) continue;
-            long maxDmg = SpellCalculator.MaxDamage(known.Formula, _stats!.Level);
-            if (maxDmg <= 0) continue;   // not an attack spell
-            int attType = _spellAttType.TryGetValue(known.Number, out int at) ? at : -1;
-            attackSpells.Add(new PlayerAttackSpell(
-                known.Name, known.Short, known.ReqLevel, attType,
-                maxDmg, SpellCalculator.ManaCost(known.Formula)));
-        }
         foreach (SpellEffectivenessResult r in MonsterMatchupCalculatorSpells.RankAttackSpells(
-            attackSpells, m.SpellImmunity, m.ElementalResists))
+            _ownedAttackSpells, m.SpellImmunity, m.ElementalResists))
             SpellEffectiveness.Add(r);
     }
 

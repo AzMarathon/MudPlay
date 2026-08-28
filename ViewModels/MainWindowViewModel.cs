@@ -4436,7 +4436,7 @@ public partial class MainWindowViewModel : ObservableObject
                 svc.GameData, svc.MonsterCatalog, svc.Dialogs, svc.Resolver,
                 svc.MonsterOverlaySeed, svc.RoomGraph,
                 svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic,
-                svc.RoomClassifier, svc.Combat, svc.MonsterObservations),
+                svc.RoomClassifier, svc.Combat, svc.MonsterObservations, svc.PlayerState),
         };
         window.Closed += (_, _) => _monsterIntel = null;
         _monsterIntel = window;
