@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.29.11
+
+- Navigation: the top status line now says **why** an engine is held, folded right into the one line — e.g. *"Looping Ring - step 4 of 12 on lap 3 — resting (low HP)"* or *"Walking to (12/431) Tower — party asked to wait"* (the state chip already shows Fighting / Paused, so those aren't repeated on the line). A route that's **queued but not moving** names its hold (a common one: **auto-engines off (Auto-All)**), and every movement gate that used to show a raw internal name now reads in plain English
+- Navigation: loop and Auto-Lair **failures now surface their reason** instead of going silent — a blocked loop names the door / winch / hidden exit + room, and an Auto-Lair whose approach keeps failing shows *"retrying: …"* rather than sitting on a mute "Approaching"
+- Navigation: the **"Lost — couldn't recover"** dialog now names the last room the engine was sure of, so you have a concrete place to right-click **"I am here"**
+
 ## 3.29.9
 
 - Windows: panel windows now snap **flush** to each other instead of leaving a small gap — the snap accounts for the invisible resize border Windows includes in a window's frame (Linux/macOS were already flush and are unchanged)

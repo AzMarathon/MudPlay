@@ -1564,7 +1564,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     private async void ShowLostRecoveryDialogAsync(Game.Map.RecoveryFailedEvent e)
     {
-        var vm = new ViewModels.Navigation.LostRecoveryDialogViewModel(e.EngineName, e.Detail);
+        var vm = new ViewModels.Navigation.LostRecoveryDialogViewModel(e.EngineName, e.Detail, e.LastGoodRoom);
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.Navigation.LostRecoveryDialogViewModel, bool>(vm);
     }

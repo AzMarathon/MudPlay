@@ -93,6 +93,14 @@ public sealed class AutoLairManager : IDisposable
     // Latest scheduler decision the controller is acting on. Null in Idle.
     public LairDecision? LastDecision { get; private set; }
 
+    // The most recent walker failure while approaching a lair, or null once the
+    // approach makes progress again. Auto-Lair retries a failed approach on its
+    // timer indefinitely (the lair may just be temporarily walled by a fight or a
+    // hazard), so this lets the nav status say WHY it's stuck retrying instead of
+    // sitting on a silent "Approaching". Surfaced via the VM's AutoLairStatusText,
+    // which its 1 s tick refreshes.
+    public string? LastWalkerFailure { get; private set; }
+
     // Latched entry-arrival instant for the current Waiting cycle. Set
     // once on Approaching→Waiting (and on the "already at wait-room"
     // short-circuit) and NOT recomputed on every scheduler tick — doing
@@ -665,6 +673,7 @@ public sealed class AutoLairManager : IDisposable
         switch (evt.Kind)
         {
             case WalkEventKind.Finished:
+                LastWalkerFailure = null;   // arrived → approach is no longer stuck
                 // The walker landed on its destination. Branch on phase.
                 if (Phase == AutoLairPhase.Approaching && CurrentTarget is { } target)
                 {
@@ -690,8 +699,13 @@ public sealed class AutoLairManager : IDisposable
 
             case WalkEventKind.Failed:
                 _log?.Warn("AutoLair", $"walker failed: {evt.Detail}");
+                LastWalkerFailure = evt.Detail;   // surfaced on the nav status while we retry
                 _retryTimer.Stop();
                 _retryTimer.Start();
+                break;
+
+            case WalkEventKind.StepCompleted:
+                LastWalkerFailure = null;   // the approach is moving again
                 break;
 
             case WalkEventKind.Stopped:

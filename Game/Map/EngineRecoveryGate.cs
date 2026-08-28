@@ -706,9 +706,10 @@ public sealed class EngineRecoveryGate
         // reading _engine.Name after the abort would NullReference. This is
         // deterministic re-entrancy, not a thread race.
         string engineName = _engine.Name;
+        RoomKey? lastGood = _anchor;
         // Stay in tier 3 visually; engine aborts; UI pops the dialog.
         _engine.AbortFromRecoveryFailure(detail);
-        RecoveryFailed?.Invoke(new RecoveryFailedEvent(engineName, detail));
+        RecoveryFailed?.Invoke(new RecoveryFailedEvent(engineName, detail, lastGood));
     }
 
     // ----- matcher delegates -----------------------------------------
@@ -776,5 +777,8 @@ public enum TierLevel
 // Payload of EngineRecoveryGate.TierChanged.
 public readonly record struct RecoveryTierChangedEvent(TierLevel Previous, TierLevel Current, string Reason);
 
-// Payload of EngineRecoveryGate.RecoveryFailed.
-public readonly record struct RecoveryFailedEvent(string EngineName, string Detail);
+// Payload of EngineRecoveryGate.RecoveryFailed. LastGoodRoom is the anchor the
+// backtrack started from — the last room the tracker was confident about — so the
+// Lost dialog can point the user at a concrete "you were here" spot instead of a
+// bare "couldn't recover".
+public readonly record struct RecoveryFailedEvent(string EngineName, string Detail, RoomKey? LastGoodRoom);
