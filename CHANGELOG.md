@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.31.0
+
+- Item Finder: the trial-set panel is now **Gear Finder**, and **Find Best searches whatever the results grid currently shows** instead of the whole catalog — so "best AC in Leather" for a plate-capable class is finally possible by narrowing Armour Type first (leave the filters default and it searches everything, as before)
+- Item Finder: Find Best's criterion dropdown gained many options (AC/DR combo, Dodge, Magic Resist, ShockShield, VileWard, backstab, the three martial-arts strikes, Thievery, and more), each with a matching results-grid column; a new **Effective AC vs Evil** criterion scores `AC + Prot-Evil` (Prot-Evil is a confirmed 1 AC/point vs evil monsters). VileWard is shown as the item's raw value — its AC scaling with the wearer's own evil isn't modelled
+- Item Finder: a **search order** — chain several criteria (e.g. VileWard, then AC, then Spellcasting) via "+ Add to search order"; Find Best resolves them highest-priority-first, each pass only filling slots the earlier ones left unresolved
+- Item Finder: a **Target weight** dropdown (None/Light/Medium/Heavy) caps Find Best's picks so the projected loadout's encumbrance stays within the chosen band, using the live character's carry capacity
+- Item Finder: each slot dropdown option now shows its stat line on hover, not just the current pick
+
 ## 3.30.2
 
 - Toolbar buttons no longer steal keyboard focus — after clicking one, the **spacebar** (and every keystroke) goes to the terminal as before, instead of re-toggling the button
