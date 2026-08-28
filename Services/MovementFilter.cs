@@ -580,6 +580,32 @@ public sealed class MovementFilter : IRoomFilter
         StashChanged?.Invoke();
     }
 
+    // Replace both the avoided and stash sets in one shot and persist once.
+    // Used by the Modify-Avoid-Rooms dialog on Save — it stages the merged,
+    // type-tagged working copy locally and commits both sets together so Cancel
+    // can discard cleanly (mirrors RoomBlacklistStore.ReplaceAll). No-op when no
+    // profile is loaded. Fires both change events so the map recolours the
+    // affected cells.
+    public void ReplaceAll(IEnumerable<RoomKey> avoided, IEnumerable<RoomKey> stash)
+    {
+        ArgumentNullException.ThrowIfNull(avoided);
+        ArgumentNullException.ThrowIfNull(stash);
+        if (_profile.Current is not { } current) return;
+
+        _avoided.Clear();
+        _stash.Clear();
+        foreach (RoomKey k in avoided) _avoided.Add(k);
+        foreach (RoomKey k in stash) _stash.Add(k);
+
+        current.AvoidedRooms = _avoided.Select(k => new RoomRef(k.Map, k.Room)).ToList();
+        current.StashRooms   = _stash.Select(k => new RoomRef(k.Map, k.Room)).ToList();
+        _profile.Save();
+        _log?.Info("MovementFilter",
+            $"replaced sets: avoided({_avoided.Count}) stash({_stash.Count})");
+        AvoidedChanged?.Invoke();
+        StashChanged?.Invoke();
+    }
+
     private void OnProfileLoaded(CharacterProfile profile)
     {
         _avoided.Clear();

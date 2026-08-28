@@ -3776,6 +3776,18 @@ public partial class MainWindowViewModel : ObservableObject
             ViewModels.BlacklistEditorDialogViewModel, bool>(vm);
     }
 
+    // Game Data menu → "Modify avoid rooms…". Staged editor over the
+    // per-character avoided + stash room sets (both on MovementFilter). Save
+    // commits both sets + recolours the map; Cancel discards.
+    [RelayCommand]
+    private async Task OpenAvoidRoomsEditorAsync()
+    {
+        var svc = AppServices.Current;
+        ViewModels.AvoidRoomsEditorDialogViewModel vm = new(svc.Movement, svc.RoomGraph);
+        await svc.Dialogs.OpenWindowAsync<
+            ViewModels.AvoidRoomsEditorDialogViewModel, bool>(vm);
+    }
+
     // Game Data menu → "Manage Sets…". Immediate-action dialog: copy or
     // move a set's loop library into another set, or delete a set
     // (game-data tables + loops). A delete drops the set from the menu, so

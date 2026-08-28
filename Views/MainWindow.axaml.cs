@@ -277,5 +277,10 @@ public partial class MainWindow : Window
             Header  = "Modify Blacklist…",
             Command = vm.OpenBlacklistEditorCommand,
         });
+        GameDataMenu.Items.Add(new MenuItem
+        {
+            Header  = "Modify avoid rooms…",
+            Command = vm.OpenAvoidRoomsEditorCommand,
+        });
     }
 }
