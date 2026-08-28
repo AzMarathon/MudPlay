@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.35.0
+
+- New **Monster Intel** window (View menu, or the toolbar) — a searchable monster reference, one click away without leaving the client. For the first time, surfaces a monster's **elemental resistances/vulnerabilities** (Cold/Fire/Stone/Lightning/Water) and its **spell-immunity / hit-magic requirements** — data the auto-combat engine has always computed internally but never showed the player. Detail panel covers Overview, Elemental Defenses, Casts (what elements it can hit you with), Attacks, Loot, Locations, and an Automation tab that opens the existing per-monster overlay editor in place
+- New typed `MonsterCatalog` — the active game-data set's Monsters table parsed once into a shared typed model, foundation for Monster Intel and future consolidation of the half-dozen independent raw-JSON monster indexes already in the codebase
+
 ## 3.34.0
 
 - Party blessing overhaul: buff slots moved from Settings → Party into a live **Party Buffs** panel in the Party window — add/remove slots, pick a learned buff, set a per-slot recast timer
@@ -25,7 +30,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - The Party Buffs panel keeps its table layout when docked Below or Left (content pinned to its natural width instead of stretching across the window)
 - bug reports addressed: stock-20260828-104653, stock-20260828-113206, stock-20260828-124347
 
-
+## 3.33.0
 
 - Equipment Manager: a gear slot holding an item your character can't wear (alignment / level / class) is flagged red with a ⚠ and skipped on swaps, instead of the engine repeatedly bonking the game with a wear it refuses
 - Equipment Manager: when the game refuses a wear/wield ("You may not wear that item!" / "You may not use that weapon." — e.g. an alignment-drift EP-zap), the slot is blocked and a terminal notice tells you to adjust the set; change that slot to clear it

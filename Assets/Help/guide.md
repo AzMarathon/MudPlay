@@ -70,7 +70,7 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 - **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave. See **Tools & Diagnostics** for its filters and toggles.
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
-- **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
+- **Spell Book** (F2), **Monster Intel** (View menu, or the toolbar's *Monster Intel* button — no default hotkey), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, a monster reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Monster Intel under **Game Data**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
 
 The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
 
@@ -509,6 +509,22 @@ Values group with thousands separators. Unlike the live **Filter…** text box, 
 - The rest (Lairs, Races, Classes, and so on) are read-only reference.
 
 **Flavor Prefixes** is a small editor of its own in the *Tables + editors* list (not a double-click table). It's the vocabulary of adjectives the game prepends to a monster's name — *large*, *nasty*, *huge*, and so on. The room classifier strips a leading word in this list so "large giant rat" resolves to "giant rat" with no per-monster data. It starts from the built-in stock list and applies to the **active game-data set**, so a custom realm that uses different adjectives just adds them here (type a word → **Add**; **✕** removes one; **Reset to defaults** restores the built-ins). Edits save to that set immediately. If the classifier ever meets a prefixed name whose leading adjective isn't in the list, it flags a Program-Log row you can double-click to add the word in one click.
+
+## Monster Intel
+
+**Monster Intel** (View menu, or the toolbar's *Monster Intel* button) is a dedicated, searchable monster reference — a faster, more focused way to look up a monster than digging into the Game Data Browser's Monsters tab, and the one place that shows a monster's **elemental resistances and spell-immunity/hit-magic requirements**, which the auto-combat engine has always known internally but never showed you until now.
+
+The left list is filterable by name, with the same core stats as the Browser's Monsters tab (HP, Exp, AC/DR, Dodge, MR, Acc, Mag, Undead). Select a monster to fill the right-hand detail panel:
+
+- **Overview** — Exp (base × multiplier), HP and its regen tick, AC/DR, Magic Resist, Dodge, alignment, Undead/Non-living flags, and the two gates that decide whether you can even hurt it: **"Requires a weapon with HitMagic ≥ N"** and **"Immune to spells with ReqLevel < N."**
+- **Elemental Defenses** — each of the five elements (Cold, Fire, Stone, Lightning, Water) it resists or is vulnerable to, as a signed percentage, classified as *resists*, *vulnerable*, *immune* (exactly 100%), or *heals* (over 100% — the "damage" restores it). A monster with none listed carries no elemental resist ability at all.
+- **Casts** — which elements the monster's own attack spells and between-round spells deal, rolled up in one line, so you know what you're about to eat before you engage.
+- **Attacks** — every physical, spell, and rob attack slot with its chance, damage range or spell + level, accuracy, and energy cost, plus its between-round spells.
+- **Loot** — every item it drops, with drop chance where known.
+- **Locations** — where it's placed, assigned, or spawns, from its raw *Summoned By* record.
+- **Automation** — a summary of its current Relationship / Priority / overrides, with an **Edit Automation…** button that opens the same overlay editor the Browser's Monsters tab uses (see **Overriding a record** above) — so you can inspect a monster and configure how MudPlay handles it without leaving this window.
+
+Monster Intel is deliberately read-only reference for now — a live-character-aware "can I actually beat this thing" matchup preview and following your current room/target automatically are planned but not built yet; for a quick hit-chance/DPS estimate against a monster today, use the Player Workshop's **Calculators** tab.
 
 ---
 

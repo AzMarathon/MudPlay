@@ -1,21 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.34.0**
-> - Party blessing overhaul: buff slots moved from Settings → Party into a live **Party Buffs** panel in the Party window — add/remove slots, pick a learned buff, set a per-slot recast timer
-> - Whole-party buffs get a single on/off; single-target buffs bless **all members** or a checklist of specific players (targeting replaces the old per-class checkboxes)
-> - Single-target casts now fire only for a member who is **both in your party and in the room** — never at someone who left, was uninvited, or wandered off; targets persist by name across parties dissolving and reforming
-> - Party Buffs panel is an aligned grid: **＋ Add buff** opens a picker (spell + recast timer), then each slot is a row — ✎ edit / ⨯ remove at the left, a `bless - 15s` label, an All/On toggle, and a checkbox column per party member (names as headers); whole-party buffs read "Party Wide" across the columns
-> - A given party buff is one slot — a slotted spell drops out of the Add picker, so it can't be double-added (which was double-tracking its recast timer in the Buff Watchdog)
-> - Party Buffs can now be a **whole-party cast-on-use item** (e.g. a shimmering greatsword), auto-detected from the item's spell; the Buff Watchdog now shows whole-party and item party buffs too, and gives a single-target buff **one timer row per member**
-> - Checking a member for a buff queues the cast immediately; the buff panel hidden for a non-buffing class no longer leaves the window stuck wide
-> - Fixed: single-target party buffs now target by **party membership** (a MajorMUD party is always one room), not `Also here:` — which never lists the **leader you follow**, so their bless was silently skipped every round; a **hiding** member (cast returns "You do not see … here!") is backed off and shown **"hidden — can't target"**, retried on move / reappear. The panel also keeps its layout when docked Below or Left
-> - Fixed: unticking a member you've already blessed no longer hides their Buff Watchdog timer — the running buff's countdown stays until it expires
-> - Buff timers now track death & disconnect like the game: your death clears your self-buffs, a party member's death clears their timers, and on your disconnect the party's timers keep counting (they stayed online) while only your own reset
-> - Buff Watchdog: a **✕** on each live timer bar manually clears that buff timer
-> - Settings → Party keeps the *bless while resting / during combat* gates, plus a **Party Buffs panel position** option (Right / Below / Left)
-> - Fixed: the Party Buffs panel no longer appears for a class with no party-buff spells — a stray blank slot is pruned on load instead of forcing the panel open
-> - Fixed: the Game Data → Players list hid the wrong person when a profile was copied from another character (it now identifies "self" by the live `stat` name, not the stored profile name)
+> **Version 3.35.0**
+> - New Monster Intel window (View menu, or the toolbar) — a searchable monster reference showing elemental resistances/vulnerabilities and spell-immunity/hit-magic requirements for the first time, plus Overview, Casts, Attacks, Loot, Locations, and an Automation tab for the existing per-monster overlay editor
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -35,7 +22,7 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Cash & items** — automated loot collection with sell/buy/stash/discard engines, banking, and equipment sets with auto-equip triggers.
 - **Character Workshop** — a unified hub for character management and development: live stats; **Equipment Manager** gear sets; an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons; **CP allocation** plans; **level projection**; quest, boss, and death tracking (with boss respawn timers you can sync between clients); character-info calculators; and **Roomba** — an automated gang-house item sorter backed by a shared item-location log you can query in-game with `@roomba`.
 - **Automation tools** — macros, aliases, triggers, and events; auto-engine toggles with per-character base modes and reconnect reconciliation; a one-press all-off kill switch; and a Sprint mode.
-- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data.
+- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window gives a searchable monster reference — elemental resistances, spell-immunity/hit-magic requirements, attacks, loot, and locations — without digging into the Browser.
 - **Conversation & chat** — a dedicated conversation pane with per-channel filtering, search, logging, and history.
 - **Tools & diagnostics** — a timestamped full-ANSI scrollback with search/filter, a **Program Log**, **Session Stats**, a **Wire Inspector** for raw/classified stream inspection, and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES — IT CAPTURES FAR MORE THAN YOU CAN DESCRIBE OR SHOW IN A SCREENSHOT)***.
 - **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.

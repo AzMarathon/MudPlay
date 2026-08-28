@@ -19,6 +19,7 @@ public enum BuiltInAction
     OpenSettings,
     OpenGameDataBrowser,
     OpenWireInspector,
+    OpenMonsterIntel,
 
     // ---- Connection ----
     ToggleConnection,

@@ -1,0 +1,190 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:combat="using:MudPlay.Game.Combat"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="720"
+        x:Class="MudPlay.Views.MonsterIntelWindow"
+        x:DataType="vm:MonsterIntelViewModel"
+        Title="Monster Intel"
+        Width="1180" Height="720"
+        MinWidth="900" MinHeight="560"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.Group">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+        <Style Selector="Border.Group">
+            <Setter Property="Background" Value="{StaticResource ChromeBgElevBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+        <Style Selector="TextBlock.DetailLine">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="Margin" Value="0,1"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
+        <Grid ColumnDefinitions="440,*" ColumnSpacing="12">
+
+            <!-- ===== Left: searchable master list ===== -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+                    <TextBox Grid.Column="0" Classes="clearable" Text="{Binding NameFilter, Mode=TwoWay}"
+                             PlaceholderText="Filter by name…"/>
+                    <TextBlock Grid.Column="1" Text="{Binding CountText}" Margin="8,0,0,0"
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeSm}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="2" Content="Close" Command="{Binding CloseCommand}" Margin="8,0,0,0"/>
+                </Grid>
+
+                <DataGrid Grid.Row="1" ItemsSource="{Binding RowsView}"
+                          SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          GridLinesVisibility="Horizontal" CanUserSortColumns="True"
+                          Background="{StaticResource ChromeBgElevBrush}"
+                          BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name"   Binding="{ReflectionBinding Name}"          Width="*"   SortMemberPath="Name"/>
+                        <DataGridTextColumn Header="HP"     Binding="{ReflectionBinding HpText}"        Width="65"  SortMemberPath="Hp"/>
+                        <DataGridTextColumn Header="Exp"    Binding="{ReflectionBinding ExpText}"       Width="75"  SortMemberPath="Exp"/>
+                        <DataGridTextColumn Header="AC/DR"  Binding="{ReflectionBinding AcDrText}"      Width="60"/>
+                        <DataGridTextColumn Header="Dodge"  Binding="{ReflectionBinding DodgeText}"     Width="55"/>
+                        <DataGridTextColumn Header="MR"     Binding="{ReflectionBinding MagicResText}"  Width="45"/>
+                        <DataGridTextColumn Header="Acc"    Binding="{ReflectionBinding AccuracyText}"  Width="70"/>
+                        <DataGridTextColumn Header="Mag"    Binding="{ReflectionBinding MagicalText}"   Width="45"/>
+                        <DataGridTextColumn Header="Undead" Binding="{ReflectionBinding UndeadText}"    Width="55"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+
+            <!-- ===== Right: selected-monster detail ===== -->
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+              <Panel>
+                <StackPanel Spacing="0" IsVisible="{Binding HasSelection}">
+                    <TextBlock Text="{Binding SelectedEntry.Name}" FontSize="{StaticResource FontSizeLg}"
+                               FontWeight="Bold" Margin="0,0,0,10"/>
+
+                    <Border Classes="Group">
+                        <StackPanel>
+                            <TextBlock Classes="Group" Text="Overview"/>
+                            <ItemsControl ItemsSource="{Binding OverviewLines}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Classes="DetailLine" Text="{Binding}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Group">
+                        <StackPanel>
+                            <TextBlock Classes="Group" Text="Elemental Defenses"/>
+                            <ItemsControl ItemsSource="{Binding ElementalDefenses}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ElementalDefenseRow">
+                                        <TextBlock Classes="DetailLine">
+                                            <TextBlock.Text>
+                                                <MultiBinding StringFormat="{}{0}: {1} ({2})">
+                                                    <Binding Path="Element"/>
+                                                    <Binding Path="PercentText"/>
+                                                    <Binding Path="Classification"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Classes="DetailLine" Text="No known elemental resistances or vulnerabilities."
+                                       IsVisible="{Binding !ElementalDefenses.Count}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Group" IsVisible="{Binding CastsLines.Count}">
+                        <StackPanel>
+                            <TextBlock Classes="Group" Text="Casts"/>
+                            <ItemsControl ItemsSource="{Binding CastsLines}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Classes="DetailLine" Text="{Binding}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Group" IsVisible="{Binding AttackRows.Count}">
+                        <StackPanel>
+                            <TextBlock Classes="Group" Text="Attacks"/>
+                            <ItemsControl ItemsSource="{Binding AttackRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AttackRowViewModel">
+                                        <StackPanel Margin="0,0,0,6">
+                                            <TextBlock Classes="DetailLine" Text="{Binding Header}" FontWeight="SemiBold"/>
+                                            <TextBlock Classes="DetailLine" Text="{Binding Kind}" Margin="10,0,0,0"/>
+                                            <TextBlock Classes="DetailLine" Text="{Binding Detail}" Margin="10,0,0,0"/>
+                                            <TextBlock Classes="DetailLine" Text="{Binding Energy}" Margin="10,0,0,0"
+                                                       IsVisible="{Binding Energy, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Group" IsVisible="{Binding LootLines.Count}">
+                        <StackPanel>
+                            <TextBlock Classes="Group" Text="Loot"/>
+                            <ItemsControl ItemsSource="{Binding LootLines}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Classes="DetailLine" Text="{Binding}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Group" IsVisible="{Binding LocationLines.Count}">
+                        <StackPanel>
+                            <TextBlock Classes="Group" Text="Locations"/>
+                            <ItemsControl ItemsSource="{Binding LocationLines}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Classes="DetailLine" Text="{Binding}" TextWrapping="Wrap"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Group">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="Group" Text="Automation"/>
+                            <TextBlock Classes="DetailLine" Text="{Binding AutomationSummaryText}" TextWrapping="Wrap"/>
+                            <Button Content="Edit Automation…" Command="{Binding EditAutomationCommand}"
+                                    ToolTip.Tip="Configure how MudPlay's auto-combat treats this monster — relationship, priority, attack overrides, backstab, kill-on-sight."/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <TextBlock Text="Select a monster on the left to see its details."
+                           Foreground="{StaticResource ChromeFgSecBrush}"
+                           IsVisible="{Binding !HasSelection}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,40,0,0"/>
+              </Panel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>

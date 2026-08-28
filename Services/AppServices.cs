@@ -970,6 +970,14 @@ public sealed class AppServices
     // game-data set. Paired with MonsterResist for the resist guard.
     public Game.Combat.SpellAttackTypeIndex SpellAttackType { get; private set; } = null!;
 
+    // Typed, parsed-once view of the active game-data set's Monsters table —
+    // every raw field this codebase reads somewhere, plus the elemental-resist /
+    // Magical / SpellImmu / Dodge / spell-cast-element lookups the individual
+    // Monster*Index classes above compute independently. Feeds Monster Intel.
+    // Not yet a replacement for those indexes — see MonsterCatalog's own
+    // class comment for why they stay separate for now.
+    public Game.Combat.MonsterCatalog MonsterCatalog { get; private set; } = null!;
+
     // Lookup of each spell's Short cast-code by its Spells.Number in the active
     // set — bridges the per-monster override slots (which store a Number) to the
     // Short the combat engine casts.
@@ -3636,6 +3644,7 @@ public sealed class AppServices
         SpellAttackType = new Game.Combat.SpellAttackTypeIndex(GameData);
         Combat.SetMagicEligibility(
             MonsterMagic, ItemMagic, SpellReqLevel, MonsterResist, SpellAttackType);
+        MonsterCatalog = new Game.Combat.MonsterCatalog(GameData);
 
         // Drain-life eligibility — a drain spell can only affect a living, non-undead
         // target; the index tells the chooser which mobs to skip (fall back to the
