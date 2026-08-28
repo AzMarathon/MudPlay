@@ -104,8 +104,22 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
             // The buff panel needs live AppServices (spellbook / profile); build it
             // only on the production path (profile present), never in tests.
             Buffs = new PartyBuffPanelViewModel(State);
+            Buffs.PropertyChanged += OnBuffsPropertyChanged;
         }
     }
+
+    private void OnBuffsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        // The window's min width depends on whether the buff panel is showing.
+        if (e.PropertyName == nameof(PartyBuffPanelViewModel.ShowPanel))
+            OnPropertyChanged(nameof(WindowMinWidth));
+    }
+
+    // The window only needs to stay wide enough for the buff panel while it's
+    // actually shown; with no party-buff spells the panel is hidden, so the floor
+    // drops to just the member list — otherwise the window stays stuck at the
+    // panel-sized width with no way to shrink it.
+    public double WindowMinWidth => Buffs is { ShowPanel: true } ? 720 : 320;
 
     public void Dispose()
     {
@@ -123,6 +137,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
             _profile.ProfileMutated -= OnProfileMutated;
             _profile.ProfileClosed -= OnProfileClosed;
         }
+        if (Buffs is not null) Buffs.PropertyChanged -= OnBuffsPropertyChanged;
         Buffs?.Dispose();
     }
 

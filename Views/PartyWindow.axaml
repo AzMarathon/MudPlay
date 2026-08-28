@@ -10,7 +10,7 @@
         x:DataType="vm:PartyViewModel"
         Title="{Binding HeaderText}"
         Width="920" Height="360"
-        MinWidth="760" MinHeight="120"
+        MinWidth="{Binding WindowMinWidth}" MinHeight="120"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
@@ -117,7 +117,7 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="x:String">
-                                        <TextBlock Text="{Binding}" Width="66" FontSize="10"
+                                        <TextBlock Text="{Binding}" Width="56" FontSize="10"
                                                    TextAlignment="Center" TextTrimming="CharacterEllipsis"
                                                    VerticalAlignment="Bottom"
                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
@@ -165,7 +165,7 @@
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:PartyBuffMemberToggle">
-                                                        <Panel Width="66">
+                                                        <Panel Width="56">
                                                             <CheckBox MinHeight="0" HorizontalAlignment="Center"
                                                                       IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                                       IsEnabled="{Binding $parent[ItemsControl].((vm:PartyBuffSlotRowViewModel)DataContext).MembersEnabled}"
