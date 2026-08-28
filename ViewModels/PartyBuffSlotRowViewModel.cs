@@ -33,8 +33,10 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
 
     public string? Spell => _dto.Spell;
     public int RecastMarginSec => _dto.RecastMarginSec;
-    // Header: the buff's name (falls back to the cast code) + its recast timer.
-    public string HeaderText => $"{_resolveName(_dto.Spell)}  ·  recast {RecastMarginSec}s";
+    // The buff's spell name (falls back to the cast code) — the "Buff" column.
+    public string DisplayName => _resolveName(_dto.Spell);
+    // The recast column, e.g. "15s".
+    public string RecastText => $"{RecastMarginSec}s";
 
     public bool IsWholeParty => _isWholeParty(Spell);
     public bool IsSingleTarget => !string.IsNullOrWhiteSpace(Spell) && !IsWholeParty;
@@ -55,6 +57,20 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
     }
 
     internal PartyBuffSlot Dto => _dto;
+
+    // Re-emit the read-only derived properties after the DTO's spell / recast
+    // changed via the edit dialog (the whole-party vs single-target split can flip
+    // if the buff changed).
+    public void Refresh()
+    {
+        OnPropertyChanged(nameof(Spell));
+        OnPropertyChanged(nameof(RecastMarginSec));
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(RecastText));
+        OnPropertyChanged(nameof(IsWholeParty));
+        OnPropertyChanged(nameof(IsSingleTarget));
+        OnPropertyChanged(nameof(ShowMemberList));
+    }
 
     partial void OnWholePartyOnChanged(bool value)
     {

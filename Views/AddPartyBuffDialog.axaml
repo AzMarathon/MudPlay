@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="360" d:DesignHeight="180"
         x:Class="MudPlay.Views.AddPartyBuffDialog"
         x:DataType="vm:AddPartyBuffDialogViewModel"
-        Title="Add party buff"
+        Title="{Binding DialogTitle}"
         Width="360" Height="185"
         MinWidth="320" MinHeight="170"
         WindowStartupLocation="CenterOwner">
@@ -50,7 +50,7 @@
         <StackPanel Grid.Row="4" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8">
             <Button Content="Cancel" Command="{Binding CancelCommand}" MinWidth="80"/>
-            <Button Content="OK" Command="{Binding OkCommand}"
+            <Button Content="{Binding OkLabel}" Command="{Binding OkCommand}"
                     IsEnabled="{Binding CanAdd}" IsDefault="True" MinWidth="80"/>
         </StackPanel>
     </Grid>

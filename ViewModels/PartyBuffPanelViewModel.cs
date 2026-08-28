@@ -28,10 +28,17 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
 
     // Buff-only picker source: LEARNED spells that are party buffs (zero energy,
     // Targets 2 / 10 / 13 — cast on another player or the whole party).
-    [ObservableProperty] private IReadOnlyList<SpellPick> _buffPicks = Array.Empty<SpellPick>();
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPanel))]
+    private IReadOnlyList<SpellPick> _buffPicks = Array.Empty<SpellPick>();
 
     // True when no slot is configured yet — drives the empty-state hint.
     public bool HasSlots => Slots.Count > 0;
+
+    // Whether to show the buff panel at all: a class with no party-buff spells
+    // (and no existing slots) hides it entirely, rather than showing an empty
+    // panel it can never use.
+    public bool ShowPanel => BuffPicks.Count > 0 || Slots.Count > 0;
 
     // Typeahead filter for the spell picker — matches the typed text against the
     // cast-code or the spell name (mirrors the Settings tab's picker).
@@ -74,6 +81,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         RefreshBuffPicks();
         RefreshMemberTargets();
         OnPropertyChanged(nameof(HasSlots));
+        OnPropertyChanged(nameof(ShowPanel));
     }
 
     private PartyBuffSlotRowViewModel MakeRow(PartyBuffSlot dto) =>
@@ -137,6 +145,30 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
             .ToList();
         row.RebuildMemberTargets(members);
         OnPropertyChanged(nameof(HasSlots));
+        OnPropertyChanged(nameof(ShowPanel));
+        Persist();
+    }
+
+    // Edit an existing slot's buff / recast — reopens the picker pre-filled, so
+    // the recast timer (or the buff) can change without a delete + re-add.
+    [RelayCommand]
+    private async System.Threading.Tasks.Task EditBuff(PartyBuffSlotRowViewModel? row)
+    {
+        if (row is null) return;
+        AddPartyBuffDialogViewModel dlg = new(
+            BuffPicks, SpellSuggestionFilter, row.Spell, row.RecastMarginSec);
+        AddPartyBuffResult? result = await AppServices.Current.Dialogs
+            .OpenWindowAsync<AddPartyBuffDialogViewModel, AddPartyBuffResult>(dlg);
+        if (result is not { } r) return;
+
+        row.Dto.Spell = r.Spell;
+        row.Dto.RecastMarginSec = r.RecastMarginSec;
+        row.Refresh();   // re-derive header + whole-party/single-target after a spell change
+        var members = _party.Members
+            .Where(m => !m.IsSelf)
+            .Select(m => (Display: m.Name, Given: GivenLower(m.Name)))
+            .ToList();
+        row.RebuildMemberTargets(members);
         Persist();
     }
 
@@ -147,6 +179,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         _settings.Slots.Remove(row.Dto);
         Slots.Remove(row);
         OnPropertyChanged(nameof(HasSlots));
+        OnPropertyChanged(nameof(ShowPanel));
         Persist();
     }
 

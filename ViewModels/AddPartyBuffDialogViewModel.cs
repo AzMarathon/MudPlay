@@ -35,13 +35,23 @@ public sealed partial class AddPartyBuffDialogViewModel : ObservableObject, IDia
         BuffPicks.Any(p => string.Equals(p.Short, (Spell ?? string.Empty).Trim(),
             StringComparison.OrdinalIgnoreCase));
 
+    // Whether this dialog is editing an existing slot (vs adding a new one) —
+    // drives the title + OK-button label.
+    public bool IsEditing { get; }
+    public string DialogTitle => IsEditing ? "Edit party buff" : "Add party buff";
+    public string OkLabel => IsEditing ? "Save" : "OK";
+
     public AddPartyBuffDialogViewModel(
-        IReadOnlyList<SpellPick> buffPicks, Func<string?, object?, bool> filter)
+        IReadOnlyList<SpellPick> buffPicks, Func<string?, object?, bool> filter,
+        string? initialSpell = null, int? initialRecast = null)
     {
         ArgumentNullException.ThrowIfNull(buffPicks);
         ArgumentNullException.ThrowIfNull(filter);
         BuffPicks = buffPicks;
         SpellSuggestionFilter = filter;
+        IsEditing = !string.IsNullOrWhiteSpace(initialSpell);
+        _spell = initialSpell;
+        if (initialRecast is { } r) _recastMarginSec = r;
     }
 
     [RelayCommand]

@@ -68,44 +68,67 @@
                    IsVisible="{Binding !State.IsInParty}"/>
 
         <!-- ===== Party-buff panel (right) =====
-             Add / remove buff slots, pick a buff, set its recast timer, and
-             choose targeting: a whole-party buff is one on/off; a single-target
-             buff blesses "all members" or a checklist of specific members. Backed
-             by CharacterProfile.PartyBuffs, persisted on every edit. -->
+             A compact table of buff slots: each is added via the "Add buff"
+             picker (spell + recast timer), then edited (✎) or removed (⨯), and its
+             targeting chosen inline — a whole-party buff is one on/off; a
+             single-target buff blesses "all members" or a checklist of specific
+             members. Backed by CharacterProfile.PartyBuffs, persisted on every
+             edit. Hidden entirely for a class with no party-buff spells. Styled to
+             sit alongside the member list (same sunken ground, bottom-ruled rows)
+             rather than as a contrasting card. -->
         <Border DockPanel.Dock="Right" Width="340"
-                Background="{StaticResource ChromeBgElevBrush}"
+                IsVisible="{Binding Buffs.ShowPanel}"
+                Background="{StaticResource ChromeBgSunkenBrush}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="1,0,0,0">
-            <Grid Margin="8" RowDefinitions="Auto,*"
+            <Grid RowDefinitions="Auto,Auto,*"
                   DataContext="{Binding Buffs}" x:DataType="vm:PartyBuffPanelViewModel">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="8,8,8,4">
                     <TextBlock Text="Party Buffs" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     <Button Grid.Column="1" Content="＋ Add buff" Padding="8,2"
                             Command="{Binding AddBuffCommand}"/>
                 </Grid>
 
-                <TextBlock Grid.Row="1"
+                <!-- Column headers -->
+                <Grid Grid.Row="1" ColumnDefinitions="*,46,24,24" Margin="8,0,8,2"
+                      IsVisible="{Binding HasSlots}">
+                    <TextBlock Grid.Column="0" Text="Buff" FontSize="11"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    <TextBlock Grid.Column="1" Text="Recast" FontSize="11" HorizontalAlignment="Right"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                </Grid>
+
+                <TextBlock Grid.Row="2"
                            IsVisible="{Binding !HasSlots}"
-                           Text="No buffs configured. Click “Add buff”, pick a spell, then set who receives it and its recast timer."
+                           Margin="8,4,8,0"
+                           Text="No buffs configured. Click “Add buff”, pick a spell, then set who receives it."
                            Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"
                            TextWrapping="Wrap"/>
 
-                <ScrollViewer Grid.Row="1" IsVisible="{Binding HasSlots}"
+                <ScrollViewer Grid.Row="2" IsVisible="{Binding HasSlots}"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding Slots}">
+                    <ItemsControl ItemsSource="{Binding Slots}" Padding="2,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:PartyBuffSlotRowViewModel">
                                 <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
-                                        BorderThickness="1" CornerRadius="3"
-                                        Padding="6" Margin="0,0,0,6">
-                                    <StackPanel Spacing="4">
-                                        <!-- Header: buff name + recast (set via the Add dialog), and remove -->
-                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                            <TextBlock Text="{Binding HeaderText}"
+                                        BorderThickness="0,0,0,1" Padding="6,4">
+                                    <StackPanel Spacing="2">
+                                        <!-- Table row: buff | recast | edit | delete -->
+                                        <Grid ColumnDefinitions="*,46,24,24" ColumnSpacing="2">
+                                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}"
                                                        FontWeight="SemiBold" VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis"/>
-                                            <Button Grid.Column="1" Content="⨯" Width="24" Height="24"
+                                            <TextBlock Grid.Column="1" Text="{Binding RecastText}"
+                                                       VerticalAlignment="Center" HorizontalAlignment="Right"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                            <Button Grid.Column="2" Content="✎" Width="22" Height="22"
+                                                    Padding="0" FontSize="12"
+                                                    ToolTip.Tip="Edit this buff / recast timer"
+                                                    Command="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).EditBuffCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Grid.Column="3" Content="⨯" Width="22" Height="22"
                                                     Padding="0"
                                                     ToolTip.Tip="Remove this buff slot"
                                                     Command="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).RemoveBuffCommand}"
@@ -113,13 +136,16 @@
                                         </Grid>
 
                                         <!-- Whole-party buff: one on/off -->
-                                        <CheckBox Content="Whole party (cast on the whole party)"
+                                        <CheckBox Content="Whole party"
+                                                  Margin="2,0,0,0" MinHeight="0"
                                                   IsChecked="{Binding WholePartyOn, Mode=TwoWay}"
-                                                  IsVisible="{Binding IsWholeParty}"/>
+                                                  IsVisible="{Binding IsWholeParty}"
+                                                  ToolTip.Tip="Cast on the whole party in one go."/>
 
                                         <!-- Single-target buff: all members, or a checklist -->
                                         <StackPanel Spacing="2" IsVisible="{Binding IsSingleTarget}">
                                             <CheckBox Content="All members"
+                                                      Margin="2,0,0,0" MinHeight="0"
                                                       IsChecked="{Binding AllMembers, Mode=TwoWay}"
                                                       ToolTip.Tip="Bless every party member who's in the room (auto-adapts to whatever party you're in)."/>
                                             <ItemsControl ItemsSource="{Binding MemberTargets}"
@@ -128,7 +154,7 @@
                                                     <DataTemplate x:DataType="vm:PartyBuffMemberToggle">
                                                         <CheckBox Content="{Binding DisplayName}"
                                                                   IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                                  Margin="12,0,0,0" MinHeight="0"/>
+                                                                  Margin="16,0,0,0" MinHeight="0"/>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
