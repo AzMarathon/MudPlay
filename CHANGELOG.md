@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.31.1
+
+- Roomba: `@roomba <item>` now shows **each room's own quantity** next to its locator (e.g. `15/12 (3), 15/13 (2)`), not just the summed total — so a high total for a hidden item can be told apart as a genuinely scattered stash vs one room's count looking wrong. (The merge already takes the max of repeated searches rather than summing; this adds the per-room diagnostic and pins that merge behavior with tests)
+
 ## 3.31.0
 
 - Item Finder: the trial-set panel is now **Gear Finder**, and **Find Best searches whatever the results grid currently shows** instead of the whole catalog — so "best AC in Leather" for a plate-capable class is finally possible by narrowing Armour Type first (leave the filters default and it searches everything, as before)
