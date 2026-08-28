@@ -519,12 +519,13 @@ The left list is filterable by name, with the same core stats as the Browser's M
 - **Overview** — Exp (base × multiplier), HP and its regen tick, AC/DR, Magic Resist, Dodge, alignment, Undead/Non-living flags, and the two gates that decide whether you can even hurt it: **"Requires a weapon with HitMagic ≥ N"** and **"Immune to spells with ReqLevel < N."**
 - **Elemental Defenses** — each of the five elements (Cold, Fire, Stone, Lightning, Water) it resists or is vulnerable to, as a signed percentage, classified as *resists*, *vulnerable*, *immune* (exactly 100%), or *heals* (over 100% — the "damage" restores it). A monster with none listed carries no elemental resist ability at all.
 - **Casts** — which elements the monster's own attack spells and between-round spells deal, rolled up in one line, so you know what you're about to eat before you engage.
+- **Your Matchup** — live, character-aware, and only shown once a character is loaded: whether your **currently-worn weapon** is magical enough to hit the monster physically (its HitMagic vs the monster's requirement); an **incoming elemental threat** line per element the monster casts, alongside how much your own worn gear resists it; and every **known attack spell you've obtained**, ranked by effective damage against *this* monster — a spell blocked by the monster's spell immunity or fully resisted by its element shows the reason instead of a damage number, so you're never guessing why a cast did nothing. This deliberately doesn't duplicate the Calculators tab's melee hit%/DPS/rounds-to-kill projection (that math already lives there, correctly) — for that, use the Player Workshop's **Calculators** tab; Monster Intel's Your Matchup is the spell/elemental half nothing else covers.
 - **Attacks** — every physical, spell, and rob attack slot with its chance, damage range or spell + level, accuracy, and energy cost, plus its between-round spells.
 - **Loot** — every item it drops, with drop chance where known.
 - **Locations** — where it's placed, assigned, or spawns, from its raw *Summoned By* record.
 - **Automation** — a summary of its current Relationship / Priority / overrides, with an **Edit Automation…** button that opens the same overlay editor the Browser's Monsters tab uses (see **Overriding a record** above) — so you can inspect a monster and configure how MudPlay handles it without leaving this window.
 
-Monster Intel is deliberately read-only reference for now — a live-character-aware "can I actually beat this thing" matchup preview and following your current room/target automatically are planned but not built yet; for a quick hit-chance/DPS estimate against a monster today, use the Player Workshop's **Calculators** tab.
+Monster Intel doesn't yet follow your current room or combat target automatically, and there's no side-by-side monster comparison — both are planned but not built.
 
 ---
 

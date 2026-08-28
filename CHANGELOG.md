@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.35.1
+
+- Monster Intel: new **Your Matchup** panel (live, character-aware) — whether your currently-worn weapon is magical enough to hit the monster physically, an incoming-elemental-threat line per element it casts (vs. your own worn-gear resists), and every attack spell you've obtained ranked by effective damage against that specific monster, with a clear reason shown for anything blocked by spell immunity or full elemental resistance instead of a silently-wrong number
+
 ## 3.35.0
 
 - New **Monster Intel** window (View menu, or the toolbar) — a searchable monster reference, one click away without leaving the client. For the first time, surfaces a monster's **elemental resistances/vulnerabilities** (Cold/Fire/Stone/Lightning/Water) and its **spell-immunity / hit-magic requirements** — data the auto-combat engine has always computed internally but never showed the player. Detail panel covers Overview, Elemental Defenses, Casts (what elements it can hit you with), Attacks, Loot, Locations, and an Automation tab that opens the existing per-monster overlay editor in place

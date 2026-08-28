@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.35.0**
-> - New Monster Intel window (View menu, or the toolbar) — a searchable monster reference showing elemental resistances/vulnerabilities and spell-immunity/hit-magic requirements for the first time, plus Overview, Casts, Attacks, Loot, Locations, and an Automation tab for the existing per-monster overlay editor
+> **Version 3.35.1**
+> - Monster Intel: new Your Matchup panel — whether your weapon is magical enough to hit the monster, incoming elemental threat vs your own resists, and your known attack spells ranked by effective damage against it, with clear reasons when something's blocked
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

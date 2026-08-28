@@ -150,3 +150,92 @@ public readonly record struct MonsterMatchupResult(
     bool MonsterHasPhysicalAttack,
     int MonsterHitPercent,
     int MonsterDamagePerHit);
+
+// One of the player's known, damage-dealing attack spells — the input
+// MonsterMatchupCalculator.RankAttackSpells scores against a specific
+// monster's SpellImmu and elemental resist. MaxDamagePerRound and
+// ManaCostPerRound are already level-scaled and energy-multiplied (see
+// SpellCalculator.MaxDamage / ManaCost) — this record carries the RESULT of
+// that player-side math, not the raw formula, so this file stays free of a
+// Game.Spells dependency.
+public readonly record struct PlayerAttackSpell(
+    string Name, string Short, int ReqLevel, int AttType,
+    long MaxDamagePerRound, long ManaCostPerRound);
+
+// One spell's effectiveness against a specific monster — either blocked
+// (SpellImmu too high, or the monster resists its element at or above 100%)
+// with a human-readable reason, or eligible with its resist-adjusted
+// effective damage.
+public readonly record struct SpellEffectivenessResult(
+    string Name, string Short, string Element, long EffectiveDamage,
+    long ManaCostPerRound, bool Eligible, string? BlockedReason);
+
+// Spell-matchup additions to MonsterMatchupCalculator below — kept as their
+// own members rather than folded into Compute(), since the inputs (known
+// spells, SpellImmu, elemental resists) share nothing with Compute()'s
+// weapon/AC/dodge inputs and Compute() already has real callers (the
+// Calculators tab's Hit Calculator) that must keep working unchanged.
+public static class MonsterMatchupCalculatorSpells
+{
+    // Whether the player's currently-worn weapon can even land a physical hit —
+    // MonsterMagicIndex.MagicalLevel(monster) is the level a weapon's own
+    // HitMagic (ItemMagicIndex) must meet or exceed. A monster with no Magical
+    // ability reads 0, so any weapon (including bare hands, HitMagic 0) hits.
+    public static bool WeaponMeetsMagical(int weaponHitMagic, int monsterMagical)
+        => weaponHitMagic >= monsterMagical;
+
+    // Rank the player's known attack spells by effective damage against one
+    // monster: a spell whose ReqLevel is below the monster's SpellImmu never
+    // lands (GAME_MECHANICS' ReqLevel ≥ SpellImmu eligibility rule, mirroring
+    // CombatManager.Spells.cs's SpellEligible); a spell whose element the
+    // monster resists ≥100% deals zero real damage (MonsterResistIndex's own
+    // determinism — exactly 100 blocks, over 100 heals the target, so both
+    // read as blocked here, not just "reduced to 0"). Everything else scores
+    // by (100 - resist%) applied to the spell's own per-round max damage.
+    // Eligible spells sort first, highest effective damage first; blocked
+    // spells trail, in their input order.
+    public static IReadOnlyList<SpellEffectivenessResult> RankAttackSpells(
+        IReadOnlyList<PlayerAttackSpell> spells,
+        int monsterSpellImmunity,
+        IReadOnlyDictionary<int, int> monsterElementalResists)
+    {
+        ArgumentNullException.ThrowIfNull(spells);
+        ArgumentNullException.ThrowIfNull(monsterElementalResists);
+
+        var results = new List<SpellEffectivenessResult>();
+        foreach (PlayerAttackSpell s in spells)
+        {
+            string element = Game.GameData.LookupEnums.FormatSpellAttackType(
+                s.AttType.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? "?";
+
+            if (s.ReqLevel < monsterSpellImmunity)
+            {
+                results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
+                    s.ManaCostPerRound, Eligible: false,
+                    $"Spell immune below level {monsterSpellImmunity} (this spell is {s.ReqLevel})"));
+                continue;
+            }
+
+            int resistCode = Game.Combat.MonsterResistIndex.ElementalResistCode(s.AttType);
+            int resistPercent = resistCode >= 0 && monsterElementalResists.TryGetValue(resistCode, out int pct)
+                ? pct : 0;
+            if (resistPercent >= 100)
+            {
+                results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
+                    s.ManaCostPerRound, Eligible: false,
+                    resistPercent == 100 ? $"{element} fully resisted" : $"{element} heals this monster instead"));
+                continue;
+            }
+
+            long effective = (long)System.Math.Round(
+                s.MaxDamagePerRound * (100 - resistPercent) / 100.0, System.MidpointRounding.AwayFromZero);
+            results.Add(new SpellEffectivenessResult(
+                s.Name, s.Short, element, effective, s.ManaCostPerRound, Eligible: true, BlockedReason: null));
+        }
+
+        return results
+            .OrderByDescending(r => r.Eligible)
+            .ThenByDescending(r => r.EffectiveDamage)
+            .ToList();
+    }
+}

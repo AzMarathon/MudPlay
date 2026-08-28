@@ -1,13 +1,19 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using Avalonia.Collections;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game;
+using MudPlay.Game.Calculators;
 using MudPlay.Game.Combat;
 using MudPlay.Game.GameData;
+using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
 
@@ -15,12 +21,13 @@ namespace MudPlay.ViewModels;
 
 // Modeless "Monster Intel" window — a searchable master list over
 // MonsterCatalog with a per-monster detail panel (Overview / Elemental
-// defenses / Attacks / Loot & locations / Automation). Phase 2 of the Monster
-// Intel plan: read-only reference + the existing per-monster automation
-// overlay editor relocated here, one click away from whatever monster is
-// selected. "Your matchup" (live character-aware combat preview) and the
-// context bar (current room / target following) are later phases — this
-// window is deliberately just the reference half for now.
+// defenses / Attacks / Loot & locations / Automation / Your Matchup). Phases
+// 1-3 of the Monster Intel plan: read-only reference, the existing
+// per-monster automation overlay editor relocated here, and a live-
+// character-aware matchup preview (weapon eligibility, ranked spell
+// effectiveness, incoming elemental threat). The context bar (current room /
+// target following, pinning) and monster-vs-monster comparison are later
+// phases — not built yet.
 public sealed partial class MonsterIntelViewModel : ObservableObject
 {
     private readonly GameDataCache _gameData;
@@ -29,8 +36,13 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
     private readonly SettingsResolver? _resolver;
     private readonly MonsterOverlaySeedStore? _overlaySeed;
     private readonly RoomGraphManager? _roomGraph;
+    private readonly PlayerStats? _stats;
+    private readonly InventoryManager? _inventory;
+    private readonly SpellbookState? _spellbook;
+    private readonly ItemMagicIndex? _itemMagic;
     private readonly IReadOnlyList<MonsterIntelEntry> _all;
     private readonly Dictionary<int, string> _itemNames;
+    private readonly Dictionary<int, int> _spellAttType;
 
     public event Action? CloseRequested;
 
@@ -44,7 +56,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
     public MonsterIntelViewModel(
         GameDataCache gameData, MonsterCatalog catalog,
         DialogService? dialogs = null, SettingsResolver? resolver = null,
-        MonsterOverlaySeedStore? overlaySeed = null, RoomGraphManager? roomGraph = null)
+        MonsterOverlaySeedStore? overlaySeed = null, RoomGraphManager? roomGraph = null,
+        PlayerStats? stats = null, InventoryManager? inventory = null,
+        SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -54,9 +68,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
         _resolver = resolver;
         _overlaySeed = overlaySeed;
         _roomGraph = roomGraph;
+        _stats = stats;
+        _inventory = inventory;
+        _spellbook = spellbook;
+        _itemMagic = itemMagic;
 
         _all = MonsterIntelEntry.BuildCatalog(catalog);
         _itemNames = BuildItemNames(gameData);
+        _spellAttType = BuildSpellAttType(gameData);
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
 
         PropertyChanged += (_, e) =>
@@ -103,6 +122,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
     [ObservableProperty] private string _automationSummaryText = string.Empty;
     [ObservableProperty] private bool _hasSelection;
 
+    // ----- Your Matchup (Phase 3 — needs a live character; blank without one) -----
+    public ObservableCollection<string> MatchupLines { get; } = new();
+    public ObservableCollection<SpellEffectivenessResult> SpellEffectiveness { get; } = new();
+    public ObservableCollection<string> IncomingThreatLines { get; } = new();
+    [ObservableProperty] private bool _hasMatchupContext;
+
     private void RebuildDetail()
     {
         OverviewLines.Clear();
@@ -112,6 +137,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
         LootLines.Clear();
         LocationLines.Clear();
         AutomationSummaryText = string.Empty;
+        MatchupLines.Clear();
+        SpellEffectiveness.Clear();
+        IncomingThreatLines.Clear();
         HasSelection = SelectedEntry is not null;
         if (SelectedEntry is not { } entry) return;
         MonsterCatalogEntry m = entry.Source;
@@ -152,6 +180,97 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(m.SummonedBy)) LocationLines.Add(m.SummonedBy);
 
         RebuildAutomationSummary(m.Number);
+        RebuildYourMatchup(m);
+    }
+
+    // Live-character matchup preview (Phase 3). Deliberately does NOT
+    // reproduce the Calculators tab's melee hit%/DPS engine (weapon swing
+    // counts, crit chance, realm-aware accuracy) — that's real, intricate,
+    // already-correct logic with its own tested home; duplicating it here
+    // would risk drifting out of sync. This panel's job is the genuinely NEW
+    // half nothing else does: is my weapon even magical enough to hit this
+    // thing, which of my known spells actually gets through it, and what
+    // elements is it going to hit ME with given my own resists. Blank
+    // (HasMatchupContext = false) when no live character context was wired in
+    // (e.g. no profile loaded).
+    private void RebuildYourMatchup(MonsterCatalogEntry m)
+    {
+        HasMatchupContext = _stats is not null && _inventory is not null
+            && _spellbook is not null && _itemMagic is not null;
+        if (!HasMatchupContext) return;
+
+        IReadOnlyList<EquippedItem> worn = _inventory!.Snapshot.EquippedItems;
+        string? weaponName = worn.FirstOrDefault(w => w.Slot == "Weapon Hand").Name;
+        int weaponHitMagic = string.IsNullOrEmpty(weaponName) ? 0 : _itemMagic!.HitMagic(weaponName);
+        bool canHitPhysically = MonsterMatchupCalculatorSpells.WeaponMeetsMagical(weaponHitMagic, m.Magical);
+        MatchupLines.Add(m.Magical > 0
+            ? $"Weapon HitMagic {weaponHitMagic} vs required {m.Magical}: "
+              + (canHitPhysically ? "you can hit it physically" : "your weapon is NOT magical enough to hit it")
+            : $"Weapon HitMagic {weaponHitMagic}: no magical requirement, any weapon hits");
+
+        EquipmentStatBreakdown playerGear = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
+        IReadOnlyDictionary<int, int> playerResists = new Dictionary<int, int>
+        {
+            [3] = playerGear.Totals.PlusColdResist,
+            [5] = playerGear.Totals.PlusFireResist,
+            [65] = playerGear.Totals.PlusStoneResist,
+            [66] = playerGear.Totals.PlusLightningResist,
+            [147] = playerGear.Totals.PlusWaterResist,
+        };
+
+        foreach (string element in m.CastsElements)
+        {
+            int code = ElementCodeFor(element);
+            int myResist = code >= 0 && playerResists.TryGetValue(code, out int pct) ? pct : 0;
+            IncomingThreatLines.Add(myResist == 0
+                ? $"{element}: you have no resistance from your gear"
+                : $"{element}: your gear resists {myResist:+0;-0}%");
+        }
+
+        List<PlayerAttackSpell> attackSpells = new();
+        foreach (KnownSpell known in _spellbook!.Available)
+        {
+            if (!_spellbook.IsObtained(known.Number)) continue;
+            long maxDmg = SpellCalculator.MaxDamage(known.Formula, _stats!.Level);
+            if (maxDmg <= 0) continue;   // not an attack spell
+            int attType = _spellAttType.TryGetValue(known.Number, out int at) ? at : -1;
+            attackSpells.Add(new PlayerAttackSpell(
+                known.Name, known.Short, known.ReqLevel, attType,
+                maxDmg, SpellCalculator.ManaCost(known.Formula)));
+        }
+        foreach (SpellEffectivenessResult r in MonsterMatchupCalculatorSpells.RankAttackSpells(
+            attackSpells, m.SpellImmunity, m.ElementalResists))
+            SpellEffectiveness.Add(r);
+    }
+
+    // Maps an element display name (as LookupEnums.FormatSpellAttackType
+    // renders it) back to its elemental-resist ability code, the inverse of
+    // ElementalResistIndex.ElementName. -1 for a non-elemental name (Normal,
+    // Poison — never resist-indexed, see MonsterResistIndex's own comment).
+    private static int ElementCodeFor(string element) => element switch
+    {
+        "Cold" => 3,
+        "Fire" => 5,
+        "Stone" => 65,
+        "Lightning" => 66,
+        "Water" => 147,
+        _ => -1,
+    };
+
+    // Spell Number → AttType, built once (not per monster selection) since the
+    // Spells table doesn't change between picks in the same window session.
+    private static Dictionary<int, int> BuildSpellAttType(GameDataCache cache)
+    {
+        Dictionary<int, int> map = new();
+        if (cache.GetRawTable("Spells") is not { } doc) return map;
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            if (!row.TryGetProperty("Number", out JsonElement numEl)
+                || numEl.ValueKind != JsonValueKind.Number || !numEl.TryGetInt32(out int n)) continue;
+            map[n] = row.TryGetProperty("AttType", out JsonElement atEl)
+                && atEl.ValueKind == JsonValueKind.Number && atEl.TryGetInt32(out int at) ? at : -1;
+        }
+        return map;
     }
 
     // "Majority" resolves a spell-attack slot's Accuracy field back to a spell

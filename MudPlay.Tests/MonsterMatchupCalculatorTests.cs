@@ -170,3 +170,116 @@ public sealed class MonsterMatchupCalculatorTests
         Assert.Equal(5, r.MonsterDamagePerHit);
     }
 }
+
+// Pins MonsterMatchupCalculatorSpells — the Monster Intel "Your Matchup"
+// panel's spell-vs-monster ranking (Phase 3 of the Monster Intel plan): the
+// weapon-vs-Magical eligibility gate and RankAttackSpells' SpellImmu /
+// elemental-resist logic.
+public sealed class MonsterMatchupCalculatorSpellsTests
+{
+    private static PlayerAttackSpell Spell(
+        string name = "fireball", string shortCode = "fire", int reqLevel = 10,
+        int attType = 1, long maxDmg = 100, long mana = 20) =>
+        new(name, shortCode, reqLevel, attType, maxDmg, mana);
+
+    [Theory]
+    [InlineData(5, 3, true)]
+    [InlineData(3, 5, false)]
+    [InlineData(4, 4, true)]
+    public void WeaponMeetsMagical_ComparesHitMagicToMonsterMagical(int weaponHitMagic, int monsterMagical, bool expected)
+        => Assert.Equal(expected, MonsterMatchupCalculatorSpells.WeaponMeetsMagical(weaponHitMagic, monsterMagical));
+
+    [Fact]
+    public void RankAttackSpells_BelowSpellImmu_IsBlockedWithReason()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(reqLevel: 5) }, monsterSpellImmunity: 10,
+            new Dictionary<int, int>());
+
+        SpellEffectivenessResult r = Assert.Single(result);
+        Assert.False(r.Eligible);
+        Assert.Equal(0, r.EffectiveDamage);
+        Assert.Contains("immune", r.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RankAttackSpells_ExactlyMeetsSpellImmu_IsEligible()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(reqLevel: 10) }, monsterSpellImmunity: 10,
+            new Dictionary<int, int>());
+
+        Assert.True(Assert.Single(result).Eligible);
+    }
+
+    [Fact]
+    public void RankAttackSpells_FullyResisted_IsBlocked()
+    {
+        // AttType 1 = Fire → resist code 5.
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(attType: 1, maxDmg: 100) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int> { [5] = 100 });
+
+        SpellEffectivenessResult r = Assert.Single(result);
+        Assert.False(r.Eligible);
+        Assert.Contains("resisted", r.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RankAttackSpells_OverHundredResist_HealsInsteadOfBlocking()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(attType: 1, maxDmg: 100) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int> { [5] = 150 });
+
+        SpellEffectivenessResult r = Assert.Single(result);
+        Assert.False(r.Eligible);
+        Assert.Contains("heals", r.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RankAttackSpells_PartialResist_ScalesEffectiveDamage()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(attType: 1, maxDmg: 100) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int> { [5] = 25 });
+
+        SpellEffectivenessResult r = Assert.Single(result);
+        Assert.True(r.Eligible);
+        Assert.Equal(75, r.EffectiveDamage);
+    }
+
+    [Fact]
+    public void RankAttackSpells_NoResistData_FullDamageThrough()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(attType: 1, maxDmg: 100) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int>());
+
+        Assert.Equal(100, Assert.Single(result).EffectiveDamage);
+    }
+
+    [Fact]
+    public void RankAttackSpells_SortsEligibleFirstThenByEffectiveDamageDescending()
+    {
+        var spells = new[]
+        {
+            Spell(name: "weak",    attType: 1, maxDmg: 20),   // eligible, low damage
+            Spell(name: "blocked", reqLevel: 1),               // blocked (immu 10)
+            Spell(name: "strong",  attType: 1, maxDmg: 90),   // eligible, high damage
+        };
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            spells, monsterSpellImmunity: 10, new Dictionary<int, int>());
+
+        Assert.Equal(new[] { "strong", "weak", "blocked" }, result.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void RankAttackSpells_ElementName_MatchesLookupEnumsFormatting()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(attType: 1) }, monsterSpellImmunity: 0, new Dictionary<int, int>());
+
+        Assert.Equal("Fire", Assert.Single(result).Element);
+    }
+}

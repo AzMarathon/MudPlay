@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels"
         xmlns:combat="using:MudPlay.Game.Combat"
+        xmlns:calc="using:MudPlay.Game.Calculators"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="720"
@@ -31,6 +32,11 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
             <Setter Property="Margin" Value="0,1"/>
+        </Style>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
     </Window.Styles>
 
@@ -121,6 +127,61 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Group" IsVisible="{Binding HasMatchupContext}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Classes="Group" Text="Your Matchup"/>
+
+                            <ItemsControl ItemsSource="{Binding MatchupLines}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Classes="DetailLine" TextWrapping="Wrap" Text="{Binding}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <StackPanel IsVisible="{Binding IncomingThreatLines.Count}">
+                                <TextBlock Classes="FieldLabel" Text="Incoming elemental threat" Margin="0,4,0,2"/>
+                                <ItemsControl ItemsSource="{Binding IncomingThreatLines}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Classes="DetailLine" TextWrapping="Wrap" Text="{Binding}"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <StackPanel IsVisible="{Binding SpellEffectiveness.Count}">
+                                <TextBlock Classes="FieldLabel" Text="Your attack spells, ranked" Margin="0,4,0,2"/>
+                                <ItemsControl ItemsSource="{Binding SpellEffectiveness}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="calc:SpellEffectivenessResult">
+                                            <StackPanel Margin="0,0,0,4">
+                                                <TextBlock Classes="DetailLine" FontWeight="SemiBold">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0} ({1})">
+                                                            <Binding Path="Name"/>
+                                                            <Binding Path="Element"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <TextBlock Classes="DetailLine" Margin="10,0,0,0" IsVisible="{Binding Eligible}">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0} effective damage, {1} mana/round">
+                                                            <Binding Path="EffectiveDamage"/>
+                                                            <Binding Path="ManaCostPerRound"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <TextBlock Classes="DetailLine" Margin="10,0,0,0" Text="{Binding BlockedReason}"
+                                                           IsVisible="{Binding !Eligible}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
