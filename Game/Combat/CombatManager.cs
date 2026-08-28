@@ -1579,6 +1579,34 @@ public sealed partial class CombatManager : IDisposable
         ClearAttackSpellCascadeState();
     }
 
+    // A disconnect/reconnect invalidates any mid-round combat state. The
+    // CombatGate correctly re-detects a hostile fresh on room-entry after
+    // reconnect, but a stale _currentTarget / _castingSpellTarget surviving the
+    // drop makes the resume logic think an attack spell is already in flight,
+    // waiting on a *Combat Off* that was lost along with the connection — the
+    // resume path only fires within CastInterruptResumeWindow of the interrupted
+    // cast, so an Off that never arrives means the round-owed latch
+    // (IsSpellAttackOwed) never clears and the character never resumes
+    // attacking, even though the monster (still fighting server-side through the
+    // link-death) keeps attacking back (report paradigm-20260827-203548; same
+    // failure shape as paradigm-20260824-012300's stale-spellTarget lockup,
+    // different trigger). Wired to the disconnect handler in
+    // MainWindowViewModel alongside CastDirector's buff-timer pause and
+    // Conditions.ClearAll("disconnect") — everything else about the fight is
+    // gone the instant the wire drops (the server has moved the round on
+    // without us by the time we're back), so the next room-entry engagement
+    // starts clean and re-casts rather than waiting on an event that can no
+    // longer arrive.
+    public void OnDisconnected()
+    {
+        if (_currentTarget is not null || _spellAttackOwed)
+            _log?.Combat(LogCategory,
+                $"disconnect cleared stale combat state — target={_currentTarget ?? "(none)"}, "
+                + $"spellTarget={_castingSpellTarget ?? "(none)"}, spellAttackOwed={_spellAttackOwed}");
+        _currentTarget = null;
+        ClearAttackSpellCascadeState();
+    }
+
     // Pre-move backstab prep — invoked from the walker / loop-runner pre-move
     // hook immediately before the sneak, so the whole approach sequence is
     // weapon → armor → sn → move. Equipping breaks sneak, so the gear MUST land
