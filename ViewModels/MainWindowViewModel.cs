@@ -1553,7 +1553,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnEquipSlotBlocked(Game.Inventory.EquipmentManager.EquipBlock block)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             WriteTerminalStatus(
-                $"[{block.ItemName} skipped, unable to wear — adjust set and save to correct]",
+                $"[{block.ItemName} skipped, unable to wear — adjust set to correct]",
                 TerminalStatusKind.Notice));
 
     private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
