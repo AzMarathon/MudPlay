@@ -110,6 +110,13 @@
         <Setter Property="Padding" Value="0"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <!-- A toolbar button executes on click but must NOT take keyboard focus:
+             otherwise the button holds focus after a click, so Space/Enter re-toggle
+             it instead of reaching the terminal, and a following window hotkey is
+             absorbed by the focused button before it fires (needing a second press).
+             Keyboard focus stays on the terminal; the buttons stay mouse-clickable
+             and every action remains reachable by its keybind / menu. -->
+        <Setter Property="Focusable" Value="False"/>
     </Style>
     <Style Selector="Button.ToolbarBtn:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="{StaticResource ChromeBgHoverBrush}"/>

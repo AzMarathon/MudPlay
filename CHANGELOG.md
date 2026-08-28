@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.30.2
+
+- Toolbar buttons no longer steal keyboard focus — after clicking one, the **spacebar** (and every keystroke) goes to the terminal as before, instead of re-toggling the button
+- Window **hotkeys register on the first press** again — keyboard focus now sits on the terminal from launch, so a shortcut no longer needs a second press to take (a focus issue seen on Windows)
+
 ## 3.30.0
 
 - Navigation: the **Choose a route** picker gains a **Show steps…** button — click a route, then Show steps to see the full start-to-finish command sequence it will execute, every **detour** included (a lever pulled in another room, a winch cranked, a door opened), each as `12/431 Tower < s` (the room you're in, then the command sent). A gate the route must **buy/ask/hunt** an item to pass shows as its own step at that gate. It's the same expansion the walker runs, so what you read is what it does

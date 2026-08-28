@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.30.0**
-> - Navigation: the **Choose a route** picker gains a **Show steps…** button — click a route, then Show steps to see the full start-to-finish command sequence it will execute, every **detour** included (a lever pulled in another room, a winch cranked, a door opened), each shown as `12/431 Tower < s` (the room you're in, then the command sent). A gate the route must **buy/ask/hunt** an item to pass shows as its own step. It's the same expansion the walker runs, so what you read is what it does
+> **Version 3.30.2**
+> - Toolbar buttons no longer steal keyboard focus — after clicking one, the **spacebar** (and every keystroke) goes to the terminal as before, instead of re-toggling the button
+> - Window **hotkeys register on the first press** again — keyboard focus now sits on the terminal from launch, so a shortcut no longer needs a second press to take (a focus issue seen on Windows)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
