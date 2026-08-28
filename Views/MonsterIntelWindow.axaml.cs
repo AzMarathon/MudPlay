@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using MudPlay.Game.Combat;
@@ -7,8 +8,10 @@ namespace MudPlay.Views;
 
 // Modeless Monster Intel window. Bound to MonsterIntelViewModel; code-behind
 // attaches the persisted window layout, wires global hotkeys, closes the
-// window when the VM's in-window Close button fires, and syncs the DataGrid's
-// multi-selection into the VM's SelectedEntries for the comparison view.
+// window when the VM's in-window Close button fires, syncs the DataGrid's
+// multi-selection into the VM's SelectedEntries for the comparison view, and
+// disposes the VM on close (it may hold a live room-event subscription and a
+// target-poll timer from Phase 4's context bar).
 public partial class MonsterIntelWindow : Window
 {
     public MonsterIntelWindow()
@@ -16,10 +19,16 @@ public partial class MonsterIntelWindow : Window
         InitializeComponent();
         GlobalHotkeys.Attach(this);
         MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "monster-intel");
+        Closed += OnClosed;
         DataContextChanged += (_, _) =>
         {
             if (DataContext is MonsterIntelViewModel vm) vm.CloseRequested += Close;
         };
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        if (DataContext is MonsterIntelViewModel vm) vm.Dispose();
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.35.2**
-> - Monster Intel: select 2+ monsters (Ctrl/Shift-click) to compare them side by side in a row of stat cards
+> **Version 3.35.3**
+> - Monster Intel: new context bar — shows every monster in your current room as clickable chips and your current combat target's name
+> - **Follow target** (on by default) auto-selects whatever you're currently fighting as it changes targets mid-fight
+> - **Pin** holds the detail panel (or an in-progress comparison) steady, ignoring target changes
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

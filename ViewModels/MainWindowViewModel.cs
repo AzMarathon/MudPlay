@@ -4435,7 +4435,8 @@ public partial class MainWindowViewModel : ObservableObject
             DataContext = new MonsterIntelViewModel(
                 svc.GameData, svc.MonsterCatalog, svc.Dialogs, svc.Resolver,
                 svc.MonsterOverlaySeed, svc.RoomGraph,
-                svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic),
+                svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic,
+                svc.RoomClassifier, svc.Combat),
         };
         window.Closed += (_, _) => _monsterIntel = null;
         _monsterIntel = window;

@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.35.3
+
+- Monster Intel: new context bar — shows every monster in your current room as clickable chips and your current combat target's name
+- **Follow target** (on by default) auto-selects whatever you're currently fighting as it changes targets mid-fight
+- **Pin** holds the detail panel (or an in-progress comparison) steady, ignoring target changes
+
 ## 3.35.2
 
 - Monster Intel: select 2+ monsters in the list (Ctrl/Shift-click) to compare them side by side — a row of cards showing HP, Exp, AC/DR, Dodge, MR, Acc, Mag, SpellImmu, Resists, Casts, and Undead per monster, in place of the single-monster detail panel

@@ -527,7 +527,7 @@ The left list is filterable by name, with the same core stats as the Browser's M
 
 **Comparing monsters side by side**: Ctrl-click or Shift-click to select two or more rows in the list, and the detail panel switches to a row of cards — one per selected monster, each showing HP, Exp, AC/DR, Dodge, MR, Acc, Mag, SpellImmu, Resists, Casts, and Undead — so you can size up a few candidates at a glance without flipping back and forth. Drop back to one selected row to return to the full single-monster detail view.
 
-Monster Intel doesn't yet follow your current room or combat target automatically — that's planned but not built.
+**Context bar**: while connected, a bar above the list shows every monster in your current room as a row of clickable chips (click one to jump straight to its detail) and your current combat target's name. **Follow target** (on by default) auto-selects whichever monster you're currently fighting as the fight moves from target to target — no need to keep re-searching mid-fight. **Pin** holds the detail panel on whatever you've currently got open, ignoring target changes, for when you want to keep studying one monster (or a comparison) while combat moves on; picking a monster from the list, the room-roster chips, or the grid overrides the pin for that one pick. The context bar only appears once a character session (room tracking, combat) is active.
 
 ---
 

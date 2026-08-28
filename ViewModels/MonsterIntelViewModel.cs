@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
 using Avalonia.Collections;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
@@ -22,13 +23,13 @@ namespace MudPlay.ViewModels;
 // Modeless "Monster Intel" window — a searchable master list over
 // MonsterCatalog with a per-monster detail panel (Overview / Elemental
 // defenses / Attacks / Loot & locations / Automation / Your Matchup) and a
-// multi-select side-by-side comparison view. Phase 1-3 of the Monster Intel
+// multi-select side-by-side comparison view. Phases 1-4 of the Monster Intel
 // plan complete: read-only reference, the existing per-monster automation
 // overlay editor relocated here, a live-character-aware matchup preview
 // (weapon eligibility, ranked spell effectiveness, incoming elemental
-// threat), and monster-vs-monster comparison. The context bar (current room /
-// target following, pinning) is Phase 4 — not built yet.
-public sealed partial class MonsterIntelViewModel : ObservableObject
+// threat), monster-vs-monster comparison, and a context bar that follows the
+// current room's roster and combat target (pin to hold the detail steady).
+public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposable
 {
     private readonly GameDataCache _gameData;
     private readonly MonsterCatalog _catalog;
@@ -40,9 +41,15 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
     private readonly InventoryManager? _inventory;
     private readonly SpellbookState? _spellbook;
     private readonly ItemMagicIndex? _itemMagic;
+    private readonly RoomEntityClassifier? _roomClassifier;
+    private readonly CombatManager? _combat;
     private readonly IReadOnlyList<MonsterIntelEntry> _all;
+    private readonly Dictionary<int, MonsterIntelEntry> _byNumber;
     private readonly Dictionary<int, string> _itemNames;
     private readonly Dictionary<int, int> _spellAttType;
+    private readonly DispatcherTimer? _targetPoll;
+    private IReadOnlyList<RoomEntity> _lastRoomEntities = Array.Empty<RoomEntity>();
+    private bool _disposed;
 
     public event Action? CloseRequested;
 
@@ -82,7 +89,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
         DialogService? dialogs = null, SettingsResolver? resolver = null,
         MonsterOverlaySeedStore? overlaySeed = null, RoomGraphManager? roomGraph = null,
         PlayerStats? stats = null, InventoryManager? inventory = null,
-        SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null)
+        SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null,
+        RoomEntityClassifier? roomClassifier = null, CombatManager? combat = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -96,8 +104,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
         _inventory = inventory;
         _spellbook = spellbook;
         _itemMagic = itemMagic;
+        _roomClassifier = roomClassifier;
+        _combat = combat;
 
         _all = MonsterIntelEntry.BuildCatalog(catalog);
+        _byNumber = _all.ToDictionary(e => e.Number);
         _itemNames = BuildItemNames(gameData);
         _spellAttType = BuildSpellAttType(gameData);
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
@@ -107,6 +118,99 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
             if (e.PropertyName == nameof(NameFilter)) { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
             else if (e.PropertyName == nameof(SelectedEntry)) RebuildDetail();
         };
+
+        if (_roomClassifier is not null)
+        {
+            _roomClassifier.EntitiesObserved += OnEntitiesObserved;
+            if (_roomClassifier.Current is { } current) OnEntitiesObserved(current);
+        }
+
+        if (_combat is not null)
+        {
+            _targetPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _targetPoll.Tick += (_, _) => PollCombatTarget();
+            _targetPoll.Start();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _targetPoll?.Stop();
+        if (_roomClassifier is not null) _roomClassifier.EntitiesObserved -= OnEntitiesObserved;
+    }
+
+    // ----- context bar (Phase 4: follow the current room/target) -----
+
+    public ObservableCollection<MonsterIntelEntry> RoomMonsters { get; } = new();
+    public bool HasContextBar => _roomClassifier is not null || _combat is not null;
+
+    [ObservableProperty] private bool _followTarget = true;
+    [ObservableProperty] private bool _pinned;
+    [ObservableProperty] private string? _currentTargetName;
+
+    private string? _lastPolledTarget;
+
+    // Repopulates the room roster from the classifier's latest "Also here"
+    // read and re-evaluates target-following. RoomEntity already carries a
+    // resolved MonsterNumber (RoomAwareMonsterResolver disambiguates shared
+    // names to the record actually placed in this room), so no separate
+    // name lookup is needed here.
+    private void OnEntitiesObserved(RoomEntitiesObservation obs)
+    {
+        _lastRoomEntities = obs.Entities;
+
+        RoomMonsters.Clear();
+        HashSet<int> seen = new();
+        foreach (RoomEntity e in obs.Entities)
+        {
+            if (e.Kind != EntityKind.Monster || e.MonsterNumber is not { } number) continue;
+            if (!seen.Add(number)) continue;
+            if (_byNumber.TryGetValue(number, out MonsterIntelEntry? entry)) RoomMonsters.Add(entry);
+        }
+
+        TryFollowTarget();
+    }
+
+    // CombatManager exposes CurrentTarget as a getter with no change event
+    // (only RoomAppearsEmptyDuringCombat, unrelated) — polling avoids adding a
+    // new event to combat-critical code for a UI convenience. CurrentTarget is
+    // the raw name CombatManager sent in its "attack" command (RoomEntity.RawName,
+    // per SendWeaponAttack), so it's matched back against RawName here rather
+    // than ResolvedName.
+    private void PollCombatTarget()
+    {
+        string? target = _combat!.CurrentTarget;
+        if (target == _lastPolledTarget) return;
+        _lastPolledTarget = target;
+        CurrentTargetName = target;
+        TryFollowTarget();
+    }
+
+    private void TryFollowTarget()
+    {
+        if (!FollowTarget || Pinned) return;
+        string? target = _combat?.CurrentTarget;
+        if (string.IsNullOrEmpty(target)) return;
+
+        foreach (RoomEntity e in _lastRoomEntities)
+        {
+            if (e.Kind != EntityKind.Monster || e.MonsterNumber is not { } number) continue;
+            if (!string.Equals(e.RawName, target, StringComparison.OrdinalIgnoreCase)) continue;
+            if (_byNumber.TryGetValue(number, out MonsterIntelEntry? entry)) SelectedEntry = entry;
+            return;
+        }
+    }
+
+    partial void OnFollowTargetChanged(bool value)
+    {
+        if (value) TryFollowTarget();
+    }
+
+    partial void OnPinnedChanged(bool value)
+    {
+        if (!value) TryFollowTarget();
     }
 
     private bool PassesFilter(object o)
@@ -134,6 +238,15 @@ public sealed partial class MonsterIntelViewModel : ObservableObject
 
     [RelayCommand]
     private void Close() => CloseRequested?.Invoke();
+
+    // Clicking a context-bar room-roster chip selects it directly, same as
+    // clicking its grid row would — overrides follow/pin for that one pick,
+    // same as picking any other row in the master list does.
+    [RelayCommand]
+    private void SelectMonster(MonsterIntelEntry? entry)
+    {
+        if (entry is not null) SelectedEntry = entry;
+    }
 
     // ----- detail panel -----
 

@@ -41,7 +41,42 @@
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
-        <Grid ColumnDefinitions="440,*" ColumnSpacing="12">
+        <Grid RowDefinitions="Auto,*">
+
+            <!-- ===== Context bar: current room roster + combat target ===== -->
+            <Border Grid.Row="0" Classes="Group" Margin="0,0,0,10" IsVisible="{Binding HasContextBar}">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" VerticalAlignment="Center">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}Current target: {0}">
+                                    <Binding Path="CurrentTargetName" TargetNullValue="(none)"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                        <CheckBox Grid.Column="1" Content="Follow target" IsChecked="{Binding FollowTarget, Mode=TwoWay}"
+                                   ToolTip.Tip="Auto-select whatever this character is currently fighting."/>
+                        <CheckBox Grid.Column="2" Content="Pin" IsChecked="{Binding Pinned, Mode=TwoWay}" Margin="12,0,0,0"
+                                   ToolTip.Tip="Hold the current detail view steady even while following is on."/>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding RoomMonsters}" IsVisible="{Binding RoomMonsters.Count}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="combat:MonsterIntelEntry">
+                                <Button Content="{Binding Name}" Margin="0,0,6,6" Padding="8,3"
+                                        Command="{Binding $parent[ItemsControl].DataContext.SelectMonsterCommand}"
+                                        CommandParameter="{Binding}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Row="1" ColumnDefinitions="440,*" ColumnSpacing="12">
 
             <!-- ===== Left: searchable master list ===== -->
             <Grid Grid.Column="0" RowDefinitions="Auto,*">
@@ -288,6 +323,7 @@
                 </ScrollViewer>
               </Panel>
             </ScrollViewer>
+            </Grid>
         </Grid>
     </Border>
 </Window>
