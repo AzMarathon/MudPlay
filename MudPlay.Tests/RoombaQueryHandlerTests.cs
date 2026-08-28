@@ -153,6 +153,27 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         Assert.Contains("1/200", reply);
     }
 
+    // Report 20260827: a gang recon reported implausibly high totals for
+    // hidden items with no way to tell whether that was several genuinely
+    // separate stashes or one room's count gone wrong. Each room locator now
+    // carries its own quantity, not just a bare room list, so the reply
+    // itself is the diagnostic.
+    [Fact]
+    public void Roomba_ItemSeenInMultipleRooms_ShowsPerRoomQuantity()
+    {
+        var (engine, players, _, locations) = Setup();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        locations.RecordRoom(new RoomKey(1, 100), new[] { "4 long sword" });
+        locations.RecordRoom(new RoomKey(1, 200), new[] { "2 long sword" });
+
+        engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
+
+        string reply = Assert.Single(Replies(engine));
+        Assert.Contains("6x long sword", reply);
+        Assert.Contains("1/100 (4)", reply);
+        Assert.Contains("1/200 (2)", reply);
+    }
+
     // Beyond MaxRoomsShown, the room list folds into a "+N more" tail instead
     // of further lines — the whole point of consolidating is staying at one
     // line even for an item scattered across many rooms.

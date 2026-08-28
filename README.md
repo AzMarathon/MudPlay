@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.31.0**
-> - Item Finder: the trial-set panel is now **Gear Finder**, and **Find Best searches whatever the results grid currently shows** instead of the whole catalog — so "best AC in Leather" for a plate-capable class is finally possible by narrowing Armour Type first
-> - Item Finder: Find Best's criterion dropdown gained many options (AC/DR combo, Dodge, Magic Resist, ShockShield, VileWard, backstab, martial-arts strikes, and more) each with a grid column, plus an **Effective AC vs Evil** criterion (`AC + Prot-Evil`)
-> - Item Finder: a **search order** (chain criteria, highest-priority-first) and a **Target weight** cap (None/Light/Medium/Heavy) for Find Best, and per-option stat tooltips on the slot dropdowns
+> **Version 3.31.1**
+> - Roomba: `@roomba <item>` now shows **each room's own quantity** next to its locator (e.g. `15/12 (3), 15/13 (2)`), not just the summed total — so a high total for a hidden item can be told apart as a genuinely scattered stash vs one room's count looking wrong
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
