@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.36.0**
-> - Monster Intel: new **Your Observations** section — a per-character log of actual combat outcomes seen against a monster, kept visibly separate from the game-data facts elsewhere in the window
-> - Tracks landed-hit damage extent/average, hit rate, and confirmed "no effect" discoveries (physical Magical-requirement gate, spell SpellImmunity gate); persists per character
-> - Deliberately doesn't attempt to infer a "resisted" cast from a low damage roll — no wire line distinguishes the two, so only the confirmed no-effect case is tracked
+> **Version 3.36.1**
+> - Monster Intel: fixed the master list being too cramped to read — the window opens wider, the list/detail divider is now a draggable, per-character-remembered splitter, and the list's columns size themselves to their content instead of clipping headers
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

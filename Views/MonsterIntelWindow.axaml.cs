@@ -9,16 +9,25 @@ namespace MudPlay.Views;
 // Modeless Monster Intel window. Bound to MonsterIntelViewModel; code-behind
 // attaches the persisted window layout, wires global hotkeys, closes the
 // window when the VM's in-window Close button fires, syncs the DataGrid's
-// multi-selection into the VM's SelectedEntries for the comparison view, and
-// disposes the VM on close (it may hold a live room-event subscription and a
-// target-poll timer from Phase 4's context bar).
+// multi-selection into the VM's SelectedEntries for the comparison view,
+// persists the list/detail pane split ratio, and disposes the VM on close (it
+// may hold a live room-event subscription and a target-poll timer from Phase
+// 4's context bar).
 public partial class MonsterIntelWindow : Window
 {
+    // Stable id under which the list/detail column split persists in
+    // CharacterProfile.SplitterRatios (mirrors MonsterEditDialog's own use of
+    // SplitterLayoutStore for the same kind of two-pane split).
+    private const string SplitterId = "MonsterIntelWindow";
+
     public MonsterIntelWindow()
     {
         InitializeComponent();
         GlobalHotkeys.Attach(this);
         MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "monster-intel");
+        MudPlay.Services.AppServices.Current.SplitterLayouts.AttachGrid(
+            owner: this, grid: this.FindControl<Grid>("PanesGrid")!,
+            leftColumnIndex: 0, rightColumnIndex: 2, id: SplitterId);
         Closed += OnClosed;
         DataContextChanged += (_, _) =>
         {

@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.36.1
+
+- Monster Intel: fixed the master list being too cramped to read — the window opens wider, the list/detail divider is now a draggable, per-character-remembered splitter, and the list's columns size themselves to their content instead of clipping headers
+
 ## 3.36.0
 
 - Monster Intel: new **Your Observations** section — a per-character log of actual combat outcomes seen against a monster, kept visibly separate from the game-data facts elsewhere in the window
