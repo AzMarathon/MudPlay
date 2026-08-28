@@ -338,6 +338,42 @@ public sealed class CombatSpellChooserTests
         Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 4, roomMobKeys: roster3)));
     }
 
+    // report paradigm-20260827-082106: hunting the same species room-to-room, the
+    // AoE debuff fired only in the first room. RawNames repeat across a same-species
+    // loop, so the room we're leaving's tags mark the next room's identical crabs as
+    // "already debuffed" and the once-per-room AoE skips. The pre-move reset
+    // (CombatManager.NotePreMove → ResetForNewRoom) clears the tags before the next
+    // room, so each room fires the AoE again.
+    [Fact]
+    public void ChooseDebuff_Area_SameSpeciesNextRoom_SkippedUntilRoomReset()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 2, maxCasts: 1),
+        };
+        // Every room in the loop shows the identical RawNames.
+        string[] crabs = { "ironshell crab", "ironshell crab", "scorpion crab" };
+
+        // Room 1: fires, tags the crabs (per-room cap now spent).
+        CombatSpellDecision? room1 = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: crabs));
+        Assert.Equal(CombatSpellAction.AreaDebuff, room1?.Action);
+        sut.MarkCast(room1!.Value, "ironshell crab", crabs);
+
+        // Same room, next round: all tagged → no re-fire (correct once-per-room).
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: crabs)));
+
+        // Walk into a FRESH room of the same species WITHOUT a reset: the leaving
+        // room's tags bleed in, so the identical crabs read as already-debuffed and
+        // the AoE is wrongly skipped — the reported bug.
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: crabs)));
+
+        // The pre-move hook resets the per-room economy → the new room fires again.
+        sut.ResetForNewRoom();
+        CombatSpellDecision? room2 = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: crabs));
+        Assert.Equal(CombatSpellAction.AreaDebuff, room2?.Action);
+    }
+
     [Fact]
     public void ChooseDebuff_RoomThinsBelowMinEnemies_SingleTakesOver()
     {

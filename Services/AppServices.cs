@@ -4628,6 +4628,10 @@ public sealed class AppServices
         Walker.SetPreMoveHook(() =>
         {
             Combat.PrepBackstabForMove();
+            // Clear the per-room AoE-debuff / attack caps so the next room's crabs
+            // aren't read as "already debuffed" from the room we're leaving (report
+            // paradigm-20260827-082106).
+            Combat.NotePreMove();
             Stealth.RequestPreMoveStealth();
         });
         // PR B — announce the route's possession-gated item ids at walk-start
@@ -4926,6 +4930,10 @@ public sealed class AppServices
         LoopRunner.SetPreMoveHook(() =>
         {
             Combat.PrepBackstabForMove();
+            // Same per-room cap reset the walker does — a loop circuit that hunts the
+            // same species room-to-room otherwise fires its AoE debuff only in the
+            // first room (report paradigm-20260827-082106).
+            Combat.NotePreMove();
             Stealth.RequestPreMoveStealth();
         });
         // Predictive equip on loop laps — same hook the walker uses, so a circuit

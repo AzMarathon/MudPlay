@@ -1602,6 +1602,23 @@ public sealed partial class CombatManager : IDisposable
         _usingAlternateWeapon = false;
     }
 
+    // Pre-move hook: reset the chooser's per-room cast economy before we step into
+    // the next room. The AoE debuff / multi-attack caps count PER ROOM, and the AoE
+    // debuff tags each mob's RawName so it fires once per room, re-firing only for a
+    // later NEW arrival. RawNames repeat across a same-species hunt loop (every room
+    // is "ironshell crab, scorpion crab, …"), so a room's tags would otherwise carry
+    // into the next room and read the fresh crabs as "already debuffed" — the
+    // once-per-room AoE silently skipped for the rest of the loop (report
+    // paradigm-20260827-082106). The room-clear reset (OnRoomCleared) only fires on
+    // an OBSERVED empty room, which a back-to-back populated loop never produces: the
+    // new room's "Also here:" parses BEFORE the move confirms, so the classifier
+    // emits no empty observation between rooms and the cap bleeds. Resetting here —
+    // on the walker / loop-runner pre-move hook, which fires before the new room
+    // displays — lands ahead of the next room's opener, so each room fires its AoE
+    // debuff exactly once with no double-fire. Fires for every mover (backstab or
+    // not), so unlike PrepBackstabForMove it is not gated on DoBackstab.
+    public void NotePreMove() => _spellChooser.ResetForNewRoom();
+
     // Re-arm the surprise round for a fresh hide established in the current room —
     // the stationary hidden opener (a monster walks into a room the character is
     // hidden in). Unlike PrepBackstabForMove there's NO gear swap: equipping breaks
