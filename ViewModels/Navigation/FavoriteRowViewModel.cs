@@ -13,4 +13,9 @@ public sealed record FavoriteRowViewModel(RoomKey Key, string Label, string Fold
     // Context-menu label for the star toggle — reflects the current state, the
     // same way a loop row's favourite toggle does.
     public string FavoriteMenuHeader => IsStarred ? "Remove from favourites" : "Add to favourites";
+
+    // GOTO-pane display text with the map/room number appended so
+    // identically-named rooms (and rooms whose label doesn't reveal where they
+    // are) are distinguishable at a glance.
+    public string LabelWithKey => $"{Label} ({Key.Map}/{Key.Room})";
 }

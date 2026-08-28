@@ -173,6 +173,12 @@ public partial class App : Application
                 MudPlay.ViewModels.BlacklistEditorDialogViewModel,
                 MudPlay.Views.BlacklistEditorDialog>();
 
+            // Modify avoid rooms (Game Data menu) — staged editor over the
+            // per-character avoided + stash room sets.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.AvoidRoomsEditorDialogViewModel,
+                MudPlay.Views.AvoidRoomsEditorDialog>();
+
             // Manage Sets… (Game Data menu) — copy/move a set's loop
             // library between sets, or delete a set (tables + loops).
             AppServices.Current.Dialogs.RegisterWindow<

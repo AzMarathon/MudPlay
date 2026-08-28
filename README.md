@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.31.3**
-> - Combat: after a disconnect/reconnect mid-fight, the character resumes attacking instead of standing there taking hits — the stale mid-round target/cast state is now cleared on disconnect (like it already is on death), so the reconnect's room-entry re-engages clean
-> - Combat: toggling **AutoCombat off then back on** mid-fight now actually re-engages — turning it back on re-evaluates the current room (it used to only on the off side), so the engine re-picks the monster still there
+> **Version 3.32.0**
+> - Game Data menu: new **Modify avoid/stash rooms…** editor listing your avoid rooms and stash rooms together, tagged by type with map/room and name
+> - Quick-add a room by type + map/room number, remove selected rows (multi-select), Save to apply or Cancel to discard
+> - Navigation Management → Go To tab: each saved room now shows its map/room number after the name
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

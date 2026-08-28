@@ -167,6 +167,81 @@ public sealed class MovementFilterTests
         Assert.Equal(2, stashFires);
     }
 
+    // ----- ReplaceAll: the Modify-Avoid-Rooms dialog Save-commit path -----
+
+    [Fact]
+    public void ReplaceAll_SetsBothSets_AndPersistsToProfile()
+    {
+        (ProfileService profile, MovementFilter filter) = NewPair();
+        CharacterProfile draft = profile.LoadBlank();
+
+        filter.ReplaceAll(
+            avoided: new[] { new RoomKey(1, 5), new RoomKey(2, 9) },
+            stash:   new[] { new RoomKey(3, 7) });
+
+        Assert.True(filter.IsAvoided(new RoomKey(1, 5)));
+        Assert.True(filter.IsAvoided(new RoomKey(2, 9)));
+        Assert.True(filter.IsStash(new RoomKey(3, 7)));
+        Assert.Equal(2, draft.AvoidedRooms!.Count);
+        Assert.Single(draft.StashRooms!);
+    }
+
+    [Fact]
+    public void ReplaceAll_DropsEntriesNotInNewSets()
+    {
+        (ProfileService profile, MovementFilter filter) = NewPair();
+        profile.LoadBlank();
+        filter.MarkAvoided(new RoomKey(1, 1));
+        filter.MarkAvoided(new RoomKey(1, 2));
+        filter.MarkStash(new RoomKey(1, 3));
+
+        // Save a working copy that keeps only 1/1 avoided and drops the stash.
+        filter.ReplaceAll(avoided: new[] { new RoomKey(1, 1) }, stash: Array.Empty<RoomKey>());
+
+        Assert.True(filter.IsAvoided(new RoomKey(1, 1)));
+        Assert.False(filter.IsAvoided(new RoomKey(1, 2)));
+        Assert.Empty(filter.Stash);
+    }
+
+    [Fact]
+    public void ReplaceAll_MoveRoomBetweenSets()
+    {
+        (ProfileService profile, MovementFilter filter) = NewPair();
+        profile.LoadBlank();
+        filter.MarkAvoided(new RoomKey(4, 4));
+
+        // Editor removed the avoid row and added the same room as a stash.
+        filter.ReplaceAll(avoided: Array.Empty<RoomKey>(), stash: new[] { new RoomKey(4, 4) });
+
+        Assert.False(filter.IsAvoided(new RoomKey(4, 4)));
+        Assert.True(filter.IsStash(new RoomKey(4, 4)));
+    }
+
+    [Fact]
+    public void ReplaceAll_FiresBothChangedEvents()
+    {
+        (ProfileService profile, MovementFilter filter) = NewPair();
+        profile.LoadBlank();
+
+        int avoidedFires = 0, stashFires = 0;
+        filter.AvoidedChanged += () => avoidedFires++;
+        filter.StashChanged   += () => stashFires++;
+
+        filter.ReplaceAll(avoided: new[] { new RoomKey(1, 1) }, stash: new[] { new RoomKey(1, 2) });
+
+        Assert.Equal(1, avoidedFires);
+        Assert.Equal(1, stashFires);
+    }
+
+    [Fact]
+    public void ReplaceAll_NoProfile_IsNoOp()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.ReplaceAll(avoided: new[] { new RoomKey(1, 1) }, stash: Array.Empty<RoomKey>());
+        Assert.Empty(filter.Avoided);
+        Assert.Empty(filter.Stash);
+    }
+
     [Fact]
     public void ProfileSwap_RehydratesIntoFreshSet()
     {

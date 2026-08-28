@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.32.0
+
+- Game Data menu: new **Modify avoid/stash rooms…** editor listing your avoid rooms and stash rooms together, tagged by type with map/room and name
+- Quick-add a room by type + map/room number, remove selected rows (multi-select), Save to apply or Cancel to discard
+- Navigation Management → Go To tab: each saved room now shows its map/room number after the name
+
 ## 3.31.3
 
 - Combat: after a disconnect/reconnect mid-fight, the character resumes attacking instead of standing there taking hits — a between-round survival cast could leave an "attack owed" latch waiting on a *Combat Off* that was lost with the connection, so the stale target/latch is now cleared on disconnect (like it already is on death) and the reconnect's room-entry re-engages clean
