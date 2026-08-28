@@ -304,6 +304,15 @@ public sealed class WindowSnapManager
     private static PixelRect RectAt(Panel p, PixelPoint pos)
     {
         Window w = p.Window;
+
+        // On Windows the reported Position / FrameSize include the invisible resize
+        // border, so snapping the frame rects flush leaves a visible gap; use the DWM
+        // visible bounds instead so visible edges land flush. The inset is a fixed
+        // border width, so it applies to a hypothetical `pos` too. No-op / fallback
+        // off Windows and on any failure — where FrameSize already IS the visible frame.
+        if (NativeWindowFrame.TryGetVisibleFrame(w, out PixelPoint inset, out PixelSize visible))
+            return new PixelRect(new PixelPoint(pos.X + inset.X, pos.Y + inset.Y), visible);
+
         double scale = w.Screens?.ScreenFromWindow(w)?.Scaling ?? w.RenderScaling;
         if (scale <= 0) scale = 1;
         Size size = w.FrameSize ?? w.Bounds.Size;
