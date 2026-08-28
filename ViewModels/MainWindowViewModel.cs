@@ -4920,12 +4920,19 @@ public partial class MainWindowViewModel : ObservableObject
         if (_suppressAutoEngineWriteback > 0) return;
         AppServices.Current.CombatTracker?.OnAutoAttackChanged();
         // OnAutoAttackChanged clears only the Combat gate. Sibling room-observation
-        // gate-holders (the deferred-cash / get-items / search Acquisition holds)
-        // re-evaluate solely on a fresh observation, so turning combat off with one
-        // of them asserted strands the walker "Paused by: Acquisition" until a
-        // manual room re-display. Re-emit the current observation once the fight is
-        // disengaged so every gate-holder re-evaluates together.
-        if (!value) AppServices.Current.RoomClassifier?.ReemitCurrent();
+        // gate-holders (the deferred-cash / get-items / search Acquisition holds) —
+        // and CombatManager's own re-pick — re-evaluate solely on a fresh
+        // observation, so toggling AutoCombat with none pending strands things
+        // until a manual room re-display. Turning it OFF mid-fight needs this to
+        // release the walker (and clear InCombat if the room is clear); turning it
+        // back ON needs it just as much, or CombatManager.OnEntitiesObserved never
+        // runs again for the unchanged current roster — its early-return while
+        // disabled already nulled _currentTarget, and nothing re-picks a target
+        // for it until some UNRELATED fresh observation happens to arrive (report
+        // paradigm-20260827-203644: toggling AutoCombat off then back on mid-fight,
+        // meant to un-stick a stalled fight, silently did nothing — the character
+        // never resumed attacking the monster still sitting in the same room).
+        AppServices.Current.RoomClassifier?.ReemitCurrent();
         MaybeEndSprintOnManualEngineEnable(value);
     }
 
