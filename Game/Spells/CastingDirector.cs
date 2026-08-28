@@ -594,6 +594,27 @@ public sealed class CastingDirector : IDisposable
                 $"party member {key} died — cleared {removed} buff timer(s) on them (death wipes buffs).");
     }
 
+    // Manually drop the timer for one (target, cast-code) — the user clicking the clear
+    // (✕) on a Buff Watchdog row. target "" is a self / whole-party buff; a given name is
+    // a single-target member. The next evaluation recasts it if it's still a configured,
+    // due buff; a phantom timer (e.g. an ex-member's) simply disappears. Case-insensitive
+    // so the row's stored key always matches.
+    public void ClearBuffTimer(string? target, string? shortCode)
+    {
+        string t = (target ?? string.Empty).Trim();
+        string s = (shortCode ?? string.Empty).Trim();
+        (string Target, string Short)? doomed = null;
+        foreach ((string Target, string Short) key in _activeUntil.Keys)
+            if (string.Equals(key.Target, t, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(key.Short, s, StringComparison.OrdinalIgnoreCase))
+            {
+                doomed = key;
+                break;
+            }
+        if (doomed is { } k && _activeUntil.Remove(k))
+            _log?.Info(LogCategory, $"buff timer manually cleared — target=\"{t}\" spell={s}.");
+    }
+
     // Remove every active-timer entry whose target matches (case-insensitive); returns
     // the count removed. target "" removes the self-keyed timers.
     private int RemoveTimersFor(string target)

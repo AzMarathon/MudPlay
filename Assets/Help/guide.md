@@ -586,6 +586,7 @@ Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar
 - The **bar fills as the buff ages** (empty just after it lands, full at wear-off), and a **vertical amber marker** shows where its **recast window** opens — the "recast within (seconds)" lead you set per slot. When the fill crosses the marker the bar turns amber: the buff is now due to be recast.
 - A buff that **isn't up** (worn off, or never cast) shows an empty bar labelled **not up**, so you can see at a glance which configured buffs are missing.
 - A single-target party-buff row whose member is **hiding** (the cast came back *"You do not see … here!"*) shows **hidden — can't target**; it clears and retries when you move or they reappear.
+- A small **✕** at the left of a live bar **clears that timer** — marks the buff off (e.g. when a dispel you didn't see stripped it). A configured buff that's still due recasts on the next pass; a leftover timer (say an ex-member's) just disappears. The ✕ only shows while a timer is actually up.
 - A configured buff your character **hasn't learned** is flagged **unlearned**.
 - A **whole-party** buff (chant, mass frenzy, a party-wide cast item…) is one row — a single cast blankets the party. A **single-target** buff gets **one row per member** it's cast on (each member is blessed individually, so each has its own recast timer and name). If you untick a member you've already blessed, their row **stays until the buff actually expires** — unticking just stops future recasts, it doesn't cancel the running buff.
 

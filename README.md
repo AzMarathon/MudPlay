@@ -12,6 +12,7 @@
 > - Fixed: single-target party buffs now target by **party membership** (a MajorMUD party is always one room), not `Also here:` — which never lists the **leader you follow**, so their bless was silently skipped every round; a **hiding** member (cast returns "You do not see … here!") is backed off and shown **"hidden — can't target"**, retried on move / reappear. The panel also keeps its layout when docked Below or Left
 > - Fixed: unticking a member you've already blessed no longer hides their Buff Watchdog timer — the running buff's countdown stays until it expires
 > - Buff timers now track death & disconnect like the game: your death clears your self-buffs, a party member's death clears their timers, and on your disconnect the party's timers keep counting (they stayed online) while only your own reset
+> - Buff Watchdog: a **✕** on each live timer bar manually clears that buff timer
 > - Settings → Party keeps the *bless while resting / during combat* gates, plus a **Party Buffs panel position** option (Right / Below / Left)
 > - Fixed: the Party Buffs panel no longer appears for a class with no party-buff spells — a stray blank slot is pruned on load instead of forcing the panel open
 > - Fixed: the Game Data → Players list hid the wrong person when a profile was copied from another character (it now identifies "self" by the live `stat` name, not the stored profile name)

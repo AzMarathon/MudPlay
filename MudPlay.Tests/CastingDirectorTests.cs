@@ -2682,6 +2682,31 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void ClearBuffTimer_RemovesOnlyTheNamedTimer()
+    {
+        // The Buff Watchdog ✕: manually drop one (target, spell) timer, leaving the rest.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddAllMembersSlot("bles");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
+
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Goldar!");
+        Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
+
+        h.Director.ClearBuffTimer("raijin", "bles");   // ✕ on Raijin's row (case-insensitive)
+
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("goldar", kept.Target);
+    }
+
+    [Fact]
     public void PartyBless_SkipsSelf()
     {
         using PartyBlessHarness h = new();

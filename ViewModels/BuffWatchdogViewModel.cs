@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -101,6 +102,17 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     }
 
     private void OnHeartbeat() => PostRefresh();
+
+    // Manually clear one row's buff timer (the ✕ button) — mark that buff off. A
+    // configured, still-due buff recasts on the next evaluation; a phantom timer just
+    // drops. Refresh at once so the row updates without waiting for the heartbeat.
+    [RelayCommand]
+    private void ClearTimer(BuffWatchdogRowViewModel? row)
+    {
+        if (row is null) return;
+        _castDirector.ClearBuffTimer(row.MemberKey, row.CastCode);
+        PostRefresh();
+    }
 
     private void PostRefresh()
     {
