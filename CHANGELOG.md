@@ -2,7 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.33.0
+## 3.34.0
+
+- Party blessing overhaul: buff slots moved from Settings → Party into a live **Party Buffs** panel in the Party window — add/remove slots, pick a learned buff, set a per-slot recast timer
+- Whole-party buffs get a single on/off; single-target buffs bless **all members** or a checklist of specific players (targeting replaces the old per-class checkboxes)
+- Single-target casts now fire only for a member who is **both in your party and in the room** — never at someone who left, was uninvited, or wandered off; targets persist by name across parties dissolving and reforming
+- Settings → Party keeps only the *bless while resting / during combat* gates
+
+
 
 - Equipment Manager: a gear slot holding an item your character can't wear (alignment / level / class) is flagged red with a ⚠ and skipped on swaps, instead of the engine repeatedly bonking the game with a wear it refuses
 - Equipment Manager: when the game refuses a wear/wield ("You may not wear that item!" / "You may not use that weapon." — e.g. an alignment-drift EP-zap), the slot is blocked and a terminal notice tells you to adjust the set; change that slot to clear it

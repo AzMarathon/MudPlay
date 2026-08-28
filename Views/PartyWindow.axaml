@@ -3,16 +3,24 @@
         xmlns:vm="using:MudPlay.ViewModels"
         xmlns:game="using:MudPlay.Game"
         xmlns:profile="using:MudPlay.Models.Profile"
+        xmlns:spells="using:MudPlay.Game.Spells"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="240"
+        mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="360"
         x:Class="MudPlay.Views.PartyWindow"
         x:DataType="vm:PartyViewModel"
         Title="{Binding HeaderText}"
-        Width="520" Height="290"
-        MinWidth="380" MinHeight="80"
+        Width="880" Height="360"
+        MinWidth="720" MinHeight="120"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
+
+    <Window.Resources>
+        <!-- Spell-picker row: "code — name". -->
+        <DataTemplate x:Key="BuffPickItem" x:DataType="spells:SpellPick">
+            <TextBlock Text="{Binding Display}"/>
+        </DataTemplate>
+    </Window.Resources>
 
     <Window.Styles>
         <!-- Rank chip (F/M/B) — rendered per member.
@@ -66,6 +74,98 @@
                    FontSize="11"
                    TextWrapping="Wrap"
                    IsVisible="{Binding !State.IsInParty}"/>
+
+        <!-- ===== Party-buff panel (right) =====
+             Add / remove buff slots, pick a buff, set its recast timer, and
+             choose targeting: a whole-party buff is one on/off; a single-target
+             buff blesses "all members" or a checklist of specific members. Backed
+             by CharacterProfile.PartyBuffs, persisted on every edit. -->
+        <Border DockPanel.Dock="Right" Width="340"
+                Background="{StaticResource ChromeBgElevBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}"
+                BorderThickness="1,0,0,0">
+            <Grid Margin="8" RowDefinitions="Auto,*"
+                  DataContext="{Binding Buffs}" x:DataType="vm:PartyBuffPanelViewModel">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                    <TextBlock Text="Party Buffs" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="＋ Add buff" Padding="8,2"
+                            Command="{Binding AddBuffCommand}"/>
+                </Grid>
+
+                <TextBlock Grid.Row="1"
+                           IsVisible="{Binding !HasSlots}"
+                           Text="No buffs configured. Click “Add buff”, pick a spell, then set who receives it and its recast timer."
+                           Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"
+                           TextWrapping="Wrap"/>
+
+                <ScrollViewer Grid.Row="1" IsVisible="{Binding HasSlots}"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Slots}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PartyBuffSlotRowViewModel">
+                                <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                                        BorderThickness="1" CornerRadius="3"
+                                        Padding="6" Margin="0,0,0,6">
+                                    <StackPanel Spacing="4">
+                                        <!-- Spell picker + remove -->
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                            <AutoCompleteBox VerticalAlignment="Center"
+                                                             Text="{Binding Spell, Mode=TwoWay}"
+                                                             ItemsSource="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).BuffPicks}"
+                                                             ValueMemberBinding="{ReflectionBinding Short}"
+                                                             ItemFilter="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).SpellSuggestionFilter}"
+                                                             ItemTemplate="{StaticResource BuffPickItem}"
+                                                             FilterMode="Contains"
+                                                             MinimumPrefixLength="0"
+                                                             PlaceholderText="Buff spell…"/>
+                                            <Button Grid.Column="1" Content="⨯" Width="24" Height="24"
+                                                    Padding="0"
+                                                    ToolTip.Tip="Remove this buff slot"
+                                                    Command="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).RemoveBuffCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                        </Grid>
+
+                                        <!-- Recast timer -->
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="recast within (s)" FontSize="11"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                       VerticalAlignment="Center"/>
+                                            <NumericUpDown Value="{Binding RecastMarginSec, Mode=TwoWay}"
+                                                           Minimum="0" Maximum="999" Increment="1"
+                                                           FormatString="0" Width="96"
+                                                           ToolTip.Tip="Recast when within this many seconds of expiring. 0 = wait for actual expiry."/>
+                                        </StackPanel>
+
+                                        <!-- Whole-party buff: one on/off -->
+                                        <CheckBox Content="Whole party (cast on the whole party)"
+                                                  IsChecked="{Binding WholePartyOn, Mode=TwoWay}"
+                                                  IsVisible="{Binding IsWholeParty}"/>
+
+                                        <!-- Single-target buff: all members, or a checklist -->
+                                        <StackPanel Spacing="2" IsVisible="{Binding IsSingleTarget}">
+                                            <CheckBox Content="All members"
+                                                      IsChecked="{Binding AllMembers, Mode=TwoWay}"
+                                                      ToolTip.Tip="Bless every party member who's in the room (auto-adapts to whatever party you're in)."/>
+                                            <ItemsControl ItemsSource="{Binding MemberTargets}"
+                                                          IsVisible="{Binding ShowMemberList}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:PartyBuffMemberToggle">
+                                                        <CheckBox Content="{Binding DisplayName}"
+                                                                  IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                                  Margin="12,0,0,0" MinHeight="0"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
 
         <!-- ===== Member rows =====
              Column header row dropped — column purpose is obvious from

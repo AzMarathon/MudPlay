@@ -204,6 +204,19 @@ Open it from **View → Party**, a toolbar button, or **right-click the terminal
 
 The healing, ranks, nags, and re-invite behaviour the window reflects are all configured on **Settings → Party**.
 
+### Party Buffs panel
+
+The right side of the Party window is where you configure the beneficial spells the client casts on your party. Click **＋ Add buff** to add a slot, then:
+
+- **Pick a spell** from the dropdown — it lists the buff spells you've learned that target another player or the whole party (attacks, heals, and self-only spells are filtered out).
+- **Set a recast timer** — "recast within (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off).
+- **Choose targeting**, which depends on the spell:
+  - A **whole-party** buff (chant, mass frenzy, and the like — one cast blankets everyone) shows a single **Whole party** on/off toggle.
+  - A **single-target** buff (frenzy, divine favour, regeneration…) shows **All members** — bless everyone present, auto-adapting to whatever party you're in — or, unticked, a **checklist** of the current party members so you pick exactly who gets it.
+- **⨯** removes a slot.
+
+Everything saves as you edit it — there's no Save button. A single-target buff only ever fires for a member who is **both currently in your party and in the room**, so a member who leaves, is uninvited, or wanders to another room is never targeted, and a saved target who rejoins is blessed again automatically. Targets are remembered by name, so your setup survives parties dissolving and reforming. (The two **bless while resting / during combat** gates that decide *when* the buff engine may cast still live on **Settings → Party**.)
+
 ## Leaders and followers
 
 One character leads; the rest follow. A follower tracks the leader's movement and holds position; if the leader disconnects, the party disbands. A party is 2–6 characters.
@@ -575,7 +588,7 @@ Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar
 
 **What it counts as "up".** A buff's timer is armed by the **cast code** — whether the client cast it or **you typed it by hand** — so a manual cast shows up here the same as an automated one. The client deliberately **ignores the `stat` screen's buff list** (Paradigm's `You feel …! (Ns)` lines): those shared effect messages can't say which buff is which, so they're never treated as a cast. **Any disconnect freezes the timers** (the display too) and reconnecting **resumes** them with the same remaining — a brief drop keeps your recast clock instead of restarting it. Switching characters (or a gap longer than the buff could last) starts the watchdog empty, with no buffs assumed.
 
-The window is a live view — it refreshes about once a second while open — and re-selecting the menu item (or toolbar button) toggles it closed. It's read-only: configure the buffs themselves on the Player Workshop (self-bless slots, regen, when-full) and Settings → Party (party-bless).
+The window is a live view — it refreshes about once a second while open — and re-selecting the menu item (or toolbar button) toggles it closed. It's read-only: configure the buffs themselves on the Player Workshop (self-bless slots, regen, when-full) and the **Party window's Party Buffs panel** (party buffs).
 
 ## Wire Inspector (F5)
 
@@ -1346,15 +1359,13 @@ Settings → Party.
 
 **Important notes:** This control exists in the UI but has no setting behind it — it's a placeholder for a future feature, currently fixed and greyed out.
 
-### Party bless (10 slots)
+### Party bless
 
-**Default:** all empty
-**What it does:** Up to 10 beneficial spells you want auto-cast on party members, each restricted to specific classes (e.g. cast a warrior buff only on Warriors and Barbarians). Row order is cast priority.
-**How the options work:** The first time you type a spell into an empty slot, every currently-known class gets auto-checked as a convenience — untick the ones you don't want it cast on. Each row also has its own **recast within (s)** — how early before the buff's tracked expiry to recast it; it defaults to **15**, and `0` waits for the buff to actually wear off.
+**Where it's configured:** the party-buff **slots** (which spells, which members, recast timers) live in the **Party window's Party Buffs panel** — see *The Party window → Party Buffs panel* above. This tab keeps only the two timing gates below.
 
-**Party-only, and targeting:** the party-bless slots are cast **only while you're actually in a party** — solo, none of them fire (your self-bless slots still do). A **party-wide** spell (chant and the like — one cast blankets the whole party, including you) is sent once with no target. A **single-target** spell is cast on each class-matched member individually with its own recast timer per person, and it is **not** cast on your own character — self comes from the self-bless slots.
+**Party-only, and targeting:** party buffs are cast **only while you're actually in a party** — solo, none fire (your self-bless slots still do). A **whole-party** spell (chant and the like) is sent once with no target and blankets the party, including you. A **single-target** spell is cast on each selected member individually with its own recast timer, is **not** cast on your own character (self comes from the self-bless slots), and only fires for a member who's both in your party and in the room.
 
-**Supersession:** if a party-wide party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
+**Supersession:** if a whole-party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
 
 ### Bless party while resting / Bless party during combat
 

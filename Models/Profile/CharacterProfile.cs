@@ -274,6 +274,12 @@ public sealed class CharacterProfile
     // yet.
     public EquipmentSettings? Equipment { get; set; }
 
+    // Per-character party-buff plan (Party window) — the dynamic list of buff
+    // slots the party-bless path casts, each with its own recast timer and (for
+    // single-target buffs) its selected party members. Configured live in the
+    // Party window, not the Settings tab. null means nothing configured yet.
+    public PartyBuffSettings? PartyBuffs { get; set; }
+
     // Given name of the party leader we were following, remembered so a
     // follower can auto-rejoin after an unexpected drop. Written through by
     // PartyRejoinCoordinator whenever follower membership changes (set on

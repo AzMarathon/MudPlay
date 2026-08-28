@@ -2381,6 +2381,16 @@ public sealed class CastingDirectorTests
         public HealthSettings Health { get; set; } = new();
         public PartySettings PartySettings { get; set; } = new();
 
+        /// <summary>The party-buff plan the director reads (CharacterProfile.PartyBuffs).</summary>
+        public PartyBuffSettings PartyBuffs { get; } = new();
+
+        /// <summary>Given names currently in the room — the presence gate. AddMember
+        /// puts a member here by default; drop a name to model an absent member.</summary>
+        public HashSet<string> InRoom { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Spell shorts that are whole-party (Targets 10/13).</summary>
+        public HashSet<string> WholeParty { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>When true the triggered-rest gate reports an active recovery
         /// rest. A bare Position=Resting does NOT set this — idle resting still
         /// buffs the party.</summary>
@@ -2392,9 +2402,6 @@ public sealed class CastingDirectorTests
         /// <summary>Buff short → (CasterMessage template, duration seconds).</summary>
         public Dictionary<string, (string Caster, long Duration)> BuffInfo { get; } =
             new(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>Class number → class name (mirrors Classes.json).</summary>
-        public Dictionary<int, string> Classes { get; } = new();
 
         public PartyBlessHarness()
         {
@@ -2417,28 +2424,57 @@ public sealed class CastingDirectorTests
                     : null,
                 // No self-confirm path exercised here.
                 _ => null);
-            Director.SetClassResolver(
-                n => Classes.TryGetValue(n, out string? name) ? name : null);
+            Director.SetPartyBuffSource(() => PartyBuffs);
+            Director.SetRoomPresenceCheck(g => InRoom.Contains(g));
+            Director.SetPartyWideBuffCheck(s => WholeParty.Contains(s));
             // Healthy + full mana so survival categories never pre-empt buffs.
             State.MaxHp = 200; State.Hp = 200;
             State.MaxMa = 100; State.Ma = 100;
             State.HasPromptData = true;
         }
 
-        public PartyMember AddMember(string name, string cls)
+        private static string Given(string name) => name.Split(' ')[0];
+
+        public PartyMember AddMember(string name)
         {
             PartyMember m = new()
             {
                 Name = name,
-                Class = cls,
                 BaselineHp = 100,
                 HpPercent = 100,
                 BaselineMp = 100,
                 MpPercent = 100,
             };
             Party.Members.Add(m);
-            Party.IsInParty = true;   // a member present ⇒ in a party (party-buff slots apply)
+            Party.IsInParty = true;      // a member present ⇒ in a party (party-buff slots apply)
+            InRoom.Add(Given(name));     // present in the room by default
             return m;
+        }
+
+        /// <summary>A single-target slot that blesses the named members (given names).</summary>
+        public PartyBuffSlot AddTargetSlot(string spell, params string[] targets)
+        {
+            PartyBuffSlot slot = new() { Spell = spell };
+            foreach (string t in targets) slot.Targets.Add(t.ToLowerInvariant());
+            PartyBuffs.Slots.Add(slot);
+            return slot;
+        }
+
+        /// <summary>A single-target slot that blesses every in-party, in-room member.</summary>
+        public PartyBuffSlot AddAllMembersSlot(string spell)
+        {
+            PartyBuffSlot slot = new() { Spell = spell, AllMembers = true };
+            PartyBuffs.Slots.Add(slot);
+            return slot;
+        }
+
+        /// <summary>A whole-party slot (one cast, no target). on = WholePartyOn.</summary>
+        public PartyBuffSlot AddWholePartySlot(string spell, bool on = true)
+        {
+            WholeParty.Add(spell);
+            PartyBuffSlot slot = new() { Spell = spell, WholePartyOn = on };
+            PartyBuffs.Slots.Add(slot);
+            return slot;
         }
 
         /// <summary>Simulate a server line arriving on the wired
@@ -2465,15 +2501,13 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyBless_ClassMatch_CastsOnMember()
+    public void PartyBless_SelectedMember_CastsOnMember()
     {
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
 
@@ -2487,12 +2521,10 @@ public sealed class CastingDirectorTests
         // Solo (IsInParty false) ⇒ the party-buff slots never fire, even with a lingering
         // member row — party buffs are used only alongside self buffs while in a party.
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
         h.Party.IsInParty = false;        // now solo
 
         h.Director.Evaluate();
@@ -2501,15 +2533,14 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyBless_ClassMismatch_NoCast()
+    public void PartyBless_UnselectedMember_NoCast()
     {
+        // A member who isn't one of the slot's chosen targets is left alone.
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");   // only Raijin selected
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Goldar", "Warrior");
+        h.AddMember("Goldar");               // Goldar isn't selected
 
         h.Director.Evaluate();
 
@@ -2517,16 +2548,76 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PartyBless_MemberNotInRoom_NoCast()
+    {
+        // A selected member who's in the party but NOT in the room is skipped — the
+        // core robustness fix (never cast at someone who isn't here).
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.InRoom.Clear();                    // Raijin wandered off / was uninvited
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_AllMembers_OnlyBlessesInRoom()
+    {
+        // AllMembers blesses everyone present; a member out of the room is skipped.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddAllMembersSlot("bles");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
+        h.InRoom.Remove("Goldar");           // Goldar is elsewhere
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bles Raijin", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void PartyBless_SkipsSelf()
     {
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddAllMembersSlot("bles");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        PartyMember self = h.AddMember("Me", "Mage");
+        PartyMember self = h.AddMember("Me");
         self.IsSelf = true;
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_WholeParty_CastsWithNoTarget()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddWholePartySlot("chan");
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("chan", h.CastsSent[0]);   // one cast, no target
+    }
+
+    [Fact]
+    public void PartyBless_WholePartyOff_NoCast()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddWholePartySlot("chan", on: false);   // all-off
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
 
@@ -2537,12 +2628,10 @@ public sealed class CastingDirectorTests
     public void PartyBless_ConfirmStartsTimer_NoImmediateRecast()
     {
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
@@ -2564,12 +2653,10 @@ public sealed class CastingDirectorTests
         // (off in normal play). It now lands on the always-on Info channel with the
         // effect duration and the recast lead (duration − 15s recast margin).
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         h.Confirm("You cast bless on Raijin!");
@@ -2589,12 +2676,10 @@ public sealed class CastingDirectorTests
         // Decision: no confirmation observed ⇒ no timer ⇒ re-attempt. The
         // CastCoordinator cooldown (cleared here) is the only spam guard.
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
@@ -2612,12 +2697,10 @@ public sealed class CastingDirectorTests
     public void PartyBless_RecastWithinExpiryWindow()
     {
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         h.Confirm("You cast bless on Raijin!");
@@ -2639,15 +2722,13 @@ public sealed class CastingDirectorTests
     [Fact]
     public void PartyBless_CyclesAcrossMembers()
     {
-        // Both Mages covered by one slot — cycle blesses each in turn.
+        // Both members covered by one all-members slot — cycle blesses each in turn.
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddAllMembersSlot("bles");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
-        h.AddMember("Goldar", "Mage");
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
 
         h.Director.Evaluate();
         Assert.Equal("bles Raijin", h.CastsSent[^1]);
@@ -2666,12 +2747,10 @@ public sealed class CastingDirectorTests
         using PartyBlessHarness h = new();
         h.PartySettings.BlessDuringCombat = false;
         h.State.InCombat = true;
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Empty(h.CastsSent);
@@ -2685,12 +2764,10 @@ public sealed class CastingDirectorTests
         h.PartySettings.BlessWhileResting = false;
         h.State.Position = PlayerPosition.Resting;
         h.TriggeredRest = true;                  // active recovery rest
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Empty(h.CastsSent);
@@ -2705,12 +2782,10 @@ public sealed class CastingDirectorTests
         h.PartySettings.BlessWhileResting = false;
         h.State.Position = PlayerPosition.Resting;
         h.TriggeredRest = false;                 // idle rest
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
@@ -2725,12 +2800,10 @@ public sealed class CastingDirectorTests
         using PartyBlessHarness h = new();
         h.PartySettings.BlessDuringCombat = true;
         h.State.InCombat = true;
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);

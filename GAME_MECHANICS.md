@@ -2914,15 +2914,25 @@ glass jug               5               2 gold crowns
   instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
   (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
   the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
-- **[user 2026-08-17] Party-buff slots are party-only, and a superseding party buff covers self.**
-  The party-bless slots are cast **only while in a party** (`PartyState.IsInParty`); solo, none fire —
-  self-buffs come from the self-bless slots. A **single-target** party buff is cast per class-matched
-  member and **never targets self** (self uses the self-slots); only a **party-wide** buff (`Spells.Targets`
-  = Full/Divided Party Area, scope 13/10) lands on self. **Supersession:** a spell that carries **RemovesSpell
-  (Abil 122)** removes the named spell (the Spell Book renders it "Removes <spell>"). So when a configured
-  **party-wide** party buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop
-  self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff
-  "covered by <party buff>". Only party-wide covers count (a single-target party buff can't cover self).
+- **[user 2026-08-17 / 2026-08-28] Party-buff slots are party-only; scope splits whole-party vs
+  single-target; targeting is per-member (not class).**
+  The party-buff slots (`CharacterProfile.PartyBuffs`, configured in the Party window) are cast **only
+  while in a party** (`PartyState.IsInParty`); solo, none fire — self-buffs come from the self-bless slots.
+  **Scope classification** (confirmed against stock + Paradigm data), gated first on **`EnergyCost == 0`**
+  (a buff, not an attack):
+  - **`Spells.Targets` = 2** (Self or User) → a **single-target** beneficial buff cast on ONE other member
+    (`frenzy`, `divine favour`, `blood ritual`, `regeneration`). Never targets self (self uses the self-slots).
+  - **`Spells.Targets` = 10 / 13** (Divided / Full Party Area) → a **whole-party** buff, one cast with no
+    target that blankets the party (`chant`, `mass frenzy`, `unholy fanaticism`, `rejuvenating field`). Lands
+    on self too. Scope 0/1 (self-only), 4/8/9/12 (enemy), 7 (item) are NOT party buffs.
+  - Single-target targeting is by **selected member (given name), not class** — a slot blesses "all members"
+    or a checklist of specific players, and only fires for a name that is BOTH a current `par` party member
+    AND in the room (never casts at someone absent / uninvited / in another room).
+  - **Supersession:** a spell that carries **RemovesSpell (Abil 122)** removes the named spell (the Spell Book
+    renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g.
+    **chant removes bless**), in a party we stop self-casting the removed one and let the party buff cover us —
+    the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a
+    single-target party buff can't cover self).
 
 ## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
 

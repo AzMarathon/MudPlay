@@ -30,6 +30,10 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
 
     public PartyState State { get; }
 
+    // The party-buff configuration panel shown on the right of the window. Null in
+    // tests (constructed only when a profile — hence AppServices — is available).
+    public PartyBuffPanelViewModel? Buffs { get; }
+
     // Header text shown at the top of the PartyWindow. When a leader is
     // known, shows their given name + current HP percent ("MudPlay (94%)");
     // when there's no leader yet (mid-formation, solo, or par hasn't
@@ -97,6 +101,9 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
             _profile.ProfileMutated += OnProfileMutated;
             _profile.ProfileClosed += OnProfileClosed;
             RefreshLocalRank();
+            // The buff panel needs live AppServices (spellbook / profile); build it
+            // only on the production path (profile present), never in tests.
+            Buffs = new PartyBuffPanelViewModel(State);
         }
     }
 
@@ -116,6 +123,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
             _profile.ProfileMutated -= OnProfileMutated;
             _profile.ProfileClosed -= OnProfileClosed;
         }
+        Buffs?.Dispose();
     }
 
     private void OnMembersChanged(object? sender, NotifyCollectionChangedEventArgs e)

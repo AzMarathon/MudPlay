@@ -3410,9 +3410,13 @@ public sealed class AppServices
         // resurrect the old character's buffs. A same-character reconnect does NOT reload
         // the profile, so its paused timers survive to be resumed.
         Profile.ProfileLoaded += _ => CastDirector.ResetBuffTracking();
-        // Party-bless slots store class numbers; PartyMember.Class is a
-        // class name — resolve via the active set's Classes table.
-        CastDirector.SetClassResolver(SpellCatalog.ResolveClassName);
+        // Party-buff plan (Party window) — the dynamic list of buff slots the
+        // party-bless path casts, read live so a Party-window edit takes effect at once.
+        CastDirector.SetPartyBuffSource(() => Profile.Current?.PartyBuffs);
+        // Room-presence gate for single-target party buffs: a member is only blessed
+        // when they're both in the party AND in the room. Backed by the live
+        // room-occupant list (RoomEntityClassifier), matched by given name.
+        CastDirector.SetRoomPresenceCheck(IsGivenNameInRoom);
         // A party-wide buff (Spells.Targets = Full / Divided Party Area) is
         // cast once for the whole party; the picker checks this to skip the
         // per-member loop.
@@ -5800,6 +5804,22 @@ public sealed class AppServices
         return false;
     }
 
+    // True when a player with the given name is currently in the room — an occupant
+    // of the live "Also here:" list (RoomEntityClassifier). Case-insensitive on the
+    // resolved given name. Gates single-target party buffs so we never cast at a
+    // member who's been uninvited, left, or wandered off. Null observation (no room
+    // seen yet) ⇒ not present, so the buff waits rather than casting blind.
+    private bool IsGivenNameInRoom(string givenName)
+    {
+        if (RoomClassifier?.Current?.Entities is not { } entities) return false;
+        string g = givenName.Trim();
+        foreach (Game.Combat.RoomEntity e in entities)
+            if (e.Kind == Game.Combat.EntityKind.Player
+                && string.Equals(e.ResolvedName, g, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
     // Self-buff cast code → the configured PARTY-WIDE party-buff cast code that removes
     // (supersedes) it via RemovesSpell (Abil 122), while in a party. Empty when solo. In
     // a party we let a party-wide buff that removes a self-buff cover us instead of self-
@@ -5813,7 +5833,6 @@ public sealed class AppServices
         if (!PartyState.IsInParty) return map;
 
         Models.Profile.SpellsSettings spells = Resolver.Resolve<Models.Profile.SpellsSettings>("Spells");
-        Models.Profile.PartySettings party = Resolver.Resolve<Models.Profile.PartySettings>("Party");
 
         // Configured self-buffs → (cast code, spell number). #item-cast tokens resolve to
         // no spell and are skipped (an item buff isn't a RemovesSpell target).
@@ -5831,9 +5850,11 @@ public sealed class AppServices
         AddSelf(spells.WhenMaFullSpell);
         if (selfBuffs.Count == 0) return map;
 
-        foreach (Models.Profile.PartyBlessSlot pslot in party.BlessSlots)
+        if (Profile.Current?.PartyBuffs is not { } buffs) return map;
+        foreach (Models.Profile.PartyBuffSlot pslot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
+            if (!pslot.WholePartyOn) continue;             // toggled off → not cast → can't cover
             if (!IsPartyWideBuff(pslot.Spell)) continue;   // a single-target party buff never covers self
             HashSet<int> removed = RemovedSpellNumbers(pslot.Spell);
             if (removed.Count == 0) continue;

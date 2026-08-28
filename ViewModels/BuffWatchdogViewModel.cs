@@ -20,11 +20,10 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 {
     private readonly CastingDirector _castDirector;
     private readonly SpellbookState _spellbook;
-    private readonly KnownSpellCatalog _catalog;
     private readonly Game.TickEngine _tick;
     private readonly ProfileService _profile;
     private readonly Func<SpellsSettings> _readSpells;
-    private readonly Func<PartySettings> _readParty;
+    private readonly Func<PartyBuffSettings?> _readPartyBuffs;
 
     private string _configSignature = string.Empty;
     private bool _needsRebuild = true;
@@ -41,24 +40,22 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     // (4-tier merged; bless slots live at the character tier, which wins).
     public BuffWatchdogViewModel()
         : this(AppServices.Current.CastDirector, AppServices.Current.Spellbook,
-               AppServices.Current.SpellCatalog, AppServices.Current.Tick,
-               AppServices.Current.Profile,
+               AppServices.Current.Tick, AppServices.Current.Profile,
                () => AppServices.Current.Resolver.Resolve<SpellsSettings>("Spells"),
-               () => AppServices.Current.Resolver.Resolve<PartySettings>("Party"))
+               () => AppServices.Current.Profile.Current?.PartyBuffs)
     { }
 
     public BuffWatchdogViewModel(
-        CastingDirector castDirector, SpellbookState spellbook, KnownSpellCatalog catalog,
+        CastingDirector castDirector, SpellbookState spellbook,
         Game.TickEngine tick, ProfileService profile,
-        Func<SpellsSettings> readSpells, Func<PartySettings> readParty)
+        Func<SpellsSettings> readSpells, Func<PartyBuffSettings?> readPartyBuffs)
     {
         _castDirector = castDirector;
         _spellbook = spellbook;
-        _catalog = catalog;
         _tick = tick;
         _profile = profile;
         _readSpells = readSpells;
-        _readParty = readParty;
+        _readPartyBuffs = readPartyBuffs;
 
         _spellbook.Changed += OnSpellbookChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
@@ -88,12 +85,12 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     {
         if (_disposed) return;
         SpellsSettings spells = _readSpells();
-        PartySettings party = _readParty();
+        PartyBuffSettings? buffs = _readPartyBuffs();
 
-        string sig = BuildSignature(spells, party);
+        string sig = BuildSignature(spells, buffs);
         if (_needsRebuild || sig != _configSignature)
         {
-            RebuildRows(spells, party);
+            RebuildRows(spells, buffs);
             _configSignature = sig;
             _needsRebuild = false;
         }
@@ -135,7 +132,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         }
     }
 
-    private void RebuildRows(SpellsSettings spells, PartySettings party)
+    private void RebuildRows(SpellsSettings spells, PartyBuffSettings? buffs)
     {
         SelfBuffs.Clear();
         PartyBuffs.Clear();
@@ -147,13 +144,14 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         AddSelf(spells.WhenHpFullSpell);
         AddSelf(spells.WhenMaFullSpell);
 
-        foreach (PartyBlessSlot p in party.BlessSlots)
-        {
-            if (string.IsNullOrWhiteSpace(p.Spell)) continue;
-            (string name, bool learned) = ResolveName(p.Spell);
-            PartyBuffs.Add(new BuffWatchdogRowViewModel(
-                p.Spell.Trim(), isParty: true, name, ClassLabel(p.ClassNumbers), learned));
-        }
+        if (buffs is not null)
+            foreach (PartyBuffSlot p in buffs.Slots)
+            {
+                if (string.IsNullOrWhiteSpace(p.Spell)) continue;
+                (string name, bool learned) = ResolveName(p.Spell);
+                PartyBuffs.Add(new BuffWatchdogRowViewModel(
+                    p.Spell.Trim(), isParty: true, name, TargetLabel(p), learned));
+            }
 
         HasSelfBuffs = SelfBuffs.Count > 0;
         HasPartyBuffs = PartyBuffs.Count > 0;
@@ -183,22 +181,30 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
             : (trimmed, false);   // unknown cast code — show it, flagged un-learned
     }
 
-    private string ClassLabel(List<int> classNumbers) =>
-        classNumbers.Count == 0
-            ? "party"
-            : string.Join(", ", classNumbers.Select(n => _catalog.ResolveClassName(n) ?? $"#{n}"));
+    // The target summary shown on a party-buff row: whole-party buffs read "party";
+    // single-target buffs read "all" or the chosen given names.
+    private string TargetLabel(PartyBuffSlot p)
+    {
+        bool wholeParty = _spellbook.FindByCastCode((p.Spell ?? string.Empty).Trim()) is { } ks
+            && PartyBuffClassifier.IsWholeParty(ks.Targets);
+        if (wholeParty) return "party";
+        if (p.AllMembers) return "all";
+        return p.Targets.Count > 0 ? string.Join(", ", p.Targets) : "(no targets)";
+    }
 
-    // Cheap fingerprint of the configured buff set — a change (live settings edit)
-    // triggers a row rebuild on the next heartbeat.
-    private static string BuildSignature(SpellsSettings spells, PartySettings party)
+    // Cheap fingerprint of the configured buff set — a change (live edit) triggers a
+    // row rebuild on the next heartbeat.
+    private static string BuildSignature(SpellsSettings spells, PartyBuffSettings? buffs)
     {
         StringBuilder sb = new();
         foreach (int slot in spells.BlessSlots.Keys.OrderBy(k => k))
             sb.Append(slot).Append('=').Append(spells.BlessSlots[slot]).Append('|');
         sb.Append(spells.HpRegenSpell).Append('|').Append(spells.MaRegenSpell).Append('|')
           .Append(spells.WhenHpFullSpell).Append('|').Append(spells.WhenMaFullSpell).Append("||");
-        foreach (PartyBlessSlot p in party.BlessSlots)
-            sb.Append(p.Spell).Append(':').Append(string.Join(",", p.ClassNumbers)).Append('|');
+        if (buffs is not null)
+            foreach (PartyBuffSlot p in buffs.Slots)
+                sb.Append(p.Spell).Append(':').Append(p.WholePartyOn ? "W" : "")
+                  .Append(p.AllMembers ? "A" : "").Append(string.Join(",", p.Targets)).Append('|');
         return sb.ToString();
     }
 

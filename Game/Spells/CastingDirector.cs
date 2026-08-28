@@ -166,8 +166,14 @@ public sealed class CastingDirector : IDisposable
 
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
     private Func<MessageRecord, string?>? _shortFromAppliedRecord;
-    private Func<int, string?>? _classNameByNumber;
     private Func<string, bool>? _isPartyWideBuff;
+    // The character's party-buff plan (Party window). Null / no reader ⇒ no party
+    // buffs. Read live each pass so an edit in the Party window takes effect at once.
+    private Func<Models.Profile.PartyBuffSettings?>? _readPartyBuffs;
+    // "Is this member (given name) currently in the room with us?" — the presence
+    // gate for single-target party buffs. Backed by the room-occupant list. Null ⇒
+    // presence unknown, so the gate stands down (tests / before wiring).
+    private Func<string, bool>? _isMemberInRoom;
     // Self-buff cast code → the party-wide party buff that removes (supersedes) it while
     // in a party. PickSelfBuff skips a covered slot; the Buff Watchdog labels it.
     private Func<IReadOnlyDictionary<string, string>>? _selfBuffCoverage;
@@ -438,14 +444,24 @@ public sealed class CastingDirector : IDisposable
         _shortFromAppliedRecord = shortFromAppliedRecord;
     }
 
-    // Wire a class-number → class-name resolver (typically backed by Classes.json)
-    // so party-bless slots — which store the set of class numbers a buff applies to —
-    // can be matched against each PartyMember.Class (a class name). Optional — until
-    // wired, party-bless slots never match a member and the party-buff picker no-ops.
-    public void SetClassResolver(Func<int, string?> classNameByNumber)
+    // Wire the party-buff plan source (CharacterProfile.PartyBuffs) so the party-buff
+    // picker reads the user's configured slots. Optional — until wired, the picker
+    // no-ops. Read live each pass so a Party-window edit takes effect immediately.
+    public void SetPartyBuffSource(Func<Models.Profile.PartyBuffSettings?> readPartyBuffs)
     {
-        ArgumentNullException.ThrowIfNull(classNameByNumber);
-        _classNameByNumber = classNameByNumber;
+        ArgumentNullException.ThrowIfNull(readPartyBuffs);
+        _readPartyBuffs = readPartyBuffs;
+    }
+
+    // Wire the room-presence gate: "is this member (given name) currently in the
+    // room with us?" A single-target party buff only fires for a member who is both
+    // in the party AND in the room, so a saved target who left / was uninvited / is
+    // elsewhere is skipped. Optional — until wired, presence is unknown and the gate
+    // stands down (every selected member is treated as present).
+    public void SetRoomPresenceCheck(Func<string, bool> isMemberInRoom)
+    {
+        ArgumentNullException.ThrowIfNull(isMemberInRoom);
+        _isMemberInRoom = isMemberInRoom;
     }
 
     // Wire a "is this buff party-wide?" check (typically backed by the active set's
@@ -1511,75 +1527,67 @@ public sealed class CastingDirector : IDisposable
         spells.BlessSlotRecastMargins.TryGetValue(slotIndex, out int m)
             ? m : DefaultRecastMarginSec;
 
-    // Walk the party-bless slots in priority order and pick one buff to cast. A
-    // party-wide buff (its Spells.Targets is Full / Divided Party Area — e.g. a
-    // mage's shimmering mirage or a chant) blankets the whole party in a single cast,
-    // so it's sent once with no target and no class filter, keyed for recast like a
-    // self-buff (it lands on us too). A single-target buff (e.g. a priest's bless) is
-    // cast on the first class-matched member due to recast — a member matches when
-    // their PartyMember.Class is in the slot's checked class set. Gated by the
-    // Other-tab "bless party while resting" / "bless party during combat" toggles.
+    // Walk the configured party-buff slots (CharacterProfile.PartyBuffs) in priority
+    // order and pick one buff to cast. A whole-party buff (Spells.Targets 10 / 13 —
+    // e.g. chant, mass frenzy) blankets the party in a single cast, sent once with no
+    // target when its WholePartyOn toggle is set, keyed for recast like a self-buff
+    // (it lands on us too). A single-target buff (Targets 2 — e.g. frenzy, divine
+    // favour) is cast on a selected member due for recast — a member is eligible only
+    // when they're BOTH in the party AND in the room (AllMembers = everyone; else the
+    // slot's chosen given names). Gated by the Settings → Party "bless while resting"
+    // / "bless during combat" toggles.
     private CastCandidate? PickPartyBuff(PartySettings? party, bool manaBuffsAllowed)
     {
         if (_party is null) return null;
-        if (party is null) return null;
         // Solo → the party-buff slots don't apply; only cast them once actually in a party.
         if (!_party.IsInParty) return null;
+        if (_readPartyBuffs?.Invoke() is not { } buffs) return null;
 
-        bool whileResting  = party.BlessWhileResting;
-        bool duringCombat  = party.BlessDuringCombat;
+        // Gates live on PartySettings (kept on the Settings → Party tab). A null
+        // settings read means gates default off (conservative: hold in combat / rest).
+        bool whileResting = party?.BlessWhileResting ?? false;
+        bool duringCombat = party?.BlessDuringCombat ?? false;
         if (_state.InCombat && !duringCombat) return null;
         // Same as self-bless: gate only a triggered recovery rest, not idle rest.
         if ((_isTriggeredRest?.Invoke() ?? false) && !whileResting) return null;
 
-        foreach (PartyBlessSlot slot in party.BlessSlots)
+        foreach (Models.Profile.PartyBuffSlot slot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
             if (!IsBuffAffordable(slot.Spell, manaBuffsAllowed)) continue;
 
-            // Party-wide buff — one cast covers everyone, so class checkboxes
-            // (which member to target) don't apply. Recast keyed to self ("")
-            // since it lands on us and confirms via the AppliedMessage path.
+            // Whole-party buff (Targets 10 / 13) — one cast covers everyone, so
+            // there's no per-member targeting; the slot's on/off is WholePartyOn.
+            // Recast keyed to self ("") since it lands on us and confirms via the
+            // AppliedMessage path.
             if (_isPartyWideBuff?.Invoke(slot.Spell) == true)
             {
+                if (!slot.WholePartyOn) continue;
                 if (!IsRecastDue("", slot.Spell)) continue;
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
             }
 
-            // Single-target buff — needs at least one class-matched member.
-            if (slot.ClassNumbers.Count == 0) continue;
+            // Single-target buff — cast on the selected members, one per pass
+            // (cycling across passes). A member is eligible only when they're BOTH a
+            // current party member AND in the room, so a saved target who left / was
+            // uninvited / is elsewhere is skipped — churn never casts at the wrong
+            // person. AllMembers blesses everyone; otherwise only the slot's Targets
+            // (lower-cased given names).
             foreach (PartyMember m in _party.Members)
             {
                 if (m.IsSelf) continue;
-                if (!MemberMatchesClasses(m, slot.ClassNumbers)) continue;
                 // Given name only: MajorMUD targets a cast by first name token, and
                 // the recast key must match the target we stash for confirmation so
                 // the buff doesn't re-fire every round on a "Given Family" mismatch.
                 string given = GivenName(m.Name);
                 string key = given.ToLowerInvariant();
+                if (!slot.AllMembers && !slot.Targets.Contains(key)) continue;   // not selected
+                if (_isMemberInRoom is { } inRoom && !inRoom(given)) continue;    // not in the room
                 if (!IsRecastDue(key, slot.Spell)) continue;
                 return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
             }
         }
         return null;
-    }
-
-    // True when the member's class name resolves to any of the slot's checked class
-    // numbers (case-insensitive). Requires the class-number → name resolver to be
-    // wired; no resolver => no match.
-    private bool MemberMatchesClasses(PartyMember m, IReadOnlyList<int> classNumbers)
-    {
-        if (_classNameByNumber is null) return false;
-        if (string.IsNullOrWhiteSpace(m.Class)) return false;
-        foreach (int n in classNumbers)
-        {
-            string? name = _classNameByNumber(n);
-            if (!string.IsNullOrWhiteSpace(name)
-                && string.Equals(name.Trim(), m.Class.Trim(),
-                    StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        return false;
     }
 
     // Arm the pending party-buff confirmation: resolve the buff's CasterMessage
