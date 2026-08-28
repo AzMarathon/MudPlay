@@ -24,6 +24,24 @@ public static class DirectionExtensions
         _            => d.ToString(),
     };
 
+    // The abbreviation the client sends on the wire for a cardinal move — "n",
+    // "ne", "u". The short forms `TryFromToken` accepts, going the other way; used
+    // by the route step list to show the exact command each hop executes.
+    public static string ToToken(this Direction d) => d switch
+    {
+        Direction.N  => "n",
+        Direction.S  => "s",
+        Direction.E  => "e",
+        Direction.W  => "w",
+        Direction.NE => "ne",
+        Direction.NW => "nw",
+        Direction.SE => "se",
+        Direction.SW => "sw",
+        Direction.U  => "u",
+        Direction.D  => "d",
+        _            => d.ToString().ToLowerInvariant(),
+    };
+
     // Parse a movement TOKEN — either the abbreviation (`n`, `ne`, `u`) or the
     // long word (`north`, `northeast`, `up`) — to a Direction. This is the typed-
     // command vocabulary (both forms honoured on the wire), distinct from
