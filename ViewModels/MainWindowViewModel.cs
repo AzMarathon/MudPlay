@@ -2718,6 +2718,12 @@ public partial class MainWindowViewModel : ObservableObject
                 // than clearing, so a brief drop doesn't lose the recast clock.
                 AppServices.Current.Conditions.ClearAll("disconnect");
                 AppServices.Current.ManaRegen.Reset();
+                // Combat's mid-round state (current target, an in-flight attack
+                // spell, the between-round-cast resume latch) can't survive the
+                // drop either — see CombatManager.OnDisconnected for why a stale
+                // latch here silently stops the character from ever resuming the
+                // fight after reconnect (report paradigm-20260827-203548).
+                AppServices.Current.Combat.OnDisconnected();
 
                 // Categorise: if the user clicked Disconnect, the flag was
                 // set in DisconnectInternalAsync. Otherwise check for a

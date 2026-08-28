@@ -2132,6 +2132,33 @@ public sealed class CombatManagerSpellsTests
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
     }
 
+    // Same root cause again, the disconnect/reconnect path (report
+    // paradigm-20260827-203548): a between-round survival cast (a self-buff)
+    // armed the round-owed latch, then the connection dropped before the
+    // server's *Combat Off* for that cast ever arrived — the ONLY event the
+    // resume logic listens for. The monster kept fighting server-side through
+    // the link-death; on reconnect the CombatGate re-detects it fresh via
+    // room-entry, but with the stale target/latch still set, the character
+    // never resumed attacking and just stood there taking hits. Same fix
+    // shape as OnPlayerDeath above.
+    [Fact]
+    public void OnDisconnected_ClearsStaleAttackSpellCascade()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "agon", MinEnemies = 0 };
+        h.AddMonster(1, "small blue dragon hatchling");
+
+        h.Feed("Also here: small blue dragon hatchling.");
+        h.Combat.NoteBetweenRoundCast();   // self-buff mid-fight; *Combat Off* never lands — connection drops
+        Assert.True(h.Combat.IsSpellAttackOwed);
+
+        h.Combat.OnDisconnected();
+
+        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
+        Assert.Null(h.Combat.Snapshot().CurrentTarget);
+    }
+
     // Report paradigm-20260824-215802: engaged a fresh shade after a kill left
     // _combatOff stuck true, but the attack spell lost the round's cast slot to a
     // self-buff sent moments earlier (blocked by CastCoordinator's MinRecastInterval
