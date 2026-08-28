@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.29.6**
-> - Combat: an AoE that **wipes the whole room** no longer leaves a ~6s pause before the next action — when the round's kills account for every hostile the room lists, the stale roster is dropped immediately so movement / loot / rest resume on the CR round-trip (~1s) instead of the post-combat idle-stall watchdog. A partial kill still waits until any survivor is confirmed gone
+> **Version 3.29.7**
+> - Combat: hunting the same species room-to-room, the **area-debuff** slot now fires in every room again — it was silently skipped after the first, because the room's per-room "already debuffed" tags carried into the next identical room (every crab shares the same name). The per-room cast economy is now cleared on each move, so the AoE debuff opens each room exactly once as configured
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
