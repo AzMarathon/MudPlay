@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.31.1**
-> - Roomba: `@roomba <item>` now shows **each room's own quantity** next to its locator (e.g. `15/12 (3), 15/13 (2)`), not just the summed total — so a high total for a hidden item can be told apart as a genuinely scattered stash vs one room's count looking wrong
+> **Version 3.31.3**
+> - Combat: after a disconnect/reconnect mid-fight, the character resumes attacking instead of standing there taking hits — the stale mid-round target/cast state is now cleared on disconnect (like it already is on death), so the reconnect's room-entry re-engages clean
+> - Combat: toggling **AutoCombat off then back on** mid-fight now actually re-engages — turning it back on re-evaluates the current room (it used to only on the off side), so the engine re-picks the monster still there
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

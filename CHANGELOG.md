@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.31.3
+
+- Combat: after a disconnect/reconnect mid-fight, the character resumes attacking instead of standing there taking hits — a between-round survival cast could leave an "attack owed" latch waiting on a *Combat Off* that was lost with the connection, so the stale target/latch is now cleared on disconnect (like it already is on death) and the reconnect's room-entry re-engages clean
+- Combat: toggling **AutoCombat off then back on** mid-fight to un-stick a stalled fight now actually works — turning it back on re-evaluates the current room (it used to re-evaluate only on the off side), so the engine re-picks and resumes attacking the monster still in the room
+- bug reports addressed: paradigm-20260827-203548, paradigm-20260827-203644
+
 ## 3.31.1
 
 - Roomba: `@roomba <item>` now shows **each room's own quantity** next to its locator (e.g. `15/12 (3), 15/13 (2)`), not just the summed total — so a high total for a hidden item can be told apart as a genuinely scattered stash vs one room's count looking wrong. (The merge already takes the max of repeated searches rather than summing; this adds the per-room diagnostic and pins that merge behavior with tests)
