@@ -157,10 +157,13 @@ public readonly record struct MonsterMatchupResult(
 // ManaCostPerRound are already level-scaled and energy-multiplied (see
 // SpellCalculator.MaxDamage / ManaCost) — this record carries the RESULT of
 // that player-side math, not the raw formula, so this file stays free of a
-// Game.Spells dependency.
+// Game.Spells dependency. AffectsUndeadOnly / AffectsLivingOnly mirror the
+// spell's own Abil 23 / Abil 108 flags (AbilityNames.cs) — a caster-side
+// target-type gate independent of SpellImmu and elemental resist.
 public readonly record struct PlayerAttackSpell(
     string Name, string Short, int ReqLevel, int AttType,
-    long MaxDamagePerRound, long ManaCostPerRound);
+    long MaxDamagePerRound, long ManaCostPerRound,
+    bool AffectsUndeadOnly = false, bool AffectsLivingOnly = false);
 
 // One spell's effectiveness against a specific monster — either blocked
 // (SpellImmu too high, or the monster resists its element at or above 100%)
@@ -187,17 +190,21 @@ public static class MonsterMatchupCalculatorSpells
     // Rank the player's known attack spells by effective damage against one
     // monster: a spell whose ReqLevel is below the monster's SpellImmu never
     // lands (GAME_MECHANICS' ReqLevel ≥ SpellImmu eligibility rule, mirroring
-    // CombatManager.Spells.cs's SpellEligible); a spell whose element the
-    // monster resists ≥100% deals zero real damage (MonsterResistIndex's own
-    // determinism — exactly 100 blocks, over 100 heals the target, so both
-    // read as blocked here, not just "reduced to 0"). Everything else scores
-    // by (100 - resist%) applied to the spell's own per-round max damage.
-    // Eligible spells sort first, highest effective damage first; blocked
-    // spells trail, in their input order.
+    // CombatManager.Spells.cs's SpellEligible); a spell restricted to undead-
+    // only (Abil 23) or living-only (Abil 108) targets is blocked outright
+    // against a monster on the wrong side of that gate, independent of
+    // SpellImmu/resist; a spell whose element the monster resists ≥100% deals
+    // zero real damage (MonsterResistIndex's own determinism — exactly 100
+    // blocks, over 100 heals the target, so both read as blocked here, not
+    // just "reduced to 0"). Everything else scores by (100 - resist%) applied
+    // to the spell's own per-round max damage. Eligible spells sort first,
+    // highest effective damage first; blocked spells trail, in their input
+    // order.
     public static IReadOnlyList<SpellEffectivenessResult> RankAttackSpells(
         IReadOnlyList<PlayerAttackSpell> spells,
         int monsterSpellImmunity,
-        IReadOnlyDictionary<int, int> monsterElementalResists)
+        IReadOnlyDictionary<int, int> monsterElementalResists,
+        bool monsterIsUndead = false)
     {
         ArgumentNullException.ThrowIfNull(spells);
         ArgumentNullException.ThrowIfNull(monsterElementalResists);
@@ -213,6 +220,19 @@ public static class MonsterMatchupCalculatorSpells
                 results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
                     s.ManaCostPerRound, Eligible: false,
                     $"Spell immune below level {monsterSpellImmunity} (this spell is {s.ReqLevel})"));
+                continue;
+            }
+
+            if (s.AffectsUndeadOnly && !monsterIsUndead)
+            {
+                results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
+                    s.ManaCostPerRound, Eligible: false, "Affects undead only — this monster isn't undead"));
+                continue;
+            }
+            if (s.AffectsLivingOnly && monsterIsUndead)
+            {
+                results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
+                    s.ManaCostPerRound, Eligible: false, "Affects living only — this monster is undead"));
                 continue;
             }
 
