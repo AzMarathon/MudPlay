@@ -40,6 +40,40 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty] private bool _isEmpty;
 
+    // Window layout: whether the config table sits above / below / left / right of the
+    // timer bars. Persisted per-character on CharacterProfile.BuffWatchdogLayout.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConfigDock))]
+    [NotifyPropertyChangedFor(nameof(ConfigWidth))]
+    private BuffWatchdogLayout _layout = BuffWatchdogLayout.ConfigTop;
+
+    // Which edge the config table docks to; the timer bars fill the rest.
+    public Avalonia.Controls.Dock ConfigDock => Layout switch
+    {
+        BuffWatchdogLayout.ConfigBottom => Avalonia.Controls.Dock.Bottom,
+        BuffWatchdogLayout.ConfigLeft => Avalonia.Controls.Dock.Left,
+        BuffWatchdogLayout.ConfigRight => Avalonia.Controls.Dock.Right,
+        _ => Avalonia.Controls.Dock.Top,
+    };
+
+    // Side-docked (left / right) the config table gets a fixed width so the bars
+    // take the rest; stacked (top / bottom) it spans the full width (NaN = auto).
+    public double ConfigWidth =>
+        Layout is BuffWatchdogLayout.ConfigLeft or BuffWatchdogLayout.ConfigRight ? 400 : double.NaN;
+
+    // Set the window layout (the four orientation buttons).
+    [RelayCommand]
+    private void SetLayout(BuffWatchdogLayout layout) => Layout = layout;
+
+    partial void OnLayoutChanged(BuffWatchdogLayout value)
+    {
+        if (_profile.Current is { } p && p.BuffWatchdogLayout != value)
+        {
+            p.BuffWatchdogLayout = value;
+            _profile.Save();
+        }
+    }
+
     // The editable buff-config panel (add / edit / remove / target). It lives in this
     // window now — the Buff Watchdog is the single place to both SEE and CONFIGURE
     // buffs. Null on the test ctor (no live services).
@@ -76,6 +110,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         _tick.HeartbeatElapsed += OnHeartbeat;
         if (_party is not null) _party.Members.CollectionChanged += OnPartyMembersChanged;
 
+        _layout = _profile.Current?.BuffWatchdogLayout ?? BuffWatchdogLayout.ConfigTop;
         Refresh();
     }
 
@@ -100,7 +135,11 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     }
 
     private void OnSpellbookChanged() => MarkRebuildAndRefresh();
-    private void OnProfileLoaded(CharacterProfile _) => MarkRebuildAndRefresh();
+    private void OnProfileLoaded(CharacterProfile p)
+    {
+        Layout = p.BuffWatchdogLayout;
+        MarkRebuildAndRefresh();
+    }
 
     private void MarkRebuildAndRefresh()
     {

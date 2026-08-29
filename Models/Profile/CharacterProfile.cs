@@ -280,6 +280,10 @@ public sealed class CharacterProfile
     // Party window, not the Settings tab. null means nothing configured yet.
     public PartyBuffSettings? PartyBuffs { get; set; }
 
+    // How the Buff Watchdog window arranges its config table vs the timer bars —
+    // stacked (config top / bottom) or side-by-side (config left / right).
+    public BuffWatchdogLayout BuffWatchdogLayout { get; set; } = BuffWatchdogLayout.ConfigTop;
+
     // Given name of the party leader we were following, remembered so a
     // follower can auto-rejoin after an unexpected drop. Written through by
     // PartyRejoinCoordinator whenever follower membership changes (set on
