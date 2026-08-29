@@ -108,7 +108,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
         tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(sweep.Start());
-        Assert.Equal("n", sent[^1]);
+        Assert.Equal("n", sent[0]);
+        Assert.Contains("bg Roomba sorting starting.", sent);
 
         // C is an unlabeled transit room. Its visible list arrives while
         // CurrentRoom still points at A; it must be staged against C and C must
@@ -194,6 +195,20 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
         // The whole sort completed on the tracked ledger — never a single `i`.
         Assert.DoesNotContain("i", sent);
+
+        // Walk the final recon lap (same A-C-B-C-A circuit) to close it out and
+        // reach genuine completion — the point the "sorting complete" announce fires.
+        tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
+            DateTimeOffset.UtcNow.AddSeconds(10));
+        tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
+            DateTimeOffset.UtcNow.AddSeconds(11));
+        tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
+            DateTimeOffset.UtcNow.AddSeconds(12));
+        tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
+            DateTimeOffset.UtcNow.AddSeconds(13));
+
+        Assert.Equal(GhSweepManager.SweepPhase.Idle, sweep.Phase);
+        Assert.Contains("bg Roomba sorting complete - moved 2 item(s).", sent);
 
         sweep.Dispose();
         ground.Dispose();
@@ -631,6 +646,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(sweep.Start(GhSweepManager.SweepMode.InventoryOnly));
         Assert.Equal(GhSweepManager.SweepMode.InventoryOnly, sweep.Mode);
+        Assert.Contains("bg Roomba inventory mode starting.", sent);
 
         // Walk the full recon lap — a war hammer visible at A, a chain shirt at B.
         FeedRouter(router, "You notice a war hammer here.");
@@ -652,6 +668,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.Empty(sweep.Stranded);
         Assert.DoesNotContain(sent, s => s.StartsWith("get ", StringComparison.Ordinal));
         Assert.DoesNotContain(sent, s => s.StartsWith("drop ", StringComparison.Ordinal));
+        // war hammer + chain shirt, one apiece — no leading stack count on either.
+        Assert.Contains("bg Roomba inventory complete - inventoried 2 item(s).", sent);
 
         // But the item-location log IS fed, same as a Sort-mode recon would.
         // The staged arrival survey attaches to the room being entered when the
