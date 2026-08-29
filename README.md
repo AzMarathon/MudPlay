@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.33.0**
-> - Equipment Manager: a gear slot holding an item your character can't wear (alignment / level / class) is flagged red with a ⚠ and skipped on swaps, instead of the engine repeatedly bonking the game with a wear it refuses
-> - Equipment Manager: when the game refuses a wear/wield ("You may not wear that item!" / "You may not use that weapon." — e.g. an alignment-drift EP-zap), the slot is blocked and a terminal notice tells you to adjust the set; change that slot to clear it
-> - Bug report: new "Equipment slot blocks" section listing any unwearable set slots
+> **Version 3.33.1**
+> - Scale terminal output to fill the window: zoom cap raised from 2x to 8x so a maximized window on a large/4K monitor fills fully instead of leaving dead space around the grid
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

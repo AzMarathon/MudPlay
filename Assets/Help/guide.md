@@ -643,7 +643,7 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **Default:** Off
 **What it does:** When on, the terminal's text grows to fill the window (zooming in on a fixed 80×25 grid) instead of leaving empty space around a fixed-size grid in a larger window.
 **When you might change it:** Turn it on if you run MudPlay maximized or in a large window and don't want dead space around the text.
-**Important notes:** Applies live. This setting resets to Off whenever you close a profile, since it's stored per-character.
+**Important notes:** Applies live and keeps re-fitting as you resize the window, so it doubles as an "auto-fit to window" for anyone wanting the terminal to always fill the current window size. Zoom is capped at 8x FontSize, comfortably covering a maximized window on a 4K monitor. This setting resets to Off whenever you close a profile, since it's stored per-character.
 
 ### Keep typing directed at the terminal when other windows are open
 

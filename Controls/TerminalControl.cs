@@ -122,9 +122,11 @@ public sealed class TerminalControl : Control
     public LocalInputBuffer? InputBuffer { get; set; }
 
     // Hard ceiling on the ScaleToFit zoom: the effective font never exceeds
-    // FontSize × this. Keeps a maximised window on a big monitor from blowing
-    // the glyphs up to an absurd size — "reasonably larger", not billboard.
-    private const double MaxScale = 2.0;
+    // FontSize × this. 2.0 left dead unpainted space on a maximised window on
+    // a big/4K monitor (fitting an 80x25 grid into e.g. 3840x2160 wants ~5.4x);
+    // 8.0 comfortably covers that without the nearest-neighbour upscale
+    // getting visibly chunky.
+    private const double MaxScale = 8.0;
 
     private Typeface _typeface;
     // Bold variant, cached alongside _typeface. DrawRun would otherwise allocate a

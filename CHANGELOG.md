@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.33.1
+
+- Scale terminal output to fill the window: zoom cap raised from 2x to 8x so a maximized window on a large/4K monitor fills fully instead of leaving dead space around the grid
+
 ## 3.33.0
 
 - Equipment Manager: a gear slot holding an item your character can't wear (alignment / level / class) is flagged red with a ⚠ and skipped on swaps, instead of the engine repeatedly bonking the game with a wear it refuses
