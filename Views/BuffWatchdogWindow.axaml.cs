@@ -94,15 +94,15 @@ public partial class BuffWatchdogWindow : Window
 
         _zoneSplitter.IsVisible = true;
 
-        // The config table wants a touch less room by default than the bars; the user
-        // drags the splitter to re-divide. Min sizes keep either zone from collapsing.
-        var configLen = new GridLength(2, GridUnitType.Star);
-        var barsLen = new GridLength(3, GridUnitType.Star);
-
+        // The config table holds a FIXED size while the timer bars flex (star), so
+        // resizing the window only grows / shrinks the bars — the splitter stays put
+        // where the user dragged it instead of drifting with the window. Dragging the
+        // splitter re-sizes the fixed config pane; min sizes stop either zone
+        // collapsing. Defaults below are just the starting division.
         if (vertical)
         {
-            var configDef = new RowDefinition(configLen) { MinHeight = 70 };
-            var barsDef = new RowDefinition(barsLen) { MinHeight = 70 };
+            var configDef = new RowDefinition(new GridLength(180)) { MinHeight = 70 };
+            var barsDef = new RowDefinition(GridLength.Star) { MinHeight = 70 };
             var splitDef = new RowDefinition(GridLength.Auto);
             if (configFirst)
             {
@@ -134,8 +134,8 @@ public partial class BuffWatchdogWindow : Window
         }
         else
         {
-            var configDef = new ColumnDefinition(configLen) { MinWidth = 120 };
-            var barsDef = new ColumnDefinition(barsLen) { MinWidth = 120 };
+            var configDef = new ColumnDefinition(new GridLength(300)) { MinWidth = 140 };
+            var barsDef = new ColumnDefinition(GridLength.Star) { MinWidth = 120 };
             var splitDef = new ColumnDefinition(GridLength.Auto);
             if (configFirst)
             {

@@ -236,13 +236,17 @@
                         <DataTemplate x:DataType="vm:BuffWatchdogPlayerGroup">
                             <StackPanel Margin="0,0,0,6">
                                 <TextBlock Classes="SectionHeader" Text="{Binding PlayerName}"/>
+                                <!-- No background — the capped bars sit directly on the
+                                     pane background, so the empty space beside a short bar
+                                     (and the stretch as the window widens) just blends in. -->
                                 <ItemsControl ItemsSource="{Binding Rows}"
-                                              Background="{StaticResource ChromeBgSunkenBrush}"
                                               Margin="6,0" Padding="2">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:BuffWatchdogRowViewModel">
-                                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
-                                                    BorderThickness="0,0,0,1" Padding="6,4">
+                                            <!-- No row divider — each bar's own green frame
+                                                 separates it; a full-width line would just
+                                                 stretch across the blended pane background. -->
+                                            <Border Padding="6,4">
                                                 <!-- ✕ clears this timer (only while up); then the
                                                      width-capped bar: light-green frame, star-weighted
                                                      elapsed fill, recast marker on the fill/rest boundary,
