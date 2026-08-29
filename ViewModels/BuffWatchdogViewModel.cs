@@ -28,6 +28,10 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     // Live party roster (non-self), so a single-target party buff can list ONE ROW
     // PER targeted member. Null on the test ctor (no per-member rows there).
     private readonly Game.PartyState? _party;
+    // Your own IN-GAME character name (PlayerStats.Name, parsed from the game), for
+    // the self section header — NOT the profile name, which can differ. Null on the
+    // test ctor / before the statline is parsed.
+    private readonly Func<string?>? _readSelfName;
 
     private string _configSignature = string.Empty;
     private bool _needsRebuild = true;
@@ -60,7 +64,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                AppServices.Current.Tick, AppServices.Current.Profile,
                () => AppServices.Current.Resolver.Resolve<SpellsSettings>("Spells"),
                () => AppServices.Current.Profile.Current?.PartyBuffs,
-               AppServices.Current.PartyState)
+               AppServices.Current.PartyState,
+               () => AppServices.Current.PlayerStats.Name)
     {
         Buffs = new BuffPanelViewModel(AppServices.Current.PartyState);
     }
@@ -69,7 +74,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         CastingDirector castDirector, SpellbookState spellbook,
         Game.TickEngine tick, ProfileService profile,
         Func<SpellsSettings> readSpells, Func<BuffSettings?> readPartyBuffs,
-        Game.PartyState? party = null)
+        Game.PartyState? party = null, Func<string?>? readSelfName = null)
     {
         _castDirector = castDirector;
         _spellbook = spellbook;
@@ -78,6 +83,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         _readSpells = readSpells;
         _readPartyBuffs = readPartyBuffs;
         _party = party;
+        _readSelfName = readSelfName;
 
         _spellbook.Changed += OnSpellbookChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
@@ -239,8 +245,14 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                     self.Rows.Add(new BuffWatchdogRowViewModel(code, isParty: false, name, "self", learned));
                 if (wholeParty)
                 {
-                    self.Rows.Add(new BuffWatchdogRowViewModel(
-                        code, isParty: true, name, "whole party", learned, isWholeParty: true));
+                    // Show a whole-party row only when it's actually being maintained
+                    // (WholePartyOn = set to recast) OR is currently up. A configured-
+                    // but-off whole-party buff with no live timer isn't surfaced.
+                    bool wpActive = snap.Any(t => t.Target.Length == 0
+                        && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase));
+                    if (p.WholePartyOn || wpActive)
+                        self.Rows.Add(new BuffWatchdogRowViewModel(
+                            code, isParty: true, name, "whole party", learned, isWholeParty: true));
                     continue;
                 }
 
@@ -262,16 +274,9 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                     if (t.Target.Length > 0 && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase))
                         AddGiven(t.Target);   // already lower-cased
 
-                if (givens.Count == 0)
-                {
-                    // Configured single-target buff with nobody targeted yet — a not-up
-                    // placeholder under your section (a self-cast slot's self row above
-                    // already represents it).
-                    if (!p.CastOnSelf)
-                        self.Rows.Add(new BuffWatchdogRowViewModel(
-                            code, isParty: true, name, TargetLabel(p, wholeParty: false), learned));
-                    continue;
-                }
+                // Configured single-target buff with nobody targeted and no live timer
+                // — it's not set to recast on anyone, so don't surface a bar for it.
+                if (givens.Count == 0) continue;
                 foreach (string given in givens)
                 {
                     string display = displayByGiven.TryGetValue(given, out string? d) ? d : Capitalise(given);
@@ -299,14 +304,16 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     }
 
     // Your own display name for the self section: your given name from the party
-    // roster if present, else the loaded profile's character name, else "You".
+    // roster if present, else your IN-GAME character name (PlayerStats.Name — never
+    // the profile name, which can differ, e.g. a "Fujinpvp" profile on a "Fujin"
+    // character), else "You".
     private string SelfName()
     {
         if (_party is not null)
             foreach (Game.PartyMember m in _party.Members)
                 if (m.IsSelf && !string.IsNullOrWhiteSpace(m.Name))
                     return Capitalise(GivenLower(m.Name));
-        string? n = _profile.Current?.Name;
+        string? n = _readSelfName?.Invoke();
         return string.IsNullOrWhiteSpace(n) ? "You" : Capitalise(GivenLower(n));
     }
 
@@ -339,15 +346,6 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
             : (trimmed, false);   // unknown cast code — show it, flagged un-learned
     }
 
-    // The target summary shown on a party-buff row: whole-party buffs read "party";
-    // single-target buffs read "all" or the chosen given names.
-    private string TargetLabel(BuffSlot p, bool wholeParty)
-    {
-        if (wholeParty) return "party";
-        if (p.AllMembers) return "all";
-        return p.Targets.Count > 0 ? string.Join(", ", p.Targets) : "(no targets)";
-    }
-
     // Whether a party-buff slot's cast value is whole-party — a spell with a whole-party
     // Targets scope, or a #item-cast whose item casts a whole-party spell.
     private bool IsWholePartySlot(string? spell)
@@ -363,7 +361,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     // timer keys matter so a member you blessed then unticked keeps a row until the timer
     // actually expires (then the key drops → rebuild → row goes away). Only the KEY set
     // (short@target), never the remaining time, so it doesn't churn every second.
-    private static string BuildSignature(
+    private string BuildSignature(
         SpellsSettings spells, BuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
     {
         StringBuilder sb = new();
@@ -371,10 +369,19 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         sb.Append(spells.HpRegenSpell).Append('|').Append(spells.MaRegenSpell).Append("||");
         if (buffs is not null)
             foreach (BuffSlot p in buffs.Slots)
+            {
+                // A whole-party buff's row shows / hides on its self-keyed ("") timer
+                // arming or expiring (when it isn't auto-maintained), so fold that into
+                // the fingerprint — the member-keyed timers below only cover single-target.
+                bool wpActive = IsWholePartySlot(p.Spell)
+                    && snap.Any(t => t.Target.Length == 0
+                        && string.Equals(t.Short, (p.Spell ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
                 sb.Append(p.Spell).Append(':').Append(p.CastOnSelf ? "S" : "")
                   .Append(p.WholePartyOn ? "W" : "").Append(p.AllMembers ? "A" : "")
                   .Append(p.OnlyWhenHpFull ? "H" : "").Append(p.OnlyWhenMaFull ? "M" : "")
+                  .Append(wpActive ? "T" : "")
                   .Append(string.Join(",", p.Targets)).Append('|');
+            }
         sb.Append("||");
         foreach (string k in snap.Where(t => t.Target.Length > 0)
                                  .Select(t => t.Short + "@" + t.Target)

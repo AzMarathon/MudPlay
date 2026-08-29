@@ -602,7 +602,7 @@ The timer bars are grouped **by player**: **your own name first** (your self buf
 
 - Each bar shows the buff's cast code (or `#item` name) left-aligned inside it, with the **time remaining** just after.
 - The **bar fills as the buff ages** (empty just after it lands, full at wear-off), and a **vertical amber marker** shows where its **recast window** opens — the recast lead you set per slot. When the fill crosses the marker the bar turns amber: the buff is now due.
-- A buff that **isn't up** (worn off, or never cast) shows an empty bar labelled **not up**, so you can see at a glance which configured buffs are missing.
+- A buff that's **set to be kept up** (targeted on you or a member) but **isn't up** right now (worn off, or not cast yet) shows an empty bar labelled **not up**, so you can see at a glance which maintained buffs are missing. A configured buff that **isn't** set to recast on anyone and has no live timer isn't listed — it would just be clutter.
 - A single-target row whose member is **hiding** (the cast came back *"You do not see … here!"*) shows **hidden — can't target**; it clears and retries when you move or they reappear.
 - A small **✕** on a live bar **clears that timer** — marks the buff off (e.g. when a dispel you didn't see stripped it). A configured buff that's still due recasts on the next pass; a leftover timer (say an ex-member's) just disappears. The ✕ only shows while a timer is actually up.
 - A configured buff your character **hasn't learned** is flagged **unlearned**.

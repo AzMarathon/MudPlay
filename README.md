@@ -7,6 +7,8 @@
 > - Timer bars are grouped **by player** (your name, then each member) instead of a Self/Party split
 > - Buff Watchdog layout — config table above / below / left / right of the bars — is chosen on Settings → General, with a draggable splitter that stays put as you resize the window (the config pane keeps its size, the timer bars flex to fill)
 > - Buff timer bars now sit directly on the pane background — no sunken strip stretching behind the short bars, no full-width row dividers
+> - Buff Watchdog player sections use your real **in-game character name**, not the profile name
+> - A configured buff that isn't set to recast on anyone and has no live timer is no longer listed — only maintained or currently-up buffs show a bar
 > - Add-buff dialog carries per-slot conditions: only-when-HP/MA-full (fires at your rest-max, not literal full), only-when-dark for light spells, and — for a mana-regen roll spell — cast-before-resting plus the reroll threshold / max-rerolls
 > - Mana-regen rerolling reads its config from the buff slot (works on Paradigm via `abil 145`); the auto-light system reads the room-light spell from the buff list
 > - Your full buff plan is written to the program log on load / edit (and captured in the bug report) so a "buffs aren't working" report shows exactly how they're set up
