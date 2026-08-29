@@ -1701,6 +1701,28 @@ public sealed class LoopRunner : IRecoverableEngine
                 EnterRecovery($"step {_index + 1} refused while paused at {source}");
                 return;
             }
+            // The tracker landed in Suspect/Lost/Unknown WHILE paused — an
+            // ambiguous room observation it couldn't reconcile against the
+            // pending queue (a combat redisplay, another player's arrival,
+            // etc. mid-pause). OnTrackerStateChanged forwards this to the
+            // recovery gate in real time; while paused it never got the
+            // chance. Falling through to a blind resend here is worse than
+            // useless: NoteMoveSentCore deliberately does NOT re-arm Pending
+            // from Suspect/Lost/Unknown (no confirmed anchor to predict a
+            // landing from), so a subsequent refusal is silently dropped too
+            // — NoteMoveBlocked only acts when confidence is Pending —
+            // stranding the loop in Suspect with no way back
+            // (paradigm-20260829-111627). Forward to the recovery gate
+            // exactly like the real-time branch instead of resending.
+            if (_stepInFlight
+                && _tracker.State.Confidence is RoomConfidence.Suspect or RoomConfidence.Lost or RoomConfidence.Unknown)
+            {
+                _log?.Warn("LoopRunner",
+                    $"resume: step {_index + 1} tracker confidence={_tracker.State.Confidence} after pause; forwarding to recovery gate");
+                _recovery?.NoteSuspectedMismatch(
+                    $"tracker {_tracker.State.Confidence} on resume at step {_index + 1}");
+                return;
+            }
             // A move was already on the wire when the pause hit and its
             // confirmation hasn't landed yet (the overshoot guard above didn't
             // fire, so the tracker is still Pending on it). Re-sending it here
