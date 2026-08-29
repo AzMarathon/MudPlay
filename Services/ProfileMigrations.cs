@@ -44,7 +44,65 @@ public static class ProfileMigrations
             changed = true;
         }
 
+        // v3 → v4: the mana-regen buff (+ its reroll config) and the room-light spell
+        // also move off the Spells tab into the unified buff list — mana-regen as a
+        // maintained CastOnSelf slot carrying its reroll threshold / cap, room-light as
+        // a CastOnSelf slot flagged "only when dark" (its prior reactive behaviour).
+        if (profile.SchemaVersion < 4)
+        {
+            FoldManaRegenAndLightIntoUnifiedList(profile);
+            profile.SchemaVersion = 4;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    // Move MaRegenSpell (with ManaRegenRerollThreshold / Cap) + RoomLightSpell out of
+    // the stored "Spells" section and into CharacterProfile.PartyBuffs as CastOnSelf
+    // slots, appended after the already-folded self-bless slots. Clears the migrated
+    // fields.
+    private static void FoldManaRegenAndLightIntoUnifiedList(CharacterProfile profile)
+    {
+        if (profile.Settings is not { } settings) return;
+        if (!settings.TryGetValue("Spells", out JsonElement json)) return;
+
+        SpellsSettings? spells;
+        try { spells = JsonSerializer.Deserialize<SpellsSettings>(json.GetRawText()); }
+        catch { spells = null; }
+        if (spells is null) return;
+
+        List<PartyBuffSlot> folded = new();
+        if (!string.IsNullOrWhiteSpace(spells.MaRegenSpell))
+            folded.Add(new PartyBuffSlot
+            {
+                Spell = spells.MaRegenSpell!.Trim(),
+                CastOnSelf = true,
+                // Old behaviour: maintained downtime buff (recast on expiry), not
+                // pre-rest-only. Reroll config rides along on the slot.
+                RerollThreshold = spells.ManaRegenRerollThreshold,
+                RerollCount = spells.ManaRegenRerollCap,
+            });
+        if (!string.IsNullOrWhiteSpace(spells.RoomLightSpell))
+            folded.Add(new PartyBuffSlot
+            {
+                Spell = spells.RoomLightSpell!.Trim(),
+                CastOnSelf = true,
+                OnlyWhenDark = true,   // keep the reactive "cast when the room is dark" behaviour
+            });
+
+        if (folded.Count > 0)
+        {
+            profile.PartyBuffs ??= new PartyBuffSettings();
+            profile.PartyBuffs.Slots.AddRange(folded);
+        }
+
+        // Always clear the migrated fields, even when nothing was configured, so the
+        // (now removed) Spells-tab pickers can't leave stale values behind.
+        spells.MaRegenSpell = null;
+        spells.RoomLightSpell = null;
+        spells.ManaRegenRerollThreshold = null;
+        settings["Spells"] = JsonSerializer.SerializeToElement(spells);
     }
 
     // Move BlessSlots (in slot order) + WhenHpFull / WhenMaFull out of the profile's

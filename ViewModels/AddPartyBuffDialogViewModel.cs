@@ -9,25 +9,53 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels;
 
-// What the Add-party-buff dialog returns on OK: the picked buff cast-code + its
-// recast timer. Null (via a cancelled dialog) means "don't add a slot".
-public sealed record AddPartyBuffResult(string Spell, int RecastMarginSec);
+// What the Add-buff dialog returns on OK: the picked buff cast-code, its recast
+// timer, and the per-slot conditions. Null (via a cancelled dialog) means "don't
+// add / change the slot".
+public sealed record AddPartyBuffResult(
+    string Spell,
+    int RecastMarginSec,
+    bool OnlyWhenHpFull,
+    bool OnlyWhenMaFull,
+    bool OnlyWhenDark,
+    bool CastBeforeRestingForMana,
+    int RerollCount,
+    int? RerollThreshold);
 
-// Small picker dialog for adding a party-buff slot: choose a buff from the
-// spellbook and set its recast timer, then OK. The Party window then lets you
-// pick who it's cast on. Keeps the buff panel compact (no inline typing per row).
+// Picker dialog for adding / editing a buff slot: choose a buff, set its recast
+// timer, and pick the per-slot conditions. The condition rows adapt to the spell —
+// a light spell offers "only when dark", a mana-regen roll spell offers the reroll
+// config (threshold + max rerolls) and a "cast before resting" toggle. Targeting
+// (self / members) is then chosen in the row back in the Buff Watchdog.
 public sealed partial class AddPartyBuffDialogViewModel : ObservableObject, IDialogViewModel<AddPartyBuffResult>
 {
     public event Action<AddPartyBuffResult?>? CloseRequested;
 
     public IReadOnlyList<SpellPick> BuffPicks { get; }
     public Func<string?, object?, bool> SpellSuggestionFilter { get; }
+    private readonly Func<string?, bool> _isLightSpell;
+    private readonly Func<string?, bool> _isRollSpell;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanAdd))]
+    [NotifyPropertyChangedFor(nameof(IsLightSpell))]
+    [NotifyPropertyChangedFor(nameof(IsRollSpell))]
     private string? _spell;
 
     [ObservableProperty] private int _recastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
+
+    // Per-slot conditions.
+    [ObservableProperty] private bool _onlyWhenHpFull;
+    [ObservableProperty] private bool _onlyWhenMaFull;
+    [ObservableProperty] private bool _onlyWhenDark;
+    [ObservableProperty] private bool _castBeforeRestingForMana;
+    [ObservableProperty] private int _rerollCount;
+    [ObservableProperty] private int? _rerollThreshold;
+
+    // Whether the picked spell is a light spell (offers "only when dark") or a
+    // mana-regen roll spell (offers the reroll config + "cast before resting").
+    public bool IsLightSpell => _isLightSpell(Spell);
+    public bool IsRollSpell => _isRollSpell(Spell);
 
     // Enabled once the typed / picked value resolves to a real buff pick, so you
     // can't add an empty or non-buff slot.
@@ -38,27 +66,47 @@ public sealed partial class AddPartyBuffDialogViewModel : ObservableObject, IDia
     // Whether this dialog is editing an existing slot (vs adding a new one) —
     // drives the title + OK-button label.
     public bool IsEditing { get; }
-    public string DialogTitle => IsEditing ? "Edit party buff" : "Add party buff";
+    public string DialogTitle => IsEditing ? "Edit buff" : "Add buff";
     public string OkLabel => IsEditing ? "Save" : "OK";
 
     public AddPartyBuffDialogViewModel(
         IReadOnlyList<SpellPick> buffPicks, Func<string?, object?, bool> filter,
-        string? initialSpell = null, int? initialRecast = null)
+        Func<string?, bool> isLightSpell, Func<string?, bool> isRollSpell,
+        AddPartyBuffResult? initial = null)
     {
         ArgumentNullException.ThrowIfNull(buffPicks);
         ArgumentNullException.ThrowIfNull(filter);
         BuffPicks = buffPicks;
         SpellSuggestionFilter = filter;
-        IsEditing = !string.IsNullOrWhiteSpace(initialSpell);
-        _spell = initialSpell;
-        if (initialRecast is { } r) _recastMarginSec = r;
+        _isLightSpell = isLightSpell;
+        _isRollSpell = isRollSpell;
+        IsEditing = initial is not null;
+        if (initial is { } i)
+        {
+            _spell = i.Spell;
+            _recastMarginSec = i.RecastMarginSec;
+            _onlyWhenHpFull = i.OnlyWhenHpFull;
+            _onlyWhenMaFull = i.OnlyWhenMaFull;
+            _onlyWhenDark = i.OnlyWhenDark;
+            _castBeforeRestingForMana = i.CastBeforeRestingForMana;
+            _rerollCount = i.RerollCount;
+            _rerollThreshold = i.RerollThreshold;
+        }
     }
 
     [RelayCommand]
     private void Ok()
     {
         if (!CanAdd) return;
-        CloseRequested?.Invoke(new AddPartyBuffResult(Spell!.Trim(), Math.Clamp(RecastMarginSec, 0, 999)));
+        CloseRequested?.Invoke(new AddPartyBuffResult(
+            Spell!.Trim(),
+            Math.Clamp(RecastMarginSec, 0, 999),
+            OnlyWhenHpFull,
+            OnlyWhenMaFull,
+            IsLightSpell && OnlyWhenDark,
+            IsRollSpell && CastBeforeRestingForMana,
+            IsRollSpell ? Math.Clamp(RerollCount, 0, 20) : 0,
+            IsRollSpell ? RerollThreshold : null));
     }
 
     [RelayCommand]

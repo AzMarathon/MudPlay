@@ -2430,6 +2430,10 @@ public sealed class AppServices
         Profile.ProfileLoaded  += _ => ApplyPartyFromActiveProfile();
         Profile.ProfileClosed  += ResetPartyToDefaults;
         Profile.ProfileMutated += _ => ApplyPartyFromActiveProfile();
+        // Dump the configured buff plan on load / edit so a "buffs aren't working"
+        // report shows exactly how they're set up.
+        Profile.ProfileLoaded  += LogBuffConfiguration;
+        Profile.ProfileMutated += LogBuffConfiguration;
         Profile.ProfileLoaded  += _ => ApplyTalkFromActiveProfile();
         Profile.ProfileClosed  += ResetTalkToDefaults;
         Profile.ProfileMutated += _ => ApplyTalkFromActiveProfile();
@@ -3463,10 +3467,8 @@ public sealed class AppServices
             AbilBreakdown,
             readConfig: () =>
             {
-                Models.Profile.SpellsSettings s =
-                    ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-                return new Game.Spells.ManaRegenRerollConfig(
-                    s.ManaRegenRerollThreshold, s.ManaRegenRerollCap);
+                Models.Profile.PartyBuffSlot? slot = ManaRegenRerollSlot();
+                return new Game.Spells.ManaRegenRerollConfig(slot?.RerollThreshold, slot?.RerollCount ?? 0);
             },
             sendAbilQuery: () =>
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
@@ -4737,10 +4739,8 @@ public sealed class AppServices
             catalogue:   () => Lights.All,
             resolveRoom: RoomGraph.GetRoom,
             wornIllu:    () => PlayerIllumination.WornOnly,
-            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(
-                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell),
-            roomLightSpellName: () =>
-                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell,
+            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(RoomLightSlotSpell()),
+            roomLightSpellName: RoomLightSlotSpell,
             castRoomLightSpell: name => Cast.TryCast(name),
             settings:    () => ReadSection<Models.Profile.AutoLightSettings>(Profile.Current, "AutoLight"),
             log:         Log);
@@ -5866,9 +5866,9 @@ public sealed class AppServices
             foreach (Models.Profile.PartyBuffSlot pslot in buffs.Slots)
                 if (pslot.CastOnSelf && !IsPartyWideBuff(pslot.Spell ?? string.Empty))
                     AddSelf(pslot.Spell);
-        // HP / MA regen still live on the Spells tab.
+        // HP regen still lives on the Spells tab (mana regen is a unified slot, already
+        // covered by the CastOnSelf loop above).
         AddSelf(spells.HpRegenSpell);
-        AddSelf(spells.MaRegenSpell);
         if (selfBuffs.Count == 0) return map;
 
         if (buffs is null) return map;
@@ -6031,14 +6031,71 @@ public sealed class AppServices
         if (string.IsNullOrWhiteSpace(shortCode)) return;
         if (GameData.ActiveRealm != Game.RealmType.ParaMud) return;
 
-        Models.Profile.SpellsSettings spells =
-            ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-        string? maRegen = spells.MaRegenSpell?.Trim();
-        if (string.IsNullOrEmpty(maRegen)) return;
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } maRegen) return;
         if (!string.Equals(maRegen, shortCode.Trim(), StringComparison.OrdinalIgnoreCase)) return;
-        if (!IsManaRegenRollSpell(maRegen)) return;
 
         ManaRegen.OnRollSpellLanded(maRegen);
+    }
+
+    // The unified-list slot that drives mana-regen rerolling: a CastOnSelf slot whose
+    // spell is a code-145 rolled regen-rate spell (nature tap / mana flux / prfl). One
+    // per character; null when none is configured. (The reroll config — threshold /
+    // count — rides on this slot.)
+    private Models.Profile.PartyBuffSlot? ManaRegenRerollSlot()
+    {
+        if (Profile.Current?.PartyBuffs is not { } buffs) return null;
+        foreach (Models.Profile.PartyBuffSlot s in buffs.Slots)
+            if (s.CastOnSelf && !string.IsNullOrWhiteSpace(s.Spell) && IsManaRegenRollSpell(s.Spell.Trim()))
+                return s;
+        return null;
+    }
+
+    // Dump the character's configured buff plan (the unified list) to the program log
+    // on profile load / edit, so a "my buffs aren't working" report shows exactly how
+    // they're set up — target(s), recast lead, and any per-slot conditions.
+    private void LogBuffConfiguration(Models.Profile.CharacterProfile profile)
+    {
+        if (profile.PartyBuffs is not { Slots.Count: > 0 } buffs)
+        {
+            Log.Info("Buffs", "Buff plan: none configured.");
+            return;
+        }
+
+        Log.Info("Buffs", $"Buff plan — {buffs.Slots.Count} slot(s):");
+        int n = 0;
+        foreach (Models.Profile.PartyBuffSlot s in buffs.Slots)
+        {
+            n++;
+            if (string.IsNullOrWhiteSpace(s.Spell)) { Log.Info("Buffs", $"  {n}. (empty)"); continue; }
+
+            System.Collections.Generic.List<string> who = new();
+            if (s.CastOnSelf) who.Add("self");
+            if (s.WholePartyOn && IsPartyWideBuff(s.Spell)) who.Add("party-wide");
+            if (s.AllMembers) who.Add("all-members");
+            else if (s.Targets.Count > 0) who.Add(string.Join("+", s.Targets));
+
+            System.Collections.Generic.List<string> cond = new();
+            if (s.OnlyWhenHpFull) cond.Add("hp-full");
+            if (s.OnlyWhenMaFull) cond.Add("ma-full");
+            if (s.OnlyWhenDark) cond.Add("only-dark");
+            if (s.CastBeforeRestingForMana) cond.Add("pre-rest");
+            if (s.RerollCount > 0) cond.Add($"reroll<{s.RerollThreshold?.ToString() ?? "-"} x{s.RerollCount}");
+
+            string target = who.Count > 0 ? string.Join("/", who) : "no target";
+            string condStr = cond.Count > 0 ? $" [{string.Join(", ", cond)}]" : string.Empty;
+            Log.Info("Buffs", $"  {n}. {s.Spell.Trim()} → {target}, recast@{s.RecastMarginSec}s{condStr}");
+        }
+    }
+
+    // The unified-list "only when dark" light spell the auto-light system casts on
+    // entering a dark room — a CastOnSelf slot flagged OnlyWhenDark. Null when none.
+    private string? RoomLightSlotSpell()
+    {
+        if (Profile.Current?.PartyBuffs is not { } buffs) return null;
+        foreach (Models.Profile.PartyBuffSlot s in buffs.Slots)
+            if (s.CastOnSelf && s.OnlyWhenDark && !string.IsNullOrWhiteSpace(s.Spell))
+                return s.Spell!.Trim();
+        return null;
     }
 
     // True when the spell with cast code shortCode carries a
@@ -6061,10 +6118,7 @@ public sealed class AppServices
         int maxMa = PlayerState.MaxMa;
         if (maxMa <= 0) return false;
 
-        Models.Profile.SpellsSettings spells =
-            ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-        string? shortCode = spells.MaRegenSpell?.Trim();
-        if (string.IsNullOrEmpty(shortCode)) return false;
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } shortCode) return false;
 
         int cost = Spellbook.ManaCostOf(shortCode) ?? 0;
         Models.Profile.HealthSettings health =

@@ -655,6 +655,10 @@ public sealed class CastingDirectorTests
                 merged.Slots.Add(new PartyBuffSlot { Spell = Spells.WhenHpFullSpell, CastOnSelf = true, OnlyWhenHpFull = true });
             if (!string.IsNullOrWhiteSpace(Spells.WhenMaFullSpell))
                 merged.Slots.Add(new PartyBuffSlot { Spell = Spells.WhenMaFullSpell, CastOnSelf = true, OnlyWhenMaFull = true });
+            // Mana-regen also folds into the unified list now (v4 migration) — a
+            // maintained CastOnSelf slot, appended after the bless / when-full slots.
+            if (!string.IsNullOrWhiteSpace(Spells.MaRegenSpell))
+                merged.Slots.Add(new PartyBuffSlot { Spell = Spells.MaRegenSpell, CastOnSelf = true });
             merged.Slots.AddRange(PartyBuffs.Slots);
             return merged;
         }

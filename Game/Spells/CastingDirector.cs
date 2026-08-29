@@ -1135,12 +1135,10 @@ public sealed class CastingDirector : IDisposable
         if (blessEnabled)
         {
             int buffPrio = CategoryPriority(spells, SpellCategory.Buffing);
-            // The mana-regen buff still lives on the Spells tab (no slot number).
-            if (!string.IsNullOrWhiteSpace(spells.MaRegenSpell) && IsRecastDue("", spells.MaRegenSpell.Trim()))
-                q.Add((buffPrio, -2, $"{spells.MaRegenSpell.Trim()}({buffPrio})"));
-            // The unified buff list, in priority (list) order. Self / whole-party
-            // slots key their recast to "" (they land on us); a member-target slot's
-            // per-member timers aren't enumerated here (best-effort self view).
+            // The unified buff list, in priority (list) order. Self / whole-party slots
+            // key their recast to "" (they land on us); a member-target slot's per-member
+            // timers aren't enumerated here (best-effort self view). Only-when-dark light
+            // slots are the auto-light system's job, not this queue.
             if (_readPartyBuffs?.Invoke() is { } buffs)
             {
                 int slotNo = 0;
@@ -1148,7 +1146,7 @@ public sealed class CastingDirector : IDisposable
                 {
                     slotNo++;
                     string? code = slot.Spell?.Trim();
-                    if (string.IsNullOrWhiteSpace(code) || !IsRecastDue("", code)) continue;
+                    if (string.IsNullOrWhiteSpace(code) || slot.OnlyWhenDark || !IsRecastDue("", code)) continue;
                     q.Add((buffPrio, slotNo, $"{code}({buffPrio}-{slotNo})"));
                 }
             }
@@ -1557,12 +1555,11 @@ public sealed class CastingDirector : IDisposable
         // list walked in priority order — self bless / when-full, whole-party, and
         // per-member buffs together.
         // A staged mana-regen reroll leads — it's an immediate below-threshold recast
-        // (front of the queue). Then the ONE unified buff list (self bless / when-full,
-        // whole-party, per-member). MaRegen MAINTENANCE trails the unified list so the
-        // self-bless slots keep their historical priority ahead of the regen top-up.
+        // (front of the queue). Then the ONE unified buff list (self bless / regen /
+        // when-full, whole-party, per-member). Mana-regen maintenance is now just a
+        // CastOnSelf slot in that list, so PickUnifiedBuff handles it in place.
         if (PickManaRegenReroll(spells, manaBuffsAllowed) is { } rr) return rr;
-        if (PickUnifiedBuff(spells, party, manaBuffsAllowed) is { } u) return u;
-        return PickManaRegenMaintenance(spells, manaBuffsAllowed);
+        return PickUnifiedBuff(spells, health, party, manaBuffsAllowed);
     }
 
     // Per-slot buff affordability for the buff pickers. A regular spell buff is
@@ -1579,22 +1576,12 @@ public sealed class CastingDirector : IDisposable
         return manaBuffsAllowed && _state.Ma >= cost.Value;
     }
 
-    // The mana-regen buff (MaRegenSpell) + its front-of-queue reroll. Kept on the
-    // Spells tab for now — it still feeds the reroll engine and the auto-light path
-    // has its own analogue — so it's picked here rather than from the unified list.
-    // Self-gated by the Spells-tab toggles (blocked during combat unless
-    // SelfBlessDuringCombat, during a triggered recovery rest unless
-    // SelfBlessWhileResting; both default OFF, matching the prior behaviour).
-    //
-    // HpRegenSpell deliberately does NOT live here: an HP-regen HoT is treated as
-    // assisted healing, cast reactively by the minor-self-heal path when HP trips the
-    // trigger — not maintained always-up. MaRegenSpell tops the mana pool (and feeds
-    // the reroll engine); it doesn't heal HP.
     // A staged mana-regen reroll — an immediate below-threshold recast that jumps the
     // whole buff queue (bypasses the slot's recast timer) but still honours the self-
     // bless timing gates and the buff mana floor. If it can't be paid for right now,
     // drop it (the reroller re-stages on the next landing if still below threshold)
-    // rather than stall the walk.
+    // rather than stall the walk. The mana-regen buff's own MAINTENANCE recast is now
+    // a normal CastOnSelf slot in the unified list (PickUnifiedBuff handles it).
     private CastCandidate? PickManaRegenReroll(SpellsSettings spells, bool manaBuffsAllowed)
     {
         if (!SelfBuffTimingAllowed(spells)) return null;
@@ -1603,25 +1590,6 @@ public sealed class CastingDirector : IDisposable
             return new CastCandidate(reroll, Target: null, DefaultRecastMarginSec);
         _pendingManaRegenReroll = null;
         return null;
-    }
-
-    // The mana-regen buff (MaRegenSpell) maintenance recast — kept on the Spells tab
-    // for now (it still feeds the reroll engine, and the auto-light path has its own
-    // analogue). Trails the unified list so the self-bless slots keep priority.
-    //
-    // HpRegenSpell deliberately does NOT live here: an HP-regen HoT is assisted
-    // healing, cast reactively by the minor-self-heal path when HP trips the trigger —
-    // not maintained always-up. MaRegenSpell tops the mana pool; it doesn't heal HP.
-    private CastCandidate? PickManaRegenMaintenance(SpellsSettings spells, bool manaBuffsAllowed)
-    {
-        if (!SelfBuffTimingAllowed(spells)) return null;
-        string? maRegen = spells.MaRegenSpell?.Trim();
-        if (string.IsNullOrWhiteSpace(maRegen)) return null;
-        // A party-wide buff that supersedes it (rare for a mana-regen) → leave it be.
-        if (_selfBuffCoverage?.Invoke() is { } cov && cov.ContainsKey(maRegen)) return null;
-        if (!IsBuffAffordable(maRegen, manaBuffsAllowed)) return null;
-        if (!IsRecastDue("", maRegen)) return null;
-        return new CastCandidate(maRegen, Target: null, DefaultRecastMarginSec);
     }
 
     // Self-buff timing gate shared by the mana-regen path and the CastOnSelf targets
@@ -1647,18 +1615,26 @@ public sealed class CastingDirector : IDisposable
     // a roster name is in the room) — the one exception being a member who's HIDING:
     // the cast returns "You do not see <name> here!" and we back off (_hiddenTargets)
     // until we move or they reappear in "Also here:".
-    private CastCandidate? PickUnifiedBuff(SpellsSettings spells, PartySettings? party, bool manaBuffsAllowed)
+    private CastCandidate? PickUnifiedBuff(SpellsSettings spells, HealthSettings health, PartySettings? party, bool manaBuffsAllowed)
     {
         if (_readPartyBuffs?.Invoke() is not { } buffs) return null;
 
         bool selfAllowed = SelfBuffTimingAllowed(spells);
+        bool triggeredRest = _isTriggeredRest?.Invoke() ?? false;
+
+        // "When HP / MA full" fires at the REST-MAX target (the level we rest up to,
+        // HealthSettings.RestMaxHp / RestMaxMa read per the threshold mode), not literal
+        // 100% — so a buff meant for "topped off, ready for the next fight" triggers as
+        // soon as a recovery rest finishes.
+        int restMaxHp = PoolThreshold.Resolve(health.HpThresholdMode, health.RestMaxHp, _state.MaxHp);
+        int restMaxMa = PoolThreshold.Resolve(health.MaThresholdMode, health.RestMaxMa, _state.MaxMa);
 
         // Party / member targets are only cast while actually in a party, gated by
         // the Settings → Party toggles (default OFF → hold in combat / triggered rest).
         bool inParty = _party?.IsInParty == true;
         bool partyAllowed = inParty
             && !(_state.InCombat && !(party?.BlessDuringCombat ?? false))
-            && !((_isTriggeredRest?.Invoke() ?? false) && !(party?.BlessWhileResting ?? false));
+            && !(triggeredRest && !(party?.BlessWhileResting ?? false));
 
         // In a party, a buff a configured party-wide buff removes (e.g. chant removes
         // bless) is left to that party buff — skip self-casting the superseded spell.
@@ -1667,13 +1643,17 @@ public sealed class CastingDirector : IDisposable
         foreach (Models.Profile.PartyBuffSlot slot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
+
+            // Only-when-dark light spells are cast reactively by the auto-light system
+            // on entering a dark room, not maintained here — skip them entirely.
+            if (slot.OnlyWhenDark) continue;
+
             if (!IsBuffAffordable(slot.Spell, manaBuffsAllowed)) continue;
 
-            // Per-slot conditions: the matching pool must be topped off. (The
-            // rest-max refinement lands with the conditions engine; parity for now
-            // is literal full, matching the old WhenHp/MaFull slots.)
-            if (slot.OnlyWhenHpFull && !(_state.MaxHp > 0 && _state.Hp >= _state.MaxHp)) continue;
-            if (slot.OnlyWhenMaFull && !(_state.MaxMa > 0 && _state.Ma >= _state.MaxMa)) continue;
+            // Per-slot conditions: the matching pool must be topped off to the rest-max
+            // target for the "when full" slots.
+            if (slot.OnlyWhenHpFull && !(_state.MaxHp > 0 && _state.Hp >= restMaxHp)) continue;
+            if (slot.OnlyWhenMaFull && !(_state.MaxMa > 0 && _state.Ma >= restMaxMa)) continue;
 
             bool isItem = ItemCastToken.IsToken(slot.Spell);
             bool partyWide = _isPartyWideBuff?.Invoke(slot.Spell) == true;
@@ -1688,9 +1668,17 @@ public sealed class CastingDirector : IDisposable
                 if (!IsRecastDue("", slot.Spell)) continue;
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
             }
+
+            // "Cast before resting for mana": a pre-rest top-up cast only while a
+            // recovery rest is running (so the fresh regen boosts the rest), instead of
+            // being maintained always-up. Otherwise the slot uses the normal self gate.
+            bool selfEligible = slot.CastBeforeRestingForMana
+                ? (triggeredRest && !_state.InCombat)
+                : selfAllowed;
+
             // Self target (CastOnSelf) — self-gated, keyed "". Works for a spell OR a
             // self item-cast (`use <item>`, whose buff lands on us).
-            if (slot.CastOnSelf && selfAllowed
+            if (slot.CastOnSelf && selfEligible
                 && (covered is null || !covered.ContainsKey(slot.Spell))
                 && IsRecastDue("", slot.Spell))
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);

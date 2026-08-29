@@ -60,11 +60,8 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         "Spell type priority", "Priority", "Minor party heal", "Major party heal",
         "Minor self heal", "Major self heal", "Curing", "Buffing", "Debuffing",
         "Healing", "Regeneration", "Minor heal", "Major heal",
-        "HP Regen", "Mana Regen",
-        "Mana-regen reroll", "Reroll if roll below", "Reroll threshold",
-        "Max rerolls", "Reroll cap", "Nature tap", "Mana flux",
+        "HP Regen",
         "Other spells", "Cure Holds", "Cure poison", "Cure disease", "Cure blindness",
-        "Room light", "Light",
         "Self bless while resting", "Self bless during combat", "Bless timing",
         "Ailment handling", "Coordination",
         "Ignore poison", "Ignore blindness", "Ignore confusion", "Ignore disease",
@@ -109,22 +106,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HpRegenSpellUnlearned))]
     private string? _hpRegenSpell;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MaRegenSpellUnlearned))]
-    private string? _maRegenSpell;
-
-    // ----- Mana-regen reroll (Paradigm roll spells) -----------------
-    // Empty threshold = rerolling off (the spell just recasts on expiry).
-
-    [ObservableProperty] private int? _manaRegenRerollThreshold;
-    [ObservableProperty] private int _manaRegenRerollCap = 3;
-
-    // Plain-language state of the mana-regen reroll for the current MaRegenSpell
-    // pick — the level-scaled roll range when it resolves to a Paradigm roll
-    // spell (nature tap / mana flux, ability code 145), otherwise why rerolling
-    // doesn't apply. Recomputed when the pick or the spellbook (class / level)
-    // changes.
-    public string ManaRegenRerollHint => BuildManaRegenRerollHint();
 
     // ----- Cures + utility ------------------------------------------
 
@@ -140,22 +121,17 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CureBlindnessSpellUnlearned))]
     private string? _cureBlindnessSpell;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(RoomLightSpellUnlearned))]
-    private string? _roomLightSpell;
 
     // Red-outline flags — the slot names a spell the character hasn't learned.
-    // All eleven pick from SpellSuggestions (spell-only). Re-raised on the name
+    // All pick from SpellSuggestions (spell-only). Re-raised on the name
     // change (attributes above) and on a spellbook change (OnSpellbookChanged).
     public bool MinorHealSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, MinorHealSpell);
     public bool MajorHealSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, MajorHealSpell);
     public bool HpRegenSpellUnlearned       => IsSpellUnlearned(SpellSuggestions, HpRegenSpell);
-    public bool MaRegenSpellUnlearned       => IsSpellUnlearned(SpellSuggestions, MaRegenSpell);
     public bool CureHoldsSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, CureHoldsSpell);
     public bool CurePoisonSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, CurePoisonSpell);
     public bool CureDiseaseSpellUnlearned   => IsSpellUnlearned(SpellSuggestions, CureDiseaseSpell);
     public bool CureBlindnessSpellUnlearned => IsSpellUnlearned(SpellSuggestions, CureBlindnessSpell);
-    public bool RoomLightSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, RoomLightSpell);
 
     // Self-bless timing gates (default on/off preserve the historical
     // out-of-combat-only behaviour). Govern the self-buff path in CastingDirector.
@@ -203,39 +179,14 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     private void OnSpellbookChanged()
     {
         OnPropertyChanged(nameof(SpellSuggestions));
-        // Class / level swap rescales the roll range shown in the reroll hint.
-        OnPropertyChanged(nameof(ManaRegenRerollHint));
         // The learned set (hence every slot's red-outline flag) just changed.
         OnPropertyChanged(nameof(MinorHealSpellUnlearned));
         OnPropertyChanged(nameof(MajorHealSpellUnlearned));
         OnPropertyChanged(nameof(HpRegenSpellUnlearned));
-        OnPropertyChanged(nameof(MaRegenSpellUnlearned));
         OnPropertyChanged(nameof(CureHoldsSpellUnlearned));
         OnPropertyChanged(nameof(CurePoisonSpellUnlearned));
         OnPropertyChanged(nameof(CureDiseaseSpellUnlearned));
         OnPropertyChanged(nameof(CureBlindnessSpellUnlearned));
-        OnPropertyChanged(nameof(RoomLightSpellUnlearned));
-    }
-
-    // Resolves the current MaRegenSpell pick to its roll range (nature tap /
-    // mana flux, code 145) via the shared classifier, or explains why
-    // rerolling doesn't apply. Kept off the render path — only rebuilt when the
-    // pick or the spellbook changes.
-    private string BuildManaRegenRerollHint()
-    {
-        if (NullIfBlank(MaRegenSpell) is not { } code)
-            return "Pick a mana-regen spell above to configure rerolling.";
-
-        if (_spellbook.FindByCastCode(code) is not { } spell)
-            return $"'{code}' isn't in this class's spell list — rerolling needs a known roll spell.";
-
-        if (!Game.Spells.ManaRegenReroller.IsRollSpell(spell.Formula))
-            return $"{spell.Name.Trim()} isn't a roll spell — it just recasts on expiry, so rerolling doesn't apply.";
-
-        (long min, long max) = Game.Spells.SpellCalculator.AffectMagnitude(spell.Formula, _spellbook.Level);
-        string atLevel = _spellbook.Level > 0 ? $" at level {_spellbook.Level}" : string.Empty;
-        return $"{spell.Name.Trim()} rolls {min}…{max} to your mana-regen rate{atLevel}. " +
-               "Recast until the roll reaches the threshold (Paradigm only).";
     }
 
     public override void Apply()
@@ -255,16 +206,11 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
             MinorHealSpell    = NullIfBlank(MinorHealSpell),
             MajorHealSpell    = NullIfBlank(MajorHealSpell),
             HpRegenSpell      = NullIfBlank(HpRegenSpell),
-            MaRegenSpell      = NullIfBlank(MaRegenSpell),
-
-            ManaRegenRerollThreshold = ManaRegenRerollThreshold,
-            ManaRegenRerollCap       = ManaRegenRerollCap,
 
             CureHoldsSpell     = NullIfBlank(CureHoldsSpell),
             CurePoisonSpell    = NullIfBlank(CurePoisonSpell),
             CureDiseaseSpell   = NullIfBlank(CureDiseaseSpell),
             CureBlindnessSpell = NullIfBlank(CureBlindnessSpell),
-            RoomLightSpell     = NullIfBlank(RoomLightSpell),
 
             SelfBlessWhileResting = SelfBlessWhileResting,
             SelfBlessDuringCombat = SelfBlessDuringCombat,
@@ -338,16 +284,11 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         MinorHealSpell  = dto.MinorHealSpell;
         MajorHealSpell  = dto.MajorHealSpell;
         HpRegenSpell    = dto.HpRegenSpell;
-        MaRegenSpell    = dto.MaRegenSpell;
-
-        ManaRegenRerollThreshold = dto.ManaRegenRerollThreshold;
-        ManaRegenRerollCap       = dto.ManaRegenRerollCap;
 
         CureHoldsSpell     = dto.CureHoldsSpell;
         CurePoisonSpell    = dto.CurePoisonSpell;
         CureDiseaseSpell   = dto.CureDiseaseSpell;
         CureBlindnessSpell = dto.CureBlindnessSpell;
-        RoomLightSpell     = dto.RoomLightSpell;
 
         SelfBlessWhileResting = dto.SelfBlessWhileResting;
         SelfBlessDuringCombat = dto.SelfBlessDuringCombat;
@@ -399,21 +340,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     partial void OnMajorHealSpellChanged(string? value)      => MarkDirty();
     partial void OnHpRegenSpellChanged(string? value)        => MarkDirty();
 
-    partial void OnMaRegenSpellChanged(string? value)
-    {
-        MarkDirty();
-        // The reroll hint keys off the mana-regen pick.
-        OnPropertyChanged(nameof(ManaRegenRerollHint));
-    }
-
-    partial void OnManaRegenRerollThresholdChanged(int? value) => MarkDirty();
-    partial void OnManaRegenRerollCapChanged(int value)        => MarkDirty();
-
     partial void OnCureHoldsSpellChanged(string? value)      => MarkDirty();
     partial void OnCurePoisonSpellChanged(string? value)     => MarkDirty();
     partial void OnCureDiseaseSpellChanged(string? value)    => MarkDirty();
     partial void OnCureBlindnessSpellChanged(string? value)  => MarkDirty();
-    partial void OnRoomLightSpellChanged(string? value)      => MarkDirty();
 
     partial void OnSelfBlessWhileRestingChanged(bool value)  => MarkDirty();
     partial void OnSelfBlessDuringCombatChanged(bool value)  => MarkDirty();

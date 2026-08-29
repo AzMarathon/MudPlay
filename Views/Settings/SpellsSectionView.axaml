@@ -84,7 +84,7 @@
 
                 <!-- ============ Healing / regeneration ============ -->
                 <TextBlock Classes="SectionHeader" Text="Healing / regeneration"/>
-                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Minor heal"/>
                     <AutoCompleteBox Grid.Row="0" Grid.Column="1"
                                      Text="{Binding MinorHealSpell, Mode=TwoWay}"
@@ -120,55 +120,11 @@
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
                                      ToolTip.Tip="HP-regen HoT (e.g. regeneration) used as assisted healing: when the Minor heal threshold trips, this is cast FIRST — ahead of the single-target minor heal — unless HP is already in life-threat range or the HoT is still ticking. Want it kept always-up instead? Put it in a Bless slot."/>
-
-                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Mana Regen"/>
-                    <AutoCompleteBox Grid.Row="3" Grid.Column="1"
-                                     Text="{Binding MaRegenSpell, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding MaRegenSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="260" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Auto-regen utility for the mana pool."/>
-                </Grid>
-
-                <!-- ============ Mana-regen reroll (Paradigm roll spells) ============ -->
-                <!-- Nature tap / mana flux (ability 145, roll value) land a fresh
-                     ± mana-regen-rate modifier each cast; a bad roll is worth
-                     recasting. After the buff lands the engine reads the rolled
-                     value off `abil 145` and recasts until it meets the
-                     threshold, up to the cap, stopping early at the mana floor.
-                     Empty threshold = rerolling off (recast on expiry only).
-                     Paradigm-only — Stock has no abil breakdown to read. -->
-                <TextBlock Classes="SectionHeader" Text="Mana-regen reroll (Paradigm roll spells)"/>
-                <TextBlock Text="{Binding ManaRegenRerollHint}"
-                           Foreground="{StaticResource ChromeFgMutedBrush}"
-                           FontSize="{StaticResource FontSizeSm}"
-                           FontStyle="Italic"
-                           TextWrapping="Wrap"
-                           MaxWidth="440" HorizontalAlignment="Left"
-                           Margin="0,0,0,6"/>
-                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Reroll if roll below"/>
-                    <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                   Value="{Binding ManaRegenRerollThreshold, Mode=TwoWay}"
-                                   Minimum="-9999" Maximum="9999" Increment="1" FormatString="0"
-                                   Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Recast the mana-regen roll spell when its rolled contribution lands below this. Leave empty to disable rerolling — the spell then just recasts on expiry. Paradigm only."/>
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Max rerolls"/>
-                    <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                   Value="{Binding ManaRegenRerollCap, Mode=TwoWay}"
-                                   Minimum="1" Maximum="20" Increment="1" FormatString="0"
-                                   Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Hard ceiling on consecutive rerolls per cast cycle before accepting whatever landed. Rerolling also stops early if paying for the next cast would drop mana below the buff floor."/>
                 </Grid>
 
                 <!-- ============ Other spells ============ -->
                 <TextBlock Classes="SectionHeader" Text="Other spells"/>
-                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Cure Holds"/>
                     <AutoCompleteBox Grid.Row="0" Grid.Column="1"
                                      Text="{Binding CureHoldsSpell, Mode=TwoWay}"
@@ -216,18 +172,6 @@
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
                                      ToolTip.Tip="Cure-blindness spell."/>
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="Room light"/>
-                    <AutoCompleteBox Grid.Row="4" Grid.Column="1"
-                                     Text="{Binding RoomLightSpell, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding RoomLightSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="260" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Cast when entering a dark room."/>
                 </Grid>
 
                 <!-- Self-bless spell picks + the "when HP/MA full" utility casts

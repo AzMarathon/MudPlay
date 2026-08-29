@@ -79,8 +79,12 @@ public sealed class PartyBuffSlot
     public bool CastBeforeRestingForMana { get; set; }
 
     // Roll spells (flux / ntap / prfl and kin): how many times to re-cast chasing a
-    // better mana-regen roll before accepting what landed. 0 = don't reroll. The
-    // stock mana-tick-monitoring / paradigm `abil 145` read that drives it lands in a
-    // follow-up.
+    // better mana-regen roll before accepting what landed. 0 = don't reroll (the
+    // spell just recasts on expiry).
     public int RerollCount { get; set; }
+
+    // Roll spells: reroll while the rolled mana-regen contribution lands BELOW this
+    // value (the min gate). null = rerolling off even if RerollCount > 0. On Paradigm
+    // this is read from `abil 145`; on Stock it's a 0-100% of the best-possible tick.
+    public int? RerollThreshold { get; set; }
 }

@@ -614,6 +614,9 @@ public static class BugReportBuilder
         string scope = who.Count > 0 ? string.Join("+", who) : "unset";
         if (s.OnlyWhenHpFull) scope += " +hp-full";
         if (s.OnlyWhenMaFull) scope += " +ma-full";
+        if (s.OnlyWhenDark) scope += " +only-dark";
+        if (s.CastBeforeRestingForMana) scope += " +pre-rest";
+        if (s.RerollCount > 0) scope += $" +reroll<{s.RerollThreshold?.ToString() ?? "-"}x{s.RerollCount}";
         return scope;
     }
 
