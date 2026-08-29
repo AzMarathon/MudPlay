@@ -197,12 +197,10 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         SelfBuffs.Clear();
         PartyBuffs.Clear();
 
-        foreach (int slot in spells.BlessSlots.Keys.OrderBy(k => k))
-            AddSelf(spells.BlessSlots[slot]);
+        // Mana / HP regen still live on the Spells tab; every other self buff is now
+        // a CastOnSelf slot in the unified list below.
         AddSelf(spells.HpRegenSpell);
         AddSelf(spells.MaRegenSpell);
-        AddSelf(spells.WhenHpFullSpell);
-        AddSelf(spells.WhenMaFullSpell);
 
         if (buffs is not null)
         {
@@ -215,8 +213,15 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 if (string.IsNullOrWhiteSpace(p.Spell)) continue;
                 string code = p.Spell.Trim();
                 (string name, bool learned) = ResolveName(code);
+                bool wholeParty = IsWholePartySlot(code);
 
-                if (IsWholePartySlot(code))
+                // A CastOnSelf slot contributes a self timer row (keyed ""). A
+                // whole-party slot already lands on us, so its "party" row covers self —
+                // no separate self row for that case.
+                if (p.CastOnSelf && !wholeParty)
+                    SelfBuffs.Add(new BuffWatchdogRowViewModel(code, isParty: false, name, "self", learned));
+
+                if (wholeParty)
                 {
                     // One cast blankets the party — a single timer, keyed to self.
                     PartyBuffs.Add(new BuffWatchdogRowViewModel(
@@ -224,22 +229,28 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                     continue;
                 }
 
-                // Single-target: one row per member, keyed by given name. Show a row for
-                // each CONFIGURED target (AllMembers = the whole roster, else the chosen
-                // names) PLUS any member who already has a LIVE timer for this spell — so
-                // a member you unticked (or who left the party) keeps their countdown
-                // visible until it actually expires, rather than the timer vanishing.
+                // Single-target member rows. Only when the slot actually targets members
+                // — a pure self-cast slot's self row above is its only row.
+                bool targetsMembers = p.AllMembers || p.Targets.Count > 0;
+
+                // One row per member, keyed by given name: each CONFIGURED target
+                // (AllMembers = the whole roster, else the chosen names) PLUS any member
+                // who already has a LIVE timer for this spell — so a member you unticked
+                // (or who left the party) keeps their countdown visible until it expires.
                 List<string> givens = new();
                 void AddGiven(string g)
                 {
                     if (!givens.Any(x => x.Equals(g, StringComparison.OrdinalIgnoreCase))) givens.Add(g);
                 }
 
-                if (p.AllMembers)
-                    foreach ((string _, string given) in members) AddGiven(given);
-                else
-                    foreach ((string _, string given) in members.Where(m => p.Targets.Contains(m.Given)))
-                        AddGiven(given);
+                if (targetsMembers)
+                {
+                    if (p.AllMembers)
+                        foreach ((string _, string given) in members) AddGiven(given);
+                    else
+                        foreach ((string _, string given) in members.Where(m => p.Targets.Contains(m.Given)))
+                            AddGiven(given);
+                }
 
                 foreach (ActiveBuffTimer t in snap)
                     if (t.Target.Length > 0 && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase))
@@ -247,10 +258,12 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
                 if (givens.Count == 0)
                 {
-                    // Nothing to track yet (no members / none selected, none active) — one
-                    // placeholder row so the configured buff still shows, with no timer.
-                    PartyBuffs.Add(new BuffWatchdogRowViewModel(
-                        code, isParty: true, name, TargetLabel(p, wholeParty: false), learned));
+                    // No member rows. If it's also not a self-cast, show a placeholder so
+                    // the configured slot still appears; a CastOnSelf slot's self row above
+                    // already represents it.
+                    if (!p.CastOnSelf)
+                        PartyBuffs.Add(new BuffWatchdogRowViewModel(
+                            code, isParty: true, name, TargetLabel(p, wholeParty: false), learned));
                     continue;
                 }
                 foreach (string given in givens)
@@ -321,14 +334,14 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         SpellsSettings spells, PartyBuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
     {
         StringBuilder sb = new();
-        foreach (int slot in spells.BlessSlots.Keys.OrderBy(k => k))
-            sb.Append(slot).Append('=').Append(spells.BlessSlots[slot]).Append('|');
-        sb.Append(spells.HpRegenSpell).Append('|').Append(spells.MaRegenSpell).Append('|')
-          .Append(spells.WhenHpFullSpell).Append('|').Append(spells.WhenMaFullSpell).Append("||");
+        // Mana / HP regen are the only self buffs still on the Spells tab.
+        sb.Append(spells.HpRegenSpell).Append('|').Append(spells.MaRegenSpell).Append("||");
         if (buffs is not null)
             foreach (PartyBuffSlot p in buffs.Slots)
-                sb.Append(p.Spell).Append(':').Append(p.WholePartyOn ? "W" : "")
-                  .Append(p.AllMembers ? "A" : "").Append(string.Join(",", p.Targets)).Append('|');
+                sb.Append(p.Spell).Append(':').Append(p.CastOnSelf ? "S" : "")
+                  .Append(p.WholePartyOn ? "W" : "").Append(p.AllMembers ? "A" : "")
+                  .Append(p.OnlyWhenHpFull ? "H" : "").Append(p.OnlyWhenMaFull ? "M" : "")
+                  .Append(string.Join(",", p.Targets)).Append('|');
         sb.Append("||");
         foreach (string k in snap.Where(t => t.Target.Length > 0)
                                  .Select(t => t.Short + "@" + t.Target)

@@ -84,7 +84,7 @@
 
                 <!-- ============ Healing / regeneration ============ -->
                 <TextBlock Classes="SectionHeader" Text="Healing / regeneration"/>
-                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Minor heal"/>
                     <AutoCompleteBox Grid.Row="0" Grid.Column="1"
                                      Text="{Binding MinorHealSpell, Mode=TwoWay}"
@@ -132,30 +132,6 @@
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
                                      ToolTip.Tip="Auto-regen utility for the mana pool."/>
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="FieldLabel" Text="When HP full"/>
-                    <AutoCompleteBox Grid.Row="4" Grid.Column="1"
-                                     Text="{Binding WhenHpFullSpell, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding WhenHpFullSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="260" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Cast when HP is full and we're between actions (room spell, debuff, etc.)."/>
-
-                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="When Mana full"/>
-                    <AutoCompleteBox Grid.Row="5" Grid.Column="1"
-                                     Text="{Binding WhenMaFullSpell, Mode=TwoWay}"
-                                     Classes.unlearnedSpell="{Binding WhenMaFullSpellUnlearned}"
-                                     ItemsSource="{Binding SpellSuggestions}"
-                                     ValueMemberBinding="{ReflectionBinding Short}"
-                                     ItemFilter="{Binding SpellSuggestionFilter}"
-                                     ItemTemplate="{StaticResource SpellPickItem}"
-                                     PlaceholderText="Type code or name…"
-                                     Width="260" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Cast when MA is full and we're between actions."/>
                 </Grid>
 
                 <!-- ============ Mana-regen reroll (Paradigm roll spells) ============ -->
@@ -254,40 +230,15 @@
                                      ToolTip.Tip="Cast when entering a dark room."/>
                 </Grid>
 
-                <!-- ============ Bless spells ============ -->
-                <!-- Self-buff slots the CastingDirector recasts when not
-                     active. Row order is cast priority. The active realm sets
-                     how many rows show — Stock 10, ParaMud 15 — rebuilt on a
-                     game-data set swap; picks beyond a narrower realm's count
-                     are preserved (stashed off-screen), not lost. -->
-                <TextBlock Classes="SectionHeader" Text="Bless spells"/>
-                <!-- Column header: label the recast-lead picker once, above the rows. -->
-                <Grid ColumnDefinitions="80,180,Auto" Margin="0,0,0,2">
-                    <TextBlock Grid.Column="2" Text="recast within (s)" Margin="8,0,0,0"
-                               Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
-                </Grid>
-                <ItemsControl ItemsSource="{Binding BlessSlots}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:SelfBlessSlotViewModel">
-                            <Grid ColumnDefinitions="80,180,Auto" Margin="0,0,0,4">
-                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"/>
-                                <AutoCompleteBox Grid.Column="1"
-                                                 Text="{Binding Spell, Mode=TwoWay}"
-                                                 Classes.unlearnedSpell="{Binding Unlearned}"
-                                                 ItemsSource="{Binding $parent[ItemsControl].((vm:SpellsSectionViewModel)DataContext).BlessSpellSuggestions}"
-                                                 ValueMemberBinding="{ReflectionBinding Short}"
-                                                 ItemFilter="{Binding $parent[ItemsControl].((vm:SpellsSectionViewModel)DataContext).SpellSuggestionFilter}"
-                                                 ItemTemplate="{StaticResource SpellPickItem}"
-                                                 PlaceholderText="Spell or #item…"
-                                                 Width="180" HorizontalAlignment="Left"/>
-                                <NumericUpDown Grid.Column="2" Value="{Binding RecastMarginSec, Mode=TwoWay}"
-                                               Minimum="0" Maximum="999" FormatString="0" Increment="1"
-                                               Width="110" Margin="8,0,0,0" VerticalAlignment="Center"
-                                               ToolTip.Tip="Recast this buff when it's within this many seconds of expiring. 0 = don't recast until it actually expires (a wear-off message or the tracked timer running out)."/>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <!-- Self-bless spell picks + the "when HP/MA full" utility casts
+                     moved to the unified Buff Watchdog list; only the timing
+                     gates below still live on this tab. -->
+                <TextBlock Text="Self bless slots and the “when HP full / MA full” buffs are configured in the Buff Watchdog window (View → Buff Watchdog)."
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           MaxWidth="440" HorizontalAlignment="Left"
+                           Margin="0,16,0,0"/>
 
                 <!-- Self-bless timing: when the self-buff path may recast. Both
                      scoped to OUR OWN buffs (the party-bless equivalents live on

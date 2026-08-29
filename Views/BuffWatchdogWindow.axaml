@@ -114,21 +114,24 @@
                                    Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap"/>
 
-                        <!-- Buff rows. Shared columns (buff | all/on | per-member) line up
-                             under the member-name header; a whole-party buff spans the
-                             member columns with "Party Wide". Horizontal scroll for a full party. -->
+                        <!-- Buff rows. Shared columns (buff | self | all/on | per-member) line
+                             up under the header; a whole-party buff spans the member columns
+                             with "Party Wide". Horizontal scroll for a full party. -->
                         <ScrollViewer IsVisible="{Binding HasSlots}"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Disabled">
                             <StackPanel>
-                                <Grid ColumnDefinitions="150,44,*" Margin="6,0,6,2">
+                                <Grid ColumnDefinitions="150,40,44,*" Margin="6,0,6,2">
                                     <TextBlock Grid.Column="0" Text="Buff" FontSize="10"
                                                VerticalAlignment="Bottom"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                    <TextBlock Grid.Column="1" Text="All" FontSize="10"
+                                    <TextBlock Grid.Column="1" Text="Self" FontSize="10"
                                                HorizontalAlignment="Center" VerticalAlignment="Bottom"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                    <ItemsControl Grid.Column="2" ItemsSource="{Binding Members}">
+                                    <TextBlock Grid.Column="2" Text="All" FontSize="10"
+                                               HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                    <ItemsControl Grid.Column="3" ItemsSource="{Binding Members}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
@@ -148,7 +151,7 @@
                                         <DataTemplate x:DataType="vm:PartyBuffSlotRowViewModel">
                                             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                                     BorderThickness="0,0,0,1" Padding="6,3">
-                                                <Grid ColumnDefinitions="150,44,*">
+                                                <Grid ColumnDefinitions="150,40,44,*">
                                                     <StackPanel Grid.Column="0" Orientation="Horizontal"
                                                                 VerticalAlignment="Center" Spacing="2">
                                                         <Button Content="✎" Width="20" Height="20" Padding="0" FontSize="11"
@@ -163,16 +166,22 @@
                                                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                                     </StackPanel>
 
+                                                    <!-- Self checkbox — shown for a self-only or single-target buff. -->
                                                     <CheckBox Grid.Column="1" MinHeight="0" HorizontalAlignment="Center"
+                                                              IsVisible="{Binding ShowSelf}"
+                                                              IsChecked="{Binding CastOnSelf, Mode=TwoWay}"
+                                                              ToolTip.Tip="Cast this buff on yourself."/>
+
+                                                    <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
                                                               IsVisible="{Binding IsSingleTarget}"
                                                               IsChecked="{Binding AllMembers, Mode=TwoWay}"
                                                               ToolTip.Tip="Bless every party member in the room (auto-adapts to whatever party you're in)."/>
-                                                    <CheckBox Grid.Column="1" MinHeight="0" HorizontalAlignment="Center"
+                                                    <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
                                                               IsVisible="{Binding IsWholeParty}"
                                                               IsChecked="{Binding WholePartyOn, Mode=TwoWay}"
                                                               ToolTip.Tip="Cast on the whole party in one go."/>
 
-                                                    <ItemsControl Grid.Column="2" ItemsSource="{Binding MemberTargets}"
+                                                    <ItemsControl Grid.Column="3" ItemsSource="{Binding MemberTargets}"
                                                                   IsVisible="{Binding IsSingleTarget}">
                                                         <ItemsControl.ItemsPanel>
                                                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
@@ -188,7 +197,7 @@
                                                             </DataTemplate>
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
-                                                    <TextBlock Grid.Column="2" Text="Party Wide"
+                                                    <TextBlock Grid.Column="3" Text="Party Wide"
                                                                IsVisible="{Binding IsWholeParty}"
                                                                VerticalAlignment="Center" Margin="4,0,0,0" FontSize="11"
                                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>

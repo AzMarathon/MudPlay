@@ -6,22 +6,30 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.ViewModels;
 
-// One party-buff slot row in the Party window's buff panel. The spell + recast
-// timer are set once via the Add dialog and shown read-only here; only the
-// targeting is edited in the row. Whether the slot is whole-party or single-target
-// is derived live from the spell's Targets scope (via the injected resolver), so
-// the row shows the right control — a Whole-party toggle vs an All-members /
-// member checklist. Edits write straight through to the PartyBuffSlot DTO and the
-// panel persists.
+// A slot's targeting scope, derived live from the spell's Targets code.
+public enum BuffSlotScope
+{
+    SelfOnly,      // Targets 0 / 1 — only castable on us.
+    SingleTarget,  // Targets 2 — castable on us and/or chosen members.
+    WholeParty,    // Targets 10 / 13 — one cast blankets the party (and us).
+}
+
+// One buff slot row in the Buff Watchdog's config panel. The spell + recast timer
+// are set once via the Add dialog and shown read-only here; only the targeting is
+// edited in the row. The scope (self-only / single-target / whole-party) is derived
+// live from the spell's Targets, so the row shows the right controls — a self
+// checkbox, an All-members / member checklist, or a whole-party toggle. Edits write
+// straight through to the PartyBuffSlot DTO and the panel persists.
 public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
 {
     private readonly PartyBuffSlot _dto;
-    private readonly Func<string?, bool> _isWholeParty;
+    private readonly Func<string?, BuffSlotScope> _resolveScope;
     private readonly Func<string?, string> _resolveName;
     private readonly Action _persist;
     private bool _suppress;
 
     // Editable targeting only — spell + recast are fixed at add time.
+    [ObservableProperty] private bool _castOnSelf;
     [ObservableProperty] private bool _wholePartyOn;
 
     [ObservableProperty]
@@ -39,21 +47,37 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
     public string? Spell => _dto.Spell;
     public int RecastMarginSec => _dto.RecastMarginSec;
     // Row label — the buff's spell name (falls back to the cast code) + its recast
-    // timer, e.g. "bless - 15s".
-    public string HeaderText => $"{_resolveName(_dto.Spell)} - {RecastMarginSec}s";
+    // timer, e.g. "bless - 15s", with a trailing condition tag when set.
+    public string HeaderText
+    {
+        get
+        {
+            string label = $"{_resolveName(_dto.Spell)} - {RecastMarginSec}s";
+            if (_dto.OnlyWhenHpFull) label += " · HP full";
+            if (_dto.OnlyWhenMaFull) label += " · MA full";
+            return label;
+        }
+    }
 
-    public bool IsWholeParty => _isWholeParty(Spell);
-    public bool IsSingleTarget => !string.IsNullOrWhiteSpace(Spell) && !IsWholeParty;
+    public BuffSlotScope Scope => _resolveScope(Spell);
+    public bool IsWholeParty => Scope == BuffSlotScope.WholeParty;
+    public bool IsSingleTarget => Scope == BuffSlotScope.SingleTarget;
+    public bool IsSelfOnly => Scope == BuffSlotScope.SelfOnly;
+
+    // The "self" checkbox shows whenever the spell can land on us — a self-only buff
+    // (its only target) or a single-target buff (self is one option among members).
+    public bool ShowSelf => IsSelfOnly || IsSingleTarget;
 
     public PartyBuffSlotRowViewModel(
-        PartyBuffSlot dto, Func<string?, bool> isWholeParty,
+        PartyBuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
         Func<string?, string> resolveName, Action persist)
     {
         _dto = dto;
-        _isWholeParty = isWholeParty;
+        _resolveScope = resolveScope;
         _resolveName = resolveName;
         _persist = persist;
         _suppress = true;
+        _castOnSelf = dto.CastOnSelf;
         _wholePartyOn = dto.WholePartyOn;
         _allMembers = dto.AllMembers;
         _suppress = false;
@@ -62,15 +86,24 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
     internal PartyBuffSlot Dto => _dto;
 
     // Re-emit the read-only derived properties after the DTO's spell / recast
-    // changed via the edit dialog (the whole-party vs single-target split can flip
-    // if the buff changed).
+    // changed via the edit dialog (the scope split can flip if the buff changed).
     public void Refresh()
     {
         OnPropertyChanged(nameof(Spell));
         OnPropertyChanged(nameof(RecastMarginSec));
         OnPropertyChanged(nameof(HeaderText));
+        OnPropertyChanged(nameof(Scope));
         OnPropertyChanged(nameof(IsWholeParty));
         OnPropertyChanged(nameof(IsSingleTarget));
+        OnPropertyChanged(nameof(IsSelfOnly));
+        OnPropertyChanged(nameof(ShowSelf));
+    }
+
+    partial void OnCastOnSelfChanged(bool value)
+    {
+        if (_suppress) return;
+        _dto.CastOnSelf = value;
+        _persist();
     }
 
     partial void OnWholePartyOnChanged(bool value)

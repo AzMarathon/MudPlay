@@ -31,10 +31,10 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     // names line up over the per-row checkbox columns in the grid.
     public ObservableCollection<string> Members { get; } = new();
 
-    // Buff-only picker source: LEARNED party buffs (zero energy, Targets 2 / 10 / 13
-    // — cast on another player or the whole party) NOT already slotted. A given
-    // party buff is one slot: two slots of the same spell would double-track its
-    // recast timer, so a spell already in a slot drops out of the picker.
+    // Picker source: LEARNED buffs (zero energy — self / single-target / whole-party
+    // scopes, plus whole-party cast-on-use items) NOT already slotted. A given buff is
+    // one slot: two slots of the same spell would double-track its recast timer, so a
+    // spell already in a slot drops out of the picker.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowPanel))]
     [NotifyPropertyChangedFor(nameof(CanAddBuff))]
@@ -105,17 +105,22 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     }
 
     private PartyBuffSlotRowViewModel MakeRow(PartyBuffSlot dto) =>
-        new(dto, IsWholePartyCode, ResolveName, Persist);
+        new(dto, ResolveScope, ResolveName, Persist);
 
-    // Resolve whether a slot's cast value is a whole-party buff, live from the active
-    // set. A #item-cast slot classifies by the item's spell (only whole-party items
-    // are offered as party buffs — see AllPartyBuffPicks).
-    private bool IsWholePartyCode(string? code)
+    // Resolve a slot's targeting scope live from the active set. A #item-cast slot is
+    // always whole-party (only whole-party items are offered — see AllBuffPicks); a
+    // spell splits self-only / single-target / whole-party by its Targets code. An
+    // unresolved code defaults to self-only (a plain "cast on me" row).
+    private BuffSlotScope ResolveScope(string? code)
     {
-        if (string.IsNullOrWhiteSpace(code)) return false;
+        if (string.IsNullOrWhiteSpace(code)) return BuffSlotScope.SelfOnly;
         string c = code.Trim();
-        if (ItemCastToken.IsToken(c)) return _spellbook.IsTokenWholeParty(c);
-        return _spellbook.FindByCastCode(c) is { } s && PartyBuffClassifier.IsWholeParty(s.Targets);
+        if (ItemCastToken.IsToken(c))
+            return _spellbook.IsTokenWholeParty(c) ? BuffSlotScope.WholeParty : BuffSlotScope.SelfOnly;
+        if (_spellbook.FindByCastCode(c) is not { } s) return BuffSlotScope.SelfOnly;
+        if (PartyBuffClassifier.IsWholeParty(s.Targets)) return BuffSlotScope.WholeParty;
+        if (PartyBuffClassifier.IsSingleTargetBuff(s.Targets)) return BuffSlotScope.SingleTarget;
+        return BuffSlotScope.SelfOnly;
     }
 
     // The buff's display name (for the compact row header): a spell's name, an item's
@@ -128,14 +133,15 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         return _spellbook.FindByCastCode(c) is { } s ? s.Name : c;
     }
 
-    // Every party buff the character can slot, de-duplicated by cast value: learned
-    // party-buff spells, plus whole-party cast-on-use items (a #item token). A
-    // single-target item can't be aimed at a member via `use`, so only whole-party
-    // items qualify (GetWholePartyCastItems already filters to those).
-    private IEnumerable<SpellPick> AllPartyBuffPicks()
+    // Every buff the character can slot, de-duplicated by cast value: learned buff
+    // spells the character can maintain on themselves, a member, or the whole party
+    // (self / single-target / whole-party scopes), plus whole-party cast-on-use items
+    // (a #item token). A single-target item can't be aimed via `use`, so only
+    // whole-party items qualify (GetWholePartyCastItems already filters to those).
+    private IEnumerable<SpellPick> AllBuffPicks()
     {
         IEnumerable<SpellPick> spells = _spellbook.Available
-            .Where(s => PartyBuffClassifier.IsPartyBuff(s) && _spellbook.IsObtained(s.Number))
+            .Where(s => PartyBuffClassifier.IsAnyBuff(s) && _spellbook.IsObtained(s.Number))
             .Select(s => new SpellPick(s.Short, s.Name));
         IEnumerable<SpellPick> items = _spellbook.GetWholePartyCastItems()
             .Select(ci => new SpellPick(
@@ -152,7 +158,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     private void RefreshBuffPicks()
     {
         HashSet<string> slotted = SlottedSpells();
-        BuffPicks = AllPartyBuffPicks().Where(p => !slotted.Contains(p.Short)).ToList();
+        BuffPicks = AllBuffPicks().Where(p => !slotted.Contains(p.Short)).ToList();
     }
 
     // Rebuild every row's member checklist — and the shared column headers — from
@@ -188,7 +194,14 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
             .OpenWindowAsync<AddPartyBuffDialogViewModel, AddPartyBuffResult>(dlg);
         if (result is not { } r) return;
 
-        PartyBuffSlot dto = new() { Spell = r.Spell, RecastMarginSec = r.RecastMarginSec };
+        // A self-only buff has no other target, so default it to cast-on-self —
+        // otherwise the freshly-added slot would sit inert until the user ticks "self".
+        PartyBuffSlot dto = new()
+        {
+            Spell = r.Spell,
+            RecastMarginSec = r.RecastMarginSec,
+            CastOnSelf = ResolveScope(r.Spell) == BuffSlotScope.SelfOnly,
+        };
         _settings.Slots.Add(dto);
         PartyBuffSlotRowViewModel row = MakeRow(dto);
         Slots.Add(row);
@@ -208,7 +221,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         if (row is null) return;
         HashSet<string> others = SlottedSpells();
         others.Remove((row.Spell ?? string.Empty).Trim());
-        var picks = AllPartyBuffPicks().Where(p => !others.Contains(p.Short)).ToList();
+        var picks = AllBuffPicks().Where(p => !others.Contains(p.Short)).ToList();
         AddPartyBuffDialogViewModel dlg = new(
             picks, SpellSuggestionFilter, row.Spell, row.RecastMarginSec);
         AddPartyBuffResult? result = await AppServices.Current.Dialogs

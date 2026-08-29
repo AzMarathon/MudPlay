@@ -5859,14 +5859,19 @@ public sealed class AppServices
             if (Spellbook.FindByCastCode(code.Trim()) is { } s)
                 selfBuffs.Add((s.Short, s.Number));
         }
-        foreach (string code in spells.BlessSlots.Values) AddSelf(code);
+        Models.Profile.PartyBuffSettings? buffs = Profile.Current?.PartyBuffs;
+        // The unified list's self-cast slots are the covered candidates (bless +
+        // when-full folded here). Whole-party / member-target slots aren't self-casts.
+        if (buffs is not null)
+            foreach (Models.Profile.PartyBuffSlot pslot in buffs.Slots)
+                if (pslot.CastOnSelf && !IsPartyWideBuff(pslot.Spell ?? string.Empty))
+                    AddSelf(pslot.Spell);
+        // HP / MA regen still live on the Spells tab.
         AddSelf(spells.HpRegenSpell);
         AddSelf(spells.MaRegenSpell);
-        AddSelf(spells.WhenHpFullSpell);
-        AddSelf(spells.WhenMaFullSpell);
         if (selfBuffs.Count == 0) return map;
 
-        if (Profile.Current?.PartyBuffs is not { } buffs) return map;
+        if (buffs is null) return map;
         foreach (Models.Profile.PartyBuffSlot pslot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;

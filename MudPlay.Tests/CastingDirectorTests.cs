@@ -574,6 +574,10 @@ public sealed class CastingDirectorTests
         public bool AutoBlessEnabled { get; set; } = true;
         public bool AutoHealRestEnabled { get; set; } = true;
 
+        /// <summary>Extra unified-list buffs (party / member / whole-party) beyond the
+        /// self-bless the tests set via <see cref="Spells"/>. Rarely used here.</summary>
+        public PartyBuffSettings PartyBuffs { get; } = new();
+
         /// <summary>When true the triggered-rest gate reports an active recovery
         /// rest (HP/MA below rest-if-below), so the bless "while resting" gate
         /// engages. A bare Position=Resting does NOT set this — idle resting still
@@ -613,6 +617,10 @@ public sealed class CastingDirectorTests
             Director.SetTriggeredRestGate(() => TriggeredRest);
             Director.SetBuffStripRoomGate(() => BuffStripRoom);
             Director.SetClock(() => Now);
+            // Self buffs now live in the unified list. Fold the tests' self-bless
+            // config (Spells.BlessSlots / WhenHp/MaFull) into it at read time, exactly
+            // like ProfileMigrations does on load, so the tests set them the old way.
+            Director.SetPartyBuffSource(FoldedBuffs);
             // Self-buff confirmation: the condition's Name is the buff short
             // in this harness, so map a fired record back to its Name and
             // resolve its duration from BuffInfo.
@@ -628,6 +636,27 @@ public sealed class CastingDirectorTests
             State.MaxHp = 200;
             State.Hp = 200;
             State.HasPromptData = true;
+        }
+
+        // Mirror ProfileMigrations' v2→v3 fold: BlessSlots (in order) + WhenHp/MaFull
+        // become CastOnSelf slots, prepended to any explicit unified-list buffs.
+        private PartyBuffSettings FoldedBuffs()
+        {
+            PartyBuffSettings merged = new();
+            foreach (System.Collections.Generic.KeyValuePair<int, string> kv in
+                     Spells.BlessSlots.OrderBy(k => k.Key))
+            {
+                if (string.IsNullOrWhiteSpace(kv.Value)) continue;
+                int margin = Spells.BlessSlotRecastMargins.TryGetValue(kv.Key, out int m)
+                    ? m : SpellsSettings.DefaultBlessRecastMarginSec;
+                merged.Slots.Add(new PartyBuffSlot { Spell = kv.Value, CastOnSelf = true, RecastMarginSec = margin });
+            }
+            if (!string.IsNullOrWhiteSpace(Spells.WhenHpFullSpell))
+                merged.Slots.Add(new PartyBuffSlot { Spell = Spells.WhenHpFullSpell, CastOnSelf = true, OnlyWhenHpFull = true });
+            if (!string.IsNullOrWhiteSpace(Spells.WhenMaFullSpell))
+                merged.Slots.Add(new PartyBuffSlot { Spell = Spells.WhenMaFullSpell, CastOnSelf = true, OnlyWhenMaFull = true });
+            merged.Slots.AddRange(PartyBuffs.Slots);
+            return merged;
         }
 
         public void RecordCondition(string name, MessageFlags flags,
