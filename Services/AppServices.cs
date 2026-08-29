@@ -3474,8 +3474,19 @@ public sealed class AppServices
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
             recast: shortCode => CastDirector.RequestManaRegenReroll(shortCode),
             canAffordReroll: CanAffordManaRegenReroll,
+            // Stock has no `abil 145` — judge the roll from the observed passive mana
+            // tick instead (fed below from RegenTracker).
+            useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             log: Log);
         CastDirector.SetSelfBuffLandedSink(OnSelfBuffLandedForReroll);
+        // Feed the reroller clean NATURAL mana ticks (Stock's roll-quality signal).
+        // Meditate ticks are unaffected by spell regen and can stack on a natural tick,
+        // so a tick observed while meditating is skipped; resting doesn't touch mana.
+        Regen.MaTickObserved += sample =>
+        {
+            if (sample.Position == Game.PlayerPosition.Meditating) return;
+            ManaRegen.OnManaTickObserved(sample.Delta);
+        };
 
         // Opt the combat engine into the
         // per-round combat-spell economy (pre-attack debuff + multi/normal/
@@ -6021,15 +6032,14 @@ public sealed class AppServices
         return true;
     }
 
-    // A self-buff of ours landed (confirmed via its AppliedMessage). On
-    // Paradigm, if it's the configured mana-regen spell AND that spell is a
-    // code-145 rolled affect (nature tap / mana flux, not a HoT like chaos
-    // surge), hand it to the reroll engine to read abil 145 and reroll a
-    // bad value. Stock has no abil breakdown, so it's a no-op there.
+    // A self-buff of ours landed (confirmed via its AppliedMessage). If it's the
+    // configured mana-regen roll spell (nature tap / mana flux, a code-145 rolled
+    // affect — not a HoT like chaos surge), hand it to the reroll engine. On Paradigm
+    // the engine reads abil 145; on Stock it waits for the next observed passive mana
+    // tick. Either way it rerolls a bad value.
     private void OnSelfBuffLandedForReroll(string shortCode)
     {
         if (string.IsNullOrWhiteSpace(shortCode)) return;
-        if (GameData.ActiveRealm != Game.RealmType.ParaMud) return;
 
         if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } maRegen) return;
         if (!string.Equals(maRegen, shortCode.Trim(), StringComparison.OrdinalIgnoreCase)) return;
