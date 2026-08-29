@@ -40,6 +40,11 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private bool _hasPartyBuffs;
     [ObservableProperty] private bool _isEmpty;
 
+    // The editable buff-config panel (add / edit / remove / target). It lives in this
+    // window now — the Buff Watchdog is the single place to both SEE and CONFIGURE
+    // buffs. Null on the test ctor (no live services).
+    public PartyBuffPanelViewModel? Buffs { get; }
+
     // Production ctor — pulls the live services. Settings come through the resolver
     // (4-tier merged; bless slots live at the character tier, which wins).
     public BuffWatchdogViewModel()
@@ -48,7 +53,9 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                () => AppServices.Current.Resolver.Resolve<SpellsSettings>("Spells"),
                () => AppServices.Current.Profile.Current?.PartyBuffs,
                AppServices.Current.PartyState)
-    { }
+    {
+        Buffs = new PartyBuffPanelViewModel(AppServices.Current.PartyState);
+    }
 
     public BuffWatchdogViewModel(
         CastingDirector castDirector, SpellbookState spellbook,
@@ -338,5 +345,6 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         _profile.ProfileLoaded -= OnProfileLoaded;
         _tick.HeartbeatElapsed -= OnHeartbeat;
         if (_party is not null) _party.Members.CollectionChanged -= OnPartyMembersChanged;
+        Buffs?.Dispose();
     }
 }

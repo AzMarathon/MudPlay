@@ -2,15 +2,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels"
         xmlns:game="using:MudPlay.Game"
-        xmlns:profile="using:MudPlay.Models.Profile"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="360"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="360"
         x:Class="MudPlay.Views.PartyWindow"
         x:DataType="vm:PartyViewModel"
         Title="{Binding HeaderText}"
-        Width="920" Height="360"
-        MinWidth="{Binding WindowMinWidth}" MinHeight="120"
+        Width="560" Height="360"
+        MinWidth="420" MinHeight="120"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
@@ -66,132 +65,6 @@
                    FontSize="11"
                    TextWrapping="Wrap"
                    IsVisible="{Binding !State.IsInParty}"/>
-
-        <!-- ===== Party-buff panel (right) =====
-             A compact table of buff slots: each is added via the "Add buff"
-             picker (spell + recast timer), then edited (✎) or removed (⨯), and its
-             targeting chosen inline — a whole-party buff is one on/off; a
-             single-target buff blesses "all members" or a checklist of specific
-             members. Backed by CharacterProfile.PartyBuffs, persisted on every
-             edit. Hidden entirely for a class with no party-buff spells. Styled to
-             sit alongside the member list (same sunken ground, bottom-ruled rows)
-             rather than as a contrasting card. -->
-        <Border DockPanel.Dock="{Binding BuffDock}"
-                Width="{Binding BuffWidth}" Height="{Binding BuffHeight}"
-                IsVisible="{Binding Buffs.ShowPanel}"
-                Background="{StaticResource ChromeBgSunkenBrush}"
-                BorderBrush="{StaticResource ChromeBorderBrush}"
-                BorderThickness="{Binding BuffBorderThickness}">
-            <!-- Content pinned to its natural width + left, so the buff table looks
-                 the SAME in every anchor: docked below, the Border's background /
-                 separator still span the full width, but the table doesn't stretch
-                 across the window. -->
-            <Grid RowDefinitions="Auto,*" MaxWidth="380" HorizontalAlignment="Left"
-                  DataContext="{Binding Buffs}" x:DataType="vm:PartyBuffPanelViewModel">
-                <Button Grid.Row="0" Content="＋ Add buff" Padding="8,2" Margin="8,8,8,4"
-                        HorizontalAlignment="Left" IsEnabled="{Binding CanAddBuff}"
-                        Command="{Binding AddBuffCommand}"/>
-
-                <TextBlock Grid.Row="1"
-                           IsVisible="{Binding !HasSlots}"
-                           Margin="8,4,8,0"
-                           Text="No buffs configured. Click “Add buff”, pick a spell, then set who receives it."
-                           Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"
-                           TextWrapping="Wrap"/>
-
-                <!-- Grid of buff rows. Shared column layout (buff | all/on toggle |
-                     per-member columns) means every row's toggle and member
-                     checkboxes line up under the member-name header. A whole-party
-                     (or item) buff spans the member columns with "Party Wide".
-                     Horizontal scroll kicks in for a full party. -->
-                <ScrollViewer Grid.Row="1" IsVisible="{Binding HasSlots}"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <!-- Header: member given-names over the checkbox columns -->
-                        <Grid ColumnDefinitions="150,44,*" Margin="6,0,6,2">
-                            <TextBlock Grid.Column="0" Text="Buff" FontSize="10"
-                                       VerticalAlignment="Bottom"
-                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                            <TextBlock Grid.Column="1" Text="All" FontSize="10"
-                                       HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                            <ItemsControl Grid.Column="2" ItemsSource="{Binding Members}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="x:String">
-                                        <TextBlock Text="{Binding}" Width="56" FontSize="10"
-                                                   TextAlignment="Center" TextTrimming="CharacterEllipsis"
-                                                   VerticalAlignment="Bottom"
-                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </Grid>
-
-                        <ItemsControl ItemsSource="{Binding Slots}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:PartyBuffSlotRowViewModel">
-                                    <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
-                                            BorderThickness="0,0,0,1" Padding="6,3">
-                                        <Grid ColumnDefinitions="150,44,*">
-                                            <!-- col0: edit / delete then "bless - 15s" -->
-                                            <StackPanel Grid.Column="0" Orientation="Horizontal"
-                                                        VerticalAlignment="Center" Spacing="2">
-                                                <Button Content="✎" Width="20" Height="20" Padding="0" FontSize="11"
-                                                        ToolTip.Tip="Edit this buff / recast timer"
-                                                        Command="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).EditBuffCommand}"
-                                                        CommandParameter="{Binding}"/>
-                                                <Button Content="⨯" Width="20" Height="20" Padding="0"
-                                                        ToolTip.Tip="Remove this buff slot"
-                                                        Command="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).RemoveBuffCommand}"
-                                                        CommandParameter="{Binding}"/>
-                                                <TextBlock Text="{Binding HeaderText}" FontWeight="SemiBold"
-                                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                            </StackPanel>
-
-                                            <!-- col1: All (single-target) / On (whole-party) toggle -->
-                                            <CheckBox Grid.Column="1" MinHeight="0" HorizontalAlignment="Center"
-                                                      IsVisible="{Binding IsSingleTarget}"
-                                                      IsChecked="{Binding AllMembers, Mode=TwoWay}"
-                                                      ToolTip.Tip="Bless every party member in the room (auto-adapts to whatever party you're in)."/>
-                                            <CheckBox Grid.Column="1" MinHeight="0" HorizontalAlignment="Center"
-                                                      IsVisible="{Binding IsWholeParty}"
-                                                      IsChecked="{Binding WholePartyOn, Mode=TwoWay}"
-                                                      ToolTip.Tip="Cast on the whole party in one go."/>
-
-                                            <!-- col2: per-member checkboxes (single) or Party Wide (whole) -->
-                                            <ItemsControl Grid.Column="2" ItemsSource="{Binding MemberTargets}"
-                                                          IsVisible="{Binding IsSingleTarget}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="vm:PartyBuffMemberToggle">
-                                                        <Panel Width="56">
-                                                            <CheckBox MinHeight="0" HorizontalAlignment="Center"
-                                                                      IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                                      IsEnabled="{Binding $parent[ItemsControl].((vm:PartyBuffSlotRowViewModel)DataContext).MembersEnabled}"
-                                                                      ToolTip.Tip="{Binding DisplayName}"/>
-                                                        </Panel>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                            <TextBlock Grid.Column="2" Text="Party Wide"
-                                                       IsVisible="{Binding IsWholeParty}"
-                                                       VerticalAlignment="Center" Margin="4,0,0,0" FontSize="11"
-                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </Grid>
-        </Border>
 
         <!-- ===== Member rows =====
              Column header row dropped — column purpose is obvious from
