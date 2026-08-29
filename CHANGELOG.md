@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.37.2
+
+- Monster Intel: removed the "Current target" combat-following feature (Follow target / Pin checkboxes) — the target name changing every round kept resizing the context bar, which was more annoying than useful. The room-monster roster chips stay.
+
 ## 3.37.1
 
 - Monster Intel: fixed Your Matchup's ranked attack spells ignoring undead-only/living-only targeting — an undead-only spell (e.g. a turn-undead-style attack) no longer ranks as usable against a living monster, and a living-only spell no longer ranks as usable against an undead one; both now show the reason instead of a damage number
