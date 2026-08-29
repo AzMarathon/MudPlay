@@ -6060,6 +6060,45 @@ public sealed class AppServices
         return null;
     }
 
+    // Live worst/best passive mana-regen TICK for a mana-regen roll spell at the
+    // current character — feeds the Add-buff dialog's Stock reroll slider so the tick
+    // threshold shows min↔max. The spell's level-scaled roll range spans the slider;
+    // the tick math folds in the summed worn +ManaRgn% (the dominant term). Null when
+    // the spell isn't a resolvable roll spell or the class isn't a caster.
+    public (int Worst, int Best)? ManaRegenTickRange(string? spellCode)
+    {
+        if (string.IsNullOrWhiteSpace(spellCode)) return null;
+        if (Spellbook.FindByCastCode(spellCode.Trim()) is not { } spell) return null;
+        if (!Game.Spells.ManaRegenReroller.IsRollSpell(spell.Formula)) return null;
+
+        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        int mageryType = RowInt(classRow, "MageryType");
+        if (mageryType is not (1 or 2 or 3)) return null;   // non-caster class
+        int mageryLevel = RowInt(classRow, "MageryLVL");
+
+        int level = System.Math.Max(1, PlayerStats.Level);
+        (long rmin, long rmax) = Game.Spells.SpellCalculator.AffectMagnitude(spell.Formula, level);
+        int gearRegen = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
+
+        Game.Calculators.ManaRegenBreakpointCalculator.Inputs inputs = new(
+            Level: level, MageryType: mageryType, Intellect: PlayerStats.Intellect,
+            Willpower: PlayerStats.Willpower, MageryLevel: mageryLevel,
+            GearRegenPercent: gearRegen, Realm: GameData.ActiveRealm);
+        Game.Calculators.ManaRegenBreakpointCalculator.Result r =
+            Game.Calculators.ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
+        return (r.WorstTick, r.BestTick);
+    }
+
+    private static int RowInt(System.Text.Json.JsonElement? row, string property)
+    {
+        if (row is not System.Text.Json.JsonElement el
+            || el.ValueKind != System.Text.Json.JsonValueKind.Object) return 0;
+        return el.TryGetProperty(property, out System.Text.Json.JsonElement v)
+            && v.ValueKind == System.Text.Json.JsonValueKind.Number
+            && v.TryGetInt32(out int n) ? n : 0;
+    }
+
     // Dump the character's configured buff plan (the unified list) to the program log
     // on profile load / edit, so a "my buffs aren't working" report shows exactly how
     // they're set up — target(s), recast lead, and any per-slot conditions.

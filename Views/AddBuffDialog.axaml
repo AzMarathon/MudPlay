@@ -70,7 +70,10 @@
                               ToolTip.Tip="Cast as a pre-rest top-up while resting for mana, instead of maintaining it always-up."/>
                     <TextBlock Text="Mana-regen reroll" FontSize="10" Margin="0,2,0,0"
                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                    <Grid ColumnDefinitions="110,*" ColumnSpacing="8">
+
+                    <!-- Numeric threshold — Paradigm (rolled value), or Stock without
+                         resolvable live tick bounds. -->
+                    <Grid ColumnDefinitions="110,*" ColumnSpacing="8" IsVisible="{Binding ShowRerollNumeric}">
                         <TextBlock Grid.Column="0" Text="{Binding RerollThresholdLabel}" VerticalAlignment="Center"
                                    FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"/>
                         <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
@@ -78,6 +81,25 @@
                                        Minimum="0" Maximum="999" Increment="1" FormatString="0"
                                        ToolTip.Tip="{Binding RerollThresholdTip}"/>
                     </Grid>
+
+                    <!-- Stock tick slider — drag the reroll target between the worst and
+                         best possible mana tick for this spell at your current gear. -->
+                    <StackPanel Spacing="2" IsVisible="{Binding ShowRerollSlider}">
+                        <TextBlock Text="{Binding RerollThresholdLabel}" FontSize="11"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                        <Slider Minimum="{Binding TickWorst}" Maximum="{Binding TickBest}"
+                                Value="{Binding RerollThresholdSlider, Mode=TwoWay}"
+                                TickFrequency="1" IsSnapToTickEnabled="True"
+                                ToolTip.Tip="{Binding RerollThresholdTip}"/>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding TickWorst, StringFormat='worst {0:0}'}"
+                                       FontSize="10" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                            <TextBlock Grid.Column="1" HorizontalAlignment="Center" FontSize="11" FontWeight="SemiBold"
+                                       Text="{Binding RerollThresholdSlider, StringFormat='reroll below {0:0} MP/tick'}"/>
+                            <TextBlock Grid.Column="2" Text="{Binding TickBest, StringFormat='best {0:0}'}"
+                                       FontSize="10" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                        </Grid>
+                    </StackPanel>
                     <Grid ColumnDefinitions="110,*" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Text="Max rerolls" VerticalAlignment="Center"
                                    FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"/>

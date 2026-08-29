@@ -36,12 +36,26 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     private readonly Func<string?, bool> _isLightSpell;
     private readonly Func<string?, bool> _isRollSpell;
     private readonly bool _isStockRealm;
+    private readonly Func<string?, (int Worst, int Best)?>? _tickRange;
+
+    // Cached worst/best mana tick for the picked roll spell (Stock only), refreshed
+    // when the spell changes so the slider bounds follow the pick.
+    private (int Worst, int Best)? _range;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanAdd))]
     [NotifyPropertyChangedFor(nameof(IsLightSpell))]
     [NotifyPropertyChangedFor(nameof(IsRollSpell))]
+    [NotifyPropertyChangedFor(nameof(ShowRerollSlider))]
+    [NotifyPropertyChangedFor(nameof(ShowRerollNumeric))]
+    [NotifyPropertyChangedFor(nameof(TickWorst))]
+    [NotifyPropertyChangedFor(nameof(TickBest))]
+    [NotifyPropertyChangedFor(nameof(RerollBoundsText))]
+    [NotifyPropertyChangedFor(nameof(RerollThresholdSlider))]
     private string? _spell;
+
+    partial void OnSpellChanged(string? value)
+        => _range = _isStockRealm ? _tickRange?.Invoke(value) : null;
 
     [ObservableProperty] private int _recastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
 
@@ -66,6 +80,27 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         ? "Reroll while the observed passive mana tick lands below this MP. Blank = don't reroll."
         : "Reroll while the rolled mana-regen value lands below this. Blank = don't reroll.";
 
+    // Stock reroll threshold slider: when the roll spell's live worst/best tick is
+    // known, show a slider between them so the threshold reads against min↔max;
+    // otherwise fall back to the plain numeric field.
+    public bool ShowRerollSlider => IsRollSpell && _range is not null;
+    public bool ShowRerollNumeric => IsRollSpell && !ShowRerollSlider;
+    public double TickWorst => _range?.Worst ?? 0;
+    // Keep Max strictly above Min so the Slider always has a usable range.
+    public double TickBest => _range is { } r && r.Best > r.Worst ? r.Best : TickWorst + 1;
+    public string RerollBoundsText =>
+        _range is { } r ? $"worst {r.Worst} … best {r.Best} MP per tick" : string.Empty;
+
+    // The slider's value, mapped onto the stored threshold (defaults to the worst
+    // tick — i.e. accept anything — until the user drags it up).
+    public double RerollThresholdSlider
+    {
+        get => RerollThreshold ?? (int)TickWorst;
+        set => RerollThreshold = (int)System.Math.Round(value);
+    }
+
+    partial void OnRerollThresholdChanged(int? value) => OnPropertyChanged(nameof(RerollThresholdSlider));
+
     // Enabled once the typed / picked value resolves to a real buff pick, so you
     // can't add an empty or non-buff slot.
     public bool CanAdd =>
@@ -81,7 +116,8 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     public AddBuffDialogViewModel(
         IReadOnlyList<SpellPick> buffPicks, Func<string?, object?, bool> filter,
         Func<string?, bool> isLightSpell, Func<string?, bool> isRollSpell,
-        bool isStockRealm = false, AddBuffResult? initial = null)
+        bool isStockRealm = false, Func<string?, (int Worst, int Best)?>? tickRange = null,
+        AddBuffResult? initial = null)
     {
         ArgumentNullException.ThrowIfNull(buffPicks);
         ArgumentNullException.ThrowIfNull(filter);
@@ -90,6 +126,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         _isLightSpell = isLightSpell;
         _isRollSpell = isRollSpell;
         _isStockRealm = isStockRealm;
+        _tickRange = tickRange;
         IsEditing = initial is not null;
         if (initial is { } i)
         {
@@ -101,6 +138,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             _castBeforeRestingForMana = i.CastBeforeRestingForMana;
             _rerollCount = i.RerollCount;
             _rerollThreshold = i.RerollThreshold;
+            _range = _isStockRealm ? _tickRange?.Invoke(_spell) : null;
         }
     }
 

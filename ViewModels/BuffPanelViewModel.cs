@@ -217,7 +217,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async System.Threading.Tasks.Task AddBuff()
     {
-        AddBuffDialogViewModel dlg = new(BuffPicks, SpellSuggestionFilter, IsLightSpell, IsRollSpell, IsStockRealm);
+        AddBuffDialogViewModel dlg = new(BuffPicks, SpellSuggestionFilter, IsLightSpell, IsRollSpell,
+            IsStockRealm, AppServices.Current.ManaRegenTickRange);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
@@ -254,7 +255,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             d.Spell ?? string.Empty, d.RecastMarginSec, d.OnlyWhenHpFull, d.OnlyWhenMaFull,
             d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold);
         AddBuffDialogViewModel dlg = new(
-            picks, SpellSuggestionFilter, IsLightSpell, IsRollSpell, IsStockRealm, initial);
+            picks, SpellSuggestionFilter, IsLightSpell, IsRollSpell,
+            IsStockRealm, AppServices.Current.ManaRegenTickRange, initial);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
