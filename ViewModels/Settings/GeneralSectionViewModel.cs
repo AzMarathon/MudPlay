@@ -574,8 +574,20 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();
     partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
     partial void OnSnapWindowsChanged(bool value)                    => Dirty();
-    partial void OnSelectedFontFamilyChanged(FontFamilyOption? value) => Dirty();
-    partial void OnSelectedFontSizeChanged(FontSizeOption? value)     => Dirty();
+    // Live preview: push straight to the terminal canvas as the picker
+    // changes, before Save/Cancel commit the choice. Discard reverts by
+    // reloading from disk (LoadFromProfile), which re-fires these handlers
+    // with the saved value and so un-previews it.
+    partial void OnSelectedFontFamilyChanged(FontFamilyOption? value)
+    {
+        AppServices.Current.Display.FontFamily = value?.Uri ?? DisplayConfig.DefaultFontFamily;
+        Dirty();
+    }
+    partial void OnSelectedFontSizeChanged(FontSizeOption? value)
+    {
+        AppServices.Current.Display.FontSize = value?.Value ?? DisplayConfig.DefaultFontSize;
+        Dirty();
+    }
     partial void OnSelectedNavTooltipFontFamilyChanged(FontFamilyOption? value) => Dirty();
     partial void OnSelectedNavTooltipFontSizeChanged(FontSizeOption? value)     => Dirty();
     partial void OnAmAutoCombatChanged(bool value)           => Dirty();

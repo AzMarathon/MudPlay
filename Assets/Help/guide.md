@@ -629,7 +629,7 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **Available options:** MX437 (bundled), JetBrains Mono (bundled), plus every monospace font installed on your system. Sizes: 8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32.
 **What it does:** Controls the font the main terminal canvas renders with. MX437 reproduces classic BBS CP437 output (box-drawing characters, line art); JetBrains Mono is a clean modern monospace alternative if you don't care about retro accuracy.
 **When you might change it:** Switch to JetBrains Mono if the block-drawing glyphs in MX437 look odd on your display, or if you just prefer a more modern look.
-**Important notes:** Applies live on Save/Apply, no restart needed.
+**Important notes:** Live-previews on the terminal canvas the moment you change the picker — no need to click Save first to see it. Clicking Cancel (or the title-bar X) reverts the canvas back to your saved font; only Save keeps the change.
 
 ### Navigation tooltip font (family + size)
 
