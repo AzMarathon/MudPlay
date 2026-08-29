@@ -392,6 +392,72 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void RefusedWhilePaused_EntersRecoveryOnResume_InsteadOfResendingSameMove()
+    {
+        // Regression (paradigm-20260829-084558 / paradigm-20260829-104437): a
+        // MoveRefusal that resolves WHILE a combat gate has the loop paused
+        // reverts the tracker to Confirmed at the source room via
+        // NoteMoveBlocked, but OnTrackerStateChanged ignores tracker events
+        // while paused (State != Running), so the old resume path never saw
+        // it — the step stayed marked in flight, and resume fell through to
+        // blindly re-sending the exact same already-refused direction. That
+        // resend got refused again, and with no gate left to clear and retry
+        // this time, the loop just sat there — observed stalls of 17 minutes
+        // and, in the worse report, over an hour, only ever "fixed" by an
+        // unrelated external event forcing a fresh room observation. The fix
+        // recognizes "Confirmed, still at the room the move was sent from" on
+        // resume as the equivalent of the real-time "blocked at source"
+        // branch and enters recovery (reroute) immediately instead.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+
+        // Combat gate holds the loop while the move is still in flight.
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        // The refusal resolves WHILE paused — the tracker correctly reverts
+        // to Confirmed at 1/1, but the runner can't react to it in real time.
+        h.Tracker.NoteMoveBlocked();
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+
+        // Resume must NOT blindly re-send "n" a second time on the stale
+        // in-flight flag — it must enter recovery and reroute instead.
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.Contains(h.Events, e =>
+            e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    [Fact]
+    public void RefusedWhilePaused_PersistentBlock_ExhaustsBudget_ThenFails()
+    {
+        // Same shape as BlockedAtSource_PersistentBlock_ExhaustsBudget_ThenFails,
+        // but every refusal resolves while paused — confirms the resume-time
+        // recovery path is bounded by MaxRecoverAttempts exactly like the
+        // real-time one, not an unbounded retry loop.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 4; i++)
+        {
+            h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+            h.Tracker.NoteMoveBlocked();
+            h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        }
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
     public void PassiveSourceRedisplay_WhileMovePending_IsIgnored_NoFalseRecovery()
     {
         // CONFIRMED game mechanic: a refused move never redisplays the room — it
