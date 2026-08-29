@@ -35,6 +35,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     public Func<string?, object?, bool> SpellSuggestionFilter { get; }
     private readonly Func<string?, bool> _isLightSpell;
     private readonly Func<string?, bool> _isRollSpell;
+    private readonly bool _isStockRealm;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanAdd))]
@@ -57,6 +58,14 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     public bool IsLightSpell => _isLightSpell(Spell);
     public bool IsRollSpell => _isRollSpell(Spell);
 
+    // Reroll wording adapts to the realm: Stock judges the roll from the observed
+    // passive mana TICK (an MP jump on the statline); Paradigm from the rolled
+    // percent read off `abil 145`.
+    public string RerollThresholdLabel => _isStockRealm ? "Reroll below tick" : "Reroll below";
+    public string RerollThresholdTip => _isStockRealm
+        ? "Reroll while the observed passive mana tick lands below this MP. Blank = don't reroll."
+        : "Reroll while the rolled mana-regen value lands below this. Blank = don't reroll.";
+
     // Enabled once the typed / picked value resolves to a real buff pick, so you
     // can't add an empty or non-buff slot.
     public bool CanAdd =>
@@ -72,7 +81,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     public AddBuffDialogViewModel(
         IReadOnlyList<SpellPick> buffPicks, Func<string?, object?, bool> filter,
         Func<string?, bool> isLightSpell, Func<string?, bool> isRollSpell,
-        AddBuffResult? initial = null)
+        bool isStockRealm = false, AddBuffResult? initial = null)
     {
         ArgumentNullException.ThrowIfNull(buffPicks);
         ArgumentNullException.ThrowIfNull(filter);
@@ -80,6 +89,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         SpellSuggestionFilter = filter;
         _isLightSpell = isLightSpell;
         _isRollSpell = isRollSpell;
+        _isStockRealm = isStockRealm;
         IsEditing = initial is not null;
         if (initial is { } i)
         {

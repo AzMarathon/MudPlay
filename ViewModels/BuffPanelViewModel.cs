@@ -194,6 +194,11 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         && _spellbook.FindByCastCode(code!.Trim()) is { } s
         && Game.Spells.ManaRegenReroller.IsRollSpell(s.Formula);
 
+    // Stock realm has no `abil 145`, so reroll quality is judged from the observed
+    // mana tick — drives the dialog's realm-aware reroll wording.
+    private static bool IsStockRealm =>
+        AppServices.Current.GameData.ActiveRealm != Game.RealmType.ParaMud;
+
     // Apply the dialog's result onto a slot DTO (shared by add + edit).
     private void ApplyResult(BuffSlot dto, AddBuffResult r)
     {
@@ -212,7 +217,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async System.Threading.Tasks.Task AddBuff()
     {
-        AddBuffDialogViewModel dlg = new(BuffPicks, SpellSuggestionFilter, IsLightSpell, IsRollSpell);
+        AddBuffDialogViewModel dlg = new(BuffPicks, SpellSuggestionFilter, IsLightSpell, IsRollSpell, IsStockRealm);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
@@ -249,7 +254,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             d.Spell ?? string.Empty, d.RecastMarginSec, d.OnlyWhenHpFull, d.OnlyWhenMaFull,
             d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold);
         AddBuffDialogViewModel dlg = new(
-            picks, SpellSuggestionFilter, IsLightSpell, IsRollSpell, initial);
+            picks, SpellSuggestionFilter, IsLightSpell, IsRollSpell, IsStockRealm, initial);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;

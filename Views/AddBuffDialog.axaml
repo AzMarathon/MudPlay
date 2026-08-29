@@ -71,12 +71,12 @@
                     <TextBlock Text="Mana-regen reroll" FontSize="10" Margin="0,2,0,0"
                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
                     <Grid ColumnDefinitions="110,*" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="Reroll below" VerticalAlignment="Center"
+                        <TextBlock Grid.Column="0" Text="{Binding RerollThresholdLabel}" VerticalAlignment="Center"
                                    FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"/>
                         <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
                                        Value="{Binding RerollThreshold, Mode=TwoWay}"
                                        Minimum="0" Maximum="999" Increment="1" FormatString="0"
-                                       ToolTip.Tip="Reroll while the rolled mana-regen value lands below this. Blank = don't reroll."/>
+                                       ToolTip.Tip="{Binding RerollThresholdTip}"/>
                     </Grid>
                     <Grid ColumnDefinitions="110,*" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Text="Max rerolls" VerticalAlignment="Center"
