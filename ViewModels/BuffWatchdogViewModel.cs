@@ -41,38 +41,12 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private bool _isEmpty;
 
     // Window layout: whether the config table sits above / below / left / right of the
-    // timer bars. Persisted per-character on CharacterProfile.BuffWatchdogLayout.
+    // timer bars. Chosen in Settings → General (persisted on
+    // CharacterProfile.BuffWatchdogLayout); the window's code-behind reads this to
+    // arrange the two zones + the drag splitter. Reloaded live on profile load /
+    // mutate so a Settings Apply reflows the open window at once.
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ConfigDock))]
-    [NotifyPropertyChangedFor(nameof(ConfigWidth))]
     private BuffWatchdogLayout _layout = BuffWatchdogLayout.ConfigTop;
-
-    // Which edge the config table docks to; the timer bars fill the rest.
-    public Avalonia.Controls.Dock ConfigDock => Layout switch
-    {
-        BuffWatchdogLayout.ConfigBottom => Avalonia.Controls.Dock.Bottom,
-        BuffWatchdogLayout.ConfigLeft => Avalonia.Controls.Dock.Left,
-        BuffWatchdogLayout.ConfigRight => Avalonia.Controls.Dock.Right,
-        _ => Avalonia.Controls.Dock.Top,
-    };
-
-    // Side-docked (left / right) the config table gets a fixed width so the bars
-    // take the rest; stacked (top / bottom) it spans the full width (NaN = auto).
-    public double ConfigWidth =>
-        Layout is BuffWatchdogLayout.ConfigLeft or BuffWatchdogLayout.ConfigRight ? 400 : double.NaN;
-
-    // Set the window layout (the four orientation buttons).
-    [RelayCommand]
-    private void SetLayout(BuffWatchdogLayout layout) => Layout = layout;
-
-    partial void OnLayoutChanged(BuffWatchdogLayout value)
-    {
-        if (_profile.Current is { } p && p.BuffWatchdogLayout != value)
-        {
-            p.BuffWatchdogLayout = value;
-            _profile.Save();
-        }
-    }
 
     // The editable buff-config panel (add / edit / remove / target). It lives in this
     // window now — the Buff Watchdog is the single place to both SEE and CONFIGURE
@@ -107,6 +81,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
         _spellbook.Changed += OnSpellbookChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
+        _profile.ProfileMutated += OnProfileMutated;
         _tick.HeartbeatElapsed += OnHeartbeat;
         if (_party is not null) _party.Members.CollectionChanged += OnPartyMembersChanged;
 
@@ -140,6 +115,10 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         Layout = p.BuffWatchdogLayout;
         MarkRebuildAndRefresh();
     }
+
+    // A Settings Apply mutates the loaded profile in place (no ProfileLoaded), so
+    // pick up a layout change chosen in Settings → General while this window is open.
+    private void OnProfileMutated(CharacterProfile p) => Layout = p.BuffWatchdogLayout;
 
     private void MarkRebuildAndRefresh()
     {
@@ -410,6 +389,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         _disposed = true;
         _spellbook.Changed -= OnSpellbookChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
+        _profile.ProfileMutated -= OnProfileMutated;
         _tick.HeartbeatElapsed -= OnHeartbeat;
         if (_party is not null) _party.Members.CollectionChanged -= OnPartyMembersChanged;
         Buffs?.Dispose();

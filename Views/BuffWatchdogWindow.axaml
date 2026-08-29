@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels"
-        xmlns:profile="using:MudPlay.Models.Profile"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="380" d:DesignHeight="420"
@@ -82,51 +81,25 @@
         </Style>
     </Window.Styles>
 
-    <DockPanel LastChildFill="True">
+    <!-- Two zones — the buff-config table and the live timer bars — split by a
+         user-draggable GridSplitter. Their arrangement (config on top / bottom /
+         left / right) is chosen in Settings → General and applied by the code-behind,
+         which reflows this grid + the splitter whenever BuffWatchdogViewModel.Layout
+         changes (and collapses the splitter for a class with no configurable buffs).
+         Both zones are star-sized so they grow to fill the window. -->
+    <Grid x:Name="ZonesGrid">
 
-        <TextBlock DockPanel.Dock="Top"
-                   Margin="10,12,10,10"
-                   Text="No buffs up yet. Add buffs above and tick who each one is cast on (yourself and/or party members)."
-                   Foreground="{StaticResource ChromeFgMutedBrush}"
-                   FontSize="11"
-                   TextWrapping="Wrap"
-                   IsVisible="{Binding IsEmpty}"/>
-
-        <!-- Orientation picker: arrange the config table vs the timer bars —
-             stacked (config above / below) or side-by-side (config left / right). -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="8,6,8,2">
-            <TextBlock Text="Layout:" VerticalAlignment="Center" FontSize="11"
-                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
-            <Button Content="▲" Padding="7,2" ToolTip.Tip="Config table above the timer bars"
-                    Command="{Binding SetLayoutCommand}"
-                    CommandParameter="{x:Static profile:BuffWatchdogLayout.ConfigTop}"/>
-            <Button Content="▼" Padding="7,2" ToolTip.Tip="Config table below the timer bars"
-                    Command="{Binding SetLayoutCommand}"
-                    CommandParameter="{x:Static profile:BuffWatchdogLayout.ConfigBottom}"/>
-            <Button Content="◀" Padding="7,2" ToolTip.Tip="Config table left of the timer bars"
-                    Command="{Binding SetLayoutCommand}"
-                    CommandParameter="{x:Static profile:BuffWatchdogLayout.ConfigLeft}"/>
-            <Button Content="▶" Padding="7,2" ToolTip.Tip="Config table right of the timer bars"
-                    Command="{Binding SetLayoutCommand}"
-                    CommandParameter="{x:Static profile:BuffWatchdogLayout.ConfigRight}"/>
-        </StackPanel>
-
-        <!-- The two zones — config table + timer bars — arranged per the layout. -->
-        <DockPanel LastChildFill="True">
-            <ScrollViewer DockPanel.Dock="{Binding ConfigDock}" Width="{Binding ConfigWidth}"
-                          IsVisible="{Binding Buffs.ShowPanel}"
-                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer x:Name="ConfigZone"
+                      IsVisible="{Binding Buffs.ShowPanel}"
+                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
 
                 <!-- ===== Configure buffs =====
                      The editable buff table (moved here from the Party window):
                      ＋ Add buff opens the picker, each slot is edited (✎) / removed (⨯)
                      and its targeting chosen inline. Hidden for a class with no
                      configurable buff spells. Backed by CharacterProfile.PartyBuffs. -->
-                <Border IsVisible="{Binding Buffs.ShowPanel}"
-                        Background="{StaticResource ChromeBgSunkenBrush}"
-                        BorderBrush="{StaticResource ChromeBorderBrush}"
-                        BorderThickness="0,0,0,1" Margin="0,0,0,4">
-                    <StackPanel MaxWidth="380" HorizontalAlignment="Left"
+                <Border Background="{StaticResource ChromeBgSunkenBrush}">
+                    <StackPanel HorizontalAlignment="Stretch"
                                 DataContext="{Binding Buffs}" x:DataType="vm:BuffPanelViewModel">
                         <Button Content="＋ Add buff" Padding="8,2" Margin="8,8,8,4"
                                 HorizontalAlignment="Left" IsEnabled="{Binding CanAddBuff}"
@@ -234,11 +207,24 @@
                         </ScrollViewer>
                     </StackPanel>
                 </Border>
-            </ScrollViewer>
+        </ScrollViewer>
 
-            <!-- Timer bars fill whatever space the config table doesn't take. -->
-            <ScrollViewer>
+        <!-- Drag to re-divide the two zones. The code-behind sets its orientation
+             (rows vs columns) + position from the chosen layout. -->
+        <GridSplitter x:Name="ZoneSplitter"
+                      IsVisible="{Binding Buffs.ShowPanel}"
+                      Background="{StaticResource ChromeBorderBrush}"/>
+
+        <!-- Timer bars fill whatever space the config table doesn't take. -->
+        <ScrollViewer x:Name="BarsZone">
                 <StackPanel>
+
+                <TextBlock Margin="10,12,10,10"
+                           Text="No buffs up yet. Add buffs in the config panel and tick who each one is cast on (yourself and/or party members)."
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding IsEmpty}"/>
 
                 <!-- ===== Buff timers, grouped by player =====
                      One section per player a buff is on: your own name (self +
@@ -317,7 +303,6 @@
                 </ItemsControl>
 
                 </StackPanel>
-            </ScrollViewer>
-        </DockPanel>
-    </DockPanel>
+        </ScrollViewer>
+    </Grid>
 </Window>

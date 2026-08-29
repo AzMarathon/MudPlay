@@ -4,7 +4,8 @@
 > **Version 3.35.0**
 > - Unified buffing: **all** automated buffing — self bless, mana/HP regen, "when HP/MA full", room light, and party buffs — now lives in **one list in the Buff Watchdog** window, replacing the Settings → Spells self-bless pickers and the Party-window buff panel
 > - Each buff picks who it's cast on with checkboxes — yourself and/or party members; **"All"** is a select-all (you + every member, auto-adapting to the party) that clears the moment you untick any box
-> - Timer bars are grouped **by player** (your name, then each member) instead of a Self/Party split; drag the config table above / below / left / right of the bars
+> - Timer bars are grouped **by player** (your name, then each member) instead of a Self/Party split
+> - Buff Watchdog layout — config table above / below / left / right of the bars — is chosen on Settings → General, with a draggable splitter between the two panels and both sides growing to fill the window
 > - Add-buff dialog carries per-slot conditions: only-when-HP/MA-full (fires at your rest-max, not literal full), only-when-dark for light spells, and — for a mana-regen roll spell — cast-before-resting plus the reroll threshold / max-rerolls
 > - Mana-regen rerolling reads its config from the buff slot (works on Paradigm via `abil 145`); the auto-light system reads the room-light spell from the buff list
 > - Your full buff plan is written to the program log on load / edit (and captured in the bug report) so a "buffs aren't working" report shows exactly how they're set up
