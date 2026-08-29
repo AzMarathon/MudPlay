@@ -139,9 +139,14 @@ public sealed class TerminalControl : Control
     // block-drawing glyphs and stems).
     private double _cellW = 8;
     private double _cellH = 16;
-    // Fractional zoom applied to the native render to fill the viewport when
-    // ScaleToFit is on (1.0 = no zoom). Clamped to [1, MaxScale].
-    private double _fitScale = 1.0;
+    // Independent horizontal/vertical zoom applied to the native render to
+    // fill the viewport when ScaleToFit is on (1.0 = no zoom). Clamped to
+    // [1, MaxScale] each. Scaled independently (not a single uniform factor)
+    // so the grid fills the viewport exactly on both axes — a uniform factor
+    // leaves a gap on whichever axis isn't the tighter constraint whenever the
+    // window's aspect ratio doesn't match the native grid's.
+    private double _fitScaleX = 1.0;
+    private double _fitScaleY = 1.0;
     // Offscreen native-size buffer the grid renders into when zooming, then
     // gets blitted nearest-neighbour to the control bounds. Null when unscaled.
     private RenderTargetBitmap? _scaleBitmap;
@@ -356,9 +361,13 @@ public sealed class TerminalControl : Control
                 Math.Max(1, Math.Round(probe.Height)));
     }
 
-    // Decide the fractional window zoom. When ScaleToFit is off (or the
-    // viewport is unknown) it's 1.0 (native). When on, fit the native grid
-    // (cell × cols/rows) into the viewport, capped at MaxScale, never below 1.
+    // Decide the horizontal/vertical window zoom. When ScaleToFit is off (or
+    // the viewport is unknown) both are 1.0 (native). When on, each axis
+    // scales independently to exactly match the viewport on that axis,
+    // capped at MaxScale, never below 1 — so the grid always fills the whole
+    // viewport with no gap on either axis, at the cost of the two axes
+    // scaling by different factors (the bitmap stretches non-uniformly)
+    // whenever the window's aspect ratio doesn't match the native grid's.
     //
     // The zoom is applied by upscaling the native render bitmap
     // nearest-neighbour (see Render) — NOT by rasterising the glyphs at a
@@ -370,7 +379,7 @@ public sealed class TerminalControl : Control
     // staying crisp.
     private void RecomputeScale()
     {
-        double fit = 1.0;
+        double fitX = 1.0, fitY = 1.0;
 
         if (ScaleToFit)
         {
@@ -381,12 +390,13 @@ public sealed class TerminalControl : Control
             double naturalH = _cellH * rows;
             if (vp.Width > 0 && vp.Height > 0 && naturalW > 0 && naturalH > 0)
             {
-                double raw = Math.Min(vp.Width / naturalW, vp.Height / naturalH);
-                fit = Math.Clamp(raw, 1.0, MaxScale);
+                fitX = Math.Clamp(vp.Width / naturalW, 1.0, MaxScale);
+                fitY = Math.Clamp(vp.Height / naturalH, 1.0, MaxScale);
             }
         }
 
-        _fitScale = fit;
+        _fitScaleX = fitX;
+        _fitScaleY = fitY;
     }
 
     // Tell layout the control wants the native grid times the window zoom. At
@@ -397,7 +407,7 @@ public sealed class TerminalControl : Control
         var em = Emulator;
         int cols = em?.Screen.Cols ?? 80;
         int rows = em?.Screen.Rows ?? 25;
-        return new Size(_cellW * cols * _fitScale, _cellH * rows * _fitScale);
+        return new Size(_cellW * cols * _fitScaleX, _cellH * rows * _fitScaleY);
     }
 
     public override void Render(DrawingContext context)
@@ -413,7 +423,7 @@ public sealed class TerminalControl : Control
         // emulator. Guarded so the normal path is untouched when inactive.
         if (SplashActive && _splash is { } sp)
         {
-            if (_fitScale > 1.0) RenderScaledCells(context, sp.Screen);
+            if (_fitScaleX > 1.0 || _fitScaleY > 1.0) RenderScaledCells(context, sp.Screen);
             else DrawCells(context, sp.Screen);
             return;
         }
@@ -426,7 +436,7 @@ public sealed class TerminalControl : Control
         // whole pixels rather than re-rasterising glyphs at a fractional size,
         // so no colour bleed or block-glyph gaps. The unscaled path draws
         // straight to the context (no bitmap round-trip) to stay cheap.
-        if (_fitScale > 1.0)
+        if (_fitScaleX > 1.0 || _fitScaleY > 1.0)
         {
             RenderScaled(context, em);
             return;
@@ -451,7 +461,7 @@ public sealed class TerminalControl : Control
         }
 
         var src = new Rect(0, 0, nativeW, nativeH);
-        var dest = new Rect(0, 0, nativeW * _fitScale, nativeH * _fitScale);
+        var dest = new Rect(0, 0, nativeW * _fitScaleX, nativeH * _fitScaleY);
         using (context.PushRenderOptions(new RenderOptions
         {
             BitmapInterpolationMode = BitmapInterpolationMode.None,
@@ -493,7 +503,7 @@ public sealed class TerminalControl : Control
             DrawCells(bctx, screen);
         }
         var src = new Rect(0, 0, nativeW, nativeH);
-        var dest = new Rect(0, 0, nativeW * _fitScale, nativeH * _fitScale);
+        var dest = new Rect(0, 0, nativeW * _fitScaleX, nativeH * _fitScaleY);
         using (context.PushRenderOptions(new RenderOptions
         {
             BitmapInterpolationMode = BitmapInterpolationMode.None,

@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.33.2**
-> - Scale terminal output to fill the window: zoom cap raised from 2x to 8x so a maximized window on a large/4K monitor fills fully instead of leaving dead space around the grid
+> **Version 3.33.3**
+> - Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right (also raised the cap from 2x to 8x for large/4K monitors)
 > - Terminal font family/size now live-preview on the terminal canvas as you change them in Settings → General, instead of only applying after Save
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
