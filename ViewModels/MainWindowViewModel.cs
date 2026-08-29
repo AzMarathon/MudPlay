@@ -104,6 +104,11 @@ public partial class MainWindowViewModel : ObservableObject
     // TerminalControl.ScaleToFit.
     public bool ScaleTerminalToWindow => AppServices.Current.Display.ScaleToWindow;
 
+    // Whether the advertised terminal grid grows to fill the window as it's
+    // resized (Settings → BBS → Display). MainWindow reads this to decide
+    // whether to push resize events into ApplyAutoFitTerminalSize.
+    public bool AutoFitTerminalToWindow => AppServices.Current.Display.AutoFitToWindow;
+
     // Terminal-canvas font family — forwarded from AppServices.Display (stored
     // there as an avares:// URI string) and wrapped into a FontFamily the
     // TerminalControl binds to, so a Settings → General font change reaches the
@@ -1489,7 +1494,17 @@ public partial class MainWindowViewModel : ObservableObject
         else if (e.PropertyName == nameof(Services.DisplayConfig.TerminalCols)
               || e.PropertyName == nameof(Services.DisplayConfig.TerminalRows))
         {
-            ApplyTerminalSize();
+            // These also act as the auto-fit floor, so a floor edit while
+            // auto-fit is on should re-fit against the last known viewport
+            // rather than snap straight to the (possibly smaller) floor.
+            if (AutoFitTerminalToWindow) RecomputeAutoFit();
+            else ApplyTerminalSize();
+        }
+        else if (e.PropertyName == nameof(Services.DisplayConfig.AutoFitToWindow))
+        {
+            OnPropertyChanged(nameof(AutoFitTerminalToWindow));
+            if (AutoFitTerminalToWindow) RecomputeAutoFit();
+            else ApplyTerminalSize();
         }
     }
 
@@ -1498,8 +1513,49 @@ public partial class MainWindowViewModel : ObservableObject
     // so any caller that wrote into it picks up the same source of truth.
     private void ApplyTerminalSize()
     {
-        int cols = AppServices.Current.Display.TerminalCols;
-        int rows = AppServices.Current.Display.TerminalRows;
+        ResizeTerminalAndAdvertise(
+            AppServices.Current.Display.TerminalCols,
+            AppServices.Current.Display.TerminalRows);
+    }
+
+    // Last viewport size (in whole cells) MainWindow reported via
+    // ApplyAutoFitTerminalSize, kept so a later floor change (TerminalCols/Rows
+    // edited while auto-fit is on) can re-fit without the view re-pushing.
+    private int _autoFitViewportCols;
+    private int _autoFitViewportRows;
+
+    // Called by MainWindow (debounced) whenever the terminal's hosting
+    // viewport is resized, converted to a whole-cell grid via
+    // TerminalControl.CellWidth/Height. No-ops unless auto-fit is on.
+    public void ApplyAutoFitTerminalSize(int viewportCols, int viewportRows)
+    {
+        _autoFitViewportCols = viewportCols;
+        _autoFitViewportRows = viewportRows;
+        RecomputeAutoFit();
+    }
+
+    // Grows cols/rows to the larger of the configured floor (TerminalCols/Rows)
+    // and the last known viewport size — auto-fit only ever grows past the
+    // floor, never shrinks below it (MajorMUD's statline/room parsing assumes
+    // at least that grid), and clamps to the same upper bound the manual
+    // Columns/Rows fields allow.
+    private void RecomputeAutoFit()
+    {
+        if (!AutoFitTerminalToWindow) return;
+        if (_autoFitViewportCols <= 0 || _autoFitViewportRows <= 0) return;
+
+        int cols = Math.Min(Math.Max(AppServices.Current.Display.TerminalCols, _autoFitViewportCols), 200);
+        int rows = Math.Min(Math.Max(AppServices.Current.Display.TerminalRows, _autoFitViewportRows), 100);
+        if (cols != Emulator.Screen.Cols || rows != Emulator.Screen.Rows)
+        {
+            AppServices.Current.Log.Info("Display",
+                $"Auto-fit: terminal grid {Emulator.Screen.Cols}x{Emulator.Screen.Rows} -> {cols}x{rows}.");
+        }
+        ResizeTerminalAndAdvertise(cols, rows);
+    }
+
+    private void ResizeTerminalAndAdvertise(int cols, int rows)
+    {
         if (cols <= 0 || rows <= 0) return;
         if (cols == Emulator.Screen.Cols && rows == Emulator.Screen.Rows)
         {

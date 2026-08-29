@@ -20,6 +20,9 @@ public partial class MainWindow : Window
     private TextBlock? _combatTickLabel;
     // Set once the user (or programmatic shutdown) has confirmed exit, so the second Close call sails through.
     private bool _exitConfirmed;
+    // Debounces auto-fit reflow so a drag-resize (many rapid bounds changes)
+    // doesn't spam Emulator.Resize / Telnet NAWS on every intermediate pixel.
+    private DispatcherTimer? _autoFitTimer;
 
     public MainWindow()
     {
@@ -50,7 +53,11 @@ public partial class MainWindow : Window
         // can't read the window size itself — this is the channel. The observable
         // fires the current bounds on subscribe, so the initial size is seeded.
         TerminalScroll.GetObservable(Visual.BoundsProperty)
-            .Subscribe(new AnonymousObserver<Rect>(b => Terminal.ViewportSize = b.Size));
+            .Subscribe(new AnonymousObserver<Rect>(b =>
+            {
+                Terminal.ViewportSize = b.Size;
+                ScheduleAutoFit(b.Size);
+            }));
 
         // Subscribe to VM PropertyChanged so we can react to IsConnected.
         // Hooking via DataContextChanged covers the case where the VM is
@@ -82,6 +89,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             AppServices.Current.Tick.CombatTickElapsed -= OnCombatTickElapsed;
+            _autoFitTimer?.Stop();
         };
 
         // Confirm-exit prompt + auto-save the loaded profile before exit.
@@ -151,6 +159,33 @@ public partial class MainWindow : Window
         {
             Terminal.Focus();
         }
+        // Turning auto-fit on mid-session should reflow against the window's
+        // current size right away, not wait for the next resize event.
+        if (e.PropertyName == nameof(MainWindowViewModel.AutoFitTerminalToWindow) &&
+            DataContext is MainWindowViewModel vm2 && vm2.AutoFitTerminalToWindow)
+        {
+            ScheduleAutoFit(TerminalScroll.Bounds.Size);
+        }
+    }
+
+    // Debounced: converts the resized viewport into a whole-cell cols/rows
+    // count via the terminal's native cell metrics, then hands it to the
+    // view-model to clamp against the configured floor and apply. No-ops
+    // when auto-fit is off.
+    private void ScheduleAutoFit(Size viewport)
+    {
+        if (DataContext is not MainWindowViewModel vm || !vm.AutoFitTerminalToWindow) return;
+
+        _autoFitTimer?.Stop();
+        _autoFitTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _autoFitTimer.Tick += (_, _) =>
+        {
+            _autoFitTimer?.Stop();
+            int cols = (int)(viewport.Width / Terminal.CellWidth);
+            int rows = (int)(viewport.Height / Terminal.CellHeight);
+            vm.ApplyAutoFitTerminalSize(cols, rows);
+        };
+        _autoFitTimer.Start();
     }
 
     private void OnGameDataSetsChanged(object? sender, NotifyCollectionChangedEventArgs e)

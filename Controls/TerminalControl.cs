@@ -109,6 +109,12 @@ public sealed class TerminalControl : Control
         set => SetValue(ViewportSizeProperty, value);
     }
 
+    // Native per-cell pixel size at the current font/FontSize, as measured by
+    // MeasureCell. Read by MainWindow to convert a resized viewport into a
+    // cols/rows count for auto-fit.
+    public double CellWidth => _cellW;
+    public double CellHeight => _cellH;
+
     // Raised on the UI thread with bytes to send to the host.
     public event Action<byte[]>? UserInput;
 

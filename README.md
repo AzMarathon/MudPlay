@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.33.0**
-> - Equipment Manager: a gear slot holding an item your character can't wear (alignment / level / class) is flagged red with a ⚠ and skipped on swaps, instead of the engine repeatedly bonking the game with a wear it refuses
-> - Equipment Manager: when the game refuses a wear/wield ("You may not wear that item!" / "You may not use that weapon." — e.g. an alignment-drift EP-zap), the slot is blocked and a terminal notice tells you to adjust the set; change that slot to clear it
-> - Bug report: new "Equipment slot blocks" section listing any unwearable set slots
+> **Version 3.34.0**
+> - New Settings → BBS → Display option: "Auto-fit to window" grows the advertised terminal Columns/Rows to fill the window as it's resized, instead of holding a fixed size
+> - Columns/Rows fields become the floor when auto-fit is on — the grid never advertises smaller than that, protecting MajorMUD's statline/room parsing
+> - Resize reflow is debounced and re-advertises the new size to the server via Telnet NAWS
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
