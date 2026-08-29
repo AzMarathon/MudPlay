@@ -180,10 +180,29 @@ public sealed class TerminalControl : Control
         ClipToBounds = true;
         _typeface = new Typeface(FontFamily);
         _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
-        // Bitmap-style fonts (Mx437) need aliased rendering to avoid color
-        // smearing across cell boundaries; subpixel AA fringes box-drawing chars.
-        TextOptions.SetTextRenderingMode(this, TextRenderingMode.Alias);
-        RenderOptions.SetEdgeMode(this, EdgeMode.Aliased);
+        UpdateRenderMode();
+    }
+
+    // The bundled CP437 bitmap font's family name — the only face that needs
+    // the pixel-native-then-nearest-neighbour-blit zoom path (see RenderScaled).
+    // Every other choice (JetBrains Mono, any installed system monospace font)
+    // is a real vector/outline font: rasterising it at a fractional point size
+    // is exactly how normal text rendering already works, so it scales cleanly
+    // through a draw-transform instead (see RenderScaledVector).
+    private const string BitmapFontFamilyName = "Mx437 IBM VGA 8x16";
+
+    private bool IsBitmapFont => FontFamily.Name.Equals(BitmapFontFamilyName, StringComparison.OrdinalIgnoreCase);
+
+    // Bitmap-style fonts need aliased rendering to avoid colour smearing across
+    // cell boundaries — subpixel AA fringes the block-drawing chars MajorMUD
+    // uses for borders/statline. Vector fonts want the normal antialiased path
+    // (Unspecified), the same as any other on-screen text, or their curves look
+    // jagged. Re-evaluated whenever the font family changes.
+    private void UpdateRenderMode()
+    {
+        bool bitmap = IsBitmapFont;
+        TextOptions.SetTextRenderingMode(this, bitmap ? TextRenderingMode.Alias : TextRenderingMode.Unspecified);
+        RenderOptions.SetEdgeMode(this, bitmap ? EdgeMode.Aliased : EdgeMode.Unspecified);
     }
 
     static TerminalControl()
@@ -333,6 +352,7 @@ public sealed class TerminalControl : Control
     {
         _typeface = new Typeface(FontFamily);
         _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
+        UpdateRenderMode();
         (_cellW, _cellH) = MeasureCell(FontSize);
         RecomputeScale();
         InvalidateMeasure();
@@ -423,22 +443,39 @@ public sealed class TerminalControl : Control
         // emulator. Guarded so the normal path is untouched when inactive.
         if (SplashActive && _splash is { } sp)
         {
-            if (_fitScaleX > 1.0 || _fitScaleY > 1.0) RenderScaledCells(context, sp.Screen);
+            if (_fitScaleX > 1.0 || _fitScaleY > 1.0)
+            {
+                if (IsBitmapFont) RenderScaledCells(context, sp.Screen);
+                else using (context.PushTransform(Matrix.CreateScale(_fitScaleX, _fitScaleY))) DrawCells(context, sp.Screen);
+            }
             else DrawCells(context, sp.Screen);
             return;
         }
 
         if (em is null) return;
 
-        // Zoomed: render the grid at native size into an offscreen bitmap, then
-        // blit it nearest-neighbour to the (larger) control bounds. This keeps
-        // the bitmap font on its native pixel grid — the upscale duplicates
-        // whole pixels rather than re-rasterising glyphs at a fractional size,
-        // so no colour bleed or block-glyph gaps. The unscaled path draws
-        // straight to the context (no bitmap round-trip) to stay cheap.
         if (_fitScaleX > 1.0 || _fitScaleY > 1.0)
         {
-            RenderScaled(context, em);
+            if (IsBitmapFont)
+            {
+                // The bitmap font's glyphs live on a fixed native pixel grid —
+                // rasterising them at a fractional point size smears stems and
+                // gaps the full-cell block-drawing glyphs MajorMUD uses for
+                // borders/statline. Render at native size into an offscreen
+                // buffer, then blit it nearest-neighbour to the (larger) control
+                // bounds so the upscale duplicates whole pixels instead.
+                RenderScaled(context, em);
+            }
+            else
+            {
+                // A real vector/outline font scales the same way any other
+                // on-screen text does: draw at native cell coordinates under a
+                // draw-transform and let Skia rasterise the glyphs directly at
+                // the final size, so it stays crisp and antialiased at any zoom
+                // instead of blowing up a small raster into blocky pixels.
+                using (context.PushTransform(Matrix.CreateScale(_fitScaleX, _fitScaleY)))
+                    DrawScreen(context, em);
+            }
             return;
         }
 
@@ -446,7 +483,7 @@ public sealed class TerminalControl : Control
     }
 
     // Native-size render into the offscreen buffer, then a nearest-neighbour
-    // blit to fill the control bounds.
+    // blit to fill the control bounds. Bitmap font only — see Render.
     private void RenderScaled(DrawingContext context, TerminalEmulator em)
     {
         var screen = em.Screen;
