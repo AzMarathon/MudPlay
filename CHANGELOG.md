@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.34.2
+
+- Fixed a related navigation stall: an ambiguous room observation that landed the tracker in Suspect while the loop was paused (a combat redisplay, another player's arrival) was also silently dropped — the loop would resume by blindly re-sending the same move, and since the tracker can't even re-arm Pending from Suspect (no confirmed anchor to predict from), a refusal on that resend was ALSO dropped, stranding the loop in Suspect with no way out
+- The loop now forwards this case to the recovery gate on resume, exactly like it already does in real time
+- bug reports addressed: paradigm-20260829-111627
+
 ## 3.34.1
 
 - Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the exact same already-refused move, get refused again, and then just sit there until an unrelated event happened to nudge it back to life (observed stalls from several minutes to over an hour)

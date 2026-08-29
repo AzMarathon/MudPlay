@@ -458,6 +458,46 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void SuspectWhilePaused_ForwardsToRecoveryGateOnResume_InsteadOfResendingSameMove()
+    {
+        // Regression (paradigm-20260829-111627): an ambiguous room
+        // observation that lands the tracker in Suspect WHILE the loop is
+        // paused (a combat redisplay, another player's arrival, etc.) is
+        // invisible to OnTrackerStateChanged in real time (State != Running)
+        // — the same seam as the "refused while paused" fix above, but for
+        // Suspect/Lost/Unknown instead of a plain refusal. The old resume
+        // path fell through to a blind resend — but NoteMoveSentCore
+        // deliberately never re-arms Pending from Suspect (no confirmed
+        // anchor to predict a landing from), so a refusal on that resent
+        // move is silently dropped too (NoteMoveBlocked only acts from
+        // Pending), stranding the loop in Suspect with no way out. The fix
+        // forwards to the recovery gate on resume, exactly like the
+        // real-time branch already does.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        // An ambiguous/unrecognized observation lands the tracker in
+        // Suspect while paused — the runner never sees the transition in
+        // real time.
+        h.Tracker.NoteRoomObserved(new RoomObservation("Somewhere Else",
+            new HashSet<Direction> { Direction.N }));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        // Resume must forward to the recovery gate, not blindly re-send "n".
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+
+        Assert.Single(h.Sent);   // not re-sent
+        Assert.Single(h.ResyncReasons);
+        Assert.Contains("Suspect", h.ResyncReasons[0]);
+    }
+
+    [Fact]
     public void PassiveSourceRedisplay_WhileMovePending_IsIgnored_NoFalseRecovery()
     {
         // CONFIRMED game mechanic: a refused move never redisplays the room — it
