@@ -16,6 +16,10 @@ public sealed partial class PartyBuffMemberToggle : ObservableObject
 
     [ObservableProperty] private bool _isChecked;
 
+    // Set when the row is driving the checkbox itself (a "select all" / auto-adapt
+    // sync), so the round-trip back into the row's handler is suppressed.
+    private bool _suppressCallback;
+
     public PartyBuffMemberToggle(
         string displayName, string given, bool isChecked, Action<PartyBuffMemberToggle> onToggled)
     {
@@ -25,5 +29,18 @@ public sealed partial class PartyBuffMemberToggle : ObservableObject
         _onToggled = onToggled;
     }
 
-    partial void OnIsCheckedChanged(bool value) => _onToggled(this);
+    // Update the checkbox from the row (a select-all or auto-adapt sync) without
+    // re-entering the per-member toggle handler.
+    public void SetCheckedSilently(bool value)
+    {
+        _suppressCallback = true;
+        IsChecked = value;
+        _suppressCallback = false;
+    }
+
+    partial void OnIsCheckedChanged(bool value)
+    {
+        if (_suppressCallback) return;
+        _onToggled(this);
+    }
 }

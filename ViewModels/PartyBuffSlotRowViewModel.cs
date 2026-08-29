@@ -29,17 +29,44 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
     private bool _suppress;
 
     // Editable targeting only — spell + recast are fixed at add time.
-    [ObservableProperty] private bool _castOnSelf;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AllTargets))]
+    private bool _castOnSelf;
     [ObservableProperty] private bool _wholePartyOn;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MembersEnabled))]
-    private bool _allMembers;
+    // The "All" master checkbox: ticked when self AND every party member are
+    // targeted. Setting it selects / deselects everyone (self + members) at once;
+    // unticking any individual box drops it automatically (the getter recomputes).
+    // Backed by the DTO's AllMembers (auto-adapt: blesses whoever is in the party)
+    // + CastOnSelf, so "All" stays a live whole-party choice, not a frozen snapshot.
+    public bool AllTargets
+    {
+        get => CastOnSelf && EveryMemberChecked;
+        set
+        {
+            _suppress = true;
+            CastOnSelf = value;
+            _dto.CastOnSelf = value;
+            _dto.AllMembers = value;
+            _dto.Targets.Clear();
+            foreach (PartyBuffMemberToggle t in MemberTargets) t.SetCheckedSilently(value);
+            _suppress = false;
+            _persist();
+            OnPropertyChanged(nameof(AllTargets));
+        }
+    }
 
-    // In the grid the per-member checkboxes stay visible even when "All" is set
-    // (so the columns line up), but greyed out — "All" overrides the individual
-    // picks, so editing them would be misleading.
-    public bool MembersEnabled => !AllMembers;
+    // Every party-member box is ticked (vacuously true with no members — a solo
+    // single-target slot's "All" is then just its self box).
+    private bool EveryMemberChecked
+    {
+        get
+        {
+            foreach (PartyBuffMemberToggle t in MemberTargets)
+                if (!t.IsChecked) return false;
+            return true;
+        }
+    }
 
     // Current party members as target checkboxes, for a single-target slot.
     public ObservableCollection<PartyBuffMemberToggle> MemberTargets { get; } = new();
@@ -79,7 +106,6 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
         _suppress = true;
         _castOnSelf = dto.CastOnSelf;
         _wholePartyOn = dto.WholePartyOn;
-        _allMembers = dto.AllMembers;
         _suppress = false;
     }
 
@@ -104,6 +130,7 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
         if (_suppress) return;
         _dto.CastOnSelf = value;
         _persist();
+        OnPropertyChanged(nameof(AllTargets));
     }
 
     partial void OnWholePartyOnChanged(bool value)
@@ -113,27 +140,34 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
         _persist();
     }
 
-    partial void OnAllMembersChanged(bool value)
-    {
-        if (_suppress) return;
-        _dto.AllMembers = value;
-        _persist();
-    }
-
     // Rebuild the target checkboxes from the current party roster (given names
-    // already lower-cased), preserving the slot's stored selection. Called when
-    // the party changes.
+    // already lower-cased), preserving the slot's stored selection. A member reads
+    // ticked when the slot is in auto-adapt "all members" mode OR their name is in
+    // the explicit list. Called when the party changes.
     public void RebuildMemberTargets(IReadOnlyList<(string Display, string Given)> members)
     {
         MemberTargets.Clear();
         foreach ((string display, string given) in members)
             MemberTargets.Add(new PartyBuffMemberToggle(
-                display, given, _dto.Targets.Contains(given), OnMemberToggled));
+                display, given, _dto.AllMembers || _dto.Targets.Contains(given), OnMemberToggled));
+        OnPropertyChanged(nameof(AllTargets));
     }
 
     private void OnMemberToggled(PartyBuffMemberToggle t)
     {
-        if (t.IsChecked)
+        if (_suppress) return;
+
+        // Leaving auto-adapt "all members" the moment a single box is unticked:
+        // freeze the currently-ticked roster into the explicit list, so the OTHER
+        // members stay blessed and only this one drops.
+        if (_dto.AllMembers)
+        {
+            _dto.AllMembers = false;
+            _dto.Targets.Clear();
+            foreach (PartyBuffMemberToggle m in MemberTargets)
+                if (m.IsChecked && !_dto.Targets.Contains(m.Given)) _dto.Targets.Add(m.Given);
+        }
+        else if (t.IsChecked)
         {
             if (!_dto.Targets.Contains(t.Given)) _dto.Targets.Add(t.Given);
         }
@@ -141,6 +175,16 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
         {
             _dto.Targets.RemoveAll(x => string.Equals(x, t.Given, StringComparison.OrdinalIgnoreCase));
         }
+
+        // Re-enter auto-adapt when every member ends up ticked again — "all members"
+        // then follows the party rather than freezing this exact roster.
+        if (MemberTargets.Count > 0 && EveryMemberChecked)
+        {
+            _dto.AllMembers = true;
+            _dto.Targets.Clear();
+        }
+
         _persist();
+        OnPropertyChanged(nameof(AllTargets));
     }
 }

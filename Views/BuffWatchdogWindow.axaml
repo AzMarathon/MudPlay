@@ -85,7 +85,7 @@
 
         <TextBlock DockPanel.Dock="Top"
                    Margin="10,12,10,10"
-                   Text="No buffs up yet. Add party buffs above; self buffs (bless / regen / when-full) are set in the Player Workshop."
+                   Text="No buffs up yet. Add buffs above and tick who each one is cast on (yourself and/or party members)."
                    Foreground="{StaticResource ChromeFgMutedBrush}"
                    FontSize="11"
                    TextWrapping="Wrap"
@@ -121,7 +121,7 @@
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Disabled">
                             <StackPanel>
-                                <Grid ColumnDefinitions="150,40,44,*" Margin="6,0,6,2">
+                                <Grid ColumnDefinitions="220,40,44,*" Margin="6,0,6,2">
                                     <TextBlock Grid.Column="0" Text="Buff" FontSize="10"
                                                VerticalAlignment="Bottom"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
@@ -151,9 +151,9 @@
                                         <DataTemplate x:DataType="vm:PartyBuffSlotRowViewModel">
                                             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                                     BorderThickness="0,0,0,1" Padding="6,3">
-                                                <Grid ColumnDefinitions="150,40,44,*">
+                                                <Grid ColumnDefinitions="220,40,44,*">
                                                     <StackPanel Grid.Column="0" Orientation="Horizontal"
-                                                                VerticalAlignment="Center" Spacing="2">
+                                                                VerticalAlignment="Center" Spacing="2" Margin="0,0,10,0">
                                                         <Button Content="✎" Width="20" Height="20" Padding="0" FontSize="11"
                                                                 ToolTip.Tip="Edit this buff / recast timer"
                                                                 Command="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).EditBuffCommand}"
@@ -172,10 +172,12 @@
                                                               IsChecked="{Binding CastOnSelf, Mode=TwoWay}"
                                                               ToolTip.Tip="Cast this buff on yourself."/>
 
+                                                    <!-- "All" is a select-all: ticks self + every member; unticking any
+                                                         individual box (self or a member) clears it automatically. -->
                                                     <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
                                                               IsVisible="{Binding IsSingleTarget}"
-                                                              IsChecked="{Binding AllMembers, Mode=TwoWay}"
-                                                              ToolTip.Tip="Bless every party member in the room (auto-adapts to whatever party you're in)."/>
+                                                              IsChecked="{Binding AllTargets, Mode=TwoWay}"
+                                                              ToolTip.Tip="Cast on yourself and every party member (auto-adapts to whoever's in the party). Unticking any box clears this."/>
                                                     <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
                                                               IsVisible="{Binding IsWholeParty}"
                                                               IsChecked="{Binding WholePartyOn, Mode=TwoWay}"
@@ -191,7 +193,6 @@
                                                                 <Panel Width="56">
                                                                     <CheckBox MinHeight="0" HorizontalAlignment="Center"
                                                                               IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                                              IsEnabled="{Binding $parent[ItemsControl].((vm:PartyBuffSlotRowViewModel)DataContext).MembersEnabled}"
                                                                               ToolTip.Tip="{Binding DisplayName}"/>
                                                                 </Panel>
                                                             </DataTemplate>
@@ -211,123 +212,78 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ===== Self buffs ===== -->
-                <TextBlock Classes="SectionHeader" Text="Self buffs" IsVisible="{Binding HasSelfBuffs}"/>
-                <ItemsControl ItemsSource="{Binding SelfBuffs}"
-                              Background="{StaticResource ChromeBgSunkenBrush}"
-                              Margin="6,0"
-                              Padding="2"
-                              IsVisible="{Binding HasSelfBuffs}">
+                <!-- ===== Buff timers, grouped by player =====
+                     One section per player a buff is on: your own name (self +
+                     whole-party buffs) first, then each party member with the buffs
+                     cast on them. Bars are width-capped (MaxWidth) + left-aligned so
+                     they stay short regardless of the window width. -->
+                <ItemsControl ItemsSource="{Binding Groups}" IsVisible="{Binding !IsEmpty}">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:BuffWatchdogRowViewModel">
-                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    Padding="6,4">
-                                <!-- ✕ clears this timer (only while a timer is up); then the
-                                     full-width bar: the light-green frame bounds it, the
-                                     star-weighted fill fills the elapsed fraction, and the
-                                     recast marker sits on the fill/rest boundary. Name + time
-                                     read left-aligned over the dark-green interior. -->
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="4">
-                                    <Button Grid.Column="0" Content="✕" Width="18" Height="18"
-                                            Padding="0" FontSize="10" VerticalAlignment="Center"
-                                            IsVisible="{Binding IsActive}"
-                                            ToolTip.Tip="Clear this buff timer (mark it off)"
-                                            Command="{Binding $parent[ItemsControl].((vm:BuffWatchdogViewModel)DataContext).ClearTimerCommand}"
-                                            CommandParameter="{Binding}"/>
-                                    <Border Grid.Column="1" Classes="BuffBarFrame">
-                                    <Grid Height="20" Background="#FF1B2A1D" ClipToBounds="True">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="{Binding FillStar}"/>
-                                                <ColumnDefinition Width="{Binding FillRestStar}"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Classes="BuffFill"
-                                                    Classes.recast="{Binding InRecastWindow}"/>
-                                        </Grid>
-                                        <Grid IsVisible="{Binding ShowRecastMarker}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="{Binding MarkerStar}"/>
-                                                <ColumnDefinition Width="{Binding MarkerRestStar}"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="1" Width="2" HorizontalAlignment="Left"
-                                                    Background="{StaticResource AccentYellowBrush}"/>
-                                        </Grid>
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
-                                                    VerticalAlignment="Center" Margin="6,0,0,0">
-                                            <TextBlock Classes="BarName" Classes.covered="{Binding IsCovered}"
-                                                       Text="{Binding Name}"/>
-                                            <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
-                                                <TextBlock Text="unlearned"/>
+                        <DataTemplate x:DataType="vm:BuffWatchdogPlayerGroup">
+                            <StackPanel Margin="0,0,0,6">
+                                <TextBlock Classes="SectionHeader" Text="{Binding PlayerName}"/>
+                                <ItemsControl ItemsSource="{Binding Rows}"
+                                              Background="{StaticResource ChromeBgSunkenBrush}"
+                                              Margin="6,0" Padding="2">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:BuffWatchdogRowViewModel">
+                                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                                                    BorderThickness="0,0,0,1" Padding="6,4">
+                                                <!-- ✕ clears this timer (only while up); then the
+                                                     width-capped bar: light-green frame, star-weighted
+                                                     elapsed fill, recast marker on the fill/rest boundary,
+                                                     name + time left-aligned over the dark interior. -->
+                                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="4">
+                                                    <Button Grid.Column="0" Content="✕" Width="18" Height="18"
+                                                            Padding="0" FontSize="10" VerticalAlignment="Center"
+                                                            IsVisible="{Binding IsActive}"
+                                                            ToolTip.Tip="Clear this buff timer (mark it off)"
+                                                            Command="{Binding $parent[Window].((vm:BuffWatchdogViewModel)DataContext).ClearTimerCommand}"
+                                                            CommandParameter="{Binding}"/>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <Border Classes="BuffBarFrame" MaxWidth="260" HorizontalAlignment="Left">
+                                                        <Grid Height="20" MinWidth="180" Background="#FF1B2A1D" ClipToBounds="True">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="{Binding FillStar}"/>
+                                                                    <ColumnDefinition Width="{Binding FillRestStar}"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <Border Grid.Column="0" Classes="BuffFill"
+                                                                        Classes.recast="{Binding InRecastWindow}"/>
+                                                            </Grid>
+                                                            <Grid IsVisible="{Binding ShowRecastMarker}">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="{Binding MarkerStar}"/>
+                                                                    <ColumnDefinition Width="{Binding MarkerRestStar}"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <Border Grid.Column="1" Width="2" HorizontalAlignment="Left"
+                                                                        Background="{StaticResource AccentYellowBrush}"/>
+                                                            </Grid>
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
+                                                                        VerticalAlignment="Center" Margin="6,0,0,0">
+                                                                <TextBlock Classes="BarName" Classes.covered="{Binding IsCovered}"
+                                                                           Text="{Binding Name}"/>
+                                                                <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
+                                                                    <TextBlock Text="unlearned"/>
+                                                                </Border>
+                                                                <TextBlock Classes="BarTime" Classes.covered="{Binding IsCovered}"
+                                                                           Text="{Binding TimeText}"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        </Border>
+                                                        <!-- Only whole-party buffs need a caption (they land on
+                                                             everyone); a self / member buff's player is the header. -->
+                                                        <TextBlock Text="whole party" FontSize="9"
+                                                                   IsVisible="{Binding IsWholeParty}"
+                                                                   Margin="2,1,0,0"
+                                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
                                             </Border>
-                                            <TextBlock Classes="BarTime" Classes.covered="{Binding IsCovered}"
-                                                       Text="{Binding TimeText}"/>
-                                        </StackPanel>
-                                    </Grid>
-                                    </Border>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <!-- ===== Party buffs ===== -->
-                <TextBlock Classes="SectionHeader" Text="Party buffs" IsVisible="{Binding HasPartyBuffs}"/>
-                <ItemsControl ItemsSource="{Binding PartyBuffs}"
-                              Background="{StaticResource ChromeBgSunkenBrush}"
-                              Margin="6,0,6,8"
-                              Padding="2"
-                              IsVisible="{Binding HasPartyBuffs}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:BuffWatchdogRowViewModel">
-                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    Padding="6,4">
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="4">
-                                <Button Grid.Column="0" Content="✕" Width="18" Height="18"
-                                        Padding="0" FontSize="10" VerticalAlignment="Top"
-                                        IsVisible="{Binding IsActive}"
-                                        ToolTip.Tip="Clear this buff timer (mark it off)"
-                                        Command="{Binding $parent[ItemsControl].((vm:BuffWatchdogViewModel)DataContext).ClearTimerCommand}"
-                                        CommandParameter="{Binding}"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <Border Classes="BuffBarFrame">
-                                        <Grid Height="20" Background="#FF1B2A1D" ClipToBounds="True">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="{Binding FillStar}"/>
-                                                    <ColumnDefinition Width="{Binding FillRestStar}"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0" Classes="BuffFill"
-                                                        Classes.recast="{Binding InRecastWindow}"/>
-                                            </Grid>
-                                            <Grid IsVisible="{Binding ShowRecastMarker}">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="{Binding MarkerStar}"/>
-                                                    <ColumnDefinition Width="{Binding MarkerRestStar}"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="1" Width="2" HorizontalAlignment="Left"
-                                                        Background="{StaticResource AccentYellowBrush}"/>
-                                            </Grid>
-                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
-                                                        VerticalAlignment="Center" Margin="6,0,0,0">
-                                                <TextBlock Classes="BarName" Text="{Binding Name}"/>
-                                                <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
-                                                    <TextBlock Text="unlearned"/>
-                                                </Border>
-                                                <TextBlock Classes="BarTime" Text="{Binding TimeText}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                    <!-- Party target (member / class) as a caption under the bar. -->
-                                    <TextBlock Text="{Binding TargetText}"
-                                               FontSize="9"
-                                               TextTrimming="CharacterEllipsis"
-                                               Margin="2,1,0,0"
-                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                </StackPanel>
-                                </Grid>
-                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
