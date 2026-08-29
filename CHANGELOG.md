@@ -2,6 +2,16 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.35.0
+
+- Unified buffing: **all** automated buffing — self bless, mana/HP regen, "when HP/MA full", room light, and party buffs — now lives in **one list in the Buff Watchdog** window, replacing the Settings → Spells self-bless pickers and the Party-window buff panel
+- Each buff picks who it's cast on with checkboxes — yourself and/or party members; **"All"** is a select-all (you + every member, auto-adapting to the party) that clears the moment you untick any box
+- Timer bars are grouped **by player** (your name, then each member) instead of a Self/Party split; drag the config table above / below / left / right of the bars
+- Add-buff dialog carries per-slot conditions: only-when-HP/MA-full (fires at your rest-max, not literal full), only-when-dark for light spells, and — for a mana-regen roll spell — cast-before-resting plus the reroll threshold / max-rerolls
+- Mana-regen rerolling reads its config from the buff slot (works on Paradigm via `abil 145`); the auto-light system reads the room-light spell from the buff list
+- Your full buff plan is written to the program log on load / edit (and captured in the bug report) so a "buffs aren't working" report shows exactly how they're set up
+- Existing self-bless / regen / light / party-buff configs are migrated into the new list automatically
+
 ## 3.34.0
 
 - Party blessing overhaul: buff slots moved from Settings → Party into a live **Party Buffs** panel in the Party window — add/remove slots, pick a learned buff, set a per-slot recast timer

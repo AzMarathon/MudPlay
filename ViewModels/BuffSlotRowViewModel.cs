@@ -19,10 +19,10 @@ public enum BuffSlotScope
 // edited in the row. The scope (self-only / single-target / whole-party) is derived
 // live from the spell's Targets, so the row shows the right controls — a self
 // checkbox, an All-members / member checklist, or a whole-party toggle. Edits write
-// straight through to the PartyBuffSlot DTO and the panel persists.
-public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
+// straight through to the BuffSlot DTO and the panel persists.
+public sealed partial class BuffSlotRowViewModel : ObservableObject
 {
-    private readonly PartyBuffSlot _dto;
+    private readonly BuffSlot _dto;
     private readonly Func<string?, BuffSlotScope> _resolveScope;
     private readonly Func<string?, string> _resolveName;
     private readonly Action _persist;
@@ -49,7 +49,7 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
             _dto.CastOnSelf = value;
             _dto.AllMembers = value;
             _dto.Targets.Clear();
-            foreach (PartyBuffMemberToggle t in MemberTargets) t.SetCheckedSilently(value);
+            foreach (BuffMemberToggle t in MemberTargets) t.SetCheckedSilently(value);
             _suppress = false;
             _persist();
             OnPropertyChanged(nameof(AllTargets));
@@ -62,14 +62,14 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
     {
         get
         {
-            foreach (PartyBuffMemberToggle t in MemberTargets)
+            foreach (BuffMemberToggle t in MemberTargets)
                 if (!t.IsChecked) return false;
             return true;
         }
     }
 
     // Current party members as target checkboxes, for a single-target slot.
-    public ObservableCollection<PartyBuffMemberToggle> MemberTargets { get; } = new();
+    public ObservableCollection<BuffMemberToggle> MemberTargets { get; } = new();
 
     public string? Spell => _dto.Spell;
     public int RecastMarginSec => _dto.RecastMarginSec;
@@ -95,8 +95,8 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
     // (its only target) or a single-target buff (self is one option among members).
     public bool ShowSelf => IsSelfOnly || IsSingleTarget;
 
-    public PartyBuffSlotRowViewModel(
-        PartyBuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
+    public BuffSlotRowViewModel(
+        BuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
         Func<string?, string> resolveName, Action persist)
     {
         _dto = dto;
@@ -109,7 +109,7 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
         _suppress = false;
     }
 
-    internal PartyBuffSlot Dto => _dto;
+    internal BuffSlot Dto => _dto;
 
     // Re-emit the read-only derived properties after the DTO's spell / recast
     // changed via the edit dialog (the scope split can flip if the buff changed).
@@ -148,12 +148,12 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
     {
         MemberTargets.Clear();
         foreach ((string display, string given) in members)
-            MemberTargets.Add(new PartyBuffMemberToggle(
+            MemberTargets.Add(new BuffMemberToggle(
                 display, given, _dto.AllMembers || _dto.Targets.Contains(given), OnMemberToggled));
         OnPropertyChanged(nameof(AllTargets));
     }
 
-    private void OnMemberToggled(PartyBuffMemberToggle t)
+    private void OnMemberToggled(BuffMemberToggle t)
     {
         if (_suppress) return;
 
@@ -164,7 +164,7 @@ public sealed partial class PartyBuffSlotRowViewModel : ObservableObject
         {
             _dto.AllMembers = false;
             _dto.Targets.Clear();
-            foreach (PartyBuffMemberToggle m in MemberTargets)
+            foreach (BuffMemberToggle m in MemberTargets)
                 if (m.IsChecked && !_dto.Targets.Contains(m.Given)) _dto.Targets.Add(m.Given);
         }
         else if (t.IsChecked)

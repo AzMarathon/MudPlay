@@ -24,7 +24,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     private readonly Game.TickEngine _tick;
     private readonly ProfileService _profile;
     private readonly Func<SpellsSettings> _readSpells;
-    private readonly Func<PartyBuffSettings?> _readPartyBuffs;
+    private readonly Func<BuffSettings?> _readPartyBuffs;
     // Live party roster (non-self), so a single-target party buff can list ONE ROW
     // PER targeted member. Null on the test ctor (no per-member rows there).
     private readonly Game.PartyState? _party;
@@ -77,7 +77,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     // The editable buff-config panel (add / edit / remove / target). It lives in this
     // window now — the Buff Watchdog is the single place to both SEE and CONFIGURE
     // buffs. Null on the test ctor (no live services).
-    public PartyBuffPanelViewModel? Buffs { get; }
+    public BuffPanelViewModel? Buffs { get; }
 
     // Production ctor — pulls the live services. Settings come through the resolver
     // (4-tier merged; bless slots live at the character tier, which wins).
@@ -88,13 +88,13 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                () => AppServices.Current.Profile.Current?.PartyBuffs,
                AppServices.Current.PartyState)
     {
-        Buffs = new PartyBuffPanelViewModel(AppServices.Current.PartyState);
+        Buffs = new BuffPanelViewModel(AppServices.Current.PartyState);
     }
 
     public BuffWatchdogViewModel(
         CastingDirector castDirector, SpellbookState spellbook,
         Game.TickEngine tick, ProfileService profile,
-        Func<SpellsSettings> readSpells, Func<PartyBuffSettings?> readPartyBuffs,
+        Func<SpellsSettings> readSpells, Func<BuffSettings?> readPartyBuffs,
         Game.PartyState? party = null)
     {
         _castDirector = castDirector;
@@ -170,7 +170,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     {
         if (_disposed) return;
         SpellsSettings spells = _readSpells();
-        PartyBuffSettings? buffs = _readPartyBuffs();
+        BuffSettings? buffs = _readPartyBuffs();
         IReadOnlyList<ActiveBuffTimer> snap = _castDirector.SnapshotActiveBuffs();
 
         string sig = BuildSignature(spells, buffs, snap);
@@ -225,7 +225,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         }
     }
 
-    private void RebuildRows(SpellsSettings spells, PartyBuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
+    private void RebuildRows(SpellsSettings spells, BuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
     {
         Groups.Clear();
 
@@ -248,7 +248,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
         if (buffs is not null)
         {
-            foreach (PartyBuffSlot p in buffs.Slots)
+            foreach (BuffSlot p in buffs.Slots)
             {
                 if (string.IsNullOrWhiteSpace(p.Spell)) continue;
                 string code = p.Spell.Trim();
@@ -362,7 +362,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
     // The target summary shown on a party-buff row: whole-party buffs read "party";
     // single-target buffs read "all" or the chosen given names.
-    private string TargetLabel(PartyBuffSlot p, bool wholeParty)
+    private string TargetLabel(BuffSlot p, bool wholeParty)
     {
         if (wholeParty) return "party";
         if (p.AllMembers) return "all";
@@ -376,7 +376,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         if (string.IsNullOrWhiteSpace(spell)) return false;
         string s = spell.Trim();
         if (ItemCastToken.IsToken(s)) return _spellbook.IsTokenWholeParty(s);
-        return _spellbook.FindByCastCode(s) is { } ks && PartyBuffClassifier.IsWholeParty(ks.Targets);
+        return _spellbook.FindByCastCode(s) is { } ks && BuffClassifier.IsWholeParty(ks.Targets);
     }
 
     // Cheap fingerprint of the configured buff set AND the active party-buff timer keys
@@ -385,13 +385,13 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     // actually expires (then the key drops → rebuild → row goes away). Only the KEY set
     // (short@target), never the remaining time, so it doesn't churn every second.
     private static string BuildSignature(
-        SpellsSettings spells, PartyBuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
+        SpellsSettings spells, BuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
     {
         StringBuilder sb = new();
         // Mana / HP regen are the only self buffs still on the Spells tab.
         sb.Append(spells.HpRegenSpell).Append('|').Append(spells.MaRegenSpell).Append("||");
         if (buffs is not null)
-            foreach (PartyBuffSlot p in buffs.Slots)
+            foreach (BuffSlot p in buffs.Slots)
                 sb.Append(p.Spell).Append(':').Append(p.CastOnSelf ? "S" : "")
                   .Append(p.WholePartyOn ? "W" : "").Append(p.AllMembers ? "A" : "")
                   .Append(p.OnlyWhenHpFull ? "H" : "").Append(p.OnlyWhenMaFull ? "M" : "")

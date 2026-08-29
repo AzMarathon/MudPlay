@@ -163,7 +163,7 @@ public sealed class PartySettings
     public bool BlessDuringCombat { get; set; }
 
     // Party bless SLOTS moved out of here: they're now a dynamic, per-target
-    // buff plan on CharacterProfile.PartyBuffs (see Models/Profile/PartyBuffSettings.cs),
+    // buff plan on CharacterProfile.PartyBuffs (see Models/Profile/BuffSettings.cs),
     // configured live in the Buff Watchdog window. The two gates above
     // (BlessWhileResting / BlessDuringCombat) stay here — the Settings tab keeps
     // them and Game.Spells.CastingDirector reads them from here.

@@ -127,18 +127,18 @@ public sealed class PartySectionViewModelTests
     [Fact]
     public void PartyBuffSlots_RoundTripThroughJson()
     {
-        PartyBuffSettings src = new();
-        src.Slots.Add(new PartyBuffSlot { Spell = "chan", WholePartyOn = true, RecastMarginSec = 20 });
-        src.Slots.Add(new PartyBuffSlot
+        BuffSettings src = new();
+        src.Slots.Add(new BuffSlot { Spell = "chan", WholePartyOn = true, RecastMarginSec = 20 });
+        src.Slots.Add(new BuffSlot
         {
             Spell = "fren",
             RecastMarginSec = 0,                 // wait-for-expiry
             Targets = { "raijin", "goldar" },
         });
-        src.Slots.Add(new PartyBuffSlot { Spell = "dfav", AllMembers = true });
+        src.Slots.Add(new BuffSlot { Spell = "dfav", AllMembers = true });
 
         string json = JsonSerializer.Serialize(src);
-        PartyBuffSettings? back = JsonSerializer.Deserialize<PartyBuffSettings>(json);
+        BuffSettings? back = JsonSerializer.Deserialize<BuffSettings>(json);
 
         Assert.NotNull(back);
         Assert.Equal(3, back!.Slots.Count);
@@ -153,7 +153,7 @@ public sealed class PartySectionViewModelTests
     [Fact]
     public void PartyBuffSlot_Defaults()
     {
-        PartyBuffSlot s = new();
+        BuffSlot s = new();
         Assert.Null(s.Spell);
         Assert.True(s.WholePartyOn);             // whole-party buffs default on
         Assert.False(s.AllMembers);

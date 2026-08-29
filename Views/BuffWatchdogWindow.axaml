@@ -127,7 +127,7 @@
                         BorderBrush="{StaticResource ChromeBorderBrush}"
                         BorderThickness="0,0,0,1" Margin="0,0,0,4">
                     <StackPanel MaxWidth="380" HorizontalAlignment="Left"
-                                DataContext="{Binding Buffs}" x:DataType="vm:PartyBuffPanelViewModel">
+                                DataContext="{Binding Buffs}" x:DataType="vm:BuffPanelViewModel">
                         <Button Content="＋ Add buff" Padding="8,2" Margin="8,8,8,4"
                                 HorizontalAlignment="Left" IsEnabled="{Binding CanAddBuff}"
                                 Command="{Binding AddBuffCommand}"/>
@@ -171,7 +171,7 @@
 
                                 <ItemsControl ItemsSource="{Binding Slots}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:PartyBuffSlotRowViewModel">
+                                        <DataTemplate x:DataType="vm:BuffSlotRowViewModel">
                                             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                                     BorderThickness="0,0,0,1" Padding="6,3">
                                                 <Grid ColumnDefinitions="220,40,44,*">
@@ -179,11 +179,11 @@
                                                                 VerticalAlignment="Center" Spacing="2" Margin="0,0,10,0">
                                                         <Button Content="✎" Width="20" Height="20" Padding="0" FontSize="11"
                                                                 ToolTip.Tip="Edit this buff / recast timer"
-                                                                Command="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).EditBuffCommand}"
+                                                                Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).EditBuffCommand}"
                                                                 CommandParameter="{Binding}"/>
                                                         <Button Content="⨯" Width="20" Height="20" Padding="0"
                                                                 ToolTip.Tip="Remove this buff slot"
-                                                                Command="{Binding $parent[ItemsControl].((vm:PartyBuffPanelViewModel)DataContext).RemoveBuffCommand}"
+                                                                Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).RemoveBuffCommand}"
                                                                 CommandParameter="{Binding}"/>
                                                         <TextBlock Text="{Binding HeaderText}" FontWeight="SemiBold"
                                                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
@@ -212,7 +212,7 @@
                                                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                                                         </ItemsControl.ItemsPanel>
                                                         <ItemsControl.ItemTemplate>
-                                                            <DataTemplate x:DataType="vm:PartyBuffMemberToggle">
+                                                            <DataTemplate x:DataType="vm:BuffMemberToggle">
                                                                 <Panel Width="56">
                                                                     <CheckBox MinHeight="0" HorizontalAlignment="Center"
                                                                               IsChecked="{Binding IsChecked, Mode=TwoWay}"

@@ -12,7 +12,7 @@ namespace MudPlay.ViewModels;
 // What the Add-buff dialog returns on OK: the picked buff cast-code, its recast
 // timer, and the per-slot conditions. Null (via a cancelled dialog) means "don't
 // add / change the slot".
-public sealed record AddPartyBuffResult(
+public sealed record AddBuffResult(
     string Spell,
     int RecastMarginSec,
     bool OnlyWhenHpFull,
@@ -27,9 +27,9 @@ public sealed record AddPartyBuffResult(
 // a light spell offers "only when dark", a mana-regen roll spell offers the reroll
 // config (threshold + max rerolls) and a "cast before resting" toggle. Targeting
 // (self / members) is then chosen in the row back in the Buff Watchdog.
-public sealed partial class AddPartyBuffDialogViewModel : ObservableObject, IDialogViewModel<AddPartyBuffResult>
+public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogViewModel<AddBuffResult>
 {
-    public event Action<AddPartyBuffResult?>? CloseRequested;
+    public event Action<AddBuffResult?>? CloseRequested;
 
     public IReadOnlyList<SpellPick> BuffPicks { get; }
     public Func<string?, object?, bool> SpellSuggestionFilter { get; }
@@ -69,10 +69,10 @@ public sealed partial class AddPartyBuffDialogViewModel : ObservableObject, IDia
     public string DialogTitle => IsEditing ? "Edit buff" : "Add buff";
     public string OkLabel => IsEditing ? "Save" : "OK";
 
-    public AddPartyBuffDialogViewModel(
+    public AddBuffDialogViewModel(
         IReadOnlyList<SpellPick> buffPicks, Func<string?, object?, bool> filter,
         Func<string?, bool> isLightSpell, Func<string?, bool> isRollSpell,
-        AddPartyBuffResult? initial = null)
+        AddBuffResult? initial = null)
     {
         ArgumentNullException.ThrowIfNull(buffPicks);
         ArgumentNullException.ThrowIfNull(filter);
@@ -98,7 +98,7 @@ public sealed partial class AddPartyBuffDialogViewModel : ObservableObject, IDia
     private void Ok()
     {
         if (!CanAdd) return;
-        CloseRequested?.Invoke(new AddPartyBuffResult(
+        CloseRequested?.Invoke(new AddBuffResult(
             Spell!.Trim(),
             Math.Clamp(RecastMarginSec, 0, 999),
             OnlyWhenHpFull,

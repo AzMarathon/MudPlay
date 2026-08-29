@@ -10,7 +10,7 @@ namespace MudPlay.Game.Spells;
 //                     (chant, mass frenzy, unholy fanaticism, rejuvenating field…)
 // Self-only (0 / 1), enemy (4 / 8 / 9 / 12), item (7), and generic-area scopes
 // are excluded — they aren't beneficial party buffs.
-public static class PartyBuffClassifier
+public static class BuffClassifier
 {
     // Whole-party scope codes (one cast, no target). Matches AppServices.IsPartyWideBuff.
     public static bool IsWholeParty(int targets) => targets is 10 or 13;

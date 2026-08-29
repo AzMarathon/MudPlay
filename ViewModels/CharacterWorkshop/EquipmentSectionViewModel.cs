@@ -577,10 +577,10 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     // enumeration: the CastOnSelf slots in the unified buff list (bless + when-full
     // folded there), then the mana-regen buff still on the Spells tab. Blank picks
     // drop out.
-    private static IEnumerable<string> EnumerateSelfBuffCodes(SpellsSettings spells, PartyBuffSettings? buffs)
+    private static IEnumerable<string> EnumerateSelfBuffCodes(SpellsSettings spells, BuffSettings? buffs)
     {
         if (buffs is not null)
-            foreach (PartyBuffSlot slot in buffs.Slots)
+            foreach (BuffSlot slot in buffs.Slots)
                 if (slot.CastOnSelf && !string.IsNullOrWhiteSpace(slot.Spell))
                     yield return slot.Spell!.Trim();
         if (!string.IsNullOrWhiteSpace(spells.MaRegenSpell)) yield return spells.MaRegenSpell!.Trim();

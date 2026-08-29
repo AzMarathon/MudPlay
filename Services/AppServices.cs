@@ -3467,7 +3467,7 @@ public sealed class AppServices
             AbilBreakdown,
             readConfig: () =>
             {
-                Models.Profile.PartyBuffSlot? slot = ManaRegenRerollSlot();
+                Models.Profile.BuffSlot? slot = ManaRegenRerollSlot();
                 return new Game.Spells.ManaRegenRerollConfig(slot?.RerollThreshold, slot?.RerollCount ?? 0);
             },
             sendAbilQuery: () =>
@@ -5859,11 +5859,11 @@ public sealed class AppServices
             if (Spellbook.FindByCastCode(code.Trim()) is { } s)
                 selfBuffs.Add((s.Short, s.Number));
         }
-        Models.Profile.PartyBuffSettings? buffs = Profile.Current?.PartyBuffs;
+        Models.Profile.BuffSettings? buffs = Profile.Current?.PartyBuffs;
         // The unified list's self-cast slots are the covered candidates (bless +
         // when-full folded here). Whole-party / member-target slots aren't self-casts.
         if (buffs is not null)
-            foreach (Models.Profile.PartyBuffSlot pslot in buffs.Slots)
+            foreach (Models.Profile.BuffSlot pslot in buffs.Slots)
                 if (pslot.CastOnSelf && !IsPartyWideBuff(pslot.Spell ?? string.Empty))
                     AddSelf(pslot.Spell);
         // HP regen still lives on the Spells tab (mana regen is a unified slot, already
@@ -5872,7 +5872,7 @@ public sealed class AppServices
         if (selfBuffs.Count == 0) return map;
 
         if (buffs is null) return map;
-        foreach (Models.Profile.PartyBuffSlot pslot in buffs.Slots)
+        foreach (Models.Profile.BuffSlot pslot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
             if (!pslot.WholePartyOn) continue;             // toggled off → not cast → can't cover
@@ -6041,10 +6041,10 @@ public sealed class AppServices
     // spell is a code-145 rolled regen-rate spell (nature tap / mana flux / prfl). One
     // per character; null when none is configured. (The reroll config — threshold /
     // count — rides on this slot.)
-    private Models.Profile.PartyBuffSlot? ManaRegenRerollSlot()
+    private Models.Profile.BuffSlot? ManaRegenRerollSlot()
     {
         if (Profile.Current?.PartyBuffs is not { } buffs) return null;
-        foreach (Models.Profile.PartyBuffSlot s in buffs.Slots)
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
             if (s.CastOnSelf && !string.IsNullOrWhiteSpace(s.Spell) && IsManaRegenRollSpell(s.Spell.Trim()))
                 return s;
         return null;
@@ -6063,7 +6063,7 @@ public sealed class AppServices
 
         Log.Info("Buffs", $"Buff plan — {buffs.Slots.Count} slot(s):");
         int n = 0;
-        foreach (Models.Profile.PartyBuffSlot s in buffs.Slots)
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
         {
             n++;
             if (string.IsNullOrWhiteSpace(s.Spell)) { Log.Info("Buffs", $"  {n}. (empty)"); continue; }
@@ -6092,7 +6092,7 @@ public sealed class AppServices
     private string? RoomLightSlotSpell()
     {
         if (Profile.Current?.PartyBuffs is not { } buffs) return null;
-        foreach (Models.Profile.PartyBuffSlot s in buffs.Slots)
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
             if (s.CastOnSelf && s.OnlyWhenDark && !string.IsNullOrWhiteSpace(s.Spell))
                 return s.Spell!.Trim();
         return null;

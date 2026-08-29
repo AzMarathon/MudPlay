@@ -2,20 +2,20 @@ namespace MudPlay.Models.Profile;
 
 // The character's UNIFIED buff plan — one dynamic list holding every automated
 // buff, self and party alike, configured live in the Buff Watchdog window. Stored
-// as the top-level CharacterProfile.PartyBuffs (char-only, like Equipment). (Name
-// kept for now for storage compatibility; the type is renamed Buff* in a later
-// cleanup — it is no longer party-only.)
+// as the top-level CharacterProfile.PartyBuffs (char-only, like Equipment). The
+// PartyBuffs property/key name is kept for storage compatibility even though the
+// type is named Buff* — it is no longer party-only.
 //
 // A slot's spell scope is derived live from the game-data Targets code (0 / 1 =
 // self-only; 2 = single-target, castable on self and/or members; 10 / 13 = whole
 // party), so the same slot re-classifies correctly across game-data sets. The
 // targeting flags + conditions below say WHO and WHEN; the scope says which of
 // them apply.
-public sealed class PartyBuffSettings
+public sealed class BuffSettings
 {
     // The buff slots in priority order (the buff path walks them top to bottom).
     // Dynamic — the user adds / removes slots in the Buff Watchdog.
-    public System.Collections.Generic.List<PartyBuffSlot> Slots { get; set; } = new();
+    public System.Collections.Generic.List<BuffSlot> Slots { get; set; } = new();
 }
 
 // One buff slot (self and/or party). Mutable DTO so the Buff Watchdog UI two-way
@@ -29,7 +29,7 @@ public sealed class PartyBuffSettings
 //     churn never casts at the wrong person.
 //   - Whole-party spell (Targets 10 / 13): WholePartyOn — one cast blankets the
 //     party (and lands on us).
-public sealed class PartyBuffSlot
+public sealed class BuffSlot
 {
     // 4-letter spell short-code (e.g. chan) or a #item-cast token, or null/empty
     // for an unconfigured slot.

@@ -72,9 +72,9 @@ public static class ProfileMigrations
         catch { spells = null; }
         if (spells is null) return;
 
-        List<PartyBuffSlot> folded = new();
+        List<BuffSlot> folded = new();
         if (!string.IsNullOrWhiteSpace(spells.MaRegenSpell))
-            folded.Add(new PartyBuffSlot
+            folded.Add(new BuffSlot
             {
                 Spell = spells.MaRegenSpell!.Trim(),
                 CastOnSelf = true,
@@ -84,7 +84,7 @@ public static class ProfileMigrations
                 RerollCount = spells.ManaRegenRerollCap,
             });
         if (!string.IsNullOrWhiteSpace(spells.RoomLightSpell))
-            folded.Add(new PartyBuffSlot
+            folded.Add(new BuffSlot
             {
                 Spell = spells.RoomLightSpell!.Trim(),
                 CastOnSelf = true,
@@ -93,7 +93,7 @@ public static class ProfileMigrations
 
         if (folded.Count > 0)
         {
-            profile.PartyBuffs ??= new PartyBuffSettings();
+            profile.PartyBuffs ??= new BuffSettings();
             profile.PartyBuffs.Slots.AddRange(folded);
         }
 
@@ -120,22 +120,22 @@ public static class ProfileMigrations
         catch { spells = null; }
         if (spells is null) return;
 
-        List<PartyBuffSlot> folded = new();
+        List<BuffSlot> folded = new();
         foreach (KeyValuePair<int, string> kv in spells.BlessSlots.OrderBy(k => k.Key))
         {
             if (string.IsNullOrWhiteSpace(kv.Value)) continue;
             int margin = spells.BlessSlotRecastMargins.TryGetValue(kv.Key, out int m)
                 ? m : SpellsSettings.DefaultBlessRecastMarginSec;
-            folded.Add(new PartyBuffSlot { Spell = kv.Value.Trim(), CastOnSelf = true, RecastMarginSec = margin });
+            folded.Add(new BuffSlot { Spell = kv.Value.Trim(), CastOnSelf = true, RecastMarginSec = margin });
         }
         if (!string.IsNullOrWhiteSpace(spells.WhenHpFullSpell))
-            folded.Add(new PartyBuffSlot { Spell = spells.WhenHpFullSpell!.Trim(), CastOnSelf = true, OnlyWhenHpFull = true });
+            folded.Add(new BuffSlot { Spell = spells.WhenHpFullSpell!.Trim(), CastOnSelf = true, OnlyWhenHpFull = true });
         if (!string.IsNullOrWhiteSpace(spells.WhenMaFullSpell))
-            folded.Add(new PartyBuffSlot { Spell = spells.WhenMaFullSpell!.Trim(), CastOnSelf = true, OnlyWhenMaFull = true });
+            folded.Add(new BuffSlot { Spell = spells.WhenMaFullSpell!.Trim(), CastOnSelf = true, OnlyWhenMaFull = true });
 
         if (folded.Count == 0) return;
 
-        profile.PartyBuffs ??= new PartyBuffSettings();
+        profile.PartyBuffs ??= new BuffSettings();
         profile.PartyBuffs.Slots.InsertRange(0, folded);
 
         spells.BlessSlots = new();

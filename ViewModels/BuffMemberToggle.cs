@@ -7,9 +7,9 @@ namespace MudPlay.ViewModels;
 // DisplayName is what the user sees; Given (lower-cased given name) is the stable
 // key persisted in the slot's Targets, so a selection survives a member leaving
 // and rejoining.
-public sealed partial class PartyBuffMemberToggle : ObservableObject
+public sealed partial class BuffMemberToggle : ObservableObject
 {
-    private readonly Action<PartyBuffMemberToggle> _onToggled;
+    private readonly Action<BuffMemberToggle> _onToggled;
 
     public string DisplayName { get; }
     public string Given { get; }
@@ -20,8 +20,8 @@ public sealed partial class PartyBuffMemberToggle : ObservableObject
     // sync), so the round-trip back into the row's handler is suppressed.
     private bool _suppressCallback;
 
-    public PartyBuffMemberToggle(
-        string displayName, string given, bool isChecked, Action<PartyBuffMemberToggle> onToggled)
+    public BuffMemberToggle(
+        string displayName, string given, bool isChecked, Action<BuffMemberToggle> onToggled)
     {
         DisplayName = displayName;
         Given = given;

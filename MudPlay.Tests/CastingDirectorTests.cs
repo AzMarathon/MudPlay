@@ -576,7 +576,7 @@ public sealed class CastingDirectorTests
 
         /// <summary>Extra unified-list buffs (party / member / whole-party) beyond the
         /// self-bless the tests set via <see cref="Spells"/>. Rarely used here.</summary>
-        public PartyBuffSettings PartyBuffs { get; } = new();
+        public BuffSettings PartyBuffs { get; } = new();
 
         /// <summary>When true the triggered-rest gate reports an active recovery
         /// rest (HP/MA below rest-if-below), so the bless "while resting" gate
@@ -640,25 +640,25 @@ public sealed class CastingDirectorTests
 
         // Mirror ProfileMigrations' v2→v3 fold: BlessSlots (in order) + WhenHp/MaFull
         // become CastOnSelf slots, prepended to any explicit unified-list buffs.
-        private PartyBuffSettings FoldedBuffs()
+        private BuffSettings FoldedBuffs()
         {
-            PartyBuffSettings merged = new();
+            BuffSettings merged = new();
             foreach (System.Collections.Generic.KeyValuePair<int, string> kv in
                      Spells.BlessSlots.OrderBy(k => k.Key))
             {
                 if (string.IsNullOrWhiteSpace(kv.Value)) continue;
                 int margin = Spells.BlessSlotRecastMargins.TryGetValue(kv.Key, out int m)
                     ? m : SpellsSettings.DefaultBlessRecastMarginSec;
-                merged.Slots.Add(new PartyBuffSlot { Spell = kv.Value, CastOnSelf = true, RecastMarginSec = margin });
+                merged.Slots.Add(new BuffSlot { Spell = kv.Value, CastOnSelf = true, RecastMarginSec = margin });
             }
             if (!string.IsNullOrWhiteSpace(Spells.WhenHpFullSpell))
-                merged.Slots.Add(new PartyBuffSlot { Spell = Spells.WhenHpFullSpell, CastOnSelf = true, OnlyWhenHpFull = true });
+                merged.Slots.Add(new BuffSlot { Spell = Spells.WhenHpFullSpell, CastOnSelf = true, OnlyWhenHpFull = true });
             if (!string.IsNullOrWhiteSpace(Spells.WhenMaFullSpell))
-                merged.Slots.Add(new PartyBuffSlot { Spell = Spells.WhenMaFullSpell, CastOnSelf = true, OnlyWhenMaFull = true });
+                merged.Slots.Add(new BuffSlot { Spell = Spells.WhenMaFullSpell, CastOnSelf = true, OnlyWhenMaFull = true });
             // Mana-regen also folds into the unified list now (v4 migration) — a
             // maintained CastOnSelf slot, appended after the bless / when-full slots.
             if (!string.IsNullOrWhiteSpace(Spells.MaRegenSpell))
-                merged.Slots.Add(new PartyBuffSlot { Spell = Spells.MaRegenSpell, CastOnSelf = true });
+                merged.Slots.Add(new BuffSlot { Spell = Spells.MaRegenSpell, CastOnSelf = true });
             merged.Slots.AddRange(PartyBuffs.Slots);
             return merged;
         }
@@ -2397,7 +2397,7 @@ public sealed class CastingDirectorTests
         public PartySettings PartySettings { get; set; } = new();
 
         /// <summary>The party-buff plan the director reads (CharacterProfile.PartyBuffs).</summary>
-        public PartyBuffSettings PartyBuffs { get; } = new();
+        public BuffSettings PartyBuffs { get; } = new();
 
         /// <summary>Given names currently in the room — the presence gate. AddMember
         /// puts a member here by default; drop a name to model an absent member.</summary>
@@ -2467,27 +2467,27 @@ public sealed class CastingDirectorTests
         }
 
         /// <summary>A single-target slot that blesses the named members (given names).</summary>
-        public PartyBuffSlot AddTargetSlot(string spell, params string[] targets)
+        public BuffSlot AddTargetSlot(string spell, params string[] targets)
         {
-            PartyBuffSlot slot = new() { Spell = spell };
+            BuffSlot slot = new() { Spell = spell };
             foreach (string t in targets) slot.Targets.Add(t.ToLowerInvariant());
             PartyBuffs.Slots.Add(slot);
             return slot;
         }
 
         /// <summary>A single-target slot that blesses every in-party, in-room member.</summary>
-        public PartyBuffSlot AddAllMembersSlot(string spell)
+        public BuffSlot AddAllMembersSlot(string spell)
         {
-            PartyBuffSlot slot = new() { Spell = spell, AllMembers = true };
+            BuffSlot slot = new() { Spell = spell, AllMembers = true };
             PartyBuffs.Slots.Add(slot);
             return slot;
         }
 
         /// <summary>A whole-party slot (one cast, no target). on = WholePartyOn.</summary>
-        public PartyBuffSlot AddWholePartySlot(string spell, bool on = true)
+        public BuffSlot AddWholePartySlot(string spell, bool on = true)
         {
             WholeParty.Add(spell);
-            PartyBuffSlot slot = new() { Spell = spell, WholePartyOn = on };
+            BuffSlot slot = new() { Spell = spell, WholePartyOn = on };
             PartyBuffs.Slots.Add(slot);
             return slot;
         }

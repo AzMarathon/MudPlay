@@ -604,7 +604,7 @@ public static class BugReportBuilder
     // e.g. "self", "all", "Bob,Sue", "party-wide", with "+hp-full" / "+ma-full" when
     // a downtime condition is set. Derived from the slot's flags (whole-party is left
     // to WholePartyOn since the classifier isn't reachable here).
-    private static string BuffScope(Models.Profile.PartyBuffSlot s)
+    private static string BuffScope(Models.Profile.BuffSlot s)
     {
         List<string> who = new();
         if (s.CastOnSelf) who.Add("self");

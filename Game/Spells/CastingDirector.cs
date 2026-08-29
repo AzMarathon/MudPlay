@@ -169,7 +169,7 @@ public sealed class CastingDirector : IDisposable
     private Func<string, bool>? _isPartyWideBuff;
     // The character's party-buff plan (Party window). Null / no reader ⇒ no party
     // buffs. Read live each pass so an edit in the Party window takes effect at once.
-    private Func<Models.Profile.PartyBuffSettings?>? _readPartyBuffs;
+    private Func<Models.Profile.BuffSettings?>? _readPartyBuffs;
     // "Is this member (given name) listed in the room's 'Also here:'?" — used ONLY to
     // clear a hidden-target back-off when the member reappears. Party membership already
     // guarantees same-room (if 'par' lists them they're here), so this is NOT a
@@ -470,7 +470,7 @@ public sealed class CastingDirector : IDisposable
     // Wire the party-buff plan source (CharacterProfile.PartyBuffs) so the party-buff
     // picker reads the user's configured slots. Optional — until wired, the picker
     // no-ops. Read live each pass so a Party-window edit takes effect immediately.
-    public void SetPartyBuffSource(Func<Models.Profile.PartyBuffSettings?> readPartyBuffs)
+    public void SetPartyBuffSource(Func<Models.Profile.BuffSettings?> readPartyBuffs)
     {
         ArgumentNullException.ThrowIfNull(readPartyBuffs);
         _readPartyBuffs = readPartyBuffs;
@@ -774,7 +774,7 @@ public sealed class CastingDirector : IDisposable
     private int SelfBuffMargin(string castCode)
     {
         if (_readPartyBuffs?.Invoke() is { } buffs)
-            foreach (Models.Profile.PartyBuffSlot slot in buffs.Slots)
+            foreach (Models.Profile.BuffSlot slot in buffs.Slots)
                 if (slot.CastOnSelf
                     && string.Equals(slot.Spell?.Trim(), castCode, StringComparison.OrdinalIgnoreCase))
                     return slot.RecastMarginSec;
@@ -1142,7 +1142,7 @@ public sealed class CastingDirector : IDisposable
             if (_readPartyBuffs?.Invoke() is { } buffs)
             {
                 int slotNo = 0;
-                foreach (Models.Profile.PartyBuffSlot slot in buffs.Slots)
+                foreach (Models.Profile.BuffSlot slot in buffs.Slots)
                 {
                     slotNo++;
                     string? code = slot.Spell?.Trim();
@@ -1640,7 +1640,7 @@ public sealed class CastingDirector : IDisposable
         // bless) is left to that party buff — skip self-casting the superseded spell.
         IReadOnlyDictionary<string, string>? covered = _selfBuffCoverage?.Invoke();
 
-        foreach (Models.Profile.PartyBuffSlot slot in buffs.Slots)
+        foreach (Models.Profile.BuffSlot slot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
 

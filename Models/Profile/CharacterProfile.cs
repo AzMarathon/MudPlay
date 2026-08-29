@@ -278,7 +278,7 @@ public sealed class CharacterProfile
     // slots the party-bless path casts, each with its own recast timer and (for
     // single-target buffs) its selected party members. Configured live in the
     // Party window, not the Settings tab. null means nothing configured yet.
-    public PartyBuffSettings? PartyBuffs { get; set; }
+    public BuffSettings? PartyBuffs { get; set; }
 
     // How the Buff Watchdog window arranges its config table vs the timer bars —
     // stacked (config top / bottom) or side-by-side (config left / right).
