@@ -37,6 +37,15 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     private bool _needsRebuild = true;
     private bool _disposed;
 
+    // Per whole-party buff (by cast code): the member given-names in the party the last
+    // time it was cast, and the timer's expiry we captured them at. Recast is driven by
+    // OUR OWN timer only — but a whole-party buff lands only on who was present, so a
+    // member who swaps in after the cast isn't covered until the next recast. We snapshot
+    // the roster when the timer first appears / jumps forward (a recast) and render a
+    // "not up" row for any current member not in the set, flagging who's missing it.
+    private readonly Dictionary<string, (DateTime Until, HashSet<string> Covered)> _wholePartyCoverage =
+        new(StringComparer.OrdinalIgnoreCase);
+
     // Live buff-timer bars, grouped by the player each buff is on: your own name
     // (self + whole-party buffs) first, then one section per party member carrying
     // the buffs cast on them.
@@ -119,12 +128,55 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     private void OnProfileLoaded(CharacterProfile p)
     {
         Layout = p.BuffWatchdogLayout;
+        _wholePartyCoverage.Clear();   // a new character starts with no tracked coverage
         MarkRebuildAndRefresh();
     }
 
     // A Settings Apply mutates the loaded profile in place (no ProfileLoaded), so
     // pick up a layout change chosen in Settings → General while this window is open.
     private void OnProfileMutated(CharacterProfile p) => Layout = p.BuffWatchdogLayout;
+
+    // Keep _wholePartyCoverage in step with the live whole-party timers: snapshot the
+    // party roster when a whole-party buff's timer first appears or jumps forward (a
+    // recast re-covers the then-current party), and drop coverage once its timer is gone.
+    private void ReconcileWholePartyCoverage(BuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
+    {
+        HashSet<string> active = new(StringComparer.OrdinalIgnoreCase);
+        if (buffs is not null)
+            foreach (BuffSlot p in buffs.Slots)
+            {
+                if (string.IsNullOrWhiteSpace(p.Spell)) continue;
+                string code = p.Spell.Trim();
+                if (!IsWholePartySlot(code)) continue;
+
+                ActiveBuffTimer? wp = null;
+                foreach (ActiveBuffTimer t in snap)
+                    if (t.Target.Length == 0
+                        && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase))
+                    { wp = t; break; }
+                if (wp is not { } timer) continue;
+
+                active.Add(code);
+                // First sighting, or a recast pushed the expiry later → (re)snapshot the
+                // current members as the covered set.
+                if (!_wholePartyCoverage.TryGetValue(code, out (DateTime Until, HashSet<string> Covered) cur)
+                    || timer.Until > cur.Until)
+                    _wholePartyCoverage[code] = (timer.Until, CurrentMemberGivens());
+            }
+
+        // Drop coverage for buffs whose timer is no longer up.
+        if (_wholePartyCoverage.Count > 0)
+            foreach (string gone in _wholePartyCoverage.Keys.Where(k => !active.Contains(k)).ToList())
+                _wholePartyCoverage.Remove(gone);
+    }
+
+    // Lower-cased given names of the current non-self party members.
+    private HashSet<string> CurrentMemberGivens()
+    {
+        HashSet<string> set = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string _, string given) in CurrentMembers()) set.Add(given);
+        return set;
+    }
 
     private void MarkRebuildAndRefresh()
     {
@@ -157,6 +209,10 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         SpellsSettings spells = _readSpells();
         BuffSettings? buffs = _readPartyBuffs();
         IReadOnlyList<ActiveBuffTimer> snap = _castDirector.SnapshotActiveBuffs();
+
+        // Refresh whole-party coverage before fingerprinting so a recast that re-covers
+        // a new member (or a member joining) reflows the rows.
+        ReconcileWholePartyCoverage(buffs, snap);
 
         string sig = BuildSignature(spells, buffs, snap);
         if (_needsRebuild || sig != _configSignature)
@@ -198,8 +254,17 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 continue;
             }
 
-            // Self-cast or whole-party row: one cast keyed to self (""). Self-cast rows
-            // may be covered by a configured party-wide buff.
+            // A whole-party MEMBER row for someone who wasn't in the party when the buff
+            // was cast (joined later) doesn't carry it — show "not up" until a recast
+            // re-covers the party. Covered members fall through to read the shared timer.
+            if (row.IsWholeParty && row.MemberKey.Length > 0 && !row.WholePartyCovered)
+            {
+                row.Update(null, now);
+                continue;
+            }
+
+            // Self-cast or (covered) whole-party row: one cast keyed to self (""). Self-
+            // cast rows may be covered by a configured party-wide buff.
             ActiveBuffTimer? entry = null;
             foreach (ActiveBuffTimer t in snap)
                 if (t.Target.Length == 0 && string.Equals(t.Short, row.CastCode, StringComparison.OrdinalIgnoreCase))
@@ -245,14 +310,31 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                     self.Rows.Add(new BuffWatchdogRowViewModel(code, isParty: false, name, "self", learned));
                 if (wholeParty)
                 {
-                    // Show a whole-party row only when it's actually being maintained
+                    // Show a whole-party buff only when it's actually being maintained
                     // (WholePartyOn = set to recast) OR is currently up. A configured-
                     // but-off whole-party buff with no live timer isn't surfaced.
                     bool wpActive = snap.Any(t => t.Target.Length == 0
                         && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase));
-                    if (p.WholePartyOn || wpActive)
-                        self.Rows.Add(new BuffWatchdogRowViewModel(
-                            code, isParty: true, name, "whole party", learned, isWholeParty: true));
+                    if (!(p.WholePartyOn || wpActive)) continue;
+
+                    // Self always carries a whole-party buff (it lands on us too).
+                    self.Rows.Add(new BuffWatchdogRowViewModel(
+                        code, isParty: true, name, "whole party", learned, isWholeParty: true));
+
+                    // One row under each CURRENT member: covered (in the party when it was
+                    // cast → reads the shared timer) or NOT covered (joined after → shows
+                    // "not up", flagging they lack the party buff). Recast is on OUR timer;
+                    // a new member is picked up on the next recast (which re-snapshots).
+                    if (wpActive)
+                    {
+                        _wholePartyCoverage.TryGetValue(code, out (DateTime Until, HashSet<string> Covered) cov);
+                        HashSet<string>? covered = cov.Covered;
+                        foreach ((string display, string given) in members)
+                            GetGroup(byName, display).Rows.Add(new BuffWatchdogRowViewModel(
+                                code, isParty: true, name, display, learned,
+                                isWholeParty: true, memberKey: given,
+                                wholePartyCovered: covered?.Contains(given) ?? false));
+                    }
                     continue;
                 }
 
@@ -373,14 +455,21 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 // A whole-party buff's row shows / hides on its self-keyed ("") timer
                 // arming or expiring (when it isn't auto-maintained), so fold that into
                 // the fingerprint — the member-keyed timers below only cover single-target.
+                string code = (p.Spell ?? string.Empty).Trim();
                 bool wpActive = IsWholePartySlot(p.Spell)
                     && snap.Any(t => t.Target.Length == 0
-                        && string.Equals(t.Short, (p.Spell ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
+                        && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase));
                 sb.Append(p.Spell).Append(':').Append(p.CastOnSelf ? "S" : "")
                   .Append(p.WholePartyOn ? "W" : "").Append(p.AllMembers ? "A" : "")
                   .Append(p.OnlyWhenHpFull ? "H" : "").Append(p.OnlyWhenMaFull ? "M" : "")
-                  .Append(wpActive ? "T" : "")
-                  .Append(string.Join(",", p.Targets)).Append('|');
+                  .Append(wpActive ? "T" : "");
+                // Which members a whole-party buff currently covers — so a recast that
+                // re-covers a swapped-in member reflows their row (roster joins / leaves
+                // already force a rebuild via the party collection-changed handler).
+                if (wpActive && _wholePartyCoverage.TryGetValue(code, out (DateTime Until, HashSet<string> Covered) cov))
+                    foreach (string g in cov.Covered.OrderBy(x => x, StringComparer.Ordinal))
+                        sb.Append('#').Append(g);
+                sb.Append(string.Join(",", p.Targets)).Append('|');
             }
         sb.Append("||");
         foreach (string k in snap.Where(t => t.Target.Length > 0)
