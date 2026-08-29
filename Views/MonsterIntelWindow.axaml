@@ -91,23 +91,12 @@
                 </Grid>
             </Border>
 
-            <!-- ===== Context bar: current room roster + combat target ===== -->
-            <Border Grid.Row="1" Classes="Group" Margin="0,0,0,10" IsVisible="{Binding HasContextBar}">
-                <StackPanel Spacing="6">
-                    <Grid ColumnDefinitions="*,Auto,Auto">
-                        <TextBlock Grid.Column="0" Classes="FieldLabel" VerticalAlignment="Center">
-                            <TextBlock.Text>
-                                <MultiBinding StringFormat="{}Current target: {0}">
-                                    <Binding Path="CurrentTargetName" TargetNullValue="(none)"/>
-                                </MultiBinding>
-                            </TextBlock.Text>
-                        </TextBlock>
-                        <CheckBox Grid.Column="1" Content="Follow target" IsChecked="{Binding FollowTarget, Mode=TwoWay}"
-                                   ToolTip.Tip="Auto-select whatever this character is currently fighting."/>
-                        <CheckBox Grid.Column="2" Content="Pin" IsChecked="{Binding Pinned, Mode=TwoWay}" Margin="12,0,0,0"
-                                   ToolTip.Tip="Hold the current detail view steady even while following is on."/>
-                    </Grid>
-                    <ItemsControl ItemsSource="{Binding RoomMonsters}" IsVisible="{Binding RoomMonsters.Count}">
+            <!-- ===== Context bar: current room's monster roster ===== -->
+            <Border Grid.Row="1" Classes="Group" Margin="0,0,0,10"
+                    IsVisible="{Binding HasContextBar}">
+                <StackPanel Spacing="6" IsVisible="{Binding RoomMonsters.Count}">
+                    <TextBlock Classes="FieldLabel" Text="In this room"/>
+                    <ItemsControl ItemsSource="{Binding RoomMonsters}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapPanel Orientation="Horizontal"/>

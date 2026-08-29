@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.2**
-> - Monster Intel: fixed Your Matchup's ranked attack spells ignoring undead-only/living-only targeting — an undead-only spell (e.g. a turn-undead-style attack) no longer ranks as usable against a living monster, and a living-only spell no longer ranks as usable against an undead one; both now show the reason instead of a damage number
+> **Version 3.37.3**
+> - Monster Intel: removed the "Current target" combat-following feature (Follow target / Pin checkboxes) — the target name changing every round kept resizing the context bar, which was more annoying than useful. The room-monster roster chips stay.
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
