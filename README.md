@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.0**
-> - Monster Intel is now character-centric: a new **character bar** at the top shows your live level/HP/mana (or Kai), your equipped weapon's HitMagic, and your known attack-spell count — updates live as HP/mana tick or you swap gear/learn a spell
-> - New **Hittable** / **Castable** list filters — narrow the monster list to what your currently-equipped weapon can actually hit, or what at least one of your known attack spells can get past spell immunity for
-> - Your Matchup's weapon/spell-capability computation is now shared with the character bar instead of being recomputed on every monster selection
+> **Version 3.37.1**
+> - Monster Intel: fixed Your Matchup's ranked attack spells ignoring undead-only/living-only targeting — an undead-only spell (e.g. a turn-undead-style attack) no longer ranks as usable against a living monster, and a living-only spell no longer ranks as usable against an undead one; both now show the reason instead of a damage number
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

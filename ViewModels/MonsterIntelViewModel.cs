@@ -225,9 +225,16 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             long maxDmg = SpellCalculator.MaxDamage(known.Formula, _stats!.Level);
             if (maxDmg <= 0) continue;   // not an attack spell
             int attType = _spellAttType.TryGetValue(known.Number, out int at) ? at : -1;
+            // Abil 23 / 108 (AbilityNames.cs) — a caster-side target-type gate
+            // independent of SpellImmu/resist: an undead-only spell (e.g. a
+            // turn-undead-style attack) does nothing to a living monster, and
+            // a living-only spell does nothing to an undead one.
+            bool undeadOnly = known.Formula.Abilities.Any(a => a.Code == 23);
+            bool livingOnly = known.Formula.Abilities.Any(a => a.Code == 108);
             _ownedAttackSpells.Add(new PlayerAttackSpell(
                 known.Name, known.Short, known.ReqLevel, attType,
-                maxDmg, SpellCalculator.ManaCost(known.Formula)));
+                maxDmg, SpellCalculator.ManaCost(known.Formula),
+                undeadOnly, livingOnly));
         }
         KnownAttackSpellCount = _ownedAttackSpells.Count;
         _maxKnownAttackSpellReqLevel = _ownedAttackSpells.Count > 0
@@ -512,7 +519,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         }
 
         foreach (SpellEffectivenessResult r in MonsterMatchupCalculatorSpells.RankAttackSpells(
-            _ownedAttackSpells, m.SpellImmunity, m.ElementalResists))
+            _ownedAttackSpells, m.SpellImmunity, m.ElementalResists, m.Undead))
             SpellEffectiveness.Add(r);
     }
 

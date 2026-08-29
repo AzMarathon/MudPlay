@@ -179,8 +179,9 @@ public sealed class MonsterMatchupCalculatorSpellsTests
 {
     private static PlayerAttackSpell Spell(
         string name = "fireball", string shortCode = "fire", int reqLevel = 10,
-        int attType = 1, long maxDmg = 100, long mana = 20) =>
-        new(name, shortCode, reqLevel, attType, maxDmg, mana);
+        int attType = 1, long maxDmg = 100, long mana = 20,
+        bool undeadOnly = false, bool livingOnly = false) =>
+        new(name, shortCode, reqLevel, attType, maxDmg, mana, undeadOnly, livingOnly);
 
     [Theory]
     [InlineData(5, 3, true)]
@@ -281,5 +282,61 @@ public sealed class MonsterMatchupCalculatorSpellsTests
             new[] { Spell(attType: 1) }, monsterSpellImmunity: 0, new Dictionary<int, int>());
 
         Assert.Equal("Fire", Assert.Single(result).Element);
+    }
+
+    // Abil 23 (AffectsUndeadOnly) / Abil 108 (AffectsLivingOnly) — a caster-
+    // side target-type gate independent of SpellImmu/resist.
+    [Fact]
+    public void RankAttackSpells_UndeadOnlySpell_BlockedAgainstLivingMonster()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(undeadOnly: true) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int>(), monsterIsUndead: false);
+
+        SpellEffectivenessResult r = Assert.Single(result);
+        Assert.False(r.Eligible);
+        Assert.Contains("undead only", r.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RankAttackSpells_UndeadOnlySpell_EligibleAgainstUndeadMonster()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(undeadOnly: true) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int>(), monsterIsUndead: true);
+
+        Assert.True(Assert.Single(result).Eligible);
+    }
+
+    [Fact]
+    public void RankAttackSpells_LivingOnlySpell_BlockedAgainstUndeadMonster()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(livingOnly: true) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int>(), monsterIsUndead: true);
+
+        SpellEffectivenessResult r = Assert.Single(result);
+        Assert.False(r.Eligible);
+        Assert.Contains("living only", r.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RankAttackSpells_LivingOnlySpell_EligibleAgainstLivingMonster()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(livingOnly: true) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int>(), monsterIsUndead: false);
+
+        Assert.True(Assert.Single(result).Eligible);
+    }
+
+    [Fact]
+    public void RankAttackSpells_NoTargetRestriction_DefaultsEligibleEitherWay()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell() }, monsterSpellImmunity: 0,
+            new Dictionary<int, int>(), monsterIsUndead: true);
+
+        Assert.True(Assert.Single(result).Eligible);
     }
 }
