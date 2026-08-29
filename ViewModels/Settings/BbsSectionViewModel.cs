@@ -80,7 +80,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _hasSysopPowers;
     [ObservableProperty] private int _terminalCols = 80;
     [ObservableProperty] private int _terminalRows = 25;
-    [ObservableProperty] private bool _autoFitToWindow;
     [ObservableProperty] private int _scrollbackLines = 4_000;
     [ObservableProperty] private int _backscrollWheelLines = 5;
 
@@ -577,7 +576,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         _display.BackscrollWheelLines = values.BackscrollWheelLines;
         _display.TerminalCols = values.TerminalCols;
         _display.TerminalRows = values.TerminalRows;
-        _display.AutoFitToWindow = values.AutoFitToWindow;
     }
 
     [RelayCommand]
@@ -655,7 +653,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         ReconnectAfterCleanup = profile.ReconnectAfterCleanup;
         TerminalCols = profile.TerminalCols;
         TerminalRows = profile.TerminalRows;
-        AutoFitToWindow = profile.AutoFitToWindow;
         ScrollbackLines = profile.ScrollbackLines;
         BackscrollWheelLines = profile.BackscrollWheelLines;
         GameEntryCommand = profile.GameEntryCommand;
@@ -839,7 +836,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         profile.ReconnectAfterCleanup = ReconnectAfterCleanup;
         profile.TerminalCols = TerminalCols;
         profile.TerminalRows = TerminalRows;
-        profile.AutoFitToWindow = AutoFitToWindow;
         profile.ScrollbackLines = ScrollbackLines;
         profile.BackscrollWheelLines = BackscrollWheelLines;
         profile.GameEntryCommand = string.IsNullOrWhiteSpace(GameEntryCommand)
@@ -911,7 +907,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnHasSysopPowersChanged(bool value)            { Dirty(); }
     partial void OnTerminalColsChanged(int value)               { PushToCache(); Dirty(); }
     partial void OnTerminalRowsChanged(int value)               { PushToCache(); Dirty(); }
-    partial void OnAutoFitToWindowChanged(bool value)           { PushToCache(); Dirty(); }
 
     partial void OnScrollbackLinesChanged(int value)            { PushToCache(); Dirty(); }
     partial void OnBackscrollWheelLinesChanged(int value)       { PushToCache(); Dirty(); }

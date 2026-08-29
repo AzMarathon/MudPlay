@@ -30,11 +30,6 @@ public sealed partial class DisplayConfig : ObservableObject
     [ObservableProperty] private int _terminalCols = 80;
     [ObservableProperty] private int _terminalRows = 25;
 
-    // When true, MainWindowViewModel grows TerminalCols/Rows to match the
-    // window as it's resized instead of holding them fixed. Sourced from the
-    // BBS-tier BbsProfile.AutoFitToWindow.
-    [ObservableProperty] private bool _autoFitToWindow;
-
     // Rows the Backscroll window advances per mouse-wheel notch. Mirrors the
     // BBS-tier BbsProfile.BackscrollWheelLines; the Backscroll window reads it
     // live so a change applies without reopening. Default 5.

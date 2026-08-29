@@ -178,13 +178,6 @@ public sealed class BbsProfile
     // Terminal rows to advertise via Telnet NAWS. Defaults to 25.
     public int TerminalRows { get; set; } = 25;
 
-    // When true, the app grows the advertised cols/rows to fill the window as
-    // it's resized, instead of always sending the fixed TerminalCols/Rows
-    // above. TerminalCols/Rows still act as the floor — auto-fit never
-    // advertises smaller than that, since MajorMUD's fixed 80x25 rendering
-    // assumes at least that grid (statline/room parsing key off it).
-    public bool AutoFitToWindow { get; set; }
-
     // How many scrolled-off rows the backscroll ring retains. Applies on
     // next launch — in-place ring resize would need to copy / drop rows and
     // is intentionally deferred.

@@ -906,12 +906,6 @@ Settings → "BBS + Display" — despite the plain "BBS" name in some places, th
 **What it does:** The terminal size MudPlay advertises to the server at connect time.
 **Important notes:** MajorMUD itself renders against a fixed 80×25 grid and won't reflow to a larger size — raising these numbers only helps with non-game BBS menus/doors that do reflow.
 
-### Auto-fit to window
-
-**Default:** off
-**What it does:** Grows the advertised Columns/Rows to match the window as you resize it, instead of holding them fixed. Columns/Rows above still act as the floor — auto-fit never advertises smaller than that, even on a small window.
-**Important notes:** Same MajorMUD caveat as above — a bigger grid only helps non-game BBS menus/doors that reflow; MajorMUD's own screens stay at their fixed 80×25 layout regardless of how large the window gets.
-
 ### Scrollback (lines)
 
 **Default:** `4000`
@@ -1942,7 +1936,6 @@ This section is a compact, technical lookup table for every setting documented a
 | Board disconnect line | `null` | pattern string | `DisconnectPattern` | Models/Settings/BbsProfile.cs |
 | Name of runic currency | `"runic"` | string | `RunicCurrencyName` | Models/Settings/BbsProfile.cs |
 | Columns / Rows (NAWS) | `80` / `25` | 40–200 / 20–100 | `TerminalCols` / `TerminalRows` | Models/Settings/BbsProfile.cs |
-| Auto-fit to window | `false` | bool | `AutoFitToWindow` | Models/Settings/BbsProfile.cs |
 | Scrollback (lines) | `4000` | 100–100,000 | `ScrollbackLines` | Models/Settings/BbsProfile.cs |
 | Wheel scroll (lines) | `5` | 1–50 | `BackscrollWheelLines` | Models/Settings/BbsProfile.cs |
 | Username / Password (per-char) | `null` | encrypted string | `EncryptedUsername` / `EncryptedPassword` | Models/Profile/BbsCredentials.cs |

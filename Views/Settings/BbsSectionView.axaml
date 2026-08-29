@@ -185,16 +185,11 @@
                                        ToolTip.Tip="Rows the Backscroll window advances per mouse-wheel notch."/>
                     </Grid>
 
-                    <CheckBox Margin="0,4,0,0"
-                              IsChecked="{Binding AutoFitToWindow, Mode=TwoWay}"
-                              Content="Auto-fit to window"
-                              ToolTip.Tip="Grows Columns/Rows to fill the window as it's resized. Columns/Rows above still act as the floor — auto-fit never advertises smaller than that."/>
-
                     <TextBlock Margin="0,4,0,0"
                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                FontSize="{StaticResource FontSizeSm}"
                                TextWrapping="Wrap"
-                               Text="Columns / rows are advertised via Telnet NAWS. MajorMUD renders against a fixed 80×25 grid and won't reflow if you push higher; non-game BBS doors usually do reflow. With Auto-fit checked, Columns/Rows become the minimum — the grid grows past them to fill a larger window."/>
+                               Text="Columns / rows are advertised via Telnet NAWS. MajorMUD renders against a fixed 80×25 grid and won't reflow if you push higher; non-game BBS doors usually do reflow."/>
 
                     <TextBlock Classes="GroupHeader"
                                Text="Credentials  —  The settings shown below are saved per character profile"/>

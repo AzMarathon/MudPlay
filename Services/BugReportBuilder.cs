@@ -53,7 +53,7 @@ public static class BugReportBuilder
 
         List<Section> sections =
         [
-            new("Session", SafeSection(() => BuildSession(svc, realm, now, emulator))),
+            new("Session", SafeSection(() => BuildSession(svc, realm, now))),
             new("Player state", SafeSection(() => BuildPlayerState(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),
             new("Inventory", SafeSection(() => BuildInventory(svc))),
@@ -141,17 +141,12 @@ public static class BugReportBuilder
 
     // ----- Section builders ----------------------------------------------
 
-    private static string BuildSession(AppServices svc, RealmType realm, DateTimeOffset now, TerminalEmulator emulator)
+    private static string BuildSession(AppServices svc, RealmType realm, DateTimeOffset now)
     {
         StringBuilder sb = new();
         Kv(sb, "Version", AppInfo.Version);
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
-        // Live grid vs. configured floor — a "the window doesn't match my
-        // terminal" or "auto-fit isn't growing" report hinges on seeing both.
-        Kv(sb, "Terminal grid", svc.Display.AutoFitToWindow
-            ? $"{emulator.Screen.Cols}x{emulator.Screen.Rows} (auto-fit on, floor {svc.Display.TerminalCols}x{svc.Display.TerminalRows})"
-            : $"{emulator.Screen.Cols}x{emulator.Screen.Rows} (auto-fit off)");
         Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
         Kv(sb, "Character", svc.Profile.CurrentProfileName ?? "(none loaded)");
         Kv(sb, "BBS", svc.Profile.CurrentBbsName ?? "(none)");
