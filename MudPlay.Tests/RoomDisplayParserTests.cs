@@ -603,6 +603,32 @@ public sealed class RoomDisplayParserTests : IDisposable
     }
 
     [Fact]
+    public void ColorAnchor_BrightCyanAbilityBeforeTitle_PicksNearestRoomTitle()
+    {
+        // Regression (paradigm-20260829-154032): another player entered while
+        // our move was landing, then emitted a bright-cyan ability line before
+        // the server printed the real bright-cyan room title. Retaining the
+        // FIRST cyan line produced the impossible observation
+        // "Astro invokes the way of the monkey!" + the room's exits, knocked
+        // the tracker to Suspect, and caused the paused loop to retry its
+        // already-completed move into a wall. The title nearest the exits wins.
+        (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
+
+        parser.FeedTestEmittedLines(new[]
+        {
+            ColoredLine("Astro walks into the room from the southeast.", DefaultAttr),
+            ColoredLine("Astro invokes the way of the monkey!", BrightCyanSgr1Then36),
+            ColoredLine("A leafling walks into the area.", DefaultAttr),
+            ColoredLine("Town Gates", BrightCyanSgr1Then36),
+            ColoredLine("Also here: leafling.", DefaultAttr),
+            ColoredLine("Obvious exits: north.", DefaultAttr),
+        });
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
     public void ColorAnchor_CrowdedRoom_TitleSurvivesRollingBufferEviction()
     {
         // Live GH rooms can list hundreds of wrapped floor items. The title is

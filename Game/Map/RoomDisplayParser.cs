@@ -12,9 +12,11 @@ namespace MudPlay.Game.Map;
 //
 // Room-name detection runs in two passes over the most-recent block (delimited
 // by a blank line, a movement transition, or a stray prompt-shaped line):
-//   1. Colour-anchored: prefer the first line whose non-space cells are all
+//   1. Colour-anchored: prefer the last line whose non-space cells are all
 //      bright cyan — the canonical room-name styling in MajorMUD's display.
 //      SGR 96 (index 14) and SGR 1;36 (index 6 + Bold) both qualify.
+//      The nearest candidate wins because asynchronous player abilities use
+//      the same colour and can arrive immediately before the actual title.
 //   2. Text fallback: when colour data is absent (tests, replays without
 //      attributes) or the realm renders names without bright cyan, return the
 //      first non-blank line that doesn't look like a command echo (single
@@ -139,11 +141,14 @@ public sealed partial class RoomDisplayParser : IDisposable
         }
 
         // Keep the retained title scoped to the same output block as the
-        // rolling buffer. A boundary belongs to the old block; the first cyan
-        // line after it can then become the next room title.
+        // rolling buffer. A boundary belongs to the old block. Within the new
+        // block retain the MOST RECENT bright-cyan line: player abilities such
+        // as "Astro invokes the way of the monkey!" use the same styling and
+        // can precede the real room title in an arrival burst. The title is the
+        // nearest bright-cyan line before "Obvious exits:", so last wins.
         if (IsBlockBoundary(line.Text))
             _brightCyanRoomName = null;
-        else if (_brightCyanRoomName is null && IsLineDominantlyBrightCyan(line))
+        else if (IsLineDominantlyBrightCyan(line))
             _brightCyanRoomName = line.Text.Trim();
 
         if (_buffer.Count >= BufferCapacity) _buffer.RemoveAt(0);
@@ -220,11 +225,13 @@ public sealed partial class RoomDisplayParser : IDisposable
         || PromptLikePattern().IsMatch(text)
         || PartyChatterBoundaryPattern().IsMatch(text);
 
-    // First bright-cyan line at or after start, or null when the range holds
-    // none. Blank lines are skipped, never treated as a stop.
+    // Last bright-cyan line at or after start, or null when the range holds
+    // none. The line nearest "Obvious exits:" is the room title when an
+    // asynchronous bright-cyan ability message precedes the display. Blank
+    // lines are skipped, never treated as a stop.
     private string? FindBrightCyanLine(int start)
     {
-        for (int i = System.Math.Max(start, 0); i < _buffer.Count; i++)
+        for (int i = _buffer.Count - 1; i >= System.Math.Max(start, 0); i--)
         {
             LineExtractor.EmittedLine line = _buffer[i];
             if (string.IsNullOrWhiteSpace(line.Text)) continue;

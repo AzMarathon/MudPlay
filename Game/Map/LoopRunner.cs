@@ -1613,6 +1613,28 @@ public sealed class LoopRunner : IRecoverableEngine
                 StartOrResumeDelayTimer();
                 return;
             }
+            // A confidence drop can land while a coordinator gate has us
+            // Paused. OnTrackerStateChanged deliberately ignores tracker events
+            // outside Running, so that Suspect/Lost/Unknown transition never
+            // reaches its normal recovery-forwarding branch. Never fall through
+            // and re-send the stale in-flight direction from an unknown physical
+            // room: the original move may already have succeeded, in which case
+            // the duplicate walks into a wall (paradigm-20260829-154032). Ask the
+            // recovery gate for an authoritative position; its Paradigm rm path
+            // immediately re-pauses us until ResumeAfterRecovery can either
+            // advance the completed step or reroute from the real room.
+            if (_stepInFlight
+                && _tracker.State.Confidence is RoomConfidence.Suspect
+                                                or RoomConfidence.Lost
+                                                or RoomConfidence.Unknown)
+            {
+                RoomConfidence confidence = _tracker.State.Confidence;
+                _log?.Warn("LoopRunner",
+                    $"resume: step {_index + 1} location is {confidence}; requesting recovery, not re-sending");
+                _recovery?.NoteSuspectedMismatch(
+                    $"tracker {confidence} while resuming in-flight loop step {_index + 1}");
+                return;
+            }
             // Arrived-while-paused guard: while paused we ignore tracker events,
             // so an in-flight move whose arrival landed during the pause window
             // leaves _index stale. Detect it by position, not posture — if the
