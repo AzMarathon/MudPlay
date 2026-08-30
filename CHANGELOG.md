@@ -2,9 +2,9 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.36.9
+## 3.36.10
 
-- Roomba gangpath announcements now include the start/finish date and time (with the sending client's own timezone offset), not just a bare "starting"/"complete" line
+- Roomba gangpath announcements now include the start/finish date and time, with the sending client's own timezone (a short name like PST/MST/EST for the common North American zones, a numeric UTC offset otherwise) instead of a bare "starting"/"complete" line
 - Sorting's completion announce now reports items sorted AND items inventoried — its recon and final scan already observe every room's floor the same way an Inventory-only run does, so a sort keeps the item-location log just as current
 - `@roomba <item>` replies now include the last-scanned date/time (with timezone) of that item's freshest sighting, so you can tell a fresh location from a stale one
 

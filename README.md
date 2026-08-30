@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.36.9**
-> - Roomba gangpath announcements now include the start/finish date and time (with the sending client's own timezone offset), not just a bare "starting"/"complete" line
+> **Version 3.36.10**
+> - Roomba gangpath announcements now include the start/finish date and time, with the sending client's own timezone (a short name like PST/MST/EST for the common North American zones, a numeric UTC offset otherwise) instead of a bare "starting"/"complete" line
 > - Sorting's completion announce now reports items sorted AND items inventoried — its recon and final scan already observe every room's floor the same way an Inventory-only run does, so a sort keeps the item-location log just as current
 > - `@roomba <item>` replies now include the last-scanned date/time (with timezone) of that item's freshest sighting, so you can tell a fresh location from a stale one
 >
