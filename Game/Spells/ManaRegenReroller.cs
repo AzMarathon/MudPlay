@@ -21,24 +21,26 @@ public readonly record struct ManaRegenRerollConfig(int? Threshold, int Cap);
 // hard-stopping early if the next cast can't be paid without dropping under the
 // buff floor.
 //
-// Purely a state machine driven by two external events: a confirmed roll-spell
-// landing (OnRollSpellLanded, wired from the CastingDirector's buff-confirmation
-// path) and a parsed abil breakdown (AbilBreakdownParser.BreakdownParsed). It
-// owns no timers, no wire access, and no spell classification: the caller only
-// invokes OnRollSpellLanded for a spell it has already resolved to a code-145
-// roll spell, and supplies the query / recast / afford actions. This keeps the
-// decision logic deterministic and unit-testable.
+// Purely a state machine driven by two external events: the roll spell being CAST
+// (OnRollSpellLanded, wired from the CastingDirector's send path — NOT the
+// applied-line confirm, which never fires for a roll spell because it lands via a
+// shared condition that can't be mapped back to the specific spell) and a parsed
+// abil breakdown (AbilBreakdownParser.BreakdownParsed). It owns no timers, no wire
+// access, and no spell classification: the caller only invokes OnRollSpellLanded
+// for a spell it has already resolved to a code-145 roll spell, and supplies the
+// query / recast / afford actions. This keeps the decision logic deterministic and
+// unit-testable.
 //
 // The Stock realm has no abil breakdown to read, so the reroll path is
 // Paradigm-only; the caller gates construction / invocation on the active
 // realm. Stock infers roll quality from observed regen ticks on a separate
 // path.
 //
-// Cycle life: a landing while idle opens a cycle and zeroes the reroll counter;
-// a landing mid-cycle is the recast we asked for and preserves the counter.
+// Cycle life: a cast while idle opens a cycle and zeroes the reroll counter;
+// a cast mid-cycle is the recast we asked for and preserves the counter.
 // Either way it fires one abil 145 query. The returned breakdown decides accept
 // (roll >= threshold, cap reached, or floor hit) or reroll (recast, counter++).
-// Serial by construction — each abil read is bracketed by a landing, so there
+// Serial by construction — each abil read is bracketed by a cast, so there
 // is never more than one query in flight.
 public sealed class ManaRegenReroller : IDisposable
 {
@@ -111,11 +113,12 @@ public sealed class ManaRegenReroller : IDisposable
     // report, so a "reroll isn't working" capture shows what value the engine saw.
     public int? LastObservedValue { get; private set; }
 
-    // The roll spell spellShort just landed (confirmed via its caster / applied
-    // message). A landing while idle opens a new cycle with the reroll counter
-    // reset; a landing mid-cycle is the recast we triggered and keeps the
-    // counter. Either way, fire an abil 145 query to read what it rolled. No-op
-    // (and abandons any cycle) when rerolling is disabled.
+    // The roll spell spellShort was just CAST (from the CastingDirector's send path;
+    // the cast is already on the wire, so the abil query below reads the fresh roll).
+    // A cast while idle opens a new cycle with the reroll counter reset; a cast
+    // mid-cycle is the recast we triggered and keeps the counter. Either way, fire an
+    // abil 145 query to read what it rolled. No-op (and abandons any cycle) when
+    // rerolling is disabled.
     public void OnRollSpellLanded(string spellShort)
     {
         if (string.IsNullOrWhiteSpace(spellShort)) return;
