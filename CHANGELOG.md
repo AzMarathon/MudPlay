@@ -2,59 +2,43 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.37.2
-
-- Monster Intel: removed the "Current target" combat-following feature (Follow target / Pin checkboxes) — the target name changing every round kept resizing the context bar, which was more annoying than useful. The room-monster roster chips stay.
-
-## 3.37.1
-
-- Monster Intel: fixed Your Matchup's ranked attack spells ignoring undead-only/living-only targeting — an undead-only spell (e.g. a turn-undead-style attack) no longer ranks as usable against a living monster, and a living-only spell no longer ranks as usable against an undead one; both now show the reason instead of a damage number
-
-## 3.37.0
-
-- Monster Intel is now character-centric: a new **character bar** at the top shows your live level/HP/mana (or Kai), your equipped weapon's HitMagic, and your known attack-spell count — updates live as HP/mana tick or you swap gear/learn a spell
-- New **Hittable** / **Castable** list filters — narrow the monster list to what your currently-equipped weapon can actually hit, or what at least one of your known attack spells can get past spell immunity for
-- Your Matchup's weapon/spell-capability computation is now shared with the character bar instead of being recomputed on every monster selection
-
-## 3.36.3
-
-- Monster Intel: Locations panel no longer dumps the raw MDB "Summoned By" field (an unreadable room-code blob) — shows a quick "Placed in N rooms / Spawns in M lairs" count instead
-- For the full room-by-room list, use the Game Data Browser's Monsters tab or the Room Info panel — Monster Intel stays a fast-lookup summary
-
-## 3.36.2
-
-- Monster Intel: every list column is now independently sortable (previously only Name/HP/Exp were; the rest silently sorted alphabetically on formatted text)
-- AC and DR split into two separate sortable columns instead of one combined "AC/DR" column
-- Name column capped so it can't balloon to take the whole pane
-
-## 3.36.1
-
-- Monster Intel: fixed the master list being too cramped to read — the window opens wider, the list/detail divider is now a draggable, per-character-remembered splitter, and the list's columns size themselves to their content instead of clipping headers
-
 ## 3.36.0
 
-- Monster Intel: new **Your Observations** section — a per-character log of actual combat outcomes seen against a monster, kept visibly separate from the game-data facts elsewhere in the window
-- Tracks landed-hit damage extent/average, hit rate, and confirmed "no effect" discoveries (physical Magical-requirement gate, spell SpellImmunity gate); persists per character
-- Deliberately doesn't attempt to infer a "resisted" cast from a low damage roll — no wire line distinguishes the two, so only the confirmed no-effect case is tracked
+- New **Monster Intel** window (View menu / toolbar) — a fast, searchable monster reference that for the first time surfaces a monster's **elemental resistances / vulnerabilities** (Cold/Fire/Stone/Lightning/Water) and its **spell-immunity / hit-magic requirements**, data the auto-combat engine has always computed internally but never showed. Detail panel: Overview, Elemental Defenses, Casts (what elements it can hit you with), Attacks, Loot, Locations (a quick "placed in N rooms / spawns in M lairs" count), and an Automation tab that opens the per-monster overlay editor in place
+- **Character-centric**: a top character bar shows your live level / HP / mana (or Kai), your worn weapon's HitMagic, and your known attack-spell count — updating live as vitals tick or you swap gear / learn a spell; plus **Hittable** / **Castable** list filters that narrow the list to what your weapon can actually hit or a known spell can get past spell immunity
+- **Your Matchup** (live, character-aware): whether your worn weapon is magical enough to hit the monster, a per-element incoming-threat line vs. your own gear's resists, and every attack spell you've learned ranked by effective damage against that specific monster — with a clear reason (spell immunity, full resist, undead-only / living-only targeting) instead of a silently-wrong number
+- **Side-by-side comparison**: Ctrl/Shift-click 2+ monsters to swap the detail panel for a row of comparison cards
+- **Context bar**: the current room's monster roster as clickable chips
+- **Your Observations**: a per-character log of actual combat outcomes against a monster — landed-hit damage extent / average, hit rate, and confirmed "no effect" discoveries — kept visibly separate from the game-data facts and persisted per character; deliberately doesn't infer "resisted" from a low roll (no wire line distinguishes the two)
+- New typed **`MonsterCatalog`** — the active game-data set's Monsters table parsed once into a shared model, the foundation Monster Intel reads from
+- The list opens wider with a draggable, per-character-remembered splitter; every column is independently sortable; AC and DR are separate columns
 
-## 3.35.3
+## 3.35.4
 
-- Monster Intel: new context bar — shows every monster in your current room as clickable chips and your current combat target's name
-- **Follow target** (on by default) auto-selects whatever you're currently fighting as it changes targets mid-fight
-- **Pin** holds the detail panel (or an in-progress comparison) steady, ignoring target changes
-
-## 3.35.2
-
-- Monster Intel: select 2+ monsters in the list (Ctrl/Shift-click) to compare them side by side — a row of cards showing HP, Exp, AC/DR, Dodge, MR, Acc, Mag, SpellImmu, Resists, Casts, and Undead per monster, in place of the single-monster detail panel
+- Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the exact same already-refused move, get refused again, and then just sit there until an unrelated event nudged it back to life (observed stalls from several minutes to over an hour). The loop now recognizes this on resume and enters recovery (reroutes) immediately.
+- Fixed a related stall: an ambiguous room observation that landed the tracker in Suspect while the loop was paused was also silently dropped — since the tracker can't re-arm Pending from Suspect, a refusal on the blind resend was ALSO dropped, stranding the loop with no way out. It now forwards this case to the recovery gate on resume, exactly like it does in real time.
+- bug reports addressed: paradigm-20260829-084558, paradigm-20260829-104437, paradigm-20260829-111627
 
 ## 3.35.1
 
-- Monster Intel: new **Your Matchup** panel (live, character-aware) — whether your currently-worn weapon is magical enough to hit the monster physically, an incoming-elemental-threat line per element it casts (vs. your own worn-gear resists), and every attack spell you've obtained ranked by effective damage against that specific monster, with a clear reason shown for anything blocked by spell immunity or full elemental resistance instead of a silently-wrong number
+- Roomba: starting a sweep or an inventory scan now gangpaths the gang house that it's underway, and finishing announces completion with a count — items moved for a sweep, items inventoried for a scan
+- Counts are true unit totals (a stacked pile counts as its full size, not as one operation) and only fire on a genuine finish, never on a manual stop or an interrupted sweep
 
 ## 3.35.0
 
-- New **Monster Intel** window (View menu, or the toolbar) — a searchable monster reference, one click away without leaving the client. For the first time, surfaces a monster's **elemental resistances/vulnerabilities** (Cold/Fire/Stone/Lightning/Water) and its **spell-immunity / hit-magic requirements** — data the auto-combat engine has always computed internally but never showed the player. Detail panel covers Overview, Elemental Defenses, Casts (what elements it can hit you with), Attacks, Loot, Locations, and an Automation tab that opens the existing per-monster overlay editor in place
-- New typed `MonsterCatalog` — the active game-data set's Monsters table parsed once into a shared typed model, foundation for Monster Intel and future consolidation of the half-dozen independent raw-JSON monster indexes already in the codebase
+- Unified buffing: **all** automated buffing — self bless, mana/HP regen, "when HP/MA full", room light, and party buffs — now lives in **one list in the Buff Watchdog** window, replacing the Settings → Spells self-bless pickers and the Party-window buff panel
+- Each buff picks who it's cast on with checkboxes — yourself and/or party members; **"All"** is a select-all (you + every member, auto-adapting to the party) that clears the moment you untick any box
+- Timer bars are grouped **by player** (your name, then each member) instead of a Self/Party split
+- Buff Watchdog layout — config table above / below / left / right of the bars — is chosen on Settings → General, with a draggable splitter that stays put as you resize the window (the config pane keeps its size, the timer bars flex to fill)
+- Buff timer bars now sit directly on the pane background — no sunken strip stretching behind the short bars, no full-width row dividers
+- Buff Watchdog player sections use your real **in-game character name**, not the profile name
+- A configured buff that isn't set to recast on anyone and has no live timer is no longer listed — only maintained or currently-up buffs show a bar
+- A whole-party buff now shows a bar under **each member who was in the party when it was cast**; a member who swaps in afterwards reads **not up**, so you can see who's actually covered (recast stays driven by your own timer)
+- Hand-casting a single-target buff at a party member (`gbls fuj`) now lights up **that member's** bar — the success line's full name is matched back to whoever you targeted, so a shorthand still resolves correctly
+- Add-buff dialog carries per-slot conditions: only-when-HP/MA-full (fires at your rest-max, not literal full), only-when-dark for light spells, and — for a mana-regen roll spell — cast-before-resting plus the reroll threshold / max-rerolls
+- Mana-regen rerolling reads its config from the buff slot (works on Paradigm via `abil 145`); the auto-light system reads the room-light spell from the buff list
+- Your full buff plan is written to the program log on load / edit (and captured in the bug report) so a "buffs aren't working" report shows exactly how they're set up
+- Existing self-bless / regen / light / party-buff configs are migrated into the new list automatically
 
 ## 3.34.0
 

@@ -90,9 +90,8 @@ public sealed record MonsterCatalogEntry(
     // value of any such slot. Null when the monster has no physical attack at
     // all (spell-only). This is a typed equivalent of
     // MonstersSectionViewModel.ComputeAttackAccuracy's existing highest-single-
-    // chance logic — deliberately NOT the real upstream majority-threshold
-    // formula (see the Monster Intel plan's deferred correctness item; that fix
-    // is unconfirmed and out of scope here, not forgotten).
+    // chance logic — deliberately NOT the true majority-threshold accuracy
+    // formula, which is unconfirmed and left for a follow-up rather than guessed.
     public (int Majority, int Max)? PhysicalAccuracy
     {
         get
@@ -149,44 +148,19 @@ public sealed class MonsterCatalog
 
     private readonly GameDataCache _cache;
     private Dictionary<int, MonsterCatalogEntry>? _byNumber;
-    private Dictionary<string, List<int>>? _byName;
 
     public MonsterCatalog(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
-        _cache.ActiveSetChanged += _ => { _byNumber = null; _byName = null; };
+        _cache.ActiveSetChanged += _ => _byNumber = null;
     }
 
     // The monster record for Number, or null when unknown in the active set.
     public MonsterCatalogEntry? Get(int number)
         => Build().TryGetValue(number, out MonsterCatalogEntry? e) ? e : null;
 
-    // Every Number sharing this display name (case-insensitive) — the active
-    // set has 600+ names that resolve to more than one record, so a name alone
-    // never uniquely identifies a monster; callers needing the right variant
-    // for a specific room use RoomAwareMonsterResolver, not this.
-    public IReadOnlyList<int> NumbersByName(string name)
-    {
-        BuildNameIndex();
-        return _byName!.TryGetValue(name, out List<int>? nums) ? nums : Array.Empty<int>();
-    }
-
     public IReadOnlyCollection<MonsterCatalogEntry> All => Build().Values;
-
-    private void BuildNameIndex()
-    {
-        if (_byName is not null) return;
-        Dictionary<int, MonsterCatalogEntry> byNumber = Build();
-        Dictionary<string, List<int>> byName = new(StringComparer.OrdinalIgnoreCase);
-        foreach (MonsterCatalogEntry e in byNumber.Values)
-        {
-            if (!byName.TryGetValue(e.Name, out List<int>? nums))
-                byName[e.Name] = nums = new List<int>();
-            nums.Add(e.Number);
-        }
-        _byName = byName;
-    }
 
     private Dictionary<int, MonsterCatalogEntry> Build()
     {

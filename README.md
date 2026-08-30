@@ -1,8 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.2**
-> - Monster Intel: removed the "Current target" combat-following feature (Follow target / Pin checkboxes) — the target name changing every round kept resizing the context bar, which was more annoying than useful. The room-monster roster chips stay.
+> **Version 3.36.0**
+> - New **Monster Intel** window (View menu / toolbar) — a fast, searchable monster reference that surfaces, for the first time, a monster's **elemental resistances / vulnerabilities** and its **spell-immunity / hit-magic requirements** (data the auto-combat engine computed internally but never showed); detail panel covers Overview, Elemental Defenses, Casts, Attacks, Loot, Locations, and an Automation tab
+> - **Character-centric**: a live character bar (level / HP / mana-or-Kai, worn weapon HitMagic, known attack-spell count) plus **Hittable** / **Castable** list filters
+> - **Your Matchup** ranks your learned attack spells by effective damage against the selected monster (with reasons for immunity / full resist / undead-only / living-only), and flags whether your weapon is magical enough to hit it
+> - Side-by-side comparison (Ctrl/Shift-click 2+ monsters), a current-room monster context bar, and a per-character **Your Observations** log of real combat outcomes (landed damage, hit rate, confirmed no-effect)
+> - A wider window with a draggable, per-character splitter and independently-sortable columns
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

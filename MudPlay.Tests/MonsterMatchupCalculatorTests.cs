@@ -172,9 +172,8 @@ public sealed class MonsterMatchupCalculatorTests
 }
 
 // Pins MonsterMatchupCalculatorSpells — the Monster Intel "Your Matchup"
-// panel's spell-vs-monster ranking (Phase 3 of the Monster Intel plan): the
-// weapon-vs-Magical eligibility gate and RankAttackSpells' SpellImmu /
-// elemental-resist logic.
+// panel's spell-vs-monster ranking: the weapon-vs-Magical eligibility gate and
+// RankAttackSpells' SpellImmu / elemental-resist logic.
 public sealed class MonsterMatchupCalculatorSpellsTests
 {
     private static PlayerAttackSpell Spell(

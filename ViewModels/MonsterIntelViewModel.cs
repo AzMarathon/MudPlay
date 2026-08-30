@@ -32,9 +32,7 @@ namespace MudPlay.ViewModels;
 // elemental threat), monster-vs-monster comparison, a context bar showing
 // the current room's roster (click a chip to select it), and a per-character
 // log of actual combat outcomes this character has observed against the
-// selected monster. Combat-target following/pinning was tried and pulled —
-// the constantly-resizing header from the changing target name was more
-// annoying than the auto-select was useful.
+// selected monster.
 public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposable
 {
     private readonly GameDataCache _gameData;
@@ -297,8 +295,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private void Close() => CloseRequested?.Invoke();
 
     // Clicking a context-bar room-roster chip selects it directly, same as
-    // clicking its grid row would — overrides follow/pin for that one pick,
-    // same as picking any other row in the master list does.
+    // clicking its grid row in the master list would.
     [RelayCommand]
     private void SelectMonster(MonsterIntelEntry? entry)
     {
@@ -319,15 +316,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [NotifyPropertyChangedFor(nameof(ShowPlaceholder))]
     private bool _hasSelection;
 
-    // ----- Your Matchup (Phase 3 — needs a live character; blank without one) -----
+    // ----- Your Matchup (needs a live character; blank without one) -----
     public ObservableCollection<string> MatchupLines { get; } = new();
     public ObservableCollection<SpellEffectivenessResult> SpellEffectiveness { get; } = new();
     public ObservableCollection<string> IncomingThreatLines { get; } = new();
     [ObservableProperty] private bool _hasMatchupContext;
 
-    // ----- Your Observations (Phase 5 — actual combat outcomes this
-    // character has seen against the selected monster; blank until at least
-    // one has been recorded) -----
+    // ----- Your Observations (actual combat outcomes this character has seen
+    // against the selected monster; blank until at least one has been recorded) -----
     public ObservableCollection<string> ObservationLines { get; } = new();
     [ObservableProperty] private bool _hasObservations;
 
@@ -416,7 +412,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private void ClearObservations() => _observations?.Clear();
 
-    // Live-character matchup preview (Phase 3). Deliberately does NOT
+    // Live-character matchup preview. Deliberately does NOT
     // reproduce the Calculators tab's melee hit%/DPS engine (weapon swing
     // counts, crit chance, realm-aware accuracy) — that's real, intricate,
     // already-correct logic with its own tested home; duplicating it here

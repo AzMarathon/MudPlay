@@ -6,9 +6,8 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// Pins MonsterCatalog — the typed, parsed-once view of the Monsters table
-// (Phase 1 of the Monster Intel plan). Covers raw-field fidelity (no silent
-// slot truncation — the same discipline mmud-planner's own tests apply),
+// Pins MonsterCatalog — the typed, parsed-once view of the Monsters table.
+// Covers raw-field fidelity (no silent slot truncation),
 // the byte-boolean Undead quirk, the pre-resolved elemental resist/Magical/
 // SpellImmu/Dodge/NonLiving fields (must match MonsterResistIndex /
 // MonsterMagicIndex / MonsterLifeIndex exactly, since those stay authoritative
@@ -44,8 +43,8 @@ public sealed class MonsterCatalogTests : IDisposable
     //    slot (Type 2, Accuracy holds spell 501 fireball) and a mid-spell slot
     //    (502 icebolt) so CastsElements should read {Fire, Cold}; also carries
     //    Resist-Fire 50, Magical 3, SpellImmu 5, Dodge 12, NonLiving.
-    // #3 "giant rat" (again) — a second record sharing #1's name, to exercise
-    //    NumbersByName's ambiguous-name grouping.
+    // #3 "giant rat" (again) — a second record sharing #1's name, so a duplicate
+    //    display name across two numbers is exercised in the parsed set.
     // #4 "ghost" — casts only a Normal (4) attack spell (turn undead) and a
     //    Poison (6) mid-spell (plague) — CastsElements should read {Poison}
     //    only (Normal excluded), and an unresolved spell number (999) in a
@@ -211,21 +210,6 @@ public sealed class MonsterCatalogTests : IDisposable
     [Fact]
     public void PhysicalAccuracy_SpellOnlyMonster_IsNull()
         => Assert.Null(NewCatalog().Get(2)!.PhysicalAccuracy);
-
-    [Fact]
-    public void NumbersByName_AmbiguousName_ReturnsEveryMatchingNumber()
-    {
-        IReadOnlyList<int> nums = NewCatalog().NumbersByName("giant rat");
-        Assert.Equal(new[] { 1, 3 }, nums.OrderBy(n => n));
-    }
-
-    [Fact]
-    public void NumbersByName_CaseInsensitive()
-        => Assert.NotEmpty(NewCatalog().NumbersByName("GIANT RAT"));
-
-    [Fact]
-    public void NumbersByName_UnknownName_ReturnsEmpty()
-        => Assert.Empty(NewCatalog().NumbersByName("nonexistent"));
 
     [Fact]
     public void All_ReturnsEveryParsedMonster()

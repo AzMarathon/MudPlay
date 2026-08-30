@@ -124,7 +124,7 @@ public sealed class SpellbookState
         && item.Unlimited && IsWholePartySpellNumber(item.SpellNumber);
 
     private bool IsWholePartySpellNumber(int spellNumber) =>
-        _catalog.GetTargetsByNumber(spellNumber) is { } targets && PartyBuffClassifier.IsWholeParty(targets);
+        _catalog.GetTargetsByNumber(spellNumber) is { } targets && BuffClassifier.IsWholeParty(targets);
 
     // Items.Number of the first item that teaches the given spell (LearnSp), or 0
     // when none does. Backs the Spell Book's double-click-to-item-record.

@@ -14,7 +14,7 @@ public sealed class CharacterProfile
 {
     // The schema version a freshly-authored (fully-migrated) profile carries.
     // Bump in lockstep with a new Services.ProfileMigrations step.
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 4;
 
     // JSON schema version (see GlobalSettings.SchemaVersion for the contract).
     // A fresh profile is authored at CurrentSchemaVersion so it never triggers a
@@ -287,7 +287,11 @@ public sealed class CharacterProfile
     // slots the party-bless path casts, each with its own recast timer and (for
     // single-target buffs) its selected party members. Configured live in the
     // Party window, not the Settings tab. null means nothing configured yet.
-    public PartyBuffSettings? PartyBuffs { get; set; }
+    public BuffSettings? PartyBuffs { get; set; }
+
+    // How the Buff Watchdog window arranges its config table vs the timer bars —
+    // stacked (config top / bottom) or side-by-side (config left / right).
+    public BuffWatchdogLayout BuffWatchdogLayout { get; set; } = BuffWatchdogLayout.ConfigTop;
 
     // Given name of the party leader we were following, remembered so a
     // follower can auto-rejoin after an unexpected drop. Written through by

@@ -11,8 +11,8 @@ namespace MudPlay.Views;
 // window when the VM's in-window Close button fires, syncs the DataGrid's
 // multi-selection into the VM's SelectedEntries for the comparison view,
 // persists the list/detail pane split ratio, and disposes the VM on close (it
-// may hold a live room-event subscription and a target-poll timer from Phase
-// 4's context bar).
+// holds live room / observation / inventory / spellbook / player-state
+// subscriptions).
 public partial class MonsterIntelWindow : Window
 {
     // Stable id under which the list/detail column split persists in

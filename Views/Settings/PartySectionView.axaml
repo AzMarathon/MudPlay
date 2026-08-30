@@ -158,7 +158,7 @@
                  Only the two coarse gates below stay here. -->
             <TextBlock Classes="SectionHeader" Text="Party bless" Margin="0,28,0,2"/>
             <TextBlock Classes="FieldLabel"
-                       Text="Party buff slots are configured in the Party window (View → Party). These two gates decide when the buff engine may cast."
+                       Text="Party buff slots are configured in the Buff Watchdog window (View → Buff Watchdog). These two gates decide when the buff engine may cast."
                        Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,0,0,6"
                        TextWrapping="Wrap"/>
             <!-- Bless gating: coarse on/off conditions the party-bless path
@@ -170,15 +170,6 @@
                 <CheckBox Content="Bless party during combat"
                           IsChecked="{Binding BlessDuringCombat, Mode=TwoWay}"
                           ToolTip.Tip="When checked (default): the party-bless engine may cast beneficial spells on party members during combat rounds."/>
-            </StackPanel>
-
-            <!-- Where the Party window docks its Party Buffs panel. -->
-            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
-                <TextBlock Classes="FieldLabel" Text="Party Buffs panel position" VerticalAlignment="Center"/>
-                <ComboBox MinWidth="110"
-                          ItemsSource="{Binding PartyBuffAnchorOptions}"
-                          SelectedItem="{Binding PartyBuffAnchor, Mode=TwoWay}"
-                          ToolTip.Tip="Where the Party window shows its Party Buffs panel: to the Right of the member list (default), Below it, or to the Left."/>
             </StackPanel>
 
             <!-- ============ Options ============ -->
