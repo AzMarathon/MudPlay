@@ -2,9 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.37.2
+## 3.37.3
 
-- Monster Intel refocused back to a fast pre-fight check: the master list now shows just Name, HP, and a new "Hits You %" column (that monster's own attack's chance to land on you, given your live AC/Dodge/wards); a new **Safe** filter (paired with an editable % threshold) keeps the list to what's actually worth engaging alongside Hittable/Castable
+- Monster Intel refocused back to a fast pre-fight check: the master list now shows just Name, HP, and a new "Hits You %" column (that monster's own attack's chance to land on you, given your live AC/Dodge/wards)
+- Replaced the single Safe threshold with a row of Hits-You-% checkboxes — 2%, 5%, 10%, 15%, and 25%+ (the last one flips direction, for deliberately sizing up something risky) — check as many as you like, a monster shows if it matches any checked band
+- A monster with no computable Hits You % (an NPC/caster-only record with no physical attack — a trainer, quest-giver, etc.) is now dropped from the list entirely once a character is loaded, instead of showing with a blank value
+- Removed the "In this room" context bar
 - Removed from the window (all still fully available on the Game Data Browser's Monsters tab): the Overview grab-bag, the full Elemental Defenses matrix, the Casts panel, Loot, Locations, the Automation overlay editor, and multi-select side-by-side comparison
 - Kept: Attacks (how dangerous is its swing), Your Matchup (weapon eligibility, ranked spell effectiveness, incoming elemental threat), and Your Observations (your own combat history against it)
 

@@ -8,7 +8,6 @@ using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
-using MudPlay.Game.Map;
 using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -21,14 +20,16 @@ namespace MudPlay.ViewModels;
 // overlay editing). A persistent character bar (level, live HP/mana, weapon
 // HitMagic, known attack-spell count) sits above a searchable master list
 // over MonsterCatalog narrowed to what THIS character can safely fight right
-// now: Hittable / Castable (can I land a hit or a spell on it at all) and
-// Safe (its own attack's chance to land on ME, given my live AC/Dodge/wards,
-// at or under a threshold). The per-monster detail panel keeps only what
-// that decision needs beyond the list: Attacks (how dangerous is its swing),
-// Your Matchup (weapon eligibility + ranked spell effectiveness + incoming
-// elemental threat), and Your Observations (what's actually happened in
-// past fights against it). A context bar shows the current room's roster
-// (click a chip to select it).
+// now: Hittable / Castable (can I land a hit or a spell on it at all) and a
+// set of Hits-You-% threshold checkboxes (its own attack's chance to land on
+// ME, given my live AC/Dodge/wards). A monster with no computable Hits You %
+// (no catalogued physical attack — an NPC/caster-only record) is dropped
+// from the list entirely once a character is loaded, since it isn't a
+// meaningful "can this thing hurt me" entry. The per-monster detail panel
+// keeps only what that decision needs beyond the list: Attacks (how
+// dangerous is its swing), Your Matchup (weapon eligibility + ranked spell
+// effectiveness + incoming elemental threat), and Your Observations (what's
+// actually happened in past fights against it).
 public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposable
 {
     private readonly GameDataCache _gameData;
@@ -38,18 +39,16 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly InventoryManager? _inventory;
     private readonly SpellbookState? _spellbook;
     private readonly ItemMagicIndex? _itemMagic;
-    private readonly RoomEntityClassifier? _roomClassifier;
     private readonly MonsterObservationTracker? _observations;
     private readonly IReadOnlyList<MonsterIntelEntry> _all;
-    private readonly Dictionary<int, MonsterIntelEntry> _byNumber;
     private readonly IReadOnlyDictionary<int, int> _spellAttType;
     private readonly bool _hasCharacterContext;
     private readonly List<PlayerAttackSpell> _ownedAttackSpells = new();
     private int _weaponHitMagic;
     private int _maxKnownAttackSpellReqLevel = -1;
-    // Live player combat totals behind the Safe filter / master-list "Hits
-    // You %" column — recomputed alongside weapon/spell capabilities in
-    // RebuildCharacterCapabilities whenever gear changes.
+    // Live player combat totals behind the Hits-You-% threshold checkboxes /
+    // master-list "Hits You %" column — recomputed alongside weapon/spell
+    // capabilities in RebuildCharacterCapabilities whenever gear changes.
     private int _playerAc;
     private int _playerDodge;
     private int _playerProtEvil;
@@ -75,7 +74,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         GameDataCache gameData, MonsterCatalog catalog,
         PlayerStats? stats = null, InventoryManager? inventory = null,
         SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null,
-        RoomEntityClassifier? roomClassifier = null,
         MonsterObservationTracker? observations = null, PlayerState? playerState = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
@@ -87,13 +85,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _inventory = inventory;
         _spellbook = spellbook;
         _itemMagic = itemMagic;
-        _roomClassifier = roomClassifier;
         _observations = observations;
         _hasCharacterContext = _stats is not null && _inventory is not null
             && _spellbook is not null && _itemMagic is not null;
 
         _all = MonsterIntelEntry.BuildCatalog(catalog);
-        _byNumber = _all.ToDictionary(e => e.Number);
         // Reuse the catalog's spell → AttType map (built off its one-time Spells
         // read) instead of re-reading the table the catalog has already evicted.
         _spellAttType = catalog.SpellAttType;
@@ -102,16 +98,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(NameFilter) or nameof(HittableOnly) or nameof(CastableOnly)
-                or nameof(SafeOnly) or nameof(SafeHitThreshold))
+                or nameof(ShowHits2) or nameof(ShowHits5) or nameof(ShowHits10)
+                or nameof(ShowHits15) or nameof(ShowHits25Plus))
             { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
             else if (e.PropertyName == nameof(SelectedEntry)) RebuildDetail();
         };
-
-        if (_roomClassifier is not null)
-        {
-            _roomClassifier.EntitiesObserved += OnEntitiesObserved;
-            if (_roomClassifier.Current is { } current) OnEntitiesObserved(current);
-        }
 
         if (_observations is not null) _observations.Changed += OnObservationsChanged;
 
@@ -133,7 +124,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     {
         if (_disposed) return;
         _disposed = true;
-        if (_roomClassifier is not null) _roomClassifier.EntitiesObserved -= OnEntitiesObserved;
         if (_observations is not null) _observations.Changed -= OnObservationsChanged;
         if (_hasCharacterContext)
         {
@@ -166,12 +156,22 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // ----- character-aware list filters -----
     [ObservableProperty] private bool _hittableOnly;
     [ObservableProperty] private bool _castableOnly;
-    [ObservableProperty] private bool _safeOnly;
-    [ObservableProperty] private int _safeHitThreshold = 5;
+
+    // Hits-You-% threshold checkboxes: independent, OR'd together — checking
+    // none shows every monster (still subject to the "no computable value"
+    // drop below); checking one or more keeps a monster if it falls in ANY
+    // checked band. The first four are "at or under"; the last is the
+    // opposite direction, for deliberately looking at what's risky.
+    [ObservableProperty] private bool _showHits2;
+    [ObservableProperty] private bool _showHits5;
+    [ObservableProperty] private bool _showHits10;
+    [ObservableProperty] private bool _showHits15;
+    [ObservableProperty] private bool _showHits25Plus;
 
     // Recomputes weapon HitMagic, the owned-attack-spell set, and the live
-    // AC/Dodge/ward totals behind the Hittable / Castable / Safe filters and
-    // the master list's "Hits You %" column. Called once at startup and again
+    // AC/Dodge/ward totals behind the Hittable / Castable filters and the
+    // threshold checkboxes / master list's "Hits You %" column. Called once
+    // at startup and again
     // whenever gear or the spellbook changes, so a mid-session weapon swap or
     // a newly-obtained spell updates the character bar and re-filters the
     // list without reselecting a monster.
@@ -222,7 +222,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         // The direction Hittable/Castable don't cover (those gate whether WE
         // can land a hit/spell; this is whether the monster can land one on
-        // US) — the master list's "Hits You %" column and the Safe filter.
+        // US) — the master list's "Hits You %" column and threshold checkboxes.
         foreach (MonsterIntelEntry entry in _all)
             entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.IncomingHitPercent(
                 entry.Source.PhysicalAccuracy, entry.Source.Align,
@@ -245,28 +245,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     private void UpdateManaLabel() => ManaLabel = _playerState?.ManaType == ManaType.Kai ? "Kai" : "Mana";
 
-    // ----- context bar: the current room's monster roster -----
-
-    public ObservableCollection<MonsterIntelEntry> RoomMonsters { get; } = new();
-    public bool HasContextBar => _roomClassifier is not null;
-
-    // Repopulates the room roster from the classifier's latest "Also here"
-    // read. RoomEntity already carries a resolved MonsterNumber
-    // (RoomAwareMonsterResolver disambiguates shared names to the record
-    // actually placed in this room), so no separate name lookup is needed
-    // here.
-    private void OnEntitiesObserved(RoomEntitiesObservation obs)
-    {
-        RoomMonsters.Clear();
-        HashSet<int> seen = new();
-        foreach (RoomEntity e in obs.Entities)
-        {
-            if (e.Kind != EntityKind.Monster || e.MonsterNumber is not { } number) continue;
-            if (!seen.Add(number)) continue;
-            if (_byNumber.TryGetValue(number, out MonsterIntelEntry? entry)) RoomMonsters.Add(entry);
-        }
-    }
-
     private bool PassesFilter(object o)
     {
         if (o is not MonsterIntelEntry e) return false;
@@ -274,20 +252,29 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             && !e.Name.Contains(NameFilter, StringComparison.OrdinalIgnoreCase)) return false;
         if (HittableOnly && e.Magical > _weaponHitMagic) return false;
         if (CastableOnly && _maxKnownAttackSpellReqLevel < e.Source.SpellImmunity) return false;
-        if (SafeOnly && (e.IncomingHitPercent < 0 || e.IncomingHitPercent > SafeHitThreshold)) return false;
+
+        // Once a character is loaded, a monster with no computable Hits You %
+        // (no catalogued physical attack — an NPC/caster-only record, e.g. a
+        // trainer or quest-giver) isn't a meaningful "can this thing hurt me"
+        // entry, so it's dropped unconditionally, not just under a checkbox.
+        if (_hasCharacterContext && e.IncomingHitPercent < 0) return false;
+
+        bool anyThresholdChecked = ShowHits2 || ShowHits5 || ShowHits10 || ShowHits15 || ShowHits25Plus;
+        if (anyThresholdChecked)
+        {
+            bool inCheckedBand =
+                (ShowHits2 && e.IncomingHitPercent <= 2)
+                || (ShowHits5 && e.IncomingHitPercent <= 5)
+                || (ShowHits10 && e.IncomingHitPercent <= 10)
+                || (ShowHits15 && e.IncomingHitPercent <= 15)
+                || (ShowHits25Plus && e.IncomingHitPercent >= 25);
+            if (!inCheckedBand) return false;
+        }
         return true;
     }
 
     [RelayCommand]
     private void Close() => CloseRequested?.Invoke();
-
-    // Clicking a context-bar room-roster chip selects it directly, same as
-    // clicking its grid row in the master list would.
-    [RelayCommand]
-    private void SelectMonster(MonsterIntelEntry? entry)
-    {
-        if (entry is not null) SelectedEntry = entry;
-    }
 
     // ----- detail panel -----
     // Deliberately narrow: this window answers "can I fight this thing right

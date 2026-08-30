@@ -511,19 +511,20 @@ Values group with thousands separators. Unlike the live **Filter…** text box, 
 
 **Character bar** — a strip across the top (once a character is loaded) showing your name/level/class, live HP, live Mana or Kai (whichever your class uses), your currently-equipped weapon's HitMagic, and how many attack spells you've obtained. It updates live as HP/mana tick and stays current if you swap gear or learn a new spell while the window is open.
 
-The left list is filterable by name and shows just three columns — **Name**, **HP**, and **Hits You %** (that monster's own attack's chance to land on you, given your live AC/Dodge and whichever ward — Prot Evil/Prot Good — applies to its alignment; blank when it has no catalogued physical attack). Both are independently sortable (click a header; click again to reverse). Three checkboxes above the list narrow it to what's worth engaging right now (all three need a character loaded):
+The left list is filterable by name and shows just three columns — **Name**, **HP**, and **Hits You %** (that monster's own attack's chance to land on you, given your live AC/Dodge and whichever ward — Prot Evil/Prot Good — applies to its alignment). Both are independently sortable (click a header; click again to reverse). **Once a character is loaded, a monster with no computable Hits You % (an NPC/caster-only record with no catalogued physical attack — a trainer, quest-giver, etc.) is dropped from the list entirely** — it isn't a meaningful "can this thing hurt me" entry, so it's never just left blank.
+
+Two checkboxes narrow the list to what you can actually engage right now (both need a character loaded):
 
 - **Hittable** — keeps only monsters your equipped weapon's HitMagic actually clears.
 - **Castable** — keeps only monsters where at least one attack spell you've obtained gets past their spell immunity.
-- **Safe** — keeps only monsters whose Hits You % is at or under the threshold next to the checkbox (a number field, percent). Combine with Hittable and/or Castable to get exactly "safe to fight, and I can actually hurt it."
+
+Below those, a row of **Hits You %** threshold checkboxes — **2%, 5%, 10%, 15%, 25%+** — narrows by how dangerous a monster's own attack is. The first four keep monsters at or under that percent; **25%+** is the reverse — monsters whose attack is *at least* that likely to land, for deliberately sizing up something risky. Check as many as you like: a monster shows if it matches **any** checked box (checking both 5% and 25%+ shows the safe end and the risky end while hiding the middle). Checking none shows every monster regardless of Hits You %.
 
 Select a monster to fill the right-hand detail panel:
 
 - **Your Matchup** — only shown once a character is loaded: whether your **currently-worn weapon** is magical enough to hit the monster physically (its HitMagic vs the monster's requirement); an **incoming elemental threat** line per element the monster casts, alongside how much your own worn gear resists it; and every **known attack spell you've obtained**, ranked by effective damage against *this* monster — a spell blocked by the monster's spell immunity, fully resisted by its element, or restricted to undead-only/living-only targets the monster doesn't qualify for shows the reason instead of a damage number, so you're never guessing why a cast did nothing. This deliberately doesn't duplicate the Calculators tab's melee hit%/DPS/rounds-to-kill projection (that math already lives there, correctly) — for that, use the Player Workshop's **Calculators** tab.
 - **Your Observations** — only shown once this character has actually fought the monster at least once: landed-hit damage extent and average, hit rate, and how many times a physical attack or a spell had **no effect** — a real, confirmed discovery that this monster's Magical or SpellImmunity requirement is higher than what you're using against it. This is deliberately kept separate from Your Matchup — that comes from the game-data record (the MDB); this is only what *this character* has personally seen happen in combat. A **Clear** button wipes every monster's recorded observations for this character (not just the one you're viewing).
 - **Attacks** — every physical, spell, and rob attack slot with its chance, damage range or spell + level, accuracy, and energy cost, plus its between-round spells — how dangerous is its swing, beyond the bare Hits You % number.
-
-**Context bar**: while connected, a bar above the list shows every monster in your current room as a row of clickable chips — click one to jump straight to its detail. It only appears once room tracking is active, and stays out of the way (no reserved space) in an empty room.
 
 ---
 
