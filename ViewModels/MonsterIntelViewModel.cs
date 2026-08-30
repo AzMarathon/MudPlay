@@ -360,6 +360,13 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (m.SpellImmunity > 0) OverviewLines.Add($"Immune to spells with ReqLevel < {m.SpellImmunity}");
         if (m.BsDefense > 0) OverviewLines.Add($"Backstab Defense: {m.BsDefense}");
         if (m.RegenTime > 0) OverviewLines.Add($"Regen time: {m.RegenTime:0.#}");
+        if (m.FollowPercent > 0) OverviewLines.Add($"Follows on flee: {m.FollowPercent}%");
+        if (m.Energy > 0) OverviewLines.Add($"Energy: {m.Energy:N0}");
+        if (m.AvgDamage > 0) OverviewLines.Add($"Avg damage: {m.AvgDamage:0.#}");
+        if (m.Weapon > 0)
+            OverviewLines.Add($"Wields: {(_itemNames.TryGetValue(m.Weapon, out string? wn) ? wn : $"item #{m.Weapon}")}");
+        if (m.CreateSpell > 0) OverviewLines.Add($"Casts on spawn: {SpellDisplay(m.CreateSpell)}");
+        if (m.DeathSpell > 0) OverviewLines.Add($"Casts on death: {SpellDisplay(m.DeathSpell)}");
 
         foreach ((int code, int pct) in m.ElementalResists.OrderBy(kv => ElementalResistIndex.ElementName(kv.Key)))
             ElementalDefenses.Add(new ElementalDefenseRow(
@@ -374,6 +381,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 $"({mid.Percent}%) Between-rounds spell", $"Spell #{mid.SpellId}"
                 + (mid.Level > 0 ? $" lvl {mid.Level}" : string.Empty), string.Empty, string.Empty));
 
+        string coin = FormatCarriedCoin(m);
+        if (coin.Length > 0) LootLines.Add($"Carries: {coin}");
         foreach (MonsterDropSlot d in m.Drops)
         {
             string name = _itemNames.TryGetValue(d.ItemId, out string? n) ? n : $"Item #{d.ItemId}";
@@ -409,6 +418,25 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 $"Spells had no effect {o.SpellNoEffectCount}x — blocked by this monster's spell immunity");
         ObservationLines.Add(
             $"First observed {o.FirstObservedAt:g}, last {o.LastObservedAt:g}");
+    }
+
+    // A spell number as its game-data name, falling back to the raw number when
+    // the active set doesn't name it (matches the Attacks panel's number display).
+    private string SpellDisplay(int spellNumber) =>
+        _gameData.FindNameByNumber("Spells", spellNumber) is { Length: > 0 } name
+            ? name : $"spell #{spellNumber}";
+
+    // The coin a monster carries, highest denomination first, non-zero only —
+    // e.g. "2 platinum, 5 gold, 3 silver". Empty when it carries nothing.
+    private static string FormatCarriedCoin(MonsterCatalogEntry m)
+    {
+        List<string> parts = new();
+        if (m.CashRunic > 0) parts.Add($"{m.CashRunic} runic");
+        if (m.CashPlatinum > 0) parts.Add($"{m.CashPlatinum} platinum");
+        if (m.CashGold > 0) parts.Add($"{m.CashGold} gold");
+        if (m.CashSilver > 0) parts.Add($"{m.CashSilver} silver");
+        if (m.CashCopper > 0) parts.Add($"{m.CashCopper} copper");
+        return string.Join(", ", parts);
     }
 
     [RelayCommand]
