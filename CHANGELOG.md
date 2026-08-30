@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.35.4
+
+- Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the exact same already-refused move, get refused again, and then just sit there until an unrelated event nudged it back to life (observed stalls from several minutes to over an hour). The loop now recognizes this on resume and enters recovery (reroutes) immediately.
+- Fixed a related stall: an ambiguous room observation that landed the tracker in Suspect while the loop was paused was also silently dropped — since the tracker can't re-arm Pending from Suspect, a refusal on the blind resend was ALSO dropped, stranding the loop with no way out. It now forwards this case to the recovery gate on resume, exactly like it does in real time.
+- bug reports addressed: paradigm-20260829-084558, paradigm-20260829-104437, paradigm-20260829-111627
+
 ## 3.35.1
 
 - Roomba: starting a sweep or an inventory scan now gangpaths the gang house that it's underway, and finishing announces completion with a count — items moved for a sweep, items inventoried for a scan

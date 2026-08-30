@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.35.1**
-> - Roomba: starting a sweep or an inventory scan now gangpaths the gang house that it's underway, and finishing announces completion with a count — items moved for a sweep, items inventoried for a scan
-> - Counts are true unit totals (a stacked pile counts as its full size, not as one operation) and only fire on a genuine finish, never on a manual stop or an interrupted sweep
+> **Version 3.35.4**
+> - Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the doomed move and then sit there until an unrelated event nudged it (observed stalls from minutes to over an hour). It now enters recovery (reroutes) immediately on resume.
+> - Fixed a related stall where an ambiguous room observation (Suspect) resolving mid-pause stranded the loop with no way out; it now forwards to the recovery gate on resume, like it does in real time.
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

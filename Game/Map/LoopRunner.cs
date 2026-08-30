@@ -95,6 +95,14 @@ public sealed class LoopRunner : IRecoverableEngine
     private bool _stepInFlight;
     private bool _awaitingPromptForCommand;
     private RoomKey? _expectedMoveTarget;
+    // The room the in-flight move was sent FROM. OnTrackerStateChanged ignores
+    // tracker transitions while State != Running (a paused loop doesn't react
+    // to events in real time), so a MoveRefusal that resolves mid-pause — the
+    // tracker reverts Pending → Confirmed at this same room, but the running
+    // handler never sees it — leaves this the only way for the resume path to
+    // tell "refused, still here" apart from "still Pending, awaiting the
+    // reply" or "arrived at target". See OnPauseChanged's resume branches.
+    private RoomKey? _expectedMoveSource;
 
     // True when the runner flipped to LoopState.Paused while still in the approach
     // phase (the walker was driving us toward the loop's entry waypoint). Tells the
@@ -602,6 +610,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         _expectedMoveTarget = null;
+        _expectedMoveSource = null;
         _approachTarget = null;
         _circleStartRoom = null;
         _expandedSteps = new List<LoopStep>();
@@ -982,6 +991,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // cardinal, text command, teleport keyword, or post-action
         // cardinal). _stepInFlight gates the confirmation handler.
         _expectedMoveTarget = exit.Target;
+        _expectedMoveSource = current.Key;
         _stepInFlight = true;
 
         // Predictive room provisioning: light a carried light if the room this lap
@@ -1143,6 +1153,7 @@ public sealed class LoopRunner : IRecoverableEngine
                     return;
                 }
                 _expectedMoveTarget = exit.Target;
+                _expectedMoveSource = current.Key;
                 _stepInFlight = true;
                 EmitCardinal(step.Direction, exit.Target, "post-door");
                 return;
@@ -1177,6 +1188,7 @@ public sealed class LoopRunner : IRecoverableEngine
                     return;
                 }
                 _expectedMoveTarget = exit.Target;
+                _expectedMoveSource = current.Key;
                 _stepInFlight = true;
                 EmitCardinal(step.Direction, exit.Target, "post-winch");
                 return;
@@ -1213,6 +1225,7 @@ public sealed class LoopRunner : IRecoverableEngine
                     return;
                 }
                 _expectedMoveTarget = exit.Target;
+                _expectedMoveSource = current.Key;
                 _stepInFlight = true;
                 EmitCardinal(step.Direction, exit.Target, "post-hidden-reveal");
                 return;
@@ -1486,6 +1499,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         _expectedMoveTarget = null;
+        _expectedMoveSource = null;
         _approachTarget = null;
         State = LoopState.Recovering;
         Raise(new LoopEvent(LoopEventKind.Paused, $"recovering: {reason}"));
@@ -1656,8 +1670,75 @@ public sealed class LoopRunner : IRecoverableEngine
                     if (_index != overshootIndex || !_stepInFlight) return;
                     _stepInFlight = false;
                     _expectedMoveTarget = null;
+                    _expectedMoveSource = null;
                     AdvanceStep();
                 });
+                return;
+            }
+            // A door / winch / hidden-exit sub-FSM was mid-flight when the pause
+            // hit. Its OWN reply (not a tracker move) drives the step — it sets
+            // _expectedMoveSource and EmitCardinals the move itself — so the tracker
+            // legitimately still reads Confirmed at the source room. The refusal /
+            // Suspect checks below would misread that as "blocked at source" and
+            // spuriously abort the in-progress open (burning a recover attempt);
+            // OnTrackerStateChanged guards the identical case at the top of its
+            // real-time handler. Mirror it here: wait for the sub-FSM's reply,
+            // bounded by the stall watchdog in case the interrupting combat swallowed
+            // it, rather than recovering or resending.
+            if (_stepInFlight
+                && (_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch))
+            {
+                _log?.Info("LoopRunner",
+                    $"resume: step {_index + 1} has a door/winch/hidden sub-FSM in flight; awaiting its reply, not recovering or resending");
+                ArmStallWatchdog($"resume with step {_index + 1} sub-FSM in flight");
+                return;
+            }
+            // A MoveRefusal ("There is no exit in that direction!", a shut
+            // door, etc.) resolved WHILE paused. RoomTracker.NoteMoveBlocked
+            // correctly reverted Pending → Confirmed at the source room and
+            // fired StateChanged, but OnTrackerStateChanged ignores tracker
+            // events while State != Running, so that recovery never happened
+            // in real time — this step is still marked in flight even though
+            // the move is long since dead. Falling through to the blind resend
+            // below would re-issue the exact same doomed direction, get
+            // refused again, and (with no combat gate this time to eventually
+            // clear and retry) just sit there — the loop only recovers by
+            // accident, whenever some unrelated event forces a fresh room
+            // observation (paradigm-20260829-084558, paradigm-20260829-104437:
+            // one stall ran for over an hour). Recognize "Confirmed, still at
+            // the room we sent the move FROM" as the resume-time equivalent of
+            // OnTrackerStateChanged's real-time "blocked at source" branch and
+            // enter recovery immediately instead of resending.
+            if (_stepInFlight
+                && _expectedMoveSource is { } source
+                && _tracker.State.Confidence == RoomConfidence.Confirmed
+                && _tracker.State.CurrentRoom?.Key.Equals(source) == true)
+            {
+                _log?.Warn("LoopRunner",
+                    $"resume: step {_index + 1} was refused while paused (still at {source}, expected {_expectedMoveTarget}); entering recovery");
+                EnterRecovery($"step {_index + 1} refused while paused at {source}");
+                return;
+            }
+            // The tracker landed in Suspect/Lost/Unknown WHILE paused — an
+            // ambiguous room observation it couldn't reconcile against the
+            // pending queue (a combat redisplay, another player's arrival,
+            // etc. mid-pause). OnTrackerStateChanged forwards this to the
+            // recovery gate in real time; while paused it never got the
+            // chance. Falling through to a blind resend here is worse than
+            // useless: NoteMoveSentCore deliberately does NOT re-arm Pending
+            // from Suspect/Lost/Unknown (no confirmed anchor to predict a
+            // landing from), so a subsequent refusal is silently dropped too
+            // — NoteMoveBlocked only acts when confidence is Pending —
+            // stranding the loop in Suspect with no way back
+            // (paradigm-20260829-111627). Forward to the recovery gate
+            // exactly like the real-time branch instead of resending.
+            if (_stepInFlight
+                && _tracker.State.Confidence is RoomConfidence.Suspect or RoomConfidence.Lost or RoomConfidence.Unknown)
+            {
+                _log?.Warn("LoopRunner",
+                    $"resume: step {_index + 1} tracker confidence={_tracker.State.Confidence} after pause; forwarding to recovery gate");
+                _recovery?.NoteSuspectedMismatch(
+                    $"tracker {_tracker.State.Confidence} on resume at step {_index + 1}");
                 return;
             }
             // A move was already on the wire when the pause hit and its
@@ -1668,8 +1749,9 @@ public sealed class LoopRunner : IRecoverableEngine
             // the tracker sticks in Pending-at-target, and the loop hangs on a
             // Confirmed it will never get. Keep the step in flight instead; now
             // that we're Running again the resumed tracker events confirm it and
-            // advance us. Refusals don't hit this — a bonked move fires
-            // NoteMoveBlocked, which drops its pending entry and re-Confirms.
+            // advance us. A refusal doesn't reach this branch — the "refused
+            // while paused" check above already caught it once NoteMoveBlocked
+            // dropped the pending entry and re-Confirmed.
             if (_stepInFlight && _tracker.State.Confidence == RoomConfidence.Pending)
             {
                 _log?.Info("LoopRunner",
@@ -1729,6 +1811,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         _expectedMoveTarget = null;
+        _expectedMoveSource = null;
         _approachTarget = null;
         _circleStartRoom = null;
         _firstWaypointReached = false;
