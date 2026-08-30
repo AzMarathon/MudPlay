@@ -148,12 +148,16 @@ public sealed class MonsterCatalog
 
     private readonly GameDataCache _cache;
     private Dictionary<int, MonsterCatalogEntry>? _byNumber;
+    // Spell Number → AttType (element), built alongside the catalog off the same
+    // one-time Spells read. Exposed so Monster Intel's spell ranking reuses it
+    // instead of re-reading Spells (which Build() has already evicted).
+    private Dictionary<int, int>? _spellAttType;
 
     public MonsterCatalog(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
-        _cache.ActiveSetChanged += _ => _byNumber = null;
+        _cache.ActiveSetChanged += _ => { _byNumber = null; _spellAttType = null; };
     }
 
     // The monster record for Number, or null when unknown in the active set.
@@ -161,6 +165,10 @@ public sealed class MonsterCatalog
         => Build().TryGetValue(number, out MonsterCatalogEntry? e) ? e : null;
 
     public IReadOnlyCollection<MonsterCatalogEntry> All => Build().Values;
+
+    // Spell Number → AttType across the active set, resolved once (the same map
+    // the catalog uses internally to roll up each monster's cast elements).
+    public IReadOnlyDictionary<int, int> SpellAttType { get { Build(); return _spellAttType!; } }
 
     private Dictionary<int, MonsterCatalogEntry> Build()
     {
@@ -187,6 +195,7 @@ public sealed class MonsterCatalog
         _cache.EvictTable("Monsters");
         _cache.EvictTable("Spells");
         _byNumber = map;
+        _spellAttType = spellAttType;
         return map;
     }
 

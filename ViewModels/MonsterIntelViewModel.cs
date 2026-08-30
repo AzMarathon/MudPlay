@@ -51,7 +51,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly IReadOnlyList<MonsterIntelEntry> _all;
     private readonly Dictionary<int, MonsterIntelEntry> _byNumber;
     private readonly Dictionary<int, string> _itemNames;
-    private readonly Dictionary<int, int> _spellAttType;
+    private readonly IReadOnlyDictionary<int, int> _spellAttType;
     private readonly bool _hasCharacterContext;
     private readonly List<PlayerAttackSpell> _ownedAttackSpells = new();
     private int _weaponHitMagic;
@@ -121,7 +121,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _all = MonsterIntelEntry.BuildCatalog(catalog);
         _byNumber = _all.ToDictionary(e => e.Number);
         _itemNames = BuildItemNames(gameData);
-        _spellAttType = BuildSpellAttType(gameData);
+        // Reuse the catalog's spell → AttType map (built off its one-time Spells
+        // read) instead of re-reading the table the catalog has already evicted.
+        _spellAttType = catalog.SpellAttType;
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
 
         PropertyChanged += (_, e) =>
@@ -446,7 +448,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         foreach (string element in m.CastsElements)
         {
-            int code = ElementCodeFor(element);
+            int code = ElementalResistIndex.CodeForName(element);
             int myResist = code >= 0 && playerResists.TryGetValue(code, out int pct) ? pct : 0;
             IncomingThreatLines.Add(myResist == 0
                 ? $"{element}: you have no resistance from your gear"
@@ -456,36 +458,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         foreach (SpellEffectivenessResult r in MonsterMatchupCalculatorSpells.RankAttackSpells(
             _ownedAttackSpells, m.SpellImmunity, m.ElementalResists, m.Undead))
             SpellEffectiveness.Add(r);
-    }
-
-    // Maps an element display name (as LookupEnums.FormatSpellAttackType
-    // renders it) back to its elemental-resist ability code, the inverse of
-    // ElementalResistIndex.ElementName. -1 for a non-elemental name (Normal,
-    // Poison — never resist-indexed, see MonsterResistIndex's own comment).
-    private static int ElementCodeFor(string element) => element switch
-    {
-        "Cold" => 3,
-        "Fire" => 5,
-        "Stone" => 65,
-        "Lightning" => 66,
-        "Water" => 147,
-        _ => -1,
-    };
-
-    // Spell Number → AttType, built once (not per monster selection) since the
-    // Spells table doesn't change between picks in the same window session.
-    private static Dictionary<int, int> BuildSpellAttType(GameDataCache cache)
-    {
-        Dictionary<int, int> map = new();
-        if (cache.GetRawTable("Spells") is not { } doc) return map;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (!row.TryGetProperty("Number", out JsonElement numEl)
-                || numEl.ValueKind != JsonValueKind.Number || !numEl.TryGetInt32(out int n)) continue;
-            map[n] = row.TryGetProperty("AttType", out JsonElement atEl)
-                && atEl.ValueKind == JsonValueKind.Number && atEl.TryGetInt32(out int at) ? at : -1;
-        }
-        return map;
     }
 
     // "Majority" resolves a spell-attack slot's Accuracy field back to a spell

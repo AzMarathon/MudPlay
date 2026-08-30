@@ -67,18 +67,32 @@ public sealed record MonsterIntelEntry
     }
 }
 
-// Ability-code → element-name map for the five elemental resists, shared by
-// ResistsText above and the Elemental Defenses detail panel — the same codes
-// MonsterResistIndex/MonsterCatalog already key their resist dictionary on.
+// Ability-code ↔ element-name map for the five elemental resists, shared by
+// ResistsText above, the Elemental Defenses detail panel, and Your Matchup's
+// incoming-threat lookup — the same codes MonsterResistIndex/MonsterCatalog
+// already key their resist dictionary on. Both directions derive from the one
+// table below so the code↔name pairing lives in exactly one place.
 internal static class ElementalResistIndex
 {
-    public static string ElementName(int resistCode) => resistCode switch
+    private static readonly (int Code, string Name)[] Elements =
     {
-        3 => "Cold",
-        5 => "Fire",
-        65 => "Stone",
-        66 => "Lightning",
-        147 => "Water",
-        _ => $"Ability {resistCode}",
+        (3, "Cold"), (5, "Fire"), (65, "Stone"), (66, "Lightning"), (147, "Water"),
     };
+
+    public static string ElementName(int resistCode)
+    {
+        foreach ((int code, string name) in Elements)
+            if (code == resistCode) return name;
+        return $"Ability {resistCode}";
+    }
+
+    // Inverse of ElementName: a display name back to its resist ability code, or
+    // -1 for a non-elemental name (Normal, Poison — never resist-indexed, see
+    // MonsterResistIndex's own comment).
+    public static int CodeForName(string element)
+    {
+        foreach ((int code, string name) in Elements)
+            if (string.Equals(name, element, System.StringComparison.Ordinal)) return code;
+        return -1;
+    }
 }
