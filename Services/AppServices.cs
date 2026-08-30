@@ -3533,7 +3533,7 @@ public sealed class AppServices
             // A hand-typed cast feeds BOTH the combat resume signal and the buff-recast
             // clock: NoteManualBuffCast arms the timer (by cast code) for a hand-cast buff
             // so the Buff Watchdog + recast engine track it the same as an engine cast.
-            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c); });
+            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c, target); });
         // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
         // taking the round's attack — a user override — while an in-between spell (heal
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.

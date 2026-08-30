@@ -126,6 +126,12 @@ public sealed class CastingDirector : IDisposable
     // The one outstanding party-buff cast awaiting CasterMessage
     // confirmation. CastCoordinator's cooldown guarantees ≤1 in flight.
     private (string Short, string Target, long DurationSec, int MarginSec, CasterMessageMatcher Matcher)? _pendingPartyCast;
+    // A HAND-TYPED single-target buff cast (`gbls fuj`) awaiting its success line. We
+    // know only the shorthand the user typed after the code; the caster line names the
+    // resolved target in full, which we prefix-match against the shorthand to arm that
+    // member's timer. Engine casts arm _pendingPartyCast instead (ArmPartyBuffConfirm
+    // clears this), so only a genuine hand-cast leaves one of these armed.
+    private (string Short, string Prefix, long DurationSec, int MarginSec, CasterMessageMatcher Matcher)? _pendingManualCast;
     // The self-buff whose optimistic recast timer was armed on send but hasn't yet
     // been confirmed landed. Cleared when its AppliedMessage confirms (the real
     // duration timer takes over) OR when a server landing-failure arrives — a fizzle
@@ -558,6 +564,7 @@ public sealed class CastingDirector : IDisposable
         _activeUntil.Clear();
         _hiddenTargets.Clear();
         _pendingPartyCast = null;
+        _pendingManualCast = null;
         _pendingSelfBuffShort = null;
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
@@ -576,6 +583,7 @@ public sealed class CastingDirector : IDisposable
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
         _pendingPartyCast = null;   // a cast in flight when we died never landed
+        _pendingManualCast = null;
         _log?.Info(LogCategory,
             $"self died — cleared {removed} self-buff timer(s); party-buff timers kept (those members are alive).");
     }
@@ -754,18 +762,50 @@ public sealed class CastingDirector : IDisposable
             + $", recast in {Math.Max(0L, seconds - marginSec)}s; awaiting applied-line confirm");
     }
 
-    // A manually-typed self-buff cast (the user entered its 4-letter cast code) — arm /
+    // A manually-typed buff cast (the user entered its 4-letter cast code) — arm /
     // refresh its recast timer exactly as an engine cast does, anchored on the cast code.
     // The typed code is the reliable identity; we never infer WHICH buff landed from the
     // shared applied message (one Paradigm line names 11 records — bless / chant / …), so
     // a hand-cast is caught here rather than left for the ambiguous applied-line path.
     // A non-buff code (a combat / instant spell with no resolved duration) is inert.
-    public void NoteManualBuffCast(string castCode)
+    //
+    // A BARE code (`bles`, or a whole-party `unfa`) targets self / the whole party —
+    // keyed "" immediately, same as the engine. A code plus a NAME (`gbls fuj`) is a
+    // single-target cast: we don't yet know the full target (only the shorthand we
+    // typed), so we arm a pending confirm and resolve the member off the success line.
+    public void NoteManualBuffCast(string castCode, string? target = null)
     {
         if (string.IsNullOrWhiteSpace(castCode)) return;
         string code = castCode.Trim();
-        if (_buffInfoByShort?.Invoke(code) is not { DurationSec: > 0 }) return;
-        StartSelfBuffTimer(code, SelfBuffMargin(code));
+        if (_buffInfoByShort?.Invoke(code) is not { } info || info.DurationSec <= 0) return;
+
+        // Whole-party (lands on everyone, no target token) and bare self casts key to "".
+        bool wholeParty = _isPartyWideBuff?.Invoke(code) == true;
+        string prefix = GivenName((target ?? string.Empty).Trim());
+        if (wholeParty || prefix.Length == 0)
+        {
+            StartSelfBuffTimer(code, SelfBuffMargin(code));
+            return;
+        }
+
+        // Single-target hand cast — arm a confirm keyed on the caster line, resolving
+        // the full target name off it (prefix-matched to the shorthand). No matcher
+        // (unresolvable caster template) → fall back to a self timer so it's not lost.
+        if (CasterMessageMatcher.TryCreate(info.Caster) is { } matcher)
+            _pendingManualCast = (code, prefix, info.DurationSec, PartyBuffMargin(code), matcher);
+        else
+            StartSelfBuffTimer(code, SelfBuffMargin(code));
+    }
+
+    // Recast lead for a single-target hand cast — the matching unified-list slot's
+    // per-slot override, else the shared default.
+    private int PartyBuffMargin(string castCode)
+    {
+        if (_readPartyBuffs?.Invoke() is { } buffs)
+            foreach (Models.Profile.BuffSlot slot in buffs.Slots)
+                if (string.Equals(slot.Spell?.Trim(), castCode, StringComparison.OrdinalIgnoreCase))
+                    return slot.RecastMarginSec;
+        return DefaultRecastMarginSec;
     }
 
     // The configured recast lead for a self-buff cast code: the matching unified-list
@@ -875,6 +915,7 @@ public sealed class CastingDirector : IDisposable
 
     private void OnLine(LineExtractor.EmittedLine line)
     {
+        if (_pendingManualCast is { } man) ConfirmManualCast(man, line.Text);
         if (_pendingPartyCast is not { } p) return;
 
         // "You do not see <target> here!" — the member is in the party (so in the room)
@@ -905,6 +946,54 @@ public sealed class CastingDirector : IDisposable
             $"party-buff confirmed spell={p.Short} target={p.Target} " +
             $"duration={p.DurationSec}s — recast in {recastInSec}s.");
         _pendingPartyCast = null;
+    }
+
+    // Resolve a hand-typed single-target buff off its success line: pull the FULL target
+    // name (prefix-matched to the shorthand we typed), then arm that member's timer — or
+    // ours, if we named ourselves. A target outside the party isn't tracked by the Buff
+    // Watchdog, so we don't arm a timer for it.
+    private void ConfirmManualCast(
+        (string Short, string Prefix, long DurationSec, int MarginSec, CasterMessageMatcher Matcher) man,
+        string lineText)
+    {
+        if (!man.Matcher.TryResolveTarget(lineText, man.Prefix, out string full)) return;
+        _pendingManualCast = null;
+
+        string given = GivenName(full).ToLowerInvariant();
+        if (given.Length == 0) return;
+
+        if (string.Equals(given, SelfGivenLower(), StringComparison.OrdinalIgnoreCase))
+        {
+            StartSelfBuffTimer(man.Short, SelfBuffMargin(man.Short));   // we named ourselves
+            return;
+        }
+        if (!IsPartyMemberGiven(given)) return;   // a non-party target the watchdog can't show
+
+        _activeUntil[(given, man.Short)] =
+            (_now().AddSeconds(man.DurationSec), man.MarginSec, (int)man.DurationSec);
+        _log?.Info(LogCategory,
+            $"manual party-buff confirmed spell={man.Short} target={given} " +
+            $"duration={man.DurationSec}s — recast in {Math.Max(0L, man.DurationSec - man.MarginSec)}s.");
+    }
+
+    // Our own given name (lower-cased) from the party roster, or empty when solo.
+    private string SelfGivenLower()
+    {
+        if (_party is not null)
+            foreach (PartyMember m in _party.Members)
+                if (m.IsSelf) return GivenName(m.Name).ToLowerInvariant();
+        return string.Empty;
+    }
+
+    // Whether a lower-cased given name is a current non-self party member.
+    private bool IsPartyMemberGiven(string given)
+    {
+        if (_party is null) return false;
+        foreach (PartyMember m in _party.Members)
+            if (!m.IsSelf
+                && string.Equals(GivenName(m.Name), given, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     // The server's "you can't see the target" answer to a single-target cast:
@@ -1716,6 +1805,9 @@ public sealed class CastingDirector : IDisposable
     private void ArmPartyBuffConfirm(string shortCode, string target, int marginSec)
     {
         _pendingPartyCast = null;
+        // An engine cast is the authority — supersede any hand-cast confirm the wire
+        // observer just armed for the same send (engine casts flow through it too).
+        _pendingManualCast = null;
         if (_buffInfoByShort?.Invoke(shortCode) is not { } info) return;
         if (CasterMessageMatcher.TryCreate(info.Caster) is not { } matcher) return;
         _pendingPartyCast = (shortCode, target, info.DurationSec, marginSec, matcher);

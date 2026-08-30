@@ -2941,6 +2941,23 @@ glass jug               5               2 gold crowns
   code (`bles`) → the client arms/refreshes that buff's timer anchored on the code (`CastingDirector.NoteManualBuffCast`,
   fed by the `OutboundCastObserver`), exactly as an engine cast does. The following success line just
   confirms it landed; identity comes from the code, never the ambiguous applied message.
+- **[CONFIRMED, user 2026-08-29] Casting syntax — no `c`/`cast` prefix needed.** The bare 4-letter cast code
+  IS the command. A **bare code** casts per the spell's own scope: a self buff on yourself, a **whole-party**
+  buff on the whole party (`unfa` → unholy fanaticism on the party, `chan`, etc.), a room spell on the room —
+  no target token. A **code + a name** is a **single-target** cast (`gbls fuj`, `bles alice`). The name is a
+  **prefix / shorthand** the server resolves against the players (and NPCs, for offensive spells) **in the
+  room**: `gbls fuj` casts greater bless on `Fujin` if that uniquely matches; an ambiguous prefix **bonks**
+  with a "do you mean …" list and casts NOTHING. This is exactly how the engine casts — bare code for
+  self / whole-party, `code given` for a single member.
+- **[CONFIRMED, user 2026-08-29 — game data] Every spell has per-perspective messages in the Messages table**
+  (`MessageRecord`): **CasterMessage** (the line YOU see when YOU cast it), **TargetMessage** (the line YOU
+  see when it lands on YOU — i.e. someone cast it on you), **WitnessMessage** (the line YOU see when someone
+  casts on someone else), and **AppliedMessage** (the buff-applied condition line). A successful cast emits
+  the perspective-appropriate line to each observer, so a buff landing on the party can be recognised from
+  ANY seat — our own cast (Caster), a buff cast ON us (Target), or a buff cast on a party member (Witness).
+  Today the buff-timer engine reads only CasterMessage (our casts) + AppliedMessage (self conditions); it does
+  NOT yet read Target / Witness, so a buff another party member casts — or our own single-target manual cast —
+  isn't tracked in the Buff Watchdog.
 - **[user 2026-08-16] Session vs drop for buff timers.** **Any** disconnect — manual, hangup, or an unexpected
   drop — **freezes** the buff timers (the buffs persist server-side through link-death); the Buff Watchdog
   display freezes at the drop instant too (its 1s heartbeat is a wall clock that keeps ticking offline). The

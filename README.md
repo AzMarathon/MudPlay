@@ -10,6 +10,7 @@
 > - Buff Watchdog player sections use your real **in-game character name**, not the profile name
 > - A configured buff that isn't set to recast on anyone and has no live timer is no longer listed — only maintained or currently-up buffs show a bar
 > - A whole-party buff now shows a bar under **each member who was in the party when it was cast**; a member who swaps in afterwards reads **not up**, so you can see who's actually covered (recast stays driven by your own timer)
+> - Hand-casting a single-target buff at a party member (`gbls fuj`) now lights up **that member's** bar — the success line's full name is matched back to whoever you targeted, so a shorthand still resolves correctly
 > - Add-buff dialog carries per-slot conditions: only-when-HP/MA-full (fires at your rest-max, not literal full), only-when-dark for light spells, and — for a mana-regen roll spell — cast-before-resting plus the reroll threshold / max-rerolls
 > - Mana-regen rerolling reads its config from the buff slot (works on Paradigm via `abil 145`); the auto-light system reads the room-light spell from the buff list
 > - Your full buff plan is written to the program log on load / edit (and captured in the bug report) so a "buffs aren't working" report shows exactly how they're set up
