@@ -361,6 +361,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (m.BsDefense > 0) OverviewLines.Add($"Backstab Defense: {m.BsDefense}");
         if (m.RegenTime > 0) OverviewLines.Add($"Regen time: {m.RegenTime:0.#}");
         if (m.FollowPercent > 0) OverviewLines.Add($"Follows on flee: {m.FollowPercent}%");
+        if (m.CharmLevel > 0) OverviewLines.Add($"Charm level: {m.CharmLevel}");
         if (m.Energy > 0) OverviewLines.Add($"Energy: {m.Energy:N0}");
         if (m.AvgDamage > 0) OverviewLines.Add($"Avg damage: {m.AvgDamage:0.#}");
         if (m.Weapon > 0)
