@@ -2,9 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.33.5
+## 3.33.6
 
-- Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right (also raised the cap from 2x to 8x for large/4K monitors)
+- Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right
+- The zoom ceiling is now an absolute effective size (never renders past 32pt-equivalent, the largest size in the picker) instead of a flat 8x multiplier of whatever size you picked — a small chosen size no longer gets blown up to look identical to a large one; Font Size now visibly matters again. A very large window can leave a small unfilled edge for a small font rather than stretching past that ceiling
 - Zoomed text now renders crisp and antialiased for any real font (JetBrains Mono, system fonts) instead of blowing up as blocky pixels — only the MX437 bitmap font keeps the blocky nearest-neighbour upscale, on purpose, to stay pixel-authentic
 - Terminal font family/size now live-preview on the terminal canvas as you change them in Settings → General, instead of only applying after Save
 - Fixed a navigation stall: an asynchronous bright-cyan player-ability line (e.g. "invokes the way of the monkey!") arriving just before the real room title could get parsed as the room name, knocking the tracker to Suspect and causing a paused loop to resend an already-completed move into a wall on resume

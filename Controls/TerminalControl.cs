@@ -121,12 +121,23 @@ public sealed class TerminalControl : Control
     // keystroke straight to the wire.
     public LocalInputBuffer? InputBuffer { get; set; }
 
-    // Hard ceiling on the ScaleToFit zoom: the effective font never exceeds
-    // FontSize × this. 2.0 left dead unpainted space on a maximised window on
-    // a big/4K monitor (fitting an 80x25 grid into e.g. 3840x2160 wants ~5.4x);
-    // 8.0 comfortably covers that without the nearest-neighbour upscale
-    // getting visibly chunky.
-    private const double MaxScale = 8.0;
+    // Hard ceiling on the ScaleToFit zoom, expressed as an absolute effective
+    // point size rather than a flat multiplier of FontSize — matches the
+    // largest size in the Settings font-size picker, so auto-zoom never
+    // renders bigger than the biggest size you could pick manually anyway. A
+    // flat multiplier (e.g. FontSize × 8) let a small chosen size (8pt × 8 =
+    // 64pt) balloon far past a large chosen size (32pt × 8 = 256pt) ever
+    // needed to reach, which is what made FontSize feel ignored — any choice
+    // under the ceiling got zoomed to roughly the same on-screen size the
+    // window's proportions dictated, regardless of what was picked. Deriving
+    // MaxScale from FontSize instead keeps a small pick smaller-but-boosted
+    // and a large pick close to its literal size, at the cost of no longer
+    // always reaching an exact fill on every axis for a small font in a very
+    // large window (a small edge can be left unfilled rather than blown up
+    // past this ceiling).
+    private const double MaxEffectiveFontSize = 32.0;
+
+    private double MaxScale => Math.Max(1.0, MaxEffectiveFontSize / FontSize);
 
     private Typeface _typeface;
     // Bold variant, cached alongside _typeface. DrawRun would otherwise allocate a
