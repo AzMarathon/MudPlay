@@ -1730,8 +1730,11 @@ public sealed class LoopRunner : IRecoverableEngine
             // landing from), so a subsequent refusal is silently dropped too
             // — NoteMoveBlocked only acts when confidence is Pending —
             // stranding the loop in Suspect with no way back
-            // (paradigm-20260829-111627). Forward to the recovery gate
-            // exactly like the real-time branch instead of resending.
+            // (paradigm-20260829-111627; also the backstop for the bright-cyan
+            // ability-line room misparse of paradigm-20260829-154032, whose
+            // primary fix is RoomDisplayParser keeping the title nearest the
+            // exits line). Forward to the recovery gate exactly like the
+            // real-time branch instead of resending.
             if (_stepInFlight
                 && _tracker.State.Confidence is RoomConfidence.Suspect or RoomConfidence.Lost or RoomConfidence.Unknown)
             {

@@ -146,6 +146,25 @@ public sealed class RoomHazardIndex
     public RoomHazard? HazardForSpell(int spell)
         => spell > 0 && _hazardBySpell.TryGetValue(spell, out RoomHazard? h) ? h : null;
 
+    // True when itemId sits in some indexed hazard's any-of counter group and
+    // that group is already satisfied by something carried — i.e. a different
+    // member of the same group protects just as well, so a pending
+    // acquisition/need pinned to itemId specifically is moot. RouteChoicePrompt
+    // and the walker's per-step hazard check both resolve to ONE representative
+    // item from a multi-item group (whichever the acquisition pipeline could
+    // actually source), so a player who instead equips/acquires a different
+    // group member never satisfies that one specific id — this lets callers
+    // notice the substitute solved it anyway.
+    public bool GroupSatisfiedByAlternative(int itemId, Func<int, bool> carries)
+    {
+        ArgumentNullException.ThrowIfNull(carries);
+        foreach (RoomHazard hazard in _hazardBySpell.Values)
+            foreach (IReadOnlyList<int> group in hazard.RequirementGroups)
+                if (group.Contains(itemId) && group.Any(carries))
+                    return true;
+        return false;
+    }
+
     // Reload the index for setName. Pass null to clear. Wired by AppServices to
     // GameDataCache.ActiveSetChanged.
     public void OnActiveSetChanged(string? setName)

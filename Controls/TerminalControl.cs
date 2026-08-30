@@ -121,10 +121,23 @@ public sealed class TerminalControl : Control
     // keystroke straight to the wire.
     public LocalInputBuffer? InputBuffer { get; set; }
 
-    // Hard ceiling on the ScaleToFit zoom: the effective font never exceeds
-    // FontSize × this. Keeps a maximised window on a big monitor from blowing
-    // the glyphs up to an absurd size — "reasonably larger", not billboard.
-    private const double MaxScale = 2.0;
+    // Hard ceiling on the ScaleToFit zoom, expressed as an absolute effective
+    // point size rather than a flat multiplier of FontSize — matches the
+    // largest size in the Settings font-size picker, so auto-zoom never
+    // renders bigger than the biggest size you could pick manually anyway. A
+    // flat multiplier (e.g. FontSize × 8) let a small chosen size (8pt × 8 =
+    // 64pt) balloon far past a large chosen size (32pt × 8 = 256pt) ever
+    // needed to reach, which is what made FontSize feel ignored — any choice
+    // under the ceiling got zoomed to roughly the same on-screen size the
+    // window's proportions dictated, regardless of what was picked. Deriving
+    // MaxScale from FontSize instead keeps a small pick smaller-but-boosted
+    // and a large pick close to its literal size, at the cost of no longer
+    // always reaching an exact fill on every axis for a small font in a very
+    // large window (a small edge can be left unfilled rather than blown up
+    // past this ceiling).
+    private const double MaxEffectiveFontSize = 32.0;
+
+    private double MaxScale => Math.Max(1.0, MaxEffectiveFontSize / FontSize);
 
     private Typeface _typeface;
     // Bold variant, cached alongside _typeface. DrawRun would otherwise allocate a
@@ -137,9 +150,14 @@ public sealed class TerminalControl : Control
     // block-drawing glyphs and stems).
     private double _cellW = 8;
     private double _cellH = 16;
-    // Fractional zoom applied to the native render to fill the viewport when
-    // ScaleToFit is on (1.0 = no zoom). Clamped to [1, MaxScale].
-    private double _fitScale = 1.0;
+    // Independent horizontal/vertical zoom applied to the native render to
+    // fill the viewport when ScaleToFit is on (1.0 = no zoom). Clamped to
+    // [1, MaxScale] each. Scaled independently (not a single uniform factor)
+    // so the grid fills the viewport exactly on both axes — a uniform factor
+    // leaves a gap on whichever axis isn't the tighter constraint whenever the
+    // window's aspect ratio doesn't match the native grid's.
+    private double _fitScaleX = 1.0;
+    private double _fitScaleY = 1.0;
     // Offscreen native-size buffer the grid renders into when zooming, then
     // gets blitted nearest-neighbour to the control bounds. Null when unscaled.
     private RenderTargetBitmap? _scaleBitmap;
@@ -173,10 +191,29 @@ public sealed class TerminalControl : Control
         ClipToBounds = true;
         _typeface = new Typeface(FontFamily);
         _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
-        // Bitmap-style fonts (Mx437) need aliased rendering to avoid color
-        // smearing across cell boundaries; subpixel AA fringes box-drawing chars.
-        TextOptions.SetTextRenderingMode(this, TextRenderingMode.Alias);
-        RenderOptions.SetEdgeMode(this, EdgeMode.Aliased);
+        UpdateRenderMode();
+    }
+
+    // The bundled CP437 bitmap font's family name — the only face that needs
+    // the pixel-native-then-nearest-neighbour-blit zoom path (see RenderScaled).
+    // Every other choice (JetBrains Mono, any installed system monospace font)
+    // is a real vector/outline font: rasterising it at a fractional point size
+    // is exactly how normal text rendering already works, so it scales cleanly
+    // through a draw-transform instead (see RenderScaledVector).
+    private const string BitmapFontFamilyName = "Mx437 IBM VGA 8x16";
+
+    private bool IsBitmapFont => FontFamily.Name.Equals(BitmapFontFamilyName, StringComparison.OrdinalIgnoreCase);
+
+    // Bitmap-style fonts need aliased rendering to avoid colour smearing across
+    // cell boundaries — subpixel AA fringes the block-drawing chars MajorMUD
+    // uses for borders/statline. Vector fonts want the normal antialiased path
+    // (Unspecified), the same as any other on-screen text, or their curves look
+    // jagged. Re-evaluated whenever the font family changes.
+    private void UpdateRenderMode()
+    {
+        bool bitmap = IsBitmapFont;
+        TextOptions.SetTextRenderingMode(this, bitmap ? TextRenderingMode.Alias : TextRenderingMode.Unspecified);
+        RenderOptions.SetEdgeMode(this, bitmap ? EdgeMode.Aliased : EdgeMode.Unspecified);
     }
 
     static TerminalControl()
@@ -326,6 +363,7 @@ public sealed class TerminalControl : Control
     {
         _typeface = new Typeface(FontFamily);
         _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
+        UpdateRenderMode();
         (_cellW, _cellH) = MeasureCell(FontSize);
         RecomputeScale();
         InvalidateMeasure();
@@ -354,9 +392,13 @@ public sealed class TerminalControl : Control
                 Math.Max(1, Math.Round(probe.Height)));
     }
 
-    // Decide the fractional window zoom. When ScaleToFit is off (or the
-    // viewport is unknown) it's 1.0 (native). When on, fit the native grid
-    // (cell × cols/rows) into the viewport, capped at MaxScale, never below 1.
+    // Decide the horizontal/vertical window zoom. When ScaleToFit is off (or
+    // the viewport is unknown) both are 1.0 (native). When on, each axis
+    // scales independently to exactly match the viewport on that axis,
+    // capped at MaxScale, never below 1 — so the grid always fills the whole
+    // viewport with no gap on either axis, at the cost of the two axes
+    // scaling by different factors (the bitmap stretches non-uniformly)
+    // whenever the window's aspect ratio doesn't match the native grid's.
     //
     // The zoom is applied by upscaling the native render bitmap
     // nearest-neighbour (see Render) — NOT by rasterising the glyphs at a
@@ -368,7 +410,7 @@ public sealed class TerminalControl : Control
     // staying crisp.
     private void RecomputeScale()
     {
-        double fit = 1.0;
+        double fitX = 1.0, fitY = 1.0;
 
         if (ScaleToFit)
         {
@@ -379,12 +421,13 @@ public sealed class TerminalControl : Control
             double naturalH = _cellH * rows;
             if (vp.Width > 0 && vp.Height > 0 && naturalW > 0 && naturalH > 0)
             {
-                double raw = Math.Min(vp.Width / naturalW, vp.Height / naturalH);
-                fit = Math.Clamp(raw, 1.0, MaxScale);
+                fitX = Math.Clamp(vp.Width / naturalW, 1.0, MaxScale);
+                fitY = Math.Clamp(vp.Height / naturalH, 1.0, MaxScale);
             }
         }
 
-        _fitScale = fit;
+        _fitScaleX = fitX;
+        _fitScaleY = fitY;
     }
 
     // Tell layout the control wants the native grid times the window zoom. At
@@ -395,7 +438,7 @@ public sealed class TerminalControl : Control
         var em = Emulator;
         int cols = em?.Screen.Cols ?? 80;
         int rows = em?.Screen.Rows ?? 25;
-        return new Size(_cellW * cols * _fitScale, _cellH * rows * _fitScale);
+        return new Size(_cellW * cols * _fitScaleX, _cellH * rows * _fitScaleY);
     }
 
     public override void Render(DrawingContext context)
@@ -411,22 +454,39 @@ public sealed class TerminalControl : Control
         // emulator. Guarded so the normal path is untouched when inactive.
         if (SplashActive && _splash is { } sp)
         {
-            if (_fitScale > 1.0) RenderScaledCells(context, sp.Screen);
+            if (_fitScaleX > 1.0 || _fitScaleY > 1.0)
+            {
+                if (IsBitmapFont) RenderScaledCells(context, sp.Screen);
+                else using (context.PushTransform(Matrix.CreateScale(_fitScaleX, _fitScaleY))) DrawCells(context, sp.Screen);
+            }
             else DrawCells(context, sp.Screen);
             return;
         }
 
         if (em is null) return;
 
-        // Zoomed: render the grid at native size into an offscreen bitmap, then
-        // blit it nearest-neighbour to the (larger) control bounds. This keeps
-        // the bitmap font on its native pixel grid — the upscale duplicates
-        // whole pixels rather than re-rasterising glyphs at a fractional size,
-        // so no colour bleed or block-glyph gaps. The unscaled path draws
-        // straight to the context (no bitmap round-trip) to stay cheap.
-        if (_fitScale > 1.0)
+        if (_fitScaleX > 1.0 || _fitScaleY > 1.0)
         {
-            RenderScaled(context, em);
+            if (IsBitmapFont)
+            {
+                // The bitmap font's glyphs live on a fixed native pixel grid —
+                // rasterising them at a fractional point size smears stems and
+                // gaps the full-cell block-drawing glyphs MajorMUD uses for
+                // borders/statline. Render at native size into an offscreen
+                // buffer, then blit it nearest-neighbour to the (larger) control
+                // bounds so the upscale duplicates whole pixels instead.
+                RenderScaled(context, em);
+            }
+            else
+            {
+                // A real vector/outline font scales the same way any other
+                // on-screen text does: draw at native cell coordinates under a
+                // draw-transform and let Skia rasterise the glyphs directly at
+                // the final size, so it stays crisp and antialiased at any zoom
+                // instead of blowing up a small raster into blocky pixels.
+                using (context.PushTransform(Matrix.CreateScale(_fitScaleX, _fitScaleY)))
+                    DrawScreen(context, em);
+            }
             return;
         }
 
@@ -434,7 +494,7 @@ public sealed class TerminalControl : Control
     }
 
     // Native-size render into the offscreen buffer, then a nearest-neighbour
-    // blit to fill the control bounds.
+    // blit to fill the control bounds. Bitmap font only — see Render.
     private void RenderScaled(DrawingContext context, TerminalEmulator em)
     {
         var screen = em.Screen;
@@ -449,7 +509,7 @@ public sealed class TerminalControl : Control
         }
 
         var src = new Rect(0, 0, nativeW, nativeH);
-        var dest = new Rect(0, 0, nativeW * _fitScale, nativeH * _fitScale);
+        var dest = new Rect(0, 0, nativeW * _fitScaleX, nativeH * _fitScaleY);
         using (context.PushRenderOptions(new RenderOptions
         {
             BitmapInterpolationMode = BitmapInterpolationMode.None,
@@ -491,7 +551,7 @@ public sealed class TerminalControl : Control
             DrawCells(bctx, screen);
         }
         var src = new Rect(0, 0, nativeW, nativeH);
-        var dest = new Rect(0, 0, nativeW * _fitScale, nativeH * _fitScale);
+        var dest = new Rect(0, 0, nativeW * _fitScaleX, nativeH * _fitScaleY);
         using (context.PushRenderOptions(new RenderOptions
         {
             BitmapInterpolationMode = BitmapInterpolationMode.None,

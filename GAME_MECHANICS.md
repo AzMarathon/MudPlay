@@ -1386,6 +1386,16 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
   treated as block boundaries. (`RoomDisplayParser.PartyChatterBoundaryPattern` does this — the room
   the follower lands in is displayed immediately after ` -- Following your Party leader <dir> --`, so
   that drag line is the natural boundary.)
+- **[CONFIRMED by user, report `paradigm-20260829-154032`] Bright cyan is not uniquely the room title —
+  an engine-side palette can remap spell/ability text to it.** A player running a palette that shifts
+  spell/ability lines from dark blue to bright cyan makes every `<player> invokes the way of the
+  monkey!`-style broadcast render in the **same bright cyan as room names**, deterministically (not an
+  occasional fluke). Such a line can arrive in the arrival burst immediately **before** the real title.
+  Colour therefore can't tell an ability line from the title under that palette. The room-name detector
+  anchors on **position** instead: the title is the **last** bright-cyan line before `Obvious exits:`
+  (the room display — title → `Also here:` → `Obvious exits:` — is one contiguous block, so async player
+  broadcasts land before it, never between the title and the exits line). `RoomDisplayParser` keeps the
+  nearest bright-cyan line to the exits, not the first in the block.
 - **[CONFIRMED]** **Hidden/foliage exits drag the follower with no direction.** Some Darkwood Forest
   exits are text-only: the leader prints `<leader> shoves aside the foliage, and disappears among the
   trees.` and the follower is pulled through with `You push through the dense foliage, and walk onto a
@@ -1559,6 +1569,14 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
        each has `NegateSpell = [526, 218]`, and they're the only two items that do. `RoomHazardIndex`
        already indexes these (one any-of group {487, 1000}), so the router treats lava exactly like the
        river/desert: avoid unless the player carries a counter.
+     - **[CONFIRMED by user, report `paradigm-20260829-203409`] Misty Bog swamp damage** — `Spell:485`
+       (the bog zone's entry spell) is negated by **either** the **swamp boots (item 925)** or the
+       **trollskin boots (item 1232)** — both share `NegateSpell = [485, 5682]`, an any-of group
+       exactly like the lava amulet/feather pair above. The route picker/walker only ever resolve to
+       *sourcing* one representative item from a multi-item group (whichever the acquisition pipeline
+       can actually reach — here, trollskin via a shop), so a player who instead equips a *different*
+       group member they already own (swamp boots) is just as protected even though the client's
+       path-item tracking was, before this report's fix, still pinned to the one it originally chose.
      - Timer cancel on exit: the `6/1139` up-exit is `(Cast: pre-516, post-0)` → spell **516**
        `151`(EndCast→**515** "stop drowning"), and 515 `153`(KillSpell) **512** & **513** — leaving the
        water cancels the drown timer. (`Cast: pre-N` = cast spell N *before* moving through the exit.)

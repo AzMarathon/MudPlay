@@ -1,10 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.36.1**
-> - Fixed lost gold in the room after a stash room: stash-room auto-collect was suppressed by reading the "current room" too early (a room's coin line is seen before the room is confirmed), so the next room's coin was mis-attributed to the stash room and left on the floor
-> - Stash rooms now collect coin that's visible on entry or dropped by a kill; only a pile that a `search` re-reveals (the coin just stashed) is left alone
-> - Same fix applied to auto-stash items
+> **Version 3.36.7**
+> - Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right
+> - The zoom ceiling is now an absolute effective size (never renders past 32pt-equivalent, the largest size in the picker) instead of a flat 8x multiplier of whatever size you picked — a small chosen size no longer gets blown up to look identical to a large one; Font Size now visibly matters again
+> - Zoomed text now renders crisp and antialiased for any real font (JetBrains Mono, system fonts) instead of blowing up as blocky pixels — only the MX437 bitmap font keeps the blocky nearest-neighbour upscale, on purpose, to stay pixel-authentic
+> - Terminal font family/size now live-preview on the terminal canvas as you change them in Settings → General, instead of only applying after Save
+> - Room-title detection now keeps the bright-cyan line nearest "Obvious exits:" instead of the first one in the block, so an asynchronous bright-cyan player-ability line (or a palette that recolors spell text to the same cyan) no longer gets read as the room name
+> - Fixed a hazard route getting permanently stuck demanding a specific counter item even after the player equipped a different item that protects against the exact same thing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

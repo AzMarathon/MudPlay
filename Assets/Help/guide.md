@@ -690,8 +690,8 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **Default:** Family = bundled MX437 IBM VGA 8×16 CP437 bitmap font; Size = 16 pt.
 **Available options:** MX437 (bundled), JetBrains Mono (bundled), plus every monospace font installed on your system. Sizes: 8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32.
 **What it does:** Controls the font the main terminal canvas renders with. MX437 reproduces classic BBS CP437 output (box-drawing characters, line art); JetBrains Mono is a clean modern monospace alternative if you don't care about retro accuracy.
-**When you might change it:** Switch to JetBrains Mono if the block-drawing glyphs in MX437 look odd on your display, or if you just prefer a more modern look.
-**Important notes:** Applies live on Save/Apply, no restart needed.
+**When you might change it:** Switch to JetBrains Mono (or any installed system monospace font) if the block-drawing glyphs in MX437 look odd on your display, or if you want smoother, more modern-looking text — especially combined with "Scale terminal output to fill the window": a real font like JetBrains Mono renders crisp and antialiased at any zoom level, unlike MX437's bitmap glyphs, which upscale as blocky pixels to preserve their authentic retro look.
+**Important notes:** Live-previews on the terminal canvas the moment you change the picker — no need to click Save first to see it. Clicking Cancel (or the title-bar X) reverts the canvas back to your saved font; only Save keeps the change.
 
 ### Navigation tooltip font (family + size)
 
@@ -703,9 +703,9 @@ Settings → General. Everything here is character-tier (follows the loaded char
 ### Scale terminal output to fill the window
 
 **Default:** Off
-**What it does:** When on, the terminal's text grows to fill the window (zooming in on a fixed 80×25 grid) instead of leaving empty space around a fixed-size grid in a larger window.
+**What it does:** When on, the terminal's fixed 80×25 grid stretches to completely fill the window — width and height scale independently, so there's never a gray bar on any edge, on any window shape. On a window whose proportions don't match the grid's, characters stretch slightly wider or taller rather than leaving dead space.
 **When you might change it:** Turn it on if you run MudPlay maximized or in a large window and don't want dead space around the text.
-**Important notes:** Applies live. This setting resets to Off whenever you close a profile, since it's stored per-character.
+**Important notes:** Applies live and keeps re-fitting as you resize the window, so it doubles as an "auto-fit to window" for anyone wanting the terminal to always fill the current window size exactly. The zoom never renders past an effective 32pt (the largest size in the Font size picker) regardless of your chosen Font size — this keeps a small chosen size from getting blown up to look identical to a large one, at the cost of possibly not quite filling an unusually large window when a small size is chosen. With a real font selected (JetBrains Mono or a system font, not MX437), the zoomed text stays crisp and antialiased at any size — MX437's bitmap glyphs upscale as blocky pixels instead, on purpose, to keep them authentic. This setting resets to Off whenever you close a profile, since it's stored per-character.
 
 ### Keep typing directed at the terminal when other windows are open
 

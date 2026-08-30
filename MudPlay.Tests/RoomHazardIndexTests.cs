@@ -422,4 +422,36 @@ public sealed class RoomHazardIndexTests : IDisposable
 
         Assert.Equal(new[] { 42 }, hazard.MandatoryItems);
     }
+
+    // The trollskin-boots / swamp-boots case (report paradigm-20260829-203409):
+    // two items share the same NegateSpell, so they land in the same any-of
+    // group. The route picker resolves to sourcing ONE of them (trollskin), but
+    // the player instead equips the other (swamp boots) they already owned.
+    // GroupSatisfiedByAlternative lets a caller pinned to the originally-chosen
+    // id (trollskin) recognize the substitute already covers the hazard.
+    [Fact]
+    public void GroupSatisfiedByAlternative_OtherGroupMemberCarried_IsTrue()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(485),
+            """ [ { "Number": 485, "Abil-0": 1, "AbilVal-0": 25 } ] """,
+            """
+            [ { "Number": 1232, "NegateSpell-0": 485 },
+              { "Number": 925,  "NegateSpell-0": 485 } ]
+            """);
+
+        Assert.True(idx.GroupSatisfiedByAlternative(1232, id => id == 925));
+        Assert.False(idx.GroupSatisfiedByAlternative(1232, _ => false));
+    }
+
+    [Fact]
+    public void GroupSatisfiedByAlternative_ItemNotInAnyGroup_IsFalse()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(485),
+            """ [ { "Number": 485, "Abil-0": 1, "AbilVal-0": 25 } ] """,
+            """ [ { "Number": 1232, "NegateSpell-0": 485 } ] """);
+
+        Assert.False(idx.GroupSatisfiedByAlternative(999, id => id == 1232));
+    }
 }

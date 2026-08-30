@@ -605,6 +605,52 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void ResumeWhileMoveInFlight_TrackerBecameSuspectDuringPause_RecoversWithoutReSending()
+    {
+        // Regression (paradigm-20260829-154032): an interleaved bright-cyan
+        // player ability was parsed as the arriving room's name while Combat
+        // had the loop paused. The tracker became Suspect, but the runner's
+        // normal mismatch handler ignores transitions while Paused. Resume then
+        // re-sent the already-completed N step from room B, where N was a wall.
+        // The primary fix is RoomDisplayParser (it no longer misreads the ability
+        // as the title); this pins the shared resume-time backstop that catches a
+        // Suspect-on-resume regardless of cause (same guard as the 111627 case).
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        // The observation carries B's exits but an impossible asynchronous
+        // message as its name, reproducing the parser failure from the report.
+        h.Tracker.NoteRoomObserved(new RoomObservation(
+            "Astro invokes the way of the monkey!",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        // Clearing Combat must request rm recovery and re-pause, never emit a
+        // second N from the room the first N already reached.
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.Single(h.Sent);
+        Assert.Single(h.ResyncReasons);
+        Assert.Contains("on resume at step", h.ResyncReasons[0]);
+
+        // The authoritative reply says the original move reached B. Recovery
+        // advances exactly once and sends the correct return step S.
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Gate!.NoteAuthoritativePosition(new RoomKey(1, 2));
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.DoesNotContain(h.Sent.Skip(1), bytes => Encoding.Latin1.GetString(bytes) == "n\r");
+    }
+
+    [Fact]
     public void InFlightStall_Watchdog_NoOpAfterLoopStopped()
     {
         // The watchdog must not escalate once the loop is no longer running — a
