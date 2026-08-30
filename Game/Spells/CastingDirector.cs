@@ -126,6 +126,12 @@ public sealed class CastingDirector : IDisposable
     // The one outstanding party-buff cast awaiting CasterMessage
     // confirmation. CastCoordinator's cooldown guarantees ≤1 in flight.
     private (string Short, string Target, long DurationSec, int MarginSec, CasterMessageMatcher Matcher)? _pendingPartyCast;
+    // A HAND-TYPED single-target buff cast (`gbls fuj`) awaiting its success line. We
+    // know only the shorthand the user typed after the code; the caster line names the
+    // resolved target in full, which we prefix-match against the shorthand to arm that
+    // member's timer. Engine casts arm _pendingPartyCast instead (ArmPartyBuffConfirm
+    // clears this), so only a genuine hand-cast leaves one of these armed.
+    private (string Short, string Prefix, long DurationSec, int MarginSec, CasterMessageMatcher Matcher)? _pendingManualCast;
     // The self-buff whose optimistic recast timer was armed on send but hasn't yet
     // been confirmed landed. Cleared when its AppliedMessage confirms (the real
     // duration timer takes over) OR when a server landing-failure arrives — a fizzle
@@ -169,7 +175,7 @@ public sealed class CastingDirector : IDisposable
     private Func<string, bool>? _isPartyWideBuff;
     // The character's party-buff plan (Party window). Null / no reader ⇒ no party
     // buffs. Read live each pass so an edit in the Party window takes effect at once.
-    private Func<Models.Profile.PartyBuffSettings?>? _readPartyBuffs;
+    private Func<Models.Profile.BuffSettings?>? _readPartyBuffs;
     // "Is this member (given name) listed in the room's 'Also here:'?" — used ONLY to
     // clear a hidden-target back-off when the member reappears. Party membership already
     // guarantees same-room (if 'par' lists them they're here), so this is NOT a
@@ -470,7 +476,7 @@ public sealed class CastingDirector : IDisposable
     // Wire the party-buff plan source (CharacterProfile.PartyBuffs) so the party-buff
     // picker reads the user's configured slots. Optional — until wired, the picker
     // no-ops. Read live each pass so a Party-window edit takes effect immediately.
-    public void SetPartyBuffSource(Func<Models.Profile.PartyBuffSettings?> readPartyBuffs)
+    public void SetPartyBuffSource(Func<Models.Profile.BuffSettings?> readPartyBuffs)
     {
         ArgumentNullException.ThrowIfNull(readPartyBuffs);
         _readPartyBuffs = readPartyBuffs;
@@ -558,6 +564,7 @@ public sealed class CastingDirector : IDisposable
         _activeUntil.Clear();
         _hiddenTargets.Clear();
         _pendingPartyCast = null;
+        _pendingManualCast = null;
         _pendingSelfBuffShort = null;
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
@@ -576,6 +583,7 @@ public sealed class CastingDirector : IDisposable
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
         _pendingPartyCast = null;   // a cast in flight when we died never landed
+        _pendingManualCast = null;
         _log?.Info(LogCategory,
             $"self died — cleared {removed} self-buff timer(s); party-buff timers kept (those members are alive).");
     }
@@ -754,29 +762,62 @@ public sealed class CastingDirector : IDisposable
             + $", recast in {Math.Max(0L, seconds - marginSec)}s; awaiting applied-line confirm");
     }
 
-    // A manually-typed self-buff cast (the user entered its 4-letter cast code) — arm /
+    // A manually-typed buff cast (the user entered its 4-letter cast code) — arm /
     // refresh its recast timer exactly as an engine cast does, anchored on the cast code.
     // The typed code is the reliable identity; we never infer WHICH buff landed from the
     // shared applied message (one Paradigm line names 11 records — bless / chant / …), so
     // a hand-cast is caught here rather than left for the ambiguous applied-line path.
     // A non-buff code (a combat / instant spell with no resolved duration) is inert.
-    public void NoteManualBuffCast(string castCode)
+    //
+    // A BARE code (`bles`, or a whole-party `unfa`) targets self / the whole party —
+    // keyed "" immediately, same as the engine. A code plus a NAME (`gbls fuj`) is a
+    // single-target cast: we don't yet know the full target (only the shorthand we
+    // typed), so we arm a pending confirm and resolve the member off the success line.
+    public void NoteManualBuffCast(string castCode, string? target = null)
     {
         if (string.IsNullOrWhiteSpace(castCode)) return;
         string code = castCode.Trim();
-        if (_buffInfoByShort?.Invoke(code) is not { DurationSec: > 0 }) return;
-        StartSelfBuffTimer(code, SelfBuffMargin(code));
+        if (_buffInfoByShort?.Invoke(code) is not { } info || info.DurationSec <= 0) return;
+
+        // Whole-party (lands on everyone, no target token) and bare self casts key to "".
+        bool wholeParty = _isPartyWideBuff?.Invoke(code) == true;
+        string prefix = GivenName((target ?? string.Empty).Trim());
+        if (wholeParty || prefix.Length == 0)
+        {
+            StartSelfBuffTimer(code, SelfBuffMargin(code));
+            return;
+        }
+
+        // Single-target hand cast — arm a confirm keyed on the caster line, resolving
+        // the full target name off it (prefix-matched to the shorthand). No matcher
+        // (unresolvable caster template) → fall back to a self timer so it's not lost.
+        if (CasterMessageMatcher.TryCreate(info.Caster) is { } matcher)
+            _pendingManualCast = (code, prefix, info.DurationSec, PartyBuffMargin(code), matcher);
+        else
+            StartSelfBuffTimer(code, SelfBuffMargin(code));
     }
 
-    // The configured recast lead for a self-buff cast code: its bless-slot override when
-    // the code occupies a slot, else the shared default (covers the regen / when-full
-    // buffs and any hand-cast buff that isn't in a slot).
+    // Recast lead for a single-target hand cast — the matching unified-list slot's
+    // per-slot override, else the shared default.
+    private int PartyBuffMargin(string castCode)
+    {
+        if (_readPartyBuffs?.Invoke() is { } buffs)
+            foreach (Models.Profile.BuffSlot slot in buffs.Slots)
+                if (string.Equals(slot.Spell?.Trim(), castCode, StringComparison.OrdinalIgnoreCase))
+                    return slot.RecastMarginSec;
+        return DefaultRecastMarginSec;
+    }
+
+    // The configured recast lead for a self-buff cast code: the matching unified-list
+    // slot's per-slot override when the code occupies a CastOnSelf slot, else the
+    // shared default (covers the mana-regen buff and any hand-cast buff not in a slot).
     private int SelfBuffMargin(string castCode)
     {
-        SpellsSettings spells = _readSpells();
-        foreach (KeyValuePair<int, string> slot in spells.BlessSlots)
-            if (string.Equals(slot.Value?.Trim(), castCode, StringComparison.OrdinalIgnoreCase))
-                return BlessSlotMargin(spells, slot.Key);
+        if (_readPartyBuffs?.Invoke() is { } buffs)
+            foreach (Models.Profile.BuffSlot slot in buffs.Slots)
+                if (slot.CastOnSelf
+                    && string.Equals(slot.Spell?.Trim(), castCode, StringComparison.OrdinalIgnoreCase))
+                    return slot.RecastMarginSec;
         return DefaultRecastMarginSec;
     }
 
@@ -874,6 +915,7 @@ public sealed class CastingDirector : IDisposable
 
     private void OnLine(LineExtractor.EmittedLine line)
     {
+        if (_pendingManualCast is { } man) ConfirmManualCast(man, line.Text);
         if (_pendingPartyCast is not { } p) return;
 
         // "You do not see <target> here!" — the member is in the party (so in the room)
@@ -904,6 +946,54 @@ public sealed class CastingDirector : IDisposable
             $"party-buff confirmed spell={p.Short} target={p.Target} " +
             $"duration={p.DurationSec}s — recast in {recastInSec}s.");
         _pendingPartyCast = null;
+    }
+
+    // Resolve a hand-typed single-target buff off its success line: pull the FULL target
+    // name (prefix-matched to the shorthand we typed), then arm that member's timer — or
+    // ours, if we named ourselves. A target outside the party isn't tracked by the Buff
+    // Watchdog, so we don't arm a timer for it.
+    private void ConfirmManualCast(
+        (string Short, string Prefix, long DurationSec, int MarginSec, CasterMessageMatcher Matcher) man,
+        string lineText)
+    {
+        if (!man.Matcher.TryResolveTarget(lineText, man.Prefix, out string full)) return;
+        _pendingManualCast = null;
+
+        string given = GivenName(full).ToLowerInvariant();
+        if (given.Length == 0) return;
+
+        if (string.Equals(given, SelfGivenLower(), StringComparison.OrdinalIgnoreCase))
+        {
+            StartSelfBuffTimer(man.Short, SelfBuffMargin(man.Short));   // we named ourselves
+            return;
+        }
+        if (!IsPartyMemberGiven(given)) return;   // a non-party target the watchdog can't show
+
+        _activeUntil[(given, man.Short)] =
+            (_now().AddSeconds(man.DurationSec), man.MarginSec, (int)man.DurationSec);
+        _log?.Info(LogCategory,
+            $"manual party-buff confirmed spell={man.Short} target={given} " +
+            $"duration={man.DurationSec}s — recast in {Math.Max(0L, man.DurationSec - man.MarginSec)}s.");
+    }
+
+    // Our own given name (lower-cased) from the party roster, or empty when solo.
+    private string SelfGivenLower()
+    {
+        if (_party is not null)
+            foreach (PartyMember m in _party.Members)
+                if (m.IsSelf) return GivenName(m.Name).ToLowerInvariant();
+        return string.Empty;
+    }
+
+    // Whether a lower-cased given name is a current non-self party member.
+    private bool IsPartyMemberGiven(string given)
+    {
+        if (_party is null) return false;
+        foreach (PartyMember m in _party.Members)
+            if (!m.IsSelf
+                && string.Equals(GivenName(m.Name), given, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     // The server's "you can't see the target" answer to a single-target cast:
@@ -1134,16 +1224,21 @@ public sealed class CastingDirector : IDisposable
         if (blessEnabled)
         {
             int buffPrio = CategoryPriority(spells, SpellCategory.Buffing);
-            foreach (KeyValuePair<int, string> kv in spells.BlessSlots.OrderBy(k => k.Key))
+            // The unified buff list, in priority (list) order. Self / whole-party slots
+            // key their recast to "" (they land on us); a member-target slot's per-member
+            // timers aren't enumerated here (best-effort self view). Only-when-dark light
+            // slots are the auto-light system's job, not this queue.
+            if (_readPartyBuffs?.Invoke() is { } buffs)
             {
-                string? code = kv.Value?.Trim();
-                if (string.IsNullOrWhiteSpace(code) || !IsRecastDue("", code)) continue;
-                q.Add((buffPrio, kv.Key, $"{code}({buffPrio}-{kv.Key})"));
+                int slotNo = 0;
+                foreach (Models.Profile.BuffSlot slot in buffs.Slots)
+                {
+                    slotNo++;
+                    string? code = slot.Spell?.Trim();
+                    if (string.IsNullOrWhiteSpace(code) || slot.OnlyWhenDark || !IsRecastDue("", code)) continue;
+                    q.Add((buffPrio, slotNo, $"{code}({buffPrio}-{slotNo})"));
+                }
             }
-            // Regen / when-full downtime buffs have no slot number.
-            foreach (string? code in new[] { spells.MaRegenSpell, spells.WhenHpFullSpell, spells.WhenMaFullSpell })
-                if (!string.IsNullOrWhiteSpace(code) && IsRecastDue("", code.Trim()))
-                    q.Add((buffPrio, int.MaxValue, $"{code.Trim()}({buffPrio})"));
         }
 
         if (q.Count == 0) return;
@@ -1545,9 +1640,15 @@ public sealed class CastingDirector : IDisposable
             health.MaThresholdMode, health.BlessIfAboveMa, _state.MaxMa);
         bool manaBuffsAllowed = _state.MaxMa > 0 && _state.Ma >= blessFloor;
 
-        // Self buffs first (rows 1–10 + regen + when-full), then party buffs.
-        if (PickSelfBuff(spells, manaBuffsAllowed) is { } self) return self;
-        return PickPartyBuff(party, manaBuffsAllowed);
+        // Mana-regen (+ its front-of-queue reroll) leads, then the ONE unified buff
+        // list walked in priority order — self bless / when-full, whole-party, and
+        // per-member buffs together.
+        // A staged mana-regen reroll leads — it's an immediate below-threshold recast
+        // (front of the queue). Then the ONE unified buff list (self bless / regen /
+        // when-full, whole-party, per-member). Mana-regen maintenance is now just a
+        // CastOnSelf slot in that list, so PickUnifiedBuff handles it in place.
+        if (PickManaRegenReroll(spells, manaBuffsAllowed) is { } rr) return rr;
+        return PickUnifiedBuff(spells, health, party, manaBuffsAllowed);
     }
 
     // Per-slot buff affordability for the buff pickers. A regular spell buff is
@@ -1564,153 +1665,133 @@ public sealed class CastingDirector : IDisposable
         return manaBuffsAllowed && _state.Ma >= cost.Value;
     }
 
-    // Walk the self-buff slots (the sparse Bless slots in slot-index order, then
-    // MaRegen + WhenHpFull + WhenMaFull) and return the first configured slot due to
-    // recast on us. Timing is gated by the Spells-tab self-bless toggles, mirroring
-    // the party-bless gates: blocked during combat unless SelfBlessDuringCombat,
-    // blocked during a triggered recovery rest unless SelfBlessWhileResting (both
-    // default OFF). Both default to the prior hard-coded behaviour — self buffs out
-    // of combat and outside an active recovery only — so a profile that never
-    // touches the toggles behaves exactly as before.
-    //
-    // HpRegenSpell deliberately does NOT live here: an HP-regen HoT is treated as
-    // assisted healing, cast reactively by the minor-self-heal path
-    // (PickMinorSelfHeal) when HP trips the trigger — not maintained always-up like a
-    // buff. A user who wants a constantly-refreshed regen buff puts that spell in a
-    // Bless slot instead. MaRegenSpell stays a downtime buff — it tops the mana pool
-    // (and feeds the reroll engine), it doesn't heal HP.
-    private CastCandidate? PickSelfBuff(SpellsSettings spells, bool manaBuffsAllowed)
+    // A staged mana-regen reroll — an immediate below-threshold recast that jumps the
+    // whole buff queue (bypasses the slot's recast timer) but still honours the self-
+    // bless timing gates and the buff mana floor. If it can't be paid for right now,
+    // drop it (the reroller re-stages on the next landing if still below threshold)
+    // rather than stall the walk. The mana-regen buff's own MAINTENANCE recast is now
+    // a normal CastOnSelf slot in the unified list (PickUnifiedBuff handles it).
+    private CastCandidate? PickManaRegenReroll(SpellsSettings spells, bool manaBuffsAllowed)
     {
-        if (_state.InCombat && !spells.SelfBlessDuringCombat) return null;
-        // "While resting" gates only a TRIGGERED recovery rest (HP/MA fell below
-        // rest-if-below and we're resting back up) — not idle / standing / idly
-        // resting. So the normal cadence buffs while moving and idle, and holds
-        // only during an active recovery unless the user opts in.
-        if ((_isTriggeredRest?.Invoke() ?? false) && !spells.SelfBlessWhileResting) return null;
-
-        // A staged mana-regen reroll takes the front of the self-buff queue — it's
-        // an immediate recast (below-threshold roll), so it bypasses the slot's
-        // recast timer, but still honours the in-combat / resting gates above and
-        // the buff mana floor. Offered here at PriorityBuffing so a due heal/cure
-        // wins; if it can't be paid for right now, drop it (the reroller re-stages
-        // on the next landing if still below threshold) rather than stall the walk.
-        if (_pendingManaRegenReroll is { } reroll)
-        {
-            if (IsBuffAffordable(reroll, manaBuffsAllowed))
-                return new CastCandidate(reroll, Target: null, DefaultRecastMarginSec);
-            _pendingManaRegenReroll = null;
-        }
-
-        // Bless slots first (in priority = slot-index order), each carrying its
-        // per-slot recast lead; then the mana-regen / "when full" downtime buffs,
-        // which have no picker and use the shared default.
-        IEnumerable<(string? Spell, bool Eligible, int Margin)> slots =
-            spells.BlessSlots.OrderBy(kv => kv.Key)
-                .Select(kv => ((string?)kv.Value, true, BlessSlotMargin(spells, kv.Key)))
-                .Concat(new (string? Spell, bool Eligible, int Margin)[]
-                {
-                    (spells.MaRegenSpell,     true, DefaultRecastMarginSec),
-                    // WhenHp/MaFull additionally require the matching pool to be
-                    // at max — they're "downtime, ready for next fight" buffs.
-                    (spells.WhenHpFullSpell,  _state.MaxHp > 0 && _state.Hp >= _state.MaxHp, DefaultRecastMarginSec),
-                    (spells.WhenMaFullSpell,  _state.MaxMa > 0 && _state.Ma >= _state.MaxMa, DefaultRecastMarginSec),
-                });
-
-        // In a party, a self-buff a configured party-wide buff removes (e.g. chant removes
-        // bless) is left to that party buff — skip self-casting the superseded spell.
-        IReadOnlyDictionary<string, string>? covered = _selfBuffCoverage?.Invoke();
-
-        foreach ((string? slot, bool eligible, int margin) in slots)
-        {
-            if (!eligible) continue;
-            if (string.IsNullOrWhiteSpace(slot)) continue;
-            if (covered is not null && covered.ContainsKey(slot)) continue;
-            if (!IsBuffAffordable(slot, manaBuffsAllowed)) continue;
-            if (!IsRecastDue("", slot)) continue;
-            return new CastCandidate(slot, Target: null, margin);
-        }
+        if (!SelfBuffTimingAllowed(spells)) return null;
+        if (_pendingManaRegenReroll is not { } reroll) return null;
+        if (IsBuffAffordable(reroll, manaBuffsAllowed))
+            return new CastCandidate(reroll, Target: null, DefaultRecastMarginSec);
+        _pendingManaRegenReroll = null;
         return null;
     }
 
-    // The recast lead for a self-bless slot: the per-slot override when set, else
-    // the shared default. A 0 override (wait for actual expiry) is preserved.
-    private static int BlessSlotMargin(SpellsSettings spells, int slotIndex) =>
-        spells.BlessSlotRecastMargins.TryGetValue(slotIndex, out int m)
-            ? m : DefaultRecastMarginSec;
-
-    // Walk the configured party-buff slots (CharacterProfile.PartyBuffs) in priority
-    // order and pick one buff to cast. A whole-party buff (Spells.Targets 10 / 13 —
-    // e.g. chant, mass frenzy) blankets the party in a single cast, sent once with no
-    // target when its WholePartyOn toggle is set, keyed for recast like a self-buff
-    // (it lands on us too). A single-target buff (Targets 2 — e.g. frenzy, divine
-    // favour) is cast on a selected member due for recast — a member is eligible only
-    // when they're BOTH in the party AND in the room (AllMembers = everyone; else the
-    // slot's chosen given names). Gated by the Settings → Party "bless while resting"
-    // / "bless during combat" toggles.
-    private CastCandidate? PickPartyBuff(PartySettings? party, bool manaBuffsAllowed)
+    // Self-buff timing gate shared by the mana-regen path and the CastOnSelf targets
+    // in the unified walk: allowed unless we're in combat without SelfBlessDuringCombat,
+    // or in a TRIGGERED recovery rest without SelfBlessWhileResting. Idle / standing /
+    // idly-resting is always allowed. Both toggles default OFF.
+    private bool SelfBuffTimingAllowed(SpellsSettings spells)
     {
-        if (_party is null) return null;
-        // Solo → the party-buff slots don't apply; only cast them once actually in a party.
-        if (!_party.IsInParty) return null;
+        if (_state.InCombat && !spells.SelfBlessDuringCombat) return false;
+        if ((_isTriggeredRest?.Invoke() ?? false) && !spells.SelfBlessWhileResting) return false;
+        return true;
+    }
+
+    // Walk the ONE unified buff list (CharacterProfile.PartyBuffs) in priority order
+    // and pick the first due buff to cast. A slot can target ourselves (CastOnSelf),
+    // the whole party in one cast (Targets 10 / 13, WholePartyOn — lands on us too),
+    // and/or selected members (Targets 2). Self targets obey the self-bless timing
+    // gates (SpellsSettings); party / member targets obey the party-bless gates
+    // (PartySettings) and require actually being in a party. Per-slot conditions
+    // (OnlyWhenHpFull / OnlyWhenMaFull) must be met for the slot to fire.
+    //
+    // A member is eligible only when in the party (MajorMUD parties are co-located, so
+    // a roster name is in the room) — the one exception being a member who's HIDING:
+    // the cast returns "You do not see <name> here!" and we back off (_hiddenTargets)
+    // until we move or they reappear in "Also here:".
+    private CastCandidate? PickUnifiedBuff(SpellsSettings spells, HealthSettings health, PartySettings? party, bool manaBuffsAllowed)
+    {
         if (_readPartyBuffs?.Invoke() is not { } buffs) return null;
 
-        // Gates live on PartySettings (kept on the Settings → Party tab). A null
-        // settings read means gates default off (conservative: hold in combat / rest).
-        bool whileResting = party?.BlessWhileResting ?? false;
-        bool duringCombat = party?.BlessDuringCombat ?? false;
-        if (_state.InCombat && !duringCombat) return null;
-        // Same as self-bless: gate only a triggered recovery rest, not idle rest.
-        if ((_isTriggeredRest?.Invoke() ?? false) && !whileResting) return null;
+        bool selfAllowed = SelfBuffTimingAllowed(spells);
+        bool triggeredRest = _isTriggeredRest?.Invoke() ?? false;
 
-        foreach (Models.Profile.PartyBuffSlot slot in buffs.Slots)
+        // "When HP / MA full" fires at the REST-MAX target (the level we rest up to,
+        // HealthSettings.RestMaxHp / RestMaxMa read per the threshold mode), not literal
+        // 100% — so a buff meant for "topped off, ready for the next fight" triggers as
+        // soon as a recovery rest finishes.
+        int restMaxHp = PoolThreshold.Resolve(health.HpThresholdMode, health.RestMaxHp, _state.MaxHp);
+        int restMaxMa = PoolThreshold.Resolve(health.MaThresholdMode, health.RestMaxMa, _state.MaxMa);
+
+        // Party / member targets are only cast while actually in a party, gated by
+        // the Settings → Party toggles (default OFF → hold in combat / triggered rest).
+        bool inParty = _party?.IsInParty == true;
+        bool partyAllowed = inParty
+            && !(_state.InCombat && !(party?.BlessDuringCombat ?? false))
+            && !(triggeredRest && !(party?.BlessWhileResting ?? false));
+
+        // In a party, a buff a configured party-wide buff removes (e.g. chant removes
+        // bless) is left to that party buff — skip self-casting the superseded spell.
+        IReadOnlyDictionary<string, string>? covered = _selfBuffCoverage?.Invoke();
+
+        foreach (Models.Profile.BuffSlot slot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
+
+            // Only-when-dark light spells are cast reactively by the auto-light system
+            // on entering a dark room, not maintained here — skip them entirely.
+            if (slot.OnlyWhenDark) continue;
+
             if (!IsBuffAffordable(slot.Spell, manaBuffsAllowed)) continue;
 
+            // Per-slot conditions: the matching pool must be topped off to the rest-max
+            // target for the "when full" slots.
+            if (slot.OnlyWhenHpFull && !(_state.MaxHp > 0 && _state.Hp >= restMaxHp)) continue;
+            if (slot.OnlyWhenMaFull && !(_state.MaxMa > 0 && _state.Ma >= restMaxMa)) continue;
+
+            bool isItem = ItemCastToken.IsToken(slot.Spell);
             bool partyWide = _isPartyWideBuff?.Invoke(slot.Spell) == true;
 
-            // A #item-cast slot can only be whole-party: `use <item>` takes no target,
-            // so an item can't be aimed at a single member. (The picker only ever
-            // offers whole-party items, but guard the cast path regardless.)
-            if (ItemCastToken.IsToken(slot.Spell) && !partyWide) continue;
-
-            // Whole-party buff (Targets 10 / 13) — one cast covers everyone, so
-            // there's no per-member targeting; the slot's on/off is WholePartyOn.
-            // Recast keyed to self ("") since it lands on us and confirms via the
-            // AppliedMessage path (or, for an item, TryFireItemCast's proactive timer).
+            // Whole-party buff — one cast blankets the party (and us). Recast keyed to
+            // self ("") since it confirms under its own cast code. An item-cast buff
+            // can only be whole-party (`use` takes no target).
             if (partyWide)
             {
                 if (!slot.WholePartyOn) continue;
+                if (!partyAllowed) continue;
                 if (!IsRecastDue("", slot.Spell)) continue;
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
             }
 
-            // Single-target buff — cast on the selected members, one per pass
-            // (cycling across passes). Eligibility is CURRENT PARTY MEMBERSHIP only:
-            // MajorMUD parties are co-located, so a name in the roster (_party.Members,
-            // from 'par') is in the room — a member who left / was uninvited is already
-            // gone from the roster. The one exception is a member who's HIDING: the cast
-            // returns "You do not see <name> here!" and we back off (_hiddenTargets)
-            // until we move or they reappear in "Also here:". AllMembers blesses
-            // everyone; otherwise only the slot's Targets (lower-cased given names).
-            foreach (PartyMember m in _party.Members)
+            // "Cast before resting for mana": a pre-rest top-up cast only while a
+            // recovery rest is running (so the fresh regen boosts the rest), instead of
+            // being maintained always-up. Otherwise the slot uses the normal self gate.
+            bool selfEligible = slot.CastBeforeRestingForMana
+                ? (triggeredRest && !_state.InCombat)
+                : selfAllowed;
+
+            // Self target (CastOnSelf) — self-gated, keyed "". Works for a spell OR a
+            // self item-cast (`use <item>`, whose buff lands on us).
+            if (slot.CastOnSelf && selfEligible
+                && (covered is null || !covered.ContainsKey(slot.Spell))
+                && IsRecastDue("", slot.Spell))
+                return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
+
+            // Member targets (single-target spell) — party-gated, one per pass. An item
+            // token can't be aimed at a member (`use` takes no target), so skip it here.
+            if (!isItem && partyAllowed && _party is not null)
             {
-                if (m.IsSelf) continue;
-                // Given name only: MajorMUD targets a cast by first name token, and
-                // the recast key must match the target we stash for confirmation so
-                // the buff doesn't re-fire every round on a "Given Family" mismatch.
-                string given = GivenName(m.Name);
-                string key = given.ToLowerInvariant();
-                if (!slot.AllMembers && !slot.Targets.Contains(key)) continue;   // not selected
-                if (_hiddenTargets.Contains(key))
+                foreach (PartyMember m in _party.Members)
                 {
-                    // Backed off as hidden — retry only once they're listed in
-                    // "Also here:" again (they unhid); otherwise keep skipping.
-                    if (_isMemberInRoom?.Invoke(given) != true) continue;
-                    _hiddenTargets.Remove(key);
+                    if (m.IsSelf) continue;
+                    // Given name only: MajorMUD targets by first name token, and the
+                    // recast key must match the target we stash for confirmation.
+                    string given = GivenName(m.Name);
+                    string key = given.ToLowerInvariant();
+                    if (!slot.AllMembers && !slot.Targets.Contains(key)) continue;
+                    if (_hiddenTargets.Contains(key))
+                    {
+                        if (_isMemberInRoom?.Invoke(given) != true) continue;
+                        _hiddenTargets.Remove(key);
+                    }
+                    if (!IsRecastDue(key, slot.Spell)) continue;
+                    return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
                 }
-                if (!IsRecastDue(key, slot.Spell)) continue;
-                return new CastCandidate(slot.Spell, given, slot.RecastMarginSec);
             }
         }
         return null;
@@ -1724,6 +1805,9 @@ public sealed class CastingDirector : IDisposable
     private void ArmPartyBuffConfirm(string shortCode, string target, int marginSec)
     {
         _pendingPartyCast = null;
+        // An engine cast is the authority — supersede any hand-cast confirm the wire
+        // observer just armed for the same send (engine casts flow through it too).
+        _pendingManualCast = null;
         if (_buffInfoByShort?.Invoke(shortCode) is not { } info) return;
         if (CasterMessageMatcher.TryCreate(info.Caster) is not { } matcher) return;
         _pendingPartyCast = (shortCode, target, info.DurationSec, marginSec, matcher);

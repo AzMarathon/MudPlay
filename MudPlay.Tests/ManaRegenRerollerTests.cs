@@ -15,6 +15,7 @@ public sealed class ManaRegenRerollerTests
         public readonly AbilBreakdownParser Parser = new();
         public ManaRegenRerollConfig Config = new(Threshold: 5, Cap: 3);
         public bool CanAfford = true;
+        public bool UseTickMonitor;   // false = Paradigm (abil 145); true = Stock (tick)
         public int AbilQueries;
         public readonly List<string> Recasts = new();
         public readonly ManaRegenReroller Reroller;
@@ -26,7 +27,8 @@ public sealed class ManaRegenRerollerTests
                 () => Config,
                 () => AbilQueries++,
                 Recasts.Add,
-                () => CanAfford);
+                () => CanAfford,
+                () => UseTickMonitor);
         }
 
         // Replay one abil-145 block whose spells: slice rolled `roll`, then the
@@ -256,4 +258,67 @@ public sealed class ManaRegenRerollerTests
     public void IsRollSpell_TrueWhenRollSlotSitsAmongOthers()
         => Assert.True(ManaRegenReroller.IsRollSpell(
             FormulaWith(new SpellAbility(7, 3), new SpellAbility(145, 0))));
+
+    // ----- Stock (tick-monitor) path -------------------------------------
+
+    [Fact]
+    public void StockLandingArmsTickWaitAndNeverQueriesAbil()
+    {
+        Harness h = new() { UseTickMonitor = true };
+
+        h.Reroller.OnRollSpellLanded("ntap");
+
+        Assert.True(h.Reroller.CycleActive);
+        Assert.Equal(0, h.AbilQueries);   // no abil 145 on Stock
+        Assert.Empty(h.Recasts);
+    }
+
+    [Fact]
+    public void StockTickAtOrAboveThresholdAccepts()
+    {
+        Harness h = new() { UseTickMonitor = true };   // threshold 5
+
+        h.Reroller.OnRollSpellLanded("ntap");
+        h.Reroller.OnManaTickObserved(6);
+
+        Assert.Empty(h.Recasts);
+        Assert.False(h.Reroller.CycleActive);
+    }
+
+    [Fact]
+    public void StockTickBelowThresholdRerolls()
+    {
+        Harness h = new() { UseTickMonitor = true };
+
+        h.Reroller.OnRollSpellLanded("ntap");
+        h.Reroller.OnManaTickObserved(3);
+
+        Assert.Equal(new[] { "ntap" }, h.Recasts);
+        Assert.True(h.Reroller.CycleActive);
+    }
+
+    [Fact]
+    public void StockTickIgnoredWhenNoCycleAwaiting()
+    {
+        Harness h = new() { UseTickMonitor = true };
+
+        // A tick with no roll-spell landing in flight is a normal regen tick — ignored.
+        h.Reroller.OnManaTickObserved(2);
+
+        Assert.Empty(h.Recasts);
+        Assert.False(h.Reroller.CycleActive);
+    }
+
+    [Fact]
+    public void StockOnlyFirstTickPerLandingIsJudged()
+    {
+        Harness h = new() { UseTickMonitor = true };
+
+        h.Reroller.OnRollSpellLanded("ntap");
+        h.Reroller.OnManaTickObserved(6);   // accepted → cycle closes
+        h.Reroller.OnManaTickObserved(1);   // a later low tick must not re-open / reroll
+
+        Assert.Empty(h.Recasts);
+        Assert.False(h.Reroller.CycleActive);
+    }
 }

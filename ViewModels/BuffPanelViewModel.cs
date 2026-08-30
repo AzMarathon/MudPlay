@@ -16,25 +16,25 @@ namespace MudPlay.ViewModels;
 // or which members for a single-target buff). Backed by CharacterProfile.PartyBuffs
 // (char-only), persisted on every edit. The member checklist rebuilds when the
 // party changes, preserving the stored per-slot selection by given name.
-public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposable
+public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 {
     private readonly Game.PartyState _party;
     private readonly ProfileService _profile;
     private readonly SpellbookState _spellbook;
-    private PartyBuffSettings _settings = new();
+    private BuffSettings _settings = new();
     private bool _disposed;
 
-    public ObservableCollection<PartyBuffSlotRowViewModel> Slots { get; } = new();
+    public ObservableCollection<BuffSlotRowViewModel> Slots { get; } = new();
 
     // Current party's non-self members as column headers (capitalised given names),
     // in the same order every row builds its target checkboxes — so the header
     // names line up over the per-row checkbox columns in the grid.
     public ObservableCollection<string> Members { get; } = new();
 
-    // Buff-only picker source: LEARNED party buffs (zero energy, Targets 2 / 10 / 13
-    // — cast on another player or the whole party) NOT already slotted. A given
-    // party buff is one slot: two slots of the same spell would double-track its
-    // recast timer, so a spell already in a slot drops out of the picker.
+    // Picker source: LEARNED buffs (zero energy — self / single-target / whole-party
+    // scopes, plus whole-party cast-on-use items) NOT already slotted. A given buff is
+    // one slot: two slots of the same spell would double-track its recast timer, so a
+    // spell already in a slot drops out of the picker.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowPanel))]
     [NotifyPropertyChangedFor(nameof(CanAddBuff))]
@@ -62,7 +62,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
             || p.Name.Contains(text, StringComparison.OrdinalIgnoreCase);
     };
 
-    public PartyBuffPanelViewModel(Game.PartyState party)
+    public BuffPanelViewModel(Game.PartyState party)
     {
         ArgumentNullException.ThrowIfNull(party);
         _party = party;
@@ -83,7 +83,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     private void Load()
     {
         // Ensure the profile has a PartyBuffs bag so edits persist somewhere.
-        _settings = _profile.Current?.PartyBuffs ?? new PartyBuffSettings();
+        _settings = _profile.Current?.PartyBuffs ?? new BuffSettings();
         if (_profile.Current is { } p) p.PartyBuffs = _settings;
 
         // Drop any slot with no spell. There's no empty-slot workflow — every slot
@@ -93,7 +93,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         int pruned = _settings.Slots.RemoveAll(s => string.IsNullOrWhiteSpace(s.Spell));
 
         Slots.Clear();
-        foreach (PartyBuffSlot dto in _settings.Slots)
+        foreach (BuffSlot dto in _settings.Slots)
             Slots.Add(MakeRow(dto));
 
         RefreshBuffPicks();
@@ -104,18 +104,23 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         if (pruned > 0) Persist();
     }
 
-    private PartyBuffSlotRowViewModel MakeRow(PartyBuffSlot dto) =>
-        new(dto, IsWholePartyCode, ResolveName, Persist);
+    private BuffSlotRowViewModel MakeRow(BuffSlot dto) =>
+        new(dto, ResolveScope, ResolveName, Persist);
 
-    // Resolve whether a slot's cast value is a whole-party buff, live from the active
-    // set. A #item-cast slot classifies by the item's spell (only whole-party items
-    // are offered as party buffs — see AllPartyBuffPicks).
-    private bool IsWholePartyCode(string? code)
+    // Resolve a slot's targeting scope live from the active set. A #item-cast slot is
+    // always whole-party (only whole-party items are offered — see AllBuffPicks); a
+    // spell splits self-only / single-target / whole-party by its Targets code. An
+    // unresolved code defaults to self-only (a plain "cast on me" row).
+    private BuffSlotScope ResolveScope(string? code)
     {
-        if (string.IsNullOrWhiteSpace(code)) return false;
+        if (string.IsNullOrWhiteSpace(code)) return BuffSlotScope.SelfOnly;
         string c = code.Trim();
-        if (ItemCastToken.IsToken(c)) return _spellbook.IsTokenWholeParty(c);
-        return _spellbook.FindByCastCode(c) is { } s && PartyBuffClassifier.IsWholeParty(s.Targets);
+        if (ItemCastToken.IsToken(c))
+            return _spellbook.IsTokenWholeParty(c) ? BuffSlotScope.WholeParty : BuffSlotScope.SelfOnly;
+        if (_spellbook.FindByCastCode(c) is not { } s) return BuffSlotScope.SelfOnly;
+        if (BuffClassifier.IsWholeParty(s.Targets)) return BuffSlotScope.WholeParty;
+        if (BuffClassifier.IsSingleTargetBuff(s.Targets)) return BuffSlotScope.SingleTarget;
+        return BuffSlotScope.SelfOnly;
     }
 
     // The buff's display name (for the compact row header): a spell's name, an item's
@@ -128,14 +133,15 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         return _spellbook.FindByCastCode(c) is { } s ? s.Name : c;
     }
 
-    // Every party buff the character can slot, de-duplicated by cast value: learned
-    // party-buff spells, plus whole-party cast-on-use items (a #item token). A
-    // single-target item can't be aimed at a member via `use`, so only whole-party
-    // items qualify (GetWholePartyCastItems already filters to those).
-    private IEnumerable<SpellPick> AllPartyBuffPicks()
+    // Every buff the character can slot, de-duplicated by cast value: learned buff
+    // spells the character can maintain on themselves, a member, or the whole party
+    // (self / single-target / whole-party scopes), plus whole-party cast-on-use items
+    // (a #item token). A single-target item can't be aimed via `use`, so only
+    // whole-party items qualify (GetWholePartyCastItems already filters to those).
+    private IEnumerable<SpellPick> AllBuffPicks()
     {
         IEnumerable<SpellPick> spells = _spellbook.Available
-            .Where(s => PartyBuffClassifier.IsPartyBuff(s) && _spellbook.IsObtained(s.Number))
+            .Where(s => BuffClassifier.IsAnyBuff(s) && _spellbook.IsObtained(s.Number))
             .Select(s => new SpellPick(s.Short, s.Name));
         IEnumerable<SpellPick> items = _spellbook.GetWholePartyCastItems()
             .Select(ci => new SpellPick(
@@ -152,7 +158,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     private void RefreshBuffPicks()
     {
         HashSet<string> slotted = SlottedSpells();
-        BuffPicks = AllPartyBuffPicks().Where(p => !slotted.Contains(p.Short)).ToList();
+        BuffPicks = AllBuffPicks().Where(p => !slotted.Contains(p.Short)).ToList();
     }
 
     // Rebuild every row's member checklist — and the shared column headers — from
@@ -162,7 +168,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         var members = CurrentMembers();
         Members.Clear();
         foreach ((string _, string given) in members) Members.Add(Capitalise(given));
-        foreach (PartyBuffSlotRowViewModel row in Slots)
+        foreach (BuffSlotRowViewModel row in Slots)
             row.RebuildMemberTargets(members);
     }
 
@@ -178,19 +184,54 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     private static string Capitalise(string given) =>
         given.Length == 0 ? given : char.ToUpperInvariant(given[0]) + given[1..];
 
-    // Open the Add-buff picker (spell + recast). On OK, add the slot; targeting
-    // (whole-party / all-members / member checklist) is then chosen in the row.
+    // True when a cast code resolves to a spell that provides light (offers the "only
+    // when dark" condition) / is a mana-regen roll spell (offers the reroll config).
+    private bool IsLightSpell(string? code) =>
+        !string.IsNullOrWhiteSpace(code) && AppServices.Current.RoomLightSpell.IlluForSpell(code!.Trim()) > 0;
+
+    private bool IsRollSpell(string? code) =>
+        !string.IsNullOrWhiteSpace(code)
+        && _spellbook.FindByCastCode(code!.Trim()) is { } s
+        && Game.Spells.ManaRegenReroller.IsRollSpell(s.Formula);
+
+    // Stock realm has no `abil 145`, so reroll quality is judged from the observed
+    // mana tick — drives the dialog's realm-aware reroll wording.
+    private static bool IsStockRealm =>
+        AppServices.Current.GameData.ActiveRealm != Game.RealmType.ParaMud;
+
+    // Apply the dialog's result onto a slot DTO (shared by add + edit).
+    private void ApplyResult(BuffSlot dto, AddBuffResult r)
+    {
+        dto.Spell = r.Spell;
+        dto.RecastMarginSec = r.RecastMarginSec;
+        dto.OnlyWhenHpFull = r.OnlyWhenHpFull;
+        dto.OnlyWhenMaFull = r.OnlyWhenMaFull;
+        dto.OnlyWhenDark = r.OnlyWhenDark;
+        dto.CastBeforeRestingForMana = r.CastBeforeRestingForMana;
+        dto.RerollCount = r.RerollCount;
+        dto.RerollThreshold = r.RerollThreshold;
+    }
+
+    // Open the Add-buff dialog (spell + recast + conditions). On OK, add the slot;
+    // targeting (self / all-members / member checklist) is then chosen in the row.
     [RelayCommand]
     private async System.Threading.Tasks.Task AddBuff()
     {
-        AddPartyBuffDialogViewModel dlg = new(BuffPicks, SpellSuggestionFilter);
-        AddPartyBuffResult? result = await AppServices.Current.Dialogs
-            .OpenWindowAsync<AddPartyBuffDialogViewModel, AddPartyBuffResult>(dlg);
+        AddBuffDialogViewModel dlg = new(BuffPicks, SpellSuggestionFilter, IsLightSpell, IsRollSpell,
+            IsStockRealm, AppServices.Current.ManaRegenTickRange);
+        AddBuffResult? result = await AppServices.Current.Dialogs
+            .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
 
-        PartyBuffSlot dto = new() { Spell = r.Spell, RecastMarginSec = r.RecastMarginSec };
+        BuffSlot dto = new();
+        ApplyResult(dto, r);
+        // A self-only buff, a room-light "only when dark" buff, and a mana-regen
+        // "cast before resting" buff all act on us — default them to cast-on-self so
+        // the fresh slot isn't inert until the user ticks "self".
+        dto.CastOnSelf = ResolveScope(r.Spell) == BuffSlotScope.SelfOnly
+                         || r.OnlyWhenDark || r.CastBeforeRestingForMana;
         _settings.Slots.Add(dto);
-        PartyBuffSlotRowViewModel row = MakeRow(dto);
+        BuffSlotRowViewModel row = MakeRow(dto);
         Slots.Add(row);
         row.RebuildMemberTargets(CurrentMembers());
         RefreshBuffPicks();   // the just-slotted spell drops out of the picker
@@ -199,24 +240,28 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
         Persist();
     }
 
-    // Edit an existing slot's buff / recast — reopens the picker pre-filled, so
-    // the recast timer (or the buff) can change without a delete + re-add. The
-    // picker offers this slot's own spell plus any not held by another slot.
+    // Edit an existing slot — reopens the dialog pre-filled, so the buff / recast /
+    // conditions can change without a delete + re-add. The picker offers this slot's
+    // own spell plus any not held by another slot.
     [RelayCommand]
-    private async System.Threading.Tasks.Task EditBuff(PartyBuffSlotRowViewModel? row)
+    private async System.Threading.Tasks.Task EditBuff(BuffSlotRowViewModel? row)
     {
         if (row is null) return;
         HashSet<string> others = SlottedSpells();
         others.Remove((row.Spell ?? string.Empty).Trim());
-        var picks = AllPartyBuffPicks().Where(p => !others.Contains(p.Short)).ToList();
-        AddPartyBuffDialogViewModel dlg = new(
-            picks, SpellSuggestionFilter, row.Spell, row.RecastMarginSec);
-        AddPartyBuffResult? result = await AppServices.Current.Dialogs
-            .OpenWindowAsync<AddPartyBuffDialogViewModel, AddPartyBuffResult>(dlg);
+        var picks = AllBuffPicks().Where(p => !others.Contains(p.Short)).ToList();
+        BuffSlot d = row.Dto;
+        AddBuffResult initial = new(
+            d.Spell ?? string.Empty, d.RecastMarginSec, d.OnlyWhenHpFull, d.OnlyWhenMaFull,
+            d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold);
+        AddBuffDialogViewModel dlg = new(
+            picks, SpellSuggestionFilter, IsLightSpell, IsRollSpell,
+            IsStockRealm, AppServices.Current.ManaRegenTickRange, initial);
+        AddBuffResult? result = await AppServices.Current.Dialogs
+            .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
 
-        row.Dto.Spell = r.Spell;
-        row.Dto.RecastMarginSec = r.RecastMarginSec;
+        ApplyResult(row.Dto, r);
         RefreshBuffPicks();   // a changed spell frees/consumes picker entries
         row.Refresh();   // re-derive header + whole-party/single-target after a spell change
         row.RebuildMemberTargets(CurrentMembers());
@@ -224,7 +269,7 @@ public sealed partial class PartyBuffPanelViewModel : ObservableObject, IDisposa
     }
 
     [RelayCommand]
-    private void RemoveBuff(PartyBuffSlotRowViewModel? row)
+    private void RemoveBuff(BuffSlotRowViewModel? row)
     {
         if (row is null) return;
         _settings.Slots.Remove(row.Dto);
