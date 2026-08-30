@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.37.0**
-> - `@where` reply → map flash: when you `@where` another MudPlay user and their client answers with its location, the Navigation map (if open) flashes that room green and centres on it for ~12 seconds, then drifts back to following you. Ignored while the map is closed; a fresh reply replaces the previous flash
+> - `@where` reply → map flash: when you `@where` another MudPlay user and their client answers with its location, the Navigation map (if open) flashes that room green and centres on it for ~15 seconds, then drifts back to following you. `@where` several people and each answered square lights up at once, each fading on its own 15s timer; the map re-centres on the newest reply. Ignored while the map is closed
 > - Tightened the shared `@where`-reply parser to require the MudPlay `{…(map N, room M)…}` wrapper, so a human telepath merely mentioning a room in prose can't be read as a location reply (also hardens the party @where-probe recovery path)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

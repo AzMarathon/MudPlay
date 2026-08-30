@@ -624,7 +624,7 @@
                                  Layout="{Binding Layout}"
                                  CurrentRoomKey="{Binding CurrentRoomKey}"
                                  DestinationRoomKey="{Binding DestinationRoomKey}"
-                                 WhereTargetRoom="{Binding WhereTargetRoom}"
+                                 WhereTargetRooms="{Binding WhereTargetRooms}"
                                  Graph="{Binding Graph}"
                                  LairMode="{Binding LairMode}"
                                  LairRespawnSeconds="{Binding LairRespawnSeconds}"

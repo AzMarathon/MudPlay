@@ -154,7 +154,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _searchDebounce?.Stop();
         _loopFilterDebounce?.Stop();
         _gotoFilterDebounce?.Stop();
-        _whereHighlightTimer?.Stop();
+        _whereHighlightPump?.Stop();
         _services.Settings.GlobalSettingsChanged -= OnGlobalSettingsChanged;
         _services.RoomTracker.StateChanged -= OnTrackerStateChanged;
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
@@ -871,9 +871,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     }
     [ObservableProperty] private RoomKey? _destinationRoomKey;
 
-    // The room an @where reply just located — flashed green on the map for ~12s
-    // then cleared by _whereHighlightTimer. Bound to MapControl.WhereTargetRoom.
-    [ObservableProperty] private RoomKey? _whereTargetRoom;
+    // Rooms @where replies just located — each flashed green on the map for ~15s,
+    // dropping independently as its own window elapses. Bound to
+    // MapControl.WhereTargetRooms; rebuilt from _whereHighlightUntil on each change.
+    [ObservableProperty] private IReadOnlySet<RoomKey>? _whereTargetRooms;
 
     [ObservableProperty] private RoomGraphManager? _graph;
 
@@ -2733,38 +2734,56 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         Layout = _services.Bfs.BuildLayout(newOrigin);
     }
 
-    // ~12s the green @where flash + the centred hold stay before the map reverts to
-    // following the player. OnFloorChangeRequested arms MapControl's own auto-follow
-    // suppression, which rebounds to the player on its own; this just clears the green.
-    private static readonly TimeSpan WhereHighlightDuration = TimeSpan.FromSeconds(12);
-    private DispatcherTimer? _whereHighlightTimer;
+    // How long each green @where flash stays before it drops. Independent per room, so
+    // several answered @where's fade out on their own schedules. The centre-hold is
+    // MapControl's own auto-follow suppression (armed on each reply via
+    // OnFloorChangeRequested), which rebounds to the player on its own.
+    private static readonly TimeSpan WhereHighlightDuration = TimeSpan.FromSeconds(15);
+    // Each flashed room → the UTC time it should drop. A 1s pump prunes expired entries
+    // and rebuilds WhereTargetRooms; it stops when none remain.
+    private readonly Dictionary<RoomKey, DateTime> _whereHighlightUntil = new();
+    private DispatcherTimer? _whereHighlightPump;
 
-    // An @where reply located a player at target — flash the square green and centre
-    // on it (re-rooting the layout to its floor, exactly like a search jump), then let
-    // the map drift back to the player. Driven by AppServices.HighlightWhereRoom only
-    // while this window is live, so a reply that lands with the map closed is ignored.
+    // An @where reply located a player at target — flash the square green and centre on
+    // this (latest) reply by re-rooting the layout to its floor, exactly like a search
+    // jump. Earlier flashes stay lit until their own windows elapse; only the newest
+    // reply re-centres the view. Driven by AppServices.HighlightWhereRoom while this
+    // window is live, so a reply that lands with the map closed is ignored.
     public void ShowWhereHighlight(RoomKey target)
     {
         // A room the active graph doesn't hold can't be centred or drawn — ignore it
         // rather than leave a highlight on a square that never renders.
         if (_services.RoomGraph.GetRoom(target) is null) return;
-        WhereTargetRoom = target;
+        _whereHighlightUntil[target] = DateTime.UtcNow + WhereHighlightDuration;
+        RebuildWhereTargets();
         OnFloorChangeRequested(target);
-        _whereHighlightTimer ??= CreateWhereHighlightTimer();
-        _whereHighlightTimer.Stop();
-        _whereHighlightTimer.Start();
+        _whereHighlightPump ??= CreateWhereHighlightPump();
+        if (!_whereHighlightPump.IsEnabled) _whereHighlightPump.Start();
     }
 
-    private DispatcherTimer CreateWhereHighlightTimer()
+    private DispatcherTimer CreateWhereHighlightPump()
     {
-        DispatcherTimer timer = new() { Interval = WhereHighlightDuration };
-        timer.Tick += (_, _) =>
+        DispatcherTimer pump = new() { Interval = TimeSpan.FromSeconds(1) };
+        pump.Tick += (_, _) =>
         {
-            timer.Stop();
-            WhereTargetRoom = null;
+            DateTime now = DateTime.UtcNow;
+            List<RoomKey>? expired = null;
+            foreach (KeyValuePair<RoomKey, DateTime> kv in _whereHighlightUntil)
+                if (now >= kv.Value) (expired ??= new()).Add(kv.Key);
+            if (expired is not null)
+            {
+                foreach (RoomKey room in expired) _whereHighlightUntil.Remove(room);
+                RebuildWhereTargets();
+            }
+            if (_whereHighlightUntil.Count == 0) pump.Stop();
         };
-        return timer;
+        return pump;
     }
+
+    private void RebuildWhereTargets() =>
+        WhereTargetRooms = _whereHighlightUntil.Count == 0
+            ? null
+            : new HashSet<RoomKey>(_whereHighlightUntil.Keys);
 
     // Open the Manage dialog — modeless surface for renaming / deleting
     // saved loops and unmarking Auto-Lair rooms. Routed through the shared

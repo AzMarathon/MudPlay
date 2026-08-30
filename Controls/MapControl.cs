@@ -187,11 +187,11 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<RoomKey?> DestinationRoomKeyProperty =
         AvaloniaProperty.Register<MapControl, RoomKey?>(nameof(DestinationRoomKey));
 
-    // A room an @where reply just located — flashed green for a few seconds then
-    // cleared by the VM's timer. Single transient highlight, so a nullable key
-    // (mirrors DestinationRoomKey) rather than a set overlay.
-    public static readonly StyledProperty<RoomKey?> WhereTargetRoomProperty =
-        AvaloniaProperty.Register<MapControl, RoomKey?>(nameof(WhereTargetRoom));
+    // Rooms an @where reply just located — each flashed green for a few seconds,
+    // then dropped independently by the VM as its own timer expires. A set so several
+    // answered @where's light up at once (mirrors the other room-set overlays).
+    public static readonly StyledProperty<IReadOnlySet<RoomKey>?> WhereTargetRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(WhereTargetRooms));
 
     public static readonly StyledProperty<MudPlay.Models.Profile.KeyChord> UpStepChordProperty =
         AvaloniaProperty.Register<MapControl, MudPlay.Models.Profile.KeyChord>(nameof(UpStepChord),
@@ -394,10 +394,10 @@ public sealed class MapControl : Control
         set => SetValue(DestinationRoomKeyProperty, value);
     }
 
-    public RoomKey? WhereTargetRoom
+    public IReadOnlySet<RoomKey>? WhereTargetRooms
     {
-        get => GetValue(WhereTargetRoomProperty);
-        set => SetValue(WhereTargetRoomProperty, value);
+        get => GetValue(WhereTargetRoomsProperty);
+        set => SetValue(WhereTargetRoomsProperty, value);
     }
 
     // Fired when the user steps the crawler up or down — the layout host is
@@ -811,7 +811,7 @@ public sealed class MapControl : Control
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
             PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
             BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty,
-            WhereTargetRoomProperty, NavLineStylesProperty);
+            WhereTargetRoomsProperty, NavLineStylesProperty);
 
         // Auto-centre on the player's current room every time it
         // changes — but only when the
@@ -1238,7 +1238,7 @@ public sealed class MapControl : Control
 
             // @where target — a transient green flash the VM clears after ~12s.
             // Drawn right on the node so it reads as a marked square.
-            if (WhereTargetRoom is { } whereRoom && whereRoom.Equals(kvp.Value))
+            if (WhereTargetRooms is { } whereRooms && whereRooms.Contains(kvp.Value))
                 DrawWhereHighlight(context, cell);
 
             if (AvoidedRooms is not null && AvoidedRooms.Contains(kvp.Value))
