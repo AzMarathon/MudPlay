@@ -1,46 +1,38 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text.Json;
 using Avalonia.Collections;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Combat;
-using MudPlay.Game.GameData;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
 using MudPlay.Game.Spells;
-using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
-using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels;
 
-// Modeless "Monster Intel" window — character-centric: a persistent
-// character bar (level, live HP/mana, weapon HitMagic, known attack-spell
-// count) sits above a searchable master list over MonsterCatalog that can be
-// narrowed to what THIS character can actually fight (Hittable / Castable
-// filters), with a per-monster detail panel (Overview / Elemental defenses /
-// Attacks / Loot & locations / Automation / Your Matchup / Your Observations)
-// and a multi-select side-by-side comparison view. Phases 1-5 of the Monster
-// Intel plan complete: read-only reference, the existing per-monster
-// automation overlay editor relocated here, a live-character-aware matchup
-// preview (weapon eligibility, ranked spell effectiveness, incoming
-// elemental threat), monster-vs-monster comparison, a context bar showing
-// the current room's roster (click a chip to select it), and a per-character
-// log of actual combat outcomes this character has observed against the
-// selected monster.
+// Modeless "Monster Intel" window — a FAST pre-fight check, not a monster
+// database browser (that's the Game Data Browser's Monsters tab, which still
+// owns the full record: loot, locations, elemental matrix, automation
+// overlay editing). A persistent character bar (level, live HP/mana, weapon
+// HitMagic, known attack-spell count) sits above a searchable master list
+// over MonsterCatalog narrowed to what THIS character can safely fight right
+// now: Hittable / Castable (can I land a hit or a spell on it at all) and
+// Safe (its own attack's chance to land on ME, given my live AC/Dodge/wards,
+// at or under a threshold). The per-monster detail panel keeps only what
+// that decision needs beyond the list: Attacks (how dangerous is its swing),
+// Your Matchup (weapon eligibility + ranked spell effectiveness + incoming
+// elemental threat), and Your Observations (what's actually happened in
+// past fights against it). A context bar shows the current room's roster
+// (click a chip to select it).
 public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposable
 {
     private readonly GameDataCache _gameData;
     private readonly MonsterCatalog _catalog;
-    private readonly DialogService? _dialogs;
-    private readonly SettingsResolver? _resolver;
-    private readonly MonsterOverlaySeedStore? _overlaySeed;
-    private readonly RoomGraphManager? _roomGraph;
     private readonly PlayerStats? _stats;
     private readonly PlayerState? _playerState;
     private readonly InventoryManager? _inventory;
@@ -50,12 +42,18 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly MonsterObservationTracker? _observations;
     private readonly IReadOnlyList<MonsterIntelEntry> _all;
     private readonly Dictionary<int, MonsterIntelEntry> _byNumber;
-    private readonly Dictionary<int, string> _itemNames;
     private readonly IReadOnlyDictionary<int, int> _spellAttType;
     private readonly bool _hasCharacterContext;
     private readonly List<PlayerAttackSpell> _ownedAttackSpells = new();
     private int _weaponHitMagic;
     private int _maxKnownAttackSpellReqLevel = -1;
+    // Live player combat totals behind the Safe filter / master-list "Hits
+    // You %" column — recomputed alongside weapon/spell capabilities in
+    // RebuildCharacterCapabilities whenever gear changes.
+    private int _playerAc;
+    private int _playerDodge;
+    private int _playerProtEvil;
+    private int _playerProtGood;
     private bool _disposed;
 
     public event Action? CloseRequested;
@@ -67,34 +65,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     public string CountText => $"{RowsView.Count} monster{(RowsView.Count == 1 ? "" : "s")}";
 
-    // ----- comparison (multi-select) -----
-    // Avalonia's DataGrid exposes SelectedItems as a non-bindable IList, so the
-    // window's code-behind syncs it into this collection on every
-    // SelectionChanged and calls NotifyComparisonChanged — see
-    // MonsterIntelWindow.axaml.cs (mirrors GameDataTableSectionView's own
-    // SelectedRows sync for the same Avalonia limitation).
-    public ObservableCollection<MonsterIntelEntry> SelectedEntries { get; } = new();
-    public bool HasComparison => SelectedEntries.Count >= 2;
+    // The single-monster detail panel shows once something's selected.
+    public bool ShowSingleDetail => HasSelection;
 
-    public void NotifyComparisonChanged()
-    {
-        OnPropertyChanged(nameof(HasComparison));
-        OnPropertyChanged(nameof(ShowSingleDetail));
-        OnPropertyChanged(nameof(ShowPlaceholder));
-    }
-
-    // The single-monster detail panel yields to the comparison view once 2+
-    // rows are selected, rather than showing both at once.
-    public bool ShowSingleDetail => HasSelection && !HasComparison;
-
-    // The "select a monster" placeholder shows only when neither the single
-    // detail panel nor the comparison view has anything to show.
-    public bool ShowPlaceholder => !HasSelection && !HasComparison;
+    // The "select a monster" placeholder shows while nothing is.
+    public bool ShowPlaceholder => !HasSelection;
 
     public MonsterIntelViewModel(
         GameDataCache gameData, MonsterCatalog catalog,
-        DialogService? dialogs = null, SettingsResolver? resolver = null,
-        MonsterOverlaySeedStore? overlaySeed = null, RoomGraphManager? roomGraph = null,
         PlayerStats? stats = null, InventoryManager? inventory = null,
         SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null,
         RoomEntityClassifier? roomClassifier = null,
@@ -104,10 +82,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         ArgumentNullException.ThrowIfNull(catalog);
         _gameData = gameData;
         _catalog = catalog;
-        _dialogs = dialogs;
-        _resolver = resolver;
-        _overlaySeed = overlaySeed;
-        _roomGraph = roomGraph;
         _stats = stats;
         _playerState = playerState;
         _inventory = inventory;
@@ -120,7 +94,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         _all = MonsterIntelEntry.BuildCatalog(catalog);
         _byNumber = _all.ToDictionary(e => e.Number);
-        _itemNames = BuildItemNames(gameData);
         // Reuse the catalog's spell → AttType map (built off its one-time Spells
         // read) instead of re-reading the table the catalog has already evicted.
         _spellAttType = catalog.SpellAttType;
@@ -128,7 +101,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(NameFilter) or nameof(HittableOnly) or nameof(CastableOnly))
+            if (e.PropertyName is nameof(NameFilter) or nameof(HittableOnly) or nameof(CastableOnly)
+                or nameof(SafeOnly) or nameof(SafeHitThreshold))
             { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
             else if (e.PropertyName == nameof(SelectedEntry)) RebuildDetail();
         };
@@ -192,12 +166,15 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // ----- character-aware list filters -----
     [ObservableProperty] private bool _hittableOnly;
     [ObservableProperty] private bool _castableOnly;
+    [ObservableProperty] private bool _safeOnly;
+    [ObservableProperty] private int _safeHitThreshold = 5;
 
-    // Recomputes weapon HitMagic + the owned-attack-spell set the Hittable /
-    // Castable filters and Your Matchup both read. Called once at startup and
-    // again whenever gear or the spellbook changes, so a mid-session weapon
-    // swap or a newly-obtained spell updates the character bar and re-filters
-    // the list without reselecting a monster.
+    // Recomputes weapon HitMagic, the owned-attack-spell set, and the live
+    // AC/Dodge/ward totals behind the Hittable / Castable / Safe filters and
+    // the master list's "Hits You %" column. Called once at startup and again
+    // whenever gear or the spellbook changes, so a mid-session weapon swap or
+    // a newly-obtained spell updates the character bar and re-filters the
+    // list without reselecting a monster.
     private void RebuildCharacterCapabilities()
     {
         IReadOnlyList<EquippedItem> worn = _inventory!.Snapshot.EquippedItems;
@@ -228,6 +205,29 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         KnownAttackSpellCount = _ownedAttackSpells.Count;
         _maxKnownAttackSpellReqLevel = _ownedAttackSpells.Count > 0
             ? _ownedAttackSpells.Max(s => s.ReqLevel) : -1;
+
+        // Same equipment-aggregation recipe CalculatorsSectionViewModel uses to
+        // seed its own live player-side matchup inputs (AggregateEquipmentStats
+        // + CalcDodge off level/agility/charm/encumbrance) — reused here rather
+        // than re-derived, so this reads the same AC/Dodge/wards that tab would.
+        EquipmentStatBreakdown gear = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
+        EquipmentStatSummary totals = gear.Totals;
+        EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
+        _playerAc = _stats!.ArmourClass;
+        _playerDodge = CombatCalculator.CalcDodge(
+            _stats.Level, _stats.Agility, _stats.Charm, totals.PlusDodge,
+            encum.CurrentWeight, encum.MaxWeight);
+        _playerProtEvil = totals.PlusProtEvil;
+        _playerProtGood = totals.PlusProtGood;
+
+        // The direction Hittable/Castable don't cover (those gate whether WE
+        // can land a hit/spell; this is whether the monster can land one on
+        // US) — the master list's "Hits You %" column and the Safe filter.
+        foreach (MonsterIntelEntry entry in _all)
+            entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+                entry.Source.PhysicalAccuracy, entry.Source.Align,
+                _playerAc, _playerDodge, _playerProtEvil, _playerProtGood,
+                _gameData.ActiveRealm) ?? -1;
     }
 
     private void OnCharacterCapabilitiesChanged()
@@ -274,23 +274,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             && !e.Name.Contains(NameFilter, StringComparison.OrdinalIgnoreCase)) return false;
         if (HittableOnly && e.Magical > _weaponHitMagic) return false;
         if (CastableOnly && _maxKnownAttackSpellReqLevel < e.Source.SpellImmunity) return false;
+        if (SafeOnly && (e.IncomingHitPercent < 0 || e.IncomingHitPercent > SafeHitThreshold)) return false;
         return true;
-    }
-
-    private static Dictionary<int, string> BuildItemNames(GameDataCache cache)
-    {
-        Dictionary<int, string> names = new();
-        if (cache.GetRawTable("Items") is not { } doc) return names;
-        foreach (System.Text.Json.JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (!row.TryGetProperty("Number", out System.Text.Json.JsonElement numEl)
-                || numEl.ValueKind != System.Text.Json.JsonValueKind.Number
-                || !numEl.TryGetInt32(out int num)) continue;
-            if (row.TryGetProperty("Name", out System.Text.Json.JsonElement nameEl)
-                && nameEl.ValueKind == System.Text.Json.JsonValueKind.String)
-                names[num] = nameEl.GetString() ?? $"Item #{num}";
-        }
-        return names;
     }
 
     [RelayCommand]
@@ -305,14 +290,15 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     }
 
     // ----- detail panel -----
+    // Deliberately narrow: this window answers "can I fight this thing right
+    // now," not "tell me everything about it" (that's the Game Data Browser's
+    // Monsters tab). Attacks (how dangerous is its swing) and Your
+    // Matchup/Your Observations (below) are what's left once Overview, the
+    // Elemental Defenses matrix, Casts, Loot, Locations, and the Automation
+    // overlay editor moved back out — all still reachable from the Game Data
+    // Browser's Monsters tab, which owns the full record.
 
-    public ObservableCollection<string> OverviewLines { get; } = new();
-    public ObservableCollection<ElementalDefenseRow> ElementalDefenses { get; } = new();
-    public ObservableCollection<string> CastsLines { get; } = new();
     public ObservableCollection<AttackRowViewModel> AttackRows { get; } = new();
-    public ObservableCollection<string> LootLines { get; } = new();
-    public ObservableCollection<string> LocationLines { get; } = new();
-    [ObservableProperty] private string _automationSummaryText = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowSingleDetail))]
     [NotifyPropertyChangedFor(nameof(ShowPlaceholder))]
@@ -331,13 +317,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     private void RebuildDetail()
     {
-        OverviewLines.Clear();
-        ElementalDefenses.Clear();
-        CastsLines.Clear();
         AttackRows.Clear();
-        LootLines.Clear();
-        LocationLines.Clear();
-        AutomationSummaryText = string.Empty;
         MatchupLines.Clear();
         SpellEffectiveness.Clear();
         IncomingThreatLines.Clear();
@@ -347,34 +327,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (SelectedEntry is not { } entry) return;
         MonsterCatalogEntry m = entry.Source;
 
-        OverviewLines.Add($"Exp: {(m.Exp > 0 ? (m.Exp * Math.Max(1, m.ExpMulti)).ToString("N0") : "—")}"
-            + (m.ExpMulti > 1 ? $" ({m.Exp:N0} × {m.ExpMulti})" : string.Empty));
-        OverviewLines.Add($"HP: {m.Hp:N0}" + (m.HpRegen > 0 ? $"  (regens {m.HpRegen:N0} per tick)" : string.Empty));
-        OverviewLines.Add($"AC/DR: {m.ArmourClass}/{m.DamageResist}");
-        OverviewLines.Add($"Magic Resist: {m.MagicRes}");
-        if (m.Dodge > 0) OverviewLines.Add($"Dodge: {m.Dodge}");
-        OverviewLines.Add($"Alignment: {LookupEnums.FormatMonAlignment(m.Align.ToString())}");
-        if (m.Undead) OverviewLines.Add("Undead");
-        if (m.NonLiving) OverviewLines.Add("Non-living (drain-immune)");
-        if (m.Magical > 0) OverviewLines.Add($"Requires a weapon with HitMagic ≥ {m.Magical} to hit physically");
-        if (m.SpellImmunity > 0) OverviewLines.Add($"Immune to spells with ReqLevel < {m.SpellImmunity}");
-        if (m.BsDefense > 0) OverviewLines.Add($"Backstab Defense: {m.BsDefense}");
-        if (m.RegenTime > 0) OverviewLines.Add($"Regen time: {m.RegenTime:0.#}");
-        if (m.FollowPercent > 0) OverviewLines.Add($"Follows on flee: {m.FollowPercent}%");
-        if (m.CharmLevel > 0) OverviewLines.Add($"Charm level: {m.CharmLevel}");
-        if (m.Energy > 0) OverviewLines.Add($"Energy: {m.Energy:N0}");
-        if (m.AvgDamage > 0) OverviewLines.Add($"Avg damage: {m.AvgDamage:0.#}");
-        if (m.Weapon > 0)
-            OverviewLines.Add($"Wields: {(_itemNames.TryGetValue(m.Weapon, out string? wn) ? wn : $"item #{m.Weapon}")}");
-        if (m.CreateSpell > 0) OverviewLines.Add($"Casts on spawn: {SpellDisplay(m.CreateSpell)}");
-        if (m.DeathSpell > 0) OverviewLines.Add($"Casts on death: {SpellDisplay(m.DeathSpell)}");
-
-        foreach ((int code, int pct) in m.ElementalResists.OrderBy(kv => ElementalResistIndex.ElementName(kv.Key)))
-            ElementalDefenses.Add(new ElementalDefenseRow(
-                ElementalResistIndex.ElementName(code), pct, ClassifyResist(pct)));
-
-        foreach (string el in m.CastsElements) CastsLines.Add(el);
-
         foreach (MonsterAttackSlot a in m.Attacks)
             AttackRows.Add(BuildAttackRow(a));
         foreach (MonsterMidSpellSlot mid in m.MidSpells)
@@ -382,16 +334,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 $"({mid.Percent}%) Between-rounds spell", $"Spell #{mid.SpellId}"
                 + (mid.Level > 0 ? $" lvl {mid.Level}" : string.Empty), string.Empty, string.Empty));
 
-        string coin = FormatCarriedCoin(m);
-        if (coin.Length > 0) LootLines.Add($"Carries: {coin}");
-        foreach (MonsterDropSlot d in m.Drops)
-        {
-            string name = _itemNames.TryGetValue(d.ItemId, out string? n) ? n : $"Item #{d.ItemId}";
-            LootLines.Add(d.Percent > 0 ? $"{name} ({d.Percent}%)" : name);
-        }
-
-        RebuildLocations(m.Number);
-        RebuildAutomationSummary(m.Number);
         RebuildYourMatchup(m);
         RebuildObservations(m.Number);
     }
@@ -419,25 +361,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 $"Spells had no effect {o.SpellNoEffectCount}x — blocked by this monster's spell immunity");
         ObservationLines.Add(
             $"First observed {o.FirstObservedAt:g}, last {o.LastObservedAt:g}");
-    }
-
-    // A spell number as its game-data name, falling back to the raw number when
-    // the active set doesn't name it (matches the Attacks panel's number display).
-    private string SpellDisplay(int spellNumber) =>
-        _gameData.FindNameByNumber("Spells", spellNumber) is { Length: > 0 } name
-            ? name : $"spell #{spellNumber}";
-
-    // The coin a monster carries, highest denomination first, non-zero only —
-    // e.g. "2 platinum, 5 gold, 3 silver". Empty when it carries nothing.
-    private static string FormatCarriedCoin(MonsterCatalogEntry m)
-    {
-        List<string> parts = new();
-        if (m.CashRunic > 0) parts.Add($"{m.CashRunic} runic");
-        if (m.CashPlatinum > 0) parts.Add($"{m.CashPlatinum} platinum");
-        if (m.CashGold > 0) parts.Add($"{m.CashGold} gold");
-        if (m.CashSilver > 0) parts.Add($"{m.CashSilver} silver");
-        if (m.CashCopper > 0) parts.Add($"{m.CashCopper} copper");
-        return string.Join(", ", parts);
     }
 
     [RelayCommand]
@@ -502,103 +425,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         return new AttackRowViewModel(chance, kind, $"{a.MinDamage}-{a.MaxDamage} dmg, acc {a.Accuracy}",
             a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
     }
-
-    // Vulnerability / normal / partial resist / immune / heals-target, per the
-    // plan's elemental-matrix classification. 100+ heals the target (server
-    // treats the "damage" as negative); exactly 100 fully blocks it.
-    private static string ClassifyResist(int pct) => pct switch
-    {
-        > 100 => "heals",
-        100 => "immune",
-        > 0 => "resists",
-        0 => "normal",
-        _ => "vulnerable",
-    };
-
-    // A quick room-placement count, not a full room list — Monster Intel is a
-    // fast-lookup surface, not a replacement for the Game Data Browser's
-    // Monsters tab / Room Info panel, which already list every room
-    // individually with clickable links and a lair breakdown. Reuses
-    // MonsterMdbInfoBuilder's own lair-tag matcher (internal, same
-    // assembly) rather than re-deriving that parsing here.
-    private void RebuildLocations(int monsterNumber)
-    {
-        if (_roomGraph is null) return;
-        int placed = 0, lairs = 0;
-        foreach (Room room in _roomGraph.Rooms)
-        {
-            if (room.Npc == monsterNumber) placed++;
-            if (MonsterMdbInfoBuilder.LairNamesMonster(room.RawLairTag, monsterNumber)) lairs++;
-        }
-        if (placed > 0) LocationLines.Add($"Placed in {placed} room{(placed == 1 ? "" : "s")}");
-        if (lairs > 0) LocationLines.Add($"Spawns in {lairs} lair{(lairs == 1 ? "" : "s")}");
-    }
-
-    private void RebuildAutomationSummary(int monsterNumber)
-    {
-        if (_resolver is null) { AutomationSummaryText = "Automation settings unavailable (no profile loaded)."; return; }
-        string wcc = monsterNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        Models.GameData.MonsterOverlay seed = (_overlaySeed is not null)
-            ? _overlaySeed.GetOverlay(monsterNumber)
-            : new Models.GameData.MonsterOverlay();
-        Models.GameData.MonsterOverlay overlay =
-            _resolver.ResolveGameData("Monsters", wcc, seed) ?? seed;
-
-        List<string> parts = new()
-        {
-            $"Relationship: {overlay.Relationship}",
-            $"Priority: {overlay.Priority}",
-        };
-        if (overlay.KillOnSight == true) parts.Add("Kill on sight");
-        if (overlay.DontBackstab == true) parts.Add("No backstab");
-        if (overlay.OverrideAttackSpellId is { } s) parts.Add($"Attack override: spell #{s}");
-        if (!string.IsNullOrEmpty(overlay.OverrideAttackCommand)) parts.Add($"Attack override: {overlay.OverrideAttackCommand}");
-        AutomationSummaryText = string.Join("  •  ", parts);
-    }
-
-    [RelayCommand]
-    private async System.Threading.Tasks.Task EditAutomationAsync()
-    {
-        if (SelectedEntry is not { } entry || _dialogs is null || _resolver is null) return;
-        string wcc = entry.Number.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-        IReadOnlyList<MdbInfoRow> mdbInfo = new MonsterMdbInfoBuilder(
-            _gameData, _roomGraph, AppServices.Current.TBInfo, _dialogs).Build(wcc);
-
-        Models.GameData.MonsterOverlay seedDefaults =
-            _overlaySeed?.GetOverlay(entry.Number) ?? new Models.GameData.MonsterOverlay();
-        Models.GameData.MonsterOverlay existing =
-            _resolver.ResolveGameData("Monsters", wcc, seedDefaults) ?? seedDefaults;
-
-        MonsterEditDialogViewModel vm = new(
-            wccNoStr: wcc,
-            mdbName: entry.Name,
-            existing: existing,
-            currentTier: SettingsTier.Character,
-            mdbInfo: mdbInfo,
-            writableTiers: _resolver.WritableTiers(),
-            resolveSpellShort: AppServices.Current.SpellShort.NumberByShort,
-            resolveSpellNumber: AppServices.Current.SpellShort.ShortByNumber);
-
-        MonsterEditResult? result = await _dialogs.OpenWindowAsync<MonsterEditDialogViewModel, MonsterEditResult>(vm);
-        if (result is null) return;
-
-        SettingsTier tier = result.Tier;
-        if (!_resolver.CanWriteAt(tier))
-        {
-            tier = _resolver.WritableTiers()[0];
-            AppServices.Current.Log.Warn("MonsterIntel",
-                $"Cannot save monster #{result.WccNoStr} at {result.Tier} tier (scope not active); saved at {tier} instead.");
-        }
-        _resolver.WriteGameDataAt(tier, "Monsters", result.WccNoStr, result.Overlay);
-        RebuildAutomationSummary(entry.Number);
-    }
-}
-
-// One line of the Elemental Defenses matrix.
-public sealed record ElementalDefenseRow(string Element, int Percent, string Classification)
-{
-    public string PercentText => Percent.ToString("+0;-0;0");
 }
 
 // One line of the Attacks panel — deliberately loose text fields (Header,

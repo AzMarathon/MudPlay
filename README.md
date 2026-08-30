@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.1**
-> - Terminal no longer faux-bolds bright text: SGR "bold" (which MajorMUD uses for room names, hostile-monster names, etc.) is BRIGHT, not heavy — it now renders as a brighter colour at normal weight, matching MegaMUD and the MX437 bitmap default. On vector fonts (Courier New, Liberation Mono, JetBrains Mono) room names and monster names came out visibly heavier than the reference client; they now match. Applies to the main terminal and the Backscroll window
+> **Version 3.37.2**
+> - Monster Intel refocused back to a fast pre-fight check: the master list now shows just Name, HP, and a new "Hits You %" column (that monster's own attack's chance to land on you, given your live AC/Dodge/wards); a new **Safe** filter (paired with an editable % threshold) keeps the list to what's actually worth engaging alongside Hittable/Castable
+> - Removed from the window (all still fully available on the Game Data Browser's Monsters tab): the Overview grab-bag, the full Elemental Defenses matrix, the Casts panel, Loot, Locations, the Automation overlay editor, and multi-select side-by-side comparison
+> - Kept: Attacks (how dangerous is its swing), Your Matchup (weapon eligibility, ranked spell effectiveness, incoming elemental threat), and Your Observations (your own combat history against it)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -22,7 +24,7 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Cash & items** — automated loot collection with sell/buy/stash/discard engines, banking, and equipment sets with auto-equip triggers.
 - **Character Workshop** — a unified hub for character management and development: live stats; **Equipment Manager** gear sets; an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons; **CP allocation** plans; **level projection**; quest, boss, and death tracking (with boss respawn timers you can sync between clients); character-info calculators; and **Roomba** — an automated gang-house item sorter backed by a shared item-location log you can query in-game with `@roomba`.
 - **Automation tools** — macros, aliases, triggers, and events; auto-engine toggles with per-character base modes and reconnect reconciliation; a one-press all-off kill switch; and a Sprint mode.
-- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window gives a searchable monster reference — elemental resistances, spell-immunity/hit-magic requirements, attacks, loot, and locations — without digging into the Browser.
+- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window answers "can I safely fight this thing right now" — Hittable/Castable/Safe filters against your live weapon, spells, and AC/Dodge, plus its attacks and your own combat history against it — without digging into the Browser.
 - **Conversation & chat** — a dedicated conversation pane with per-channel filtering, search, logging, and history.
 - **Tools & diagnostics** — a timestamped full-ANSI scrollback with search/filter, a **Program Log**, **Session Stats**, a **Wire Inspector** for raw/classified stream inspection, and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES — IT CAPTURES FAR MORE THAN YOU CAN DESCRIBE OR SHOW IN A SCREENSHOT)***.
 - **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.

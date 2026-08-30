@@ -187,6 +187,30 @@ public static class MonsterMatchupCalculatorSpells
     public static bool WeaponMeetsMagical(int weaponHitMagic, int monsterMagical)
         => weaponHitMagic >= monsterMagical;
 
+    // Chance THIS monster's own attack lands on a defender with the given
+    // live AC/Dodge, given whichever ward (Prot Evil/Prot Good) applies
+    // against its alignment — the Monster → player direction Compute() above
+    // already implements, exposed standalone since Monster Intel's "Hits You
+    // %" column needs it for every catalog row, not a single picked monster.
+    // Null when the monster has no catalogued physical attack to compute
+    // against. MajorMUD alignment codes 1/2/5/6 are evil, 0/4 are good.
+    public static int? IncomingHitPercent(
+        (int Majority, int Max)? physicalAccuracy, int alignment,
+        int defenderAc, int defenderDodge, int protEvil, int protGood,
+        RealmType realm)
+    {
+        if (physicalAccuracy is not { } acc) return null;
+        bool isEvil = alignment is 1 or 2 or 5 or 6;
+        bool isGood = alignment is 0 or 4;
+        return CombatCalculator.CalculateHitChance(
+            attackerAccuracy: acc.Majority,
+            defenderAC: defenderAc,
+            defenderDodge: defenderDodge,
+            protEvil: isEvil ? protEvil : 0,
+            protGood: isGood ? protGood : 0,
+            realmType: realm).OverallHitPercent;
+    }
+
     // Rank the player's known attack spells by effective damage against one
     // monster: a spell whose ReqLevel is below the monster's SpellImmu never
     // lands (GAME_MECHANICS' ReqLevel ≥ SpellImmu eligibility rule, mirroring
