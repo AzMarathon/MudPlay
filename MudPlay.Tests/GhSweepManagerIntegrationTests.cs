@@ -109,7 +109,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(sweep.Start());
         Assert.Equal("n", sent[0]);
-        Assert.Contains("bg Roomba sorting starting.", sent);
+        Assert.Contains(sent, s => s.StartsWith("bg Roomba sorting starting - ", StringComparison.Ordinal));
 
         // C is an unlabeled transit room. Its visible list arrives while
         // CurrentRoom still points at A; it must be staged against C and C must
@@ -208,7 +208,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             DateTimeOffset.UtcNow.AddSeconds(13));
 
         Assert.Equal(GhSweepManager.SweepPhase.Idle, sweep.Phase);
-        Assert.Contains("bg Roomba sorting complete - moved 2 item(s).", sent);
+        Assert.Contains(sent, s => s.StartsWith("bg Roomba sorting complete - sorted 2 item(s), inventoried ", StringComparison.Ordinal)
+            && s.Contains(" item(s). started ", StringComparison.Ordinal)
+            && s.Contains(", finished ", StringComparison.Ordinal));
 
         sweep.Dispose();
         ground.Dispose();
@@ -646,7 +648,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(sweep.Start(GhSweepManager.SweepMode.InventoryOnly));
         Assert.Equal(GhSweepManager.SweepMode.InventoryOnly, sweep.Mode);
-        Assert.Contains("bg Roomba inventory mode starting.", sent);
+        Assert.Contains(sent, s => s.StartsWith("bg Roomba inventory mode starting - ", StringComparison.Ordinal));
 
         // Walk the full recon lap — a war hammer visible at A, a chain shirt at B.
         FeedRouter(router, "You notice a war hammer here.");
@@ -669,7 +671,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.DoesNotContain(sent, s => s.StartsWith("get ", StringComparison.Ordinal));
         Assert.DoesNotContain(sent, s => s.StartsWith("drop ", StringComparison.Ordinal));
         // war hammer + chain shirt, one apiece — no leading stack count on either.
-        Assert.Contains("bg Roomba inventory complete - inventoried 2 item(s).", sent);
+        Assert.Contains(sent, s => s.StartsWith("bg Roomba inventory complete - inventoried 2 item(s). started ", StringComparison.Ordinal)
+            && s.Contains(", finished ", StringComparison.Ordinal));
 
         // But the item-location log IS fed, same as a Sort-mode recon would.
         // The staged arrival survey attaches to the room being entered when the

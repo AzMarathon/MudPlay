@@ -1,13 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.36.7**
-> - Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right
-> - The zoom ceiling is now an absolute effective size (never renders past 32pt-equivalent, the largest size in the picker) instead of a flat 8x multiplier of whatever size you picked — a small chosen size no longer gets blown up to look identical to a large one; Font Size now visibly matters again
-> - Zoomed text now renders crisp and antialiased for any real font (JetBrains Mono, system fonts) instead of blowing up as blocky pixels — only the MX437 bitmap font keeps the blocky nearest-neighbour upscale, on purpose, to stay pixel-authentic
-> - Terminal font family/size now live-preview on the terminal canvas as you change them in Settings → General, instead of only applying after Save
-> - Room-title detection now keeps the bright-cyan line nearest "Obvious exits:" instead of the first one in the block, so an asynchronous bright-cyan player-ability line (or a palette that recolors spell text to the same cyan) no longer gets read as the room name
-> - Fixed a hazard route getting permanently stuck demanding a specific counter item even after the player equipped a different item that protects against the exact same thing
+> **Version 3.36.8**
+> - Roomba gangpath announcements now include the start/finish date and time, not just a bare "starting"/"complete" line
+> - Sorting's completion announce now reports items sorted AND items inventoried — its recon and final scan already observe every room's floor the same way an Inventory-only run does, so a sort keeps the item-location log just as current
+> - `@roomba <item>` replies now include the last-scanned date/time of that item's freshest sighting, so you can tell a fresh location from a stale one
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
