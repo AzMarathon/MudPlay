@@ -387,12 +387,13 @@ public sealed class CashManager : IDisposable
         switch (policy)
         {
             case CashPolicy.Collect:
-                // In a stash room mid-loop, don't re-collect — a `sea` re-exposes
-                // the just-stashed pile and this would grab it right back.
+                // A search in a stash room re-exposed the just-hidden pile — don't
+                // grab our own stash back. Only the reveal survey is gated; coin
+                // shown on plain room entry (this line) collects normally.
                 if (SuppressCollectInStashRoom())
                 {
                     _log?.Info(LogCategory,
-                        $"stash room (looping) — not collecting {count} {currency}");
+                        $"stash-room search reveal — not re-grabbing {count} {currency}");
                     break;
                 }
                 // Specific amount (not bare `get <currency>` which
@@ -437,10 +438,13 @@ public sealed class CashManager : IDisposable
 
         if (policy == CashPolicy.Collect)
         {
+            // Corpse drops are freshly-dropped visible coin, never the stashed pile,
+            // so this only trips if a search reveal happens to be in flight as the
+            // drop lands — the guard stays for symmetry with the other collect paths.
             if (SuppressCollectInStashRoom())
             {
                 _log?.Info(LogCategory,
-                    $"stash room (looping) — not collecting corpse {count} {currency}");
+                    $"stash-room search reveal — not re-grabbing corpse {count} {currency}");
                 return;
             }
             // Fresh coin on the ground → re-arm collection of this currency even if
@@ -789,10 +793,11 @@ public sealed class CashManager : IDisposable
         // the "You notice N here" room-survey path (what auto-search's `sea`
         // re-render drives) reached here without passing the per-handler guards, so
         // a just-stashed pile got grabbed right back while looping (report
-        // paradigm-20260820-055720).
+        // paradigm-20260820-055720). The guard fires only while the reveal is in
+        // flight, so a plain-entry survey of a stash room still collects visible coin.
         if (SuppressCollectInStashRoom())
         {
-            _log?.Info(LogCategory, $"stash room (looping) — not collecting {count} {currency}");
+            _log?.Info(LogCategory, $"stash-room search reveal — not re-grabbing {count} {currency}");
             return;
         }
 

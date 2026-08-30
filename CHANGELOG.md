@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.35.5
+
+- Fixed lost gold in the room after a stash room: stash-room auto-collect was suppressed by reading the "current room" too early (a room's coin line is seen before the room is confirmed), so the next room's coin was mis-attributed to the stash room and left on the floor
+- Stash rooms now collect coin that's visible on entry or dropped by a kill; only a pile that a `search` re-reveals (the coin just stashed) is left alone
+- Same fix applied to auto-stash items
+- bug reports addressed: paradigm-20260829-212158
+
 ## 3.35.4
 
 - Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the exact same already-refused move, get refused again, and then just sit there until an unrelated event nudged it back to life (observed stalls from several minutes to over an hour). The loop now recognizes this on resume and enters recovery (reroutes) immediately.

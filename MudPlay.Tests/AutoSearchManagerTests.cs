@@ -155,6 +155,61 @@ public sealed class AutoSearchManagerTests
         Assert.False(SearchHeld(coord));
     }
 
+    // ----- reveal-in-flight window (stash-room collect guard keys off this) -----
+
+    [Fact]
+    public void RevealInFlight_TrueOnlyBetweenSeaAndSettle()
+    {
+        // The stash-room collect guard suppresses re-grabbing a just-hidden pile ONLY
+        // while the `sea` reveal is round-tripping. False on entry (no sea yet), true
+        // once the sea fires with a consumer to collect the reveal, false again once
+        // the settle elapses.
+        var mgr = new AutoSearchManager(
+            isEnabled: () => true,
+            hasGetEngineArmed: () => true);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged(Key());
+        Assert.False(mgr.IsRevealInFlight);   // armed, but no sea sent yet
+        mgr.OnClassifyElapsed();              // clear room → sea fires, settle armed
+        Assert.True(mgr.IsRevealInFlight);    // reveal is round-tripping
+        mgr.OnSettleElapsed();
+        Assert.False(mgr.IsRevealInFlight);   // window closed
+    }
+
+    [Fact]
+    public void RevealInFlight_FalseWithNoLootConsumer()
+    {
+        // With no get engine armed the settle window is never held (report
+        // paradigm-20260818-060742), so there is nothing collecting the reveal and
+        // nothing to suppress — the guard stays open.
+        var mgr = new AutoSearchManager(isEnabled: () => true);   // no consumer
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged(Key());
+        mgr.OnClassifyElapsed();              // sea fires but releases immediately
+        Assert.Single(mgr.LastSentForTests);
+        Assert.False(mgr.IsRevealInFlight);
+    }
+
+    [Fact]
+    public void RevealInFlight_ClearedOnRoomChange()
+    {
+        // Leaving the room ends any reveal window — a stale flag must never leak into
+        // the next room's entry survey (the mis-attribution that dropped coin in the
+        // room after a stash room, report paradigm-20260829-212158).
+        var mgr = new AutoSearchManager(
+            isEnabled: () => true,
+            hasGetEngineArmed: () => true);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged(Key());
+        mgr.OnClassifyElapsed();
+        Assert.True(mgr.IsRevealInFlight);
+        mgr.OnRoomChanged(Key());             // moved on before settle elapsed
+        Assert.False(mgr.IsRevealInFlight);
+    }
+
     // ----- fight in the room: defer + hold, fire on clear -----
 
     [Fact]
