@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.37.1
+
+- Terminal no longer faux-bolds bright text: SGR "bold" (which MajorMUD uses for room names, hostile-monster names, etc.) is BRIGHT, not heavy — it now renders as a brighter colour at normal weight, matching MegaMUD and the MX437 bitmap default. On vector fonts (Courier New, Liberation Mono, JetBrains Mono) room names and monster names came out visibly heavier than the reference client; they now match. Applies to the main terminal and the Backscroll window
+
 ## 3.37.0
 
 - `@where` reply → map flash: when you `@where` another MudPlay user and their client answers with its location, the Navigation map (if open) flashes that room green and centres on it for ~15 seconds, then drifts back to following you. `@where` several people and each answered square lights up at once, each fading on its own 15s timer; the map re-centres on the newest reply. Ignored while the map is closed

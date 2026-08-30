@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.0**
-> - `@where` reply → map flash: when you `@where` another MudPlay user and their client answers with its location, the Navigation map (if open) flashes that room green and centres on it for ~15 seconds, then drifts back to following you. `@where` several people and each answered square lights up at once, each fading on its own 15s timer; the map re-centres on the newest reply. Ignored while the map is closed
-> - Tightened the shared `@where`-reply parser to require the MudPlay `{…(map N, room M)…}` wrapper, so a human telepath merely mentioning a room in prose can't be read as a location reply (also hardens the party @where-probe recovery path)
+> **Version 3.37.1**
+> - Terminal no longer faux-bolds bright text: SGR "bold" (which MajorMUD uses for room names, hostile-monster names, etc.) is BRIGHT, not heavy — it now renders as a brighter colour at normal weight, matching MegaMUD and the MX437 bitmap default. On vector fonts (Courier New, Liberation Mono, JetBrains Mono) room names and monster names came out visibly heavier than the reference client; they now match. Applies to the main terminal and the Backscroll window
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
