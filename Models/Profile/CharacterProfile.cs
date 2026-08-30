@@ -224,6 +224,15 @@ public sealed class CharacterProfile
     // players seen yet.
     public List<PlayerSighting>? PlayersSeen { get; set; }
 
+    // Per-character log of actual combat outcomes observed against specific
+    // monsters — landed/whiffed swing counts and damage extent, and confirmed
+    // "no effect" discoveries (physical Magical-requirement gate, spell
+    // SpellImmunity gate). Written by Game.Combat.MonsterObservationTracker;
+    // surfaced by Monster Intel's "Your Observations" section, kept visibly
+    // separate from the authoritative MDB facts the rest of that window
+    // shows. null / empty means no observations yet.
+    public List<MonsterObservation>? MonsterObservations { get; set; }
+
     // When true, the DEATH-recovery flow grabs lost items (and re-equips what
     // was worn at death) automatically whenever the character re-enters a room
     // holding one of their own deathpiles — regardless of the item's auto-get

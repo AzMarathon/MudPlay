@@ -2,6 +2,17 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.36.0
+
+- New **Monster Intel** window (View menu / toolbar) — a fast, searchable monster reference that for the first time surfaces a monster's **elemental resistances / vulnerabilities** (Cold/Fire/Stone/Lightning/Water) and its **spell-immunity / hit-magic requirements**, data the auto-combat engine has always computed internally but never showed. Detail panel: Overview, Elemental Defenses, Casts (what elements it can hit you with), Attacks, Loot, Locations (a quick "placed in N rooms / spawns in M lairs" count), and an Automation tab that opens the per-monster overlay editor in place
+- **Character-centric**: a top character bar shows your live level / HP / mana (or Kai), your worn weapon's HitMagic, and your known attack-spell count — updating live as vitals tick or you swap gear / learn a spell; plus **Hittable** / **Castable** list filters that narrow the list to what your weapon can actually hit or a known spell can get past spell immunity
+- **Your Matchup** (live, character-aware): whether your worn weapon is magical enough to hit the monster, a per-element incoming-threat line vs. your own gear's resists, and every attack spell you've learned ranked by effective damage against that specific monster — with a clear reason (spell immunity, full resist, undead-only / living-only targeting) instead of a silently-wrong number
+- **Side-by-side comparison**: Ctrl/Shift-click 2+ monsters to swap the detail panel for a row of comparison cards
+- **Context bar**: the current room's monster roster as clickable chips
+- **Your Observations**: a per-character log of actual combat outcomes against a monster — landed-hit damage extent / average, hit rate, and confirmed "no effect" discoveries — kept visibly separate from the game-data facts and persisted per character; deliberately doesn't infer "resisted" from a low roll (no wire line distinguishes the two)
+- New typed **`MonsterCatalog`** — the active game-data set's Monsters table parsed once into a shared model, the foundation Monster Intel reads from
+- The list opens wider with a draggable, per-character-remembered splitter; every column is independently sortable; AC and DR are separate columns
+
 ## 3.35.4
 
 - Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the exact same already-refused move, get refused again, and then just sit there until an unrelated event nudged it back to life (observed stalls from several minutes to over an hour). The loop now recognizes this on resume and enters recovery (reroutes) immediately.
@@ -52,7 +63,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - The Party Buffs panel keeps its table layout when docked Below or Left (content pinned to its natural width instead of stretching across the window)
 - bug reports addressed: stock-20260828-104653, stock-20260828-113206, stock-20260828-124347
 
-
+## 3.33.0
 
 - Equipment Manager: a gear slot holding an item your character can't wear (alignment / level / class) is flagged red with a ⚠ and skipped on swaps, instead of the engine repeatedly bonking the game with a wear it refuses
 - Equipment Manager: when the game refuses a wear/wield ("You may not wear that item!" / "You may not use that weapon." — e.g. an alignment-drift EP-zap), the slot is blocked and a terminal notice tells you to adjust the set; change that slot to clear it

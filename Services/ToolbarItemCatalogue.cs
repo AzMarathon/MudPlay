@@ -76,6 +76,8 @@ public static class ToolbarItemCatalogue
             "OpenGameDataBrowserCommand", ShortcutHint: "F3"),
         new("OpenLogPane",        "Program Log",          "IconLog",
             "OpenLogPaneCommand",      ShortcutHint: "F4"),
+        new("OpenMonsterIntel",   "Monster Intel",        "IconSearch",
+            "OpenMonsterIntelCommand", Tooltip: "Monster Intel — searchable monster reference: stats, elemental resists, attacks, loot, automation"),
 
         // ----- Action menu surface -------------------------------------------
         // These mirror the Action menu in MainWindow.axaml. The CommandName

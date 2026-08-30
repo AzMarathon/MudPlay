@@ -861,6 +861,13 @@ public sealed class AppServices
     // on the loaded profile.
     public Game.PlayerSightingTracker PlayerSightings { get; private set; } = null!;
 
+    // Per-character log of actual combat outcomes observed against specific
+    // monsters — landed/whiffed swing damage extent and confirmed "no effect"
+    // (Magical / SpellImmunity gate) discoveries. Feeds Monster Intel's "Your
+    // Observations" section, kept visibly separate from MonsterCatalog's
+    // authoritative MDB facts. Persists on the loaded profile.
+    public Game.Combat.MonsterObservationTracker MonsterObservations { get; private set; } = null!;
+
     // Owns PlayerState.InCombat and
     // the Game.Map.MovementCoordinator.CombatGate hold
     // state. Cleared automatically when the room is free of
@@ -969,6 +976,14 @@ public sealed class AppServices
     // Lookup of each spell's AttType (damage element) by cast-code in the active
     // game-data set. Paired with MonsterResist for the resist guard.
     public Game.Combat.SpellAttackTypeIndex SpellAttackType { get; private set; } = null!;
+
+    // Typed, parsed-once view of the active game-data set's Monsters table —
+    // every raw field this codebase reads somewhere, plus the elemental-resist /
+    // Magical / SpellImmu / Dodge / spell-cast-element lookups the individual
+    // Monster*Index classes above compute independently. Feeds Monster Intel.
+    // Not yet a replacement for those indexes — see MonsterCatalog's own
+    // class comment for why they stay separate for now.
+    public Game.Combat.MonsterCatalog MonsterCatalog { get; private set; } = null!;
 
     // Lookup of each spell's Short cast-code by its Spells.Number in the active
     // set — bridges the per-monster override slots (which store a Number) to the
@@ -3649,6 +3664,7 @@ public sealed class AppServices
         SpellAttackType = new Game.Combat.SpellAttackTypeIndex(GameData);
         Combat.SetMagicEligibility(
             MonsterMagic, ItemMagic, SpellReqLevel, MonsterResist, SpellAttackType);
+        MonsterCatalog = new Game.Combat.MonsterCatalog(GameData);
 
         // Drain-life eligibility — a drain spell can only affect a living, non-undead
         // target; the index tells the chooser which mobs to skip (fall back to the
@@ -4367,6 +4383,11 @@ public sealed class AppServices
             selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
         RoomClassifier.EntitiesObserved += PlayerSightings.NoteAlsoHere;
         RoomEntry.ArrivalObserved += PlayerSightings.NoteArrival;
+        // Monster Intel's "Your Observations" — subscribes to the same fixed
+        // combat-line patterns CombatSessionTracker does, attributed per
+        // monster instead of session-wide; persists on the loaded profile.
+        MonsterObservations = new Game.Combat.MonsterObservationTracker(
+            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log);
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The

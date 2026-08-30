@@ -1,9 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.35.4**
-> - Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the doomed move and then sit there until an unrelated event nudged it (observed stalls from minutes to over an hour). It now enters recovery (reroutes) immediately on resume.
-> - Fixed a related stall where an ambiguous room observation (Suspect) resolving mid-pause stranded the loop with no way out; it now forwards to the recovery gate on resume, like it does in real time.
+> **Version 3.36.0**
+> - New **Monster Intel** window (View menu / toolbar) — a fast, searchable monster reference that surfaces, for the first time, a monster's **elemental resistances / vulnerabilities** and its **spell-immunity / hit-magic requirements** (data the auto-combat engine computed internally but never showed); detail panel covers Overview, Elemental Defenses, Casts, Attacks, Loot, Locations, and an Automation tab
+> - **Character-centric**: a live character bar (level / HP / mana-or-Kai, worn weapon HitMagic, known attack-spell count) plus **Hittable** / **Castable** list filters
+> - **Your Matchup** ranks your learned attack spells by effective damage against the selected monster (with reasons for immunity / full resist / undead-only / living-only), and flags whether your weapon is magical enough to hit it
+> - Side-by-side comparison (Ctrl/Shift-click 2+ monsters), a current-room monster context bar, and a per-character **Your Observations** log of real combat outcomes (landed damage, hit rate, confirmed no-effect)
+> - A wider window with a draggable, per-character splitter and independently-sortable columns
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -23,7 +26,7 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Cash & items** — automated loot collection with sell/buy/stash/discard engines, banking, and equipment sets with auto-equip triggers.
 - **Character Workshop** — a unified hub for character management and development: live stats; **Equipment Manager** gear sets; an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons; **CP allocation** plans; **level projection**; quest, boss, and death tracking (with boss respawn timers you can sync between clients); character-info calculators; and **Roomba** — an automated gang-house item sorter backed by a shared item-location log you can query in-game with `@roomba`.
 - **Automation tools** — macros, aliases, triggers, and events; auto-engine toggles with per-character base modes and reconnect reconciliation; a one-press all-off kill switch; and a Sprint mode.
-- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data.
+- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window gives a searchable monster reference — elemental resistances, spell-immunity/hit-magic requirements, attacks, loot, and locations — without digging into the Browser.
 - **Conversation & chat** — a dedicated conversation pane with per-channel filtering, search, logging, and history.
 - **Tools & diagnostics** — a timestamped full-ANSI scrollback with search/filter, a **Program Log**, **Session Stats**, a **Wire Inspector** for raw/classified stream inspection, and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES — IT CAPTURES FAR MORE THAN YOU CAN DESCRIBE OR SHOW IN A SCREENSHOT)***.
 - **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.
