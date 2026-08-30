@@ -187,6 +187,12 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<RoomKey?> DestinationRoomKeyProperty =
         AvaloniaProperty.Register<MapControl, RoomKey?>(nameof(DestinationRoomKey));
 
+    // A room an @where reply just located — flashed green for a few seconds then
+    // cleared by the VM's timer. Single transient highlight, so a nullable key
+    // (mirrors DestinationRoomKey) rather than a set overlay.
+    public static readonly StyledProperty<RoomKey?> WhereTargetRoomProperty =
+        AvaloniaProperty.Register<MapControl, RoomKey?>(nameof(WhereTargetRoom));
+
     public static readonly StyledProperty<MudPlay.Models.Profile.KeyChord> UpStepChordProperty =
         AvaloniaProperty.Register<MapControl, MudPlay.Models.Profile.KeyChord>(nameof(UpStepChord),
             new MudPlay.Models.Profile.KeyChord(Key.PageUp));
@@ -386,6 +392,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(DestinationRoomKeyProperty);
         set => SetValue(DestinationRoomKeyProperty, value);
+    }
+
+    public RoomKey? WhereTargetRoom
+    {
+        get => GetValue(WhereTargetRoomProperty);
+        set => SetValue(WhereTargetRoomProperty, value);
     }
 
     // Fired when the user steps the crawler up or down — the layout host is
@@ -730,6 +742,11 @@ public sealed class MapControl : Control
     {
         LineCap = PenLineCap.Round,
     };
+    // @where target flash — a translucent green fill under a bright green ring, so an
+    // answered "where are you?" reads as a lit-up marked square the moment it lands.
+    // Cleared by the VM's ~12s timer.
+    private static readonly IBrush WhereTargetFill = new SolidColorBrush(Color.Parse("#5533DD66"));
+    private static readonly IPen   WhereTargetPen  = new Pen(new SolidColorBrush(Color.Parse("#FF33DD66")), 2.5);
     // Death-marker skull — bone-white silhouette with dark hollows, drawn on
     // rooms that still hold an un-recovered deathpile. The dark eye / nose / tooth
     // features carry the contrast so the glyph reads on both light and dark room
@@ -794,7 +811,7 @@ public sealed class MapControl : Control
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
             PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
             BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty,
-            NavLineStylesProperty);
+            WhereTargetRoomProperty, NavLineStylesProperty);
 
         // Auto-centre on the player's current room every time it
         // changes — but only when the
@@ -1218,6 +1235,11 @@ public sealed class MapControl : Control
             if (!cell.Intersects(viewport)) continue;
 
             DrawRoomNode(context, cell, kvp.Value);
+
+            // @where target — a transient green flash the VM clears after ~12s.
+            // Drawn right on the node so it reads as a marked square.
+            if (WhereTargetRoom is { } whereRoom && whereRoom.Equals(kvp.Value))
+                DrawWhereHighlight(context, cell);
 
             if (AvoidedRooms is not null && AvoidedRooms.Contains(kvp.Value))
                 DrawAvoidX(context, cell);
@@ -1675,6 +1697,11 @@ public sealed class MapControl : Control
         ctx.DrawLine(pen, topLeft, bottomRight);
         ctx.DrawLine(pen, topRight, bottomLeft);
     }
+
+    // Green flash for the room an @where reply located — a translucent fill + ring
+    // over the whole cell so it stands out at a glance; the VM clears it after ~12s.
+    private static void DrawWhereHighlight(DrawingContext ctx, Rect cell)
+        => ctx.DrawRectangle(WhereTargetFill, WhereTargetPen, new RoundedRect(cell.Deflate(1), cell.Width * 0.14));
 
     // A tiny robot head marking a room the user labeled for Roomba Mode — antenna,
     // rounded head, two eyes. Cyan so it reads distinctly against the red avoid and

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Avalonia.Threading;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Map;
@@ -71,12 +70,6 @@ public sealed class PartyComebackManager : IDisposable
     // we fall back to the @where probe. Long enough to cover the CR round-trip +
     // the invite/follow-confirm handshake (report stock-20260730-193610).
     private static readonly TimeSpan CrRecoverFallback = TimeSpan.FromSeconds(3);
-
-    // Pulls the map/room numbers out of a @where reply
-    // ("{Throne Room (map 9, room 1012); exits: ...}"). PartyEssentialHandlers
-    // fixes that wording, so this parse tracks it.
-    private static readonly Regex WhereReply =
-        new(@"map (\d+), room (\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private readonly RemoteCommandManager _engine;
     private readonly PartyManager _party;
@@ -326,7 +319,7 @@ public sealed class PartyComebackManager : IDisposable
         if (!_pendingProbes.ContainsKey(sender)) return;
         // Not a location reply — leave the probe pending; they may answer with a
         // later line, and PruneProbes expires it if they never do.
-        if (!TryParseWhere(result.Groups[1], out RoomKey room)) return;
+        if (!WhereReplyParser.TryParseRoom(result.Groups[1], out RoomKey room)) return;
         _pendingProbes.Remove(sender);
         if (MemberInParty(sender)) return; // bare invite already collected them
         _log?.Info(LogCategory, $"{sender} answered @where at {room.Map}/{room.Room} — evaluating recovery.");
@@ -341,18 +334,6 @@ public sealed class PartyComebackManager : IDisposable
             if (now - kv.Value > ProbeTimeout) (stale ??= new()).Add(kv.Key);
         if (stale is null) return;
         foreach (string key in stale) _pendingProbes.Remove(key);
-    }
-
-    private static bool TryParseWhere(string message, out RoomKey room)
-    {
-        room = default;
-        if (string.IsNullOrEmpty(message)) return false;
-        Match m = WhereReply.Match(message);
-        if (!m.Success) return false;
-        if (!int.TryParse(m.Groups[1].Value, out int map) || map <= 0) return false;
-        if (!int.TryParse(m.Groups[2].Value, out int r) || r <= 0) return false;
-        room = new RoomKey(map, r);
-        return true;
     }
 
     // ----- shared recovery decision + drive --------------------------

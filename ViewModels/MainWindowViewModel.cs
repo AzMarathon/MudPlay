@@ -618,6 +618,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
+        AppServices.Current.SetHighlightWhereOpener(HighlightWhereRoomIfOpen);
         AppServices.Current.SetNavManagerOpener(OpenNavManager);
         AppServices.Current.SetTypedInputSender(SendUserText);
 
@@ -4293,6 +4294,15 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (_navigationWindow?.DataContext is ViewModels.Navigation.NavigationViewModel vm)
             vm.OnFloorChangeRequested(key);
+    }
+
+    // Flash + centre an @where reply's room on the map, but only if it's open —
+    // an answered "where are you?" lights up where they are without summoning the
+    // window over what you're doing.
+    private void HighlightWhereRoomIfOpen(Game.Map.RoomKey key)
+    {
+        if (_navigationWindow?.DataContext is ViewModels.Navigation.NavigationViewModel vm)
+            vm.ShowWhereHighlight(key);
     }
 
     // Toolbar Start, which doubles as Resume. USER-paused → resume. Idle with a

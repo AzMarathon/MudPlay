@@ -488,8 +488,9 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Router.Dispatch(Line("Tank just entered the Realm."));
         // CR re-observe found no Tank in our room → fallback fires the @where probe.
         h.Comeback.FireCrFallbackForTests();
-        // Leader probed @where; Tank answers with their location.
-        h.Router.Dispatch(Line("Tank telepaths: Throne Room (map 1, room 3); exits: north"));
+        // Leader probed @where; Tank answers with their location (the wrapped
+        // MudPlay reply format PartyEssentialHandlers builds).
+        h.Router.Dispatch(Line("Tank telepaths: {Throne Room (map 1, room 3); exits: north}"));
 
         Assert.False(h.Lair.IsActive);                    // paused for the pickup
         Assert.Equal(WalkState.Walking, h.Walker.State);

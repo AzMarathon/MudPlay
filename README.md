@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.36.9**
-> - Fixed mana-regen rerolling never firing on Paradigm: a roll spell (mana flux / nature tap) confirms via a shared "mana regenerating" condition that couldn't be mapped back to the specific spell, so the reroll was keyed on a signal that never arrived — it sat on a bad (even negative) roll forever. The reroll now triggers off the cast itself, reads the fresh `abil 145` value, and rerolls / re-checks after each recast
-> - "Reroll below" now labeled "Reroll below abil 145" on Paradigm, with a tip noting the rolled value can be negative
-> - "Cast before resting for mana" reworked: the buff is kept up (recast on expiry) only while you're actually resting for mana — through a combat interruption, until mana tops back up — then stops; unchecked still maintains it always
-> - Bug report gains a Mana-regen reroll section (roll signal, cycle state, last observed roll value)
+> **Version 3.37.0**
+> - `@where` reply → map flash: when you `@where` another MudPlay user and their client answers with its location, the Navigation map (if open) flashes that room green and centres on it for ~12 seconds, then drifts back to following you. Ignored while the map is closed; a fresh reply replaces the previous flash
+> - Tightened the shared `@where`-reply parser to require the MudPlay `{…(map N, room M)…}` wrapper, so a human telepath merely mentioning a room in prose can't be read as a location reply (also hardens the party @where-probe recovery path)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

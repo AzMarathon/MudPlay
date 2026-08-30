@@ -130,6 +130,14 @@ public sealed class AppServices
     public void SetCenterNavigationIfOpenOpener(Action<Game.Map.RoomKey> opener) => _centerNavigationIfOpenOpener = opener;
     public void CenterNavigationIfOpen(Game.Map.RoomKey key) => _centerNavigationIfOpenOpener?.Invoke(key);
 
+    // Flashes a room green on the map and centres on it for a few seconds ONLY if
+    // the Navigation window is already open — never force-opens it. Driven by
+    // WhereReplyTracker when an @where reply telepath lands, so an answered
+    // "where are you?" lights up on the map. No-op until the main VM binds it.
+    private Action<Game.Map.RoomKey>? _highlightWhereOpener;
+    public void SetHighlightWhereOpener(Action<Game.Map.RoomKey> opener) => _highlightWhereOpener = opener;
+    public void HighlightWhereRoom(Game.Map.RoomKey key) => _highlightWhereOpener?.Invoke(key);
+
     // Single source of truth for "are you sure?" prompts (exit /
     // hangup / save / delete). Lives at Global tier; mirrored from
     // SettingsService on startup and every save.
@@ -435,6 +443,9 @@ public sealed class AppServices
     // Game.Remote.PartyComebackManager.MaxBacktrackRooms
     // budget is pushed from Settings → Other.
     public Game.Remote.PartyComebackManager PartyComeback { get; private set; } = null!;
+
+    // Recognises an @where reply telepath and flashes its room on the nav map.
+    public Game.Remote.WhereReplyTracker WhereReply { get; private set; } = null!;
 
     // Follower-side @comeback sender. Detects being left
     // behind (a movement-failure line just before "You are no longer
@@ -5275,6 +5286,12 @@ public sealed class AppServices
         // from Settings → Other by ApplyOtherFromActiveProfile on load.
         PartyComeback = new Game.Remote.PartyComebackManager(
             RemoteCommands, Party, RoomTracker, RoomClassifier, Walker, LoopRunner, AutoLair, Router, Bfs, Log);
+
+        // @where reply → nav-map flash. Recognises the wrapped location reply an
+        // @where'd MudPlay client telepaths back and routes it to the (open) map;
+        // HighlightWhereRoom no-ops when the window is closed.
+        WhereReply = new Game.Remote.WhereReplyTracker(Router, Log);
+        WhereReply.TargetLocated += (_, room) => HighlightWhereRoom(room);
 
         // Auto-deposit reroute. Built here
         // (after the movement engines) so it can snapshot / stop / restart

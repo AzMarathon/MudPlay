@@ -154,6 +154,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _searchDebounce?.Stop();
         _loopFilterDebounce?.Stop();
         _gotoFilterDebounce?.Stop();
+        _whereHighlightTimer?.Stop();
         _services.Settings.GlobalSettingsChanged -= OnGlobalSettingsChanged;
         _services.RoomTracker.StateChanged -= OnTrackerStateChanged;
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
@@ -869,6 +870,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshPreviewPath();
     }
     [ObservableProperty] private RoomKey? _destinationRoomKey;
+
+    // The room an @where reply just located — flashed green on the map for ~12s
+    // then cleared by _whereHighlightTimer. Bound to MapControl.WhereTargetRoom.
+    [ObservableProperty] private RoomKey? _whereTargetRoom;
 
     [ObservableProperty] private RoomGraphManager? _graph;
 
@@ -2726,6 +2731,39 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // change has no auto-centre on its own, so the order matters.
         SelectedRoomKey = newOrigin;
         Layout = _services.Bfs.BuildLayout(newOrigin);
+    }
+
+    // ~12s the green @where flash + the centred hold stay before the map reverts to
+    // following the player. OnFloorChangeRequested arms MapControl's own auto-follow
+    // suppression, which rebounds to the player on its own; this just clears the green.
+    private static readonly TimeSpan WhereHighlightDuration = TimeSpan.FromSeconds(12);
+    private DispatcherTimer? _whereHighlightTimer;
+
+    // An @where reply located a player at target — flash the square green and centre
+    // on it (re-rooting the layout to its floor, exactly like a search jump), then let
+    // the map drift back to the player. Driven by AppServices.HighlightWhereRoom only
+    // while this window is live, so a reply that lands with the map closed is ignored.
+    public void ShowWhereHighlight(RoomKey target)
+    {
+        // A room the active graph doesn't hold can't be centred or drawn — ignore it
+        // rather than leave a highlight on a square that never renders.
+        if (_services.RoomGraph.GetRoom(target) is null) return;
+        WhereTargetRoom = target;
+        OnFloorChangeRequested(target);
+        _whereHighlightTimer ??= CreateWhereHighlightTimer();
+        _whereHighlightTimer.Stop();
+        _whereHighlightTimer.Start();
+    }
+
+    private DispatcherTimer CreateWhereHighlightTimer()
+    {
+        DispatcherTimer timer = new() { Interval = WhereHighlightDuration };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            WhereTargetRoom = null;
+        };
+        return timer;
     }
 
     // Open the Manage dialog — modeless surface for renaming / deleting
