@@ -555,6 +555,18 @@ public static class BugReportBuilder
         }
         sb.Append('\n');
 
+        // Mana-regen reroll engine state — so a "flux stuck at a bad value" report
+        // (paradigm-20260830-110918) shows the roll quality it judges from and its
+        // cycle, not just the configured threshold in the buff plan above.
+        Game.Spells.ManaRegenReroller reroll = svc.ManaRegen;
+        string rerollSignal = svc.GameData.ActiveRealm == Game.RealmType.ParaMud
+            ? "abil 145 spells value" : "observed mana tick";
+        sb.Append("**Mana-regen reroll**\n\n");
+        sb.Append($"- Roll signal: {rerollSignal}\n");
+        sb.Append($"- Cycle active: {reroll.CycleActive}; rerolls used this cycle: {reroll.RerollsUsed}\n");
+        sb.Append($"- Last observed roll value: {(reroll.LastObservedValue is { } v ? v.ToString() : "(none judged yet)")}\n");
+        sb.Append('\n');
+
         int shown = 0;
         void Group(string title, IEnumerable<(string Label, string? Code)> slots)
         {

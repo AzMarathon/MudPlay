@@ -106,6 +106,11 @@ public sealed class ManaRegenReroller : IDisposable
     // idle. For diagnostics / tests.
     public int RerollsUsed => _rerollsUsed;
 
+    // The roll quality last judged — the abil-145 spells value (Paradigm) or the
+    // observed tick (Stock). Null until the first roll is evaluated. For the bug
+    // report, so a "reroll isn't working" capture shows what value the engine saw.
+    public int? LastObservedValue { get; private set; }
+
     // The roll spell spellShort just landed (confirmed via its caster / applied
     // message). A landing while idle opens a new cycle with the reroll counter
     // reset; a landing mid-cycle is the recast we triggered and keeps the
@@ -182,6 +187,7 @@ public sealed class ManaRegenReroller : IDisposable
     private void Decide(int value, string valueLabel)
     {
         if (_activeShort is not { } shortCode) return;   // defensive: no active cycle
+        LastObservedValue = value;
         ManaRegenRerollConfig cfg = _readConfig();
 
         // Threshold went null mid-cycle (settings edit) — accept and drop out.

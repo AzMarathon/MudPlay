@@ -1,13 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.36.7**
-> - Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right
-> - The zoom ceiling is now an absolute effective size (never renders past 32pt-equivalent, the largest size in the picker) instead of a flat 8x multiplier of whatever size you picked — a small chosen size no longer gets blown up to look identical to a large one; Font Size now visibly matters again
-> - Zoomed text now renders crisp and antialiased for any real font (JetBrains Mono, system fonts) instead of blowing up as blocky pixels — only the MX437 bitmap font keeps the blocky nearest-neighbour upscale, on purpose, to stay pixel-authentic
-> - Terminal font family/size now live-preview on the terminal canvas as you change them in Settings → General, instead of only applying after Save
-> - Room-title detection now keeps the bright-cyan line nearest "Obvious exits:" instead of the first one in the block, so an asynchronous bright-cyan player-ability line (or a palette that recolors spell text to the same cyan) no longer gets read as the room name
-> - Fixed a hazard route getting permanently stuck demanding a specific counter item even after the player equipped a different item that protects against the exact same thing
+> **Version 3.36.9**
+> - Fixed mana-regen rerolling never firing on Paradigm: a roll spell (mana flux / nature tap) confirms via a shared "mana regenerating" condition that couldn't be mapped back to the specific spell, so the reroll was keyed on a signal that never arrived — it sat on a bad (even negative) roll forever. The reroll now triggers off the cast itself, reads the fresh `abil 145` value, and rerolls / re-checks after each recast
+> - "Reroll below" now labeled "Reroll below abil 145" on Paradigm, with a tip noting the rolled value can be negative
+> - "Cast before resting for mana" reworked: the buff is kept up (recast on expiry) only while you're actually resting for mana — through a combat interruption, until mana tops back up — then stops; unchecked still maintains it always
+> - Bug report gains a Mana-regen reroll section (roll signal, cycle state, last observed roll value)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -568,7 +568,7 @@ public sealed class CastingDirectorTests
         public ConditionTracker Conditions { get; }
         public CastingDirector Director { get; }
         public List<string> CastsSent { get; } = new();
-        public List<string> SelfBuffLanded { get; } = new();
+        public List<string> SelfBuffCast { get; } = new();
         public SpellsSettings Spells { get; set; } = new();
         public HealthSettings Health { get; set; } = new();
         public bool AutoBlessEnabled { get; set; } = true;
@@ -629,9 +629,9 @@ public sealed class CastingDirectorTests
                     ? (info.Caster, info.Duration)
                     : null,
                 record => record.Name);
-            // Capture the reroll sink so a test can assert a confirmed self-buff
-            // landing is reported to the mana-regen reroll engine.
-            Director.SetSelfBuffLandedSink(SelfBuffLanded.Add);
+            // Capture the reroll sink so a test can assert a self-buff CAST is
+            // reported to the mana-regen reroll engine (fired from the send path).
+            Director.SetSelfBuffCastSink(SelfBuffCast.Add);
             // Healthy baseline so Tier-1 doesn't fire over the cure path.
             State.MaxHp = 200;
             State.Hp = 200;
@@ -714,16 +714,24 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void SelfBuffLanding_NotifiesTheRerollSink()
+    public void SelfBuffCast_NotifiesTheRerollSink()
     {
         using CureHarness h = new();
-        // A confirmed self-buff — its condition Name doubles as the cast short
-        // in this harness, so a resolved landing reports that short to the sink.
-        h.RecordCondition("ntap", MessageFlags.None, "You tap into the mana around you.");
+        // The reroll sink fires when a self-buff is CAST (from the send path), not on
+        // its applied-line confirm — a roll spell confirms via a shared condition that
+        // can't be mapped back to it (paradigm-20260830-110918). Configure a mana-regen
+        // self-buff and drive a between-round pass: casting it must report to the sink.
+        h.Spells.MaRegenSpell = "ntap";
+        h.BuffInfo["ntap"] = ("You tap into the mana around you.", 300);
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
 
-        h.FeedLine("You tap into the mana around you.");
+        h.Director.Evaluate();
 
-        Assert.Contains("ntap", h.SelfBuffLanded);
+        Assert.Contains("ntap", h.CastsSent);
+        Assert.Contains("ntap", h.SelfBuffCast);
     }
 
     [Fact]
