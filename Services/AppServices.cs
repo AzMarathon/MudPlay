@@ -4402,6 +4402,31 @@ public sealed class AppServices
         // Walker.Event is wired after the walker is constructed (see below).
         Inventory.Changed += () => _forcedPathObtain.RemoveWhere(IsItemCarried);
 
+        // A hazard's any-of counter group can be satisfied by a DIFFERENT item
+        // than the one the route picker / walker chose to source (both resolve
+        // to ONE representative item from the group — whichever the acquisition
+        // pipeline could actually reach). A player who instead equips or
+        // acquires a different group member (e.g. an already-owned alternative
+        // negator, worn to stop taking hazard damage mid-route while the
+        // planned acquisition stalls) never satisfies that one specific id, so
+        // neither the forced-obtain override above nor PathItemDemand's own
+        // resolve (both keyed on the originally-announced item) ever notice —
+        // leaving a permanently stuck "still need item N" need even though the
+        // hazard is already covered. Confirmed via bug report paradigm-20260829-203409
+        // (swamp boots and trollskin boots both negate spell 485; the player
+        // equipped swamp boots but the walk kept demanding trollskin boots).
+        Inventory.Changed += () =>
+        {
+            foreach (Need need in Needs.Outstanding(NeedKind.PathItem))
+            {
+                if (!int.TryParse(need.Descriptor, out int id)) continue;
+                if (!RoomHazards.GroupSatisfiedByAlternative(id, IsItemCarried)) continue;
+                Needs.Resolve(need);
+                _forcedPathObtain.Remove(id);
+                Log.Info("Needs", $"path item {id} need cleared — hazard covered by a different carried item");
+            }
+        };
+
         // Party-level probe + tracker. The probe broadcasts @level and
         // persists each reply into the players table (RecordLevel) — the sole
         // @level recorder, so a level (from the route-gate probe, the once-a-day
