@@ -325,20 +325,23 @@ public sealed class AutoGetItemsManager : IDisposable
     // collect (or defer) those flagged for auto-collection. The deferred queue
     // is rebuilt per survey — a fresh "You notice" supersedes the prior room
     // snapshot.
-    // True while standing in a marked stash room with a loop / lair running.
-    // Item auto-collect is suppressed there so a search's survey can't re-grab
-    // items alongside the stashed coins (report paradigm-20260819-121516). Wired
-    // by AppServices to AutoDeposit; defaults to never-suppress.
+    // True while standing in a marked stash room mid-loop AND an auto-search reveal
+    // is in flight — the `sea` round-trip that re-exposes items the pass-through
+    // stash just hid (report paradigm-20260819-121516). Gated on the reveal window
+    // (not merely "in a stash room") so plainly-visible items on entry are still
+    // collected. Wired by AppServices to AutoDeposit + AutoSearch; defaults to
+    // never-suppress.
     internal Func<bool> SuppressCollectInStashRoom { get; set; } = static () => false;
 
     private void DispatchList(string list)
     {
         if (!_isEnabled()) return;
-        // In a stash room mid-loop, don't collect — a `sea` re-exposes the pile
-        // the pass-through stash just hid and this would sweep it back up.
+        // A search in a stash room just re-exposed the pile the pass-through stash
+        // hid — don't sweep our own stash back up. Only the reveal survey is gated;
+        // items visible on plain entry collect normally.
         if (SuppressCollectInStashRoom())
         {
-            _log?.Info(LogCategory, "stash room (looping) — skipping you-notice item collection");
+            _log?.Info(LogCategory, "stash-room search reveal — not re-grabbing stashed items");
             return;
         }
         // A look-direction peek renders a full "You notice" survey for the

@@ -137,6 +137,35 @@ public sealed class PlayersSectionViewModelTests
     }
 
     [Fact]
+    public void LiveSelfName_PreferredOverStaleProfileName()
+    {
+        // Report stock-20260828-104653: a profile copied from "Fujin" keeps its
+        // Name="Fujin", but the live character (from `stat`) is Raijin. The
+        // self-filter must use the LIVE name — so the real Fujin still shows (and
+        // can be granted permissions), and Raijin (self) is the one hidden.
+        PlayerDatabase db = BuildDb("Fujin WuzHere", "Raijin WuzHere");
+        ProfileService profile = BuildProfileWithName("Fujin WuzHere");   // stale copied name
+        PlayersSectionViewModel vm = new(db, dialogs: null, profile: profile,
+            liveSelfName: () => "Raijin WuzHere");
+
+        Assert.Single(vm.AllRows);
+        Assert.Equal("Fujin", vm.AllRows[0].Get("Given Name"));
+    }
+
+    [Fact]
+    public void LiveSelfName_Null_FallsBackToProfileName()
+    {
+        // Before `stat` reveals the live name, fall back to the stored profile name.
+        PlayerDatabase db = BuildDb("Fujin", "Raijin");
+        ProfileService profile = BuildProfileWithName("Fujin");
+        PlayersSectionViewModel vm = new(db, dialogs: null, profile: profile,
+            liveSelfName: () => null);
+
+        Assert.Single(vm.AllRows);
+        Assert.Equal("Raijin", vm.AllRows[0].Get("Given Name"));
+    }
+
+    [Fact]
     public void Dispose_DetachesProfileSubscriptions()
     {
         // After dispose, profile events must not cause the section to

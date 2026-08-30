@@ -861,6 +861,13 @@ public sealed class AppServices
     // on the loaded profile.
     public Game.PlayerSightingTracker PlayerSightings { get; private set; } = null!;
 
+    // Per-character log of actual combat outcomes observed against specific
+    // monsters — landed/whiffed swing damage extent and confirmed "no effect"
+    // (Magical / SpellImmunity gate) discoveries. Feeds Monster Intel's "Your
+    // Observations" section, kept visibly separate from MonsterCatalog's
+    // authoritative MDB facts. Persists on the loaded profile.
+    public Game.Combat.MonsterObservationTracker MonsterObservations { get; private set; } = null!;
+
     // Owns PlayerState.InCombat and
     // the Game.Map.MovementCoordinator.CombatGate hold
     // state. Cleared automatically when the room is free of
@@ -969,6 +976,14 @@ public sealed class AppServices
     // Lookup of each spell's AttType (damage element) by cast-code in the active
     // game-data set. Paired with MonsterResist for the resist guard.
     public Game.Combat.SpellAttackTypeIndex SpellAttackType { get; private set; } = null!;
+
+    // Typed, parsed-once view of the active game-data set's Monsters table —
+    // every raw field this codebase reads somewhere, plus the elemental-resist /
+    // Magical / SpellImmu / Dodge / spell-cast-element lookups the individual
+    // Monster*Index classes above compute independently. Feeds Monster Intel.
+    // Not yet a replacement for those indexes — see MonsterCatalog's own
+    // class comment for why they stay separate for now.
+    public Game.Combat.MonsterCatalog MonsterCatalog { get; private set; } = null!;
 
     // Lookup of each spell's Short cast-code by its Spells.Number in the active
     // set — bridges the per-monster override slots (which store a Number) to the
@@ -2430,6 +2445,10 @@ public sealed class AppServices
         Profile.ProfileLoaded  += _ => ApplyPartyFromActiveProfile();
         Profile.ProfileClosed  += ResetPartyToDefaults;
         Profile.ProfileMutated += _ => ApplyPartyFromActiveProfile();
+        // Dump the configured buff plan on load / edit so a "buffs aren't working"
+        // report shows exactly how they're set up.
+        Profile.ProfileLoaded  += LogBuffConfiguration;
+        Profile.ProfileMutated += LogBuffConfiguration;
         Profile.ProfileLoaded  += _ => ApplyTalkFromActiveProfile();
         Profile.ProfileClosed  += ResetTalkToDefaults;
         Profile.ProfileMutated += _ => ApplyTalkFromActiveProfile();
@@ -3290,6 +3309,8 @@ public sealed class AppServices
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
             if (t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
             Health.NoteRoomChanged(t.NewRoom.Key);
+            // A move retries any party-buff targets we'd backed off as hidden.
+            CastDirector.NoteRoomChanged();
         };
 
         // CastCoordinator. Subscribes to spell-failure
@@ -3410,9 +3431,13 @@ public sealed class AppServices
         // resurrect the old character's buffs. A same-character reconnect does NOT reload
         // the profile, so its paused timers survive to be resumed.
         Profile.ProfileLoaded += _ => CastDirector.ResetBuffTracking();
-        // Party-bless slots store class numbers; PartyMember.Class is a
-        // class name — resolve via the active set's Classes table.
-        CastDirector.SetClassResolver(SpellCatalog.ResolveClassName);
+        // Party-buff plan (Party window) — the dynamic list of buff slots the
+        // party-bless path casts, read live so a Party-window edit takes effect at once.
+        CastDirector.SetPartyBuffSource(() => Profile.Current?.PartyBuffs);
+        // Room-presence gate for single-target party buffs: a member is only blessed
+        // when they're both in the party AND in the room. Backed by the live
+        // room-occupant list (RoomEntityClassifier), matched by given name.
+        CastDirector.SetRoomPresenceCheck(IsGivenNameInRoom);
         // A party-wide buff (Spells.Targets = Full / Divided Party Area) is
         // cast once for the whole party; the picker checks this to skip the
         // per-member loop.
@@ -3457,17 +3482,26 @@ public sealed class AppServices
             AbilBreakdown,
             readConfig: () =>
             {
-                Models.Profile.SpellsSettings s =
-                    ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-                return new Game.Spells.ManaRegenRerollConfig(
-                    s.ManaRegenRerollThreshold, s.ManaRegenRerollCap);
+                Models.Profile.BuffSlot? slot = ManaRegenRerollSlot();
+                return new Game.Spells.ManaRegenRerollConfig(slot?.RerollThreshold, slot?.RerollCount ?? 0);
             },
             sendAbilQuery: () =>
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
             recast: shortCode => CastDirector.RequestManaRegenReroll(shortCode),
             canAffordReroll: CanAffordManaRegenReroll,
+            // Stock has no `abil 145` — judge the roll from the observed passive mana
+            // tick instead (fed below from RegenTracker).
+            useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             log: Log);
         CastDirector.SetSelfBuffLandedSink(OnSelfBuffLandedForReroll);
+        // Feed the reroller clean NATURAL mana ticks (Stock's roll-quality signal).
+        // Meditate ticks are unaffected by spell regen and can stack on a natural tick,
+        // so a tick observed while meditating is skipped; resting doesn't touch mana.
+        Regen.MaTickObserved += sample =>
+        {
+            if (sample.Position == Game.PlayerPosition.Meditating) return;
+            ManaRegen.OnManaTickObserved(sample.Delta);
+        };
 
         // Opt the combat engine into the
         // per-round combat-spell economy (pre-attack debuff + multi/normal/
@@ -3514,7 +3548,7 @@ public sealed class AppServices
             // A hand-typed cast feeds BOTH the combat resume signal and the buff-recast
             // clock: NoteManualBuffCast arms the timer (by cast code) for a hand-cast buff
             // so the Buff Watchdog + recast engine track it the same as an engine cast.
-            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c); });
+            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c, target); });
         // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
         // taking the round's attack — a user override — while an in-between spell (heal
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
@@ -3630,6 +3664,7 @@ public sealed class AppServices
         SpellAttackType = new Game.Combat.SpellAttackTypeIndex(GameData);
         Combat.SetMagicEligibility(
             MonsterMagic, ItemMagic, SpellReqLevel, MonsterResist, SpellAttackType);
+        MonsterCatalog = new Game.Combat.MonsterCatalog(GameData);
 
         // Drain-life eligibility — a drain spell can only affect a living, non-undead
         // target; the index tells the chooser which mobs to skip (fall back to the
@@ -4348,6 +4383,11 @@ public sealed class AppServices
             selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
         RoomClassifier.EntitiesObserved += PlayerSightings.NoteAlsoHere;
         RoomEntry.ArrivalObserved += PlayerSightings.NoteArrival;
+        // Monster Intel's "Your Observations" — subscribes to the same fixed
+        // combat-line patterns CombatSessionTracker does, attributed per
+        // monster instead of session-wide; persists on the loaded profile.
+        MonsterObservations = new Game.Combat.MonsterObservationTracker(
+            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log);
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The
@@ -4756,10 +4796,8 @@ public sealed class AppServices
             catalogue:   () => Lights.All,
             resolveRoom: RoomGraph.GetRoom,
             wornIllu:    () => PlayerIllumination.WornOnly,
-            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(
-                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell),
-            roomLightSpellName: () =>
-                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell,
+            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(RoomLightSlotSpell()),
+            roomLightSpellName: RoomLightSlotSpell,
             castRoomLightSpell: name => Cast.TryCast(name),
             settings:    () => ReadSection<Models.Profile.AutoLightSettings>(Profile.Current, "AutoLight"),
             log:         Log);
@@ -5179,7 +5217,16 @@ public sealed class AppServices
         // blocks every automatic heal/cure/bless, the latter suppresses a
         // legitimate recast (report paradigm-20260824-012300).
         RoomTracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
-        RoomTracker.PlayerDeathObserved += () => CastDirector.ResetBuffTracking();
+        // Our death wipes only OUR buffs — clear the self timers; party members stayed
+        // alive, so their buff timers we hold are kept (don't re-bless them because we
+        // died). A party MEMBER's death wipes THEIR buffs — clear the timers we hold on
+        // that name ("<Name> has died." also fires for mobs, but that's a no-op since we
+        // hold no timer for them).
+        RoomTracker.PlayerDeathObserved += () => CastDirector.ClearSelfBuffTracking();
+        Router.Subscribe(Services.Patterns.KnownPatterns.PartyMemberDied, r =>
+        {
+            if (r.Groups.Count > 0) CastDirector.ClearMemberBuffTimers(r.Groups[0]);
+        });
 
         // Death drops us from the party server-side — a follower is removed, a
         // leader's party disbands. PlayerDroppedGate already clears our roster on the
@@ -5286,12 +5333,23 @@ public sealed class AppServices
         // its own bank -> shop -> origin light detour and needs the `i` dump to
         // notice the bought copy land.
         Inventory.Changed += AutoDeposit.OnInventoryChanged;
-        // In a stash room mid-loop, suppress cash + item auto-collect so a search
-        // there can't re-expose and re-grab the pile the pass-through stash just
-        // hid (report paradigm-20260819-121516). AutoDeposit owns the room/stash/
-        // running-engine state; the lambda reads it live per survey line.
-        Cash.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
-        AutoGetItems.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
+        // In a stash room mid-loop, suppress cash + item auto-collect ONLY while an
+        // auto-search reveal is in flight — the `sea` round-trip that re-exposes the
+        // pile the pass-through stash just hid (reports paradigm-20260819-121516,
+        // -20260820-055720). Gating on the reveal window (not merely "we're in a
+        // stash room") is what lets the character still collect coin that's plainly
+        // visible on entry or dropped by a kill, in the stash room AND in the room
+        // after it: a room's entry survey is parsed BEFORE the room is confirmed, so
+        // reading live CurrentRoom alone mis-attributes the next room's coin to the
+        // stash room we just left and dropped it on the floor (report
+        // paradigm-20260829-212158 — 1788 gold in the room south of a stash room).
+        // The settle gate holds the walker through the reveal, so the window never
+        // straddles a room change. AutoDeposit owns the room/stash/running-engine
+        // state; AutoSearch owns the reveal window; both read live per survey line.
+        Cash.SuppressCollectInStashRoom =
+            () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
+        AutoGetItems.SuppressCollectInStashRoom =
+            () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
         // Bank deposits (already a copper value) join stash hides in the Session
         // Stats stashed/deposited figure. The transaction-history ledger is fed
         // separately from the `You deposit …` echo (InventoryManager.BankDeposited,
@@ -5819,9 +5877,30 @@ public sealed class AppServices
     {
         if (string.IsNullOrWhiteSpace(castCode)) return false;
         string target = castCode.Trim();
+        // #item-cast slot: the item casts a spell on `use`, so classify by that
+        // spell's Targets scope (a whole-party item cast blankets everyone in one use).
+        if (Game.Spells.ItemCastToken.IsToken(target))
+            return Spellbook.IsTokenWholeParty(target);
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
             if (string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase))
                 return s.Targets is 10 or 13;
+        return false;
+    }
+
+    // True when a player with the given name is listed in the live "Also here:"
+    // (RoomEntityClassifier). Case-insensitive on the resolved given name. This is NOT
+    // a party-buff cast gate — party membership already means same room; it's only used
+    // to CLEAR a hidden-target back-off when the member reappears in Also-here (a member
+    // absent from Also-here but present in 'par' is simply hiding — including the leader
+    // we follow, who never appears there). Null observation ⇒ not listed.
+    private bool IsGivenNameInRoom(string givenName)
+    {
+        string g = givenName.Trim();
+        if (RoomClassifier?.Current?.Entities is not { } entities) return false;
+        foreach (Game.Combat.RoomEntity e in entities)
+            if (e.Kind == Game.Combat.EntityKind.Player
+                && string.Equals(e.ResolvedName, g, StringComparison.OrdinalIgnoreCase))
+                return true;
         return false;
     }
 
@@ -5838,7 +5917,6 @@ public sealed class AppServices
         if (!PartyState.IsInParty) return map;
 
         Models.Profile.SpellsSettings spells = Resolver.Resolve<Models.Profile.SpellsSettings>("Spells");
-        Models.Profile.PartySettings party = Resolver.Resolve<Models.Profile.PartySettings>("Party");
 
         // Configured self-buffs → (cast code, spell number). #item-cast tokens resolve to
         // no spell and are skipped (an item buff isn't a RemovesSpell target).
@@ -5849,16 +5927,23 @@ public sealed class AppServices
             if (Spellbook.FindByCastCode(code.Trim()) is { } s)
                 selfBuffs.Add((s.Short, s.Number));
         }
-        foreach (string code in spells.BlessSlots.Values) AddSelf(code);
+        Models.Profile.BuffSettings? buffs = Profile.Current?.PartyBuffs;
+        // The unified list's self-cast slots are the covered candidates (bless +
+        // when-full folded here). Whole-party / member-target slots aren't self-casts.
+        if (buffs is not null)
+            foreach (Models.Profile.BuffSlot pslot in buffs.Slots)
+                if (pslot.CastOnSelf && !IsPartyWideBuff(pslot.Spell ?? string.Empty))
+                    AddSelf(pslot.Spell);
+        // HP regen still lives on the Spells tab (mana regen is a unified slot, already
+        // covered by the CastOnSelf loop above).
         AddSelf(spells.HpRegenSpell);
-        AddSelf(spells.MaRegenSpell);
-        AddSelf(spells.WhenHpFullSpell);
-        AddSelf(spells.WhenMaFullSpell);
         if (selfBuffs.Count == 0) return map;
 
-        foreach (Models.Profile.PartyBlessSlot pslot in party.BlessSlots)
+        if (buffs is null) return map;
+        foreach (Models.Profile.BuffSlot pslot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
+            if (!pslot.WholePartyOn) continue;             // toggled off → not cast → can't cover
             if (!IsPartyWideBuff(pslot.Spell)) continue;   // a single-target party buff never covers self
             HashSet<int> removed = RemovedSpellNumbers(pslot.Spell);
             if (removed.Count == 0) continue;
@@ -6004,24 +6089,119 @@ public sealed class AppServices
         return true;
     }
 
-    // A self-buff of ours landed (confirmed via its AppliedMessage). On
-    // Paradigm, if it's the configured mana-regen spell AND that spell is a
-    // code-145 rolled affect (nature tap / mana flux, not a HoT like chaos
-    // surge), hand it to the reroll engine to read abil 145 and reroll a
-    // bad value. Stock has no abil breakdown, so it's a no-op there.
+    // A self-buff of ours landed (confirmed via its AppliedMessage). If it's the
+    // configured mana-regen roll spell (nature tap / mana flux, a code-145 rolled
+    // affect — not a HoT like chaos surge), hand it to the reroll engine. On Paradigm
+    // the engine reads abil 145; on Stock it waits for the next observed passive mana
+    // tick. Either way it rerolls a bad value.
     private void OnSelfBuffLandedForReroll(string shortCode)
     {
         if (string.IsNullOrWhiteSpace(shortCode)) return;
-        if (GameData.ActiveRealm != Game.RealmType.ParaMud) return;
 
-        Models.Profile.SpellsSettings spells =
-            ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-        string? maRegen = spells.MaRegenSpell?.Trim();
-        if (string.IsNullOrEmpty(maRegen)) return;
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } maRegen) return;
         if (!string.Equals(maRegen, shortCode.Trim(), StringComparison.OrdinalIgnoreCase)) return;
-        if (!IsManaRegenRollSpell(maRegen)) return;
 
         ManaRegen.OnRollSpellLanded(maRegen);
+    }
+
+    // The unified-list slot that drives mana-regen rerolling: a CastOnSelf slot whose
+    // spell is a code-145 rolled regen-rate spell (nature tap / mana flux / prfl). One
+    // per character; null when none is configured. (The reroll config — threshold /
+    // count — rides on this slot.)
+    private Models.Profile.BuffSlot? ManaRegenRerollSlot()
+    {
+        if (Profile.Current?.PartyBuffs is not { } buffs) return null;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+            if (s.CastOnSelf && !string.IsNullOrWhiteSpace(s.Spell) && IsManaRegenRollSpell(s.Spell.Trim()))
+                return s;
+        return null;
+    }
+
+    // Live worst/best passive mana-regen TICK for a mana-regen roll spell at the
+    // current character — feeds the Add-buff dialog's Stock reroll slider so the tick
+    // threshold shows min↔max. The spell's level-scaled roll range spans the slider;
+    // the tick math folds in the summed worn +ManaRgn% (the dominant term). Null when
+    // the spell isn't a resolvable roll spell or the class isn't a caster.
+    public (int Worst, int Best)? ManaRegenTickRange(string? spellCode)
+    {
+        if (string.IsNullOrWhiteSpace(spellCode)) return null;
+        if (Spellbook.FindByCastCode(spellCode.Trim()) is not { } spell) return null;
+        if (!Game.Spells.ManaRegenReroller.IsRollSpell(spell.Formula)) return null;
+
+        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        int mageryType = RowInt(classRow, "MageryType");
+        if (mageryType is not (1 or 2 or 3)) return null;   // non-caster class
+        int mageryLevel = RowInt(classRow, "MageryLVL");
+
+        int level = System.Math.Max(1, PlayerStats.Level);
+        (long rmin, long rmax) = Game.Spells.SpellCalculator.AffectMagnitude(spell.Formula, level);
+        int gearRegen = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
+
+        Game.Calculators.ManaRegenBreakpointCalculator.Inputs inputs = new(
+            Level: level, MageryType: mageryType, Intellect: PlayerStats.Intellect,
+            Willpower: PlayerStats.Willpower, MageryLevel: mageryLevel,
+            GearRegenPercent: gearRegen, Realm: GameData.ActiveRealm);
+        Game.Calculators.ManaRegenBreakpointCalculator.Result r =
+            Game.Calculators.ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
+        return (r.WorstTick, r.BestTick);
+    }
+
+    private static int RowInt(System.Text.Json.JsonElement? row, string property)
+    {
+        if (row is not System.Text.Json.JsonElement el
+            || el.ValueKind != System.Text.Json.JsonValueKind.Object) return 0;
+        return el.TryGetProperty(property, out System.Text.Json.JsonElement v)
+            && v.ValueKind == System.Text.Json.JsonValueKind.Number
+            && v.TryGetInt32(out int n) ? n : 0;
+    }
+
+    // Dump the character's configured buff plan (the unified list) to the program log
+    // on profile load / edit, so a "my buffs aren't working" report shows exactly how
+    // they're set up — target(s), recast lead, and any per-slot conditions.
+    private void LogBuffConfiguration(Models.Profile.CharacterProfile profile)
+    {
+        if (profile.PartyBuffs is not { Slots.Count: > 0 } buffs)
+        {
+            Log.Info("Buffs", "Buff plan: none configured.");
+            return;
+        }
+
+        Log.Info("Buffs", $"Buff plan — {buffs.Slots.Count} slot(s):");
+        int n = 0;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+        {
+            n++;
+            if (string.IsNullOrWhiteSpace(s.Spell)) { Log.Info("Buffs", $"  {n}. (empty)"); continue; }
+
+            System.Collections.Generic.List<string> who = new();
+            if (s.CastOnSelf) who.Add("self");
+            if (s.WholePartyOn && IsPartyWideBuff(s.Spell)) who.Add("party-wide");
+            if (s.AllMembers) who.Add("all-members");
+            else if (s.Targets.Count > 0) who.Add(string.Join("+", s.Targets));
+
+            System.Collections.Generic.List<string> cond = new();
+            if (s.OnlyWhenHpFull) cond.Add("hp-full");
+            if (s.OnlyWhenMaFull) cond.Add("ma-full");
+            if (s.OnlyWhenDark) cond.Add("only-dark");
+            if (s.CastBeforeRestingForMana) cond.Add("pre-rest");
+            if (s.RerollCount > 0) cond.Add($"reroll<{s.RerollThreshold?.ToString() ?? "-"} x{s.RerollCount}");
+
+            string target = who.Count > 0 ? string.Join("/", who) : "no target";
+            string condStr = cond.Count > 0 ? $" [{string.Join(", ", cond)}]" : string.Empty;
+            Log.Info("Buffs", $"  {n}. {s.Spell.Trim()} → {target}, recast@{s.RecastMarginSec}s{condStr}");
+        }
+    }
+
+    // The unified-list "only when dark" light spell the auto-light system casts on
+    // entering a dark room — a CastOnSelf slot flagged OnlyWhenDark. Null when none.
+    private string? RoomLightSlotSpell()
+    {
+        if (Profile.Current?.PartyBuffs is not { } buffs) return null;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+            if (s.CastOnSelf && s.OnlyWhenDark && !string.IsNullOrWhiteSpace(s.Spell))
+                return s.Spell!.Trim();
+        return null;
     }
 
     // True when the spell with cast code shortCode carries a
@@ -6044,10 +6224,7 @@ public sealed class AppServices
         int maxMa = PlayerState.MaxMa;
         if (maxMa <= 0) return false;
 
-        Models.Profile.SpellsSettings spells =
-            ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-        string? shortCode = spells.MaRegenSpell?.Trim();
-        if (string.IsNullOrEmpty(shortCode)) return false;
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } shortCode) return false;
 
         int cost = Spellbook.ManaCostOf(shortCode) ?? 0;
         Models.Profile.HealthSettings health =

@@ -1,13 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.33.7**
+> **Version 3.36.7**
 > - Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right
 > - The zoom ceiling is now an absolute effective size (never renders past 32pt-equivalent, the largest size in the picker) instead of a flat 8x multiplier of whatever size you picked — a small chosen size no longer gets blown up to look identical to a large one; Font Size now visibly matters again
 > - Zoomed text now renders crisp and antialiased for any real font (JetBrains Mono, system fonts) instead of blowing up as blocky pixels — only the MX437 bitmap font keeps the blocky nearest-neighbour upscale, on purpose, to stay pixel-authentic
 > - Terminal font family/size now live-preview on the terminal canvas as you change them in Settings → General, instead of only applying after Save
-> - Fixed a navigation stall: an asynchronous bright-cyan player-ability line arriving just before the real room title could get parsed as the room name, causing a paused loop to resend an already-completed move into a wall on resume
-> - Room-title detection now keeps the bright-cyan line nearest "Obvious exits:" instead of the first one in the block
+> - Room-title detection now keeps the bright-cyan line nearest "Obvious exits:" instead of the first one in the block, so an asynchronous bright-cyan player-ability line (or a palette that recolors spell text to the same cyan) no longer gets read as the room name
 > - Fixed a hazard route getting permanently stuck demanding a specific counter item even after the player equipped a different item that protects against the exact same thing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
@@ -28,7 +27,7 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Cash & items** — automated loot collection with sell/buy/stash/discard engines, banking, and equipment sets with auto-equip triggers.
 - **Character Workshop** — a unified hub for character management and development: live stats; **Equipment Manager** gear sets; an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons; **CP allocation** plans; **level projection**; quest, boss, and death tracking (with boss respawn timers you can sync between clients); character-info calculators; and **Roomba** — an automated gang-house item sorter backed by a shared item-location log you can query in-game with `@roomba`.
 - **Automation tools** — macros, aliases, triggers, and events; auto-engine toggles with per-character base modes and reconnect reconciliation; a one-press all-off kill switch; and a Sprint mode.
-- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data.
+- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window gives a searchable monster reference — elemental resistances, spell-immunity/hit-magic requirements, attacks, loot, and locations — without digging into the Browser.
 - **Conversation & chat** — a dedicated conversation pane with per-channel filtering, search, logging, and history.
 - **Tools & diagnostics** — a timestamped full-ANSI scrollback with search/filter, a **Program Log**, **Session Stats**, a **Wire Inspector** for raw/classified stream inspection, and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES — IT CAPTURES FAR MORE THAN YOU CAN DESCRIBE OR SHOW IN A SCREENSHOT)***.
 - **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.

@@ -96,7 +96,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
             _profile.ProfileLoaded += OnProfileLoaded;
             _profile.ProfileMutated += OnProfileMutated;
             _profile.ProfileClosed += OnProfileClosed;
-            RefreshLocalRank();
+            RefreshFromPartySettings();
         }
     }
 
@@ -145,32 +145,20 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnProfileLoaded(CharacterProfile _) => RefreshLocalRank();
-    private void OnProfileMutated(CharacterProfile _) => RefreshLocalRank();
+    private void OnProfileLoaded(CharacterProfile _) => RefreshFromPartySettings();
+    private void OnProfileMutated(CharacterProfile _) => RefreshFromPartySettings();
     private void OnProfileClosed() => LocalRank = PartyRank.Mid;
 
-    private void RefreshLocalRank()
+    private void RefreshFromPartySettings() => LocalRank = ReadPartySettings().Rank;
+
+    private PartySettings ReadPartySettings()
     {
-        if (_profile?.Current is not { } profile)
-        {
-            LocalRank = PartyRank.Mid;
-            return;
-        }
-        if (profile.Settings is null
+        if (_profile?.Current is not { } profile
+            || profile.Settings is null
             || !profile.Settings.TryGetValue("Party", out JsonElement json))
-        {
-            LocalRank = PartyRank.Mid;
-            return;
-        }
-        try
-        {
-            PartySettings dto = JsonSerializer.Deserialize<PartySettings>(json) ?? new PartySettings();
-            LocalRank = dto.Rank;
-        }
-        catch
-        {
-            LocalRank = PartyRank.Mid;
-        }
+            return new PartySettings();
+        try { return JsonSerializer.Deserialize<PartySettings>(json) ?? new PartySettings(); }
+        catch { return new PartySettings(); }
     }
 
     // Per-row Uninvite. Sends uninvite X on the wire when the local character

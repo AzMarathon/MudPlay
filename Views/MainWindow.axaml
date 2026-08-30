@@ -143,6 +143,7 @@
                 <MenuItem Header="Player Workshop" InputGesture="{Binding WorkshopGesture}" Command="{Binding OpenWorkshopCommand}"/>
                 <MenuItem Header="Navigation"      InputGesture="{Binding NavigationGesture}" Command="{Binding OpenNavigationCommand}"/>
                 <MenuItem Header="Spell Book"    InputGesture="{Binding SpellBookGesture}"  Command="{Binding OpenSpellBookCommand}"/>
+                <MenuItem Header="Monster Intel" InputGesture="{Binding MonsterIntelGesture}" Command="{Binding OpenMonsterIntelCommand}"/>
                 <MenuItem Header="Session Stats" InputGesture="{Binding SessionStatsGesture}" Command="{Binding OpenSessionStatsCommand}"/>
                 <Separator/>
                 <MenuItem Header="Players"  Command="{Binding OpenGameDataPlayersCommand}"/>
@@ -565,6 +566,7 @@
                         <MenuItem Header="Open Player Workshop" InputGesture="{Binding WorkshopGesture}"     Command="{Binding OpenWorkshopCommand}"/>
                         <MenuItem Header="Open Party"           InputGesture="{Binding PartyGesture}"        Command="{Binding OpenPartyCommand}"/>
                         <MenuItem Header="Open Spell Book"      InputGesture="{Binding SpellBookGesture}"    Command="{Binding OpenSpellBookCommand}"/>
+                        <MenuItem Header="Open Monster Intel"   InputGesture="{Binding MonsterIntelGesture}" Command="{Binding OpenMonsterIntelCommand}"/>
                         <MenuItem Header="Open Conversation"    InputGesture="{Binding ConversationGesture}" Command="{Binding OpenConversationCommand}"/>
                         <MenuItem Header="Open Navigation"      InputGesture="{Binding NavigationGesture}"   Command="{Binding OpenNavigationCommand}"/>
                         <MenuItem Header="Open Session Stats"   InputGesture="{Binding SessionStatsGesture}" Command="{Binding OpenSessionStatsCommand}"/>

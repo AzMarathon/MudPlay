@@ -937,6 +937,22 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 
 **Unverified / modelled (not from the engine reference, don't hard-depend):** the roll's *distribution* across `[Min,Max]` is treated as linear for "where on the range" purposes but is not proven uniform; the meditate path (10 s tick, ManaRgn% excluded) is a reverse-engineered model; whether the live engine caps summed ManaRgn% is unknown. The mana-regen breakpoint calculator uses only the CONFIRMED passive formula above.
 
+### Rerolling a mana-regen roll spell *([CONFIRMED] 2026-08-28, user + screenshot)*
+
+Only **roll spells** (nature tap / mana flux / `prfl`, and kin — code-145 with stored value 0) are candidates for rerolling: a bad roll drags `ManaRgn%` down, so re-cast to chase a better one. **`CHSU` (chaos surge) is NEVER rerolled** — it's a *constant* mana heal-over-time (the mana analogue of HP regen), not a rolled `ManaRgn%` modifier; maintain it like a normal buff. A fixed (non-zero) code-145 spell isn't rerolled either. (`RegenSpellClassifier` already splits roll / fixed / HoT.)
+
+Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again.
+
+**How the roll is read differs by realm:**
+- **Paradigm** — send **`abil 145`**. The output is three lines for `ManaRegen(145)`:
+  ```
+  granted: N      (innate)
+  worn:    N      (gear/quest +ManaRgn bonuses)
+  spells:  N      (what the mana-regen spell ROLLED — this is the value we gate on)
+  ```
+  The **`spells:` value** is the rolled magnitude (e.g. a priest's `prfl` rolling 32). Reroll if `spells:` < the min gate. *(Already built: `ManaRegenReroller` sends `abil 145`, parses the `spells:` slice, rerolls below `ManaRegenRerollThreshold` up to `ManaRegenRerollCap`.)*
+- **Stock** — there is **no `abil 145`**. Instead, monitor the actual **mana tick**: passive regen lands one tick every ~30 s, so watch the MP jump to measure the realised per-tick amount. Because the tick formula above is known, compute the possible tick range at the current level — worst = tick with the Min roll, best = tick with the Max roll (using worn `ManaRgn%`) — and surface both so the user sets a min-tick threshold on a **0–100 % scale** between worst and best. After a cast, wait for the next tick (~30 s), and if the observed tick is below threshold, recast (up to max); otherwise let it ride. *(NOT yet built — the stock mana-tick monitor is the new work.)*
+
 ## Vitality — HP, dropping, and death
 
 **Max-HP sources** *([CONFIRMED])*
@@ -981,6 +997,19 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   - the character is **teleported to the graveyard room** appropriate to the **map** they died on.
 - Graveyard rooms are **per-map**; two known graveyards are **`1/2189`** (map 1, room 2189) and
   **`16/542`** (map 16, room 542).
+- **[CONFIRMED]** *(2026-08-28, user)* **Death wipes ALL magical effects on the character** — every
+  buff and debuff is removed. Consequence for a buff-maintaining automation: on **our own** death,
+  clear the timers for **our self-buffs** (they're gone) but **keep** the timers we hold on party
+  members (they didn't die — still buffed); on a **party member's** death (the `<Name> has died.`
+  line), clear the timers we hold **on that member** (their buffs are gone). Distinct from a
+  buff-strip room (which dispels on entry) — this is the death event doing it.
+- **[CONFIRMED]** *(2026-08-28, user)* **When WE (the caster) disconnect, only OUR OWN buffs are in
+  doubt.** The other party members stayed **online**, so their buffs kept **counting down in real
+  time** the whole time we were gone — their absolute expiry doesn't move. So on reconnect: clear our
+  self-buff timers (re-establish fresh), and **leave party-member timers at their real (absolute)
+  expiry** — they now read the correctly reduced remaining (any that lapsed while we were away recast).
+  Do **not** shift party timers forward by the offline gap (the old "freeze + preserve remaining"
+  model over-counted them).
 
 **Death fully clears all effects** *([CONFIRMED] 2026-08-09, user)*
 - Death **wipes every ailment, status effect, buff, and debuff** off the character — poison, disease,
@@ -1357,6 +1386,16 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
   treated as block boundaries. (`RoomDisplayParser.PartyChatterBoundaryPattern` does this — the room
   the follower lands in is displayed immediately after ` -- Following your Party leader <dir> --`, so
   that drag line is the natural boundary.)
+- **[CONFIRMED by user, report `paradigm-20260829-154032`] Bright cyan is not uniquely the room title —
+  an engine-side palette can remap spell/ability text to it.** A player running a palette that shifts
+  spell/ability lines from dark blue to bright cyan makes every `<player> invokes the way of the
+  monkey!`-style broadcast render in the **same bright cyan as room names**, deterministically (not an
+  occasional fluke). Such a line can arrive in the arrival burst immediately **before** the real title.
+  Colour therefore can't tell an ability line from the title under that palette. The room-name detector
+  anchors on **position** instead: the title is the **last** bright-cyan line before `Obvious exits:`
+  (the room display — title → `Also here:` → `Obvious exits:` — is one contiguous block, so async player
+  broadcasts land before it, never between the title and the exits line). `RoomDisplayParser` keeps the
+  nearest bright-cyan line to the exits, not the first in the block.
 - **[CONFIRMED]** **Hidden/foliage exits drag the follower with no direction.** Some Darkwood Forest
   exits are text-only: the leader prints `<leader> shoves aside the foliage, and disappears among the
   trees.` and the follower is pulled through with `You push through the dense foliage, and walk onto a
@@ -2433,6 +2472,18 @@ an encumbrance-adjusted one, since it's a planning aid without a fixed load assu
   `You notice` total — one authoritative pass — never replay the mid-fight drop deltas (they
   double-count against the total, re-queue on every re-render, and go stale). Implemented in
   `CashManager`.
+- **[CONFIRMED 2026-08-29, user]** **Stashed (hidden) coin is only re-surfaced by a `search`.**
+  In a stash room the client `hide`s excess coin; a hidden pile does **not** show on plain room
+  entry or a re-`look` — only a `search` / `sea` re-reveals it, re-rendered through the same
+  `You notice N <coin> here.` line as visible coin. So there are two kinds of coin in a stash room:
+  **visible** coin (present on entry, or dropped by a kill via `N <coin> drop to the ground.`) which
+  is fine to collect, and **search-revealed** coin (the pile we just stashed) which must **not** be
+  re-grabbed. Client consequence: auto-collect is suppressed in a stash room **only while an
+  auto-search reveal is in flight** — coin shown on plain entry or a corpse drop still collects,
+  in the stash room and in the room after it. (Reading "am I in a stash room" alone is wrong: a
+  room's entry survey is parsed before the room is confirmed, so it mis-attributes the *next* room's
+  coin to the stash room just left — report `paradigm-20260829-212158`.) Implemented as
+  `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.
 - **[CONFIRMED]** **Toll exits gate on total wealth, not a specific coin.** A room exit tagged
   `(Toll: N)` in the map data requires the crosser to carry a **wealth value of `N × 100`**
   (copper farthings — the same consolidated `Wealth:` figure), held **on them** (carried coin, not
@@ -2576,6 +2627,11 @@ fresh `@level` lands ≥ 10.)
 ## Party
 
 - **[CONFIRMED]** Party size: minimum 2, maximum 6.
+- **[CONFIRMED]** *(2026-08-28, user)* **Party members are always co-located — a party is a single room.** If a name shows in `par`, they are in your room, full stop. So the correct "is this member reachable?" gate is *party membership* (`par`), **not** the room's `Also here:` line.
+- **[CONFIRMED]** *(2026-08-28, user — report `stock-20260828-124347` + scrollback)* **A party member may be absent from `Also here:` for two reasons, neither meaning they left the room:**
+  1. **The leader you're FOLLOWING is never listed in `Also here:`** — the game prints `You are following <leader>.` as a separate status line instead, and `Also here:` shows only the *other* occupants. Reciprocal: when **you** lead, your followers **do** appear in your `Also here:` (you follow no one).
+  2. **A member who is HIDING** is removed from `Also here:` (see Stealth). They're still in the room and in `par`.
+- **[CONFIRMED]** *(2026-08-28, user + screenshot)* **The only time a targeted cast on a party member misses is when that member is HIDING.** The server answers **`You do not see <name> here!`** (and they aren't in `Also here:`). Automation handling: don't pre-gate single-target party casts on `Also here:` (it wrongly skips the followed leader and any hidden member) — attempt on party membership, and if `You do not see <name> here!` comes back, back that member off until you **move** or they **reappear in `Also here:`** (they unhid), rather than re-firing — and the failure — every round.
 - **[CONFIRMED]** Losing the leader disbands the whole party — whether the leader **disconnects or
   dies**. No grace-window auto-invite for a lost leader; on the leader's own death the party is gone
   by the time they respawn in the graveyard.
@@ -2915,6 +2971,23 @@ glass jug               5               2 gold crowns
   code (`bles`) → the client arms/refreshes that buff's timer anchored on the code (`CastingDirector.NoteManualBuffCast`,
   fed by the `OutboundCastObserver`), exactly as an engine cast does. The following success line just
   confirms it landed; identity comes from the code, never the ambiguous applied message.
+- **[CONFIRMED, user 2026-08-29] Casting syntax — no `c`/`cast` prefix needed.** The bare 4-letter cast code
+  IS the command. A **bare code** casts per the spell's own scope: a self buff on yourself, a **whole-party**
+  buff on the whole party (`unfa` → unholy fanaticism on the party, `chan`, etc.), a room spell on the room —
+  no target token. A **code + a name** is a **single-target** cast (`gbls fuj`, `bles alice`). The name is a
+  **prefix / shorthand** the server resolves against the players (and NPCs, for offensive spells) **in the
+  room**: `gbls fuj` casts greater bless on `Fujin` if that uniquely matches; an ambiguous prefix **bonks**
+  with a "do you mean …" list and casts NOTHING. This is exactly how the engine casts — bare code for
+  self / whole-party, `code given` for a single member.
+- **[CONFIRMED, user 2026-08-29 — game data] Every spell has per-perspective messages in the Messages table**
+  (`MessageRecord`): **CasterMessage** (the line YOU see when YOU cast it), **TargetMessage** (the line YOU
+  see when it lands on YOU — i.e. someone cast it on you), **WitnessMessage** (the line YOU see when someone
+  casts on someone else), and **AppliedMessage** (the buff-applied condition line). A successful cast emits
+  the perspective-appropriate line to each observer, so a buff landing on the party can be recognised from
+  ANY seat — our own cast (Caster), a buff cast ON us (Target), or a buff cast on a party member (Witness).
+  Today the buff-timer engine reads only CasterMessage (our casts) + AppliedMessage (self conditions); it does
+  NOT yet read Target / Witness, so a buff another party member casts — or our own single-target manual cast —
+  isn't tracked in the Buff Watchdog.
 - **[user 2026-08-16] Session vs drop for buff timers.** **Any** disconnect — manual, hangup, or an unexpected
   drop — **freezes** the buff timers (the buffs persist server-side through link-death); the Buff Watchdog
   display freezes at the drop instant too (its 1s heartbeat is a wall clock that keeps ticking offline). The
@@ -2922,15 +2995,25 @@ glass jug               5               2 gold crowns
   instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
   (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
   the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
-- **[user 2026-08-17] Party-buff slots are party-only, and a superseding party buff covers self.**
-  The party-bless slots are cast **only while in a party** (`PartyState.IsInParty`); solo, none fire —
-  self-buffs come from the self-bless slots. A **single-target** party buff is cast per class-matched
-  member and **never targets self** (self uses the self-slots); only a **party-wide** buff (`Spells.Targets`
-  = Full/Divided Party Area, scope 13/10) lands on self. **Supersession:** a spell that carries **RemovesSpell
-  (Abil 122)** removes the named spell (the Spell Book renders it "Removes <spell>"). So when a configured
-  **party-wide** party buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop
-  self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff
-  "covered by <party buff>". Only party-wide covers count (a single-target party buff can't cover self).
+- **[user 2026-08-17 / 2026-08-28] Party-buff slots are party-only; scope splits whole-party vs
+  single-target; targeting is per-member (not class).**
+  The party-buff slots (`CharacterProfile.PartyBuffs`, configured in the Party window) are cast **only
+  while in a party** (`PartyState.IsInParty`); solo, none fire — self-buffs come from the self-bless slots.
+  **Scope classification** (confirmed against stock + Paradigm data), gated first on **`EnergyCost == 0`**
+  (a buff, not an attack):
+  - **`Spells.Targets` = 2** (Self or User) → a **single-target** beneficial buff cast on ONE other member
+    (`frenzy`, `divine favour`, `blood ritual`, `regeneration`). Never targets self (self uses the self-slots).
+  - **`Spells.Targets` = 10 / 13** (Divided / Full Party Area) → a **whole-party** buff, one cast with no
+    target that blankets the party (`chant`, `mass frenzy`, `unholy fanaticism`, `rejuvenating field`). Lands
+    on self too. Scope 0/1 (self-only), 4/8/9/12 (enemy), 7 (item) are NOT party buffs.
+  - Single-target targeting is by **selected member (given name), not class** — a slot blesses "all members"
+    or a checklist of specific players, and only fires for a name that is BOTH a current `par` party member
+    AND in the room (never casts at someone absent / uninvited / in another room).
+  - **Supersession:** a spell that carries **RemovesSpell (Abil 122)** removes the named spell (the Spell Book
+    renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g.
+    **chant removes bless**), in a party we stop self-casting the removed one and let the party buff cover us —
+    the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a
+    single-target party buff can't cover self).
 
 ## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
 

@@ -61,8 +61,9 @@ public sealed class KnownSpellCatalogTests : IDisposable
         SpellRow(104, "unlearnable", "nolr", magery: 1, mageryLvl: 1, reqLevel: 1,
             learnable: 0, learnedFrom: "\0", classes: "(*)", minBase: 1, abil0: 1),
         // 105 kai1: Kai magery, reqLevel>=1, not learnable — usable via Kai autolearn.
+        // Targets 13 (whole-party) exercises GetTargetsByNumber's whole-party read.
         SpellRow(105, "kai blast", "kai1", magery: 5, mageryLvl: 1, reqLevel: 3,
-            learnable: 0, learnedFrom: "\0", classes: "(*)", minBase: 1, abil0: 1),
+            learnable: 0, learnedFrom: "\0", classes: "(*)", minBase: 1, abil0: 1, targets: 13),
         // 106 kai0: Kai magery but reqLevel<1 — NOT autolearned, filtered.
         SpellRow(106, "kai dud", "kai0", magery: 5, mageryLvl: 1, reqLevel: 0,
             learnable: 0, learnedFrom: "\0", classes: "(*)", minBase: 1, abil0: 1),
@@ -106,6 +107,15 @@ public sealed class KnownSpellCatalogTests : IDisposable
         Assert.Contains("star", shorts);          // needs MageryLVL 1 — Warlock cap 2 OK
         Assert.DoesNotContain("high", shorts);    // needs MageryLVL 3 — Warlock cap 2 fails
         Assert.DoesNotContain("excl", shorts);    // explicit (12) — Warlock excluded
+    }
+
+    [Fact]
+    public void GetTargetsByNumber_ReadsWholePartyScope_NullForMissing()
+    {
+        KnownSpellCatalog catalog = NewCatalog();
+        Assert.Equal(13, catalog.GetTargetsByNumber(105));   // whole-party scope
+        Assert.Equal(0, catalog.GetTargetsByNumber(100));    // scope left unset ⇒ 0
+        Assert.Null(catalog.GetTargetsByNumber(999));        // no such spell number
     }
 
     [Fact]
@@ -206,7 +216,7 @@ public sealed class KnownSpellCatalogTests : IDisposable
     private static Dictionary<string, object> SpellRow(
         int number, string name, string shortCode, int magery, int mageryLvl, int reqLevel,
         int learnable, string classes, int minBase = 0, int maxBase = 0, int abil0 = 0,
-        string learnedFrom = "\0")
+        string learnedFrom = "\0", int targets = 0)
     {
         Dictionary<string, object> row = new()
         {
@@ -219,6 +229,7 @@ public sealed class KnownSpellCatalogTests : IDisposable
             ["Learnable"] = learnable,
             ["Learned From"] = learnedFrom,
             ["Classes"] = classes,
+            ["Targets"] = targets,
             ["MinBase"] = minBase,
             ["MaxBase"] = maxBase,
             ["MinInc"] = 0,

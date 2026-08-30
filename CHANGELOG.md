@@ -2,16 +2,83 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.33.7
+## 3.36.7
 
 - Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right
 - The zoom ceiling is now an absolute effective size (never renders past 32pt-equivalent, the largest size in the picker) instead of a flat 8x multiplier of whatever size you picked — a small chosen size no longer gets blown up to look identical to a large one; Font Size now visibly matters again. A very large window can leave a small unfilled edge for a small font rather than stretching past that ceiling
 - Zoomed text now renders crisp and antialiased for any real font (JetBrains Mono, system fonts) instead of blowing up as blocky pixels — only the MX437 bitmap font keeps the blocky nearest-neighbour upscale, on purpose, to stay pixel-authentic
 - Terminal font family/size now live-preview on the terminal canvas as you change them in Settings → General, instead of only applying after Save
-- Fixed a navigation stall: an asynchronous bright-cyan player-ability line (e.g. "invokes the way of the monkey!") arriving just before the real room title could get parsed as the room name, knocking the tracker to Suspect and causing a paused loop to resend an already-completed move into a wall on resume
-- Room-title detection now keeps the bright-cyan line nearest "Obvious exits:" instead of the first one in the block
+- Room-title detection now keeps the bright-cyan line nearest "Obvious exits:" instead of the first one in the block, so an asynchronous bright-cyan player-ability line arriving just before the real title (or a palette that recolors spell text to the same cyan) no longer gets read as the room name and knocks the tracker off course
 - Fixed a hazard route getting permanently stuck demanding a specific counter item (e.g. trollskin boots) even after the player equipped a different item (swamp boots) that protects against the exact same thing — the need now clears the moment ANY item from the hazard's counter group is carried, not just the one the route originally chose to obtain
 - bug reports addressed: paradigm-20260829-154032, paradigm-20260829-203409
+
+## 3.36.1
+
+- Fixed lost gold in the room after a stash room: stash-room auto-collect was suppressed by reading the "current room" too early (a room's coin line is seen before the room is confirmed), so the next room's coin was mis-attributed to the stash room and left on the floor
+- Stash rooms now collect coin that's visible on entry or dropped by a kill; only a pile that a `search` re-reveals (the coin just stashed) is left alone
+- Same fix applied to auto-stash items
+- bug reports addressed: paradigm-20260829-212158
+
+## 3.36.0
+
+- New **Monster Intel** window (View menu / toolbar) — a fast, searchable monster reference that for the first time surfaces a monster's **elemental resistances / vulnerabilities** (Cold/Fire/Stone/Lightning/Water) and its **spell-immunity / hit-magic requirements**, data the auto-combat engine has always computed internally but never showed. Detail panel: Overview, Elemental Defenses, Casts (what elements it can hit you with), Attacks, Loot, Locations (a quick "placed in N rooms / spawns in M lairs" count), and an Automation tab that opens the per-monster overlay editor in place
+- **Character-centric**: a top character bar shows your live level / HP / mana (or Kai), your worn weapon's HitMagic, and your known attack-spell count — updating live as vitals tick or you swap gear / learn a spell; plus **Hittable** / **Castable** list filters that narrow the list to what your weapon can actually hit or a known spell can get past spell immunity
+- **Your Matchup** (live, character-aware): whether your worn weapon is magical enough to hit the monster, a per-element incoming-threat line vs. your own gear's resists, and every attack spell you've learned ranked by effective damage against that specific monster — with a clear reason (spell immunity, full resist, undead-only / living-only targeting) instead of a silently-wrong number
+- **Side-by-side comparison**: Ctrl/Shift-click 2+ monsters to swap the detail panel for a row of comparison cards
+- **Context bar**: the current room's monster roster as clickable chips
+- **Your Observations**: a per-character log of actual combat outcomes against a monster — landed-hit damage extent / average, hit rate, and confirmed "no effect" discoveries — kept visibly separate from the game-data facts and persisted per character; deliberately doesn't infer "resisted" from a low roll (no wire line distinguishes the two)
+- New typed **`MonsterCatalog`** — the active game-data set's Monsters table parsed once into a shared model, the foundation Monster Intel reads from
+- The list opens wider with a draggable, per-character-remembered splitter; every column is independently sortable; AC and DR are separate columns
+
+## 3.35.4
+
+- Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the exact same already-refused move, get refused again, and then just sit there until an unrelated event nudged it back to life (observed stalls from several minutes to over an hour). The loop now recognizes this on resume and enters recovery (reroutes) immediately.
+- Fixed a related stall: an ambiguous room observation that landed the tracker in Suspect while the loop was paused was also silently dropped — since the tracker can't re-arm Pending from Suspect, a refusal on the blind resend was ALSO dropped, stranding the loop with no way out. It now forwards this case to the recovery gate on resume, exactly like it does in real time.
+- bug reports addressed: paradigm-20260829-084558, paradigm-20260829-104437, paradigm-20260829-111627
+
+## 3.35.1
+
+- Roomba: starting a sweep or an inventory scan now gangpaths the gang house that it's underway, and finishing announces completion with a count — items moved for a sweep, items inventoried for a scan
+- Counts are true unit totals (a stacked pile counts as its full size, not as one operation) and only fire on a genuine finish, never on a manual stop or an interrupted sweep
+
+## 3.35.0
+
+- Unified buffing: **all** automated buffing — self bless, mana/HP regen, "when HP/MA full", room light, and party buffs — now lives in **one list in the Buff Watchdog** window, replacing the Settings → Spells self-bless pickers and the Party-window buff panel
+- Each buff picks who it's cast on with checkboxes — yourself and/or party members; **"All"** is a select-all (you + every member, auto-adapting to the party) that clears the moment you untick any box
+- Timer bars are grouped **by player** (your name, then each member) instead of a Self/Party split
+- Buff Watchdog layout — config table above / below / left / right of the bars — is chosen on Settings → General, with a draggable splitter that stays put as you resize the window (the config pane keeps its size, the timer bars flex to fill)
+- Buff timer bars now sit directly on the pane background — no sunken strip stretching behind the short bars, no full-width row dividers
+- Buff Watchdog player sections use your real **in-game character name**, not the profile name
+- A configured buff that isn't set to recast on anyone and has no live timer is no longer listed — only maintained or currently-up buffs show a bar
+- A whole-party buff now shows a bar under **each member who was in the party when it was cast**; a member who swaps in afterwards reads **not up**, so you can see who's actually covered (recast stays driven by your own timer)
+- Hand-casting a single-target buff at a party member (`gbls fuj`) now lights up **that member's** bar — the success line's full name is matched back to whoever you targeted, so a shorthand still resolves correctly
+- Add-buff dialog carries per-slot conditions: only-when-HP/MA-full (fires at your rest-max, not literal full), only-when-dark for light spells, and — for a mana-regen roll spell — cast-before-resting plus the reroll threshold / max-rerolls
+- Mana-regen rerolling reads its config from the buff slot (works on Paradigm via `abil 145`); the auto-light system reads the room-light spell from the buff list
+- Your full buff plan is written to the program log on load / edit (and captured in the bug report) so a "buffs aren't working" report shows exactly how they're set up
+- Existing self-bless / regen / light / party-buff configs are migrated into the new list automatically
+
+## 3.34.0
+
+- Party blessing overhaul: buff slots moved from Settings → Party into a live **Party Buffs** panel in the Party window — add/remove slots, pick a learned buff, set a per-slot recast timer
+- Whole-party buffs get a single on/off; single-target buffs bless **all members** or a checklist of specific players (targeting replaces the old per-class checkboxes)
+- Single-target casts now fire only for a member who is **both in your party and in the room** — never at someone who left, was uninvited, or wandered off; targets persist by name across parties dissolving and reforming
+- Party Buffs panel is a compact table: **＋ Add buff** opens a picker (spell + recast timer), each slot has ✎ edit / ⨯ remove, targeting is chosen inline, it's styled to match the member list, and it's hidden entirely for a class with no party-buff spells
+- Settings → Party keeps the *bless while resting / during combat* gates, plus a **Party Buffs panel position** option (Right / Below / Left)
+- Party Buffs panel is now an aligned grid: edit/remove at the left, a `bless - 15s` label, an All/On toggle, and a checkbox column per party member (names as headers); whole-party buffs read "Party Wide" across the columns
+- A given party buff is one slot — a spell already slotted drops out of the Add picker, so it can't be double-added (which was double-tracking its recast timer in the Buff Watchdog)
+- Party Buffs can now be a **cast-on-use item** (e.g. a shimmering greatsword casting a party-wide bless): the picker offers whole-party cast items, auto-detected from the item's spell — a single-target item can't be aimed at a member, so only party-wide ones qualify
+- Buff Watchdog now shows whole-party (and item) party buffs, not just single-target ones, and gives a single-target buff **one timer row per member** (each member is cast individually, so each tracks its own recast) instead of collapsing them into one
+- Checking a member for a buff now queues the cast immediately (assume-uncast) instead of waiting for the next idle tick
+- Party window: buff panel hidden for a class with no party buffs no longer leaves the window stuck at the panel-sized width; tighter member columns with centered, truncated names
+- Fixed: the Party Buffs panel no longer appears for a class with no party-buff spells — a stray blank slot is pruned on load instead of forcing the panel open
+- Fixed: the Game Data → Players list hid the wrong person when a profile was copied from another character — it now identifies "self" by the live `stat` name, not the stored profile name, so a copied profile no longer omits the real other player from your player records
+- Fixed: single-target party buffs now target by **party membership** (a MajorMUD party is always in one room), not the room's `Also here:` list — which never lists the **leader you follow** (shown as "You are following …") and so silently blocked the leader's bless every round
+- A member who's **hiding** (the cast returns "You do not see … here!") is now backed off — the Buff Watchdog shows **"hidden — can't target"** — and retried when you move or they reappear, instead of re-firing the failing cast every round
+- Unticking a member you've already blessed no longer hides their Buff Watchdog timer — the running buff's countdown stays until it actually expires (unticking only stops future recasts)
+- Death and disconnect now match the game: **your death** clears your self-buff timers, a **party member's death** clears the timers you hold on them (death wipes buffs); and when **you** disconnect, party members' timers keep counting down (they stayed online) while only your own self-buff timers reset on reconnect — instead of freezing/preserving everyone's
+- Buff Watchdog: a **✕** on each live timer bar manually clears that buff timer (marks it off — a still-due buff recasts, a stale one just drops)
+- The Party Buffs panel keeps its table layout when docked Below or Left (content pinned to its natural width instead of stretching across the window)
+- bug reports addressed: stock-20260828-104653, stock-20260828-113206, stock-20260828-124347
 
 ## 3.33.0
 

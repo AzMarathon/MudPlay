@@ -15,8 +15,14 @@ namespace MudPlay.Game.Map;
 //   1. Colour-anchored: prefer the last line whose non-space cells are all
 //      bright cyan — the canonical room-name styling in MajorMUD's display.
 //      SGR 96 (index 14) and SGR 1;36 (index 6 + Bold) both qualify.
-//      The nearest candidate wins because asynchronous player abilities use
-//      the same colour and can arrive immediately before the actual title.
+//      The nearest candidate wins because a bright-cyan line is NOT uniquely a
+//      room name: an engine-side palette that remaps spell/ability text from
+//      dark blue to bright cyan makes every "<player> invokes …" line collide
+//      with the title colour, and such a line arrives immediately before the
+//      real title in the arrival burst. Colour can't disambiguate under that
+//      palette, so we anchor on POSITION — the title is the last bright-cyan
+//      line before "Obvious exits:" (the room display is one contiguous block,
+//      so async broadcasts land before it, not between the title and exits).
 //   2. Text fallback: when colour data is absent (tests, replays without
 //      attributes) or the realm renders names without bright cyan, return the
 //      first non-blank line that doesn't look like a command echo (single

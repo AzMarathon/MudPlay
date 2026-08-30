@@ -68,6 +68,7 @@ public static class BugReportBuilder
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
+            new("Monster observations (this character)", SafeSection(() => BuildMonsterObservations(svc))),
             new("Item overrides", SafeSection(() => BuildItemOverrides(svc))),
             new("Effective settings (resolved)", SafeSection(() => BuildEffectiveSettings(svc))),
             new("Settings overrides (deltas, excluding BBS + Display)", SafeSection(() => BuildSettings(svc))),
@@ -438,6 +439,39 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
+    // Per-character combat outcomes actually seen against a monster (Monster
+    // Intel's "Your Observations") — the personal counterpart to the MDB-sourced
+    // monster overrides above, useful when a report is about "why won't it hit /
+    // cast on this thing".
+    private static string BuildMonsterObservations(AppServices svc)
+    {
+        StringBuilder sb = new();
+        List<Models.Profile.MonsterObservation> rows = svc.MonsterObservations.Snapshot()
+            .OrderByDescending(o => o.LastObservedAt).ToList();
+
+        sb.Append("Combat outcomes THIS character has observed per monster — landed-hit damage, hit rate, and confirmed physical/spell no-effect discoveries (")
+          .Append(rows.Count).Append(")\n\n");
+        if (rows.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
+
+        foreach (Models.Profile.MonsterObservation o in rows)
+        {
+            string name = svc.GameData.FindNameByNumber("Monsters", o.MonsterNumber) ?? "(unknown)";
+            List<string> parts = new();
+            if (o.HitCount > 0)
+                parts.Add($"hits {o.HitCount} (dmg {o.HitDamageMin}-{o.HitDamageMax}, avg {o.AvgHitDamage:0.#})");
+            if (o.SwingCount > 0)
+                parts.Add($"hit-rate {o.HitRatePercent:0}% ({o.HitCount}/{o.SwingCount})");
+            if (o.PhysicalNoEffectCount > 0) parts.Add($"physical-no-effect x{o.PhysicalNoEffectCount}");
+            if (o.SpellNoEffectCount > 0) parts.Add($"spell-no-effect x{o.SpellNoEffectCount}");
+            if (parts.Count == 0) parts.Add("(no outcomes recorded)");
+
+            sb.Append("- #").Append(o.MonsterNumber).Append(' ').Append(name)
+              .Append(" — ").Append(string.Join(", ", parts)).Append('\n');
+        }
+
+        return sb.ToString();
+    }
+
     // "151 (disrupt)" — an override stores a Spell.Number; annotate it with the
     // Spells-table display name so a triager needn't cross-reference the id.
     private static string SpellLabel(AppServices svc, int spellNumber)
@@ -552,8 +586,6 @@ public static class BugReportBuilder
             ("major-heal", spells.MajorHealSpell),
             ("hp-regen", spells.HpRegenSpell),
             ("ma-regen", spells.MaRegenSpell),
-            ("when-hp-full", spells.WhenHpFullSpell),
-            ("when-ma-full", spells.WhenMaFullSpell),
         });
         Group("Cures", new (string, string?)[]
         {
@@ -562,7 +594,6 @@ public static class BugReportBuilder
             ("disease", spells.CureDiseaseSpell),
             ("blindness", spells.CureBlindnessSpell),
         });
-        Group("Self bless", SlotList(spells.BlessSlots, i => $"bless {i}"));
         Group("Party heal", new (string, string?)[]
         {
             ("minor-party-heal", party.MinorPartyHealSpell),
@@ -571,8 +602,12 @@ public static class BugReportBuilder
             ("major-party-heal-aoe", party.MajorPartyHealAoeSpell),
         });
 
-        int partyBless = 0;
-        Group("Party bless", party.BlessSlots.Select(s => ($"party-bless {++partyBless}", s.Spell)));
+        // The one unified buff list (self bless + when-full + party buffs). Each slot's
+        // label carries its targeting + any per-slot condition so a "buff didn't fire"
+        // report shows exactly what was configured.
+        int buffNo = 0;
+        if (svc.Profile.Current?.PartyBuffs is { } unifiedBuffs)
+            Group("Buffs", unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(s)}]", s.Spell)));
 
         if (shown == 0) sb.Append("_(no spells configured)_\n");
         return sb.ToString();
@@ -599,13 +634,24 @@ public static class BugReportBuilder
              + $" Mana={(mana is { } m ? m.ToString() : "?")}";
     }
 
-    // Dictionary-keyed slot map (self-bless) → labelled (label, code) pairs in key
-    // order, so a numbered slot in the report matches the editor's slot index.
-    private static IEnumerable<(string Label, string? Code)> SlotList(
-        IReadOnlyDictionary<int, string> slots, Func<int, string> label)
+    // A unified buff slot's targeting + condition summary for the report label —
+    // e.g. "self", "all", "Bob,Sue", "party-wide", with "+hp-full" / "+ma-full" when
+    // a downtime condition is set. Derived from the slot's flags (whole-party is left
+    // to WholePartyOn since the classifier isn't reachable here).
+    private static string BuffScope(Models.Profile.BuffSlot s)
     {
-        foreach (int key in slots.Keys.OrderBy(k => k))
-            yield return (label(key), slots[key]);
+        List<string> who = new();
+        if (s.CastOnSelf) who.Add("self");
+        if (s.AllMembers) who.Add("all");
+        else if (s.Targets.Count > 0) who.Add(string.Join(",", s.Targets));
+        else if (s.WholePartyOn) who.Add("party-wide?");
+        string scope = who.Count > 0 ? string.Join("+", who) : "unset";
+        if (s.OnlyWhenHpFull) scope += " +hp-full";
+        if (s.OnlyWhenMaFull) scope += " +ma-full";
+        if (s.OnlyWhenDark) scope += " +only-dark";
+        if (s.CastBeforeRestingForMana) scope += " +pre-rest";
+        if (s.RerollCount > 0) scope += $" +reroll<{s.RerollThreshold?.ToString() ?? "-"}x{s.RerollCount}";
+        return scope;
     }
 
     // Per-item overlay deltas the user set in the active set — the loot-automation

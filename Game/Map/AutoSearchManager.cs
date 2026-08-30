@@ -106,6 +106,17 @@ public sealed class AutoSearchManager : IDisposable
         _settle.Tick += (_, _) => OnSettleElapsed();
     }
 
+    // True from the moment a `sea` goes out until its settle window elapses — the
+    // round-trip during which the surfaced "You notice" survey comes back. This is
+    // the ONLY window in which a search re-exposes concealed coin/items, so the
+    // stash-room collect guard keys off it: a pile re-revealed here is the one we
+    // just hid (don't re-grab), whereas coin shown on plain room entry or a corpse
+    // drop is visible loot to collect. The settle gate holds the walker meanwhile,
+    // so the window can never straddle a room change (a stale flag can't leak into
+    // the next room's entry survey). False when no loot consumer is armed — nothing
+    // collects then, so there is nothing to suppress.
+    public bool IsRevealInFlight => _settle.IsEnabled;
+
     // Bind the wire-sender — the gate-wrapped engine pipeline from
     // MainWindowViewModel.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);

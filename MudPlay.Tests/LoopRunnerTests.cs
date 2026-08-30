@@ -392,6 +392,112 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void RefusedWhilePaused_EntersRecoveryOnResume_InsteadOfResendingSameMove()
+    {
+        // Regression (paradigm-20260829-084558 / paradigm-20260829-104437): a
+        // MoveRefusal that resolves WHILE a combat gate has the loop paused
+        // reverts the tracker to Confirmed at the source room via
+        // NoteMoveBlocked, but OnTrackerStateChanged ignores tracker events
+        // while paused (State != Running), so the old resume path never saw
+        // it — the step stayed marked in flight, and resume fell through to
+        // blindly re-sending the exact same already-refused direction. That
+        // resend got refused again, and with no gate left to clear and retry
+        // this time, the loop just sat there — observed stalls of 17 minutes
+        // and, in the worse report, over an hour, only ever "fixed" by an
+        // unrelated external event forcing a fresh room observation. The fix
+        // recognizes "Confirmed, still at the room the move was sent from" on
+        // resume as the equivalent of the real-time "blocked at source"
+        // branch and enters recovery (reroute) immediately instead.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+
+        // Combat gate holds the loop while the move is still in flight.
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        // The refusal resolves WHILE paused — the tracker correctly reverts
+        // to Confirmed at 1/1, but the runner can't react to it in real time.
+        h.Tracker.NoteMoveBlocked();
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+
+        // Resume must NOT blindly re-send "n" a second time on the stale
+        // in-flight flag — it must enter recovery and reroute instead.
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.Contains(h.Events, e =>
+            e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    [Fact]
+    public void RefusedWhilePaused_PersistentBlock_ExhaustsBudget_ThenFails()
+    {
+        // Same shape as BlockedAtSource_PersistentBlock_ExhaustsBudget_ThenFails,
+        // but every refusal resolves while paused — confirms the resume-time
+        // recovery path is bounded by MaxRecoverAttempts exactly like the
+        // real-time one, not an unbounded retry loop.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 4; i++)
+        {
+            h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+            h.Tracker.NoteMoveBlocked();
+            h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        }
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void SuspectWhilePaused_ForwardsToRecoveryGateOnResume_InsteadOfResendingSameMove()
+    {
+        // Regression (paradigm-20260829-111627): an ambiguous room
+        // observation that lands the tracker in Suspect WHILE the loop is
+        // paused (a combat redisplay, another player's arrival, etc.) is
+        // invisible to OnTrackerStateChanged in real time (State != Running)
+        // — the same seam as the "refused while paused" fix above, but for
+        // Suspect/Lost/Unknown instead of a plain refusal. The old resume
+        // path fell through to a blind resend — but NoteMoveSentCore
+        // deliberately never re-arms Pending from Suspect (no confirmed
+        // anchor to predict a landing from), so a refusal on that resent
+        // move is silently dropped too (NoteMoveBlocked only acts from
+        // Pending), stranding the loop in Suspect with no way out. The fix
+        // forwards to the recovery gate on resume, exactly like the
+        // real-time branch already does.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        // An ambiguous/unrecognized observation lands the tracker in
+        // Suspect while paused — the runner never sees the transition in
+        // real time.
+        h.Tracker.NoteRoomObserved(new RoomObservation("Somewhere Else",
+            new HashSet<Direction> { Direction.N }));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        // Resume must forward to the recovery gate, not blindly re-send "n".
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+
+        Assert.Single(h.Sent);   // not re-sent
+        Assert.Single(h.ResyncReasons);
+        Assert.Contains("Suspect", h.ResyncReasons[0]);
+    }
+
+    [Fact]
     public void PassiveSourceRedisplay_WhileMovePending_IsIgnored_NoFalseRecovery()
     {
         // CONFIRMED game mechanic: a refused move never redisplays the room — it
@@ -506,6 +612,9 @@ public sealed class LoopRunnerTests : IDisposable
         // had the loop paused. The tracker became Suspect, but the runner's
         // normal mismatch handler ignores transitions while Paused. Resume then
         // re-sent the already-completed N step from room B, where N was a wall.
+        // The primary fix is RoomDisplayParser (it no longer misreads the ability
+        // as the title); this pins the shared resume-time backstop that catches a
+        // Suspect-on-resume regardless of cause (same guard as the 111627 case).
         Harness h = NewHarness(wireRecovery: true);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
@@ -528,7 +637,7 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Paused, h.Runner.State);
         Assert.Single(h.Sent);
         Assert.Single(h.ResyncReasons);
-        Assert.Contains("while resuming in-flight loop step", h.ResyncReasons[0]);
+        Assert.Contains("on resume at step", h.ResyncReasons[0]);
 
         // The authoritative reply says the original move reached B. Recovery
         // advances exactly once and sends the correct return step S.
@@ -1221,6 +1330,47 @@ public sealed class LoopRunnerTests : IDisposable
         doorReply!(DoorOpenResult.Opened.Instance);
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("w\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    [Fact]
+    public void ClosedDoorInFlight_CombatPauseThenResume_WaitsForDoor_DoesNotRecoverOrResend()
+    {
+        // A door-open FSM in flight when a Combat gate pauses the loop must NOT be
+        // aborted on resume. The FSM has set _stepInFlight and _expectedMoveSource
+        // but hasn't crossed yet, so the tracker legitimately reads Confirmed at the
+        // source room — which the resume-time "refused while paused" check would
+        // otherwise misread as blocked-at-source and spuriously enter recovery,
+        // burning a recover attempt and killing the in-progress open. The loop must
+        // wait for the door reply instead.
+        Harness h = NewHarness(DoorGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Action<DoorOpenResult>? doorReply = null;
+        h.Runner.SetDoorEnqueuer((_, _, _, _, _, reply) => doorReply = reply);
+        h.Runner.SetDoorStopper(() => { });
+
+        h.Runner.Start(new Loop("house", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.NotNull(doorReply);
+        Assert.Empty(h.Sent);                        // door FSM in flight, nothing on the wire
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        // Combat asserts mid-open, then clears.
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+
+        // Resume must NOT recover and must NOT resend — the door FSM is still owed
+        // its reply.
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.DoesNotContain(h.Events,
+            e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+        Assert.Empty(h.Sent);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        // The door finally opens — the loop crosses as normal, proving it only waited.
+        doorReply!(DoorOpenResult.Opened.Instance);
+        Assert.Single(h.Sent);
+        Assert.Equal("e\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
     [Fact]

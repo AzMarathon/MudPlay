@@ -70,7 +70,7 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 - **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave. See **Tools & Diagnostics** for its filters and toggles.
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
-- **Spell Book** (F2), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
+- **Spell Book** (F2), **Monster Intel** (View menu, or the toolbar's *Monster Intel* button — no default hotkey), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, a monster reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Monster Intel under **Game Data**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
 
 The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
 
@@ -204,6 +204,12 @@ Open it from **View → Party**, a toolbar button, or **right-click the terminal
 
 The healing, ranks, nags, and re-invite behaviour the window reflects are all configured on **Settings → Party**.
 
+### Configuring party buffs
+
+Party buffs are no longer set up here in the Party window. **All** automated buffing — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts — is now configured in **one unified list inside the Buff Watchdog** (View → Buff Watchdog): click **＋ Add buff**, pick a spell, and tick the party members (or **All**) it should be cast on. See **Buff Watchdog** under *Tools & Diagnostics* for the full walkthrough.
+
+Two things about party buffs stay worth knowing here. A single-target buff fires for any member who's **currently in your party** — a MajorMUD party is always in one room, so being in `par` means being in the room (a member who leaves or is uninvited drops out of the party and is no longer targeted). The one exception is a member who's **hiding**: the cast comes back *"You do not see … here!"*, so the client backs off that member — the Buff Watchdog marks them **"hidden — can't target"** — and retries the next time you **move** or they **reappear**. Targets are remembered by name, so your setup survives parties dissolving and reforming. And the two **bless while resting / during combat** gates that decide *when* the party-buff engine may cast still live on **Settings → Party**.
+
 ## Leaders and followers
 
 One character leads; the rest follow. A follower tracks the leader's movement and holds position; if the leader disconnects, the party disbands. A party is 2–6 characters.
@@ -311,11 +317,11 @@ When more than one spell wants to fire, the caster follows the priority order on
 
 ## Curing and blessing
 
-Configure cure spells for holds, poison, disease, and blindness, plus several bless (buff) slots that recast as they expire. Auto-blessing — self *and* party — is controlled by the **Auto-Bless** toggle and nothing else (it's independent of Auto-Combat and Auto-Rest/Heal). By default the engine buffs while you're **moving or standing idle** (including an idle rest) and holds off **during combat** and **during a triggered recovery rest** (when HP or MA fell below your rest-if-below setting). Two opt-in checkboxes override those holds — one to also bless during a recovery rest, one to also bless while actively fighting. You can also tell it to ignore, or not announce, specific ailments.
+Configure cure spells for holds, poison, disease, and blindness on **Settings → Spells**; the bless (buff) slots that recast as they expire now live in the **Buff Watchdog** (View → Buff Watchdog — one unified list for self *and* party buffs). Auto-blessing — self *and* party — is controlled by the **Auto-Bless** toggle and nothing else (it's independent of Auto-Combat and Auto-Rest/Heal). By default the engine buffs while you're **moving or standing idle** (including an idle rest) and holds off **during combat** and **during a triggered recovery rest** (when HP or MA fell below your rest-if-below setting). Two opt-in checkboxes override those holds — one to also bless during a recovery rest, one to also bless while actively fighting (the self pair on **Settings → Spells**, the party pair on **Settings → Party**). You can also tell it to ignore, or not announce, specific ailments.
 
 ## Mana regen
 
-For mana-regen classes, the caster can rest to regen and — if configured — reroll a poor regen result up to a cap.
+For mana-regen classes, the caster can rest to regen and — if configured — reroll a poor regen result up to a cap. The mana-regen spell and its reroll settings are configured in the **Buff Watchdog** (View → Buff Watchdog); rerolling works on Paradigm.
 
 ## The Spell Book (F2)
 
@@ -338,6 +344,8 @@ MudPlay collects coin and loot, banks your wealth, and manages your gear.
 ## Collecting coin and loot
 
 With the collection engines on, MudPlay picks up coin and flagged items off the ground after a fight, following your per-currency rules (Settings → Cash) and the per-item flags in Game Data. It can skip a pickup that would push you into a heavier encumbrance band, and drop smaller coin to make room for larger.
+
+In a **stash room** the client stashes your excess coin (and any auto-stash items) as you pass through, so it deliberately does **not** re-grab a pile it just hid — but only the coin a `search` *re-reveals* is skipped. Coin that's plainly visible when you walk in, or that a kill drops on the floor, is still collected there (and, of course, in every ordinary room, including the room right after a stash room).
 
 You don't have to wait for the engines, either: the **Action menu** (and the matching toolbar buttons) has **Get All**, **Drop All**, and **Equip All** to grab everything on the floor, drop everything unworn, or re-wear your Default set on demand — the local twins of the `@get-all` / `@drop-all` remote commands.
 
@@ -495,6 +503,28 @@ Values group with thousands separators. Unlike the live **Filter…** text box, 
 
 **Flavor Prefixes** is a small editor of its own in the *Tables + editors* list (not a double-click table). It's the vocabulary of adjectives the game prepends to a monster's name — *large*, *nasty*, *huge*, and so on. The room classifier strips a leading word in this list so "large giant rat" resolves to "giant rat" with no per-monster data. It starts from the built-in stock list and applies to the **active game-data set**, so a custom realm that uses different adjectives just adds them here (type a word → **Add**; **✕** removes one; **Reset to defaults** restores the built-ins). Edits save to that set immediately. If the classifier ever meets a prefixed name whose leading adjective isn't in the list, it flags a Program-Log row you can double-click to add the word in one click.
 
+## Monster Intel
+
+**Monster Intel** (View menu, or the toolbar's *Monster Intel* button) is character-centric: it's built around *this character* — what you can hit, what you can cast through, what's actually worth engaging — not just a flat reference table. It's also still the one place that shows a monster's **elemental resistances and spell-immunity/hit-magic requirements**, which the auto-combat engine has always known internally but never showed you until now.
+
+**Character bar** — a strip across the top (once a character is loaded) showing your name/level/class, live HP, live Mana or Kai (whichever your class uses), your currently-equipped weapon's HitMagic, and how many attack spells you've obtained. It updates live as HP/mana tick and stays current if you swap gear or learn a new spell while the window is open.
+
+The left list is filterable by name, with the same core stats as the Browser's Monsters tab (HP, Exp, AC, DR, Dodge, MR, Acc, Mag, Undead) — every column is independently sortable (click a header; click again to reverse), columns size themselves to fit their content, and both they and the divider between the list and the detail panel are draggable; the divider's position is remembered per character. Two checkboxes above the list narrow it to what's relevant to you right now (both need a character loaded): **Hittable** keeps only monsters your equipped weapon's HitMagic actually clears, and **Castable** keeps only monsters where at least one attack spell you've obtained gets past their spell immunity. Select a monster to fill the right-hand detail panel:
+
+- **Overview** — Exp (base × multiplier), HP and its regen tick, AC/DR, Magic Resist, Dodge, alignment, Undead/Non-living flags, and the two gates that decide whether you can even hurt it: **"Requires a weapon with HitMagic ≥ N"** and **"Immune to spells with ReqLevel < N."** Where the record carries them, it also shows backstab defense, its chance to **follow when you flee**, the **charm level** needed to charm it, its energy pool and average damage, the **weapon it wields**, and any spell it **casts on spawn or on death** — so you know a monster nukes on death before it dies on you.
+- **Elemental Defenses** — each of the five elements (Cold, Fire, Stone, Lightning, Water) it resists or is vulnerable to, as a signed percentage, classified as *resists*, *vulnerable*, *immune* (exactly 100%), or *heals* (over 100% — the "damage" restores it). A monster with none listed carries no elemental resist ability at all.
+- **Casts** — which elements the monster's own attack spells and between-round spells deal, rolled up in one line, so you know what you're about to eat before you engage.
+- **Your Matchup** — live, character-aware, and only shown once a character is loaded: whether your **currently-worn weapon** is magical enough to hit the monster physically (its HitMagic vs the monster's requirement); an **incoming elemental threat** line per element the monster casts, alongside how much your own worn gear resists it; and every **known attack spell you've obtained**, ranked by effective damage against *this* monster — a spell blocked by the monster's spell immunity, fully resisted by its element, or restricted to undead-only/living-only targets the monster doesn't qualify for shows the reason instead of a damage number, so you're never guessing why a cast did nothing. This deliberately doesn't duplicate the Calculators tab's melee hit%/DPS/rounds-to-kill projection (that math already lives there, correctly) — for that, use the Player Workshop's **Calculators** tab; Monster Intel's Your Matchup is the spell/elemental half nothing else covers.
+- **Your Observations** — only shown once this character has actually fought the monster at least once: landed-hit damage extent and average, hit rate, and how many times a physical attack or a spell had **no effect** — a real, confirmed discovery that this monster's Magical or SpellImmunity requirement is higher than what you're using against it. This is deliberately kept separate from every other section here — everything above comes from the game-data record (the MDB); this is only what *this character* has personally seen happen in combat, so the two never get blended together. A monster whose damage rolls come in lower than its resist numbers predict isn't flagged here — MajorMUD's wire protocol has no line that distinguishes "resisted" from "just rolled low," so that inference isn't made (only the confirmed no-effect immunity discovery is). A **Clear** button wipes every monster's recorded observations for this character (not just the one you're viewing).
+- **Attacks** — every physical, spell, and rob attack slot with its chance, damage range or spell + level, accuracy, and energy cost, plus its between-round spells.
+- **Loot** — every item it drops, with drop chance where known, plus a **Carries** line for any coin it holds (platinum / gold / silver / …).
+- **Locations** — a quick count of how many rooms place it and how many lairs spawn it. This is a fast-lookup summary, not the full room list — for every individual room with clickable links, use the Game Data Browser's Monsters tab or the Navigation window's Room Info panel.
+- **Automation** — a summary of its current Relationship / Priority / overrides, with an **Edit Automation…** button that opens the same overlay editor the Browser's Monsters tab uses (see **Overriding a record** above) — so you can inspect a monster and configure how MudPlay handles it without leaving this window.
+
+**Comparing monsters side by side**: Ctrl-click or Shift-click to select two or more rows in the list, and the detail panel switches to a row of cards — one per selected monster, each showing HP, Exp, AC/DR, Dodge, MR, Acc, Mag, SpellImmu, Resists, Casts, and Undead — so you can size up a few candidates at a glance without flipping back and forth. Drop back to one selected row to return to the full single-monster detail view.
+
+**Context bar**: while connected, a bar above the list shows every monster in your current room as a row of clickable chips — click one to jump straight to its detail. It only appears once room tracking is active, and stays out of the way (no reserved space) in an empty room.
+
 ---
 
 # Conversation
@@ -565,17 +595,49 @@ Open **Session Stats** from the **View** menu or its toolbar button (it has no d
 
 ## Buff Watchdog
 
-Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. It lists the buffs you've **configured** (never the whole spellbook) — your **self-bless slots**, the **HP/MA-regen** and **when-HP/MA-full** utility buffs, any `#item`-cast buffs, and your **party-bless slots** — each on its own row with a live timer bar:
+Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. This is the **one place you configure every automated buff** — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts all live here now, in a single unified list — **and** it shows a live timer bar for each one as it runs. Re-selecting the menu item (or toolbar button) toggles it closed.
 
-- Each row **is** the timer bar: the buff's 4-letter cast code (or a `#`-prefixed item name) sits **left-aligned inside the bar**, with the **time remaining** just after it. Party-buff rows also show the target member/class as a caption beneath the bar.
-- The **bar fills as the buff ages** (empty just after it lands, full at wear-off), and a **vertical amber marker** shows where its **recast window** opens — the "recast within (seconds)" lead you set per slot. When the fill crosses the marker the bar turns amber: the buff is now due to be recast.
-- A buff that **isn't up** (worn off, or never cast) shows an empty bar labelled **not up**, so you can see at a glance which configured buffs are missing.
+### Building the buff list
+
+Click **＋ Add buff** to open the Add-buff dialog:
+
+- **Pick a spell** — the buff spells you've learned (attacks and heals are filtered out), plus any **cast-on-use buff item** you can use (an unlimited-use item like a *shimmering greatsword* that casts a buff when used; these show as a `#item` slot). What targeting a slot offers depends on the spell: a self-only spell can only be cast on you, a single-target spell can be aimed at you and/or party members, and a whole-party spell (chant and the like) blankets everyone with one cast.
+- **Set a recast timer** — "recast (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off).
+- **Set conditions** — optional per-slot gates, some of which only appear for the spell that uses them:
+  - **Only when HP is full** / **Only when MA is full** — hold the cast until you've rested up to your **rest-max** target (not literal 100%); a "topped-off, ready for the next fight" buff. A triggered recovery rest suspends it until you're back at max.
+  - **Only when the room is dark** — shown for a **light** spell. Ticked, it keeps the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); unticked, the light is maintained like any ordinary buff.
+  - **Cast before resting for mana** — shown for a **mana-regen roll** spell (nature tap / mana flux / prfl). Ticked, it fires as a pre-rest top-up; unticked, it's kept up all the time like a normal buff. Alongside it sit the reroll knobs: **Reroll below** (a threshold — reroll while the rolled regen lands under it) and **Max rerolls** (how many times to chase a better roll before accepting what landed). Rerolling works on **Paradigm** (it reads the roll back from `abil 145`).
+- **OK** adds it as a slot.
+
+Each slot is a **row** with an **✎** (edit — reopens the dialog) and an **⨯** (remove) at the left, then the buff's `name - recast` label, then the targeting checkboxes. **You choose who it's cast on right in the row:**
+
+- A **Self** box casts it on you.
+- An **All** box is a **select-all** — ticking it casts on you *and* every party member, auto-adapting to whoever's in the party. Unticking any individual box (Self or a member) clears **All** automatically.
+- A **checkbox per party member** — member names run along the top as column headers, so every row's checkboxes line up under them — lets you pick exactly who gets it.
+- A **whole-party** spell shows a single on/off toggle and reads **Party Wide** across the member columns (one cast covers everyone). A **self-only** spell shows just the **Self** box.
+
+A given spell is **one slot** — once it's slotted it drops out of the Add dialog, so you can't double up. Everything saves as you edit it; there's no Save button. Existing setups from before the unification are migrated into this list automatically.
+
+> **Note:** the **HP-regen** spell is *not* a maintained buff and isn't set here — it's a reactive minor-heal that fires when your HP dips, and it stays on **Settings → Spells** as **HP Regen**. Everything else moved to this list.
+
+### Reading the timer bars
+
+The timer bars are grouped **by player**: **your own name first** (your self buffs and any whole-party buffs), then one section per party member with the buffs cast on them.
+
+- Each bar shows the buff's cast code (or `#item` name) left-aligned inside it, with the **time remaining** just after.
+- The **bar fills as the buff ages** (empty just after it lands, full at wear-off), and a **vertical amber marker** shows where its **recast window** opens — the recast lead you set per slot. When the fill crosses the marker the bar turns amber: the buff is now due.
+- A buff that's **set to be kept up** (targeted on you or a member) but **isn't up** right now (worn off, or not cast yet) shows an empty bar labelled **not up**, so you can see at a glance which maintained buffs are missing. A configured buff that **isn't** set to recast on anyone and has no live timer isn't listed — it would just be clutter.
+- A single-target row whose member is **hiding** (the cast came back *"You do not see … here!"*) shows **hidden — can't target**; it clears and retries when you move or they reappear.
+- A small **✕** on a live bar **clears that timer** — marks the buff off (e.g. when a dispel you didn't see stripped it). A configured buff that's still due recasts on the next pass; a leftover timer (say an ex-member's) just disappears. The ✕ only shows while a timer is actually up.
 - A configured buff your character **hasn't learned** is flagged **unlearned**.
-- Party-buff rows show the **soonest-expiring** member's timer (the next one due) and that member's name.
+- A **single-target** buff gets **one bar per member** it's cast on (each member is blessed individually, so each has its own recast timer). If you untick a member you've already blessed, their bar **stays until the buff actually expires** — unticking just stops future recasts, it doesn't cancel the running buff.
+- A **whole-party** buff blankets everyone in the party **at the moment you cast it**, so it shows a bar under **your own section and each member who was present** — all reading the one recast timer (recast is driven by *your* timer). If a member **swaps out and someone new joins**, the newcomer shows **not up** under their section: they didn't get the party buff and won't until your next recast, which re-covers whoever's in the party then. So a glance tells you who's actually covered.
 
-**What it counts as "up".** A buff's timer is armed by the **cast code** — whether the client cast it or **you typed it by hand** — so a manual cast shows up here the same as an automated one. The client deliberately **ignores the `stat` screen's buff list** (Paradigm's `You feel …! (Ns)` lines): those shared effect messages can't say which buff is which, so they're never treated as a cast. **Any disconnect freezes the timers** (the display too) and reconnecting **resumes** them with the same remaining — a brief drop keeps your recast clock instead of restarting it. Switching characters (or a gap longer than the buff could last) starts the watchdog empty, with no buffs assumed.
+A **drag bar** sits between the config table and the timer bars — grab it to re-divide the space between the two. It stays where you leave it as you resize the window: the config table keeps its size and the timer bars flex to fill the rest. Where the config table sits relative to the bars — **above / below / left / right** — is set on **Settings → General → "Buff Watchdog layout"**; changing it reflows an open Buff Watchdog at once.
 
-The window is a live view — it refreshes about once a second while open — and re-selecting the menu item (or toolbar button) toggles it closed. It's read-only: configure the buffs themselves on the Player Workshop (self-bless slots, regen, when-full) and Settings → Party (party-bless).
+**What it counts as "up".** A buff's timer is armed by the **cast code** — whether the client cast it or **you typed it by hand** — so a manual cast shows up here the same as an automated one. This includes a **single-target buff you hand-cast at a party member** (`gbls fuj`): you needn't type their whole name, and the buff's success line — whose wording comes from the game-data spell message — names the member in full, which the client matches back to whoever you targeted and lights up **their** bar. A whole-party or self buff you hand-cast (`unfa`, `bles`) registers the same way. The client deliberately **ignores the `stat` screen's buff list** (Paradigm's `You feel …! (Ns)` lines): those shared effect messages can't say which buff is which, so they're never treated as a cast. **Death and disconnect are handled to match the game:** dying wipes all your magical effects, so **your own death clears your self-buff timers** (a **party member's death** clears the timers you hold on that member); and when **you** disconnect, only **your own** buffs are in doubt — your **party's** buffs kept counting down while they stayed online, so on reconnect your **self** timers clear and re-establish, while **party** timers keep their real remaining (any that lapsed recast). Switching characters starts the watchdog empty.
+
+The window is a live view — it refreshes about once a second while open. The two timing gates that decide *when* the buff engine may cast — self-bless "while resting / during combat" and party-bless "while resting / during combat" — still live in Settings (**Settings → Spells** for self, **Settings → Party** for party).
 
 ## Wire Inspector (F5)
 
@@ -1184,41 +1246,28 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 
 **Default:** unset
 **What it does:** A heal-over-time spell. When your Minor-heal threshold trips, this is cast *first*, ahead of an instant heal — but only while you're still above the Major/life-threat threshold, and only if it isn't already active. Inside the life-threat band, you always get an instant heal instead.
-**When you might change it:** If you want this HoT kept up permanently rather than only cast reactively, put it in a Bless slot instead.
+**When you might change it:** If you want this HoT kept up permanently rather than only cast reactively, add it as a maintained buff in the **Buff Watchdog** instead.
 
-### Mana Regen
+### Mana regen — moved to the Buff Watchdog
 
-**Default:** unset
-**What it does:** A spell cast during downtime to boost mana regeneration — either a "roll" spell (rerolls a random regen bonus each cast) or a flat mana heal-over-time buff.
-**Important notes:** The reroll feature below only works with roll-type spells, and only on certain realms (see next entry).
+The mana-regen spell and its **reroll** knobs are no longer picked here. Add the spell in the **Buff Watchdog** (View → Buff Watchdog → ＋ Add buff) and set its conditions there: **Cast before resting for mana** (fire it as a pre-rest top-up rather than maintaining it), plus **Reroll below** (the threshold — reroll while the rolled regen lands under it) and **Max rerolls** (how many times to chase a better roll before accepting what landed). Rerolling works on **Paradigm** (it reads the roll back from `abil 145`); each reroll still runs through the normal between-round priority, so a due heal or cure fires ahead of it. See the **Buff Watchdog** section for details.
 
-### Reroll if roll below / Max rerolls
+### When HP full / When Mana full — moved to the Buff Watchdog
 
-**Default:** Threshold unset (off); Cap `3`
-**What it does:** After the Mana Regen roll spell lands, if the roll came in below this threshold, MudPlay recasts to try for a better one, up to the cap. Each recast runs through the normal between-round priority (like every other automated cast), so a due heal or cure fires ahead of a reroll and only one between-round cast goes out per combat round.
-**Important notes:** Only works on realms that expose a way to read the actual roll value back — inert on realms that don't. Leave the threshold blank to disable rerolling entirely.
-
-### When HP full / When Mana full
-
-**Default:** unset
-**What it does:** A spell cast whenever the matching pool (HP or mana) is sitting completely full — a way to spend a maxed-out resource on something useful instead of letting it sit idle.
+The "spend a maxed-out pool on something useful" casts are configured as ordinary buffs in the **Buff Watchdog** now — add the spell and tick **Only when HP is full** or **Only when MA is full** on the slot (they fire once you've rested up to your **rest-max** target). See the **Buff Watchdog** section.
 
 ### Cure Holds / Cure poison / Cure disease / Cure blindness
 
 **Default:** unset
 **What it does:** The specific spell used to cure each named ailment. These feed the Curing priority category (self first, then party members).
 
-### Room light
+### Room light — moved to the Buff Watchdog
 
-**Default:** unset
-**What it does:** A spell automatically cast when you enter a dark room (works together with the light-item automation on the Auto-Light tab).
+The room-light spell is configured in the **Buff Watchdog** now. Add it there and tick **Only when the room is dark** on the slot to keep the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); leave it unticked to maintain the light like an ordinary buff. See the **Buff Watchdog** section.
 
-### Bless spells
+### Self-bless — moved to the Buff Watchdog
 
-**Default:** all empty (10 rows on a Stock realm, 15 on ParaMud)
-**What it does:** A ranked list of self-buffs MudPlay recasts whenever they aren't currently active (the on-screen section is headed **Bless spells**, its rows labeled Bless 1, Bless 2, …). Row order is cast priority. Each row can hold a spell code or a `#item name` for a reusable buff item. The same learned-spell guard applies here, with one twist for the `#item` entries: an item-cast is only flagged (struck through / red-outlined) when you **aren't carrying or wearing that item** — a buff item you actually hold is treated as available, just like a learned spell.
-**How the options work:** Each row has its own "recast within (seconds)" — how early before the buff's tracked expiry MudPlay proactively recasts it. It defaults to **15**; set it to `0` to wait for the buff to actually wear off before recasting.
-**Important notes:** The visible row count matches your active realm's buff-slot cap; extra picks beyond that cap aren't lost, they just wait until you load a realm that supports more. An `#item` buff equips the item, uses it, and re-equips whatever it displaced — including juggling a two-handed weapon out of the way when the cast item is an off-hand piece. It waits until the client knows what you're wearing (the first inventory dump after login) before firing, so it never blindly equips over a readied two-hander.
+The self-buff slots (which spells, `#item`-cast buffs, per-slot recast timers) live in the **Buff Watchdog** now, folded into the one unified buff list alongside your party buffs — tick the **Self** box on a slot to cast it on yourself. See the **Buff Watchdog** section for how to add and target buffs. The two **timing gates** below — *when* the self-buff engine may cast — stay here on this tab.
 
 ### Bless self while resting / Bless self during combat
 
@@ -1346,15 +1395,13 @@ Settings → Party.
 
 **Important notes:** This control exists in the UI but has no setting behind it — it's a placeholder for a future feature, currently fixed and greyed out.
 
-### Party bless (10 slots)
+### Party bless
 
-**Default:** all empty
-**What it does:** Up to 10 beneficial spells you want auto-cast on party members, each restricted to specific classes (e.g. cast a warrior buff only on Warriors and Barbarians). Row order is cast priority.
-**How the options work:** The first time you type a spell into an empty slot, every currently-known class gets auto-checked as a convenience — untick the ones you don't want it cast on. Each row also has its own **recast within (s)** — how early before the buff's tracked expiry to recast it; it defaults to **15**, and `0` waits for the buff to actually wear off.
+**Where it's configured:** the party-buff **slots** (which spells, which members, recast timers) live in the **Buff Watchdog** — see the **Buff Watchdog** section under *Tools & Diagnostics*. This tab keeps only the two timing gates below.
 
-**Party-only, and targeting:** the party-bless slots are cast **only while you're actually in a party** — solo, none of them fire (your self-bless slots still do). A **party-wide** spell (chant and the like — one cast blankets the whole party, including you) is sent once with no target. A **single-target** spell is cast on each class-matched member individually with its own recast timer per person, and it is **not** cast on your own character — self comes from the self-bless slots.
+**Party-only, and targeting:** party buffs are cast **only while you're actually in a party** — solo, none fire (your self-bless slots still do). A **whole-party** spell (chant and the like) is sent once with no target and blankets the party, including you. A **single-target** spell is cast on each selected member individually with its own recast timer, is **not** cast on your own character (self comes from the self-bless slots), and only fires for a member who's both in your party and in the room.
 
-**Supersession:** if a party-wide party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
+**Supersession:** if a whole-party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
 
 ### Bless party while resting / Bless party during combat
 
@@ -1568,7 +1615,7 @@ Settings → Auto-Light. Everything here only matters once the master **Auto-Lig
 
 **Default:** `Automatic (per route)`
 **Available options:** `Automatic (per route)`, `Only use my room-light spell (no items)`, or the name of any purchasable light item.
-**What it does:** Chooses what light source MudPlay buys and lights when it needs one. "Automatic" picks whatever's strong enough to cover the route ahead. Choosing a specific item pins it to that light (falling back to auto-pick if it's unavailable in your current game data). "Only use my room-light spell" tells MudPlay to never buy or ready a light item at all — it relies purely on your gear and the Spells tab's room-light spell.
+**What it does:** Chooses what light source MudPlay buys and lights when it needs one. "Automatic" picks whatever's strong enough to cover the route ahead. Choosing a specific item pins it to that light (falling back to auto-pick if it's unavailable in your current game data). "Only use my room-light spell" tells MudPlay to never buy or ready a light item at all — it relies purely on your gear and the room-light spell you've configured in the Buff Watchdog.
 **When you might change it:** Pin a specific light for predictable weight/cost; use spell-only mode if you're a caster who never wants automation touching your light inventory.
 
 ### Carry (hours)
@@ -1843,6 +1890,8 @@ Use **+ Add rule** to add another rule to the room, and the ✕ on a rule row to
 
 **Start Inventory — scan and log without moving anything.** Next to Start Sweep is **Start Inventory**: it walks the exact same labeled circuit, observes each room's floor, and honors **Search rooms for hidden items** exactly like a sweep's scan phase — but it never dispatches a single `get` or `drop`. It finishes automatically the moment its one lap completes (no sorting, no final scan — the lap it just took already reflects the true state). Use it if you've already got your own manual way of organizing the gang house and just want `@roomba`'s item-location log kept current without Roomba touching anything. The Roomba Log and the tab's completion summary both call this out explicitly so it's never mistaken for a sweep that sorted nothing.
 
+**Gangpath announcements.** Starting either mode gangpaths the gang house that it's underway (`Roomba sorting starting.` / `Roomba inventory mode starting.`), and finishing announces the same way with a count (`Roomba sorting complete - moved N item(s).` / `Roomba inventory complete - inventoried N item(s).`). "Moved" and "inventoried" both count individual units, not stacks — a `35 orc-head` pile sorted or scanned in one go counts as 35. Manually stopping a sweep early (or an external navigation failure interrupting it) doesn't send a completion announce — only a genuine finish does, so the gang isn't told a sweep "completed" when it didn't.
+
 **Reading the tab.** Each room's **Status** column tracks it live — *Scanning* during the scan, *Cleaning* while it still holds items to move out, *Complete* once its movable clutter is gone. **Double-click a room** to see its current floor contents (from the final scan). The **Roomba Log** button opens a window with the full per-move record, everything left in place (tagged with why — *no matching room*, *gone by sort time*, or *too heavy to carry*), and an end-of-run summary: rooms sorted, items sorted, and the explicit list of unmovable items. **Stop** ends a sweep early.
 
 **Master List** — a separate button that opens a full, **sortable** table (click any column header — Item, Qty, Seen In, Market) of everything the item-location log currently knows: one row per item per room it was seen in (quantity included), plus a **Market** column cross-referencing that item's `Obtained From` shop data — every shop that buys or sells it, priced at a fixed 50 charm (MajorMUD's neutral "retail" point), **excluding any shop that sits inside one of this gang house's own labeled rooms** — you don't need a reminder that your own stash room "sells" what you just put there. An item with no market outside the gang house reads "(no outside market)". A **filter box** at the top narrows the list live by item name, quantity, or the seen-in map/room (type `15/12` to see just that room's finds), and **double-clicking a row opens that item's full record** (the same Item edit dialog the Game Data Browser opens). An **Export List…** button to the right of the filter saves the whole log to a text file grouped **by room** — one header per map/room (with its name), then that room's items listed alphabetically with quantity — a shareable gang-house manifest. The export always covers the full log, regardless of what the filter is showing. Even on a big synced log it opens instantly — each item's Market value is only priced when its row scrolls into view. Updates live as new scans (sweep, Inventory-only, or an incoming `@roomba sync`) come in, same as `@roomba`'s log — they're the same data.
@@ -1972,12 +2021,9 @@ This section is a compact, technical lookup table for every setting documented a
 | Setting | Default | Allowed Values | Config Key | Location |
 |---|---|---|---|---|
 | Spell type priority (7 categories) | Minor party heal(1)…Debuffing(7) | 1–7 permutation | `PriorityMinorPartyHeal` … `PriorityDebuffing` | Models/Profile/SpellsSettings.cs |
-| Minor / Major heal, HP Regen, Mana Regen | unset | spell code | `MinorHealSpell`, `MajorHealSpell`, `HpRegenSpell`, `MaRegenSpell` | Models/Profile/SpellsSettings.cs |
-| Reroll if roll below / Max rerolls | unset / `3` | int or blank / 1–20 | `ManaRegenRerollThreshold` / `ManaRegenRerollCap` | Models/Profile/SpellsSettings.cs |
-| When HP/Mana full | unset | spell code | `WhenHpFullSpell` / `WhenMaFullSpell` | Models/Profile/SpellsSettings.cs |
+| Minor / Major heal, HP Regen | unset | spell code | `MinorHealSpell`, `MajorHealSpell`, `HpRegenSpell` | Models/Profile/SpellsSettings.cs |
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
-| Room light | unset | spell code | `RoomLightSpell` | Models/Profile/SpellsSettings.cs |
-| Bless slots (1–10/15) + recast margin | empty / 15s default | spell code or `#item` / 0–999 | `BlessSlots` / `BlessSlotRecastMargins` | Models/Profile/SpellsSettings.cs |
+| Unified buff list (self + party bless, room light, mana-regen + reroll, when-HP/MA-full) | empty | spell / `#item` + targets + recast + conditions | `PartyBuffs` (`BuffSettings`) | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Bless self while resting / during combat | false / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
 | Ignore / Don't announce poison, blindness, confusion, diseased | false (all) | bool | `IgnorePoison` etc. / `DoNotAnnouncePoison` etc. | Models/Profile/SpellsSettings.cs |
 | HP/MA threshold mode | `Percentage` (both) | Percentage / Absolute | `HpThresholdMode` / `MaThresholdMode` | Models/Profile/HealthSettings.cs |
@@ -1997,7 +2043,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Rank | `Mid` | Front / Mid / Back | `Rank` | Models/Profile/PartySettings.cs |
 | Minor/Major party heal (single/AOE) | blank (all 4) | spell code | `MinorPartyHealSpell` etc. | Models/Profile/PartySettings.cs |
 | Minor/Major heal threshold %, AOE min members | 70/40/2 | 0–100 / 2–6 | `MinorHealMemberThresholdPercent` etc. / `AoeMinMembers` | Models/Profile/PartySettings.cs |
-| Party bless slots (10) | empty | spell + class list + recast sec | `BlessSlots` | Models/Profile/PartySettings.cs |
+| Party bless slots (part of the unified buff list — see Spells/Health above) | empty | configured in the Buff Watchdog | `PartyBuffs` | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Bless while resting / during combat | false / false | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
 | Help leader open doors / Ignore @wait when leading / Reset stats on loop start | false/false/true | bool | `HelpLeaderOpenDoors`, `IgnoreWaitWhenLeading`, `ResetStatisticsOnLoopStart` | Models/Profile/PartySettings.cs |
 | Re-invite lost members / send @join nags / send @health nags / probe on join | true (all) | bool | `AutoInviteReconnecting`, `SendJoinToInvited`, `SendHealthToMembers`, `ProbeStatsOnPartyJoin` | Models/Profile/PartySettings.cs |
