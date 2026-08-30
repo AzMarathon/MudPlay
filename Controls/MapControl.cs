@@ -745,7 +745,7 @@ public sealed class MapControl : Control
     // @where target flash — a translucent green fill under a bright green ring, so an
     // answered "where are you?" reads as a lit-up marked square the moment it lands.
     // Cleared by the VM's ~12s timer.
-    private static readonly IBrush WhereTargetFill = new SolidColorBrush(Color.Parse("#5533DD66"));
+    private static readonly IBrush WhereTargetFill = new SolidColorBrush(Color.Parse("#8833DD66"));
     private static readonly IPen   WhereTargetPen  = new Pen(new SolidColorBrush(Color.Parse("#FF33DD66")), 2.5);
     // Death-marker skull — bone-white silhouette with dark hollows, drawn on
     // rooms that still hold an un-recovered deathpile. The dark eye / nose / tooth
