@@ -5308,12 +5308,23 @@ public sealed class AppServices
         // its own bank -> shop -> origin light detour and needs the `i` dump to
         // notice the bought copy land.
         Inventory.Changed += AutoDeposit.OnInventoryChanged;
-        // In a stash room mid-loop, suppress cash + item auto-collect so a search
-        // there can't re-expose and re-grab the pile the pass-through stash just
-        // hid (report paradigm-20260819-121516). AutoDeposit owns the room/stash/
-        // running-engine state; the lambda reads it live per survey line.
-        Cash.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
-        AutoGetItems.SuppressCollectInStashRoom = () => AutoDeposit?.IsPassingThroughStashRoom() ?? false;
+        // In a stash room mid-loop, suppress cash + item auto-collect ONLY while an
+        // auto-search reveal is in flight — the `sea` round-trip that re-exposes the
+        // pile the pass-through stash just hid (reports paradigm-20260819-121516,
+        // -20260820-055720). Gating on the reveal window (not merely "we're in a
+        // stash room") is what lets the character still collect coin that's plainly
+        // visible on entry or dropped by a kill, in the stash room AND in the room
+        // after it: a room's entry survey is parsed BEFORE the room is confirmed, so
+        // reading live CurrentRoom alone mis-attributes the next room's coin to the
+        // stash room we just left and dropped it on the floor (report
+        // paradigm-20260829-212158 — 1788 gold in the room south of a stash room).
+        // The settle gate holds the walker through the reveal, so the window never
+        // straddles a room change. AutoDeposit owns the room/stash/running-engine
+        // state; AutoSearch owns the reveal window; both read live per survey line.
+        Cash.SuppressCollectInStashRoom =
+            () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
+        AutoGetItems.SuppressCollectInStashRoom =
+            () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
         // Bank deposits (already a copper value) join stash hides in the Session
         // Stats stashed/deposited figure. The transaction-history ledger is fed
         // separately from the `You deposit …` echo (InventoryManager.BankDeposited,

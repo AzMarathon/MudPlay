@@ -2454,6 +2454,18 @@ an encumbrance-adjusted one, since it's a planning aid without a fixed load assu
   `You notice` total — one authoritative pass — never replay the mid-fight drop deltas (they
   double-count against the total, re-queue on every re-render, and go stale). Implemented in
   `CashManager`.
+- **[CONFIRMED 2026-08-29, user]** **Stashed (hidden) coin is only re-surfaced by a `search`.**
+  In a stash room the client `hide`s excess coin; a hidden pile does **not** show on plain room
+  entry or a re-`look` — only a `search` / `sea` re-reveals it, re-rendered through the same
+  `You notice N <coin> here.` line as visible coin. So there are two kinds of coin in a stash room:
+  **visible** coin (present on entry, or dropped by a kill via `N <coin> drop to the ground.`) which
+  is fine to collect, and **search-revealed** coin (the pile we just stashed) which must **not** be
+  re-grabbed. Client consequence: auto-collect is suppressed in a stash room **only while an
+  auto-search reveal is in flight** — coin shown on plain entry or a corpse drop still collects,
+  in the stash room and in the room after it. (Reading "am I in a stash room" alone is wrong: a
+  room's entry survey is parsed before the room is confirmed, so it mis-attributes the *next* room's
+  coin to the stash room just left — report `paradigm-20260829-212158`.) Implemented as
+  `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.
 - **[CONFIRMED]** **Toll exits gate on total wealth, not a specific coin.** A room exit tagged
   `(Toll: N)` in the map data requires the crosser to carry a **wealth value of `N × 100`**
   (copper farthings — the same consolidated `Wealth:` figure), held **on them** (carried coin, not

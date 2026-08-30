@@ -2,6 +2,13 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.36.1
+
+- Fixed lost gold in the room after a stash room: stash-room auto-collect was suppressed by reading the "current room" too early (a room's coin line is seen before the room is confirmed), so the next room's coin was mis-attributed to the stash room and left on the floor
+- Stash rooms now collect coin that's visible on entry or dropped by a kill; only a pile that a `search` re-reveals (the coin just stashed) is left alone
+- Same fix applied to auto-stash items
+- bug reports addressed: paradigm-20260829-212158
+
 ## 3.36.0
 
 - New **Monster Intel** window (View menu / toolbar) — a fast, searchable monster reference that for the first time surfaces a monster's **elemental resistances / vulnerabilities** (Cold/Fire/Stone/Lightning/Water) and its **spell-immunity / hit-magic requirements**, data the auto-combat engine has always computed internally but never showed. Detail panel: Overview, Elemental Defenses, Casts (what elements it can hit you with), Attacks, Loot, Locations (a quick "placed in N rooms / spawns in M lairs" count), and an Automation tab that opens the per-monster overlay editor in place

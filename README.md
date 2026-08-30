@@ -1,12 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.36.0**
-> - New **Monster Intel** window (View menu / toolbar) — a fast, searchable monster reference that surfaces, for the first time, a monster's **elemental resistances / vulnerabilities** and its **spell-immunity / hit-magic requirements** (data the auto-combat engine computed internally but never showed); detail panel covers Overview, Elemental Defenses, Casts, Attacks, Loot, Locations, and an Automation tab
-> - **Character-centric**: a live character bar (level / HP / mana-or-Kai, worn weapon HitMagic, known attack-spell count) plus **Hittable** / **Castable** list filters
-> - **Your Matchup** ranks your learned attack spells by effective damage against the selected monster (with reasons for immunity / full resist / undead-only / living-only), and flags whether your weapon is magical enough to hit it
-> - Side-by-side comparison (Ctrl/Shift-click 2+ monsters), a current-room monster context bar, and a per-character **Your Observations** log of real combat outcomes (landed damage, hit rate, confirmed no-effect)
-> - A wider window with a draggable, per-character splitter and independently-sortable columns
+> **Version 3.36.1**
+> - Fixed lost gold in the room after a stash room: stash-room auto-collect was suppressed by reading the "current room" too early (a room's coin line is seen before the room is confirmed), so the next room's coin was mis-attributed to the stash room and left on the floor
+> - Stash rooms now collect coin that's visible on entry or dropped by a kill; only a pile that a `search` re-reveals (the coin just stashed) is left alone
+> - Same fix applied to auto-stash items
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
