@@ -1530,6 +1530,14 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
        each has `NegateSpell = [526, 218]`, and they're the only two items that do. `RoomHazardIndex`
        already indexes these (one any-of group {487, 1000}), so the router treats lava exactly like the
        river/desert: avoid unless the player carries a counter.
+     - **[CONFIRMED by user, report `paradigm-20260829-203409`] Misty Bog swamp damage** — `Spell:485`
+       (the bog zone's entry spell) is negated by **either** the **swamp boots (item 925)** or the
+       **trollskin boots (item 1232)** — both share `NegateSpell = [485, 5682]`, an any-of group
+       exactly like the lava amulet/feather pair above. The route picker/walker only ever resolve to
+       *sourcing* one representative item from a multi-item group (whichever the acquisition pipeline
+       can actually reach — here, trollskin via a shop), so a player who instead equips a *different*
+       group member they already own (swamp boots) is just as protected even though the client's
+       path-item tracking was, before this report's fix, still pinned to the one it originally chose.
      - Timer cancel on exit: the `6/1139` up-exit is `(Cast: pre-516, post-0)` → spell **516**
        `151`(EndCast→**515** "stop drowning"), and 515 `153`(KillSpell) **512** & **513** — leaving the
        water cancels the drown timer. (`Cast: pre-N` = cast spell N *before* moving through the exit.)
