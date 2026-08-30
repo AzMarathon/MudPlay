@@ -140,10 +140,6 @@ public sealed class TerminalControl : Control
     private double MaxScale => Math.Max(1.0, MaxEffectiveFontSize / FontSize);
 
     private Typeface _typeface;
-    // Bold variant, cached alongside _typeface. DrawRun would otherwise allocate a
-    // fresh bold Typeface — a managed wrapper over native Skia/HarfBuzz shaping
-    // resources — for every bold run on every frame, churning native memory.
-    private Typeface _typefaceBold;
     // Native cell box at FontSize. Glyphs are ALWAYS drawn at this size; any
     // window fitting happens by upscaling the rendered bitmap, never by
     // rasterising the bitmap font at a fractional point size (which smears
@@ -190,7 +186,6 @@ public sealed class TerminalControl : Control
         Focusable = true;
         ClipToBounds = true;
         _typeface = new Typeface(FontFamily);
-        _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
         UpdateRenderMode();
     }
 
@@ -362,7 +357,6 @@ public sealed class TerminalControl : Control
     private void RecalculateMetrics()
     {
         _typeface = new Typeface(FontFamily);
-        _typefaceBold = new Typeface(FontFamily, FontStyle.Normal, FontWeight.Bold);
         UpdateRenderMode();
         (_cellW, _cellH) = MeasureCell(FontSize);
         RecomputeScale();
@@ -752,7 +746,14 @@ public sealed class TerminalControl : Control
         // Drawing a run as one FormattedText lets the font's advance widths
         // drift the glyph row away from the cell grid by fractions of a pixel,
         // which manifests as the visible "color bleed" between cells.
-        var typeface = bold ? _typefaceBold : _typeface;
+        //
+        // Always the regular weight — never a bold typeface. In MajorMUD's world SGR
+        // "bold" (SGR 1) means BRIGHT, not heavy: it's already applied to the colour
+        // above via ResolveForeground(..., bold). A bold FACE on top is faux-bolding
+        // MegaMUD never does — room names + hostile-monster names came out visibly
+        // heavier than the reference client on vector fonts (the MX437 bitmap has no
+        // bold face, so it always looked right). Match that: bright colour, normal weight.
+        var typeface = _typeface;
         for (int i = x0; i < x1; i++)
         {
             char ch = screen[i, y].Char;
