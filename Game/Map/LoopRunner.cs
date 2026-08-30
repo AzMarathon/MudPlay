@@ -1675,6 +1675,24 @@ public sealed class LoopRunner : IRecoverableEngine
                 });
                 return;
             }
+            // A door / winch / hidden-exit sub-FSM was mid-flight when the pause
+            // hit. Its OWN reply (not a tracker move) drives the step — it sets
+            // _expectedMoveSource and EmitCardinals the move itself — so the tracker
+            // legitimately still reads Confirmed at the source room. The refusal /
+            // Suspect checks below would misread that as "blocked at source" and
+            // spuriously abort the in-progress open (burning a recover attempt);
+            // OnTrackerStateChanged guards the identical case at the top of its
+            // real-time handler. Mirror it here: wait for the sub-FSM's reply,
+            // bounded by the stall watchdog in case the interrupting combat swallowed
+            // it, rather than recovering or resending.
+            if (_stepInFlight
+                && (_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch))
+            {
+                _log?.Info("LoopRunner",
+                    $"resume: step {_index + 1} has a door/winch/hidden sub-FSM in flight; awaiting its reply, not recovering or resending");
+                ArmStallWatchdog($"resume with step {_index + 1} sub-FSM in flight");
+                return;
+            }
             // A MoveRefusal ("There is no exit in that direction!", a shut
             // door, etc.) resolved WHILE paused. RoomTracker.NoteMoveBlocked
             // correctly reverted Pending → Confirmed at the source room and

@@ -241,6 +241,35 @@ public sealed class CasterMessageMatcher
         return false;
     }
 
+    // Pull the FULL target name out of a matched caster line when we only know the
+    // shorthand the user typed after the cast code — a hand-typed single-target cast
+    // (`gbls fuj`) whose success line names the resolved target in full (`You cast
+    // greater bless on Fujin!` → "Fujin"). Prefers a pinned {target} slot; otherwise
+    // the capture that STARTS WITH what we typed (the spell-name capture won't, so the
+    // shorthand disambiguates target from spell). False when the line doesn't match or
+    // nothing fits the shorthand (a different line, or an ambiguous / failed cast).
+    public bool TryResolveTarget(string? line, string shorthand, out string target)
+    {
+        target = string.Empty;
+        if (string.IsNullOrWhiteSpace(shorthand)) return false;
+        if (!TryMatch(line, out IReadOnlyList<string> caps)) return false;
+
+        string sh = shorthand.Trim();
+        int t = IndexOfRole(PlaceholderRole.Target);
+        if (t >= 0)
+        {
+            if (!StartsWithFold(caps[t], sh)) return false;   // pinned target must fit what we typed
+            target = caps[t].Trim();
+            return true;
+        }
+        foreach (string c in caps)
+            if (StartsWithFold(c, sh)) { target = c.Trim(); return true; }
+        return false;
+    }
+
+    private static bool StartsWithFold(string capture, string prefix) =>
+        capture.Trim().StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase);
+
     // First capture carrying the given role, or -1. Index aligns with the TryMatch
     // capture array (both ordered by template position).
     private int IndexOfRole(PlaceholderRole role)

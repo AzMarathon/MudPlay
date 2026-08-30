@@ -24,6 +24,10 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     public string MemberKey { get; }
     public bool IsParty { get; }
     public bool IsWholeParty { get; }
+    // For a whole-party MEMBER row: was this member in the party when the buff was last
+    // cast? Covered members read the shared whole-party timer; a member who joined after
+    // (not covered) shows "not up", so the menu flags who's missing the party buff.
+    public bool WholePartyCovered { get; }
 
     [ObservableProperty] private string _name;
     [ObservableProperty] private string _targetText;
@@ -51,12 +55,13 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
 
     public BuffWatchdogRowViewModel(
         string castCode, bool isParty, string name, string targetText, bool isLearned,
-        bool isWholeParty = false, string memberKey = "")
+        bool isWholeParty = false, string memberKey = "", bool wholePartyCovered = false)
     {
         CastCode = castCode;
         IsParty = isParty;
         IsWholeParty = isWholeParty;
         MemberKey = memberKey;
+        WholePartyCovered = wholePartyCovered;
         _name = name;
         _targetText = targetText;
         _isLearned = isLearned;

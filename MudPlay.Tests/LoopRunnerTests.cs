@@ -1287,6 +1287,47 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void ClosedDoorInFlight_CombatPauseThenResume_WaitsForDoor_DoesNotRecoverOrResend()
+    {
+        // A door-open FSM in flight when a Combat gate pauses the loop must NOT be
+        // aborted on resume. The FSM has set _stepInFlight and _expectedMoveSource
+        // but hasn't crossed yet, so the tracker legitimately reads Confirmed at the
+        // source room — which the resume-time "refused while paused" check would
+        // otherwise misread as blocked-at-source and spuriously enter recovery,
+        // burning a recover attempt and killing the in-progress open. The loop must
+        // wait for the door reply instead.
+        Harness h = NewHarness(DoorGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Action<DoorOpenResult>? doorReply = null;
+        h.Runner.SetDoorEnqueuer((_, _, _, _, _, reply) => doorReply = reply);
+        h.Runner.SetDoorStopper(() => { });
+
+        h.Runner.Start(new Loop("house", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.NotNull(doorReply);
+        Assert.Empty(h.Sent);                        // door FSM in flight, nothing on the wire
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        // Combat asserts mid-open, then clears.
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+
+        // Resume must NOT recover and must NOT resend — the door FSM is still owed
+        // its reply.
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.DoesNotContain(h.Events,
+            e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+        Assert.Empty(h.Sent);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        // The door finally opens — the loop crosses as normal, proving it only waited.
+        doorReply!(DoorOpenResult.Opened.Instance);
+        Assert.Single(h.Sent);
+        Assert.Equal("e\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    [Fact]
     public void Circuit_ClosedDoor_WithEnqueuer_FailsLoud_WhenDoorWontOpen()
     {
         // The door FSM exhausting its verbs (bash/pick out, key missing) must

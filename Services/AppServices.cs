@@ -2430,6 +2430,10 @@ public sealed class AppServices
         Profile.ProfileLoaded  += _ => ApplyPartyFromActiveProfile();
         Profile.ProfileClosed  += ResetPartyToDefaults;
         Profile.ProfileMutated += _ => ApplyPartyFromActiveProfile();
+        // Dump the configured buff plan on load / edit so a "buffs aren't working"
+        // report shows exactly how they're set up.
+        Profile.ProfileLoaded  += LogBuffConfiguration;
+        Profile.ProfileMutated += LogBuffConfiguration;
         Profile.ProfileLoaded  += _ => ApplyTalkFromActiveProfile();
         Profile.ProfileClosed  += ResetTalkToDefaults;
         Profile.ProfileMutated += _ => ApplyTalkFromActiveProfile();
@@ -3463,17 +3467,26 @@ public sealed class AppServices
             AbilBreakdown,
             readConfig: () =>
             {
-                Models.Profile.SpellsSettings s =
-                    ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-                return new Game.Spells.ManaRegenRerollConfig(
-                    s.ManaRegenRerollThreshold, s.ManaRegenRerollCap);
+                Models.Profile.BuffSlot? slot = ManaRegenRerollSlot();
+                return new Game.Spells.ManaRegenRerollConfig(slot?.RerollThreshold, slot?.RerollCount ?? 0);
             },
             sendAbilQuery: () =>
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
             recast: shortCode => CastDirector.RequestManaRegenReroll(shortCode),
             canAffordReroll: CanAffordManaRegenReroll,
+            // Stock has no `abil 145` — judge the roll from the observed passive mana
+            // tick instead (fed below from RegenTracker).
+            useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             log: Log);
         CastDirector.SetSelfBuffLandedSink(OnSelfBuffLandedForReroll);
+        // Feed the reroller clean NATURAL mana ticks (Stock's roll-quality signal).
+        // Meditate ticks are unaffected by spell regen and can stack on a natural tick,
+        // so a tick observed while meditating is skipped; resting doesn't touch mana.
+        Regen.MaTickObserved += sample =>
+        {
+            if (sample.Position == Game.PlayerPosition.Meditating) return;
+            ManaRegen.OnManaTickObserved(sample.Delta);
+        };
 
         // Opt the combat engine into the
         // per-round combat-spell economy (pre-attack debuff + multi/normal/
@@ -3520,7 +3533,7 @@ public sealed class AppServices
             // A hand-typed cast feeds BOTH the combat resume signal and the buff-recast
             // clock: NoteManualBuffCast arms the timer (by cast code) for a hand-cast buff
             // so the Buff Watchdog + recast engine track it the same as an engine cast.
-            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c); });
+            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c, target); });
         // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
         // taking the round's attack — a user override — while an in-between spell (heal
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
@@ -4737,10 +4750,8 @@ public sealed class AppServices
             catalogue:   () => Lights.All,
             resolveRoom: RoomGraph.GetRoom,
             wornIllu:    () => PlayerIllumination.WornOnly,
-            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(
-                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell),
-            roomLightSpellName: () =>
-                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell,
+            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(RoomLightSlotSpell()),
+            roomLightSpellName: RoomLightSlotSpell,
             castRoomLightSpell: name => Cast.TryCast(name),
             settings:    () => ReadSection<Models.Profile.AutoLightSettings>(Profile.Current, "AutoLight"),
             log:         Log);
@@ -5859,15 +5870,20 @@ public sealed class AppServices
             if (Spellbook.FindByCastCode(code.Trim()) is { } s)
                 selfBuffs.Add((s.Short, s.Number));
         }
-        foreach (string code in spells.BlessSlots.Values) AddSelf(code);
+        Models.Profile.BuffSettings? buffs = Profile.Current?.PartyBuffs;
+        // The unified list's self-cast slots are the covered candidates (bless +
+        // when-full folded here). Whole-party / member-target slots aren't self-casts.
+        if (buffs is not null)
+            foreach (Models.Profile.BuffSlot pslot in buffs.Slots)
+                if (pslot.CastOnSelf && !IsPartyWideBuff(pslot.Spell ?? string.Empty))
+                    AddSelf(pslot.Spell);
+        // HP regen still lives on the Spells tab (mana regen is a unified slot, already
+        // covered by the CastOnSelf loop above).
         AddSelf(spells.HpRegenSpell);
-        AddSelf(spells.MaRegenSpell);
-        AddSelf(spells.WhenHpFullSpell);
-        AddSelf(spells.WhenMaFullSpell);
         if (selfBuffs.Count == 0) return map;
 
-        if (Profile.Current?.PartyBuffs is not { } buffs) return map;
-        foreach (Models.Profile.PartyBuffSlot pslot in buffs.Slots)
+        if (buffs is null) return map;
+        foreach (Models.Profile.BuffSlot pslot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
             if (!pslot.WholePartyOn) continue;             // toggled off → not cast → can't cover
@@ -6016,24 +6032,119 @@ public sealed class AppServices
         return true;
     }
 
-    // A self-buff of ours landed (confirmed via its AppliedMessage). On
-    // Paradigm, if it's the configured mana-regen spell AND that spell is a
-    // code-145 rolled affect (nature tap / mana flux, not a HoT like chaos
-    // surge), hand it to the reroll engine to read abil 145 and reroll a
-    // bad value. Stock has no abil breakdown, so it's a no-op there.
+    // A self-buff of ours landed (confirmed via its AppliedMessage). If it's the
+    // configured mana-regen roll spell (nature tap / mana flux, a code-145 rolled
+    // affect — not a HoT like chaos surge), hand it to the reroll engine. On Paradigm
+    // the engine reads abil 145; on Stock it waits for the next observed passive mana
+    // tick. Either way it rerolls a bad value.
     private void OnSelfBuffLandedForReroll(string shortCode)
     {
         if (string.IsNullOrWhiteSpace(shortCode)) return;
-        if (GameData.ActiveRealm != Game.RealmType.ParaMud) return;
 
-        Models.Profile.SpellsSettings spells =
-            ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-        string? maRegen = spells.MaRegenSpell?.Trim();
-        if (string.IsNullOrEmpty(maRegen)) return;
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } maRegen) return;
         if (!string.Equals(maRegen, shortCode.Trim(), StringComparison.OrdinalIgnoreCase)) return;
-        if (!IsManaRegenRollSpell(maRegen)) return;
 
         ManaRegen.OnRollSpellLanded(maRegen);
+    }
+
+    // The unified-list slot that drives mana-regen rerolling: a CastOnSelf slot whose
+    // spell is a code-145 rolled regen-rate spell (nature tap / mana flux / prfl). One
+    // per character; null when none is configured. (The reroll config — threshold /
+    // count — rides on this slot.)
+    private Models.Profile.BuffSlot? ManaRegenRerollSlot()
+    {
+        if (Profile.Current?.PartyBuffs is not { } buffs) return null;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+            if (s.CastOnSelf && !string.IsNullOrWhiteSpace(s.Spell) && IsManaRegenRollSpell(s.Spell.Trim()))
+                return s;
+        return null;
+    }
+
+    // Live worst/best passive mana-regen TICK for a mana-regen roll spell at the
+    // current character — feeds the Add-buff dialog's Stock reroll slider so the tick
+    // threshold shows min↔max. The spell's level-scaled roll range spans the slider;
+    // the tick math folds in the summed worn +ManaRgn% (the dominant term). Null when
+    // the spell isn't a resolvable roll spell or the class isn't a caster.
+    public (int Worst, int Best)? ManaRegenTickRange(string? spellCode)
+    {
+        if (string.IsNullOrWhiteSpace(spellCode)) return null;
+        if (Spellbook.FindByCastCode(spellCode.Trim()) is not { } spell) return null;
+        if (!Game.Spells.ManaRegenReroller.IsRollSpell(spell.Formula)) return null;
+
+        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        int mageryType = RowInt(classRow, "MageryType");
+        if (mageryType is not (1 or 2 or 3)) return null;   // non-caster class
+        int mageryLevel = RowInt(classRow, "MageryLVL");
+
+        int level = System.Math.Max(1, PlayerStats.Level);
+        (long rmin, long rmax) = Game.Spells.SpellCalculator.AffectMagnitude(spell.Formula, level);
+        int gearRegen = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
+
+        Game.Calculators.ManaRegenBreakpointCalculator.Inputs inputs = new(
+            Level: level, MageryType: mageryType, Intellect: PlayerStats.Intellect,
+            Willpower: PlayerStats.Willpower, MageryLevel: mageryLevel,
+            GearRegenPercent: gearRegen, Realm: GameData.ActiveRealm);
+        Game.Calculators.ManaRegenBreakpointCalculator.Result r =
+            Game.Calculators.ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
+        return (r.WorstTick, r.BestTick);
+    }
+
+    private static int RowInt(System.Text.Json.JsonElement? row, string property)
+    {
+        if (row is not System.Text.Json.JsonElement el
+            || el.ValueKind != System.Text.Json.JsonValueKind.Object) return 0;
+        return el.TryGetProperty(property, out System.Text.Json.JsonElement v)
+            && v.ValueKind == System.Text.Json.JsonValueKind.Number
+            && v.TryGetInt32(out int n) ? n : 0;
+    }
+
+    // Dump the character's configured buff plan (the unified list) to the program log
+    // on profile load / edit, so a "my buffs aren't working" report shows exactly how
+    // they're set up — target(s), recast lead, and any per-slot conditions.
+    private void LogBuffConfiguration(Models.Profile.CharacterProfile profile)
+    {
+        if (profile.PartyBuffs is not { Slots.Count: > 0 } buffs)
+        {
+            Log.Info("Buffs", "Buff plan: none configured.");
+            return;
+        }
+
+        Log.Info("Buffs", $"Buff plan — {buffs.Slots.Count} slot(s):");
+        int n = 0;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+        {
+            n++;
+            if (string.IsNullOrWhiteSpace(s.Spell)) { Log.Info("Buffs", $"  {n}. (empty)"); continue; }
+
+            System.Collections.Generic.List<string> who = new();
+            if (s.CastOnSelf) who.Add("self");
+            if (s.WholePartyOn && IsPartyWideBuff(s.Spell)) who.Add("party-wide");
+            if (s.AllMembers) who.Add("all-members");
+            else if (s.Targets.Count > 0) who.Add(string.Join("+", s.Targets));
+
+            System.Collections.Generic.List<string> cond = new();
+            if (s.OnlyWhenHpFull) cond.Add("hp-full");
+            if (s.OnlyWhenMaFull) cond.Add("ma-full");
+            if (s.OnlyWhenDark) cond.Add("only-dark");
+            if (s.CastBeforeRestingForMana) cond.Add("pre-rest");
+            if (s.RerollCount > 0) cond.Add($"reroll<{s.RerollThreshold?.ToString() ?? "-"} x{s.RerollCount}");
+
+            string target = who.Count > 0 ? string.Join("/", who) : "no target";
+            string condStr = cond.Count > 0 ? $" [{string.Join(", ", cond)}]" : string.Empty;
+            Log.Info("Buffs", $"  {n}. {s.Spell.Trim()} → {target}, recast@{s.RecastMarginSec}s{condStr}");
+        }
+    }
+
+    // The unified-list "only when dark" light spell the auto-light system casts on
+    // entering a dark room — a CastOnSelf slot flagged OnlyWhenDark. Null when none.
+    private string? RoomLightSlotSpell()
+    {
+        if (Profile.Current?.PartyBuffs is not { } buffs) return null;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+            if (s.CastOnSelf && s.OnlyWhenDark && !string.IsNullOrWhiteSpace(s.Spell))
+                return s.Spell!.Trim();
+        return null;
     }
 
     // True when the spell with cast code shortCode carries a
@@ -6056,10 +6167,7 @@ public sealed class AppServices
         int maxMa = PlayerState.MaxMa;
         if (maxMa <= 0) return false;
 
-        Models.Profile.SpellsSettings spells =
-            ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-        string? shortCode = spells.MaRegenSpell?.Trim();
-        if (string.IsNullOrEmpty(shortCode)) return false;
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } shortCode) return false;
 
         int cost = Spellbook.ManaCostOf(shortCode) ?? 0;
         Models.Profile.HealthSettings health =

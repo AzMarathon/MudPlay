@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.34.2**
-> - Fixed a related navigation stall: an ambiguous room observation that landed the tracker in Suspect while the loop was paused (a combat redisplay, another player's arrival) was also silently dropped — the loop would resume by blindly re-sending the same move, and since the tracker can't even re-arm Pending from Suspect (no confirmed anchor to predict from), a refusal on that resend was ALSO dropped, stranding the loop in Suspect with no way out
-> - The loop now forwards this case to the recovery gate on resume, exactly like it already does in real time
+> **Version 3.35.4**
+> - Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the doomed move and then sit there until an unrelated event nudged it (observed stalls from minutes to over an hour). It now enters recovery (reroutes) immediately on resume.
+> - Fixed a related stall where an ambiguous room observation (Suspect) resolving mid-pause stranded the loop with no way out; it now forwards to the recovery gate on resume, like it does in real time.
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
