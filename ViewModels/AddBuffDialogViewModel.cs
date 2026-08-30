@@ -75,10 +75,10 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     // Reroll wording adapts to the realm: Stock judges the roll from the observed
     // passive mana TICK (an MP jump on the statline); Paradigm from the rolled
     // percent read off `abil 145`.
-    public string RerollThresholdLabel => _isStockRealm ? "Reroll below tick" : "Reroll below";
+    public string RerollThresholdLabel => _isStockRealm ? "Reroll below tick" : "Reroll below abil 145";
     public string RerollThresholdTip => _isStockRealm
         ? "Reroll while the observed passive mana tick lands below this MP. Blank = don't reroll."
-        : "Reroll while the rolled mana-regen value lands below this. Blank = don't reroll.";
+        : "Reroll while the spell's rolled mana-regen value — its `abil 145` spells contribution, which can be negative — lands below this. Blank = don't reroll.";
 
     // Stock reroll threshold slider: when the roll spell's live worst/best tick is
     // known, show a slider between them so the threshold reads against min↔max;

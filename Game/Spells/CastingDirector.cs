@@ -97,6 +97,13 @@ public sealed class CastingDirector : IDisposable
     private Func<bool>? _autoBlessEnabled;
     private Func<bool>? _attackOwed;
     private Func<bool>? _isTriggeredRest;
+    // True while a MANA-recovery rest is in progress — the mana-rest lock. Asserted
+    // when mana drops below its rest trigger and held (through a combat interruption)
+    // until mana tops back up to the rest-max target. Gates the "cast before resting
+    // for mana" slot: unlike _isTriggeredRest (any recovery rest, drops on combat)
+    // this is mana-specific and combat-durable, matching what that flag means. Left
+    // unwired, the pre-rest slot falls back to never-eligible (fails closed).
+    private Func<bool>? _isManaRestActive;
     // True while the telnet link is up. Null (unwired, tests) = treat as connected.
     // Gates the whole between-round loop: while disconnected the wire-send is a no-op
     // but TryCast still returns true and arms the recast timer, so an ungated loop
@@ -206,7 +213,7 @@ public sealed class CastingDirector : IDisposable
     // Self-buff cast code → the party-wide party buff that removes (supersedes) it while
     // in a party. PickSelfBuff skips a covered slot; the Buff Watchdog labels it.
     private Func<IReadOnlyDictionary<string, string>>? _selfBuffCoverage;
-    private Action<string>? _selfBuffLandedSink;
+    private Action<string>? _selfBuffCastSink;
     private Func<DateTime> _now = () => DateTime.UtcNow;
     private LineExtractor? _lines;
 
@@ -413,6 +420,15 @@ public sealed class CastingDirector : IDisposable
         _isTriggeredRest = isTriggeredRest;
     }
 
+    // Wire the mana-rest-lock gate for "cast before resting for mana" slots (see
+    // _isManaRestActive). True while a mana-recovery rest is active — held through a
+    // combat interruption until mana reaches its rest-max target.
+    public void SetManaRestGate(Func<bool> isManaRestActive)
+    {
+        ArgumentNullException.ThrowIfNull(isManaRestActive);
+        _isManaRestActive = isManaRestActive;
+    }
+
     // Wire the buff-strip-room gate. When the predicate returns true, the current
     // room's cast-on-enter spell strips buffs (RemovesSpell / DispellMagic), so the
     // Buffing category is suppressed — re-casting a buff the room immediately tears
@@ -524,15 +540,20 @@ public sealed class CastingDirector : IDisposable
         new Dictionary<string, string>();
 
     // Wire a sink notified with the 4-letter cast code every time one of OUR
-    // self-buffs is confirmed to have landed (via the ConditionTracker AppliedMessage
-    // path). The mana-regen reroll engine subscribes here to learn when a code-145
-    // roll spell (nature tap / mana flux) re-landed so it can read abil 145 and
-    // reroll a bad value; the sink itself owns the spell / realm filtering. Optional
-    // — until wired, self-buff landings only refresh the recast timer.
-    public void SetSelfBuffLandedSink(Action<string> sink)
+    // self-buffs is CAST (StartSelfBuffTimer, right after the cast reaches the wire).
+    // The mana-regen reroll engine subscribes here to read the fresh roll off abil 145
+    // after a code-145 roll spell (nature tap / mana flux) goes out; the sink owns the
+    // spell / realm filtering. Deliberately keyed to the send, NOT the AppliedMessage
+    // confirm: a roll spell confirms via the SHARED "mana regenerating" condition,
+    // which the applied-line path can't map back to the specific spell (#406), so the
+    // confirm never fires for it and a confirm-keyed reroll never ran
+    // (paradigm-20260830-110918). The send is the reliable per-cast signal, and firing
+    // the abil query after the cast (TryCast precedes StartSelfBuffTimer) reads the
+    // post-cast value. Optional — until wired, casts only arm the recast timer.
+    public void SetSelfBuffCastSink(Action<string> sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
-        _selfBuffLandedSink = sink;
+        _selfBuffCastSink = sink;
     }
 
     // Override the clock used for buff-expiry math. Test seam — production uses
@@ -760,6 +781,11 @@ public sealed class CastingDirector : IDisposable
             $"self-buff {spellShort} sent — optimistic timer {seconds}s"
             + (resolved ? "" : " (fallback — no resolved duration)")
             + $", recast in {Math.Max(0L, seconds - marginSec)}s; awaiting applied-line confirm");
+        // Feed the mana-regen reroll engine off the SEND (this runs after TryCast, so
+        // the cast is on the wire and the sink's abil 145 query reads the fresh roll).
+        // The sink filters for the configured code-145 roll spell + realm; every other
+        // self-buff send is a cheap no-op there.
+        _selfBuffCastSink?.Invoke(spellShort);
     }
 
     // A manually-typed buff cast (the user entered its 4-letter cast code) — arm /
@@ -894,10 +920,10 @@ public sealed class CastingDirector : IDisposable
             // Landed — the real duration timer is now authoritative, so the pending
             // optimistic marker mustn't later be treated as an unlanded cast.
             if (_pendingSelfBuffShort == shortCode) _pendingSelfBuffShort = null;
-            // Feed the reroll engine: a re-landed code-145 roll spell wants its
-            // fresh roll read off abil 145. The sink filters for the roll spell
-            // + Paradigm realm; here we just report the confirmed landing.
-            _selfBuffLandedSink?.Invoke(shortCode);
+            // NOTE: the mana-regen reroll engine is fed off the SEND path
+            // (StartSelfBuffTimer), NOT here — a roll spell confirms via the shared
+            // "mana regenerating" condition, which can't be mapped back to the specific
+            // spell, so this applied-confirm never fires for it (paradigm-20260830-110918).
         }
         Evaluate();
     }
@@ -1758,11 +1784,15 @@ public sealed class CastingDirector : IDisposable
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
             }
 
-            // "Cast before resting for mana": a pre-rest top-up cast only while a
-            // recovery rest is running (so the fresh regen boosts the rest), instead of
-            // being maintained always-up. Otherwise the slot uses the normal self gate.
+            // "Cast before resting for mana": keep the regen buff up (recast on expiry)
+            // only while the mana-rest lock is held — from when mana drops below its rest
+            // trigger until it tops back up to rest-max — so the buff boosts the rest and
+            // then stops. The lock is mana-specific and combat-durable: a mob walking in
+            // mid-rest doesn't drop it, so the buff stays up through that combat until mana
+            // recovers. Unchecked, the slot is maintained always-up via the normal self
+            // gate. (Left unwired — tests — the lock reads false, so the slot never fires.)
             bool selfEligible = slot.CastBeforeRestingForMana
-                ? (triggeredRest && !_state.InCombat)
+                ? (_isManaRestActive?.Invoke() ?? false)
                 : selfAllowed;
 
             // Self target (CastOnSelf) — self-gated, keyed "". Works for a spell OR a

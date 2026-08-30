@@ -3408,6 +3408,10 @@ public sealed class AppServices
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));
         CastDirector.SetTriggeredRestGate(() => Health.IsRecoveringRest);
+        // Mana-rest lock for "cast before resting for mana" slots — held while the
+        // mana-recovery gate is asserted (mana below target), durable across a combat
+        // interruption, released when mana tops back up.
+        CastDirector.SetManaRestGate(() => Health.MaGateAsserted);
         // Buff-strip-room gate — the current room casts a buff-removal spell on
         // entry (RemovesSpell / DispellMagic), so suppress buffs here rather than
         // burn mana on a buff the room tears straight back off.
@@ -3493,7 +3497,7 @@ public sealed class AppServices
             // tick instead (fed below from RegenTracker).
             useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             log: Log);
-        CastDirector.SetSelfBuffLandedSink(OnSelfBuffLandedForReroll);
+        CastDirector.SetSelfBuffCastSink(OnSelfBuffCastForReroll);
         // Feed the reroller clean NATURAL mana ticks (Stock's roll-quality signal).
         // Meditate ticks are unaffected by spell regen and can stack on a natural tick,
         // so a tick observed while meditating is skipped; resting doesn't touch mana.
@@ -6089,12 +6093,15 @@ public sealed class AppServices
         return true;
     }
 
-    // A self-buff of ours landed (confirmed via its AppliedMessage). If it's the
-    // configured mana-regen roll spell (nature tap / mana flux, a code-145 rolled
-    // affect — not a HoT like chaos surge), hand it to the reroll engine. On Paradigm
-    // the engine reads abil 145; on Stock it waits for the next observed passive mana
-    // tick. Either way it rerolls a bad value.
-    private void OnSelfBuffLandedForReroll(string shortCode)
+    // A self-buff of ours was just CAST (fired from StartSelfBuffTimer, after the cast
+    // reached the wire). If it's the configured mana-regen roll spell (nature tap /
+    // mana flux, a code-145 rolled affect — not a HoT like chaos surge), hand it to the
+    // reroll engine. On Paradigm the engine reads abil 145; on Stock it waits for the
+    // next observed passive mana tick. Either way it rerolls a bad value. Keyed to the
+    // cast (not the AppliedMessage confirm) because a roll spell confirms via the shared
+    // "mana regenerating" condition, which never maps back to the specific spell — so a
+    // confirm-keyed reroll never fired at all (paradigm-20260830-110918).
+    private void OnSelfBuffCastForReroll(string shortCode)
     {
         if (string.IsNullOrWhiteSpace(shortCode)) return;
 

@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.36.9
+
+- Fixed mana-regen rerolling never firing on Paradigm: a roll spell (mana flux / nature tap) confirms via a shared "mana regenerating" condition that couldn't be mapped back to the specific spell, so the reroll was keyed on a signal that never arrived — it sat on a bad (even negative) roll forever. The reroll now triggers off the cast itself, reads the fresh `abil 145` value, and rerolls / re-checks after each recast
+- "Reroll below" now labeled "Reroll below abil 145" on Paradigm, with a tip noting the rolled value can be negative
+- "Cast before resting for mana" reworked: the buff is now kept up (recast on expiry) only while you're actually resting for mana — through a combat interruption, until mana tops back up — then stops; unchecked still maintains it always
+- Bug report gains a Mana-regen reroll section (roll signal, cycle state, last observed roll value)
+- bug reports addressed: paradigm-20260830-110918
+
 ## 3.36.7
 
 - Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right
