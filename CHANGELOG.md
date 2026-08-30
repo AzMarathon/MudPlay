@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.37.0
+
+- `@where` reply → map flash: when you `@where` another MudPlay user and their client answers with its location, the Navigation map (if open) flashes that room green and centres on it for ~15 seconds, then drifts back to following you. `@where` several people and each answered square lights up at once, each fading on its own 15s timer; the map re-centres on the newest reply. Ignored while the map is closed
+- Tightened the shared `@where`-reply parser to require the MudPlay `{…(map N, room M)…}` wrapper, so a human telepath merely mentioning a room in prose can't be read as a location reply (also hardens the party @where-probe recovery path)
+
 ## 3.36.9
 
 - Fixed mana-regen rerolling never firing on Paradigm: a roll spell (mana flux / nature tap) confirms via a shared "mana regenerating" condition that couldn't be mapped back to the specific spell, so the reroll was keyed on a signal that never arrived — it sat on a bad (even negative) roll forever. The reroll now triggers off the cast itself, reads the fresh `abil 145` value, and rerolls / re-checks after each recast
