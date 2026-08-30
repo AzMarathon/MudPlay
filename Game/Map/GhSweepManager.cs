@@ -408,8 +408,8 @@ public sealed class GhSweepManager : IDisposable
         // this announce lands right after it rather than strictly before —
         // only fires once a start is genuinely confirmed, never on a refusal.
         Send(Mode == SweepMode.InventoryOnly
-            ? $"bg Roomba inventory mode starting - {StartedAt:yyyy-MM-dd HH:mm}."
-            : $"bg Roomba sorting starting - {StartedAt:yyyy-MM-dd HH:mm}.");
+            ? $"bg Roomba inventory mode starting - {StartedAt:yyyy-MM-dd HH:mm zzz}."
+            : $"bg Roomba sorting starting - {StartedAt:yyyy-MM-dd HH:mm zzz}.");
         PhaseChanged?.Invoke();
         return true;
     }
@@ -1380,7 +1380,7 @@ public sealed class GhSweepManager : IDisposable
             + (_stranded.Count > 0 ? $" stranded={_stranded.Count}" : string.Empty));
         DateTimeOffset started = StartedAt ?? DateTimeOffset.Now;
         DateTimeOffset finished = DateTimeOffset.Now;
-        string timespan = $"started {started:yyyy-MM-dd HH:mm}, finished {finished:yyyy-MM-dd HH:mm}";
+        string timespan = $"started {started:yyyy-MM-dd HH:mm zzz}, finished {finished:yyyy-MM-dd HH:mm zzz}";
         // _observedByRoom's raw floor tokens can carry a leading stack count
         // ("35 orc-head") the same way a `get`/`drop` command line does, so the
         // unit total needs the same split — a raw list length would undercount

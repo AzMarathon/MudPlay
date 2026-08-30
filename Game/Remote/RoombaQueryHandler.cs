@@ -164,7 +164,7 @@ public sealed class RoombaQueryHandler : IDisposable
         // is a much weaker signal than one scanned this session).
         DateTimeOffset lastSeen = sightings.Max(s => s.SeenAt);
 
-        return $"total: {total}x {name} - seen in {rooms} - last scanned {lastSeen:yyyy-MM-dd HH:mm}";
+        return $"total: {total}x {name} - seen in {rooms} - last scanned {lastSeen:yyyy-MM-dd HH:mm zzz}";
     }
 
     // Reply to `@roomba sync` with this client's entire sighting log, encoded

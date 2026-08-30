@@ -189,7 +189,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
 
         string reply = Assert.Single(Replies(engine));
-        Assert.Contains($"last scanned {before:yyyy-MM-dd HH:mm}", reply);
+        Assert.Contains($"last scanned {before:yyyy-MM-dd HH:mm zzz}", reply);
     }
 
     // Beyond MaxRoomsShown, the room list folds into a "+N more" tail instead
