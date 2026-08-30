@@ -24,10 +24,13 @@ namespace MudPlay.Game.Combat;
 // back on ProfileSaving (write-on-next-save, not a disk write per swing).
 public sealed class MonsterObservationTracker : IDisposable
 {
+    private const string LogCategory = "MonsterObs";
+
     private readonly RoomEntityClassifier _roomClassifier;
     private readonly Func<string?> _currentTarget;
     private readonly ProfileService? _profile;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly LogService? _log;
 
     private readonly Dictionary<int, MonsterObservation> _observations = new();
 
@@ -57,7 +60,8 @@ public sealed class MonsterObservationTracker : IDisposable
         RoomEntityClassifier roomClassifier,
         Func<string?> currentTarget,
         ProfileService? profile,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(roomClassifier);
@@ -66,6 +70,7 @@ public sealed class MonsterObservationTracker : IDisposable
         _currentTarget = currentTarget;
         _profile = profile;
         _clock = clock ?? (static () => DateTimeOffset.Now);
+        _log = log;
 
         _userHitsSub = router.Subscribe(KnownPatterns.UserHits, OnUserHits);
         _userMissesSub = router.Subscribe(KnownPatterns.UserMisses, OnUserMisses);
@@ -99,6 +104,7 @@ public sealed class MonsterObservationTracker : IDisposable
             _profile.Current.MonsterObservations = null;
             _profile.Save();
         }
+        _log?.Info(LogCategory, "monster observations cleared");
         Changed?.Invoke();
     }
 
@@ -135,7 +141,12 @@ public sealed class MonsterObservationTracker : IDisposable
     {
         if (ResolveCurrentTargetNumber() is not { } number) return;
         MonsterObservation o = GetOrCreate(number);
+        bool firstTime = o.PhysicalNoEffectCount == 0;
         o.PhysicalNoEffectCount++;
+        // The FIRST no-effect is a new learned fact (this monster's Magical
+        // requirement exceeds our physical) — Info; repeats are verbose noise.
+        if (firstTime) _log?.Info(LogCategory, $"learned #{number} resists physical (weapon/fists no effect)");
+        else _log?.Combat(LogCategory, $"physical no-effect vs #{number} (count={o.PhysicalNoEffectCount})");
         Touch(o);
     }
 
@@ -145,7 +156,10 @@ public sealed class MonsterObservationTracker : IDisposable
         number ??= ResolveCurrentTargetNumber();
         if (number is not { } n) return;
         MonsterObservation o = GetOrCreate(n);
+        bool firstTime = o.SpellNoEffectCount == 0;
         o.SpellNoEffectCount++;
+        if (firstTime) _log?.Info(LogCategory, $"learned #{n} resists a cast spell (spell no effect — SpellImmunity gate)");
+        else _log?.Combat(LogCategory, $"spell no-effect vs #{n} (count={o.SpellNoEffectCount})");
         Touch(o);
     }
 
@@ -207,6 +221,8 @@ public sealed class MonsterObservationTracker : IDisposable
         if (profile?.MonsterObservations is { } rows)
             foreach (MonsterObservation o in rows)
                 if (o.MonsterNumber > 0) _observations[o.MonsterNumber] = o;
+        if (_observations.Count > 0)
+            _log?.Info(LogCategory, $"hydrated {_observations.Count} monster observation(s) from profile");
         Changed?.Invoke();
     }
 

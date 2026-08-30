@@ -4387,7 +4387,7 @@ public sealed class AppServices
         // combat-line patterns CombatSessionTracker does, attributed per
         // monster instead of session-wide; persists on the loaded profile.
         MonsterObservations = new Game.Combat.MonsterObservationTracker(
-            Router, RoomClassifier, () => Combat.CurrentTarget, Profile);
+            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log);
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The
