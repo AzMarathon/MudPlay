@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.37.2
+
+- A profile copied from another character now heals its stored character name from the `stat` screen: the app was only ever writing the in-game name on create/rename, so a copied profile kept the old owner's name and mis-identified "self" everywhere it mattered (corpse recovery, party self-detection, remote-command self-echo). The authoritative name from `stat` now updates the profile once, silently, the first time it differs
+- Corpse recovery now matches your corpse against the live self-name rather than the stored profile name, so a stale profile name can't send it hunting the wrong corpse
+- bug reports addressed: stock-20260828-104653
+
 ## 3.37.1
 
 - Terminal no longer faux-bolds bright text: SGR "bold" (which MajorMUD uses for room names, hostile-monster names, etc.) is BRIGHT, not heavy — it now renders as a brighter colour at normal weight, matching MegaMUD and the MX437 bitmap default. On vector fonts (Courier New, Liberation Mono, JetBrains Mono) room names and monster names came out visibly heavier than the reference client; they now match. Applies to the main terminal and the Backscroll window
