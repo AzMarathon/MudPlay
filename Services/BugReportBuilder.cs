@@ -68,6 +68,7 @@ public static class BugReportBuilder
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
+            new("Monster observations (this character)", SafeSection(() => BuildMonsterObservations(svc))),
             new("Item overrides", SafeSection(() => BuildItemOverrides(svc))),
             new("Effective settings (resolved)", SafeSection(() => BuildEffectiveSettings(svc))),
             new("Settings overrides (deltas, excluding BBS + Display)", SafeSection(() => BuildSettings(svc))),
@@ -433,6 +434,39 @@ public static class BugReportBuilder
             sb.Append("- #").Append(n).Append(' ').Append(name)
               .Append(" [").Append(tier).Append("] — ")
               .Append(string.Join(", ", parts)).Append('\n');
+        }
+
+        return sb.ToString();
+    }
+
+    // Per-character combat outcomes actually seen against a monster (Monster
+    // Intel's "Your Observations") — the personal counterpart to the MDB-sourced
+    // monster overrides above, useful when a report is about "why won't it hit /
+    // cast on this thing".
+    private static string BuildMonsterObservations(AppServices svc)
+    {
+        StringBuilder sb = new();
+        List<Models.Profile.MonsterObservation> rows = svc.MonsterObservations.Snapshot()
+            .OrderByDescending(o => o.LastObservedAt).ToList();
+
+        sb.Append("Combat outcomes THIS character has observed per monster — landed-hit damage, hit rate, and confirmed physical/spell no-effect discoveries (")
+          .Append(rows.Count).Append(")\n\n");
+        if (rows.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
+
+        foreach (Models.Profile.MonsterObservation o in rows)
+        {
+            string name = svc.GameData.FindNameByNumber("Monsters", o.MonsterNumber) ?? "(unknown)";
+            List<string> parts = new();
+            if (o.HitCount > 0)
+                parts.Add($"hits {o.HitCount} (dmg {o.HitDamageMin}-{o.HitDamageMax}, avg {o.AvgHitDamage:0.#})");
+            if (o.SwingCount > 0)
+                parts.Add($"hit-rate {o.HitRatePercent:0}% ({o.HitCount}/{o.SwingCount})");
+            if (o.PhysicalNoEffectCount > 0) parts.Add($"physical-no-effect x{o.PhysicalNoEffectCount}");
+            if (o.SpellNoEffectCount > 0) parts.Add($"spell-no-effect x{o.SpellNoEffectCount}");
+            if (parts.Count == 0) parts.Add("(no outcomes recorded)");
+
+            sb.Append("- #").Append(o.MonsterNumber).Append(' ').Append(name)
+              .Append(" — ").Append(string.Join(", ", parts)).Append('\n');
         }
 
         return sb.ToString();

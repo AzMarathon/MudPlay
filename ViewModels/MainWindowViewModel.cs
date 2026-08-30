@@ -4418,6 +4418,31 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
+    // Singleton handle for the live MonsterIntelWindow — re-press toggles closed.
+    private MonsterIntelWindow? _monsterIntel;
+
+    [RelayCommand]
+    private void OpenMonsterIntel()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_monsterIntel is { } existing) { existing.Close(); return; }
+
+        var svc = AppServices.Current;
+        MonsterIntelWindow window = new()
+        {
+            DataContext = new MonsterIntelViewModel(
+                svc.GameData, svc.MonsterCatalog, svc.Dialogs, svc.Resolver,
+                svc.MonsterOverlaySeed, svc.RoomGraph,
+                svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic,
+                svc.RoomClassifier, svc.MonsterObservations, svc.PlayerState),
+        };
+        window.Closed += (_, _) => _monsterIntel = null;
+        _monsterIntel = window;
+        window.Show(main);
+    }
+
     // Singleton handle for the live SessionStatsWindow — re-press toggles closed.
     private SessionStatsWindow? _sessionStats;
 
@@ -4586,6 +4611,7 @@ public partial class MainWindowViewModel : ObservableObject
     public string WorkshopGesture         => GetGesture(Models.Profile.BuiltInAction.OpenWorkshop);
     public string NavigationGesture       => GetGesture(Models.Profile.BuiltInAction.OpenNavigation);
     public string SpellBookGesture        => GetGesture(Models.Profile.BuiltInAction.OpenSpellBook);
+    public string MonsterIntelGesture     => GetGesture(Models.Profile.BuiltInAction.OpenMonsterIntel);
     public string LogPaneGesture          => GetGesture(Models.Profile.BuiltInAction.OpenLogPane);
     public string BackscrollGesture       => GetGesture(Models.Profile.BuiltInAction.OpenBackscroll);
     public string SessionStatsGesture     => GetGesture(Models.Profile.BuiltInAction.OpenSessionStats);
