@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.34.1**
+> **Version 3.35.1**
 > - Roomba: starting a sweep or an inventory scan now gangpaths the gang house that it's underway, and finishing announces completion with a count — items moved for a sweep, items inventoried for a scan
 > - Counts are true unit totals (a stacked pile counts as its full size, not as one operation) and only fire on a genuine finish, never on a manual stop or an interrupted sweep
 >

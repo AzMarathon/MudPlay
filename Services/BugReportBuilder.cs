@@ -552,8 +552,6 @@ public static class BugReportBuilder
             ("major-heal", spells.MajorHealSpell),
             ("hp-regen", spells.HpRegenSpell),
             ("ma-regen", spells.MaRegenSpell),
-            ("when-hp-full", spells.WhenHpFullSpell),
-            ("when-ma-full", spells.WhenMaFullSpell),
         });
         Group("Cures", new (string, string?)[]
         {
@@ -562,7 +560,6 @@ public static class BugReportBuilder
             ("disease", spells.CureDiseaseSpell),
             ("blindness", spells.CureBlindnessSpell),
         });
-        Group("Self bless", SlotList(spells.BlessSlots, i => $"bless {i}"));
         Group("Party heal", new (string, string?)[]
         {
             ("minor-party-heal", party.MinorPartyHealSpell),
@@ -571,9 +568,12 @@ public static class BugReportBuilder
             ("major-party-heal-aoe", party.MajorPartyHealAoeSpell),
         });
 
-        int partyBless = 0;
-        if (svc.Profile.Current?.PartyBuffs is { } partyBuffs)
-            Group("Party bless", partyBuffs.Slots.Select(s => ($"party-bless {++partyBless}", s.Spell)));
+        // The one unified buff list (self bless + when-full + party buffs). Each slot's
+        // label carries its targeting + any per-slot condition so a "buff didn't fire"
+        // report shows exactly what was configured.
+        int buffNo = 0;
+        if (svc.Profile.Current?.PartyBuffs is { } unifiedBuffs)
+            Group("Buffs", unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(s)}]", s.Spell)));
 
         if (shown == 0) sb.Append("_(no spells configured)_\n");
         return sb.ToString();
@@ -600,13 +600,24 @@ public static class BugReportBuilder
              + $" Mana={(mana is { } m ? m.ToString() : "?")}";
     }
 
-    // Dictionary-keyed slot map (self-bless) → labelled (label, code) pairs in key
-    // order, so a numbered slot in the report matches the editor's slot index.
-    private static IEnumerable<(string Label, string? Code)> SlotList(
-        IReadOnlyDictionary<int, string> slots, Func<int, string> label)
+    // A unified buff slot's targeting + condition summary for the report label —
+    // e.g. "self", "all", "Bob,Sue", "party-wide", with "+hp-full" / "+ma-full" when
+    // a downtime condition is set. Derived from the slot's flags (whole-party is left
+    // to WholePartyOn since the classifier isn't reachable here).
+    private static string BuffScope(Models.Profile.BuffSlot s)
     {
-        foreach (int key in slots.Keys.OrderBy(k => k))
-            yield return (label(key), slots[key]);
+        List<string> who = new();
+        if (s.CastOnSelf) who.Add("self");
+        if (s.AllMembers) who.Add("all");
+        else if (s.Targets.Count > 0) who.Add(string.Join(",", s.Targets));
+        else if (s.WholePartyOn) who.Add("party-wide?");
+        string scope = who.Count > 0 ? string.Join("+", who) : "unset";
+        if (s.OnlyWhenHpFull) scope += " +hp-full";
+        if (s.OnlyWhenMaFull) scope += " +ma-full";
+        if (s.OnlyWhenDark) scope += " +only-dark";
+        if (s.CastBeforeRestingForMana) scope += " +pre-rest";
+        if (s.RerollCount > 0) scope += $" +reroll<{s.RerollThreshold?.ToString() ?? "-"}x{s.RerollCount}";
+        return scope;
     }
 
     // Per-item overlay deltas the user set in the active set — the loot-automation

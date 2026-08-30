@@ -2,10 +2,26 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.34.1
+## 3.35.1
 
 - Roomba: starting a sweep or an inventory scan now gangpaths the gang house that it's underway, and finishing announces completion with a count — items moved for a sweep, items inventoried for a scan
 - Counts are true unit totals (a stacked pile counts as its full size, not as one operation) and only fire on a genuine finish, never on a manual stop or an interrupted sweep
+
+## 3.35.0
+
+- Unified buffing: **all** automated buffing — self bless, mana/HP regen, "when HP/MA full", room light, and party buffs — now lives in **one list in the Buff Watchdog** window, replacing the Settings → Spells self-bless pickers and the Party-window buff panel
+- Each buff picks who it's cast on with checkboxes — yourself and/or party members; **"All"** is a select-all (you + every member, auto-adapting to the party) that clears the moment you untick any box
+- Timer bars are grouped **by player** (your name, then each member) instead of a Self/Party split
+- Buff Watchdog layout — config table above / below / left / right of the bars — is chosen on Settings → General, with a draggable splitter that stays put as you resize the window (the config pane keeps its size, the timer bars flex to fill)
+- Buff timer bars now sit directly on the pane background — no sunken strip stretching behind the short bars, no full-width row dividers
+- Buff Watchdog player sections use your real **in-game character name**, not the profile name
+- A configured buff that isn't set to recast on anyone and has no live timer is no longer listed — only maintained or currently-up buffs show a bar
+- A whole-party buff now shows a bar under **each member who was in the party when it was cast**; a member who swaps in afterwards reads **not up**, so you can see who's actually covered (recast stays driven by your own timer)
+- Hand-casting a single-target buff at a party member (`gbls fuj`) now lights up **that member's** bar — the success line's full name is matched back to whoever you targeted, so a shorthand still resolves correctly
+- Add-buff dialog carries per-slot conditions: only-when-HP/MA-full (fires at your rest-max, not literal full), only-when-dark for light spells, and — for a mana-regen roll spell — cast-before-resting plus the reroll threshold / max-rerolls
+- Mana-regen rerolling reads its config from the buff slot (works on Paradigm via `abil 145`); the auto-light system reads the room-light spell from the buff list
+- Your full buff plan is written to the program log on load / edit (and captured in the bug report) so a "buffs aren't working" report shows exactly how they're set up
+- Existing self-bless / regen / light / party-buff configs are migrated into the new list automatically
 
 ## 3.34.0
 

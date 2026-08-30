@@ -204,20 +204,11 @@ Open it from **View → Party**, a toolbar button, or **right-click the terminal
 
 The healing, ranks, nags, and re-invite behaviour the window reflects are all configured on **Settings → Party**.
 
-### Party Buffs panel
+### Configuring party buffs
 
-The right side of the Party window is where you configure the beneficial spells the client casts on your party. Click **＋ Add buff** to open a small picker:
+Party buffs are no longer set up here in the Party window. **All** automated buffing — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts — is now configured in **one unified list inside the Buff Watchdog** (View → Buff Watchdog): click **＋ Add buff**, pick a spell, and tick the party members (or **All**) it should be cast on. See **Buff Watchdog** under *Tools & Diagnostics* for the full walkthrough.
 
-- **Pick a buff** — it lists the buff spells you've learned that target another player or the whole party (attacks, heals, and self-only spells are filtered out), plus any **whole-party cast-on-use item** you can use (an unlimited-use item like a *shimmering greatsword* that casts a party-wide buff when used). A single-target item can't be aimed at a specific member — `use <item>` takes no target — so only party-wide items are offered; those show as a `#item` slot and cast once to blanket the party.
-- **Set a recast timer** — "recast (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off).
-- **OK** adds it as a slot.
-
-Each slot is a **row in a grid**: **✎** (edit the buff / recast timer — reopens the picker) and **⨯** (remove) sit at the left, then the buff's `name - recast` label (e.g. `bless - 15s`), a toggle column, and a column per party member — the member names run along the top as headers, so every row's checkboxes line up under them. You choose **who it's cast on** right there:
-
-- A **whole-party** buff (chant, mass frenzy, and the like — one cast blankets everyone) has a single **on/off** toggle and reads **Party Wide** across the member columns.
-- A **single-target** buff (frenzy, divine favour, regeneration…) has an **All** toggle — bless everyone present, auto-adapting to whatever party you're in — and, when All is off, a **checkbox per member** so you pick exactly who gets it. (With All ticked the per-member boxes grey out, since All already covers everyone.)
-
-A given buff is **one slot** — once a spell is slotted it drops out of the Add picker, so you can't accidentally double up (one slot's member checkboxes already cover as many members as you like). Everything saves as you edit it — there's no Save button. If your class has no spells that qualify as party buffs (nothing that targets another player or the whole party), the panel is hidden entirely. You can move the panel to the **Right** of the member list (default), **Below** it, or to the **Left** on **Settings → Party → Party Buffs panel position**. A single-target buff fires for any member who's **currently in your party** — a MajorMUD party is always in one room, so being in `par` means being in the room (a member who leaves or is uninvited drops out of the party and is no longer targeted). The one exception is a member who's **hiding**: the cast comes back *"You do not see … here!"*, so the client backs off that member — the Buff Watchdog marks them **"hidden — can't target"** — and retries the next time you **move** or they **reappear**. Targets are remembered by name, so your setup survives parties dissolving and reforming. (The two **bless while resting / during combat** gates that decide *when* the buff engine may cast still live on **Settings → Party**.)
+Two things about party buffs stay worth knowing here. A single-target buff fires for any member who's **currently in your party** — a MajorMUD party is always in one room, so being in `par` means being in the room (a member who leaves or is uninvited drops out of the party and is no longer targeted). The one exception is a member who's **hiding**: the cast comes back *"You do not see … here!"*, so the client backs off that member — the Buff Watchdog marks them **"hidden — can't target"** — and retries the next time you **move** or they **reappear**. Targets are remembered by name, so your setup survives parties dissolving and reforming. And the two **bless while resting / during combat** gates that decide *when* the party-buff engine may cast still live on **Settings → Party**.
 
 ## Leaders and followers
 
@@ -326,11 +317,11 @@ When more than one spell wants to fire, the caster follows the priority order on
 
 ## Curing and blessing
 
-Configure cure spells for holds, poison, disease, and blindness, plus several bless (buff) slots that recast as they expire. Auto-blessing — self *and* party — is controlled by the **Auto-Bless** toggle and nothing else (it's independent of Auto-Combat and Auto-Rest/Heal). By default the engine buffs while you're **moving or standing idle** (including an idle rest) and holds off **during combat** and **during a triggered recovery rest** (when HP or MA fell below your rest-if-below setting). Two opt-in checkboxes override those holds — one to also bless during a recovery rest, one to also bless while actively fighting. You can also tell it to ignore, or not announce, specific ailments.
+Configure cure spells for holds, poison, disease, and blindness on **Settings → Spells**; the bless (buff) slots that recast as they expire now live in the **Buff Watchdog** (View → Buff Watchdog — one unified list for self *and* party buffs). Auto-blessing — self *and* party — is controlled by the **Auto-Bless** toggle and nothing else (it's independent of Auto-Combat and Auto-Rest/Heal). By default the engine buffs while you're **moving or standing idle** (including an idle rest) and holds off **during combat** and **during a triggered recovery rest** (when HP or MA fell below your rest-if-below setting). Two opt-in checkboxes override those holds — one to also bless during a recovery rest, one to also bless while actively fighting (the self pair on **Settings → Spells**, the party pair on **Settings → Party**). You can also tell it to ignore, or not announce, specific ailments.
 
 ## Mana regen
 
-For mana-regen classes, the caster can rest to regen and — if configured — reroll a poor regen result up to a cap.
+For mana-regen classes, the caster can rest to regen and — if configured — reroll a poor regen result up to a cap. The mana-regen spell and its reroll settings are configured in the **Buff Watchdog** (View → Buff Watchdog); rerolling works on Paradigm.
 
 ## The Spell Book (F2)
 
@@ -580,19 +571,49 @@ Open **Session Stats** from the **View** menu or its toolbar button (it has no d
 
 ## Buff Watchdog
 
-Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. It lists the buffs you've **configured** (never the whole spellbook) — your **self-bless slots**, the **HP/MA-regen** and **when-HP/MA-full** utility buffs, any `#item`-cast buffs, and your **party-bless slots** — each on its own row with a live timer bar:
+Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. This is the **one place you configure every automated buff** — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts all live here now, in a single unified list — **and** it shows a live timer bar for each one as it runs. Re-selecting the menu item (or toolbar button) toggles it closed.
 
-- Each row **is** the timer bar: the buff's 4-letter cast code (or a `#`-prefixed item name) sits **left-aligned inside the bar**, with the **time remaining** just after it. Party-buff rows show the target beneath the bar.
-- The **bar fills as the buff ages** (empty just after it lands, full at wear-off), and a **vertical amber marker** shows where its **recast window** opens — the "recast within (seconds)" lead you set per slot. When the fill crosses the marker the bar turns amber: the buff is now due to be recast.
-- A buff that **isn't up** (worn off, or never cast) shows an empty bar labelled **not up**, so you can see at a glance which configured buffs are missing.
-- A single-target party-buff row whose member is **hiding** (the cast came back *"You do not see … here!"*) shows **hidden — can't target**; it clears and retries when you move or they reappear.
-- A small **✕** at the left of a live bar **clears that timer** — marks the buff off (e.g. when a dispel you didn't see stripped it). A configured buff that's still due recasts on the next pass; a leftover timer (say an ex-member's) just disappears. The ✕ only shows while a timer is actually up.
+### Building the buff list
+
+Click **＋ Add buff** to open the Add-buff dialog:
+
+- **Pick a spell** — the buff spells you've learned (attacks and heals are filtered out), plus any **cast-on-use buff item** you can use (an unlimited-use item like a *shimmering greatsword* that casts a buff when used; these show as a `#item` slot). What targeting a slot offers depends on the spell: a self-only spell can only be cast on you, a single-target spell can be aimed at you and/or party members, and a whole-party spell (chant and the like) blankets everyone with one cast.
+- **Set a recast timer** — "recast (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off).
+- **Set conditions** — optional per-slot gates, some of which only appear for the spell that uses them:
+  - **Only when HP is full** / **Only when MA is full** — hold the cast until you've rested up to your **rest-max** target (not literal 100%); a "topped-off, ready for the next fight" buff. A triggered recovery rest suspends it until you're back at max.
+  - **Only when the room is dark** — shown for a **light** spell. Ticked, it keeps the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); unticked, the light is maintained like any ordinary buff.
+  - **Cast before resting for mana** — shown for a **mana-regen roll** spell (nature tap / mana flux / prfl). Ticked, it fires as a pre-rest top-up; unticked, it's kept up all the time like a normal buff. Alongside it sit the reroll knobs: **Reroll below** (a threshold — reroll while the rolled regen lands under it) and **Max rerolls** (how many times to chase a better roll before accepting what landed). Rerolling works on **Paradigm** (it reads the roll back from `abil 145`).
+- **OK** adds it as a slot.
+
+Each slot is a **row** with an **✎** (edit — reopens the dialog) and an **⨯** (remove) at the left, then the buff's `name - recast` label, then the targeting checkboxes. **You choose who it's cast on right in the row:**
+
+- A **Self** box casts it on you.
+- An **All** box is a **select-all** — ticking it casts on you *and* every party member, auto-adapting to whoever's in the party. Unticking any individual box (Self or a member) clears **All** automatically.
+- A **checkbox per party member** — member names run along the top as column headers, so every row's checkboxes line up under them — lets you pick exactly who gets it.
+- A **whole-party** spell shows a single on/off toggle and reads **Party Wide** across the member columns (one cast covers everyone). A **self-only** spell shows just the **Self** box.
+
+A given spell is **one slot** — once it's slotted it drops out of the Add dialog, so you can't double up. Everything saves as you edit it; there's no Save button. Existing setups from before the unification are migrated into this list automatically.
+
+> **Note:** the **HP-regen** spell is *not* a maintained buff and isn't set here — it's a reactive minor-heal that fires when your HP dips, and it stays on **Settings → Spells** as **HP Regen**. Everything else moved to this list.
+
+### Reading the timer bars
+
+The timer bars are grouped **by player**: **your own name first** (your self buffs and any whole-party buffs), then one section per party member with the buffs cast on them.
+
+- Each bar shows the buff's cast code (or `#item` name) left-aligned inside it, with the **time remaining** just after.
+- The **bar fills as the buff ages** (empty just after it lands, full at wear-off), and a **vertical amber marker** shows where its **recast window** opens — the recast lead you set per slot. When the fill crosses the marker the bar turns amber: the buff is now due.
+- A buff that's **set to be kept up** (targeted on you or a member) but **isn't up** right now (worn off, or not cast yet) shows an empty bar labelled **not up**, so you can see at a glance which maintained buffs are missing. A configured buff that **isn't** set to recast on anyone and has no live timer isn't listed — it would just be clutter.
+- A single-target row whose member is **hiding** (the cast came back *"You do not see … here!"*) shows **hidden — can't target**; it clears and retries when you move or they reappear.
+- A small **✕** on a live bar **clears that timer** — marks the buff off (e.g. when a dispel you didn't see stripped it). A configured buff that's still due recasts on the next pass; a leftover timer (say an ex-member's) just disappears. The ✕ only shows while a timer is actually up.
 - A configured buff your character **hasn't learned** is flagged **unlearned**.
-- A **whole-party** buff (chant, mass frenzy, a party-wide cast item…) is one row — a single cast blankets the party. A **single-target** buff gets **one row per member** it's cast on (each member is blessed individually, so each has its own recast timer and name). If you untick a member you've already blessed, their row **stays until the buff actually expires** — unticking just stops future recasts, it doesn't cancel the running buff.
+- A **single-target** buff gets **one bar per member** it's cast on (each member is blessed individually, so each has its own recast timer). If you untick a member you've already blessed, their bar **stays until the buff actually expires** — unticking just stops future recasts, it doesn't cancel the running buff.
+- A **whole-party** buff blankets everyone in the party **at the moment you cast it**, so it shows a bar under **your own section and each member who was present** — all reading the one recast timer (recast is driven by *your* timer). If a member **swaps out and someone new joins**, the newcomer shows **not up** under their section: they didn't get the party buff and won't until your next recast, which re-covers whoever's in the party then. So a glance tells you who's actually covered.
 
-**What it counts as "up".** A buff's timer is armed by the **cast code** — whether the client cast it or **you typed it by hand** — so a manual cast shows up here the same as an automated one. The client deliberately **ignores the `stat` screen's buff list** (Paradigm's `You feel …! (Ns)` lines): those shared effect messages can't say which buff is which, so they're never treated as a cast. **Death and disconnect are handled to match the game:** dying wipes all your magical effects, so **your own death clears your self-buff timers** (a **party member's death** clears the timers you hold on that member); and when **you** disconnect, only **your own** buffs are in doubt — your **party's** buffs kept counting down while they stayed online, so on reconnect your **self** timers clear and re-establish, while **party** timers keep their real remaining (any that lapsed recast). Switching characters starts the watchdog empty.
+A **drag bar** sits between the config table and the timer bars — grab it to re-divide the space between the two. It stays where you leave it as you resize the window: the config table keeps its size and the timer bars flex to fill the rest. Where the config table sits relative to the bars — **above / below / left / right** — is set on **Settings → General → "Buff Watchdog layout"**; changing it reflows an open Buff Watchdog at once.
 
-The window is a live view — it refreshes about once a second while open — and re-selecting the menu item (or toolbar button) toggles it closed. It's read-only: configure the buffs themselves on the Player Workshop (self-bless slots, regen, when-full) and the **Party window's Party Buffs panel** (party buffs).
+**What it counts as "up".** A buff's timer is armed by the **cast code** — whether the client cast it or **you typed it by hand** — so a manual cast shows up here the same as an automated one. This includes a **single-target buff you hand-cast at a party member** (`gbls fuj`): you needn't type their whole name, and the buff's success line — whose wording comes from the game-data spell message — names the member in full, which the client matches back to whoever you targeted and lights up **their** bar. A whole-party or self buff you hand-cast (`unfa`, `bles`) registers the same way. The client deliberately **ignores the `stat` screen's buff list** (Paradigm's `You feel …! (Ns)` lines): those shared effect messages can't say which buff is which, so they're never treated as a cast. **Death and disconnect are handled to match the game:** dying wipes all your magical effects, so **your own death clears your self-buff timers** (a **party member's death** clears the timers you hold on that member); and when **you** disconnect, only **your own** buffs are in doubt — your **party's** buffs kept counting down while they stayed online, so on reconnect your **self** timers clear and re-establish, while **party** timers keep their real remaining (any that lapsed recast). Switching characters starts the watchdog empty.
+
+The window is a live view — it refreshes about once a second while open. The two timing gates that decide *when* the buff engine may cast — self-bless "while resting / during combat" and party-bless "while resting / during combat" — still live in Settings (**Settings → Spells** for self, **Settings → Party** for party).
 
 ## Wire Inspector (F5)
 
@@ -1201,41 +1222,28 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 
 **Default:** unset
 **What it does:** A heal-over-time spell. When your Minor-heal threshold trips, this is cast *first*, ahead of an instant heal — but only while you're still above the Major/life-threat threshold, and only if it isn't already active. Inside the life-threat band, you always get an instant heal instead.
-**When you might change it:** If you want this HoT kept up permanently rather than only cast reactively, put it in a Bless slot instead.
+**When you might change it:** If you want this HoT kept up permanently rather than only cast reactively, add it as a maintained buff in the **Buff Watchdog** instead.
 
-### Mana Regen
+### Mana regen — moved to the Buff Watchdog
 
-**Default:** unset
-**What it does:** A spell cast during downtime to boost mana regeneration — either a "roll" spell (rerolls a random regen bonus each cast) or a flat mana heal-over-time buff.
-**Important notes:** The reroll feature below only works with roll-type spells, and only on certain realms (see next entry).
+The mana-regen spell and its **reroll** knobs are no longer picked here. Add the spell in the **Buff Watchdog** (View → Buff Watchdog → ＋ Add buff) and set its conditions there: **Cast before resting for mana** (fire it as a pre-rest top-up rather than maintaining it), plus **Reroll below** (the threshold — reroll while the rolled regen lands under it) and **Max rerolls** (how many times to chase a better roll before accepting what landed). Rerolling works on **Paradigm** (it reads the roll back from `abil 145`); each reroll still runs through the normal between-round priority, so a due heal or cure fires ahead of it. See the **Buff Watchdog** section for details.
 
-### Reroll if roll below / Max rerolls
+### When HP full / When Mana full — moved to the Buff Watchdog
 
-**Default:** Threshold unset (off); Cap `3`
-**What it does:** After the Mana Regen roll spell lands, if the roll came in below this threshold, MudPlay recasts to try for a better one, up to the cap. Each recast runs through the normal between-round priority (like every other automated cast), so a due heal or cure fires ahead of a reroll and only one between-round cast goes out per combat round.
-**Important notes:** Only works on realms that expose a way to read the actual roll value back — inert on realms that don't. Leave the threshold blank to disable rerolling entirely.
-
-### When HP full / When Mana full
-
-**Default:** unset
-**What it does:** A spell cast whenever the matching pool (HP or mana) is sitting completely full — a way to spend a maxed-out resource on something useful instead of letting it sit idle.
+The "spend a maxed-out pool on something useful" casts are configured as ordinary buffs in the **Buff Watchdog** now — add the spell and tick **Only when HP is full** or **Only when MA is full** on the slot (they fire once you've rested up to your **rest-max** target). See the **Buff Watchdog** section.
 
 ### Cure Holds / Cure poison / Cure disease / Cure blindness
 
 **Default:** unset
 **What it does:** The specific spell used to cure each named ailment. These feed the Curing priority category (self first, then party members).
 
-### Room light
+### Room light — moved to the Buff Watchdog
 
-**Default:** unset
-**What it does:** A spell automatically cast when you enter a dark room (works together with the light-item automation on the Auto-Light tab).
+The room-light spell is configured in the **Buff Watchdog** now. Add it there and tick **Only when the room is dark** on the slot to keep the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); leave it unticked to maintain the light like an ordinary buff. See the **Buff Watchdog** section.
 
-### Bless spells
+### Self-bless — moved to the Buff Watchdog
 
-**Default:** all empty (10 rows on a Stock realm, 15 on ParaMud)
-**What it does:** A ranked list of self-buffs MudPlay recasts whenever they aren't currently active (the on-screen section is headed **Bless spells**, its rows labeled Bless 1, Bless 2, …). Row order is cast priority. Each row can hold a spell code or a `#item name` for a reusable buff item. The same learned-spell guard applies here, with one twist for the `#item` entries: an item-cast is only flagged (struck through / red-outlined) when you **aren't carrying or wearing that item** — a buff item you actually hold is treated as available, just like a learned spell.
-**How the options work:** Each row has its own "recast within (seconds)" — how early before the buff's tracked expiry MudPlay proactively recasts it. It defaults to **15**; set it to `0` to wait for the buff to actually wear off before recasting.
-**Important notes:** The visible row count matches your active realm's buff-slot cap; extra picks beyond that cap aren't lost, they just wait until you load a realm that supports more. An `#item` buff equips the item, uses it, and re-equips whatever it displaced — including juggling a two-handed weapon out of the way when the cast item is an off-hand piece. It waits until the client knows what you're wearing (the first inventory dump after login) before firing, so it never blindly equips over a readied two-hander.
+The self-buff slots (which spells, `#item`-cast buffs, per-slot recast timers) live in the **Buff Watchdog** now, folded into the one unified buff list alongside your party buffs — tick the **Self** box on a slot to cast it on yourself. See the **Buff Watchdog** section for how to add and target buffs. The two **timing gates** below — *when* the self-buff engine may cast — stay here on this tab.
 
 ### Bless self while resting / Bless self during combat
 
@@ -1365,7 +1373,7 @@ Settings → Party.
 
 ### Party bless
 
-**Where it's configured:** the party-buff **slots** (which spells, which members, recast timers) live in the **Party window's Party Buffs panel** — see *The Party window → Party Buffs panel* above. This tab keeps only the two timing gates below.
+**Where it's configured:** the party-buff **slots** (which spells, which members, recast timers) live in the **Buff Watchdog** — see the **Buff Watchdog** section under *Tools & Diagnostics*. This tab keeps only the two timing gates below.
 
 **Party-only, and targeting:** party buffs are cast **only while you're actually in a party** — solo, none fire (your self-bless slots still do). A **whole-party** spell (chant and the like) is sent once with no target and blankets the party, including you. A **single-target** spell is cast on each selected member individually with its own recast timer, is **not** cast on your own character (self comes from the self-bless slots), and only fires for a member who's both in your party and in the room.
 
@@ -1583,7 +1591,7 @@ Settings → Auto-Light. Everything here only matters once the master **Auto-Lig
 
 **Default:** `Automatic (per route)`
 **Available options:** `Automatic (per route)`, `Only use my room-light spell (no items)`, or the name of any purchasable light item.
-**What it does:** Chooses what light source MudPlay buys and lights when it needs one. "Automatic" picks whatever's strong enough to cover the route ahead. Choosing a specific item pins it to that light (falling back to auto-pick if it's unavailable in your current game data). "Only use my room-light spell" tells MudPlay to never buy or ready a light item at all — it relies purely on your gear and the Spells tab's room-light spell.
+**What it does:** Chooses what light source MudPlay buys and lights when it needs one. "Automatic" picks whatever's strong enough to cover the route ahead. Choosing a specific item pins it to that light (falling back to auto-pick if it's unavailable in your current game data). "Only use my room-light spell" tells MudPlay to never buy or ready a light item at all — it relies purely on your gear and the room-light spell you've configured in the Buff Watchdog.
 **When you might change it:** Pin a specific light for predictable weight/cost; use spell-only mode if you're a caster who never wants automation touching your light inventory.
 
 ### Carry (hours)
@@ -1989,12 +1997,9 @@ This section is a compact, technical lookup table for every setting documented a
 | Setting | Default | Allowed Values | Config Key | Location |
 |---|---|---|---|---|
 | Spell type priority (7 categories) | Minor party heal(1)…Debuffing(7) | 1–7 permutation | `PriorityMinorPartyHeal` … `PriorityDebuffing` | Models/Profile/SpellsSettings.cs |
-| Minor / Major heal, HP Regen, Mana Regen | unset | spell code | `MinorHealSpell`, `MajorHealSpell`, `HpRegenSpell`, `MaRegenSpell` | Models/Profile/SpellsSettings.cs |
-| Reroll if roll below / Max rerolls | unset / `3` | int or blank / 1–20 | `ManaRegenRerollThreshold` / `ManaRegenRerollCap` | Models/Profile/SpellsSettings.cs |
-| When HP/Mana full | unset | spell code | `WhenHpFullSpell` / `WhenMaFullSpell` | Models/Profile/SpellsSettings.cs |
+| Minor / Major heal, HP Regen | unset | spell code | `MinorHealSpell`, `MajorHealSpell`, `HpRegenSpell` | Models/Profile/SpellsSettings.cs |
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
-| Room light | unset | spell code | `RoomLightSpell` | Models/Profile/SpellsSettings.cs |
-| Bless slots (1–10/15) + recast margin | empty / 15s default | spell code or `#item` / 0–999 | `BlessSlots` / `BlessSlotRecastMargins` | Models/Profile/SpellsSettings.cs |
+| Unified buff list (self + party bless, room light, mana-regen + reroll, when-HP/MA-full) | empty | spell / `#item` + targets + recast + conditions | `PartyBuffs` (`BuffSettings`) | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Bless self while resting / during combat | false / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
 | Ignore / Don't announce poison, blindness, confusion, diseased | false (all) | bool | `IgnorePoison` etc. / `DoNotAnnouncePoison` etc. | Models/Profile/SpellsSettings.cs |
 | HP/MA threshold mode | `Percentage` (both) | Percentage / Absolute | `HpThresholdMode` / `MaThresholdMode` | Models/Profile/HealthSettings.cs |
@@ -2014,9 +2019,8 @@ This section is a compact, technical lookup table for every setting documented a
 | Rank | `Mid` | Front / Mid / Back | `Rank` | Models/Profile/PartySettings.cs |
 | Minor/Major party heal (single/AOE) | blank (all 4) | spell code | `MinorPartyHealSpell` etc. | Models/Profile/PartySettings.cs |
 | Minor/Major heal threshold %, AOE min members | 70/40/2 | 0–100 / 2–6 | `MinorHealMemberThresholdPercent` etc. / `AoeMinMembers` | Models/Profile/PartySettings.cs |
-| Party buff slots | empty | spell + per-member targets + recast sec | `PartyBuffs` | Models/Profile/PartyBuffSettings.cs (Party window) |
+| Party bless slots (part of the unified buff list — see Spells/Health above) | empty | configured in the Buff Watchdog | `PartyBuffs` | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Bless while resting / during combat | false / false | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
-| Party Buffs panel position | `Right` | Right / Below / Left | `PartyBuffAnchor` | Models/Profile/PartySettings.cs |
 | Help leader open doors / Ignore @wait when leading / Reset stats on loop start | false/false/true | bool | `HelpLeaderOpenDoors`, `IgnoreWaitWhenLeading`, `ResetStatisticsOnLoopStart` | Models/Profile/PartySettings.cs |
 | Re-invite lost members / send @join nags / send @health nags / probe on join | true (all) | bool | `AutoInviteReconnecting`, `SendJoinToInvited`, `SendHealthToMembers`, `ProbeStatsOnPartyJoin` | Models/Profile/PartySettings.cs |
 | Nag initial delay / frequency / max window (s) | 5/10/55 | 1–60 / 1–60 / 5–600 | `JoinNagInitialDelaySec`, `JoinNagFrequencySec`, `JoinNagMaxTotalSec` | Models/Profile/PartySettings.cs |

@@ -551,7 +551,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         int protEvil = 0;
         bool hasShadow = false, hasVileWard = false;
 
-        foreach (string code in EnumerateSelfBuffCodes(spells))
+        foreach (string code in EnumerateSelfBuffCodes(spells, _profile.Current?.PartyBuffs))
         {
             if (catalog.GetByShort(code, classNumber, level) is not { } spell) continue;
             foreach (SpellAbility a in spell.Formula.Abilities)
@@ -573,16 +573,17 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     private static double Magnitude(SpellAbility a, in SpellFormulaInput formula, int level)
         => a.Value != 0 ? a.Value : SpellCalculator.AffectMagnitude(formula, level).Max;
 
-    // The canonical self-buff cast-code roster, matching CastingDirector's
-    // self-buff enumeration: the bless slots in slot order, then the mana-regen
-    // and when-HP/MA-full downtime buffs. Blank picks drop out.
-    private static IEnumerable<string> EnumerateSelfBuffCodes(SpellsSettings spells)
+    // The canonical self-buff cast-code roster, matching CastingDirector's self-buff
+    // enumeration: the CastOnSelf slots in the unified buff list (bless + when-full
+    // folded there), then the mana-regen buff still on the Spells tab. Blank picks
+    // drop out.
+    private static IEnumerable<string> EnumerateSelfBuffCodes(SpellsSettings spells, BuffSettings? buffs)
     {
-        foreach (KeyValuePair<int, string> kv in spells.BlessSlots.OrderBy(kv => kv.Key))
-            if (!string.IsNullOrWhiteSpace(kv.Value)) yield return kv.Value.Trim();
+        if (buffs is not null)
+            foreach (BuffSlot slot in buffs.Slots)
+                if (slot.CastOnSelf && !string.IsNullOrWhiteSpace(slot.Spell))
+                    yield return slot.Spell!.Trim();
         if (!string.IsNullOrWhiteSpace(spells.MaRegenSpell)) yield return spells.MaRegenSpell!.Trim();
-        if (!string.IsNullOrWhiteSpace(spells.WhenHpFullSpell)) yield return spells.WhenHpFullSpell!.Trim();
-        if (!string.IsNullOrWhiteSpace(spells.WhenMaFullSpell)) yield return spells.WhenMaFullSpell!.Trim();
     }
 
     // Read the character-tier "Spells" section the same way the settings tab and

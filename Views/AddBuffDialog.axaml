@@ -1,0 +1,122 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:spells="using:MudPlay.Game.Spells"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="360" d:DesignHeight="360"
+        x:Class="MudPlay.Views.AddBuffDialog"
+        x:DataType="vm:AddBuffDialogViewModel"
+        Title="{Binding DialogTitle}"
+        Width="380" Height="380"
+        MinWidth="340" MinHeight="300"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <DataTemplate x:Key="BuffPickItem" x:DataType="spells:SpellPick">
+            <TextBlock Text="{Binding Display}"/>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="16" RowSpacing="8">
+        <TextBlock Grid.Row="0"
+                   Text="Pick a buff, its recast timer and any conditions. You'll choose who it's cast on (yourself and/or party members) back in the Buff Watchdog."
+                   TextWrapping="Wrap" FontSize="11"
+                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+
+        <Grid Grid.Row="1" ColumnDefinitions="70,*" ColumnSpacing="8">
+            <TextBlock Grid.Column="0" Text="Buff" VerticalAlignment="Center"
+                       Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
+            <AutoCompleteBox Grid.Column="1"
+                             Text="{Binding Spell, Mode=TwoWay}"
+                             ItemsSource="{Binding BuffPicks}"
+                             ValueMemberBinding="{ReflectionBinding Short}"
+                             ItemFilter="{Binding SpellSuggestionFilter}"
+                             ItemTemplate="{StaticResource BuffPickItem}"
+                             FilterMode="Contains"
+                             MinimumPrefixLength="0"
+                             PlaceholderText="Buff spell…"/>
+        </Grid>
+
+        <Grid Grid.Row="2" ColumnDefinitions="70,*" ColumnSpacing="8">
+            <TextBlock Grid.Column="0" Text="Recast (s)" VerticalAlignment="Center"
+                       Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
+            <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
+                           Value="{Binding RecastMarginSec, Mode=TwoWay}"
+                           Minimum="0" Maximum="999" Increment="1" FormatString="0"
+                           ToolTip.Tip="Recast when within this many seconds of expiring. 0 = wait for actual expiry."/>
+        </Grid>
+
+        <!-- Per-slot conditions. The dark / reroll rows adapt to the picked spell. -->
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Conditions" FontSize="10" Margin="0,2,0,0"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                <CheckBox Content="Only when HP is full (rested up)"
+                          IsChecked="{Binding OnlyWhenHpFull, Mode=TwoWay}"
+                          ToolTip.Tip="Cast only once HP is rested up to the rest-max target — a 'topped off, ready for the next fight' buff."/>
+                <CheckBox Content="Only when MA is full (rested up)"
+                          IsChecked="{Binding OnlyWhenMaFull, Mode=TwoWay}"
+                          ToolTip.Tip="Cast only once MA is rested up to the rest-max target."/>
+                <CheckBox Content="Only when the room is dark"
+                          IsVisible="{Binding IsLightSpell}"
+                          IsChecked="{Binding OnlyWhenDark, Mode=TwoWay}"
+                          ToolTip.Tip="Cast this light spell only on entering a dark room (the auto-light system handles it). Unchecked = keep it up like an ordinary buff."/>
+
+                <!-- Mana-regen roll spell: reroll config + pre-rest option. -->
+                <StackPanel Spacing="4" IsVisible="{Binding IsRollSpell}" Margin="0,4,0,0">
+                    <CheckBox Content="Cast before resting for mana"
+                              IsChecked="{Binding CastBeforeRestingForMana, Mode=TwoWay}"
+                              ToolTip.Tip="Cast as a pre-rest top-up while resting for mana, instead of maintaining it always-up."/>
+                    <TextBlock Text="Mana-regen reroll" FontSize="10" Margin="0,2,0,0"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+
+                    <!-- Numeric threshold — Paradigm (rolled value), or Stock without
+                         resolvable live tick bounds. -->
+                    <Grid ColumnDefinitions="110,*" ColumnSpacing="8" IsVisible="{Binding ShowRerollNumeric}">
+                        <TextBlock Grid.Column="0" Text="{Binding RerollThresholdLabel}" VerticalAlignment="Center"
+                                   FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                        <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
+                                       Value="{Binding RerollThreshold, Mode=TwoWay}"
+                                       Minimum="0" Maximum="999" Increment="1" FormatString="0"
+                                       ToolTip.Tip="{Binding RerollThresholdTip}"/>
+                    </Grid>
+
+                    <!-- Stock tick slider — drag the reroll target between the worst and
+                         best possible mana tick for this spell at your current gear. -->
+                    <StackPanel Spacing="2" IsVisible="{Binding ShowRerollSlider}">
+                        <TextBlock Text="{Binding RerollThresholdLabel}" FontSize="11"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                        <Slider Minimum="{Binding TickWorst}" Maximum="{Binding TickBest}"
+                                Value="{Binding RerollThresholdSlider, Mode=TwoWay}"
+                                TickFrequency="1" IsSnapToTickEnabled="True"
+                                ToolTip.Tip="{Binding RerollThresholdTip}"/>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding TickWorst, StringFormat='worst {0:0}'}"
+                                       FontSize="10" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                            <TextBlock Grid.Column="1" HorizontalAlignment="Center" FontSize="11" FontWeight="SemiBold"
+                                       Text="{Binding RerollThresholdSlider, StringFormat='reroll below {0:0} MP/tick'}"/>
+                            <TextBlock Grid.Column="2" Text="{Binding TickBest, StringFormat='best {0:0}'}"
+                                       FontSize="10" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                        </Grid>
+                    </StackPanel>
+                    <Grid ColumnDefinitions="110,*" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Text="Max rerolls" VerticalAlignment="Center"
+                                   FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                        <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
+                                       Value="{Binding RerollCount, Mode=TwoWay}"
+                                       Minimum="0" Maximum="20" Increment="1" FormatString="0"
+                                       ToolTip.Tip="Most re-casts per cycle chasing a better roll before accepting what landed."/>
+                    </Grid>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Cancel" Command="{Binding CancelCommand}" MinWidth="80"/>
+            <Button Content="{Binding OkLabel}" Command="{Binding OkCommand}"
+                    IsEnabled="{Binding CanAdd}" IsDefault="True" MinWidth="80"/>
+        </StackPanel>
+    </Grid>
+</Window>

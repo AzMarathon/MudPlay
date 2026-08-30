@@ -66,11 +66,16 @@ public sealed class ManaRegenReroller : IDisposable
     private readonly Action _sendAbilQuery;
     private readonly Action<string> _recast;
     private readonly Func<bool> _canAffordReroll;
+    // True on the Stock realm — there's no `abil 145`, so roll quality is judged from
+    // the observed passive mana TICK (an MP jump on the statline) instead. The
+    // threshold then means the desired tick, not the rolled percent.
+    private readonly Func<bool> _useTickMonitor;
     private readonly LogService? _log;
 
     private string? _activeShort;
     private int _rerollsUsed;
     private bool _awaitingAbil;
+    private bool _awaitingTick;
     private bool _disposed;
 
     public ManaRegenReroller(
@@ -79,6 +84,7 @@ public sealed class ManaRegenReroller : IDisposable
         Action sendAbilQuery,
         Action<string> recast,
         Func<bool> canAffordReroll,
+        Func<bool> useTickMonitor,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(parser);
@@ -87,6 +93,7 @@ public sealed class ManaRegenReroller : IDisposable
         _sendAbilQuery = sendAbilQuery;
         _recast = recast;
         _canAffordReroll = canAffordReroll;
+        _useTickMonitor = useTickMonitor;
         _log = log;
         _parser.BreakdownParsed += OnBreakdown;
     }
@@ -132,9 +139,19 @@ public sealed class ManaRegenReroller : IDisposable
                 $"recast landed spell={spellShort} reroll={_rerollsUsed}/{cfg.Cap}");
         }
 
-        _awaitingAbil = true;
-        _log?.Debug(LogCategory, "querying abil 145 for rolled mana-regen contribution");
-        _sendAbilQuery();
+        // Paradigm reads the rolled contribution off `abil 145`; Stock instead waits
+        // for the next observed passive mana tick (an MP jump on the statline).
+        if (_useTickMonitor())
+        {
+            _awaitingTick = true;
+            _log?.Debug(LogCategory, "awaiting the next passive mana tick to judge the roll");
+        }
+        else
+        {
+            _awaitingAbil = true;
+            _log?.Debug(LogCategory, "querying abil 145 for rolled mana-regen contribution");
+            _sendAbilQuery();
+        }
     }
 
     private void OnBreakdown(AbilBreakdown b)
@@ -143,26 +160,42 @@ public sealed class ManaRegenReroller : IDisposable
         if (b.Code != ManaRegenAbilityCode) return;   // an unrelated abil query — keep waiting
 
         _awaitingAbil = false;
-
-        if (_activeShort is not { } shortCode) return;   // defensive: no active cycle
-
-        ManaRegenRerollConfig cfg = _readConfig();
-        int roll = b.Spells;
         _log?.Debug(LogCategory,
-            $"observed rolled mana-regen contribution spells={roll} (abil total {b.Total})");
+            $"observed rolled mana-regen contribution spells={b.Spells} (abil total {b.Total})");
+        Decide(b.Spells, "roll");
+    }
+
+    // A passive mana tick was observed (Stock): the MP jump IS the roll's quality, so
+    // it stands in for the abil read. Only consumed while a reroll cycle is awaiting a
+    // tick; the caller supplies only CLEAN passive ticks (not while resting / meditating).
+    public void OnManaTickObserved(int tickAmount)
+    {
+        if (!_awaitingTick) return;
+        _awaitingTick = false;
+        _log?.Debug(LogCategory, $"observed passive mana tick={tickAmount}");
+        Decide(tickAmount, "tick");
+    }
+
+    // The shared accept-or-reroll decision. value is the roll's quality — the rolled
+    // percent on Paradigm, the observed tick on Stock — compared against the configured
+    // threshold; reroll while below it, up to the cap, hard-stopping at the mana floor.
+    private void Decide(int value, string valueLabel)
+    {
+        if (_activeShort is not { } shortCode) return;   // defensive: no active cycle
+        ManaRegenRerollConfig cfg = _readConfig();
 
         // Threshold went null mid-cycle (settings edit) — accept and drop out.
         if (cfg.Threshold is not { } threshold)
         {
-            _log?.Info(LogCategory, $"reroll disabled mid-cycle — accepting spell={shortCode} roll={roll}");
+            _log?.Info(LogCategory, $"reroll disabled mid-cycle — accepting spell={shortCode} {valueLabel}={value}");
             Reset();
             return;
         }
 
-        if (roll >= threshold)
+        if (value >= threshold)
         {
             _log?.Info(LogCategory,
-                $"roll accepted spell={shortCode} roll={roll} >= threshold={threshold} " +
+                $"accepted spell={shortCode} {valueLabel}={value} >= threshold={threshold} " +
                 $"after {_rerollsUsed} reroll(s)");
             Reset();
             return;
@@ -171,7 +204,7 @@ public sealed class ManaRegenReroller : IDisposable
         if (_rerollsUsed >= cfg.Cap)
         {
             _log?.Info(LogCategory,
-                $"reroll cap reached spell={shortCode} roll={roll} < threshold={threshold} " +
+                $"reroll cap reached spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
                 $"cap={cfg.Cap} — accepting");
             Reset();
             return;
@@ -180,7 +213,7 @@ public sealed class ManaRegenReroller : IDisposable
         if (!_canAffordReroll())
         {
             _log?.Info(LogCategory,
-                $"reroll stopped at mana floor spell={shortCode} roll={roll} < threshold={threshold} " +
+                $"reroll stopped at mana floor spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
                 $"after {_rerollsUsed} reroll(s)");
             Reset();
             return;
@@ -188,7 +221,7 @@ public sealed class ManaRegenReroller : IDisposable
 
         _rerollsUsed++;
         _log?.Info(LogCategory,
-            $"rerolling spell={shortCode} roll={roll} < threshold={threshold} " +
+            $"rerolling spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
             $"attempt {_rerollsUsed}/{cfg.Cap}");
         _recast(shortCode);
     }
@@ -200,6 +233,7 @@ public sealed class ManaRegenReroller : IDisposable
         _activeShort = null;
         _rerollsUsed = 0;
         _awaitingAbil = false;
+        _awaitingTick = false;
     }
 
     public void Dispose()
