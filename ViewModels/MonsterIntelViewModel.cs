@@ -39,6 +39,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly PlayerState? _playerState;
     private readonly InventoryManager? _inventory;
     private readonly SpellbookState? _spellbook;
+
+    // Live read of the character's configured buff plan (Profile.Current.PartyBuffs)
+    // so the projected AC / DR assumes those buffs are up. Null in tests.
+    private readonly System.Func<Models.Profile.BuffSettings?>? _buffProvider;
     private readonly ItemMagicIndex? _itemMagic;
     private readonly MonsterObservationTracker? _observations;
     private readonly IReadOnlyList<MonsterIntelEntry> _all;
@@ -82,7 +86,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         GameDataCache gameData, MonsterCatalog catalog, SettingsResolver resolver,
         PlayerStats? stats = null, InventoryManager? inventory = null,
         SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null,
-        MonsterObservationTracker? observations = null, PlayerState? playerState = null)
+        MonsterObservationTracker? observations = null, PlayerState? playerState = null,
+        System.Func<Models.Profile.BuffSettings?>? buffProvider = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -96,6 +101,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _spellbook = spellbook;
         _itemMagic = itemMagic;
         _observations = observations;
+        _buffProvider = buffProvider;
         _hasCharacterContext = _stats is not null && _inventory is not null
             && _spellbook is not null && _itemMagic is not null;
 
@@ -247,7 +253,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         EquipmentStatBreakdown gear = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
         EquipmentStatSummary totals = gear.Totals;
         EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
-        _playerAc = _stats!.ArmourClass;
+        // Assume the character's configured AC buffs are up — this is a "with my
+        // buffs" pre-fight read, so a configured bless that isn't applied this
+        // second still counts toward Hits You % / AC vs Evil.
+        int buffAc = Game.Spells.BuffDefenseCalculator.Compute(
+            _buffProvider?.Invoke(), _stats!.Level, _spellbook!.Available).Ac;
+        _playerAc = _stats!.ArmourClass + buffAc;
         _playerDodge = CombatCalculator.CalcDodge(
             _stats.Level, _stats.Agility, _stats.Charm, totals.PlusDodge,
             encum.CurrentWeight, encum.MaxWeight);
