@@ -29506,5 +29506,107 @@
         "Number": 5438
       }
     ]
+  },
+  {
+    "Id": "41caf8b165d89c17",
+    "Name": "Dae Asp Effect",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "Poison burns through your veins!",
+    "WitnessMessage": "",
+    "AppliedMessage": "Venom runs through your veins",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 794
+      }
+    ]
+  },
+  {
+    "Id": "a8e1f041c24494fa",
+    "Name": "Dae Asp Effect 2",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "Poison burns through your veins!",
+    "WitnessMessage": "",
+    "AppliedMessage": "Venom runs through your veins",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 798
+      }
+    ]
+  },
+  {
+    "Id": "7dcd48b3081b5e60",
+    "Name": "ghastly wail",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "The {source} wails in agony!",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are deathly afraid",
+    "AppliedEndsWith": "You don't feel quite so afraid anymore",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 821
+      }
+    ]
+  },
+  {
+    "Id": "a889215c78f68755",
+    "Name": "monster aging",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 729
+      }
+    ]
+  },
+  {
+    "Id": "769f7e3970289bcd",
+    "Name": "river damage",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 753
+      }
+    ]
+  },
+  {
+    "Id": "9018e6eff5adcb15",
+    "Name": "shredded tapestry summon",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 1208
+      }
+    ]
   }
 ]
