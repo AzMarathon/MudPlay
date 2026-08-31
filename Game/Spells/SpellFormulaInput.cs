@@ -62,6 +62,12 @@ public readonly record struct SpellFormulaInput
     // read it without re-touching the raw JSON.
     public int Diff { get; init; }
 
+    // Attack type (AttType): the spell's damage element for resist purposes —
+    // 0 cold, 1 fire, 2 stone, 3 lightning, 4 Normal (magic-resist only), 5
+    // water, 6 poison. Picks which elemental resist the damage calculator scales
+    // against (see SpellDamageCalculator).
+    public int AttType { get; init; }
+
     // The ten Abil-N / AbilVal-N pairs in slot order. Empty when the row sets no
     // ability slots.
     public IReadOnlyList<SpellAbility> Abilities { get; init; } = [];

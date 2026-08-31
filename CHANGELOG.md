@@ -9,6 +9,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Spell Game Data view no longer triple-lists the same affect — a level-scaling stat affect now shows one row with its real range ("AC Blur +5 → +12"), replacing the meaningless "0" row and the duplicate "Magnitude" row
 - Spell DR now shown as the value actually gained (raw ÷ 10, e.g. "+1.0") everywhere it surfaces, not the raw store value ("+10")
 - Spell Energy Cost now spells out its fire rate: 0 → "(between rounds)", otherwise "(up to N times per round)" where N = 1000 ÷ energy cost
+- Damage spells now lead the Game Data tab with an interactive damage calculator: a Level picker (learned level → cap) recomputes min/max damage live, plus Magic-resist and elemental-resist pickers (where they apply) that show how a resistant target cuts the damage — replacing the old two contradictory damage numbers + scaling row
+- Spell Book Difficulty header shows the equation ("Spellcasting N + spell difficulty"); the clipped Difficulty column header is fixed
 - RemovesSpell entries collapse into one linked "Removes" row; display-only message-slot rows dropped
 
 ## 3.37.3

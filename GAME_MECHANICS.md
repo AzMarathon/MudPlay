@@ -2192,6 +2192,18 @@ so their only mitigation is the deterministic elemental cut in 3a — which is e
 elemental resist is safely pre-emptable. Among Normal spells, `magic missile` is `TypeOfResists 0`
 (never rolled-resisted) while `harm` is `TypeOfResists 2`.
 
+*3b-calc. Display damage calculator — MMUD-Explorer parity, and a code-gating discrepancy with 3b
+above.* The Game Data spell view's interactive damage calculator (`SpellDamageCalculator`) reproduces
+MMUD-Explorer's `CalculateResistDamage` / `CalculateSpellCast` range math *([CONFIRMED] 2026-08-30,
+user direction: "follow what MMUD-Explorer has")*: the per-cast range comes from Min/MaxBase scaling,
+then the **magic-resist partial cut** (fraction `(MR−50)/200`, cap 50%; AntiMagic `MR/200` cap 75%;
+below MR 50 it amplifies), then the **elemental flat-% cut** on any elemental spell; the probabilistic
+full-resist chance is shown separately, never folded into the range. **⚠ In MMUD-Explorer the partial
+MR cut is gated on code 17 `Damage(-MR)` (via `bDamageMinusMR`), NOT code 1 — the exact opposite of
+3b's gating just above.** The calculator follows MMUD-Explorer for its display; this note does **not**
+re-decide 3b's combat-engine gating (unverified against the live game which of the two is right — one
+source has the code assignment backwards). Resolve before relying on either for a combat decision.
+
 *3c. Poison (`AttType 6`) — not resistible, binary immunity.* Poison has **no** resist value and
 **no** `Resist-Poison` code — a target is either affected or immune, never "partially resisted."
 - Immunity is sourced from **race / items**, not a resist stat: the **Kang** race is

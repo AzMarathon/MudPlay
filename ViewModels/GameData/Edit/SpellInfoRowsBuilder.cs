@@ -116,6 +116,12 @@ public sealed class SpellInfoRowsBuilder
         KnownSpellCatalog catalog = new(_cache);
         SpellFormulaInput? formula = catalog.GetFormulaByNumber(spellNumber);
 
+        // A damage spell gets the interactive level/resist damage calculator on
+        // the dialog (SpellDamageCalcViewModel), so suppress the static damage
+        // rows that used to show it two contradictory ways: the "Effect" summary,
+        // the growth-block magnitude range, and the per-level "Level Scaling" row.
+        bool isDamageSpell = formula is { } df && SpellDamageCalculator.IsDamageSpell(df);
+
         // Plain-English effect summary at the top — the same translator the
         // Items "Other Info" pane + the Spell Book use, so the spell reads as
         // "Dmg 1–4 · then casts X · Slowness" instead of a wall of raw ability
@@ -137,7 +143,7 @@ public sealed class SpellInfoRowsBuilder
             // when a spell's only effect is a textblock it can't expand) — the
             // Summons / Casts / item-gate rows from the textblock walk below
             // carry the real info instead.
-            if (effect.Length > 0 && effect != "—" && !BareTextblock.IsMatch(effect))
+            if (!isDamageSpell && effect.Length > 0 && effect != "—" && !BareTextblock.IsMatch(effect))
                 rows.Add(new GameDataInfoRow("Effect", effect));
         }
 
@@ -154,7 +160,7 @@ public sealed class SpellInfoRowsBuilder
             {
                 if (!growthRendered)
                 {
-                    EmitGrowthBlock(rows, formula);
+                    EmitGrowthBlock(rows, formula, isDamageSpell);
                     growthRendered = true;
                 }
                 continue;
@@ -450,7 +456,7 @@ public sealed class SpellInfoRowsBuilder
 
     // The curated growth block — magnitude range ("Damage(-MR): 18 to 68"), level cap, per-level
     // growth formula ("Max: 24+(2*lvl)"), and at-cap duration.
-    private static void EmitGrowthBlock(List<GameDataInfoRow> rows, SpellFormulaInput? formula)
+    private static void EmitGrowthBlock(List<GameDataInfoRow> rows, SpellFormulaInput? formula, bool isDamageSpell)
     {
         if (formula is not { } f) return;
 
@@ -458,14 +464,16 @@ public sealed class SpellInfoRowsBuilder
         // ("Damage(-MR): 18 to 68") — that's data no ability row carries. For a
         // scaling stat-affect the label falls back to a bare "Magnitude", which
         // just repeats the affect's own row (now shown as "AC Blur +5 → +12"), so
-        // it's suppressed here to kill the duplication.
+        // it's suppressed here to kill the duplication. A damage spell suppresses
+        // both the magnitude AND the per-level "Level Scaling" row — the
+        // interactive damage calculator owns those.
         string magnitudeLabel = SpellGrowthFormatter.MagnitudeLabel(f);
-        if (!string.Equals(magnitudeLabel, "Magnitude", StringComparison.Ordinal)
+        if (!isDamageSpell && !string.Equals(magnitudeLabel, "Magnitude", StringComparison.Ordinal)
             && SpellGrowthFormatter.MagnitudeRange(f) is { } range)
             rows.Add(new GameDataInfoRow(magnitudeLabel, range));
         if (f.Cap > 0)
             rows.Add(new GameDataInfoRow(FriendlyLabel("LVL Cap"), f.Cap.ToString(CultureInfo.InvariantCulture)));
-        if (SpellGrowthFormatter.GrowthFormula(f) is { } growth)
+        if (!isDamageSpell && SpellGrowthFormatter.GrowthFormula(f) is { } growth)
             rows.Add(new GameDataInfoRow(FriendlyLabel("LVL Increases"), growth));
         long durSecs = SpellGrowthFormatter.DurationSeconds(f);
         if (durSecs > 0)

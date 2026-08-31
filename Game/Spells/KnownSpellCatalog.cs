@@ -739,6 +739,7 @@ public sealed class KnownSpellCatalog
             EnergyCost = ReadInt(row, "EnergyCost"),
             ManaCost = ReadInt(row, "ManaCost"),
             Diff = ReadInt(row, "Diff"),
+            AttType = ReadInt(row, "AttType"),
             Abilities = abilities,
         };
     }
