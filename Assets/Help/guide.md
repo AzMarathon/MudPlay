@@ -45,7 +45,7 @@ The **terminal** is the center of MudPlay — everything the game sends, rendere
 
 ## The terminal and status bar
 
-Type, and your keystrokes go straight to the game. The **numpad** is pre-wired to compass movement out of the box. **Paste** with **Ctrl+V** or **Shift+Insert** — a single line drops onto your input, and a multi-line paste is sent as one command per line. **Right-click the terminal** for a quick menu: your starred GOTO **Favorites** and **Recent destinations** (the last 10 places you walked — click either to walk there) lead the menu, followed by a set of entries you fully control — by default quick-opens for Backscroll / Player Workshop / Party / Spell Book / Conversation / Navigation / Session Stats, **Reset States** (the recovery escape hatch — see Automation), and **Bug report…**. You can rebuild that lower section — add whole menus or single commands, direct links to a Workshop tab or a calculator, and rename anything — under **Settings → Toolbar + Shortcuts** (see *Customizing the terminal right-click menu*).
+Type, and your keystrokes go straight to the game. The **numpad** is pre-wired to compass movement out of the box. **Paste** with **Ctrl+V** or **Shift+Insert** — a single line drops onto your input, and a multi-line paste is sent as one command per line. **Right-click the terminal** for a quick menu: your starred GOTO **Favorites** and **Recent destinations** (the last 10 places you walked — click either to walk there) lead the menu, followed by a set of entries you fully control — by default quick-opens for Backscroll / Player Workshop / Party / Spell Book / Conversation / Navigation / Session Stats, **Reset States** (the recovery escape hatch — see Automation), and **Bug report…**. You can rebuild that lower section — add commands, direct links to a Workshop tab or a calculator, your own fly-out folders, and rename anything — under **Settings → Toolbar + Shortcuts** (see *Customizing the terminal right-click menu*).
 
 The status bar along the bottom packs several live readouts:
 
@@ -63,13 +63,13 @@ A customizable **toolbar** of icon buttons sits under the menu bar. The full bar
 
 The bottom of **Settings → Toolbar + Shortcuts** also lets you build the **terminal right-click menu** — everything that appears when you right-click the terminal, below the pinned **Favorites** / **Recent destinations** walk shortcuts (those always lead the menu). Pick from a pool of everything addable and arrange it top-to-bottom:
 
-- **Whole menus** — add **File**, **View**, **Action**, or **Tools** as a nested submenu (shown as *Whole menu: …* in the picker).
-- **Single commands** — any individual command from those menus on its own.
+- **Commands** — any individual command from the File / View / Action / Tools menus (window opens, one-shots like Get All / Reset States, utilities like Bug report / Program Log / Wire Inspector). Auto-engine toggles are deliberately left out — those belong on the toolbar / Action menu.
 - **Workshop tabs** — a direct link that opens the Player Workshop straight to a chosen tab (Character Info, Equipment Manager, Calculators, Bosses, Roomba, …).
 - **Calculators** — a direct link that opens the Workshop on the **Calculators** tab with a chosen calculator (Hit / Movement / Swing / Backstab / Mana Regen / Realm Rankings) **expanded and centered** on screen.
+- **Folders** — click **New folder** to add your own named submenu that flies out to the side; select the folder and add items from the pool to put them inside it. Build the menu structure you want.
 - **Separators** to group things.
 
-Select a placed entry and type a **Name** to rename it however you like — it still links to the same action; leave the name blank to use the default. **Move up / down** to reorder, **Remove** to drop one, **Reset** to restore the built-in menu. Changes save when you click **Apply** (per character). You can also **Import from profile…** to copy another character's menu, or **Import from file… / Export to file…** to share a menu (a small `.json`) with a friend.
+Select a placed entry (or folder) and type a **Name** to rename it however you like — an entry still links to the same action; leave an entry's name blank to use its default. **Move up / down** to reorder (a folder moves with its contents), **Remove** to drop one (removing a folder removes its contents), **Reset** to restore the built-in menu. Changes save when you click **Apply** (per character). You can also **Import from profile…** to copy another character's menu, or **Import from file… / Export to file…** to share a menu (a small `.json`) with a friend.
 
 ## The windows
 

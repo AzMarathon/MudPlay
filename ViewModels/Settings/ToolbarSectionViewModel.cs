@@ -260,7 +260,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
             profile.Settings ??= new();
             profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
 
-            ContextMenuSettings menuDto = new() { Layout = ContextMenuRows.Select(r => r.ToModel()).ToList() };
+            ContextMenuSettings menuDto = new() { Layout = BuildContextMenuLayout() };
             profile.Settings[ContextMenuKey] = JsonSerializer.SerializeToElement(menuDto);
 
             _profile.Save();
@@ -322,25 +322,55 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         SelectedContextMenuRow = null;
     }
 
-    // Replace the placed rows from a set of entries (unknown ids skipped). Shared
-    // by profile-load, reset, and the two import paths.
+    // Replace the placed rows from a set of entries — FLATTENING folders (a
+    // folder row followed by its children at Depth 1). Unknown ids are dropped so
+    // the editor never shows a dead row. Shared by profile-load, reset, imports.
     private void PopulateContextMenuRows(IEnumerable<ContextMenuEntry> items)
     {
         foreach (ContextMenuRowViewModel row in ContextMenuRows) row.PropertyChanged -= OnContextMenuRowChanged;
         ContextMenuRows.Clear();
         foreach (ContextMenuEntry item in items)
-            if (FromModelOrNull(item) is { } row) ContextMenuRows.Add(row);
+        {
+            if (item.Kind == ContextMenuEntryKind.Folder)
+            {
+                ContextMenuRows.Add(HookContextMenuRow(ContextMenuRowViewModel.Folder(item.Label)));
+                if (item.Children is { } children)
+                    foreach (ContextMenuEntry child in children)
+                        if (FromModelOrNull(child, depth: 1) is { } crow) ContextMenuRows.Add(crow);
+            }
+            else if (FromModelOrNull(item) is { } row) ContextMenuRows.Add(row);
+        }
     }
 
-    // A placed row from a persisted entry (separator, or a catalogue entry + its
-    // optional custom label). Unknown ids are dropped so the editor never shows a
-    // dead row. Subscribes each real row so a rename marks the tab dirty.
-    private ContextMenuRowViewModel? FromModelOrNull(ContextMenuEntry item)
+    // A placed row from a leaf entry (separator or catalogue entry + its optional
+    // custom label). Folders are handled by the caller; unknown ids are dropped.
+    private ContextMenuRowViewModel? FromModelOrNull(ContextMenuEntry item, int depth = 0)
     {
         if (item.Kind == ContextMenuEntryKind.Separator)
-            return HookContextMenuRow(ContextMenuRowViewModel.Separator());
+            return HookContextMenuRow(ContextMenuRowViewModel.Separator(depth));
+        if (item.Kind == ContextMenuEntryKind.Folder) return null;   // caller handles folders
         if (MenuActionCatalogue.Find(item.Id) is not { } def) return null;
-        return HookContextMenuRow(new ContextMenuRowViewModel(def, item.Label));
+        return HookContextMenuRow(new ContextMenuRowViewModel(def, item.Label, depth));
+    }
+
+    // The flat editor rows → the nested persisted layout: a Depth-0 folder row
+    // adopts the Depth-1 rows that follow it as its Children.
+    private List<ContextMenuEntry> BuildContextMenuLayout()
+    {
+        List<ContextMenuEntry> result = new();
+        ContextMenuEntry? currentFolder = null;
+        foreach (ContextMenuRowViewModel row in ContextMenuRows)
+        {
+            ContextMenuEntry entry = row.ToModel();
+            if (row.Depth == 0)
+            {
+                result.Add(entry);
+                currentFolder = row.IsFolder ? entry : null;
+            }
+            else if (currentFolder?.Children is { } kids) kids.Add(entry);
+            else result.Add(entry);   // orphaned child (shouldn't happen) — demote to top
+        }
+        return result;
     }
 
     private ContextMenuRowViewModel HookContextMenuRow(ContextMenuRowViewModel row)
@@ -783,13 +813,36 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
     private static Window? HostWindow =>
         Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } m } ? m : null;
 
+    // Where a new leaf lands relative to the selection, and at what depth: as the
+    // first child of a selected folder, a sibling inside the folder a selected
+    // child belongs to, else after a selected top-level row (or the end).
+    private int LeafInsertIndex(out int depth)
+    {
+        if (SelectedContextMenuRow is not { } sel) { depth = 0; return ContextMenuRows.Count; }
+        int i = ContextMenuRows.IndexOf(sel);
+        depth = sel.IsFolder || sel.Depth == 1 ? 1 : 0;
+        return i + 1;
+    }
+
+    // Index just past the selected row's whole top-level block (a folder + its
+    // children), for inserting another top-level row (folder / after a block).
+    private int TopLevelInsertIndex()
+    {
+        if (SelectedContextMenuRow is not { } sel) return ContextMenuRows.Count;
+        int i = ContextMenuRows.IndexOf(sel);
+        while (i > 0 && ContextMenuRows[i].Depth == 1) i--;   // back to the block's top row
+        int j = i + 1;
+        while (j < ContextMenuRows.Count && ContextMenuRows[j].Depth == 1) j++;  // skip its children
+        return j;
+    }
+
     private bool CanAddContextMenuEntry() => SelectedContextMenuPoolRow is not null;
     [RelayCommand(CanExecute = nameof(CanAddContextMenuEntry))]
     private void AddContextMenuEntry()
     {
         if (SelectedContextMenuPoolRow is not { Id: { } id } || MenuActionCatalogue.Find(id) is not { } def) return;
-        ContextMenuRowViewModel row = HookContextMenuRow(new ContextMenuRowViewModel(def));
-        int at = SelectedContextMenuRow is { } sel ? ContextMenuRows.IndexOf(sel) + 1 : ContextMenuRows.Count;
+        int at = LeafInsertIndex(out int depth);
+        ContextMenuRowViewModel row = HookContextMenuRow(new ContextMenuRowViewModel(def, null, depth));
         ContextMenuRows.Insert(at, row);
         SelectedContextMenuRow = row;
         Dirty();
@@ -798,8 +851,20 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
     [RelayCommand]
     private void AddContextMenuSeparator()
     {
-        ContextMenuRowViewModel row = HookContextMenuRow(ContextMenuRowViewModel.Separator());
-        int at = SelectedContextMenuRow is { } sel ? ContextMenuRows.IndexOf(sel) + 1 : ContextMenuRows.Count;
+        int at = LeafInsertIndex(out int depth);
+        ContextMenuRowViewModel row = HookContextMenuRow(ContextMenuRowViewModel.Separator(depth));
+        ContextMenuRows.Insert(at, row);
+        SelectedContextMenuRow = row;
+        Dirty();
+    }
+
+    // A user-defined folder (top level only) — a named fly-out submenu. Add items
+    // to it by selecting it and adding from the pool.
+    [RelayCommand]
+    private void AddContextMenuFolder()
+    {
+        int at = TopLevelInsertIndex();
+        ContextMenuRowViewModel row = HookContextMenuRow(ContextMenuRowViewModel.Folder("New folder"));
         ContextMenuRows.Insert(at, row);
         SelectedContextMenuRow = row;
         Dirty();
@@ -811,39 +876,76 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
     {
         if (SelectedContextMenuRow is not { } row) return;
         int idx = ContextMenuRows.IndexOf(row);
-        row.PropertyChanged -= OnContextMenuRowChanged;
-        ContextMenuRows.Remove(row);
+        // Removing a folder takes its contiguous Depth-1 children with it.
+        int end = idx + 1;
+        if (row.IsFolder)
+            while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
+        for (int k = end - 1; k >= idx; k--)
+        {
+            ContextMenuRows[k].PropertyChanged -= OnContextMenuRowChanged;
+            ContextMenuRows.RemoveAt(k);
+        }
         SelectedContextMenuRow = ContextMenuRows.Count == 0
             ? null
             : ContextMenuRows[System.Math.Min(idx, ContextMenuRows.Count - 1)];
         Dirty();
     }
 
-    private bool CanMoveContextMenuUp() => SelectedContextMenuRow is { } r && ContextMenuRows.IndexOf(r) > 0;
+    // Move rows [start..end) so they begin at dest (an index in the pre-removal
+    // list). Used for block-aware folder moves.
+    private void MoveContextMenuBlock(int start, int end, int dest)
+    {
+        List<ContextMenuRowViewModel> block = new();
+        for (int k = start; k < end; k++) block.Add(ContextMenuRows[k]);
+        for (int k = end - 1; k >= start; k--) ContextMenuRows.RemoveAt(k);
+        int insertAt = dest > start ? dest - block.Count : dest;
+        for (int k = 0; k < block.Count; k++) ContextMenuRows.Insert(insertAt + k, block[k]);
+    }
+
+    private bool CanMoveContextMenuUp() => SelectedContextMenuRow is not null;
     [RelayCommand(CanExecute = nameof(CanMoveContextMenuUp))]
     private void MoveContextMenuUp()
     {
         if (SelectedContextMenuRow is not { } row) return;
         int i = ContextMenuRows.IndexOf(row);
         if (i <= 0) return;
-        ContextMenuRows.Move(i, i - 1);
+
+        if (row.Depth == 1)
+        {
+            // A child moves only among its siblings — never above its folder.
+            if (ContextMenuRows[i - 1].Depth == 1) { ContextMenuRows.Move(i, i - 1); Dirty(); }
+            return;
+        }
+        // Top-level block [i..end) swaps with the previous top-level block at p.
+        int end = i + 1;
+        while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
+        int p = i - 1;
+        while (p > 0 && ContextMenuRows[p].Depth == 1) p--;
+        MoveContextMenuBlock(i, end, p);
         Dirty();
-        MoveContextMenuUpCommand.NotifyCanExecuteChanged();
-        MoveContextMenuDownCommand.NotifyCanExecuteChanged();
     }
 
-    private bool CanMoveContextMenuDown() =>
-        SelectedContextMenuRow is { } r && ContextMenuRows.IndexOf(r) is var i && i >= 0 && i < ContextMenuRows.Count - 1;
+    private bool CanMoveContextMenuDown() => SelectedContextMenuRow is not null;
     [RelayCommand(CanExecute = nameof(CanMoveContextMenuDown))]
     private void MoveContextMenuDown()
     {
         if (SelectedContextMenuRow is not { } row) return;
         int i = ContextMenuRows.IndexOf(row);
-        if (i < 0 || i >= ContextMenuRows.Count - 1) return;
-        ContextMenuRows.Move(i, i + 1);
+        if (i < 0) return;
+
+        if (row.Depth == 1)
+        {
+            if (i + 1 < ContextMenuRows.Count && ContextMenuRows[i + 1].Depth == 1) { ContextMenuRows.Move(i, i + 1); Dirty(); }
+            return;
+        }
+        // Move the NEXT top-level block up above this one (= this block moves down).
+        int end = i + 1;
+        while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
+        if (end >= ContextMenuRows.Count) return;
+        int next = end + 1;
+        while (next < ContextMenuRows.Count && ContextMenuRows[next].Depth == 1) next++;
+        MoveContextMenuBlock(end, next, i);
         Dirty();
-        MoveContextMenuUpCommand.NotifyCanExecuteChanged();
-        MoveContextMenuDownCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
@@ -900,7 +1002,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
             FileTypeChoices = new[] { new FilePickerFileType("Right-click menu (JSON)") { Patterns = new[] { "*.json" } } },
         });
         if (file is null) return;
-        ContextMenuSettings dto = new() { Layout = ContextMenuRows.Select(r => r.ToModel()).ToList() };
+        ContextMenuSettings dto = new() { Layout = BuildContextMenuLayout() };
         JsonStore.Save(file.Path.LocalPath, dto);
         ContextMenuStatus = "Exported the current right-click menu.";
     }

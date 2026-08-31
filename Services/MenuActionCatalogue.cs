@@ -20,7 +20,6 @@ public static class MenuActionCatalogue
     {
         Command,      // CommandName → ICommand on MainWindowViewModel
         Toggle,       // ToggleProperty → two-way bool on MainWindowViewModel
-        Submenu,      // Members → nested MenuItem built from other entries
         WorkshopTab,  // Parameter → CharacterWorkshop section id (OpenWorkshopTab)
         Calculator,   // Parameter → calculator id (OpenWorkshopCalculator)
     }
@@ -29,12 +28,11 @@ public static class MenuActionCatalogue
         string Id,                 // stable id persisted in ContextMenuSettings
         string Label,              // display text in the menu + editor
         Kind EntryKind,
-        string Group,              // editor grouping header (also the submenu label source)
+        string Group,              // editor grouping header (File / View / … / Workshop tabs / Calculators)
         string? CommandName = null,
         string? ToggleProperty = null,
         string? GestureProperty = null,
         string? Parameter = null,
-        IReadOnlyList<string>? Members = null,
         string? Tooltip = null);
 
     // ----- Individual File-menu commands -----
@@ -69,10 +67,13 @@ public static class MenuActionCatalogue
         new("view.gdtriggers", "Triggers (Game Data)", Kind.Command, "View", CommandName: "OpenGameDataTriggersCommand"),
         new("view.gdaliases", "Aliases (Game Data)", Kind.Command, "View", CommandName: "OpenGameDataAliasesCommand"),
         new("view.events", "Events", Kind.Command, "View", CommandName: "OpenEventsCommand"),
-        new("view.resetlayout", "Reset layout", Kind.Command, "View", CommandName: "ResetLayoutCommand"),
     };
 
     // ----- Individual Action-menu commands -----
+    // Auto-engine toggles (Auto Combat / Nuke / … and Sprint) are deliberately
+    // left OUT — those live on the toolbar / Action menu as their own on/off
+    // surface and don't belong in a right-click menu. One-shot manual commands
+    // stay.
     private static readonly Entry[] _action =
     {
         new("action.resetstates", "Reset States", Kind.Command, "Action", CommandName: "ResetStatesCommand", Tooltip: "Clear my own stuck ailments, waits, and movement holds — return to idle"),
@@ -80,17 +81,6 @@ public static class MenuActionCatalogue
         new("action.dropall", "Drop All", Kind.Command, "Action", CommandName: "DropAllCommand", Tooltip: "Drop every carried (unworn) item"),
         new("action.equipall", "Equip All", Kind.Command, "Action", CommandName: "EquipAllCommand", Tooltip: "Wear the Default gear set"),
         new("action.depositall", "Deposit All", Kind.Command, "Action", CommandName: "DepositAllCommand", Tooltip: "Bank wealth down to the keep-on-hand floor"),
-        new("action.sprint", "Sprint Mode", Kind.Toggle, "Action", ToggleProperty: "IsSprintModeActive"),
-        new("action.autocombat", "Auto Combat", Kind.Toggle, "Action", ToggleProperty: "IsAutoCombatActive"),
-        new("action.autonuke", "Auto Nuke", Kind.Toggle, "Action", ToggleProperty: "IsAutoNukeActive"),
-        new("action.autohealrest", "Auto Rest / Heal", Kind.Toggle, "Action", ToggleProperty: "IsAutoHealRestActive"),
-        new("action.autobless", "Auto Bless", Kind.Toggle, "Action", ToggleProperty: "IsAutoBlessActive"),
-        new("action.autolight", "Auto Light", Kind.Toggle, "Action", ToggleProperty: "IsAutoLightActive"),
-        new("action.autogetitems", "Auto Get Items", Kind.Toggle, "Action", ToggleProperty: "IsAutoGetItemsActive"),
-        new("action.autogetcash", "Auto Get Cash", Kind.Toggle, "Action", ToggleProperty: "IsAutoGetCashActive"),
-        new("action.autosneak", "Auto Sneak", Kind.Toggle, "Action", ToggleProperty: "IsAutoSneakActive"),
-        new("action.autohide", "Auto Hide", Kind.Toggle, "Action", ToggleProperty: "IsAutoHideActive"),
-        new("action.autosearch", "Auto Search", Kind.Toggle, "Action", ToggleProperty: "IsAutoSearchActive"),
     };
 
     // ----- Individual Tools-menu commands -----
@@ -131,26 +121,17 @@ public static class MenuActionCatalogue
         new("calc.realmrankings", "Calculator: Realm Rankings", Kind.Calculator, "Calculators", Parameter: "RealmRankings"),
     };
 
-    // ----- Whole-menu submenus (Members are the individual-command ids above) -----
-    private static readonly Entry[] _submenus =
-    {
-        new("menu.file", "File", Kind.Submenu, "Whole menus", Members: _file.Select(e => e.Id).ToArray()),
-        new("menu.view", "View", Kind.Submenu, "Whole menus", Members: _view.Select(e => e.Id).ToArray()),
-        new("menu.action", "Action", Kind.Submenu, "Whole menus", Members: _action.Select(e => e.Id).ToArray()),
-        new("menu.tools", "Tools", Kind.Submenu, "Whole menus", Members: _tools.Select(e => e.Id).ToArray()),
-    };
-
     private static readonly Entry[] _all =
-        _submenus
-        .Concat(_file).Concat(_view).Concat(_action).Concat(_tools)
+        _file.Concat(_view).Concat(_action).Concat(_tools)
         .Concat(_tabs).Concat(_calcs)
         .ToArray();
 
     private static readonly FrozenDictionary<string, Entry> _byId =
         _all.ToFrozenDictionary(e => e.Id, System.StringComparer.OrdinalIgnoreCase);
 
-    // Every addable entry, in editor-picker order (submenus first, then each
-    // menu's items, then workshop tabs, then calculators).
+    // Every addable entry, in editor-picker order (each menu's commands, then
+    // Workshop tabs, then calculators). Users build their own submenus via
+    // folders in the editor — there are no pre-canned whole-menu submenus.
     public static IReadOnlyList<Entry> AllEntries => _all;
 
     public static Entry? Find(string? id)

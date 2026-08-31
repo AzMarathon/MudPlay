@@ -336,10 +336,6 @@
         <TextBlock Classes="SectionHeader" Text="TERMINAL RIGHT-CLICK MENU"
                    IsVisible="{Binding HasProfile}"/>
         <StackPanel IsVisible="{Binding HasProfile}" Spacing="8">
-            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource ChromeFgMutedBrush}"
-                       FontSize="{StaticResource FontSizeSm}"
-                       Text="What appears when you right-click the terminal, below the Favorites / Recent shortcuts. Add whole menus, single commands, or a direct link to a Workshop tab or calculator — rename any of them — then Apply."/>
-
             <Grid ColumnDefinitions="*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="SectionHeader" Margin="0,0,0,4" Text="IN THE MENU (TOP TO BOTTOM)"/>
                 <TextBlock Grid.Row="0" Grid.Column="2" Classes="SectionHeader" Margin="0,0,0,4" Text="ADD AN ITEM"/>
@@ -353,6 +349,7 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:ContextMenuRowViewModel">
                                 <TextBlock Text="{Binding DisplayLabel}" VerticalAlignment="Center"
+                                           Margin="{Binding Indent}"
                                            Classes.SeparatorRow="{Binding IsSeparator}"/>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -362,6 +359,8 @@
                 <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,0" Spacing="6" VerticalAlignment="Top">
                     <Button Content="Move up"     Command="{Binding MoveContextMenuUpCommand}"     HorizontalAlignment="Stretch"/>
                     <Button Content="Move down"   Command="{Binding MoveContextMenuDownCommand}"   HorizontalAlignment="Stretch"/>
+                    <Button Content="New folder"  Command="{Binding AddContextMenuFolderCommand}"  HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Add a named folder (a fly-out submenu). Select it, then add items from the right to put them inside."/>
                     <Button Content="Add separator" Command="{Binding AddContextMenuSeparatorCommand}" HorizontalAlignment="Stretch"/>
                     <Button Content="Remove"      Command="{Binding RemoveContextMenuEntryCommand}" HorizontalAlignment="Stretch"/>
                     <Button Content="Reset"       Command="{Binding ResetContextMenuCommand}"       HorizontalAlignment="Stretch"

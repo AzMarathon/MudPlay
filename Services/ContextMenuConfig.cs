@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Models.Profile;
 
@@ -29,19 +30,23 @@ public sealed partial class ContextMenuConfig : ObservableObject
     public ContextMenuSettings Snapshot()
     {
         List<ContextMenuEntry> copy = new(Layout.Count);
-        foreach (ContextMenuEntry item in Layout)
-        {
-            copy.Add(new ContextMenuEntry { Kind = item.Kind, Id = item.Id, Label = item.Label });
-        }
+        foreach (ContextMenuEntry item in Layout) copy.Add(Clone(item));
         return new ContextMenuSettings { Layout = copy };
     }
 
     private void ReplaceAll(IEnumerable<ContextMenuEntry> items)
     {
         Layout.Clear();
-        foreach (ContextMenuEntry item in items)
-        {
-            Layout.Add(new ContextMenuEntry { Kind = item.Kind, Id = item.Id, Label = item.Label });
-        }
+        foreach (ContextMenuEntry item in items) Layout.Add(Clone(item));
     }
+
+    // Deep copy — carries a folder's Children so the live layout doesn't alias
+    // the dto's lists.
+    private static ContextMenuEntry Clone(ContextMenuEntry item) => new()
+    {
+        Kind = item.Kind,
+        Id = item.Id,
+        Label = item.Label,
+        Children = item.Children?.Select(Clone).ToList(),
+    };
 }

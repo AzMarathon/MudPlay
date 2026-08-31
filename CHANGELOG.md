@@ -5,10 +5,11 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 ## 3.42.0
 
 - The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts, at the bottom). The pinned Favorites / Recent walk shortcuts still lead it; everything below is yours to arrange
-- Add **whole main menus** (File / View / Action / Tools) as nested submenus, or any **individual command** on its own
+- Add any **menu command** (window opens, one-shots, utilities like Bug report / Program Log / Wire Inspector); auto-engine toggles are left out (they belong on the toolbar / Action menu)
 - Add a **direct link to a Player Workshop tab** (opens the Workshop straight to Character Info / Equipment / Calculators / Bosses / Roomba / …)
 - Add a **direct link to a calculator** — opens the Workshop on the Calculators tab with that calculator **expanded and centered** (Hit / Movement / Swing / Backstab / Mana Regen / Realm Rankings)
-- **Rename** any entry to whatever you want while it still links to the same action; reorder, add separators, or Reset to the built-in menu
+- Build your own **fly-out folders** — named submenus you fill with whatever items you want
+- **Rename** any entry (or folder) to whatever you want while an entry still links to the same action; reorder, add separators, or Reset to the built-in menu
 - **Import** a menu from another character or a shared `.json` file, and **Export** yours to share with friends
 - Saved per character
 

@@ -261,40 +261,50 @@ public partial class MainWindow : Window
             items.RemoveAt(items.Count - 1);
 
         foreach (ContextMenuEntry entry in vm.ContextMenu.Layout)
+            if (BuildLayoutItem(entry, vm) is { } built) items.Add(built);
+    }
+
+    // One top-level layout entry → a menu control: a separator, a user-defined
+    // folder (a named fly-out submenu of its Children), or a catalogue-backed
+    // entry. Unknown ids and empty folders are dropped so nothing dead renders.
+    private static Control? BuildLayoutItem(ContextMenuEntry entry, MainWindowViewModel vm)
+    {
+        switch (entry.Kind)
         {
-            if (entry.Kind == ContextMenuEntryKind.Separator)
+            case ContextMenuEntryKind.Separator:
+                return new Separator();
+            case ContextMenuEntryKind.Folder:
             {
-                items.Add(new Separator());
-                continue;
+                MenuItem folder = new() { Header = string.IsNullOrWhiteSpace(entry.Label) ? "Folder" : entry.Label! };
+                if (entry.Children is { } children)
+                    foreach (ContextMenuEntry child in children)
+                        if (BuildFolderChild(child, vm) is { } c) folder.Items.Add(c);
+                return folder.Items.Count > 0 ? folder : null;   // hide an empty folder
             }
-            MenuActionCatalogue.Entry? def = MenuActionCatalogue.Find(entry.Id);
-            if (def is null) continue;   // stale / unknown id — skip, never add a dead item
-            if (BuildContextMenuEntry(def, vm, entry.Label) is { } built) items.Add(built);
+            default:   // Entry
+                return MenuActionCatalogue.Find(entry.Id) is { } def
+                    ? BuildContextMenuEntry(def, vm, entry.Label)
+                    : null;
         }
     }
 
+    // A folder's child — an Entry or Separator only (folders are one level deep).
+    private static Control? BuildFolderChild(ContextMenuEntry child, MainWindowViewModel vm)
+    {
+        if (child.Kind == ContextMenuEntryKind.Separator) return new Separator();
+        return MenuActionCatalogue.Find(child.Id) is { } def
+            ? BuildContextMenuEntry(def, vm, child.Label)
+            : null;
+    }
+
     // Resolve one catalogue entry into a MenuItem, or null when it can't be built
-    // (an unresolvable command, or an empty submenu). Recurses for submenu members.
-    // customLabel (the user's chosen name) overrides the catalogue label when set.
+    // (an unresolvable command). customLabel (the user's chosen name) overrides
+    // the catalogue label when set.
     private static Control? BuildContextMenuEntry(MenuActionCatalogue.Entry def, MainWindowViewModel vm, string? customLabel = null)
     {
         string header = string.IsNullOrWhiteSpace(customLabel) ? def.Label : customLabel!;
         switch (def.EntryKind)
         {
-            case MenuActionCatalogue.Kind.Submenu:
-            {
-                MenuItem parent = new() { Header = header };
-                if (def.Members is { } members)
-                {
-                    foreach (string memberId in members)
-                    {
-                        if (MenuActionCatalogue.Find(memberId) is { } child
-                            && BuildContextMenuEntry(child, vm) is { } builtChild)
-                            parent.Items.Add(builtChild);
-                    }
-                }
-                return parent.Items.Count > 0 ? parent : null;
-            }
             case MenuActionCatalogue.Kind.Toggle:
             {
                 MenuItem item = new() { Header = header, ToggleType = MenuItemToggleType.CheckBox };

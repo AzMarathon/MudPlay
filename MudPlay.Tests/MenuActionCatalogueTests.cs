@@ -70,17 +70,15 @@ public class MenuActionCatalogueTests
         }
     }
 
+    // No auto-engine toggles in the pool — they live on the toolbar / Action menu,
+    // not the right-click menu (user's rule). Sanity-check they're absent.
     [Fact]
-    public void EverySubmenuMember_ResolvesInTheCatalogue()
+    public void Catalogue_HasNoAutoEngineToggles()
     {
-        foreach (MenuActionCatalogue.Entry e in MenuActionCatalogue.AllEntries
-                     .Where(e => e.EntryKind == MenuActionCatalogue.Kind.Submenu))
-        {
-            Assert.NotNull(e.Members);
-            foreach (string memberId in e.Members!)
-                Assert.True(MenuActionCatalogue.Find(memberId) is not null,
-                    $"submenu '{e.Id}' references unknown member '{memberId}'");
-        }
+        Assert.Null(MenuActionCatalogue.Find("action.autocombat"));
+        Assert.Null(MenuActionCatalogue.Find("action.sprint"));
+        // But one-shot manual commands stay.
+        Assert.NotNull(MenuActionCatalogue.Find("action.getall"));
     }
 
     [Fact]
@@ -116,6 +114,43 @@ public class MenuActionCatalogueTests
         Assert.Equal(ContextMenuEntryKind.Separator, snap.Layout[1].Kind);
         Assert.Equal("calc.hit", snap.Layout[2].Id);
         Assert.Null(snap.Layout[2].Label);
+    }
+
+    // A user-defined folder with children deep-copies through the config (the
+    // live layout must not alias the dto's child lists).
+    [Fact]
+    public void Config_RoundTripsFolderWithChildren()
+    {
+        ContextMenuSettings dto = new()
+        {
+            Layout = new()
+            {
+                new ContextMenuEntry
+                {
+                    Kind = ContextMenuEntryKind.Folder,
+                    Label = "Tools",
+                    Children = new()
+                    {
+                        new ContextMenuEntry { Kind = ContextMenuEntryKind.Entry, Id = "tools.bugreport" },
+                        new ContextMenuEntry { Kind = ContextMenuEntryKind.Separator },
+                        new ContextMenuEntry { Kind = ContextMenuEntryKind.Entry, Id = "tools.log", Label = "Log" },
+                    },
+                },
+            },
+        };
+        ContextMenuConfig cfg = new();
+        cfg.ApplyFrom(dto);
+        ContextMenuSettings snap = cfg.Snapshot();
+
+        ContextMenuEntry folder = Assert.Single(snap.Layout!);
+        Assert.Equal(ContextMenuEntryKind.Folder, folder.Kind);
+        Assert.Equal("Tools", folder.Label);
+        Assert.NotNull(folder.Children);
+        Assert.Equal(3, folder.Children!.Count);
+        Assert.Equal("tools.bugreport", folder.Children[0].Id);
+        Assert.Equal(ContextMenuEntryKind.Separator, folder.Children[1].Kind);
+        Assert.Equal("Log", folder.Children[2].Label);
+        Assert.NotSame(dto.Layout[0].Children, folder.Children);   // deep copy, not an alias
     }
 
     [Fact]

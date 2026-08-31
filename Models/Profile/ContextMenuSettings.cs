@@ -22,18 +22,23 @@ public sealed class ContextMenuEntry
 {
     public ContextMenuEntryKind Kind { get; set; } = ContextMenuEntryKind.Entry;
 
-    // Stable id resolved against Services.MenuActionCatalogue. null when Kind is
-    // ContextMenuEntryKind.Separator.
+    // Stable id resolved against Services.MenuActionCatalogue (Entry kind). null
+    // for a Separator or a Folder.
     public string? Id { get; set; }
 
-    // Optional user-chosen display name — the entry still LINKS to Id's action /
-    // submenu / tab / calculator, this just renames how it appears in the menu.
-    // null / empty falls back to the catalogue entry's default label.
+    // Entry kind: optional user-chosen display name (null/empty = catalogue
+    // default). Folder kind: the folder's name (shown as a fly-out submenu).
     public string? Label { get; set; }
+
+    // Folder kind only: the entries shown when the folder flies out. One level
+    // deep — a folder holds commands / links / separators, not other folders.
+    public List<ContextMenuEntry>? Children { get; set; }
 }
 
 public enum ContextMenuEntryKind
 {
     Entry,
     Separator,
+    // A user-defined named submenu (folder) that flies out its Children.
+    Folder,
 }
