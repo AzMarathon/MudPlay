@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.39.2**
-> - Fixed: Monster Intel's rounds-to-kill cap now hides monsters that take longer than the cap, instead of just relabeling them "<cap>+"
-> - Monster Intel's AC vs Evil is now editable — a hand correction for when the auto-calc doesn't yet account for an active AC-boosting spell buff, which also feeds Hits You % for evil monsters
+> **Version 3.39.3**
+> - Monster Intel: double-click a monster row to jump straight to its record in the Game Data Browser's Monsters tab
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -1,7 +1,9 @@
 using System;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using MudPlay.Game.Combat;
+using MudPlay.Services;
 using MudPlay.ViewModels;
 
 namespace MudPlay.Views;
@@ -36,6 +38,17 @@ public partial class MonsterIntelWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         if (DataContext is MonsterIntelViewModel vm) vm.Dispose();
+    }
+
+    // Double-click a monster → jump to its Game Data Browser record (opens
+    // or re-focuses the browser at the Monsters section and selects the
+    // matching row). Mirrors ItemFinderWindow's OnRowDoubleTapped. A
+    // double-tap also selects the row, so MonsterGrid.SelectedItem is the
+    // double-clicked entry; Monster Intel stays open (modeless) alongside it.
+    private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (this.FindControl<DataGrid>("MonsterGrid")?.SelectedItem is MonsterIntelEntry entry)
+            AppServices.Current.OpenMonsterGameData(entry.Number);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

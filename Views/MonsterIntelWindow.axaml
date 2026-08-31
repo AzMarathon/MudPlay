@@ -140,7 +140,7 @@
 
                 <DataGrid Grid.Row="2" x:Name="MonsterGrid" ItemsSource="{Binding RowsView}"
                           SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
-                          SelectionMode="Single"
+                          SelectionMode="Single" DoubleTapped="OnRowDoubleTapped"
                           AutoGenerateColumns="False" IsReadOnly="True"
                           GridLinesVisibility="Horizontal" CanUserSortColumns="True" CanUserResizeColumns="True"
                           HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"

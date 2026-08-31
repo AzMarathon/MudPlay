@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.39.3
+
+- Monster Intel: double-click a monster row to jump straight to its record in the Game Data Browser's Monsters tab — opens or re-focuses the browser and selects the row, Monster Intel stays open alongside it
+
 ## 3.39.2
 
 - Fixed: Monster Intel's rounds-to-kill cap now actually hides monsters that take longer than the cap to kill, instead of just relabeling them "<cap>+" — a monster you can't kill at all still shows as "—", since that's different information from "too slow"
