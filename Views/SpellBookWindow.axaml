@@ -27,6 +27,9 @@
         <Style Selector="DataGridRow:selected TextBlock.cellName"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
         <Style Selector="DataGridRow:selected TextBlock.cellDim"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
         <Style Selector="DataGridRow:selected TextBlock.cellEffect"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
+        <!-- Tighten the default column-header padding so a longer header
+             ("Difficulty") isn't clipped in a snug column. -->
+        <Style Selector="DataGridColumnHeader"><Setter Property="Padding" Value="4,0"/></Style>
     </Window.Styles>
 
     <DockPanel LastChildFill="True">
@@ -40,8 +43,19 @@
             <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
                 <TextBlock Grid.Column="0"
                            Text="{Binding HeaderText}"
+                           HorizontalAlignment="Left"
                            Foreground="{StaticResource ChromeFgBrush}"
                            FontSize="13"
+                           VerticalAlignment="Center"/>
+                <!-- How the Difficulty column is computed, surfaced in the blank
+                     space between the class/level and the filters. -->
+                <TextBlock Grid.Column="0"
+                           Text="{Binding DifficultyFormulaText}"
+                           HorizontalAlignment="Right"
+                           Margin="0,0,16,0"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontFamily="{StaticResource FontMono}"
+                           FontSize="11"
                            VerticalAlignment="Center"/>
                 <CheckBox Grid.Column="1"
                           IsChecked="{Binding ShowAllSpells}"
@@ -208,7 +222,7 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Difficulty" SortMemberPath="DifficultySort" Width="80">
+                <DataGridTemplateColumn Header="Difficulty" SortMemberPath="DifficultySort" Width="86">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:SpellBookRowViewModel">
                             <TextBlock Text="{Binding DifficultyText}" Classes="cellDim"
