@@ -43,8 +43,13 @@ public static class MonsterMatchupCalculator
             ? playerHit.OverallHitPercent / 100.0 * effectivePerHit * player.SwingsPerRound
             : 0;
         // RoundsToKill is 0 when the player can't out-damage a kill (no weapon
-        // or zero effective DPS) — the UI renders that as "—".
-        int roundsToKill = dps > 0 ? (int)System.Math.Ceiling(monster.Hp / dps) : 0;
+        // or zero effective DPS) — the UI renders that as "—". Clamp before the
+        // int cast: a pathological superboss (Hp/dps past int range — e.g. a
+        // high-DR boss chipped only by a crit sliver) saturates to int.MaxValue,
+        // which the caller's rounds-to-kill cap then shows as "<cap>+", rather
+        // than wrapping to a negative that renders blank.
+        double rounds = dps > 0 ? System.Math.Ceiling(monster.Hp / dps) : 0;
+        int roundsToKill = rounds >= int.MaxValue ? int.MaxValue : (int)rounds;
 
         // Monster → player. Only the primary physical slot is previewed.
         int monsterHit = 0;

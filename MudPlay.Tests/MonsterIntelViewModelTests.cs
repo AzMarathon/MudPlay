@@ -256,6 +256,18 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         }
     }
 
+    // The headline "hide unfightable mobs" rule: with a character loaded, a
+    // monster with no computable Hits You % (IncomingHitPercent -1 — an NPC /
+    // caster-only record with no physical attack, e.g. a trainer or quest-giver)
+    // is dropped from the list entirely, even with no Hits-You-% box checked
+    // (which otherwise shows everything).
+    [Fact]
+    public void UnfightableMonster_DroppedFromList_WhenCharacterLoaded()
+    {
+        using MonsterIntelViewModel vm = BuildViewModelWithSyntheticEntry(-1);
+        Assert.DoesNotContain(vm.RowsView.Cast<MonsterIntelEntry>(), e => e.Name == "test goblin");
+    }
+
     private static void SetBox(MonsterIntelViewModel vm, string property, bool value)
         => typeof(MonsterIntelViewModel).GetProperty(property)!.SetValue(vm, value);
 
