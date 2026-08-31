@@ -418,6 +418,26 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private void Close() => CloseRequested?.Invoke();
 
+    // "What should I fight next" — scores every monster CURRENTLY VISIBLE in
+    // the (already filtered) master list via MonsterRecommendationScorer and
+    // selects the best one, so it respects whatever Hits-You-% bands /
+    // rounds-to-kill cap / name filter the player already has set rather
+    // than second-guessing them. First-pass heuristic (see the scorer's own
+    // doc comment) — expected to need a few rounds of tuning as real usage
+    // turns up cases it gets wrong. No-op if nothing in view is killable.
+    [RelayCommand]
+    private void RecommendMob()
+    {
+        MonsterIntelEntry? best = null;
+        double bestScore = double.NegativeInfinity;
+        foreach (MonsterIntelEntry candidate in RowsView.Cast<MonsterIntelEntry>())
+        {
+            double score = MonsterRecommendationScorer.Score(candidate);
+            if (score > bestScore) { bestScore = score; best = candidate; }
+        }
+        if (best is not null) SelectedEntry = best;
+    }
+
     // ----- detail panel -----
     // Deliberately narrow: this window answers "can I fight this thing right
     // now," not "tell me everything about it" (that's the Game Data Browser's

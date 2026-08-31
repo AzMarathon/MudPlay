@@ -184,6 +184,90 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.Contains(vm.RowsView.Cast<MonsterIntelEntry>(), e => e.Name == "test goblin");
     }
 
+    // MonsterRecommendationScorer -- pure, no VM needed.
+    [Fact]
+    public void RecommendationScore_NotKillable_IsNegativeInfinity()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        MonsterIntelEntry entry = MonsterIntelEntry.BuildCatalog(catalog).First();
+        entry.EstimatedRoundsToKill = 0;
+        entry.IncomingHitPercent = 5;
+
+        Assert.Equal(double.NegativeInfinity, MonsterRecommendationScorer.Score(entry));
+    }
+
+    [Fact]
+    public void RecommendationScore_NoComputedData_IsNegativeInfinity()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        MonsterIntelEntry entry = MonsterIntelEntry.BuildCatalog(catalog).First();
+        entry.EstimatedRoundsToKill = 5;
+        entry.IncomingHitPercent = -1;
+
+        Assert.Equal(double.NegativeInfinity, MonsterRecommendationScorer.Score(entry));
+    }
+
+    [Fact]
+    public void RecommendationScore_FasterKillAndSaferFight_ScoresHigher()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        MonsterIntelEntry entry = MonsterIntelEntry.BuildCatalog(catalog).First(e => e.Name == "test goblin");
+
+        entry.EstimatedRoundsToKill = 5;
+        entry.IncomingHitPercent = 50;
+        double riskyAndSlow = MonsterRecommendationScorer.Score(entry);
+
+        entry.EstimatedRoundsToKill = 2;
+        entry.IncomingHitPercent = 5;
+        double fastAndSafe = MonsterRecommendationScorer.Score(entry);
+
+        Assert.True(fastAndSafe > riskyAndSlow);
+    }
+
+    // Regression: RecommendMobCommand must pick the best-scoring monster
+    // from what's CURRENTLY VISIBLE (respects the player's own filters),
+    // not the whole unfiltered catalog, and it must select that entry so
+    // the detail panel opens on it.
+    [Fact]
+    public void RecommendMob_SelectsHighestScoringVisibleEntry()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 10, Agility = 50, Charm = 50 };
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
+        var itemMagic = new ItemMagicIndex(cache);
+
+        using var vm = new MonsterIntelViewModel(
+            cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
+            observations: null, playerState: null);
+
+        FieldInfo allField = typeof(MonsterIntelViewModel).GetField("_all", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var all = (List<MonsterIntelEntry>)allField.GetValue(vm)!;
+        MonsterIntelEntry goblin = all.First(e => e.Name == "test goblin");
+        // "test wraith" has no physical attack, but for this test we only
+        // care about ranking behavior, not real Hits-You% eligibility --
+        // override IncomingHitPercent past the "no computable value" gate.
+        MonsterIntelEntry wraith = all.First(e => e.Name == "test wraith");
+
+        goblin.EstimatedRoundsToKill = 5;
+        goblin.IncomingHitPercent = 10;      // score: 50/5 * 0.90 = 9.0
+        wraith.EstimatedRoundsToKill = 2;
+        wraith.IncomingHitPercent = 5;       // score: 50/2 * 0.95 = 23.75
+        vm.RowsView.Refresh();
+
+        vm.RecommendMobCommand.Execute(null);
+
+        Assert.Equal("test wraith", vm.SelectedEntry?.Name);
+    }
+
     // Accuracy/AccuracyText surface the monster's own physical-attack
     // accuracy directly (the same value IncomingHitPercent already feeds
     // into CombatCalculator as attackerAccuracy) -- empty for a spell-only

@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.39.3**
-> - Monster Intel: double-click a monster row to jump straight to its record in the Game Data Browser's Monsters tab
+> **Version 3.39.5**
+> - Fixed: Monster Intel's AC vs Evil field was truncated/clipped
+> - Monster Intel gains a **Recommend a mob** button — picks the best fight from what's currently shown, favoring high EXP-per-round and low chance to get hit back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

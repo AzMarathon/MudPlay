@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.39.5
+
+- Fixed: Monster Intel's AC vs Evil field was truncated/clipped — widened to match the working rounds-to-kill cap field's sizing
+- Monster Intel gains a **Recommend a mob** button: scores whatever's currently shown in the list (respecting your own filters) by EXP per round of fighting, discounted by the monster's own chance to hit back, and selects the best pick — a first-pass heuristic, expect it to get tuned
+
 ## 3.39.3
 
 - Monster Intel: double-click a monster row to jump straight to its record in the Game Data Browser's Monsters tab — opens or re-focuses the browser and selects the row, Monster Intel stays open alongside it

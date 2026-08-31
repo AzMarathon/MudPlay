@@ -93,7 +93,7 @@
                         <NumericUpDown Value="{Binding EffectiveAcVsEvil, Mode=TwoWay}"
                                        Minimum="0" Maximum="9999" Increment="1"
                                        FormatString="0" ShowButtonSpinner="True"
-                                       Width="90" MinWidth="90" Padding="4,0"/>
+                                       Width="110" MinWidth="110"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -102,13 +102,16 @@
 
             <!-- ===== Left: searchable master list ===== -->
             <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*" Margin="0,0,12,0">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,8">
                     <TextBox Grid.Column="0" Classes="clearable" Text="{Binding NameFilter, Mode=TwoWay}"
                              PlaceholderText="Filter by name…"/>
                     <TextBlock Grid.Column="1" Text="{Binding CountText}" Margin="8,0,0,0"
                                Foreground="{StaticResource ChromeFgSecBrush}"
                                FontSize="{StaticResource FontSizeSm}" VerticalAlignment="Center"/>
-                    <Button Grid.Column="2" Content="Close" Command="{Binding CloseCommand}" Margin="8,0,0,0"/>
+                    <Button Grid.Column="2" Content="Recommend a mob" Command="{Binding RecommendMobCommand}"
+                            Margin="8,0,0,0" IsVisible="{Binding HasCharacterContext}"
+                            ToolTip.Tip="Picks the best fight from what's currently shown in the list below — highest EXP per round, favoring monsters that are fast to kill and unlikely to hit back. First-pass heuristic, still being tuned. Selects the pick so its detail panel opens on the right."/>
+                    <Button Grid.Column="3" Content="Close" Command="{Binding CloseCommand}" Margin="8,0,0,0"/>
                 </Grid>
 
                 <StackPanel Grid.Row="1" Spacing="6" Margin="0,0,0,8"

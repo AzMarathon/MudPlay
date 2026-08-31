@@ -73,6 +73,34 @@ public sealed record MonsterIntelEntry
     }
 }
 
+// First-pass "what should I fight next" heuristic behind Monster Intel's
+// Recommended Mob button — deliberately simple, and expected to need
+// tuning over a few passes (see the button's own doc comment in
+// MonsterIntelViewModel). EXP earned per round of fighting, discounted by
+// the monster's own chance to land a hit back. Lowest-HP and "player's
+// accuracy vs the monster's AC" (the melee-relevant factor the user asked
+// for) don't need their own terms: EstimatedRoundsToKill already is the
+// player's own weapon landing hits on this specific monster's AC/dodge
+// divided into its HP, so a monster that's either tanky OR hard for THIS
+// character to hit already scores worse through that one term.
+internal static class MonsterRecommendationScorer
+{
+    // NegativeInfinity for anything that can't be recommended at all: no
+    // computed data yet, or genuinely not killable with the current
+    // weapon (0 rounds) — "no point recommending a mob you're only going
+    // to hit 10% of the time" applies exactly here, since a monster the
+    // player barely lands hits on already shows an inflated or 0
+    // EstimatedRoundsToKill.
+    public static double Score(MonsterIntelEntry entry)
+    {
+        if (entry.EstimatedRoundsToKill <= 0 || entry.IncomingHitPercent < 0)
+            return double.NegativeInfinity;
+
+        double safety = 1.0 - System.Math.Clamp(entry.IncomingHitPercent, 0, 100) / 100.0;
+        return entry.Exp / (double)entry.EstimatedRoundsToKill * safety;
+    }
+}
+
 // Ability-code -> element-name map for the five elemental resists — Your
 // Matchup's incoming-threat lookup uses CodeForName to match a monster's
 // CastsElements name back to the resist code its own gear tracks under.
