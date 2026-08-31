@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.39.8**
-> - Fixed: a loop could hang indefinitely if a move's confirmation was swallowed by an unrelated line arriving the same instant (e.g. a debuff reapplying) — the stall watchdog now arms on every move, not just after a pause/resume
-> - Fixed: a self-buff could get stuck recasting every few seconds indefinitely out of combat, racing an out-of-tune fallback timer against the confirmed combat-tick cadence
+> **Version 3.39.9**
+> - Fixed: recovering from a stalled move could still wedge the loop forever, silently paused with nothing holding it — if the recovery engine's own backtrack move got refused too (a debuff, a shut door, a blocking monster), nothing was watching for that case
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

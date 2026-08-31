@@ -268,6 +268,23 @@ public sealed class EngineRecoveryGate
         if (t.NewConfidence != RoomConfidence.Confirmed) return;
         if (t.NewRoom is not { } room) return;
 
+        // Tier-3 backtrack move was refused, not landed. RoomTracker.NoteMoveBlocked
+        // reverts Pending → Confirmed at the SAME room it was already at
+        // (PreviousRoom and NewRoom are literally the same instance — see
+        // SetConfidence), so no room ever rendered and OnRoomObserved/
+        // HandleLitLanding — the normal landing path — never fires. Left
+        // unhandled, _tier3Phase sat at AwaitingLanding forever with nothing
+        // to advance, retry, or fail it: the whole engine stayed silently
+        // wedged, paused with no gate holding it (report
+        // paradigm-20260831-120857, "movement stopped again" — "Paused by:
+        // (nothing)"). Fail cleanly instead: the player gets a visible abort
+        // dialog, not a silent multi-minute stall.
+        if (_tier3Phase == Tier3Phase.AwaitingLanding && ReferenceEquals(t.PreviousRoom, t.NewRoom))
+        {
+            FailTier3("tier-3 backtrack move refused; can't reverse-walk further");
+            return;
+        }
+
         // True 1-of-1 anchor refresh — independent of tier.
         IReadOnlyList<RoomKey> candidates = _graph.FindCandidates(room.Name, ExitMaskToSet(room.ExitMask));
         bool isStrict = candidates.Count == 1;

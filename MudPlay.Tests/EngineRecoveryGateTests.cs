@@ -480,6 +480,52 @@ public sealed class EngineRecoveryGateTests : IDisposable
         Assert.Equal(new RoomKey(1, 20), tracker.State.CurrentRoom!.Key);
     }
 
+    // Regression (report paradigm-20260831-120857, "movement stopped again" /
+    // "Paused by: (nothing)"): the tier-3 backtrack move itself can get
+    // refused (a debuff, a since-shut door, a monster blocking the exit —
+    // anything a plain move can be refused for). NoteMoveBlocked reverts
+    // Pending -> Confirmed at the SAME room the engine was already at, so no
+    // room ever renders and OnRoomObserved/HandleLitLanding (the normal
+    // landing path) never fires. Before the fix, nothing else was watching
+    // AwaitingLanding either, so the whole engine sat silently wedged
+    // forever with no gate holding it. It must fail cleanly instead.
+    [Fact]
+    public void Tier3_BacktrackMoveRefused_FailsCleanly_InsteadOfHangingForever()
+    {
+        (RoomGraphManager graph, RoomTracker tracker) = NewGraphAndTracker("twinsouth-refused", TwinSouthGraphJson);
+        var gate = new EngineRecoveryGate(graph, tracker);
+        var engine = new RecordingEngine();
+
+        // Land Confirmed at the ambiguous Fork (mirrors ParkSuspectAtFork's
+        // first half, but stops short of the second off-graph observation
+        // that demotes it to Suspect -- NoteMoveBlocked only reverts a
+        // Pending move, and Suspect never reaches Pending, so this test
+        // needs the tracker genuinely Pending, not Suspect, to reproduce
+        // the real incident's shape).
+        tracker.SetLocated(new RoomKey(1, 1));
+        tracker.NoteMoveSent(Direction.N);
+        tracker.NoteRoomObserved(new RoomObservation("Fork", new HashSet<Direction>([Direction.N, Direction.S])));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
+
+        gate.Attach(engine);                     // anchor seeds 1/2
+        tracker.NoteMoveSent(Direction.N);        // the move that stalls -- confirmation never arrives
+        for (int i = 0; i < EngineRecoveryGate.Tier2StepBudget; i++)
+            gate.NoteEngineStepSent(Direction.N);
+
+        gate.NoteSuspectedMismatch("in-flight stall, no confirmation");
+        Assert.Equal(Direction.S, Assert.Single(engine.Backtracks));   // awaiting this landing
+
+        // The server refuses the reverse-S backtrack move -- no room renders,
+        // so OnRoomObserved never fires for it either. NoteMoveBlocked drains
+        // the outstanding pending move and reverts Pending -> Confirmed at the
+        // SAME room (CurrentRoom never moved), reproducing the exact
+        // no-room-rendered shape this regression covers.
+        tracker.NoteMoveBlocked();
+
+        Assert.Equal(1, engine.AbortCount);
+    }
+
     // Dark recovery: a room too dark to display can't be look-swept (nothing
     // renders), so the gate must skip the sweep entirely and reverse-walk on the
     // fact-of-movement alone — no `look` bytes ever hit the wire.

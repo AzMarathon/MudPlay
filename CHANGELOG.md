@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.39.9
+
+- Fixed: recovering from a stalled move could still wedge the loop forever, silently paused with nothing holding it — if the recovery engine's own backtrack move got refused too (a debuff, a shut door, a blocking monster), nothing was watching for that case
+- bug reports addressed: paradigm-20260831-120857
+
 ## 3.39.8
 
 - Fixed: a loop could hang indefinitely mid-walk if a move's confirmation was swallowed by an unrelated line arriving at the same instant (e.g. a debuff reapplying) — the in-flight stall watchdog was only armed after a pause/resume, never on an ordinary move send, so nothing ever timed out and recovered
