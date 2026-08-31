@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.13**
-> - Fixed: Monster Intel's AC vs Evil and Hits You % both omitted the flat +10 Shadow AC bonus, which applies against every attacker
+> **Version 3.38.3**
+> - Monster Intel refocused into a fast pre-fight check — "can I safely fight this right now?" The master list now shows Name / HP / EXP / Accuracy / **Hits You %** / **Est. Rounds to Kill**, dropping the broad reference view (still on the Game Data Browser's Monsters tab)
+> - Hits-You-% threshold checkboxes (six contiguous bands, no gap) narrow the list by how dangerous a monster's attack is; a rounds-to-kill cap (editable in the window) keeps a superboss from projecting into the millions
+> - Character bar gains **AC vs Evil**; monsters with no computable Hits You % (NPC / caster-only records) drop from the list once a character is loaded
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -22,7 +24,7 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Cash & items** — automated loot collection with sell/buy/stash/discard engines, banking, and equipment sets with auto-equip triggers.
 - **Character Workshop** — a unified hub for character management and development: live stats; **Equipment Manager** gear sets; an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons; **CP allocation** plans; **level projection**; quest, boss, and death tracking (with boss respawn timers you can sync between clients); character-info calculators; and **Roomba** — an automated gang-house item sorter backed by a shared item-location log you can query in-game with `@roomba`.
 - **Automation tools** — macros, aliases, triggers, and events; auto-engine toggles with per-character base modes and reconnect reconciliation; a one-press all-off kill switch; and a Sprint mode.
-- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window answers "can I safely fight this thing right now" — Hits-You-% threshold checkboxes against your live AC/Dodge, an estimated rounds-to-kill per monster with your current weapon, plus its attacks and your own combat history against it — without digging into the Browser.
+- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window gives a searchable monster reference — elemental resistances, spell-immunity/hit-magic requirements, attacks, loot, and locations — without digging into the Browser.
 - **Conversation & chat** — a dedicated conversation pane with per-channel filtering, search, logging, and history.
 - **Tools & diagnostics** — a timestamped full-ANSI scrollback with search/filter, a **Program Log**, **Session Stats**, a **Wire Inspector** for raw/classified stream inspection, and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES — IT CAPTURES FAR MORE THAN YOU CAN DESCRIBE OR SHOW IN A SCREENSHOT)***.
 - **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.

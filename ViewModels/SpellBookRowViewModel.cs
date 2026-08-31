@@ -19,7 +19,8 @@ public sealed class SpellBookRowViewModel
         Func<int, SpellFormulaInput?> resolveChain,
         Func<int, string?>? resolveSpellName = null,
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts = null,
-        int teachLevel = 0)
+        int teachLevel = 0,
+        int spellcasting = 0)
     {
         Number = spell.Number;
         Short = spell.Short;
@@ -27,6 +28,17 @@ public sealed class SpellBookRowViewModel
         ReqLevel = spell.ReqLevel;
         EffectiveLevel = System.Math.Max(spell.ReqLevel, teachLevel);
         IsObtained = isObtained;
+
+        // Cast-success chance for THIS character (Spellcasting stat + the spell's
+        // Diff), null when we can't state one — a non-caster class, or the stat
+        // line hasn't been read yet (Spellcasting 0). Level plays no part.
+        bool isKai = spell.Magery == SpellCastChance.KaiMagery;
+        int? success = SpellCastChance.Compute(spellcasting, spell.Formula.Diff, isKai);
+        SuccessSort = success ?? -1;
+        SuccessText = success is { } pct
+            ? $"{pct.ToString(System.Globalization.CultureInfo.InvariantCulture)}%"
+            : "—";
+        SuccessTooltip = BuildSuccessTooltip(spellcasting, spell.Formula.Diff, isKai, success);
 
         Mana = SpellCalculator.ManaCost(spell.Formula);
         ManaText = Mana.ToString();
@@ -63,6 +75,40 @@ public sealed class SpellBookRowViewModel
 
     // The effective unlock level as a bare number — the Lvl cell.
     public string ReqLevelText => EffectiveLevel.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    // Cast-success chance for this character as "95%", or "—" when none can be
+    // stated (non-caster, or Spellcasting not yet parsed). Column header is
+    // "Success %" — the spell's static Diff turned into the caster's real
+    // landing chance. See SpellCastChance.
+    public string SuccessText { get; }
+
+    // Success percent for column sorting; -1 for the "—" rows so they group.
+    public int SuccessSort { get; }
+
+    // Hover breakdown for the Success % cell: the equation with THIS spell's
+    // actual numbers (Spellcasting + its difficulty), including any clamp.
+    public string SuccessTooltip { get; }
+
+    // "Spellcasting 94 + spell difficulty (-5) = 89%" with the clamp spelled out,
+    // or the reason there's no chance to state.
+    private static string BuildSuccessTooltip(int spellcasting, int diff, bool isKai, int? success)
+    {
+        if (success is null)
+            return "No cast chance yet — not a caster class, or your stats haven't been read "
+                + "(type `stat` in the game, then reopen the book).";
+        if (diff >= SpellCastChance.AlwaysSucceedsDiff)
+            return "Always succeeds — a utility spell that never fizzles.";
+
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        int cap = isKai ? SpellCastChance.KaiCap : SpellCastChance.StockCap;
+        int raw = spellcasting + diff;
+        string signedDiff = diff >= 0 ? $"+{diff.ToString(c)}" : diff.ToString(c);
+        string line = $"Spellcasting {spellcasting.ToString(c)} + spell difficulty ({signedDiff})"
+            + $" = {raw.ToString(c)}%";
+        if (raw > cap) line += $"  →  capped at {cap.ToString(c)}%";
+        else if (raw < 0) line += "  →  floored at 0%";
+        return line;
+    }
 
     // Per-round mana cost — numeric, for column sorting.
     public long Mana { get; }

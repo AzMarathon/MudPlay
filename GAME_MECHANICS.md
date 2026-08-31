@@ -2167,21 +2167,26 @@ damage-type mitigation is the monster's `M.R.` ability, **not** a `Resist-<type>
 never nulls a spell deterministically from its value alone. It works through **two independent
 effects, each separately gated** (equations below are the reference client's own combat math):
 
-- **Partial damage reduction** — gated by the spell's *damage ability code*. Applies only to code
-  **1** `Damage`; code **17** `Damage(-MR)` **bypasses** it. `baseline M.R. is 50` (the no-change
-  point): for M.R. ≥ 50 the reduction is `(M.R. − 50) / 200`, climbing to a hard **cap of 50%** at
-  M.R. 150 and stopping (the target's own AntiMagic raises the cap to **75%**, via `M.R. / 200`).
-  Below M.R. 50 the term goes negative — low M.R. *amplifies* damage taken. So even an enormous
-  M.R. only ever **halves** (or, under AntiMagic, three-quarters) the damage — it can't reach 0.
-- **Full-resist chance** — gated by the spell's `TypeOfResists` (below). A separate per-cast roll
-  can negate the spell entirely, with probability `M.R. / 2` percent (M.R. 100 → 50% chance,
-  capped at 98% for M.R. ≥ 196) — a *chance*, never a certainty short of the cap.
-- Net: **100 M.R. never means 0 damage**, so M.R. must **never** feed a ≥100%→skip guard. Both
-  example spells actually carry code **17** (bypass the partial cut), which shows how the two
-  gates combine: `magic missile` (code 17 + `TypeOfResists 0`) takes **neither** effect — it
-  always lands full, the reliable nuker; `harm` (code 17 + `TypeOfResists 2`) takes no partial
-  cut but *can* be fully-resist-rolled; a code-**1** Normal spell would eat the capped partial cut
-  on top. In every case a high-M.R. monster can still take Normal-spell damage.
+- **Partial damage reduction** — gated by the spell's *damage ability code*. Applies to code **17**
+  `Damage(-MR)` (the "(−MR)" means M.R. **is** subtracted); code **1** `Damage` takes **no** M.R.
+  cut *([CONFIRMED] 2026-08-30, user + syntax53/MMUD-Explorer `CalculateResistDamage` /
+  `CalculateSpellCast` — **this note previously had the two codes reversed**)*. `baseline M.R. is 50`
+  (the no-change point): for M.R. ≥ 50 the reduction is `(M.R. − 50) / 200`, climbing to a hard **cap
+  of 50%** at M.R. 150 and stopping (the target's own AntiMagic raises the cap to **75%**, via
+  `M.R. / 200`). Below M.R. 50 the term goes negative — low M.R. *amplifies* damage taken. So even
+  an enormous M.R. only ever **halves** (or, under AntiMagic, three-quarters) the damage — never 0.
+- **Full-resist chance** — gated by the spell's `TypeOfResists` (below), **independent of the damage
+  code**. A separate per-cast roll can negate the spell entirely, with probability `M.R. / 2` percent
+  (M.R. 100 → 50% chance, capped at 98% for M.R. ≥ 196) — a *chance*, never a certainty short of the
+  cap.
+- Net: **100 M.R. never means 0 damage** (the partial cut caps at 50%, or 75% under AntiMagic), so
+  M.R. must **never** feed a ≥100%→skip guard. Both example spells carry code **17**, so both take
+  the partial cut: `magic missile` (code 17 + `TypeOfResists 0`) takes the partial cut but **no**
+  full-resist roll — still the most reliable nuker (never fully *negated*), just softened against a
+  high-M.R. target; `harm` (code 17 + `TypeOfResists 2`) takes the partial cut **and** can be
+  fully-resist-rolled. A code-**1** Normal spell would take **neither** M.R. effect (though the
+  full-resist roll, being `TypeOfResists`-gated, could still fire). In every case a high-M.R. monster
+  still takes Normal-spell damage.
 
 *3b-note. `TypeOfResists` — the full-resist eligibility flag.* The Spells-table `TypeOfResists`
 column (values 0/1/2) gates whether the full-resist roll above can fire, independent of the
@@ -2192,12 +2197,50 @@ so their only mitigation is the deterministic elemental cut in 3a — which is e
 elemental resist is safely pre-emptable. Among Normal spells, `magic missile` is `TypeOfResists 0`
 (never rolled-resisted) while `harm` is `TypeOfResists 2`.
 
+*3b-calc. Display damage calculator.* The Game Data spell view's interactive damage calculator
+(`SpellDamageCalculator`) implements the reduction above: the per-cast range comes from Min/MaxBase
+scaling, then the code-17 **magic-resist partial cut** (fraction `(MR−50)/200`, cap 50%; AntiMagic
+`MR/200` cap 75%; below MR 50 it amplifies), then the **elemental flat-% cut** on any elemental spell;
+the probabilistic full-resist chance is shown separately, never folded into the range. **The combat
+engine never estimates M.R.-reduced damage** — it only pre-empts spells on deterministic signals
+(elemental ≥100% resist per 3a via `MonsterResistIndex`, `SpellImmu`, and the `Magical` weapon-hit
+gate), and `CombatSpellChooser` explicitly resist-blocks *elemental* spells only. So correcting the
+code-1↔17 gating above changed **no combat decision** — the old reversed note was never implemented
+in engine code; it drove only the (now-fixed) doc and this display calculator.
+
 *3c. Poison (`AttType 6`) — not resistible, binary immunity.* Poison has **no** resist value and
 **no** `Resist-Poison` code — a target is either affected or immune, never "partially resisted."
 - Immunity is sourced from **race / items**, not a resist stat: the **Kang** race is
   poison-immune, the **golden headdress** item grants poison immunity, and **swamp boots** /
   **snakeskin boots** negate certain room-cast "swamp poison" effects — snakeskin also grants
   immunity to certain poisons, varying by game-data set.
+
+## Spell cast-success chance + the `Diff` column *([CONFIRMED] 2026-08-30, source: syntax53/MMUD-Explorer `GetSpellCastChance`)*
+
+A spell's chance to LAND (not fizzle) is a flat, **level-independent** function of the caster's
+`Spellcasting` stat and the spell's `Diff` (difficulty) column:
+
+```
+success% = clamp(Spellcasting + Diff, 0, cap)
+```
+
+- **`Diff`** is the Spells-table `Diff` column — normally **≤ 0** (a harder spell is more negative, so
+  it lowers the chance; `ethereal shield` = −5). It's added directly to Spellcasting.
+- **cap** = **100** for a **Kai** caster (`Magery` type **5**), else **98** (MajorMUD/stock; Paradigm
+  shares the stock cap — it's a MajorMUD variant, not GreaterMUD, whose cap is 100).
+- **Short-circuits:** `Diff ≥ 200` marks an always-succeeds utility spell → **100%**; a `Spellcasting`
+  of **0** means the character isn't a caster (or the stat line isn't parsed yet) → **no stated
+  chance** (the client shows "—", never a bogus 100%).
+- **Level plays no part** — the caster's level scales a spell's damage/duration, not its landing
+  chance. Modeled in `SpellCastChance`; surfaced as the Spell Book "Difficulty" column.
+
+## `DR` (ability code 7) magnitude — stored at 10× *([CONFIRMED] 2026-08-30, user)*
+
+The `DR` ability's stored value is **ten times** the damage-resistance the character actually gains:
+raw **10 → +1.0** DR, raw **22 → +2.2**, raw **15 → +1.5**. Display it as `raw / 10` to the tenth,
+never the raw store value (a spell/effect showing "DR +10" really grants +1.0). Applied in
+`SpellEffectFormatter` (the effect line) and the spell Game Data view. (Worn-DR on gear via the
+equipment stat path is a separate display not yet audited against this.)
 
 ## The `spells` / `sp` command output *([CONFIRMED] 2026-08-13, user capture, Paradigm)*
 

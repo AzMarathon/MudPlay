@@ -15,6 +15,18 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class ProfileServiceTests
 {
+    [Theory]
+    // report stock-20260828-104653: a copied profile keeps the old name; heal it.
+    [InlineData("Fujin", "Raijin WuzHere", "Raijin WuzHere")]  // copied profile → heal to full live name
+    [InlineData("Raijin", "Raijin WuzHere", "Raijin WuzHere")] // given matches, family missing → still heal (store family)
+    [InlineData("Raijin WuzHere", "Raijin WuzHere", null)]     // identical → no heal, no Save churn
+    [InlineData("raijin wuzhere", "Raijin WuzHere", null)]     // case-only difference → no heal
+    [InlineData("Fujin", "", null)]                            // blank stat name (pre-stat) → nothing to heal from
+    [InlineData("Fujin", null, null)]
+    [InlineData(null, "Raijin WuzHere", "Raijin WuzHere")]     // no stored name yet → adopt the live name
+    public void HealedCharacterName_HealsOnlyOnRealChange(string? current, string? stat, string? expected)
+        => Assert.Equal(expected, ProfileService.HealedCharacterName(current, stat));
+
     [Fact]
     public void NormalizeForLoad_BbsCredentials_ResolveCaseInsensitively()
     {

@@ -133,6 +133,13 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // True when the Game Data tab has content to show.
     public bool HasGameData => GameDataInfo.Count > 0;
 
+    // Interactive damage calculator (level + resist pickers), non-null only for a
+    // damage spell. Sits at the top of the Game Data tab.
+    public SpellDamageCalcViewModel? DamageCalc { get; }
+
+    // Drives the calculator panel's visibility.
+    public bool HasDamageCalc => DamageCalc is not null;
+
     // Tab the dialog opens on (0 = User Definitions, 1 = Game Data). A spell the player
     // can cast already has an authored cast message, so it opens on User Definitions where
     // the user's editable content lives. A spell with no message — cast by a room / item /
@@ -200,7 +207,8 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         IReadOnlyCollection<MessageRecord> existingRecords,
         bool isNew,
         GameDataCache? cache = null,
-        IReadOnlyList<GameDataInfoRow>? gameDataInfo = null)
+        IReadOnlyList<GameDataInfoRow>? gameDataInfo = null,
+        MudPlay.Game.Spells.SpellFormulaInput? spellFormula = null)
     {
         ArgumentNullException.ThrowIfNull(original);
         ArgumentNullException.ThrowIfNull(existingRecords);
@@ -209,6 +217,12 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         _isNew           = isNew;
         _cache           = cache;
         GameDataInfo     = gameDataInfo ?? Array.Empty<GameDataInfoRow>();
+
+        // A damage spell drives an interactive level/resist damage calculator on
+        // the Game Data tab (see SpellDamageCalcViewModel); the redundant static
+        // damage rows are suppressed upstream in SpellInfoRowsBuilder.
+        if (spellFormula is { } f && MudPlay.Game.Spells.SpellDamageCalculator.IsDamageSpell(f))
+            DamageCalc = new SpellDamageCalcViewModel(f);
 
         if (original.Links is { Count: > 0 } links)
         {

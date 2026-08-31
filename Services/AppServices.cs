@@ -2402,8 +2402,28 @@ public sealed class AppServices
         Profile.ProfileClosed += ()  => Party.LocalCharacterName = null;
         PlayerStats.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(Game.PlayerStats.Name) && !string.IsNullOrWhiteSpace(PlayerStats.Name))
-                Party.LocalCharacterName = PlayerStats.Name;
+            if (e.PropertyName != nameof(Game.PlayerStats.Name) || string.IsNullOrWhiteSpace(PlayerStats.Name))
+                return;
+            Party.LocalCharacterName = PlayerStats.Name;
+            // Heal a stale CharacterProfile.Name from the authoritative stat screen.
+            // Name is defined as the in-game character name (distinct from the profile
+            // FILE label, CurrentProfileName) and is otherwise only written on
+            // create/rename — so a profile COPIED from another character keeps the old
+            // name and every self-identity consumer of Current.Name mis-identifies self
+            // (report stock-20260828-104653: copied Fujin → renamed to Raijin, but
+            // Current.Name stayed "Fujin", hiding the real Fujin from player records).
+            // Healing it here fixes them all centrally the moment the user sees `stat`.
+            // Store the FULL "Given Family" name; HealedCharacterName returns null when
+            // it already matches, so there's no per-screen Save churn. Touches no
+            // filename or BBS folder — that's CurrentProfileName.
+            if (Profile.Current is { } cur
+                && ProfileService.HealedCharacterName(cur.Name, PlayerStats.Name) is { } healed)
+            {
+                Log.Info("Profile",
+                    $"healing profile character name '{cur.Name}' → '{healed}' from stat screen");
+                cur.Name = healed;
+                Profile.Save();
+            }
         };
         Profile.ProfileClosed += () => Panels.ApplyLayouts(layouts: null);
         Profile.ProfileSaving += p => p.PanelLayouts = Panels.SnapshotLayouts();
@@ -3971,6 +3991,9 @@ public sealed class AppServices
         // Realm picks the recovery mechanic: Paradigm packs the pile into a corpse
         // (`recover corpse`), Stock scatters it loose on the floor (per-item `get`).
         DeathRecovery.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
+        // Match our own corpse by the LIVE in-game name, not a copied profile's stale
+        // Current.Name (report stock-20260828-104653).
+        DeathRecovery.AttachLiveSelfName(() => Party.LocalCharacterName);
 
         // Read-only inventory queries — @wealth / @enc / @have report off the
         // InventoryManager snapshot; @what reports the GroundItems survey. No

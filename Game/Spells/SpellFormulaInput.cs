@@ -55,6 +55,19 @@ public readonly record struct SpellFormulaInput
     // Mana spent per individual fire (before the energy multiplier).
     public int ManaCost { get; init; }
 
+    // Spell difficulty (Diff). Normally <= 0 (a harder spell is more negative);
+    // it adds directly to the caster's Spellcasting to give the cast-success
+    // chance (see SpellCastChance). A value >= 200 marks an always-succeeds
+    // utility spell. Carried here so the success calc and the Game Data view can
+    // read it without re-touching the raw JSON.
+    public int Diff { get; init; }
+
+    // Attack type (AttType): the spell's damage element for resist purposes —
+    // 0 cold, 1 fire, 2 stone, 3 lightning, 4 Normal (magic-resist only), 5
+    // water, 6 poison. Picks which elemental resist the damage calculator scales
+    // against (see SpellDamageCalculator).
+    public int AttType { get; init; }
+
     // The ten Abil-N / AbilVal-N pairs in slot order. Empty when the row sets no
     // ability slots.
     public IReadOnlyList<SpellAbility> Abilities { get; init; } = [];

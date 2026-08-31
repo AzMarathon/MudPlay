@@ -27,6 +27,9 @@
         <Style Selector="DataGridRow:selected TextBlock.cellName"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
         <Style Selector="DataGridRow:selected TextBlock.cellDim"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
         <Style Selector="DataGridRow:selected TextBlock.cellEffect"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
+        <!-- Tighten the default column-header padding so a header isn't
+             clipped in a snug column. -->
+        <Style Selector="DataGridColumnHeader"><Setter Property="Padding" Value="4,0"/></Style>
     </Window.Styles>
 
     <DockPanel LastChildFill="True">
@@ -40,8 +43,19 @@
             <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
                 <TextBlock Grid.Column="0"
                            Text="{Binding HeaderText}"
+                           HorizontalAlignment="Left"
                            Foreground="{StaticResource ChromeFgBrush}"
                            FontSize="13"
+                           VerticalAlignment="Center"/>
+                <!-- How the Success % column is computed, surfaced in the blank
+                     space between the class/level and the filters. -->
+                <TextBlock Grid.Column="0"
+                           Text="{Binding SuccessFormulaText}"
+                           HorizontalAlignment="Right"
+                           Margin="0,0,16,0"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontFamily="{StaticResource FontMono}"
+                           FontSize="11"
                            VerticalAlignment="Center"/>
                 <CheckBox Grid.Column="1"
                           IsChecked="{Binding ShowAllSpells}"
@@ -203,6 +217,16 @@
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:SpellBookRowViewModel">
                             <TextBlock Text="{Binding ManaText}" Classes="cellDim"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       FontFamily="{StaticResource FontMono}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Success %" SortMemberPath="SuccessSort" Width="86">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="vm:SpellBookRowViewModel">
+                            <TextBlock Text="{Binding SuccessText}" Classes="cellDim"
+                                       ToolTip.Tip="{Binding SuccessTooltip}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        FontFamily="{StaticResource FontMono}"/>
                         </DataTemplate>

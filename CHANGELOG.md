@@ -2,42 +2,43 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.37.13
+## 3.38.3
 
-- Fixed: Monster Intel's AC vs Evil and Hits You % both omitted the flat +10 Shadow AC bonus (confirmed: it applies against every attacker, not just evil ones) — caught against a live character's own stat readout showing AC vs Evil/vs Good both 10 higher than AC + Prot Evil/Good alone
+- Monster Intel refocused into a fast pre-fight check — "can I safely fight this right now?" The master list now shows **Name / HP / EXP / Accuracy / Hits You % / Est. Rounds to Kill**, dropping the broad reference view (still available on the Game Data Browser's Monsters tab)
+- **Hits You %** — that monster's own physical attack's chance to land on you, given your live AC / Dodge and whichever ward applies (Prot Evil / Prot Good, plus the flat +10 Shadow AC bonus that applies against every attacker)
+- **Est. Rounds to Kill** — projected rounds for your currently-equipped weapon's Normal attack to drop the monster (live accuracy / damage / swings / crit; reuses the Character Workshop Calculators tab's MonsterMatchupCalculator); shows "—" when unarmed or unable to out-damage it, and caps at a tunable ceiling (default 999, editable in the window) shown as `<cap>+` so a superboss doesn't project into the millions
+- Replaced the single Safe threshold with a row of **Hits-You-% checkboxes** — six contiguous bands (2 / 5 / 10 / 20 / 40 / 40%+, covering 0-2, 3-5, 6-10, 11-20, 21-40, 41-100 with no gap or overlap); check any combination and a monster shows if it matches any checked band
+- Character bar gains **AC vs Evil** — your Armour Class plus your worn Prot Evil, the combined defense an evil monster's attack actually rolls against
+- A monster with no computable Hits You % (an NPC / caster-only record with no physical attack — trainer, quest-giver, etc.) is dropped from the list once a character is loaded, instead of showing blank
+- Removed from the window (all still on the Game Data Browser's Monsters tab): the "In this room" context bar, the Overview grab-bag, the Elemental Defenses matrix, the Casts panel, Loot, Locations, the Automation overlay editor, and multi-select comparison — kept: Attacks, Your Matchup, and Your Observations
 
-## 3.37.12
+## 3.38.2
 
-- Monster Intel character bar gains **AC vs Evil** — your Armour Class plus your worn Prot Evil, the combined defense an evil monster's attack actually rolls against
-- Monster Intel master list gains an **Accuracy** column — the monster's own physical-attack accuracy, the raw number behind the Hits You % outcome
+- Spell Book: the "Difficulty" column is renamed **Success %** — the number it shows is your chance to land the cast, so "Difficulty" read backwards; the header equation now reads "Success % = your Spellcasting + the spell's difficulty (capped at 98%, 100% for Kai)"
+- Game Data → Items filter now matches the friendly column labels, so you can type `weapon`, `feet`, or `plate` to filter by item type / worn slot / weapon or armour type — not just the raw code (applies to every MDB tab's Filter… box)
 
-## 3.37.10
+## 3.38.0
 
-- Monster Intel's rounds-to-kill cap moved out of Settings → Other and into the Monster Intel window itself, next to the Hits-You-% checkboxes — no need to leave the window to change it
+- Spell Book gains a **Difficulty** column (between Mana and Effect): your real chance to land the cast — Spellcasting + the spell's difficulty, capped at 98% (100% for Kai) — or "—" when you're not a caster / stats aren't read yet
+- Spell Game Data view overhauled: human-readable field labels (Required Level, Mana Cost, Difficulty, Resist Type, School, Cast Code, …) instead of raw column names
+- Spell Game Data view no longer triple-lists the same affect — a level-scaling stat affect now shows one row with its real range ("AC Blur +5 → +12"), replacing the meaningless "0" row and the duplicate "Magnitude" row
+- Spell DR now shown as the value actually gained (raw ÷ 10, e.g. "+1.0") everywhere it surfaces, not the raw store value ("+10")
+- Spell Energy Cost now spells out its fire rate: 0 → "(between rounds)", otherwise "(up to N times per round)" where N = 1000 ÷ energy cost
+- Damage spells now lead the Game Data tab with an interactive damage calculator: a Level picker (learned level → cap) recomputes min/max damage live, plus Magic-resist and elemental-resist pickers (where they apply) that show how a resistant target cuts the damage — replacing the old two contradictory damage numbers + scaling row
+- Spell Book Difficulty header shows the equation ("Spellcasting N + spell difficulty"); the clipped Difficulty column header is fixed
+- RemovesSpell entries collapse into one linked "Removes" row; display-only message-slot rows dropped
 
-## 3.37.9
+## 3.37.3
 
-- Monster Intel: removed the Hittable/Castable checkboxes — they silently gated on your current weapon/spells with no way to see or select what they were checking against, and are now redundant with the Est. Rounds to Kill column (a monster you can't effectively hurt just shows a huge or capped rounds figure, which is more informative than a plain yes/no)
-- Monster Intel's "Est. Rounds to Kill" now caps at a tunable ceiling (Settings → Other → rounds-to-kill cap, default 999) — a monster projecting past it shows `<cap>+` instead of a literal number that can run into the millions for a superboss
+- Roomba gangpath announcements now include the start/finish date and time, with the sending client's own timezone (a short name like PST/MST/EST for the common North American zones, a numeric UTC offset otherwise) instead of a bare "starting"/"complete" line
+- Sorting's completion announce now reports items sorted AND items inventoried — its recon and final scan already observe every room's floor the same way an Inventory-only run does, so a sort keeps the item-location log just as current
+- `@roomba <item>` replies now include the last-scanned date/time (with timezone) of that item's freshest sighting, so you can tell a fresh location from a stale one
 
-## 3.37.7
+## 3.37.2
 
-- Monster Intel's Hits-You-% checkboxes reworked from 5 bands (2/5/10/15/25%+) to 6 contiguous bands with no gap (2/5/10/20/40/40%+, covering 0-2, 3-5, 6-10, 11-20, 21-40, 41-100) — the old scheme left a dead 16-24% zone no box covered, and dumped roughly 40% of a geared character's fightable monsters into one undifferentiated "25%+" bucket
-
-## 3.37.6
-
-- Monster Intel master list gains two columns: **EXP** and **Est. Rounds to Kill** (projected rounds for your currently-equipped weapon's Normal attack to drop the monster, at your live accuracy/damage/swings/crit — reuses the same MonsterMatchupCalculator the Character Workshop's Calculators tab already uses; shows "—" when unarmed or unable to out-damage it)
-
-## 3.37.5
-
-- Monster Intel refocused back to a fast pre-fight check: the master list now shows just Name, HP, and a new "Hits You %" column (that monster's own attack's chance to land on you, given your live AC/Dodge/wards)
-- Replaced the single Safe threshold with a row of Hits-You-% checkboxes — 2%, 5%, 10%, 15%, and 25%+ (the last one flips direction, for deliberately sizing up something risky) — check as many as you like, a monster shows if it matches any checked band
-- A monster with no computable Hits You % (an NPC/caster-only record with no physical attack — a trainer, quest-giver, etc.) is now dropped from the list entirely once a character is loaded, instead of showing with a blank value
-- Removed the "In this room" context bar
-- Removed from the window (all still fully available on the Game Data Browser's Monsters tab): the Overview grab-bag, the full Elemental Defenses matrix, the Casts panel, Loot, Locations, the Automation overlay editor, and multi-select side-by-side comparison
-- Kept: Attacks (how dangerous is its swing), Your Matchup (weapon eligibility, ranked spell effectiveness, incoming elemental threat), and Your Observations (your own combat history against it)
-- Fixed: checking a single Hits-You-% checkbox (e.g. 10%) was also pulling in every monster from the lower bands (1-2%, 3-5%) instead of showing only its own band
-- Fixed: the master list could open completely empty with a character loaded — Hits You % wasn't computed yet the first time the list's filter ran, so the "no computable value" rule dropped the entire catalog until the next gear or spell change
+- A profile copied from another character now heals its stored character name from the `stat` screen: the app was only ever writing the in-game name on create/rename, so a copied profile kept the old owner's name and mis-identified "self" everywhere it mattered (corpse recovery, party self-detection, remote-command self-echo). The authoritative name from `stat` now updates the profile once, silently, the first time it differs
+- Corpse recovery now matches your corpse against the live self-name rather than the stored profile name, so a stale profile name can't send it hunting the wrong corpse
+- bug reports addressed: stock-20260828-104653
 
 ## 3.37.1
 
