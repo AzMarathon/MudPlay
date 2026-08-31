@@ -925,6 +925,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         {
             // A child moves only among its siblings — never above its folder.
             if (ContextMenuRows[i - 1].Depth == 1) { ContextMenuRows.Move(i, i - 1); Dirty(); }
+            SelectedContextMenuRow = row;   // keep it selected for rapid re-clicks
             return;
         }
         // Top-level block [i..end) swaps with the previous top-level block at p.
@@ -934,6 +935,9 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         while (p > 0 && ContextMenuRows[p].Depth == 1) p--;
         MoveContextMenuBlock(i, end, p);
         Dirty();
+        // The block move removes + re-inserts the rows, which clears the list's
+        // selection — restore it so the user can keep clicking Move up/down.
+        SelectedContextMenuRow = row;
     }
 
     private bool CanMoveContextMenuDown() => SelectedContextMenuRow is not null;
@@ -947,6 +951,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         if (row.Depth == 1)
         {
             if (i + 1 < ContextMenuRows.Count && ContextMenuRows[i + 1].Depth == 1) { ContextMenuRows.Move(i, i + 1); Dirty(); }
+            SelectedContextMenuRow = row;
             return;
         }
         // Move the NEXT top-level block up above this one (= this block moves down).
@@ -957,6 +962,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         while (next < ContextMenuRows.Count && ContextMenuRows[next].Depth == 1) next++;
         MoveContextMenuBlock(end, next, i);
         Dirty();
+        SelectedContextMenuRow = row;
     }
 
     private void RefreshFolderMoveCanExec()
