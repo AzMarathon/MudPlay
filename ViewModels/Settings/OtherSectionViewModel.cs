@@ -63,8 +63,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Great Pyramid climb";
             yield return "Asylum solver";
             yield return "Maze solver";
-            yield return "Est. Rounds to Kill cap";
-            yield return "Monster Intel";
             foreach (StubGroup g in StubGroups)
             foreach (StubField f in g.Fields)
                 yield return f.Label;
@@ -148,12 +146,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // Master gate for the monster-HP-lookup display (status-bar "TGT HP:" slot
     // + the yellow terminal line on a monster look). Default on.
     [ObservableProperty] private bool _showMonsterHpLookup = true;
-
-    // Ceiling for Monster Intel's "Est. Rounds to Kill" column. No push
-    // needed — MonsterIntelViewModel reads it live through the resolver each
-    // time it recomputes, the same "read on demand" pattern the door caps
-    // above use. Range 1..999999.
-    [ObservableProperty] private int _roundsToKillCap = 999;
 
     // Per-category Verbose toggles + WriteCombatRoundTrace live in a
     // session-only umbrella switch in the Log pane menu — see
@@ -261,7 +253,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             MaxComebackBacktrackRooms = Math.Clamp(MaxComebackBacktrackRooms, 1, 50),
             AutoRequestComebackWhenLeftBehind = AutoRequestComebackWhenLeftBehind,
             ShowMonsterHpLookup   = ShowMonsterHpLookup,
-            RoundsToKillCap       = Math.Clamp(RoundsToKillCap, 1, 999999),
+            // Not edited on this tab (Monster Intel owns it directly) —
+            // carry the current Character-tier value through so Apply here
+            // doesn't reset it to the compile-time default.
+            RoundsToKillCap       = ReadOrDefault().RoundsToKillCap,
         };
 
         profile.Settings ??= new();
@@ -321,7 +316,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         MaxComebackBacktrackRooms = dto.MaxComebackBacktrackRooms;
         AutoRequestComebackWhenLeftBehind = dto.AutoRequestComebackWhenLeftBehind;
         ShowMonsterHpLookup = dto.ShowMonsterHpLookup;
-        RoundsToKillCap = dto.RoundsToKillCap;
         PlayerCleanupDays = _globalSettings?.Current.PlayerCleanupDays ?? 90;
         PyramidSolverEnabled = _globalSettings?.Current.PyramidSolverEnabled ?? true;
         AsylumSolverEnabled = _globalSettings?.Current.AsylumSolverEnabled ?? true;
@@ -384,7 +378,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnMaxComebackBacktrackRoomsChanged(int value) => MarkDirty();
     partial void OnAutoRequestComebackWhenLeftBehindChanged(bool value) => MarkDirty();
     partial void OnShowMonsterHpLookupChanged(bool value) => MarkDirty();
-    partial void OnRoundsToKillCapChanged(int value) => MarkDirty();
     partial void OnPyramidSolverEnabledChanged(bool value) => MarkDirty();
     partial void OnAsylumSolverEnabledChanged(bool value) => MarkDirty();
 

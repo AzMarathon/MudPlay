@@ -54,6 +54,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private int _playerProtEvil;
     private int _playerProtGood;
     private bool _disposed;
+    // Guards the initial RoundsToKillCap load (from the resolver) from
+    // immediately writing the same value straight back out via
+    // OnRoundsToKillCapChanged.
+    private bool _suppressCapPersist;
 
     public event Action? CloseRequested;
 
@@ -110,6 +114,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         if (_hasCharacterContext)
         {
+            _suppressCapPersist = true;
+            RoundsToKillCap = _resolver.Resolve<OtherSettings>("Other").RoundsToKillCap;
+            _suppressCapPersist = false;
+
             // RowsView was just constructed with Filter = PassesFilter, which
             // reads IncomingHitPercent — still every entry's default -1 until
             // this rebuild runs. Without a Refresh here the view's initial
@@ -181,6 +189,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private bool _showHits40;
     [ObservableProperty] private bool _showHits100;
 
+    // Ceiling for the master list's "Est. Rounds to Kill" column — edited
+    // right here instead of Settings → Other so changing it doesn't mean
+    // leaving the window. Loaded once from OtherSettings (Character tier)
+    // in the constructor; every edit persists straight back via WriteAt and
+    // re-stamps every entry's cap without a full RebuildCharacterCapabilities
+    // (only the display ceiling changed, not the underlying projections).
+    [ObservableProperty] private int _roundsToKillCap = 999;
+
     // Recomputes weapon HitMagic, the owned-attack-spell set, and the live
     // AC/Dodge/ward totals behind the Hits-You-% threshold checkboxes,
     // the master list's "Hits You %" / "Est. Rounds to Kill" columns, and
@@ -243,14 +259,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // weapon's projected DPS against each monster's HP/AC/DR, via the same
         // Compute() the Character Workshop's Hit Calculator uses. Capped for
         // display (a superboss can otherwise project into the millions of
-        // rounds) at a user-tunable ceiling (Settings → Other), read live so
-        // a mid-session change takes effect on the next gear/spell rebuild.
+        // rounds) at RoundsToKillCap, editable right in this window.
         PlayerMatchupProfile playerProfile =
             CharacterCalculator.BuildNormalAttackProfile(_stats, worn, encum, _gameData);
-        int roundsToKillCap = _resolver.Resolve<OtherSettings>("Other").RoundsToKillCap;
         foreach (MonsterIntelEntry entry in _all)
         {
-            entry.RoundsToKillCap = roundsToKillCap;
+            entry.RoundsToKillCap = RoundsToKillCap;
             if (entry.Hp <= 0) { entry.EstimatedRoundsToKill = -1; continue; }
             MonsterCatalogEntry m = entry.Source;
             var monsterProfile = new MonsterMatchupProfile(
@@ -273,6 +287,21 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         RowsView.Refresh();
         OnPropertyChanged(nameof(CountText));
         if (SelectedEntry is not null) RebuildDetail();
+    }
+
+    // Persists the new cap (Character tier, "Other") and re-stamps every
+    // entry without a full RebuildCharacterCapabilities — only the display
+    // ceiling changed, not the underlying rounds-to-kill projections.
+    // Resolve-then-write (not a bare new OtherSettings) so this doesn't
+    // clobber the tab's other fields at the Character tier.
+    partial void OnRoundsToKillCapChanged(int value)
+    {
+        if (_suppressCapPersist || !_hasCharacterContext) return;
+        foreach (MonsterIntelEntry entry in _all) entry.RoundsToKillCap = value;
+        OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
+        dto.RoundsToKillCap = value;
+        _resolver.WriteAt(SettingsTier.Character, "Other", dto);
+        RowsView.Refresh();
     }
 
     private void OnPlayerStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

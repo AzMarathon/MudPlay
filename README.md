@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.9**
-> - Monster Intel: removed the Hittable/Castable checkboxes (redundant with Est. Rounds to Kill, and they gave no visibility into what they checked against)
-> - Monster Intel's Est. Rounds to Kill now caps at a tunable ceiling (Settings → Other, default 999) instead of showing a literal number that can run into the millions
+> **Version 3.37.10**
+> - Monster Intel's rounds-to-kill cap moved out of Settings → Other and into the Monster Intel window itself — no need to leave the window to change it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

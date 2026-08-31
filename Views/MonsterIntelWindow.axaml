@@ -120,6 +120,14 @@
                         <CheckBox Content="40%+" IsChecked="{Binding ShowHits100, Mode=TwoWay}"
                                   ToolTip.Tip="Show monsters whose own attack has 41% or more chance to hit you."/>
                     </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Classes="FieldLabel" Text="Rounds-to-kill cap:" VerticalAlignment="Center"/>
+                        <NumericUpDown Value="{Binding RoundsToKillCap, Mode=TwoWay}"
+                                       Minimum="1" Maximum="999999" Increment="1"
+                                       FormatString="0" ShowButtonSpinner="True"
+                                       Width="110" MinWidth="110"
+                                       ToolTip.Tip="A monster projecting more rounds to kill than this shows '&lt;cap&gt;+' instead of the literal number — a superboss can otherwise project into the millions. Saved automatically, per character."/>
+                    </StackPanel>
                 </StackPanel>
 
                 <DataGrid Grid.Row="2" x:Name="MonsterGrid" ItemsSource="{Binding RowsView}"

@@ -187,19 +187,11 @@
                       Margin="0,8,0,0"
                       ToolTip.Tip="When checked (default): looking at a monster shows its estimated remaining hit points — both in the status bar's &quot;TGT HP:&quot; slot and as a yellow line printed to the terminal (e.g. [orc remaining Hitpoints: 35-48]). When unchecked, neither is shown. Applies only for this character."/>
 
-            <!-- Monster Intel's "Est. Rounds to Kill" ceiling. A superboss can
-                 otherwise project into the millions of rounds, which isn't a
-                 meaningful number — beyond this cap the column just shows
-                 "<cap>+". Read live through the resolver on every recompute,
-                 no push needed. -->
-            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,12,0,0" VerticalAlignment="Center">
-                <TextBlock Classes="FieldLabel" Text="Monster Intel rounds-to-kill cap"/>
-                <NumericUpDown Value="{Binding RoundsToKillCap, Mode=TwoWay}"
-                               Minimum="1" Maximum="999999" Increment="1"
-                               FormatString="0" ShowButtonSpinner="True"
-                               Width="120" MinWidth="120"
-                               ToolTip.Tip="Monster Intel's 'Est. Rounds to Kill' column shows this many rounds as its ceiling — a monster projecting past it (e.g. a superboss) just shows '&lt;cap&gt;+' instead of a huge, meaningless number. Default 999."/>
-            </StackPanel>
+            <!-- Note: Monster Intel's "Est. Rounds to Kill" cap moved out of
+                 here and lives entirely in that window now (a NumericUpDown
+                 next to the Hits-You-% checkboxes) — editing it doesn't mean
+                 leaving Monster Intel to come back. Still backed by
+                 OtherSettings.RoundsToKillCap at the Character tier. -->
 
             <!-- Navigation puzzle-solver master toggles (Global tier — one switch
                  per install). Off → a walk-to that would hand off to the solver

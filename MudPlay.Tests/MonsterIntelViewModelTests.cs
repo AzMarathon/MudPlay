@@ -6,6 +6,7 @@ using MudPlay.Game;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Spells;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels;
 using Xunit;
@@ -48,6 +49,41 @@ public sealed class MonsterIntelViewModelTests : IDisposable
     // Resolve<T> tolerates a null active profile/BBS via null-conditional).
     private static SettingsResolver NewResolver()
         => new(new SettingsService(), new BbsProfileStore(), new ProfileService());
+
+    // Regression: RoundsToKillCap moved from Settings -> Other into Monster
+    // Intel's own window. Pins that editing it there actually persists to
+    // the Character tier (the one storage location OtherSettings.RoundsToKillCap
+    // still lives at) via SettingsResolver.WriteAt, and that re-resolving
+    // afterward (e.g. on the next window open) sees the new value.
+    [Fact]
+    public void RoundsToKillCap_EditInWindow_PersistsToCharacterTier()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 10, Agility = 50, Charm = 50 };
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
+        var itemMagic = new ItemMagicIndex(cache);
+
+        var profile = new ProfileService();
+        profile.LoadBlank();   // non-null Current; Save() is a no-op for a blank draft
+        var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
+
+        using (var vm = new MonsterIntelViewModel(
+            cache, catalog, resolver, stats, inventory, spellbook, itemMagic,
+            observations: null, playerState: null))
+        {
+            Assert.Equal(999, vm.RoundsToKillCap);   // default, nothing persisted yet
+            vm.RoundsToKillCap = 42;
+
+            MonsterIntelEntry entry = Assert.Single(
+                vm.RowsView.Cast<MonsterIntelEntry>().Where(e => e.Name == "test goblin"));
+            Assert.Equal(42, entry.RoundsToKillCap);
+        }
+
+        Assert.Equal(42, resolver.Resolve<OtherSettings>("Other").RoundsToKillCap);
+    }
 
     [Fact]
     public void MasterList_ShowsEntries_ImmediatelyOnConstruction_WithCharacterContext()
