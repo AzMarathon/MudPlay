@@ -548,26 +548,13 @@
                                 </Setter>
                             </ControlTheme>
                         </ContextMenu.Resources>
-                        <!-- Quick-access GOTO favourites — the ones starred in the Go To
-                             list. Each item walks there on click; the submenu hides when
-                             nothing is starred. -->
-                        <MenuItem Header="Favorites" IsVisible="{Binding HasFavorites}"
-                                  ItemsSource="{Binding Favorites}"
-                                  ItemContainerTheme="{StaticResource WalkFlyoutItemTheme}"/>
-                        <!-- The last GOTO destinations (newest first, up to 10) — each
-                             walks there on click, same as a favourite. -->
-                        <MenuItem Header="Recent destinations" IsVisible="{Binding HasRecentDestinations}"
-                                  ItemsSource="{Binding RecentDestinations}"
-                                  ItemContainerTheme="{StaticResource WalkFlyoutItemTheme}"/>
-                        <Separator IsVisible="{Binding HasWalkFlyouts}"/>
-                        <!-- Everything below the pinned Favorites / Recent walk
-                             flyouts is user-customizable (Settings → Toolbar +
-                             Shortcuts → Terminal right-click menu) and rebuilt in
+                        <!-- The whole menu is user-customizable (Settings → Toolbar +
+                             Shortcuts → Terminal right-click menu) and built in
                              code-behind from AppServices.ContextMenu.Layout — see
-                             RebuildTerminalContextMenu. The three leading items
-                             above (Favorites, Recent, separator) stay fixed so
-                             their live IsVisible/ItemsSource bindings keep
-                             working; the builder appends after them. -->
+                             RebuildTerminalContextMenu. That includes the GOTO
+                             Favorites / Recent-destinations fly-outs (a WalkFlyout
+                             catalogue entry the builder renders with the
+                             WalkFlyoutItemTheme above); nothing is pinned here. -->
                     </ContextMenu>
                 </ctl:TerminalControl.ContextMenu>
             </ctl:TerminalControl>

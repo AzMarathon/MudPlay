@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.42.0**
-> - The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts): below the pinned Favorites / Recent walk shortcuts, add menu commands, direct links to a Player Workshop tab, or a calculator that opens **expanded and centered**, and build your own **fly-out folders**
+> - The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts): arrange the whole menu — the Favorites / Recent walk fly-outs, menu commands, direct links to a Player Workshop tab, or a calculator that opens **expanded and centered** — and build your own **fly-out folders**
 > - **Rename** any entry or folder while an entry still links to the same action; reorder, add separators, Reset to the built-in menu
 > - **Import** a menu from another character or a shared `.json` file, and **Export** yours to share with friends; saved per character
 >

@@ -22,6 +22,7 @@ public static class MenuActionCatalogue
         Toggle,       // ToggleProperty → two-way bool on MainWindowViewModel
         WorkshopTab,  // Parameter → CharacterWorkshop section id (OpenWorkshopTab)
         Calculator,   // Parameter → calculator id (OpenWorkshopCalculator)
+        WalkFlyout,   // Parameter "favorites"/"recent" → the dynamic walk submenu
     }
 
     public sealed record Entry(
@@ -121,8 +122,20 @@ public static class MenuActionCatalogue
         new("calc.realmrankings", "Calculator: Realm Rankings", Kind.Calculator, "Calculators", Parameter: "RealmRankings"),
     };
 
+    // ----- Walk-destination fly-outs (the same GOTO submenus that used to be
+    // pinned at the top of the menu — now placeable / renamable like anything
+    // else). Each renders its live ObservableCollection and hides when empty. -----
+    private static readonly Entry[] _walk =
+    {
+        new("walk.favorites", "Favorites", Kind.WalkFlyout, "Walk shortcuts", Parameter: "favorites",
+            Tooltip: "Your starred GOTO locations — click one to walk there. Hidden when you have none."),
+        new("walk.recent", "Recent destinations", Kind.WalkFlyout, "Walk shortcuts", Parameter: "recent",
+            Tooltip: "The last places you walked — click one to walk there. Hidden when empty."),
+    };
+
     private static readonly Entry[] _all =
-        _file.Concat(_view).Concat(_action).Concat(_tools)
+        _walk
+        .Concat(_file).Concat(_view).Concat(_action).Concat(_tools)
         .Concat(_tabs).Concat(_calcs)
         .ToArray();
 

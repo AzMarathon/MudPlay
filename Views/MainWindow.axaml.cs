@@ -236,7 +236,7 @@ public partial class MainWindow : Window
     // Each entry resolves through MenuActionCatalogue into a MenuItem — a command,
     // a toggle, a whole-menu submenu, a Workshop-tab link, or a calculator link —
     // reusing the same reflection bridge the toolbar/keybinds use for commands.
-    private const int ContextMenuFixedLeadingItems = 3;
+    private const int ContextMenuFixedLeadingItems = 0;
     private bool _ctxRebuildQueued;
 
     private void OnContextMenuLayoutChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -267,7 +267,7 @@ public partial class MainWindow : Window
     // One top-level layout entry → a menu control: a separator, a user-defined
     // folder (a named fly-out submenu of its Children), or a catalogue-backed
     // entry. Unknown ids and empty folders are dropped so nothing dead renders.
-    private static Control? BuildLayoutItem(ContextMenuEntry entry, MainWindowViewModel vm)
+    private Control? BuildLayoutItem(ContextMenuEntry entry, MainWindowViewModel vm)
     {
         switch (entry.Kind)
         {
@@ -279,7 +279,11 @@ public partial class MainWindow : Window
                 if (entry.Children is { } children)
                     foreach (ContextMenuEntry child in children)
                         if (BuildFolderChild(child, vm) is { } c) folder.Items.Add(c);
-                return folder.Items.Count > 0 ? folder : null;   // hide an empty folder
+                // Show even an empty folder (as a submenu with a disabled hint) so a
+                // just-created folder doesn't silently vanish from the menu.
+                if (folder.Items.Count == 0)
+                    folder.Items.Add(new MenuItem { Header = "(empty)", IsEnabled = false });
+                return folder;
             }
             default:   // Entry
                 return MenuActionCatalogue.Find(entry.Id) is { } def
@@ -289,7 +293,7 @@ public partial class MainWindow : Window
     }
 
     // A folder's child — an Entry or Separator only (folders are one level deep).
-    private static Control? BuildFolderChild(ContextMenuEntry child, MainWindowViewModel vm)
+    private Control? BuildFolderChild(ContextMenuEntry child, MainWindowViewModel vm)
     {
         if (child.Kind == ContextMenuEntryKind.Separator) return new Separator();
         return MenuActionCatalogue.Find(child.Id) is { } def
@@ -300,11 +304,28 @@ public partial class MainWindow : Window
     // Resolve one catalogue entry into a MenuItem, or null when it can't be built
     // (an unresolvable command). customLabel (the user's chosen name) overrides
     // the catalogue label when set.
-    private static Control? BuildContextMenuEntry(MenuActionCatalogue.Entry def, MainWindowViewModel vm, string? customLabel = null)
+    private Control? BuildContextMenuEntry(MenuActionCatalogue.Entry def, MainWindowViewModel vm, string? customLabel = null)
     {
         string header = string.IsNullOrWhiteSpace(customLabel) ? def.Label : customLabel!;
         switch (def.EntryKind)
         {
+            case MenuActionCatalogue.Kind.WalkFlyout:
+            {
+                // The GOTO Favorites / Recent-destinations fly-out: a submenu whose
+                // items come from a live ObservableCollection, rendered by the same
+                // WalkFlyoutItemTheme the menu declares. Hidden when its list is empty.
+                bool isFav = string.Equals(def.Parameter, "favorites", System.StringComparison.Ordinal);
+                MenuItem item = new() { Header = header };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                if (TerminalContextMenu?.TryFindResource("WalkFlyoutItemTheme", out object? themeObj) == true
+                    && themeObj is Avalonia.Styling.ControlTheme theme)
+                    item.ItemContainerTheme = theme;
+                item.Bind(ItemsControl.ItemsSourceProperty, new Binding(
+                    isFav ? nameof(MainWindowViewModel.Favorites) : nameof(MainWindowViewModel.RecentDestinations)) { Source = vm });
+                item.Bind(MenuItem.IsVisibleProperty, new Binding(
+                    isFav ? nameof(MainWindowViewModel.HasFavorites) : nameof(MainWindowViewModel.HasRecentDestinations)) { Source = vm });
+                return item;
+            }
             case MenuActionCatalogue.Kind.Toggle:
             {
                 MenuItem item = new() { Header = header, ToggleType = MenuItemToggleType.CheckBox };

@@ -69,7 +69,16 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(RemoveContextMenuEntryCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveContextMenuUpCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveContextMenuDownCommand))]
+    [NotifyPropertyChangedFor(nameof(AddContextMenuButtonText))]
     private ContextMenuRowViewModel? _selectedContextMenuRow;
+
+    // The pool "Add" button relabels to make the folder flow discoverable: with a
+    // folder (or one of its children) selected in the placed list, a new item lands
+    // INSIDE that folder.
+    public string AddContextMenuButtonText =>
+        SelectedContextMenuRow is { } r && (r.IsFolder || r.Depth == 1)
+            ? "◄ Add into folder"
+            : "◄ Add to menu";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddContextMenuEntryCommand))]

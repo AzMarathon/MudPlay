@@ -4,7 +4,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.42.0
 
-- The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts, at the bottom). The pinned Favorites / Recent walk shortcuts still lead it; everything below is yours to arrange
+- The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts, at the bottom) — the whole menu is yours to arrange, including the **Favorites / Recent destinations** GOTO walk fly-outs (move, rename, or remove them like anything else)
 - Add any **menu command** (window opens, one-shots, utilities like Bug report / Program Log / Wire Inspector); auto-engine toggles are left out (they belong on the toolbar / Action menu)
 - Add a **direct link to a Player Workshop tab** (opens the Workshop straight to Character Info / Equipment / Calculators / Bosses / Roomba / …)
 - Add a **direct link to a calculator** — opens the Workshop on the Calculators tab with that calculator **expanded and centered** (Hit / Movement / Swing / Backstab / Mana Regen / Realm Rankings)

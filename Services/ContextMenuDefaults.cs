@@ -14,6 +14,9 @@ public static class ContextMenuDefaults
     // Entry ids in default order. null marks a separator.
     private static readonly string?[] _order =
     {
+        "walk.favorites",
+        "walk.recent",
+        null,
         "view.backscroll",
         "view.workshop",
         "view.party",

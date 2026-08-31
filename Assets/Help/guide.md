@@ -61,8 +61,9 @@ A customizable **toolbar** of icon buttons sits under the menu bar. The full bar
 
 ### Customizing the terminal right-click menu
 
-The bottom of **Settings → Toolbar + Shortcuts** also lets you build the **terminal right-click menu** — everything that appears when you right-click the terminal, below the pinned **Favorites** / **Recent destinations** walk shortcuts (those always lead the menu). Pick from a pool of everything addable and arrange it top-to-bottom:
+The bottom of **Settings → Toolbar + Shortcuts** also lets you build the **terminal right-click menu** — everything that appears when you right-click the terminal. The whole menu is yours to arrange from a pool of everything addable:
 
+- **Favorites / Recent destinations** — the GOTO walk fly-outs (your starred locations and the last places you walked, click one to walk there). They're at the top by default but you can move, rename, or remove them like anything else; each hides itself when its list is empty.
 - **Commands** — any individual command from the File / View / Action / Tools menus (window opens, one-shots like Get All / Reset States, utilities like Bug report / Program Log / Wire Inspector). Auto-engine toggles are deliberately left out — those belong on the toolbar / Action menu.
 - **Workshop tabs** — a direct link that opens the Player Workshop straight to a chosen tab (Character Info, Equipment Manager, Calculators, Bosses, Roomba, …).
 - **Calculators** — a direct link that opens the Workshop on the **Calculators** tab with a chosen calculator (Hit / Movement / Swing / Backstab / Mana Regen / Realm Rankings) **expanded and centered** on screen.
