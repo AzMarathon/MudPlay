@@ -9,6 +9,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Monster filtering absorbs Monster Intel's dimensions: per-element resists (Cold/Fire/Stone/Lightning/Water, signed so you can find vulnerabilities), spell-immunity level, magic-weapon requirement, monster Type, Undead / Animal / Non-living flags, "casts spells", and "drops an item"
 - The search box and the filter panel are now clearly split: the box FINDS a monster within the list, the panel CURATES which monsters are in it
 - Monster record Abilities now list one per line (easier to read), and the meaningless "Damage" ability code is no longer shown
+- Clicking a monster filter range box selects its whole value, so you can overtype or clear it in one action
 
 ## 3.38.0
 
