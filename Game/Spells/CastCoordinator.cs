@@ -42,8 +42,16 @@ public sealed class CastCoordinator : IDisposable
 
     // How long the cast-blocked latch lives without a combat tick clearing it. Out
     // of combat the tick never fires, so the latch must auto-expire or buffs would
-    // never recast.
-    public static readonly TimeSpan CastBlockExpiry = TimeSpan.FromSeconds(3);
+    // never recast. Must match (or exceed) CastCommandCooldown — both gate the same
+    // once-per-round cast slot, just from opposite directions (this is "you got
+    // rejected, wait"; that one is "don't even try yet"). A shorter value here
+    // self-clears the latch before the server's own slot has actually refreshed, so
+    // the very next retry gets rejected again — report paradigm-20260831-091839
+    // ("WHY DOES IT KEEP BUFFING ITSELF"): a self-buff spammed a reject/retry loop
+    // every ~3-5s indefinitely while out of combat because this used to be a bare
+    // 3s, racing the confirmed ~5.04s combat tick (GAME_MECHANICS.md) instead of
+    // this file's own already-correct 5.5s cooldown for the identical constraint.
+    public static readonly TimeSpan CastBlockExpiry = CastCommandCooldown;
 
     private readonly LogService? _log;
     private readonly IDisposable _fizzleSub;

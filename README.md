@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.39.5**
-> - Fixed: Monster Intel's AC vs Evil field was truncated/clipped
-> - Monster Intel gains a **Recommend a mob** button — picks the best fight from what's currently shown, favoring high EXP-per-round and low chance to get hit back
+> **Version 3.39.8**
+> - Fixed: a loop could hang indefinitely if a move's confirmation was swallowed by an unrelated line arriving the same instant (e.g. a debuff reapplying) — the stall watchdog now arms on every move, not just after a pause/resume
+> - Fixed: a self-buff could get stuck recasting every few seconds indefinitely out of combat, racing an out-of-tune fallback timer against the confirmed combat-tick cadence
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

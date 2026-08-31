@@ -2,6 +2,12 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.39.8
+
+- Fixed: a loop could hang indefinitely mid-walk if a move's confirmation was swallowed by an unrelated line arriving at the same instant (e.g. a debuff reapplying) — the in-flight stall watchdog was only armed after a pause/resume, never on an ordinary move send, so nothing ever timed out and recovered
+- Fixed: a self-buff could get stuck in a reject/retry loop out of combat, recasting every few seconds indefinitely — the cast-block latch's out-of-combat expiry (3s) was shorter than the confirmed ~5.04s combat tick that actually governs the once-per-round cast slot, so it self-cleared before the slot had really refreshed
+- bug reports addressed: paradigm-20260831-091353, paradigm-20260831-100557, paradigm-20260831-091839
+
 ## 3.39.5
 
 - Fixed: Monster Intel's AC vs Evil field was truncated/clipped — widened to match the working rounds-to-kill cap field's sizing
