@@ -172,11 +172,16 @@ public sealed class MonsterMdbInfoBuilder
                     guards.Add(val);
                     continue;
                 }
+                // Code 1 ("Damage") is a spell/item effect code with no defined
+                // effect on a monster — MMUD-Explorer treats it as a non-stat
+                // ability, and it appears on exactly one monster in the stock
+                // data with value 0. Inert noise; don't surface it.
+                if (code == 1) continue;
                 string label = AbilityNames.GetName(code) ?? $"Ability {code}";
                 abilities.Add(val == 0 ? label : $"{label} {FormatSigned(val)}");
             }
             if (abilities.Count > 0)
-                AddRow(kv, "Abilities", string.Join(", ", abilities));
+                AddRow(kv, "Abilities", string.Join("\n", abilities));
             if (guards.Count > 0)
             {
                 List<string> guardNames = new();

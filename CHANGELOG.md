@@ -8,6 +8,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Every numeric monster filter is now a **min/max range** (either bound optional), so you can bracket — HP 500–2000, or AC ≤ 20 to find easy kills — not just "at least N"
 - Monster filtering absorbs Monster Intel's dimensions: per-element resists (Cold/Fire/Stone/Lightning/Water, signed so you can find vulnerabilities), spell-immunity level, magic-weapon requirement, monster Type, Undead / Animal / Non-living flags, "casts spells", and "drops an item"
 - The search box and the filter panel are now clearly split: the box FINDS a monster within the list, the panel CURATES which monsters are in it
+- Monster record Abilities now list one per line (easier to read), and the meaningless "Damage" ability code is no longer shown
 
 ## 3.38.0
 

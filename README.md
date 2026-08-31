@@ -6,6 +6,7 @@
 > - Every numeric monster filter is now a **min/max range** (either bound optional) so you can bracket — HP 500–2000, or AC ≤ 20 to find easy kills — not just "at least N"
 > - Monster filtering absorbs Monster Intel's dimensions: per-element resists (signed, to find vulnerabilities), spell-immunity level, magic-weapon requirement, Type, Undead / Animal / Non-living flags, "casts spells", "drops an item"
 > - The search box FINDS a monster within the list; the filter panel CURATES which monsters are in it
+> - Monster records list Abilities one per line, and the meaningless "Damage" ability code is no longer shown
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
