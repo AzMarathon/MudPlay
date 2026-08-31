@@ -67,8 +67,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // OnRoundsToKillCapChanged.
     private bool _suppressCapPersist;
 
-    public event Action? CloseRequested;
-
     public DataGridCollectionView RowsView { get; }
 
     [ObservableProperty] private string? _nameFilter;
@@ -179,9 +177,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _manaLabel = "Mana";
     [ObservableProperty] private string? _weaponSummaryText;
     [ObservableProperty] private int _knownAttackSpellCount;
-    // AC + Prot Evil — see the assignment in RebuildCharacterCapabilities for
-    // why this sum, not bare AC, is "effective AC vs Evil."
-    [ObservableProperty] private int _effectiveAcVsEvil;
+    // Plain AC that applies vs every attacker — worn gear + configured buffs +
+    // the flat Shadow bonus. Evil-only wards (Prot Evil / Vile Ward) are left
+    // out; see the assignment in RebuildCharacterCapabilities.
+    [ObservableProperty] private int _effectiveAc;
 
     // Hits-You-% threshold checkboxes: independent, OR'd together — checking
     // none shows every monster (still subject to the "no computable value"
@@ -265,13 +264,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _playerProtEvil = totals.PlusProtEvil;
         _playerProtGood = totals.PlusProtGood;
         _playerHasShadow = totals.PlusShadowResist > 0;
-        // AC + Shadow(+10 once) + Prot Evil is exactly the "defense" term
-        // CombatCalculator folds together against an evil attacker (see
-        // CalculateHitChance's non-backstab branch) — the single number
-        // that actually answers "how well-defended am I against an evil
-        // monster right now." (Confirmed against a live @st vs Evil/vs Good
-        // readout: both include the same flat Shadow bonus.)
-        EffectiveAcVsEvil = _playerAc + (_playerHasShadow ? 10 : 0) + _playerProtEvil;
+        // The panel shows plain AC — worn gear + configured buffs + the flat
+        // Shadow bonus, all of which apply against EVERY attacker. Prot Evil
+        // and Vile Ward are deliberately excluded: they're secondary AC only
+        // versus evil monsters, so folding them into one headline number
+        // overstates your defense against a neutral / good monster. The
+        // evil-only wards still count per-row in Hits You %, which knows each
+        // monster's alignment.
+        EffectiveAc = _playerAc + (_playerHasShadow ? 10 : 0);
 
         // The monster → player direction — the master list's "Hits You %"
         // column and threshold checkboxes.
@@ -369,9 +369,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         }
         return true;
     }
-
-    [RelayCommand]
-    private void Close() => CloseRequested?.Invoke();
 
     // ----- detail panel -----
     // Deliberately narrow: this window answers "can I fight this thing right

@@ -176,14 +176,12 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.Equal(string.Empty, entry.AccuracyText);
     }
 
-    // EffectiveAcVsEvil = AC + Shadow(+10 once) + Prot Evil -- the combined
-    // "defense" term CombatCalculator.CalculateHitChance folds together
-    // against an evil attacker. Regression: an earlier version omitted the
-    // Shadow term entirely, undercounting AC vs Evil by exactly the flat
-    // +10 a real @st readout includes (caught against a live character's
-    // AC(64) + Shadow(10) + Prev(10) = AC vs Evil(84)).
+    // EffectiveAc = AC + Shadow(+10 once), the defense that applies vs EVERY
+    // attacker. Prot Evil (and Vile Ward) are deliberately excluded — they're
+    // secondary AC only vs evil monsters, so folding them into one headline
+    // number would overstate defense against a neutral / good monster.
     [Fact]
-    public void EffectiveAcVsEvil_IsArmourClassPlusShadowPlusWornProtEvil()
+    public void EffectiveAc_IsArmourClassPlusShadow_ExcludesWornProtEvil()
     {
         var cache = new GameDataCache(_root);
         cache.SwitchSet("test-set");
@@ -211,9 +209,10 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
             observations: null, playerState: null);
 
-        // 30 AC + 10 Shadow (Abil 9, flat once) + 15 Prot Evil (Abil 24)
-        // from the worn "wraith ward".
-        Assert.Equal(55, vm.EffectiveAcVsEvil);
+        // 30 AC + 10 Shadow (Abil 9, flat once); the worn "wraith ward" also
+        // grants 15 Prot Evil (Abil 24) but that's evil-only, so it's NOT in
+        // the plain AC figure.
+        Assert.Equal(40, vm.EffectiveAc);
     }
 
     // Six contiguous, non-overlapping Hits-You-% bands covering 0-100% with

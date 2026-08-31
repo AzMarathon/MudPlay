@@ -88,9 +88,9 @@
                         <TextBlock Classes="DetailLine" Text="{Binding KnownAttackSpellCount}"/>
                     </StackPanel>
                     <StackPanel Grid.Column="5">
-                        <TextBlock Classes="FieldLabel" Text="AC vs Evil"
-                                   ToolTip.Tip="Your Armour Class plus your worn Prot Evil — the combined defense an evil monster's attack actually rolls against."/>
-                        <TextBlock Classes="DetailLine" Text="{Binding EffectiveAcVsEvil}"/>
+                        <TextBlock Classes="FieldLabel" Text="AC"
+                                   ToolTip.Tip="Your Armour Class — worn gear plus your configured buffs, and the flat Shadow bonus if you have it. This is the defense every monster's attack rolls against. Evil-only wards (Prot Evil, Vile Ward) add more, but only versus evil monsters, so they're not folded in here."/>
+                        <TextBlock Classes="DetailLine" Text="{Binding EffectiveAc}"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -99,18 +99,22 @@
 
             <!-- ===== Left: searchable master list ===== -->
             <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*" Margin="0,0,12,0">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                     <TextBox Grid.Column="0" Classes="clearable" Text="{Binding NameFilter, Mode=TwoWay}"
                              PlaceholderText="Filter by name…"/>
-                    <TextBlock Grid.Column="1" Text="{Binding CountText}" Margin="8,0,0,0"
+                    <!-- Reserve room for a 5-digit count so the label never resizes the
+                         filter box as the Hits-You-% filters change the shown total.
+                         Closing is the title-bar X, so there's no in-window Close button. -->
+                    <TextBlock Grid.Column="1" Text="{Binding CountText}" Margin="8,0,0,0" MinWidth="96"
                                Foreground="{StaticResource ChromeFgSecBrush}"
                                FontSize="{StaticResource FontSizeSm}" VerticalAlignment="Center"/>
-                    <Button Grid.Column="2" Content="Close" Command="{Binding CloseCommand}" Margin="8,0,0,0"/>
                 </Grid>
 
-                <StackPanel Grid.Row="1" Spacing="6" Margin="0,0,0,8"
-                            IsVisible="{Binding HasCharacterContext}">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
+                <!-- The Hits-You-% checkboxes and the rounds-to-kill cap share one row
+                     (cap to the right of the boxes); the WrapPanel drops the cap onto a
+                     second line only when the pane is too narrow to fit both. -->
+                <WrapPanel Grid.Row="1" Margin="0,0,0,8" IsVisible="{Binding HasCharacterContext}">
+                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,16,4">
                         <TextBlock Classes="FieldLabel" Text="Hits You %:" VerticalAlignment="Center"/>
                         <CheckBox Content="2%" IsChecked="{Binding ShowHits2, Mode=TwoWay}"
                                   ToolTip.Tip="Show monsters whose own attack has 0-2% chance to hit you."/>
@@ -125,7 +129,7 @@
                         <CheckBox Content="40%+" IsChecked="{Binding ShowHits100, Mode=TwoWay}"
                                   ToolTip.Tip="Show monsters whose own attack has 41% or more chance to hit you."/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,0,4">
                         <TextBlock Classes="FieldLabel" Text="Rounds-to-kill cap:" VerticalAlignment="Center"/>
                         <NumericUpDown Value="{Binding RoundsToKillCap, Mode=TwoWay}"
                                        Minimum="1" Maximum="999999" Increment="1"
@@ -133,11 +137,12 @@
                                        Width="110" MinWidth="110"
                                        ToolTip.Tip="A monster projecting more rounds to kill than this shows '&lt;cap&gt;+' instead of the literal number — a superboss can otherwise project into the millions. Saved automatically, per character."/>
                     </StackPanel>
-                </StackPanel>
+                </WrapPanel>
 
                 <DataGrid Grid.Row="2" x:Name="MonsterGrid" ItemsSource="{Binding RowsView}"
                           SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
                           SelectionMode="Single"
+                          DoubleTapped="OnMonsterRowDoubleTapped"
                           AutoGenerateColumns="False" IsReadOnly="True"
                           GridLinesVisibility="Horizontal" CanUserSortColumns="True" CanUserResizeColumns="True"
                           HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"

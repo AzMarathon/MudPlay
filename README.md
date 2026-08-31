@@ -1,8 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.39.1**
+> **Version 3.39.7**
 > - Hit Calculator: removed the "Hits me %" picker and "Show me the Monsters" button — the Monsters game-data tab's own filters cover the same ground
+> - Monster Intel top bar shows plain **AC** (worn gear + configured buffs + Shadow) instead of "AC vs Evil" — evil-only wards no longer inflate it against neutral/good monsters
+> - Editing the rounds-to-kill cap now re-applies to the list immediately; the cap spinner moved inline to the right of the Hits-You-% checkboxes
+> - Filter-by-name box no longer resizes as the monster count changes
+> - Removed the in-window Close button (the title-bar X closes it); double-click a monster row to open its full Game Data record
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
