@@ -82,6 +82,14 @@ public sealed record MonsterCatalogEntry(
     // this rolled a monster's outgoing spell elements up into one place.
     IReadOnlyList<string> CastsElements)
 {
+    // True experience awarded: the raw EXP field × its ExpMulti multiplier
+    // (default 1) — the MDB stores a base and a multiplier, and the awarded value
+    // is their product (e.g. aged earth dragon 65000 × 40 = 2.6M). Long-typed
+    // because a big base × multiplier overflows int. The Game Data Monsters tab
+    // shows this same product; consumers that display "exp" should read it, not
+    // the raw Exp field.
+    public long EffectiveExp => (long)Exp * (ExpMulti > 0 ? ExpMulti : 1);
+
     // The physical-attack accuracy summary: (majority, max) across every
     // physical/rob slot (Type 1 or 3) with a positive Percent — "majority" is
     // the slot with the highest TruePercent chance, "max" the highest Accuracy

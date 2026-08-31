@@ -149,8 +149,10 @@ public static class CombatCalculator
     }
 
     // Scale a defender's vile ward by evil level: <=Seedy → 0, <=Criminal →
-    // halved, then always divided by 10.
-    private static int AdjustVileWard(int vileWard, EvilLevel evilLevel)
+    // halved, then always divided by 10. Public so callers computing a displayed
+    // "effective AC vs an evil target" (Monster Intel) convert the raw ward the
+    // same way the hit-chance math does, instead of re-deriving the ~10:1 rate.
+    public static int AdjustVileWard(int vileWard, EvilLevel evilLevel)
     {
         if (vileWard <= 0 || evilLevel <= EvilLevel.Saint) return 0;
         if (evilLevel <= EvilLevel.Seedy) return 0;

@@ -25,7 +25,10 @@ public sealed class MonsterIntelEntry : INotifyPropertyChanged
     public int Hp => Source.Hp;
     public string HpText => Hp > 0 ? Hp.ToString("N0", Inv) : string.Empty;
 
-    public int Exp => Source.Exp;
+    // True experience = raw EXP × ExpMulti (see MonsterCatalogEntry.EffectiveExp),
+    // the same product the Game Data Monsters tab shows — the raw Exp field alone
+    // undercounts a multiplier monster (aged earth dragon read 65000, not 2.6M).
+    public long Exp => Source.EffectiveExp;
     public string ExpText => Exp > 0 ? Exp.ToString("N0", Inv) : string.Empty;
 
     // The monster's own physical-attack accuracy — the same "majority" slot
@@ -35,6 +38,12 @@ public sealed class MonsterIntelEntry : INotifyPropertyChanged
     // with no physical attack (Source.PhysicalAccuracy is null).
     public int Accuracy => Source.PhysicalAccuracy?.Majority ?? 0;
     public string AccuracyText => Source.PhysicalAccuracy is not null ? Accuracy.ToString(Inv) : string.Empty;
+
+    // A non-zero RegenTime (hours) means this monster respawns on its own timer
+    // — a boss, lair leader, or other timed spawn — rather than freely via the
+    // room's regen (RegenTime 0 = "no respawn" per the MDB). Monster Intel's
+    // "hide regen timers" filter reads this to drop the timed spawns from the list.
+    public bool HasRegenTimer => Source.RegenTime > 0;
 
     // Chance this monster's own attack lands on the current character, given
     // their live AC/Dodge/wards — the one field on this record that ISN'T a

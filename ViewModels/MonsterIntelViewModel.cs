@@ -129,9 +129,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         {
             if (e.PropertyName is nameof(NameFilter)
                 or nameof(ShowHits2) or nameof(ShowHits5) or nameof(ShowHits10)
-                or nameof(ShowHits20) or nameof(ShowHits40) or nameof(ShowHits100))
+                or nameof(ShowHits20) or nameof(ShowHits40) or nameof(ShowHits100)
+                or nameof(HideRegenMonsters))
             { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
-            else if (e.PropertyName == nameof(SelectedEntry)) RebuildDetail();
+            else if (e.PropertyName == nameof(SelectedEntry)) { RebuildDetail(); UpdateAcVsTarget(); }
         };
 
         if (_observations is not null) _observations.Changed += OnObservationsChanged;
@@ -227,6 +228,13 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _ => EvilLevel.Saint,
     };
 
+    // The effective AC the selected monster's attack actually rolls against —
+    // base AC (worn + buffs) + Shadow (vs all) + the wards that apply to THAT
+    // monster's alignment (Prot Evil + converted Vile Ward vs evil, Prot Good vs
+    // good). "—" until a monster is selected. This is the same `defense` figure
+    // that feeds Hits You %, surfaced as a plain number for the picked target.
+    [ObservableProperty] private string _acVsTargetText = "—";
+
     // Hits-You-% threshold checkboxes: independent, OR'd together — checking
     // none shows every monster (still subject to the "no computable value"
     // drop below); checking one or more keeps a monster if it falls in ANY
@@ -245,6 +253,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private bool _showHits20;
     [ObservableProperty] private bool _showHits40;
     [ObservableProperty] private bool _showHits100;
+
+    // Drop monsters that respawn on their own timer (a non-zero RegenTime — bosses,
+    // lair leaders, other timed spawns) so the list shows only freely-farmable
+    // monsters. Session-only, like the Hits-You-% boxes it sits beside.
+    [ObservableProperty] private bool _hideRegenMonsters;
 
     // Ceiling for the master list's "Est. Rounds to Kill" column — edited
     // right here instead of Settings → Other so changing it doesn't mean
@@ -330,6 +343,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // The monster → player direction — the master list's "Hits You %" column
         // and threshold checkboxes — computed from the (possibly tweaked) simulator.
         RecomputeIncomingHits();
+        UpdateAcVsTarget();
 
         // The character's usable attacks feed the Edit Attacks picker — every
         // melee type they can throw (CharacterCalculator gates by class/race) plus
@@ -385,13 +399,41 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 _gameData.ActiveRealm, SimShadow, SimVileWard, evil) ?? -1;
     }
 
-    // A defense-simulator input changed — recompute Hits-You-% and re-filter.
+    // A defense-simulator input changed — recompute Hits-You-%, re-filter, and
+    // refresh the selected-target AC readout.
     private void OnSimInputChanged()
     {
         if (_suppressSimRecompute || !_hasCharacterContext) return;
         RecomputeIncomingHits();
         RowsView.Refresh();
         OnPropertyChanged(nameof(CountText));
+        UpdateAcVsTarget();
+    }
+
+    // Effective AC vs the currently-selected monster: base AC + Shadow (always) +
+    // the alignment-applicable wards (Prot Evil + converted Vile Ward vs an evil
+    // target, Prot Good vs a good one). Mirrors the `defense` term in
+    // CombatCalculator.CalculateHitChance so it matches that monster's Hits You %.
+    private void UpdateAcVsTarget()
+    {
+        if (!_hasCharacterContext || SelectedEntry is not { } sel)
+        {
+            AcVsTargetText = "—";
+            return;
+        }
+        int align = sel.Source.Align;
+        bool isEvil = align is 1 or 2 or 5 or 6;
+        bool isGood = align is 0 or 4;
+        int ac = SimAc + (SimShadow ? 10 : 0);
+        if (isEvil)
+        {
+            ac += SimProtEvil;
+            // Vile Ward only counts on Paradigm — CalculateHitChance gates it there.
+            if (_gameData.ActiveRealm == RealmType.ParaMud)
+                ac += CombatCalculator.AdjustVileWard(SimVileWard, SimEvilLevel);
+        }
+        if (isGood) ac += _playerProtGood;
+        AcVsTargetText = ac.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     partial void OnSimAcChanged(int value) => OnSimInputChanged();
@@ -567,6 +609,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (o is not MonsterIntelEntry e) return false;
         if (!string.IsNullOrWhiteSpace(NameFilter)
             && !e.Name.Contains(NameFilter, StringComparison.OrdinalIgnoreCase)) return false;
+
+        // Optionally drop timed/boss respawns — a non-zero per-monster RegenTime.
+        if (HideRegenMonsters && e.HasRegenTimer) return false;
 
         // Once a character is loaded, a monster with no computable Hits You %
         // (no catalogued physical attack — an NPC/caster-only record, e.g. a

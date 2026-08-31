@@ -57,6 +57,7 @@ public sealed class MonsterCatalogTests : IDisposable
             "AttMin-0": 1, "AttMax-0": 3, "AttAcc-0": 40, "AttEnergy-0": 500,
             "DropItem-0": 900, "DropItem%-0": 25 },
           { "Number": 2, "Name": "acid slime", "Undead": 255,
+            "EXP": 65000, "ExpMulti": 40,
             "AttType-0": 2, "Att%-0": 100, "AttTrue%-0": 100, "AttAcc-0": 501, "AttMax-0": 5, "AttMin-0": 80,
             "MidSpell-0": 502, "MidSpell%-0": 30, "MidSpellLVL-0": 4,
             "AttType-1": 0,
@@ -93,6 +94,17 @@ public sealed class MonsterCatalogTests : IDisposable
         Assert.Equal(1.5, rat.RegenTime);
         Assert.Equal(20, rat.Hp);
         Assert.Equal(2, rat.ArmourClass);
+    }
+
+    // True experience is EXP × ExpMulti (default 1) — the raw EXP alone
+    // undercounts a multiplier monster (aged earth dragon read 65000, not 2.6M).
+    [Fact]
+    public void EffectiveExp_MultipliesExpByExpMulti()
+    {
+        MonsterCatalog catalog = NewCatalog();
+        Assert.Equal(10, catalog.Get(1)!.EffectiveExp);               // 10 × 1
+        Assert.Equal(2_600_000, catalog.Get(2)!.EffectiveExp);        // 65000 × 40
+        Assert.Equal(0, catalog.Get(3)!.EffectiveExp);                // no EXP / no multiplier → 0
     }
 
     [Fact]

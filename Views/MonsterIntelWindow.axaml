@@ -45,7 +45,7 @@
             <!-- ===== Character bar: who you are, right now ===== -->
             <Border Grid.Row="0" Classes="Group" Margin="0,0,0,10" IsVisible="{Binding HasCharacterContext}">
                 <StackPanel Spacing="10">
-                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="28">
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="28">
                         <StackPanel Grid.Column="0">
                             <TextBlock Classes="FieldLabel" Text="Character"/>
                             <TextBlock Classes="DetailLine">
@@ -88,6 +88,11 @@
                             <TextBlock Classes="FieldLabel" Text="Known attack spells"/>
                             <TextBlock Classes="DetailLine" Text="{Binding KnownAttackSpellCount}"/>
                         </StackPanel>
+                        <StackPanel Grid.Column="5">
+                            <TextBlock Classes="FieldLabel" Text="AC vs Selected Target"
+                                       ToolTip.Tip="The effective Armour Class the selected monster's attack rolls against — your base AC (worn + buffs) plus Shadow, plus the wards that apply to THAT monster's alignment (Prot Evil + converted Vile Ward vs an evil target, Prot Good vs a good one). Select a monster to fill it in."/>
+                            <TextBlock Classes="DetailLine" Text="{Binding AcVsTargetText}"/>
+                        </StackPanel>
                     </Grid>
 
                     <!-- ===== Defense simulator: editable what-if defense ===== -->
@@ -103,7 +108,7 @@
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,0">
                                 <TextBlock Classes="FieldLabel" Text="AC" VerticalAlignment="Center"/>
                                 <NumericUpDown Value="{Binding SimAc, Mode=TwoWay}" Minimum="0" Maximum="9999" Increment="1"
-                                               FormatString="0" ShowButtonSpinner="True" Width="96" MinWidth="96"
+                                               FormatString="0" ShowButtonSpinner="True" Width="124" MinWidth="124"
                                                ToolTip.Tip="Armour Class vs every attacker (worn gear + buffs). Seeded from your live loadout."/>
                             </StackPanel>
                             <CheckBox Content="Shadow AC" IsChecked="{Binding SimShadow, Mode=TwoWay}"
@@ -112,13 +117,13 @@
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,0">
                                 <TextBlock Classes="FieldLabel" Text="Prot Evil" VerticalAlignment="Center"/>
                                 <NumericUpDown Value="{Binding SimProtEvil, Mode=TwoWay}" Minimum="0" Maximum="9999" Increment="1"
-                                               FormatString="0" ShowButtonSpinner="True" Width="96" MinWidth="96"
+                                               FormatString="0" ShowButtonSpinner="True" Width="124" MinWidth="124"
                                                ToolTip.Tip="Protection from Evil — 1 extra AC per point, but only versus an evil monster."/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,0">
                                 <TextBlock Classes="FieldLabel" Text="Vile Ward" VerticalAlignment="Center"/>
                                 <NumericUpDown Value="{Binding SimVileWard, Mode=TwoWay}" Minimum="0" Maximum="99999" Increment="1"
-                                               FormatString="0" ShowButtonSpinner="True" Width="104" MinWidth="104"
+                                               FormatString="0" ShowButtonSpinner="True" Width="140" MinWidth="140"
                                                ToolTip.Tip="Raw Vile Ward from your gear/buffs. Converts to AC versus evil monsters, scaled by the alignment picker to the right (~10 Vile Ward = 1 AC at full)."/>
                                 <ComboBox ItemsSource="{Binding VileWardAlignOptions}"
                                           SelectedIndex="{Binding SimVileWardAlignIndex, Mode=TwoWay}"
@@ -195,14 +200,17 @@
                         <CheckBox Content="40%+" IsChecked="{Binding ShowHits100, Mode=TwoWay}"
                                   ToolTip.Tip="Show monsters whose own attack has 41% or more chance to hit you."/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,0,4">
-                        <TextBlock Classes="FieldLabel" Text="Rounds-to-kill cap:" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,4">
+                        <TextBlock Classes="FieldLabel" Text="Max Rnds to Kill:" VerticalAlignment="Center"/>
                         <NumericUpDown Value="{Binding RoundsToKillCap, Mode=TwoWay}"
                                        Minimum="1" Maximum="999999" Increment="1"
                                        FormatString="0" ShowButtonSpinner="True"
                                        Width="110" MinWidth="110"
                                        ToolTip.Tip="A monster the selected attack needs more than this many rounds to kill is filtered OUT of the list, so you see only fights you can finish quickly. Raise it to include tougher monsters. Saved automatically, per character."/>
                     </StackPanel>
+                    <CheckBox Content="Hide regen timers" IsChecked="{Binding HideRegenMonsters, Mode=TwoWay}"
+                              VerticalAlignment="Center" Margin="0,0,0,4"
+                              ToolTip.Tip="Hide monsters that respawn on their own timer (bosses, lair leaders, and other timed spawns — any with a non-zero respawn/regen time), leaving only freely-farmable monsters."/>
                 </WrapPanel>
 
                 <DataGrid Grid.Row="2" x:Name="MonsterGrid" ItemsSource="{Binding RowsView}"
