@@ -69,18 +69,16 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(RemoveContextMenuEntryCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveContextMenuUpCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveContextMenuDownCommand))]
-    [NotifyCanExecuteChangedFor(nameof(MoveContextMenuIntoFolderCommand))]
-    [NotifyCanExecuteChangedFor(nameof(MoveContextMenuOutOfFolderCommand))]
     [NotifyPropertyChangedFor(nameof(AddContextMenuButtonText))]
     private ContextMenuRowViewModel? _selectedContextMenuRow;
 
-    // The pool "Add" button relabels to make the folder flow discoverable: with a
-    // folder (or one of its children) selected in the placed list, a new item lands
-    // INSIDE that folder.
+    // The "Add" button relabels to make the folder flow clear: with a folder (or
+    // one of its children) selected in the placed list, a new item lands INSIDE
+    // that folder.
     public string AddContextMenuButtonText =>
         SelectedContextMenuRow is { } r && (r.IsFolder || r.Depth == 1)
-            ? "◄ Add into folder"
-            : "◄ Add to menu";
+            ? "Add into folder"
+            : "Add to menu";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddContextMenuEntryCommand))]
@@ -351,6 +349,27 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
             }
             else if (FromModelOrNull(item) is { } row) ContextMenuRows.Add(row);
         }
+        RefreshContextMenuPool();
+    }
+
+    // Rebuild the "Add an item" pool. Single-instance entries (the Favorites /
+    // Recent walk fly-outs — you'd never want two) drop out once they're placed,
+    // and come back if removed; everything else can be added any number of times.
+    private void RefreshContextMenuPool()
+    {
+        var placed = new HashSet<string>(
+            ContextMenuRows.Where(r => !r.IsSeparator && !r.IsFolder && r.Id is not null).Select(r => r.Id!),
+            StringComparer.OrdinalIgnoreCase);
+        string? selectedId = SelectedContextMenuPoolRow?.Id;
+        ContextMenuPool.Clear();
+        foreach (MenuActionCatalogue.Entry e in MenuActionCatalogue.AllEntries)
+        {
+            if (e.EntryKind == MenuActionCatalogue.Kind.WalkFlyout && placed.Contains(e.Id)) continue;
+            ContextMenuPool.Add(new ContextMenuRowViewModel(e));
+        }
+        SelectedContextMenuPoolRow = selectedId is null
+            ? null
+            : ContextMenuPool.FirstOrDefault(r => string.Equals(r.Id, selectedId, StringComparison.OrdinalIgnoreCase));
     }
 
     // A placed row from a leaf entry (separator or catalogue entry + its optional
@@ -856,6 +875,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         ContextMenuRowViewModel row = HookContextMenuRow(new ContextMenuRowViewModel(def, null, depth));
         ContextMenuRows.Insert(at, row);
         SelectedContextMenuRow = row;
+        RefreshContextMenuPool();   // a placed single-instance entry (walk fly-out) leaves the pool
         Dirty();
     }
 
@@ -899,6 +919,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         SelectedContextMenuRow = ContextMenuRows.Count == 0
             ? null
             : ContextMenuRows[System.Math.Min(idx, ContextMenuRows.Count - 1)];
+        RefreshContextMenuPool();   // a removed single-instance entry returns to the pool
         Dirty();
     }
 
@@ -913,6 +934,28 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         for (int k = 0; k < block.Count; k++) ContextMenuRows.Insert(insertAt + k, block[k]);
     }
 
+    // Remove `row` and re-insert it at `insertAt` (an index in the list AFTER the
+    // removal) with `depth`, keeping it selected. Used when a Move up/down steps
+    // an item into or out of a folder (its depth changes).
+    private void ReinsertContextMenuRow(ContextMenuRowViewModel row, int insertAt, int depth)
+    {
+        ContextMenuRows.Remove(row);
+        row.Depth = depth;
+        ContextMenuRows.Insert(insertAt, row);
+        SelectedContextMenuRow = row;
+        // Depth changed under the same selection, so the Add-button label
+        // (which reads the selected row's depth) must re-evaluate.
+        OnPropertyChanged(nameof(AddContextMenuButtonText));
+        Dirty();
+    }
+
+    private void SwapContextMenuRows(int a, int b, ContextMenuRowViewModel keepSelected)
+    {
+        ContextMenuRows.Move(a, b);
+        SelectedContextMenuRow = keepSelected;
+        Dirty();
+    }
+
     private bool CanMoveContextMenuUp() => SelectedContextMenuRow is not null;
     [RelayCommand(CanExecute = nameof(CanMoveContextMenuUp))]
     private void MoveContextMenuUp()
@@ -921,23 +964,33 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         int i = ContextMenuRows.IndexOf(row);
         if (i <= 0) return;
 
-        if (row.Depth == 1)
+        // A folder moves as a whole block, swapping with the previous top-level block.
+        if (row.IsFolder)
         {
-            // A child moves only among its siblings — never above its folder.
-            if (ContextMenuRows[i - 1].Depth == 1) { ContextMenuRows.Move(i, i - 1); Dirty(); }
-            SelectedContextMenuRow = row;   // keep it selected for rapid re-clicks
+            int end = i + 1;
+            while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
+            int p = i - 1;
+            while (p > 0 && ContextMenuRows[p].Depth == 1) p--;
+            MoveContextMenuBlock(i, end, p);
+            SelectedContextMenuRow = row;
+            Dirty();
             return;
         }
-        // Top-level block [i..end) swaps with the previous top-level block at p.
-        int end = i + 1;
-        while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
-        int p = i - 1;
-        while (p > 0 && ContextMenuRows[p].Depth == 1) p--;
-        MoveContextMenuBlock(i, end, p);
-        Dirty();
-        // The block move removes + re-inserts the rows, which clears the list's
-        // selection — restore it so the user can keep clicking Move up/down.
-        SelectedContextMenuRow = row;
+
+        ContextMenuRowViewModel above = ContextMenuRows[i - 1];
+        if (row.Depth == 1)
+        {
+            // Inside a folder: reorder among siblings, or if it's the first child,
+            // pop it OUT above the folder.
+            if (above.Depth == 1) SwapContextMenuRows(i, i - 1, row);
+            else ReinsertContextMenuRow(row, i - 1, 0);   // above the folder header
+            return;
+        }
+
+        // Top-level item: swapping with a folder (its header or last child) steps
+        // it INTO that folder as the last child; otherwise a plain swap up.
+        if (above.IsFolder || above.Depth == 1) ReinsertContextMenuRow(row, i, 1);
+        else SwapContextMenuRows(i, i - 1, row);
     }
 
     private bool CanMoveContextMenuDown() => SelectedContextMenuRow is not null;
@@ -948,85 +1001,34 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         int i = ContextMenuRows.IndexOf(row);
         if (i < 0) return;
 
-        if (row.Depth == 1)
+        if (row.IsFolder)
         {
-            if (i + 1 < ContextMenuRows.Count && ContextMenuRows[i + 1].Depth == 1) { ContextMenuRows.Move(i, i + 1); Dirty(); }
+            int end = i + 1;
+            while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
+            if (end >= ContextMenuRows.Count) return;
+            int next = end + 1;
+            while (next < ContextMenuRows.Count && ContextMenuRows[next].Depth == 1) next++;
+            MoveContextMenuBlock(end, next, i);
             SelectedContextMenuRow = row;
+            Dirty();
             return;
         }
-        // Move the NEXT top-level block up above this one (= this block moves down).
-        int end = i + 1;
-        while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
-        if (end >= ContextMenuRows.Count) return;
-        int next = end + 1;
-        while (next < ContextMenuRows.Count && ContextMenuRows[next].Depth == 1) next++;
-        MoveContextMenuBlock(end, next, i);
-        Dirty();
-        SelectedContextMenuRow = row;
-    }
 
-    private void RefreshFolderMoveCanExec()
-    {
-        MoveContextMenuIntoFolderCommand.NotifyCanExecuteChanged();
-        MoveContextMenuOutOfFolderCommand.NotifyCanExecuteChanged();
-        // The row's depth changed under the same selection, so the Add-button
-        // label (which reads the selected row's depth) must re-evaluate.
-        OnPropertyChanged(nameof(AddContextMenuButtonText));
-    }
+        int j = i + 1;
+        if (row.Depth == 1)
+        {
+            // Inside a folder: reorder among siblings, or if it's the last child,
+            // pop it OUT below the folder.
+            if (j < ContextMenuRows.Count && ContextMenuRows[j].Depth == 1) SwapContextMenuRows(i, j, row);
+            else ReinsertContextMenuRow(row, i, 0);   // below the folder block
+            return;
+        }
 
-    // The folder a selected top-level item can indent into: the folder directly
-    // above it (its header, or the folder whose last child sits just above), or
-    // -1 when the item isn't adjacent to a folder. Mirrors outline-editor "Tab".
-    private int FolderForIndent()
-    {
-        if (SelectedContextMenuRow is not { IsFolder: false, Depth: 0 } sel) return -1;
-        int i = ContextMenuRows.IndexOf(sel);
-        if (i <= 0) return -1;
-        ContextMenuRowViewModel above = ContextMenuRows[i - 1];
-        if (above.IsFolder) return i - 1;
-        if (above.Depth == 1)
-            for (int k = i - 2; k >= 0; k--)
-                if (ContextMenuRows[k].IsFolder) return k;
-        return -1;
-    }
-
-    // Move an already-placed top-level item INTO the folder above it (appended to
-    // that folder's children).
-    private bool CanMoveContextMenuIntoFolder() => FolderForIndent() >= 0;
-    [RelayCommand(CanExecute = nameof(CanMoveContextMenuIntoFolder))]
-    private void MoveContextMenuIntoFolder()
-    {
-        if (SelectedContextMenuRow is not { } row) return;
-        int f = FolderForIndent();
-        if (f < 0) return;
-        int i = ContextMenuRows.IndexOf(row);
-        ContextMenuRows.RemoveAt(i);
-        int insertAt = f + 1;   // f < i, so unaffected by the removal
-        while (insertAt < ContextMenuRows.Count && ContextMenuRows[insertAt].Depth == 1) insertAt++;
-        row.Depth = 1;
-        ContextMenuRows.Insert(insertAt, row);
-        SelectedContextMenuRow = row;
-        Dirty();
-        RefreshFolderMoveCanExec();
-    }
-
-    // Move a folder child OUT to the top level, just after its folder's block.
-    private bool CanMoveContextMenuOutOfFolder() => SelectedContextMenuRow is { Depth: 1 };
-    [RelayCommand(CanExecute = nameof(CanMoveContextMenuOutOfFolder))]
-    private void MoveContextMenuOutOfFolder()
-    {
-        if (SelectedContextMenuRow is not { Depth: 1 } row) return;
-        int i = ContextMenuRows.IndexOf(row);
-        int f = i - 1;
-        while (f >= 0 && !ContextMenuRows[f].IsFolder) f--;   // parent folder (always exists)
-        ContextMenuRows.RemoveAt(i);
-        int insertAt = f + 1;
-        while (insertAt < ContextMenuRows.Count && ContextMenuRows[insertAt].Depth == 1) insertAt++;
-        row.Depth = 0;
-        ContextMenuRows.Insert(insertAt, row);
-        SelectedContextMenuRow = row;
-        Dirty();
-        RefreshFolderMoveCanExec();
+        // Top-level item: swapping with a folder header steps it INTO that folder
+        // as the first child; otherwise a plain swap down.
+        if (j >= ContextMenuRows.Count) return;
+        if (ContextMenuRows[j].IsFolder) ReinsertContextMenuRow(row, i + 1, 1);
+        else SwapContextMenuRows(i, j, row);
     }
 
     [RelayCommand]

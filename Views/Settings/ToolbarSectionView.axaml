@@ -327,14 +327,19 @@
             </StackPanel>
         </Grid>
 
-        <!-- ===== Terminal right-click menu editor (Char tier) ===== -->
-        <!-- Customize the entries below the pinned Favorites / Recent walk
-             shortcuts: add whole main menus as submenus, individual commands,
-             or direct links to a Player Workshop tab or a calculator; rename
-             any of them; reorder; import from another character or a shared
-             file; export to share. Persisted on Apply, per character. -->
-        <TextBlock Classes="SectionHeader" Text="TERMINAL RIGHT-CLICK MENU"
-                   IsVisible="{Binding HasProfile}"/>
+        <!-- ===== Terminal right-click menu customizer (Char tier) ===== -->
+        <!-- Build the whole terminal right-click menu: the Favorites / Recent
+             walk fly-outs, individual commands, direct links to a Player
+             Workshop tab or a calculator, and your own fly-out folders; rename
+             any of them; reorder (Move up/down steps items into / out of
+             folders); import from another character or a shared file; export to
+             share. Persisted on Apply, per character. -->
+        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasProfile}" Margin="0,12,0,2">
+            <TextBlock Grid.Column="0" Classes="SectionHeader" Margin="0" VerticalAlignment="Center"
+                       Text="Terminal right click menu customizer"/>
+            <Button Grid.Column="1" Content="Reset to default" Command="{Binding ResetContextMenuCommand}"
+                    ToolTip.Tip="Restore the built-in right-click menu."/>
+        </Grid>
         <StackPanel IsVisible="{Binding HasProfile}" Spacing="8">
             <Grid ColumnDefinitions="*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="SectionHeader" Margin="0,0,0,4" Text="IN THE MENU (TOP TO BOTTOM)"/>
@@ -356,19 +361,18 @@
                     </ListBox>
                 </Border>
 
+                <!-- Rail order: Move up / Move down / Add to menu / Remove /
+                     Add folder / Add separator. Move up/down steps items into
+                     and out of folders automatically. -->
                 <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,0" Spacing="6" VerticalAlignment="Top">
                     <Button Content="Move up"     Command="{Binding MoveContextMenuUpCommand}"     HorizontalAlignment="Stretch"/>
                     <Button Content="Move down"   Command="{Binding MoveContextMenuDownCommand}"   HorizontalAlignment="Stretch"/>
-                    <Button Content="Into folder →" Command="{Binding MoveContextMenuIntoFolderCommand}" HorizontalAlignment="Stretch"
-                            ToolTip.Tip="Move the selected item into the folder directly above it."/>
-                    <Button Content="← Out of folder" Command="{Binding MoveContextMenuOutOfFolderCommand}" HorizontalAlignment="Stretch"
-                            ToolTip.Tip="Move the selected item out of its folder, back to the top level."/>
-                    <Button Content="New folder"  Command="{Binding AddContextMenuFolderCommand}"  HorizontalAlignment="Stretch"
-                            ToolTip.Tip="Add a named folder (a fly-out submenu). Select it, then add items from the right to put them inside."/>
-                    <Button Content="Add separator" Command="{Binding AddContextMenuSeparatorCommand}" HorizontalAlignment="Stretch"/>
+                    <Button Content="{Binding AddContextMenuButtonText}" Command="{Binding AddContextMenuEntryCommand}" HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Add the item selected on the right. With a folder (or one of its items) selected on the left, it goes inside that folder."/>
                     <Button Content="Remove"      Command="{Binding RemoveContextMenuEntryCommand}" HorizontalAlignment="Stretch"/>
-                    <Button Content="Reset"       Command="{Binding ResetContextMenuCommand}"       HorizontalAlignment="Stretch"
-                            ToolTip.Tip="Restore the built-in right-click menu."/>
+                    <Button Content="Add folder"  Command="{Binding AddContextMenuFolderCommand}"  HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Add a named folder (a fly-out submenu). Select it, then add items to put them inside."/>
+                    <Button Content="Add separator" Command="{Binding AddContextMenuSeparatorCommand}" HorizontalAlignment="Stretch"/>
                 </StackPanel>
 
                 <Border Grid.Row="1" Grid.Column="2" Height="234" VerticalAlignment="Top"
@@ -385,8 +389,8 @@
                     </ListBox>
                 </Border>
 
-                <!-- Rename the selected placed entry (real entries only). -->
-                <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
+                <!-- Rename the selected placed entry / folder (not separators). -->
+                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
                             IsVisible="{Binding SelectedContextMenuRow.CanRename, FallbackValue=False}">
                     <TextBlock Text="Name" VerticalAlignment="Center"
                                Foreground="{StaticResource ChromeFgSecBrush}" FontSize="{StaticResource FontSizeSm}"/>
@@ -397,11 +401,6 @@
                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                Text="{Binding SelectedContextMenuRow.DefaultLabel, StringFormat='→ {0}'}"/>
                 </StackPanel>
-
-                <Button Grid.Row="2" Grid.Column="2" Content="{Binding AddContextMenuButtonText}" Margin="0,8,0,0"
-                        HorizontalAlignment="Stretch"
-                        Command="{Binding AddContextMenuEntryCommand}"
-                        ToolTip.Tip="Add the selected item. With a folder (or one of its items) selected on the left, it goes inside that folder."/>
 
                 <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal"
                             Spacing="8" Margin="0,12,0,0">
