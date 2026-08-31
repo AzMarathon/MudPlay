@@ -45,6 +45,34 @@ public sealed class BuffDefenseCalculatorTests
     }
 
     [Fact]
+    public void Compute_FoldsAcBlur_ProtEvil_Shadow_VileWard()
+    {
+        List<KnownSpell> available = new()
+        {
+            Spell("blur", targets: 0, new SpellAbility(10, 5)),  // AC-Blur folds into AC
+            Spell("prot", targets: 0, new SpellAbility(24, 12)), // Prot-Evil ward
+            Spell("shad", targets: 0, new SpellAbility(9, 1)),   // shadow property
+            Spell("vile", targets: 0, new SpellAbility(1113, 1)),// vile ward
+        };
+        BuffSettings buffs = new()
+        {
+            Slots =
+            {
+                new BuffSlot { Spell = "blur", CastOnSelf = true },
+                new BuffSlot { Spell = "prot", CastOnSelf = true },
+                new BuffSlot { Spell = "shad", CastOnSelf = true },
+                new BuffSlot { Spell = "vile", CastOnSelf = true },
+            },
+        };
+
+        BuffDefense d = BuffDefenseCalculator.Compute(buffs, level: 20, available);
+        Assert.Equal(5, d.Ac);        // AC-Blur folded into AC
+        Assert.Equal(12, d.ProtEvil);
+        Assert.True(d.HasShadow);
+        Assert.True(d.HasVileWard);
+    }
+
+    [Fact]
     public void Compute_ItemTokenAndUnknownCode_Skipped()
     {
         List<KnownSpell> available = new() { Spell("shld", targets: 0, new SpellAbility(2, 15)) };

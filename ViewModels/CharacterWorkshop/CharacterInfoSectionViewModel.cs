@@ -156,6 +156,13 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     // Consolidated wealth in copper farthings (matches the game's `Wealth:` line).
     [ObservableProperty] private string _totalWealth = "—";
 
+    // AC / DR split by source, under the wealth block. Gear = worn armour + items;
+    // Buffs = the character's configured self-applicable buffs assumed up (the same
+    // shared BuffDefenseCalculator the Monster Intel matchup + Equipment Manager use,
+    // so the "as if buffed" numbers agree everywhere).
+    [ObservableProperty] private string _gearDefense = "—";
+    [ObservableProperty] private string _spellDefense = "—";
+
     // ----- Inventory: the full carry list from the last `i` dump ---------
     // Worn items split into name + parenthesized slot so the view can align every
     // slot flag in a shared column (like the in-game `look self`), rather than
@@ -211,8 +218,31 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         RefreshDerived();
         RefreshAlignment();
         RefreshWealth();
+        RefreshDefense();
         RefreshInventory();
     }
+
+    // The character's AC / DR split by source, surfaced under the wealth block:
+    // what worn gear grants, then — assuming the configured self-buffs are up —
+    // what those buffs add on top. The buff side runs through the shared
+    // BuffDefenseCalculator (the same "everything that lands on you" roster the
+    // Monster Intel matchup and Equipment Manager use), so the numbers agree.
+    private void RefreshDefense()
+    {
+        EquipmentStatBreakdown gear = CharacterCalculator.AggregateEquipmentStats(
+            _inventory.Snapshot.EquippedItems, _gameData);
+        GearDefense = FormatDefense(gear.Totals.PlusAC, gear.Totals.PlusDR);
+
+        MudPlay.Game.Spells.BuffDefense buff = MudPlay.Game.Spells.BuffDefenseCalculator.Compute(
+            AppServices.Current.Profile.Current?.PartyBuffs, _stats.Level,
+            AppServices.Current.Spellbook.Available);
+        SpellDefense = FormatDefense(buff.Ac, buff.Dr);
+    }
+
+    // "AC +45  ·  DR +3.2", with a plain 0 per component when nothing contributes.
+    private static string FormatDefense(double ac, double dr)
+        => $"AC {ac.ToString("+0;-0;0", CultureInfo.InvariantCulture)}" +
+           $"  ·  DR {dr.ToString("+0.#;-0.#;0", CultureInfo.InvariantCulture)}";
 
     // ----- Box A ----------------------------------------------------------
 

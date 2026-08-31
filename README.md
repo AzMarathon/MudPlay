@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.38.4**
+> **Version 3.38.5**
 > - Character Workshop → Calculators tab: fixed the outgoing weapon damage / DPS / rounds-to-kill silently undercounting **+MinDamage gear** (ability-1 "Damage" items — the flat low-end add) — it never fed that bonus into the melee-damage math
 > - The Calculators tab and Monster Intel's matchup now compute melee offense through one shared helper, so the two can't drift apart
+> - Defense readouts now assume your configured buffs are up — Monster Intel's Hits-You-% / AC-vs-Evil, the Equipment Manager's projected AC, and Character Info all fold in the AC (and DR) your configured self-buffs grant, from one shared calculator
+> - Character Info gains an AC / DR breakdown below Wealth: one line for worn gear, one for what your buffs add
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
