@@ -416,7 +416,7 @@ A read-only what-if table: pick a level **from–to** range (and optionally any 
 
 **Character Info** is your read-only character sheet — stats, skills, the attack table (per attack type: accuracy, damage range, and swings per round, computed from your stats and equipped weapon), and folded-in quest bonuses. It also lists your worn, carried, and key-ring inventory, each a clickable link to its Game Data record (an item whose dumped name didn't resolve stays plain text). Below the wealth block it shows an **AC / DR breakdown** in two lines: one for what your worn gear grants, and one for what your **configured self-buffs** add on top (assuming they're up) — the same buff figure the Equipment Manager and Monster Intel use.
 
-**Calculators** holds what-if tools: the Hit Calculator, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings. The **Hit Calculator** projects your hit% / damage against a monster and the monster's hit% against you.
+**Calculators** holds what-if tools: the Hit Calculator, Swing and Backstab calculators, Movement Speed, Mana Regen, and Realm Rankings. The **Hit Calculator** projects your hit% and damage against a monster with your current weapon; for the reverse — how often a monster hits *you*, and whether it's safe to fight — see **Monster Intel**.
 
 ---
 
