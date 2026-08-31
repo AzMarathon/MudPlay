@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.40.1**
+> **Version 3.40.4**
 > - Fixed the auto-equip spamming the same `wear` commands several times a second when a Default set and a Pre-rest set overlap the same slots (a re-apply now waits for the previous swap's wears to confirm)
+> - Fixed a loop wedging forever when a move's confirmation got swallowed by an unrelated line — the stall watchdog is now armed on every move sent
+> - Fixed a self-buff spamming a reject/retry loop out of combat (the cast-blocked latch now clears on the correct ~5.5s cadence, not a too-short 3s)
 > - Monster Intel **Edit Attacks** picker: choose which of your attacks (every usable melee type + your attack spells) show in Your Matchup, and which one drives the Est. Rounds to Kill column
 > - Your Matchup now lists your melee attacks (rounds/hit%/dmg vs the monster) alongside the ranked spells
 > - Monster Intel top bar shows plain **AC** (worn gear + configured buffs + Shadow) instead of "AC vs Evil" — evil-only wards no longer inflate it against neutral/good monsters

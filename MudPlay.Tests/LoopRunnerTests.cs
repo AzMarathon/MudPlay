@@ -605,6 +605,38 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void InFlightStall_NoPauseInvolved_WatchdogStillEscalates()
+    {
+        // Regression (reports paradigm-20260831-091353 and -100557: "the debuff
+        // wore off and it got stuck" / "movement stopped again"): the stall
+        // watchdog used to be armed only from the resume-reconciliation path
+        // (see InFlightStall_ConfirmationNeverArrives_WatchdogEscalatesToRecovery
+        // above), so an ordinary mid-loop move that went Pending with NO pause
+        // anywhere near it had no timeout at all if its confirmation got
+        // swallowed (there, a debuff reapplying the same instant the move was
+        // sent). One incident hung 19s, the other over 4 minutes, both only
+        // ending because the player noticed and filed a report. EmitCardinal now
+        // arms the watchdog on every send, not just the resume path.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+
+        // The real regression: FireStallWatchdogForTests bypasses arming (it
+        // invokes the elapsed-handler directly regardless), so it can't catch
+        // "never armed in the first place" -- this can.
+        Assert.True(h.Runner.IsStallWatchdogArmedForTests);
+
+        // No pause, no resume -- just the plain send above, then the wait window
+        // elapses with the move still wedged Pending.
+        h.Runner.FireStallWatchdogForTests();
+
+        Assert.Single(h.ResyncReasons);
+        Assert.Contains("in-flight stall", h.ResyncReasons[0]);
+    }
+
+    [Fact]
     public void ResumeWhileMoveInFlight_TrackerBecameSuspectDuringPause_RecoversWithoutReSending()
     {
         // Regression (paradigm-20260829-154032): an interleaved bright-cyan

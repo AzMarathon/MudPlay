@@ -1108,6 +1108,18 @@ public sealed class LoopRunner : IRecoverableEngine
     // Emit a plain cardinal move for the circuit, notifying the tracker + recovery
     // gate and firing the pre-move stealth hook. note annotates the wire reason
     // (e.g. "door pre-open"); null for an ordinary passage.
+    //
+    // Arms the stall watchdog on every send, not just the resume-reconciliation
+    // path (ArmStallWatchdog's other two call sites) — this is the ONE place every
+    // plain cardinal actually goes on the wire, ordinary mid-loop sends included.
+    // Without it, a move that goes Pending outside a pause/resume boundary and then
+    // gets swallowed by an unrelated line (a debuff reapplying mid-move, say) had
+    // no timeout at all: AdvanceStep only disarms on confirmation, so nothing was
+    // ever watching for one that never arrives. Reports paradigm-20260831-091353
+    // and -100557 ("the debuff wore off and it got stuck" / "movement stopped
+    // again"): a rabid-dire-wolf convulsions tick landed the same instant a step's
+    // move went out, the room confirmation never came, and the loop sat wedged —
+    // once for 19s, once for over 4 minutes — because no watchdog had been armed.
     private void EmitCardinal(Direction direction, RoomKey target, string? note)
     {
         _tracker.NoteMoveSent(direction);
@@ -1118,6 +1130,7 @@ public sealed class LoopRunner : IRecoverableEngine
             ? $"move {direction} → {target}"
             : $"move {direction} ({note})";
         Write(bytes, reason);
+        ArmStallWatchdog($"step {_index + 1} move sent");
     }
 
     // Fail the active circuit with reason and reset.
@@ -1348,6 +1361,12 @@ public sealed class LoopRunner : IRecoverableEngine
 
     // Test seam — pretend the in-flight stall watchdog just elapsed.
     internal void FireStallWatchdogForTests() => OnStallWatchdogElapsed();
+
+    // Test seam — true while the in-flight stall watchdog is armed and
+    // counting down. FireStallWatchdogForTests bypasses arming entirely (it
+    // invokes the elapsed-handler directly), so it can't tell a test whether
+    // EmitCardinal actually armed the watchdog on send — this can.
+    internal bool IsStallWatchdogArmedForTests => _stallWatchdog?.IsEnabled == true;
 
     private void Write(byte[] bytes, string reason)
     {
