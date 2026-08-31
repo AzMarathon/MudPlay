@@ -518,7 +518,7 @@ Two checkboxes narrow the list to what you can actually engage right now (both n
 - **Hittable** — keeps only monsters your equipped weapon's HitMagic actually clears.
 - **Castable** — keeps only monsters where at least one attack spell you've obtained gets past their spell immunity.
 
-Below those, a row of **Hits You %** threshold checkboxes — **2%, 5%, 10%, 15%, 25%+** — narrows by how dangerous a monster's own attack is. The first four keep monsters at or under that percent; **25%+** is the reverse — monsters whose attack is *at least* that likely to land, for deliberately sizing up something risky. Check as many as you like: a monster shows if it matches **any** checked box (checking both 5% and 25%+ shows the safe end and the risky end while hiding the middle). Checking none shows every monster regardless of Hits You %.
+Below those, a row of **Hits You %** threshold checkboxes — **2%, 5%, 10%, 15%, 25%+** — narrows by how dangerous a monster's own attack is. Each box is its own discrete, non-overlapping band (0-2%, 3-5%, 6-10%, 11-15%), so checking **10%** alone shows only monsters in the 6-10% band, not the 1-2% or 3-5% ones too; **25%+** is the reverse — monsters whose attack is *at least* that likely to land, for deliberately sizing up something risky. Check as many as you like: a monster shows if it matches **any** checked box (checking both 5% and 25%+ shows the safe end and the risky end while hiding the middle). Checking none shows every monster regardless of Hits You %.
 
 Select a monster to fill the right-hand detail panel:
 

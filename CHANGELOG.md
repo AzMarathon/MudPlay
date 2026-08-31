@@ -2,7 +2,7 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.37.3
+## 3.37.5
 
 - Monster Intel refocused back to a fast pre-fight check: the master list now shows just Name, HP, and a new "Hits You %" column (that monster's own attack's chance to land on you, given your live AC/Dodge/wards)
 - Replaced the single Safe threshold with a row of Hits-You-% checkboxes — 2%, 5%, 10%, 15%, and 25%+ (the last one flips direction, for deliberately sizing up something risky) — check as many as you like, a monster shows if it matches any checked band
@@ -10,6 +10,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Removed the "In this room" context bar
 - Removed from the window (all still fully available on the Game Data Browser's Monsters tab): the Overview grab-bag, the full Elemental Defenses matrix, the Casts panel, Loot, Locations, the Automation overlay editor, and multi-select side-by-side comparison
 - Kept: Attacks (how dangerous is its swing), Your Matchup (weapon eligibility, ranked spell effectiveness, incoming elemental threat), and Your Observations (your own combat history against it)
+- Fixed: checking a single Hits-You-% checkbox (e.g. 10%) was also pulling in every monster from the lower bands (1-2%, 3-5%) instead of showing only its own band
+- Fixed: the master list could open completely empty with a character loaded — Hits You % wasn't computed yet the first time the list's filter ran, so the "no computable value" rule dropped the entire catalog until the next gear or spell change
 
 ## 3.37.1
 

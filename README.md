@@ -1,13 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.3**
+> **Version 3.37.5**
 > - Monster Intel refocused back to a fast pre-fight check: the master list now shows just Name, HP, and a new "Hits You %" column (that monster's own attack's chance to land on you, given your live AC/Dodge/wards)
 > - Replaced the single Safe threshold with a row of Hits-You-% checkboxes — 2%, 5%, 10%, 15%, and 25%+ (the last one flips direction, for sizing up something risky) — check as many as you like, a monster shows if it matches any checked band
 > - A monster with no computable Hits You % is now dropped from the list entirely once a character is loaded, instead of showing with a blank value
 > - Removed the "In this room" context bar
 > - Removed from the window (all still fully available on the Game Data Browser's Monsters tab): the Overview grab-bag, the full Elemental Defenses matrix, the Casts panel, Loot, Locations, the Automation overlay editor, and multi-select side-by-side comparison
 > - Kept: Attacks (how dangerous is its swing), Your Matchup (weapon eligibility, ranked spell effectiveness, incoming elemental threat), and Your Observations (your own combat history against it)
+> - Fixed: a single Hits-You-% checkbox was also pulling in every monster from the lower bands
+> - Fixed: the master list could open completely empty with a character loaded
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

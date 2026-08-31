@@ -108,7 +108,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         if (_hasCharacterContext)
         {
+            // RowsView was just constructed with Filter = PassesFilter, which
+            // reads IncomingHitPercent — still every entry's default -1 until
+            // this rebuild runs. Without a Refresh here the view's initial
+            // snapshot filters the whole catalog out (the -1 sentinel reads
+            // as "no computable Hits You %") and never re-evaluates until the
+            // next gear/spell change, so the master list opens empty.
             RebuildCharacterCapabilities();
+            RowsView.Refresh();
             _inventory!.Changed += OnCharacterCapabilitiesChanged;
             _spellbook!.Changed += OnCharacterCapabilitiesChanged;
         }
@@ -160,7 +167,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // Hits-You-% threshold checkboxes: independent, OR'd together — checking
     // none shows every monster (still subject to the "no computable value"
     // drop below); checking one or more keeps a monster if it falls in ANY
-    // checked band. The first four are "at or under"; the last is the
+    // checked band. Each is its OWN discrete, non-overlapping band (0-2,
+    // 3-5, 6-10, 11-15) — checking 10% alone must never also surface a 1%
+    // or 2% monster. The last checkbox is the odd one out: >=25%, the
     // opposite direction, for deliberately looking at what's risky.
     [ObservableProperty] private bool _showHits2;
     [ObservableProperty] private bool _showHits5;
@@ -262,12 +271,17 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         bool anyThresholdChecked = ShowHits2 || ShowHits5 || ShowHits10 || ShowHits15 || ShowHits25Plus;
         if (anyThresholdChecked)
         {
+            // Each box is its OWN discrete band, not "at or under" — checking
+            // 10% must show only the 6-10% band, never the 2%/5% monsters
+            // underneath it too (report: checking 10% alone showed 1%/2%
+            // entries because this used to be cumulative thresholds).
+            int hp = e.IncomingHitPercent;
             bool inCheckedBand =
-                (ShowHits2 && e.IncomingHitPercent <= 2)
-                || (ShowHits5 && e.IncomingHitPercent <= 5)
-                || (ShowHits10 && e.IncomingHitPercent <= 10)
-                || (ShowHits15 && e.IncomingHitPercent <= 15)
-                || (ShowHits25Plus && e.IncomingHitPercent >= 25);
+                (ShowHits2 && hp is >= 0 and <= 2)
+                || (ShowHits5 && hp is >= 3 and <= 5)
+                || (ShowHits10 && hp is >= 6 and <= 10)
+                || (ShowHits15 && hp is >= 11 and <= 15)
+                || (ShowHits25Plus && hp >= 25);
             if (!inCheckedBand) return false;
         }
         return true;

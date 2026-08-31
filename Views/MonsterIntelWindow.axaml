@@ -114,13 +114,13 @@
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <TextBlock Classes="FieldLabel" Text="Hits You %:" VerticalAlignment="Center"/>
                         <CheckBox Content="2%" IsChecked="{Binding ShowHits2, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 2% or less chance to hit you."/>
+                                  ToolTip.Tip="Show monsters whose own attack has 0-2% chance to hit you."/>
                         <CheckBox Content="5%" IsChecked="{Binding ShowHits5, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 5% or less chance to hit you."/>
+                                  ToolTip.Tip="Show monsters whose own attack has 3-5% chance to hit you."/>
                         <CheckBox Content="10%" IsChecked="{Binding ShowHits10, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 10% or less chance to hit you."/>
+                                  ToolTip.Tip="Show monsters whose own attack has 6-10% chance to hit you."/>
                         <CheckBox Content="15%" IsChecked="{Binding ShowHits15, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 15% or less chance to hit you."/>
+                                  ToolTip.Tip="Show monsters whose own attack has 11-15% chance to hit you."/>
                         <CheckBox Content="25%+" IsChecked="{Binding ShowHits25Plus, Mode=TwoWay}"
                                   ToolTip.Tip="Show monsters whose own attack has 25% or more chance to hit you."/>
                     </StackPanel>
