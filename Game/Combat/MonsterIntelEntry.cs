@@ -20,6 +20,9 @@ public sealed record MonsterIntelEntry
     public int Hp => Source.Hp;
     public string HpText => Hp > 0 ? Hp.ToString("N0", Inv) : string.Empty;
 
+    public int Exp => Source.Exp;
+    public string ExpText => Exp > 0 ? Exp.ToString("N0", Inv) : string.Empty;
+
     // Sole gate for the Hittable filter: keep only if the equipped weapon's
     // HitMagic meets or exceeds this. Plain int (not Source.Magical) so the
     // grid sorts on the number, not lexically on a formatted string.
@@ -34,6 +37,20 @@ public sealed record MonsterIntelEntry
     // physical attack to compute against.
     public int IncomingHitPercent { get; set; } = -1;
     public string IncomingHitPercentText => IncomingHitPercent >= 0 ? $"{IncomingHitPercent}%" : string.Empty;
+
+    // Projected rounds for the player to kill this monster with their current
+    // weapon, given live accuracy/damage/swings/crit — the other live,
+    // player-dependent field alongside IncomingHitPercent, set the same way
+    // by RebuildCharacterCapabilities. -1 = no character context (not yet
+    // computed); 0 = computed but not killable (no weapon, or the weapon
+    // can't out-damage the monster's regen/HP at all).
+    public int EstimatedRoundsToKill { get; set; } = -1;
+    public string EstimatedRoundsToKillText => EstimatedRoundsToKill switch
+    {
+        < 0 => string.Empty,
+        0 => "—",
+        _ => EstimatedRoundsToKill.ToString(Inv),
+    };
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 

@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.37.6
+
+- Monster Intel master list gains two columns: **EXP** and **Est. Rounds to Kill** (projected rounds for your currently-equipped weapon's Normal attack to drop the monster, at your live accuracy/damage/swings/crit — reuses the same MonsterMatchupCalculator the Character Workshop's Calculators tab already uses; shows "—" when unarmed or unable to out-damage it)
+
 ## 3.37.5
 
 - Monster Intel refocused back to a fast pre-fight check: the master list now shows just Name, HP, and a new "Hits You %" column (that monster's own attack's chance to land on you, given your live AC/Dodge/wards)

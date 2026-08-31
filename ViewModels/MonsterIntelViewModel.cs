@@ -237,6 +237,28 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 entry.Source.PhysicalAccuracy, entry.Source.Align,
                 _playerAc, _playerDodge, _playerProtEvil, _playerProtGood,
                 _gameData.ActiveRealm) ?? -1;
+
+        // Estimated Rounds to Kill — the player-offense direction, our current
+        // weapon's projected DPS against each monster's HP/AC/DR, via the same
+        // Compute() the Character Workshop's Hit Calculator uses.
+        PlayerMatchupProfile playerProfile =
+            CharacterCalculator.BuildNormalAttackProfile(_stats, worn, encum, _gameData);
+        foreach (MonsterIntelEntry entry in _all)
+        {
+            if (entry.Hp <= 0) { entry.EstimatedRoundsToKill = -1; continue; }
+            MonsterCatalogEntry m = entry.Source;
+            var monsterProfile = new MonsterMatchupProfile(
+                ArmourClass: m.ArmourClass,
+                DamageResist: m.DamageResist,
+                Hp: m.Hp,
+                Dodge: m.Dodge,
+                HasPhysicalAttack: m.PhysicalAccuracy is not null,
+                AttackAccuracy: m.PhysicalAccuracy?.Majority ?? 0,
+                AvgAttackDamage: m.PrimaryPhysicalAvgDamage,
+                IsEvil: m.Align is 1 or 2 or 5 or 6,
+                IsGood: m.Align is 0 or 4);
+            entry.EstimatedRoundsToKill = MonsterMatchupCalculator.Compute(playerProfile, monsterProfile).RoundsToKill;
+        }
     }
 
     private void OnCharacterCapabilitiesChanged()

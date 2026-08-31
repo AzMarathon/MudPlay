@@ -27,7 +27,7 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         File.WriteAllText(Path.Combine(setDir, "Monsters.json"), """
         [
           {
-            "Number": 1, "Name": "test goblin", "Type": 1, "Align": 2, "HP": 10,
+            "Number": 1, "Name": "test goblin", "Type": 1, "Align": 2, "HP": 10, "EXP": 50,
             "AttType-0": 1, "AttName-0": "hits you", "Att%-0": 100, "AttTrue%-0": 100,
             "AttAcc-0": 50, "AttMin-0": 1, "AttMax-0": 5, "AttEnergy-0": 100, "AttHitSpell-0": 0
           }
@@ -57,7 +57,10 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             observations: null, playerState: null);
 
         Assert.True(vm.HasCharacterContext);
-        Assert.Contains(vm.RowsView.Cast<MonsterIntelEntry>(), e => e.Name == "test goblin");
+        MonsterIntelEntry entry = Assert.Single(
+            vm.RowsView.Cast<MonsterIntelEntry>().Where(e => e.Name == "test goblin"));
+        Assert.Equal("50", entry.ExpText);
+        Assert.NotEqual(string.Empty, entry.EstimatedRoundsToKillText);
 
         inventory.Dispose();
     }
