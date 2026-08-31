@@ -103,10 +103,123 @@ public sealed class SpellInfoRowsBuilderTests : IDisposable
             monsters: [NamedRow(200, "vampire magus"), NamedRow(201, "vampire acolyte")]);
 
         GameDataInfoRow row = Assert.Single(
-            new SpellInfoRowsBuilder(cache).Build(50).Where(r => r.Label == "Casted By"));
+            new SpellInfoRowsBuilder(cache).Build(50).Where(r => r.Label == "Cast By"));
 
         Assert.True(row.HasLinks);
         Assert.Equal(new[] { "vampire magus", "vampire acolyte" }, row.Links!.Select(l => l.Name));
         Assert.All(row.Links!, l => Assert.True(l.IsLinked));
+    }
+
+    // The ethereal shield shape: a level-scaling AC Blur (code 10, stored 0), a
+    // flat DR (code 7, stored 10), difficulty, and removed spells.
+    private static Dictionary<string, object> EtherealShieldRow() => new()
+    {
+        ["Number"] = 4, ["Name"] = "ethereal shield", ["Short"] = "shld",
+        ["ReqLevel"] = 5, ["ManaCost"] = 6, ["Diff"] = -5, ["Learnable"] = 1,
+        ["MinBase"] = 3, ["MaxBase"] = 3, ["MinInc"] = 1, ["MinIncLVLs"] = 2,
+        ["MaxInc"] = 1, ["MaxIncLVLs"] = 2, ["Cap"] = 18,
+        ["Abil-0"] = 10, ["AbilVal-0"] = 0,       // AC Blur, scales
+        ["Abil-1"] = 115, ["AbilVal-1"] = 8531,   // DescMsg — suppressed
+        ["Abil-2"] = 122, ["AbilVal-2"] = 132,    // RemovesSpell mageshield
+        ["Abil-3"] = 7, ["AbilVal-3"] = 10,       // DR 10 -> +1.0
+        ["Abil-4"] = 122, ["AbilVal-4"] = 133,    // RemovesSpell protective shell
+    };
+
+    private static string? ValueOf(IReadOnlyList<GameDataInfoRow> rows, string label)
+        => rows.FirstOrDefault(r => r.Label == label)?.Value;
+
+    [Fact]
+    public void Build_FriendlyLabels_ReplaceRawColumnNames()
+    {
+        GameDataCache cache = NewCache(spells: [EtherealShieldRow()]);
+        var rows = new SpellInfoRowsBuilder(cache).Build(4);
+
+        Assert.Equal("5", ValueOf(rows, "Required Level"));
+        Assert.Equal("6", ValueOf(rows, "Mana Cost"));
+        Assert.Equal("-5", ValueOf(rows, "Difficulty"));   // Diff renamed
+        Assert.Equal("shld", ValueOf(rows, "Cast Code"));
+        Assert.Equal("Yes", ValueOf(rows, "Learnable"));
+        Assert.DoesNotContain(rows, r => r.Label is "Diff" or "ReqLevel" or "ManaCost" or "Short");
+    }
+
+    [Fact]
+    public void Build_DrAbility_ShownAppliedToTheTenth()
+    {
+        GameDataCache cache = NewCache(spells: [EtherealShieldRow()]);
+        var rows = new SpellInfoRowsBuilder(cache).Build(4);
+        Assert.Equal("+1.0", ValueOf(rows, "DR"));   // raw 10 / 10
+    }
+
+    [Fact]
+    public void Build_ScalingAffect_ShownAsRange_NotZero_AndNoMagnitudeRow()
+    {
+        GameDataCache cache = NewCache(spells: [EtherealShieldRow()]);
+        var rows = new SpellInfoRowsBuilder(cache).Build(4);
+
+        // AC Blur: 3 + floor(5/2) = 5 at req level, 3 + floor(18/2) = 12 at cap.
+        Assert.Equal("Min: +5, Max: +12", ValueOf(rows, "AC Blur"));
+        // The generic "Magnitude" growth row is gone — the affect row carries it.
+        Assert.DoesNotContain(rows, r => r.Label == "Magnitude");
+    }
+
+    [Fact]
+    public void Build_RemovesSpells_CollapseToOneLinkedRow()
+    {
+        GameDataCache cache = NewCache(
+            spells:
+            [
+                EtherealShieldRow(),
+                SpellRow(132, "mageshield"),
+                SpellRow(133, "protective shell"),
+            ]);
+        var rows = new SpellInfoRowsBuilder(cache).Build(4);
+
+        GameDataInfoRow removes = Assert.Single(rows.Where(r => r.Label == "Removes"));
+        Assert.True(removes.HasLinks);
+        Assert.Equal(new[] { "mageshield", "protective shell" }, removes.Links!.Select(l => l.Name));
+        // No raw per-slot "RemovesSpell" rows survive the collapse.
+        Assert.DoesNotContain(rows, r => r.Label == "RemovesSpell");
+    }
+
+    [Fact]
+    public void Build_MessageOnlyAbility_IsDropped()
+    {
+        GameDataCache cache = NewCache(spells: [EtherealShieldRow()]);
+        Assert.DoesNotContain(new SpellInfoRowsBuilder(cache).Build(4), r => r.Label == "DescMsg");
+    }
+
+    [Theory]
+    [InlineData(0, "0 (between rounds)")]
+    [InlineData(500, "500 (up to 2 times per round)")]   // 1000/500 fires twice
+    [InlineData(334, "334 (up to 2 times per round)")]   // floor(1000/334) = 2
+    [InlineData(1000, "1000 (once per round)")]
+    [InlineData(700, "700 (once per round)")]            // floor(1000/700) = 1
+    public void Build_EnergyCost_AnnotatesFireRate(int energy, string expected)
+    {
+        var spell = new Dictionary<string, object>
+        {
+            ["Number"] = 70, ["Name"] = "test spell", ["EnergyCost"] = energy,
+        };
+        var rows = new SpellInfoRowsBuilder(NewCache(spells: [spell])).Build(70);
+        Assert.Equal(expected, ValueOf(rows, "Energy Cost"));
+    }
+
+    [Fact]
+    public void Build_FlagBesideDamage_NotGivenScaledRange()
+    {
+        // A NonMagicalSpell (144) flag alongside a Damage (1) spell must render
+        // name-only, never inherit the damage magnitude as a bogus scaled range.
+        var spell = new Dictionary<string, object>
+        {
+            ["Number"] = 60, ["Name"] = "nonmagic bolt", ["ReqLevel"] = 8,
+            ["MinBase"] = 13, ["MaxBase"] = 14,
+            ["Abil-0"] = 1, ["AbilVal-0"] = 0,     // Damage — scales
+            ["Abil-1"] = 144, ["AbilVal-1"] = 0,   // NonMagicalSpell flag
+        };
+        var rows = new SpellInfoRowsBuilder(NewCache(spells: [spell])).Build(60);
+
+        string? flag = ValueOf(rows, "NonMagicalSpell");
+        Assert.NotNull(flag);
+        Assert.DoesNotContain("→", flag);   // never a scaled range
     }
 }

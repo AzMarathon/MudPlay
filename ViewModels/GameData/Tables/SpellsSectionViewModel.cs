@@ -136,13 +136,17 @@ public sealed class SpellsSectionViewModel : JsonTableSectionViewModel, IEditabl
             isNew = true;
         }
 
+        MudPlay.Game.Spells.SpellFormulaInput? formula =
+            new MudPlay.Game.Spells.KnownSpellCatalog(_cache).GetFormulaByNumber(spellNumber);
+
         MessageEditDialogViewModel vm = new(
             record,
             currentTier:     SettingsTier.Defaults,
             existingRecords: _messages.Messages,
             isNew:           isNew,
             cache:           _cache,
-            gameDataInfo:    info);
+            gameDataInfo:    info,
+            spellFormula:    formula);
         MessageEditResult? result = await _dialogs
             .OpenWindowAsync<MessageEditDialogViewModel, MessageEditResult>(vm);
         if (result is null) return;

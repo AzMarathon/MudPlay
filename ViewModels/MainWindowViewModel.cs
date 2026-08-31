@@ -4421,7 +4421,8 @@ public partial class MainWindowViewModel : ObservableObject
         {
             DataContext = new SpellBookViewModel(
                 AppServices.Current.Spellbook,
-                () => AppServices.Current.Profile.Current?.LastKnownStats?.Class),
+                () => AppServices.Current.Profile.Current?.LastKnownStats?.Class,
+                () => AppServices.Current.PlayerStats.Spellcasting),
         };
         window.Closed += (_, _) => _spellBook = null;
         _spellBook = window;
