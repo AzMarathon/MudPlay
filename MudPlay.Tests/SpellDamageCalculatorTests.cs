@@ -57,6 +57,13 @@ public sealed class SpellDamageCalculatorTests
     }
 
     [Fact]
+    public void Compute_NegativeElementalResist_AmplifiesDamage()
+    {
+        // -50% cold resist = vulnerability: 12→18, 21→31.5→32 (banker's rounding).
+        Assert.Equal((18L, 32L), SpellDamageCalculator.Compute(ColdBolt(), level: 4, elementalResist: -50));
+    }
+
+    [Fact]
     public void Compute_NormalSpell_IgnoresElementalResist()
     {
         // AttType 4 (Normal) has no element — an elemental resist can't touch it.

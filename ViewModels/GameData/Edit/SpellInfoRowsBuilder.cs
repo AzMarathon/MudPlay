@@ -281,12 +281,14 @@ public sealed class SpellInfoRowsBuilder
                 if (val == 0 && formula is { } affF
                     && ResolveAbilityReference(code, val) is null && !_flagOnlyAbil.Contains(code))
                 {
+                    // Min: is the base value at the spell's learned level; Max: is
+                    // where it grows to at the level cap.
                     long loVal = SpellCalculator.AffectMagnitude(affF, affF.ReqLevel).Max;
                     long hiVal = SpellCalculator.AffectMagnitude(affF, ScaleTopLevel(affF)).Max;
                     if (loVal != 0 || hiVal != 0)
                     {
                         rows.Add(new GameDataInfoRow(
-                            abilName, loVal == hiVal ? Signed(hiVal) : $"{Signed(loVal)} → {Signed(hiVal)}"));
+                            abilName, loVal == hiVal ? Signed(hiVal) : $"Min: {Signed(loVal)}, Max: {Signed(hiVal)}"));
                         continue;
                     }
                 }

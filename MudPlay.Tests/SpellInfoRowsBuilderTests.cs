@@ -157,7 +157,7 @@ public sealed class SpellInfoRowsBuilderTests : IDisposable
         var rows = new SpellInfoRowsBuilder(cache).Build(4);
 
         // AC Blur: 3 + floor(5/2) = 5 at req level, 3 + floor(18/2) = 12 at cap.
-        Assert.Equal("+5 → +12", ValueOf(rows, "AC Blur"));
+        Assert.Equal("Min: +5, Max: +12", ValueOf(rows, "AC Blur"));
         // The generic "Magnitude" growth row is gone — the affect row carries it.
         Assert.DoesNotContain(rows, r => r.Label == "Magnitude");
     }

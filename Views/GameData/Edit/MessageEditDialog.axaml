@@ -272,8 +272,11 @@
                       <StackPanel IsVisible="{Binding DamageCalc.ShowElementalResist}">
                         <TextBlock Text="{Binding DamageCalc.ElementalResistLabel}"
                                    Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
+                        <!-- Elemental resist is signed: negative = vulnerability
+                             (the element deals EXTRA damage), 100 = no damage. -->
                         <NumericUpDown Value="{Binding DamageCalc.ElementalResist, Mode=TwoWay}"
-                                       Minimum="0" Maximum="100" Increment="5" FormatString="0" Width="120"/>
+                                       Minimum="-100" Maximum="100" Increment="5" FormatString="0" Width="120"
+                                       ToolTip.Tip="Negative = the target is vulnerable (extra damage); 100 = immune."/>
                       </StackPanel>
                     </WrapPanel>
                     <TextBlock Text="{Binding DamageCalc.GrowthText}"
