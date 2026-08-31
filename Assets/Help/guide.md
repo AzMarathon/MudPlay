@@ -485,14 +485,17 @@ The window is a sidebar plus a content pane:
 
 Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
 
-The **Monsters** table carries a full column set for browsing and filtering monster stats: **Rgn** (respawn timer), **Exp** (the actual experience earned per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **MR**, **Acc (Maj/Mx)** (majority/highest attack accuracy), **Damage**, **Exp/(Dmg+HP)** (an exp-per-effort efficiency score), **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**, **Mag** (the hitmag level a weapon must meet to land a hit), and **Undead**.
+The **Monsters** table carries a full column set for browsing and filtering monster stats: **Respawn** (respawn timer), **Exp** (the actual experience earned per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **Magic Res**, **Acc (typ/max)** (typical/highest attack accuracy), **Damage**, **Exp Eff** (an exp-per-effort efficiency score), **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**, **Mag-wpn req** (the HitMagic level a weapon must meet to land a hit), and **Undead**.
 
-It also carries a **filter sidebar** on the right — drag its left edge to resize it — with one **at-least (≥)** threshold per stat, so you filter for monsters that *have at least* that much of a stat:
+It also carries a **filter sidebar** on the right — drag its left edge to resize it — that **curates** which monsters are in the list. It's split into labelled sections, each control a **live** filter (edit it and the list re-curates immediately — no Apply button), all AND'd together:
 
-- **HP ≥**, **AC ≥**, **DR ≥**, **Dodge ≥**, **MR ≥**, **Damage ≥**, **Mag ≥**, **Rgn ≥**, **Acc ≥** (monsters accurate enough to threaten you), **Exp ≥**, **Lair Exp ≥**, **# Lairs ≥**.
-- Plus an **Undead only** checkbox and an **Alignment** dropdown.
+- **Combat** — Exp, HP, Avg damage, Accuracy, Armour Class, Damage Resist, Dodge, Magic Resist.
+- **Elemental defenses** — Cold / Fire / Stone / Lightning / Water resist %. These are **signed**: a *negative* resist means the monster is **vulnerable** (takes extra of that element), so bracket the max at −1 to find things a given element shreds.
+- **Casting & immunity** — Magic-weapon requirement, Spell immunity level, and a **Casts spells** toggle.
+- **Type & alignment** — Type (Solo / Leader / Follower / Stationary) and Alignment dropdowns, plus **Undead**, **Animal**, and **Non-living** checkboxes.
+- **Loot & lairs** — a **Drops an item** toggle, and Lair Exp / # Lairs / Respawn ranges.
 
-Values group with thousands separators. Unlike the live **Filter…** text box, the sidebar filters are applied on demand: edit the boxes, then press **Apply filter** to run them (a ticker's outline turns amber while you're editing and green once applied), or **Clear filters** to empty them. Everything AND's together.
+Every numeric filter is a **min / max range** — either box can be blank for no limit on that side, so `HP 500–2000` brackets a band, `AC ≤ 20` finds easy kills, and a lone minimum works like the old "at least N". Hover any label for what the stat means. **Reset** (top-right of the panel) clears every filter and the search box at once. The **Filter…** text box at the top is separate: it **finds** a specific monster within the curated list, while the sidebar decides which monsters are in it.
 
 ## Overriding a record
 

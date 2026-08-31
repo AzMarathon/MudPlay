@@ -144,6 +144,11 @@ public static class LookupEnums
     // Monsters.Type — Solo / Leader / Follower / Stationary group role.
     public static string? FormatMonType(string? raw) => Map(raw, MonTypeNames);
 
+    // Ordered display names — for a category filter dropdown that lists every
+    // value rather than only the ones present in the loaded set.
+    public static IReadOnlyList<string> MonTypeOptions { get; } =
+        MonTypeNames.OrderBy(kv => kv.Key).Select(kv => kv.Value).ToArray();
+
     private static readonly FrozenDictionary<int, string> MonAlignmentNames = new Dictionary<int, string>
     {
         [0] = "Good",
@@ -157,6 +162,10 @@ public static class LookupEnums
 
     // Monsters.Align.
     public static string? FormatMonAlignment(string? raw) => Map(raw, MonAlignmentNames);
+
+    // Ordered display names — for a category filter dropdown listing every value.
+    public static IReadOnlyList<string> MonAlignmentOptions { get; } =
+        MonAlignmentNames.OrderBy(kv => kv.Key).Select(kv => kv.Value).ToArray();
 
     private static readonly FrozenDictionary<int, string> MageryNames = new Dictionary<int, string>
     {

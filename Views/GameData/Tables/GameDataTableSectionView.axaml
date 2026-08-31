@@ -17,13 +17,16 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
         </Style>
-        <!-- Threshold spinners stretch to the sidebar's full width (label sits
-             above them) so the typed value is never clipped by the spin buttons. -->
+        <!-- Range boxes sit two-across (min / max), so hide the spin buttons to
+             leave room for the number; the user types the bracket values. -->
         <Style Selector="NumericUpDown.range">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="HorizontalContentAlignment" Value="Right"/>
+            <Setter Property="ShowButtonSpinner" Value="False"/>
+            <Setter Property="Minimum" Value="-100000000"/>
+            <Setter Property="Maximum" Value="100000000"/>
             <Setter Property="Increment" Value="1"/>
-            <Setter Property="FormatString" Value="N0"/>
+            <Setter Property="FormatString" Value="0"/>
         </Style>
         <Style Selector="TextBlock.FilterLabel">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
@@ -108,78 +111,86 @@
                       ShowsPreview="False"
                       IsVisible="{Binding HasFilterPanel}"/>
 
-        <!-- Filter sidebar: single-threshold filters, an Undead checkbox, and an
-             Alignment dropdown. Scrolls when the list is long. -->
+        <!-- Filter sidebar: labelled groups of min/max ranges, checkboxes, and
+             dropdowns that live-curate the list. Scrolls when the list is long. -->
         <Border Grid.Column="2"
-                MinWidth="200"
+                MinWidth="248"
                 Padding="12"
                 IsVisible="{Binding HasFilterPanel}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="3">
             <DockPanel LastChildFill="True">
-                <TextBlock DockPanel.Dock="Top"
-                           Text="Filters"
-                           Foreground="{StaticResource ChromeFgBrush}"
-                           FontWeight="SemiBold"
-                           Margin="0,0,0,8"/>
-                <!-- Apply / Clear act on the boxes below; editing a box does nothing
-                     until Apply is pressed. -->
-                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,*" ColumnSpacing="6" Margin="0,0,0,10">
-                    <Button Grid.Column="0"
-                            Content="Apply filter"
-                            Command="{Binding ApplyFiltersCommand}"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"/>
-                    <Button Grid.Column="1"
-                            Content="Clear filters"
-                            Command="{Binding ClearFiltersCommand}"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"/>
+                <!-- The panel CURATES the list live (edit any control → re-filters);
+                     the top search box FINDS a monster within the curated list. -->
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                    <TextBlock Grid.Column="0" Text="Filters"
+                               Foreground="{StaticResource ChromeFgBrush}"
+                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="Reset"
+                            Command="{Binding ResetFiltersCommand}"
+                            Padding="10,2" FontSize="11"
+                            ToolTip.Tip="Clear every filter (and the search box)"/>
                 </Grid>
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Spacing="6">
-                        <ItemsControl ItemsSource="{Binding ThresholdFilters}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:ThresholdFilter">
-                                    <StackPanel Margin="0,0,0,6">
-                                        <TextBlock Classes="FilterLabel" Text="{Binding LabelWithGlyph}"/>
-                                        <!-- Outline reflects state: amber = edited/pending,
-                                             green = applied, grey = empty/unapplied. -->
-                                        <Border BorderThickness="1.5"
-                                                CornerRadius="5"
-                                                BorderBrush="{Binding State, Converter={x:Static vm:ThresholdStateBrushConverter.Instance}}">
-                                            <NumericUpDown Classes="range"
-                                                           Value="{Binding Value, Mode=TwoWay}"
-                                                           ToolTip.Tip="Blank = no limit"/>
-                                        </Border>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <ItemsControl ItemsSource="{Binding BoolFilters}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:BoolFilter">
-                                    <CheckBox Margin="0,4,0,2"
-                                              Content="{Binding Label}"
-                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <ItemsControl ItemsSource="{Binding CategoryFilters}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:CategoryFilter">
-                                    <StackPanel Margin="0,4,0,4">
-                                        <TextBlock Classes="FilterLabel" Text="{Binding Label}"/>
-                                        <ComboBox HorizontalAlignment="Stretch"
-                                                  ItemsSource="{Binding Options}"
-                                                  SelectedItem="{Binding Selected, Mode=TwoWay}"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding FilterGroups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FilterGroup">
+                                <StackPanel Margin="0,0,0,6">
+                                    <TextBlock Text="{Binding Header}"
+                                               Foreground="{StaticResource ChromeFgBrush}"
+                                               FontWeight="SemiBold" Margin="0,6,0,4"/>
+                                    <!-- Min / max range boxes (either blank = no limit on that side). -->
+                                    <ItemsControl ItemsSource="{Binding Ranges}" IsVisible="{Binding HasRanges}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:RangeFilter">
+                                                <StackPanel Margin="0,0,0,5">
+                                                    <TextBlock Classes="FilterLabel" Text="{Binding Label}"
+                                                               ToolTip.Tip="{Binding Hint}"/>
+                                                    <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="4">
+                                                        <NumericUpDown Grid.Column="0" Classes="range"
+                                                                       PlaceholderText="min"
+                                                                       Value="{Binding Min, Mode=TwoWay}"
+                                                                       ToolTip.Tip="Minimum (blank = no lower limit)"/>
+                                                        <TextBlock Grid.Column="1" Text="–" VerticalAlignment="Center"
+                                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                        <NumericUpDown Grid.Column="2" Classes="range"
+                                                                       PlaceholderText="max"
+                                                                       Value="{Binding Max, Mode=TwoWay}"
+                                                                       ToolTip.Tip="Maximum (blank = no upper limit)"/>
+                                                    </Grid>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <ItemsControl ItemsSource="{Binding Bools}" IsVisible="{Binding HasBools}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:BoolFilter">
+                                                <CheckBox Margin="0,2"
+                                                          Content="{Binding Label}"
+                                                          IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                          ToolTip.Tip="{Binding Hint}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <ItemsControl ItemsSource="{Binding Categories}" IsVisible="{Binding HasCategories}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:CategoryFilter">
+                                                <StackPanel Margin="0,2,0,4">
+                                                    <TextBlock Classes="FilterLabel" Text="{Binding Label}"
+                                                               ToolTip.Tip="{Binding Hint}"/>
+                                                    <ComboBox HorizontalAlignment="Stretch"
+                                                              ItemsSource="{Binding Options}"
+                                                              SelectedItem="{Binding Selected, Mode=TwoWay}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </ScrollViewer>
             </DockPanel>
         </Border>

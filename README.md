@@ -1,15 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.38.0**
-> - Spell Book gains a **Difficulty** column (between Mana and Effect): your real chance to land the cast — Spellcasting + the spell's difficulty, capped at 98% (100% for Kai) — or "—" when you're not a caster / stats aren't read yet
-> - Spell Game Data view overhauled: human-readable field labels (Required Level, Mana Cost, Difficulty, Resist Type, School, …) instead of raw column names
-> - Spell Game Data view no longer triple-lists the same affect — a level-scaling stat affect now shows one row with its real range ("AC Blur +5 → +12"), replacing the meaningless "0" row and the duplicate "Magnitude" row
-> - Spell DR now shown as the value actually gained (raw ÷ 10, e.g. "+1.0"), not the raw store value ("+10")
-> - Spell Energy Cost now spells out its fire rate: 0 → "(between rounds)", otherwise "(up to N times per round)" where N = 1000 ÷ energy cost
-> - Damage spells now lead the Game Data tab with an interactive damage calculator: a Level picker (learned level → cap) recomputes min/max damage live, plus Magic-resist and elemental-resist pickers (where they apply) showing how a resistant target cuts it — replacing the old two contradictory damage numbers + scaling row
-> - Spell Book Difficulty header shows the equation; the clipped Difficulty column header is fixed
-> - RemovesSpell entries collapse into one linked "Removes" row; display-only message-slot rows dropped
+> **Version 3.39.0**
+> - Game Data → Monsters filter panel reworked: filters are now **live** (edit any control and the list re-curates immediately — no "Apply" button), grouped into labelled sections (Combat / Elemental defenses / Casting & immunity / Type & alignment / Loot & lairs), with friendlier labels + tooltips
+> - Every numeric monster filter is now a **min/max range** (either bound optional) so you can bracket — HP 500–2000, or AC ≤ 20 to find easy kills — not just "at least N"
+> - Monster filtering absorbs Monster Intel's dimensions: per-element resists (signed, to find vulnerabilities), spell-immunity level, magic-weapon requirement, Type, Undead / Animal / Non-living flags, "casts spells", "drops an item"
+> - The search box FINDS a monster within the list; the filter panel CURATES which monsters are in it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
