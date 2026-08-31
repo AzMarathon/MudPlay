@@ -396,6 +396,15 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
             if (value is not null && value.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
+        // Match the formatter-applied *display* label too, so a visible enum value
+        // the user sees ("Weapon", "Plate", "Feet", "Lawful Good") is searchable,
+        // not just its raw MDB code — Get above only sees the raw. The raw pass
+        // stays so numeric text ("300000") still matches a thousands-grouped cell.
+        foreach (GameDataCell cell in row.Cells)
+        {
+            if (cell.Value is { } display && display.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
         // Also match against the Use-tier short label so the user can
         // filter by tier (e.g. typing "Char" surfaces every overridden row).
         return row.SourceTier.ToShortLabel().Contains(filter, StringComparison.OrdinalIgnoreCase);
