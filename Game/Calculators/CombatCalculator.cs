@@ -777,4 +777,46 @@ public static class CombatCalculator
         }
         return crit < 0 ? 0 : crit;
     }
+
+    // Damage / swings / crit for one melee attack type, from resolved weapon +
+    // stat inputs. The shared core behind BOTH the Character Workshop Calculators
+    // tab's weapon offense and CharacterCalculator.BuildNormalAttackProfile
+    // (Monster Intel's rounds-to-kill) — kept in one place so a +MinDamage source,
+    // a Bash swing rate, or the Smash single-swing can't read differently on the
+    // two surfaces. Accuracy is deliberately NOT computed here: the Calculators
+    // tab folds martial-arts strikes into its accuracy path, which has no analogue
+    // on the weapon side, so each caller resolves accuracy itself.
+    public static MeleeOffense ComputeMeleeOffense(
+        MudAttackType type, RealmType realmType, int level, int combatLevel,
+        int strength, int agility, int weaponMin, int weaponMax, int weaponSpeed, int weaponStrReq,
+        int plusMaxDamage, int plusMinDamage, int plusCrits, int currentEncum, int maxEncum)
+    {
+        bool hasWeapon = weaponMax > 0;
+
+        MeleeDamageResult dmg = CalcMeleeDamage(
+            type, realmType, strength, weaponMin, weaponMax, plusMaxDamage, plusMinDamage);
+        int avgDamage = hasWeapon ? (dmg.MinDamage + dmg.MaxDamage) / 2 : 0;
+
+        SwingCalcResult swings = CalcSwings(
+            combatLevel, level, weaponSpeed, agility, strength, weaponStrReq,
+            currentEncum, maxEncum, isBashing: type == MudAttackType.Bash, realmType: realmType);
+        // Smash locks the round to a single swing regardless of weapon speed.
+        // A no-weapon projection reads 0 swings (the DPS gate + the UI both key
+        // off HasWeapon, so the raw value is never shown for an empty hand).
+        double swingsPerRound = !hasWeapon ? 0
+            : type == MudAttackType.Smash ? 1 : swings.RawSwings;
+
+        // Crit folds into DPS only for the plain Normal attack (Bash / Smash crit
+        // interaction isn't a verified mechanic); a crit averages 3x the max, and
+        // the Quick-and-Deadly bonus only applies when STR meets the weapon's req.
+        int critChance = 0, avgCritDamage = 0;
+        if (type == MudAttackType.Normal && hasWeapon)
+        {
+            int qnd = (weaponStrReq <= 0 || strength >= weaponStrReq) ? swings.QnDCritBonus : 0;
+            critChance = CalcCritChance(plusCrits, qnd, realmType);
+            avgCritDamage = dmg.MaxDamage * 3;
+        }
+
+        return new MeleeOffense(avgDamage, swingsPerRound, critChance, avgCritDamage, hasWeapon);
+    }
 }

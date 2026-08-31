@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.38.3**
-> - Monster Intel refocused into a fast pre-fight check — "can I safely fight this right now?" The master list now shows Name / HP / EXP / Accuracy / **Hits You %** / **Est. Rounds to Kill**, dropping the broad reference view (still on the Game Data Browser's Monsters tab)
-> - Hits-You-% threshold checkboxes (six contiguous bands, no gap) narrow the list by how dangerous a monster's attack is; a rounds-to-kill cap (editable in the window) keeps a superboss from projecting into the millions
-> - Character bar gains **AC vs Evil**; monsters with no computable Hits You % (NPC / caster-only records) drop from the list once a character is loaded
+> **Version 3.38.5**
+> - Character Workshop → Calculators tab: fixed the outgoing weapon damage / DPS / rounds-to-kill silently undercounting **+MinDamage gear** (ability-1 "Damage" items — the flat low-end add) — it never fed that bonus into the melee-damage math
+> - The Calculators tab and Monster Intel's matchup now compute melee offense through one shared helper, so the two can't drift apart
+> - Defense readouts now assume your configured buffs are up — Monster Intel's Hits-You-% / AC-vs-Evil, the Equipment Manager's projected AC, and Character Info all fold in the AC (and DR) your configured self-buffs grant, from one shared calculator
+> - Character Info gains an AC / DR breakdown below Wealth: one line for worn gear, one for what your buffs add
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

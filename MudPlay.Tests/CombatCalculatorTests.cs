@@ -610,4 +610,25 @@ public sealed class CombatCalculatorTests
     [Fact]
     public void AccuracyForHitChance_ZeroTargetIsMinimalAccuracy()
         => Assert.Equal(1, CombatCalculator.AccuracyForHitChance(0, 100, 40, RealmType.ParaMud));
+
+    // Ability-1 "Damage" gear raises the low end of a weapon's damage, so it must
+    // lift the average — the shared ComputeMeleeOffense (used by both the
+    // Calculators tab and Monster Intel) carries plusMinDamage, where the tab's
+    // old inline call silently dropped it.
+    [Fact]
+    public void ComputeMeleeOffense_PlusMinDamage_RaisesAverage()
+    {
+        MeleeOffense without = CombatCalculator.ComputeMeleeOffense(
+            MudAttackType.Normal, RealmType.ParaMud, level: 20, combatLevel: 20,
+            strength: 100, agility: 50, weaponMin: 10, weaponMax: 20, weaponSpeed: 30, weaponStrReq: 0,
+            plusMaxDamage: 0, plusMinDamage: 0, plusCrits: 0, currentEncum: 0, maxEncum: 1000);
+        MeleeOffense with = CombatCalculator.ComputeMeleeOffense(
+            MudAttackType.Normal, RealmType.ParaMud, level: 20, combatLevel: 20,
+            strength: 100, agility: 50, weaponMin: 10, weaponMax: 20, weaponSpeed: 30, weaponStrReq: 0,
+            plusMaxDamage: 0, plusMinDamage: 6, plusCrits: 0, currentEncum: 0, maxEncum: 1000);
+
+        Assert.True(with.HasWeapon);
+        Assert.True(with.AvgDamage > without.AvgDamage,
+            $"+MinDamage should raise avg damage ({with.AvgDamage} vs {without.AvgDamage})");
+    }
 }

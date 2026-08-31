@@ -2,6 +2,14 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.38.5
+
+- Character Workshop → Calculators tab: fixed the outgoing weapon damage / DPS / rounds-to-kill silently undercounting **+MinDamage gear** (ability-1 "Damage" items — the flat low-end add) — it never fed that bonus into the melee-damage math
+- The Calculators tab and Monster Intel's matchup now compute melee offense through one shared helper, so the two can't drift apart (Monster Intel already had this right)
+- **Defense readouts now assume your configured buffs are up.** Monster Intel's Hits-You-% / AC-vs-Evil, the Equipment Manager's projected AC, and Character Info all fold in the AC (and DR) your configured self-buffs grant — computed once, identically, from the same shared calculator so the three never disagree
+- Buff roster is "everything that lands on you" — self-only spells, whole-party buffs you keep on, and single-target buffs you cast on yourself — which also fixes the Equipment Manager previously ignoring whole-party AC buffs
+- Character Info gains an **AC / DR breakdown** below Wealth: one line for what worn gear grants, one for what your buffs add on top
+
 ## 3.38.3
 
 - Monster Intel refocused into a fast pre-fight check — "can I safely fight this right now?" The master list now shows **Name / HP / EXP / Accuracy / Hits You % / Est. Rounds to Kill**, dropping the broad reference view (still available on the Game Data Browser's Monsters tab)
