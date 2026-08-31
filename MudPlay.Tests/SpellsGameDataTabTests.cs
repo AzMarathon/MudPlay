@@ -85,21 +85,24 @@ public sealed class SpellsGameDataTabTests : IDisposable
     // ----- Effect summary row -----
 
     [Fact]
-    public void GameDataRows_LeadWithPlainEnglishEffect()
+    public void GameDataRows_DamageSpell_OmitsStaticDamageRows_ForTheCalculator()
     {
-        // A damage spell renders an "Effect" row translating the ability
-        // codes ("Dmg 10–20") instead of only raw fields.
+        // A damage spell's damage is shown by the interactive calculator (built
+        // on the dialog from the formula), so the static rows suppress it: no
+        // "Effect" summary, no magnitude range, no per-level "Level Scaling" row.
         Seed("Spells", "[{\"Number\":50,\"Name\":\"zap\",\"MinBase\":10,\"MaxBase\":20," +
-                       "\"Abil-0\":1,\"AbilVal-0\":0}]");
+                       "\"MaxInc\":2,\"MaxIncLVLs\":1,\"Cap\":20,\"Abil-0\":1,\"AbilVal-0\":0}]");
         _cache.SwitchSet("v1.11p");
 
         var vm = new SpellsSectionViewModel(_cache);
         IReadOnlyList<GameDataInfoRow> rows = vm.BuildSpellInfoRowsForTests(50);
 
-        GameDataInfoRow effect = rows.First(r => r.Label == "Effect");
-        Assert.Contains("Dmg", effect.Value);
-        Assert.Contains("10", effect.Value);
-        Assert.Contains("20", effect.Value);
+        Assert.DoesNotContain(rows, r => r.Label == "Effect");
+        Assert.DoesNotContain(rows, r => r.Label == "Level Scaling");
+        Assert.DoesNotContain(rows, r => r.Label == "Damage");   // magnitude row suppressed
+        Assert.DoesNotContain(rows, r => r.Value.Contains("Dmg"));
+        // The plain fields still render.
+        Assert.Contains(rows, r => r.Label == "Name");
     }
 
     // ----- textblock item gate (the "silver river" case) -----

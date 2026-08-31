@@ -54,6 +54,7 @@ public sealed class ItemMdbViewBuilder
         List<KeyValuePair<string, string>> otherInfo = new();
         List<ShopSaleRow> shops = new();
         List<DroppedByRow> droppedBy = new();
+        List<PlacedInRow> placedIn = new();
         bool isLight = false;
         bool isContainer = false;
 
@@ -273,6 +274,11 @@ public sealed class ItemMdbViewBuilder
             // list rather than a joined string so each monster is clickable.
             droppedBy.AddRange(ResolveDroppedByLinks(obtainedFrom));
 
+            // Placed In — one clickable room link per "Room {map}/{room}" token, a
+            // static floor placement (the room's Placed list). Room-only items
+            // (no shop / no monster / no giver) rendered nothing before this.
+            placedIn.AddRange(ResolvePlacedInLinks(obtainedFrom));
+
             // Bought / sold — one clickable row per shop buy/sell location, each
             // with a "BUY: … SELL: …" line priced for the given charm under the
             // active realm's formula (the dialog re-runs this as its charm picker
@@ -283,7 +289,37 @@ public sealed class ItemMdbViewBuilder
 
             break;
         }
-        return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy);
+        return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy, placedIn);
+    }
+
+    // Placed In: one clickable room row per "Room {map}/{room}" token in Obtained
+    // From — the reverse of a room's Placed column (the item numbers it drops on
+    // the floor). Deduped by room; a drop-rate suffix (rare on a fixed placement)
+    // is tolerated and stripped. Links to the room's Rooms-tab record, like the
+    // bought/sold shop rows.
+    private List<PlacedInRow> ResolvePlacedInLinks(string obtainedFrom)
+    {
+        List<PlacedInRow> rows = new();
+        if (string.IsNullOrWhiteSpace(obtainedFrom)) return rows;
+        HashSet<(int, int)> seen = new();
+        foreach (string token in obtainedFrom.Split(','))
+        {
+            string t = token.Trim();
+            if (!t.StartsWith("Room ", StringComparison.Ordinal)) continue;
+            string rest = t[5..].Trim();
+            int paren = rest.IndexOf('(');
+            if (paren >= 0) rest = rest[..paren].Trim();   // drop any "(X%)"
+            int slash = rest.IndexOf('/');
+            if (slash <= 0) continue;
+            if (!int.TryParse(rest[..slash].Trim(), out int mapNo)) continue;
+            if (!int.TryParse(rest[(slash + 1)..].Trim(), out int roomNo)) continue;
+            if (!seen.Add((mapNo, roomNo))) continue;
+            string? name = ResolveRoomName(mapNo, roomNo);
+            string locator = $"{mapNo}/{roomNo}";
+            string label = string.IsNullOrEmpty(name) ? $"Room {locator}" : $"{name} - {locator}";
+            rows.Add(new PlacedInRow(label, mapNo, roomNo));
+        }
+        return rows;
     }
 
     // ----- Ability-row formatting helpers -----
@@ -623,4 +659,5 @@ public sealed record ItemMdbView(
     IReadOnlyList<ShopSaleRow> Shops,
     bool IsLight = false,
     bool IsContainer = false,
-    IReadOnlyList<DroppedByRow>? DroppedBy = null);
+    IReadOnlyList<DroppedByRow>? DroppedBy = null,
+    IReadOnlyList<PlacedInRow>? PlacedIn = null);

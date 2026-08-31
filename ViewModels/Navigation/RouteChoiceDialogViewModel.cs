@@ -48,9 +48,18 @@ public sealed partial class RouteChoiceDialogViewModel
     // item-gate choice, which shows RequirementSummary instead.
     public string TeleportCaveat { get; }
 
+    // The caveat shown under the shorter route in a trap-avoid choice — that the
+    // shortcut crosses a trap the walker disarms at step time, which can fail. Empty
+    // for the other forks.
+    public string TrapCaveat { get; }
+
     // The sub-line under the shorter route's card: the item requirements for an
-    // item-gate choice, the teleport caveat for a teleport choice.
-    public string GatedDetail => IsTeleportChoice ? TeleportCaveat : RequirementSummary;
+    // item-gate choice, the teleport caveat for a teleport choice, the trap caveat
+    // for a trap-avoid choice.
+    public string GatedDetail =>
+        IsTeleportChoice ? TeleportCaveat :
+        IsTrapAvoidChoice ? TrapCaveat :
+        RequirementSummary;
 
     // The footnote under the cards, explaining the fork's options — different
     // wording for the teleport choice (no acquire / send-it split there).
@@ -60,6 +69,12 @@ public sealed partial class RouteChoiceDialogViewModel
     // teleport the walking route avoids. Reworders the cards (Walk / Teleport) and
     // hides the acquire/send-it split (there's nothing to acquire).
     public bool IsTeleportChoice { get; }
+
+    // True when this is the trap-avoid fork: the shortest route crosses a trap and a
+    // trap-free route exists. A plain two-way choice (avoid / cross), no acquire /
+    // send-it split. The trap-free route is pre-selected so the safe route is the
+    // default (the user can still pick the shortcut).
+    public bool IsTrapAvoidChoice { get; }
 
     // False when there's no gate-free route — the direct (hazard-crossing) route
     // is the only way there. The Free card renders as a disabled "why you can't
@@ -74,7 +89,9 @@ public sealed partial class RouteChoiceDialogViewModel
     // A teleport choice has no acquisition, so it never shows the send-it card.
     // A sole hazard route with an obtainable counter also shows it — as the
     // "cross unprotected (take the damage)" escape opposite "obtain then cross".
-    public bool ShowSendItCard => (HasFreeRoute || HazardObtain) && !IsTeleportChoice;
+    // A trap-avoid choice is a plain two-way fork — no send-it card there either.
+    public bool ShowSendItCard =>
+        (HasFreeRoute || HazardObtain) && !IsTeleportChoice && !IsTrapAvoidChoice;
 
     // True when this is a sole hazard-only route the caller resolved an obtainable
     // counter for: Go fetches it then crosses (vs. "cross unprotected"). Drives the
@@ -87,8 +104,26 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(IsFreeSelected))]
     [NotifyPropertyChangedFor(nameof(IsGatedSelected))]
     [NotifyPropertyChangedFor(nameof(IsSendItSelected))]
+    [NotifyPropertyChangedFor(nameof(CurrentStepRows))]
+    [NotifyPropertyChangedFor(nameof(HasStepRows))]
+    [NotifyPropertyChangedFor(nameof(CanShowSteps))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
     private RouteChoiceResult? _selectedRoute;
+
+    // The full start-to-finish command sequence for each route (moves, lever/winch/
+    // door detours, and acquire steps), surfaced by the Show-steps flyout. Free
+    // traces the gate-free line; the two gated choices share the same physical route.
+    private readonly IReadOnlyList<RouteStepRow> _freeSteps;
+    private readonly IReadOnlyList<RouteStepRow> _gatedSteps;
+
+    public IReadOnlyList<RouteStepRow> CurrentStepRows =>
+        SelectedRoute == RouteChoiceResult.Free ? _freeSteps : _gatedSteps;
+
+    public bool HasStepRows => CurrentStepRows.Count > 0;
+
+    // The Show-steps button lights up once a route is picked and there's a sequence
+    // to show — clicking it opens the flyout listing that route's full step plan.
+    public bool CanShowSteps => SelectedRoute is not null && HasStepRows;
 
     public bool IsFreeSelected => SelectedRoute == RouteChoiceResult.Free;
     public bool IsGatedSelected => SelectedRoute == RouteChoiceResult.Gated;
@@ -103,12 +138,18 @@ public sealed partial class RouteChoiceDialogViewModel
         Func<int, string?>? dropNameForItem = null,
         TimeSpan freeEta = default,
         TimeSpan gatedEta = default,
-        string? hazardCounterSource = null)
+        string? hazardCounterSource = null,
+        IReadOnlyList<RouteStepRow>? freeSteps = null,
+        IReadOnlyList<RouteStepRow>? gatedSteps = null)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
 
+        _freeSteps = freeSteps ?? Array.Empty<RouteStepRow>();
+        _gatedSteps = gatedSteps ?? Array.Empty<RouteStepRow>();
+
         IsTeleportChoice = choice.Kind == RouteChoiceKind.Teleport;
+        IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;
         HasFreeRoute = choice.HasFreeRoute;
 
         // A fully-blocked route: no way through at all, but the destination is
@@ -124,6 +165,7 @@ public sealed partial class RouteChoiceDialogViewModel
             SendItSummary = string.Empty;
             RequirementSummary = string.Empty;
             TeleportCaveat = string.Empty;
+            TrapCaveat = string.Empty;
             Footnote = "Click the route to preview it on the map, then Go to walk as far as you "
                 + $"can toward {destinationLabel} and stop at the block — clear it by hand to continue.";
             return;
@@ -150,8 +192,36 @@ public sealed partial class RouteChoiceDialogViewModel
                 + "you somewhere deadly (a damaging plane, water with no boat). Whether you survive "
                 + "depends on your character, so the call is yours.";
             RequirementSummary = string.Empty;
+            TrapCaveat = string.Empty;
             Footnote = "Click a route to preview it on the map, then Go to walk it. "
                 + "The teleport is much shorter but can be lethal — take the walk if you're unsure.";
+        }
+        else if (IsTrapAvoidChoice)
+        {
+            int freeTraps = choice.FreeTrapCount;
+            int gatedTraps = choice.GatedTrapCount;
+            Heading = $"Avoid traps to {destinationLabel}?";
+            // The fewest-traps route isn't always fully clean — it may still cross an
+            // unavoidable trap — so state the real counts instead of claiming "trap-free".
+            FreeSummary = freeTraps == 0
+                ? $"Avoid traps — {StepsEta(choice.FreeStepCount, freeEta)}, trap-free"
+                : $"Fewest traps — {StepsEta(choice.FreeStepCount, freeEta)}, crosses {TrapWord(freeTraps)}";
+            GatedSummary = $"Shortest — {StepsEta(choice.GatedStepCount, gatedEta)}, crosses {TrapWord(gatedTraps)}";
+            TrapCaveat = freeTraps == 0
+                ? "The shortest route crosses a trap the walker would try to disarm as it steps — "
+                    + "a disarm can fail (no lockpicks, no party disarmer) and springs the trap, so the "
+                    + "trap-free route is the safer bet."
+                : $"The shortest route crosses {TrapWord(gatedTraps)}; the safer route can't avoid "
+                    + $"{TrapWord(freeTraps)} (no way around it), but dodges the rest — and a step-time "
+                    + "disarm can fail, so fewer traps is the safer bet.";
+            RequirementSummary = string.Empty;
+            TeleportCaveat = string.Empty;
+            Footnote = "Click a route to preview it on the map, then Go to walk it. "
+                + "The fewest-traps route is pre-selected — \"shortest\" is quicker but crosses more "
+                + "traps (disarmed en route).";
+            // Default to the safer route so a plain Go dodges what it can; the user
+            // can still click the shortcut. Previewed on open via RaiseSelectionPreview.
+            SelectedRoute = RouteChoiceResult.Free;
         }
         else
         {
@@ -202,7 +272,16 @@ public sealed partial class RouteChoiceDialogViewModel
                 + DescribeRequirements(
                     choice.Requirements, itemName, giveNameForItem, shopNameForItem, dropNameForItem);
             TeleportCaveat = string.Empty;
+            TrapCaveat = string.Empty;
         }
+    }
+
+    // Re-fire the current selection's preview so a pre-selected route (trap-avoid
+    // defaults to the trap-free line) draws on the map when the picker opens. The
+    // prompt calls this after subscribing to PreviewRequested.
+    public void RaiseSelectionPreview()
+    {
+        if (SelectedRoute is not null) PreviewRequested?.Invoke(SelectedRoute);
     }
 
     // "6 steps (~35s)" — the hop count with an approximate arrival ETA when one
@@ -214,6 +293,9 @@ public sealed partial class RouteChoiceDialogViewModel
         string steps = n == 1 ? "1 step" : $"{n} steps";
         return eta > TimeSpan.Zero ? $"{steps} (~{RouteEtaEstimator.FormatCompact(eta)})" : steps;
     }
+
+    // "1 trap" / "3 traps" — the trap count on a route, for the trap-avoid cards.
+    private static string TrapWord(int n) => n == 1 ? "1 trap" : $"{n} traps";
 
     // "a raft (buy at General Store); the iron key; a waterskin (dropped by a
     // sand nomad)" — each requirement is one clause; a hazard's any-of counters

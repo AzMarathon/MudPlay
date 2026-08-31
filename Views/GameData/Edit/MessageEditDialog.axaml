@@ -220,6 +220,52 @@
             <!-- ===== Game Data (read-only source-row fields) ===== -->
             <TabItem Header="Game Data" IsVisible="{Binding HasGameData}">
               <ScrollViewer Margin="0,8,0,0" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="8">
+                <!-- Damage calculator (damage spells only): live min/max vs a
+                     Level picker, plus Magic-Resist / elemental-resist pickers
+                     where they bear on the spell. -->
+                <Border IsVisible="{Binding HasDamageCalc}"
+                        Background="{StaticResource ChromeBgSunkenBrush}"
+                        BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                        BorderThickness="1" CornerRadius="4" Padding="10,8">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="Damage calculator" Classes="FieldLabel"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                      <TextBlock Text="Damage" Foreground="{StaticResource ChromeFgMutedBrush}"
+                                 FontSize="12" VerticalAlignment="Center"/>
+                      <TextBlock Text="{Binding DamageCalc.DamageText}"
+                                 Foreground="{StaticResource AccentGreenBrush}"
+                                 FontFamily="{StaticResource FontMono}" FontSize="16"
+                                 VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <WrapPanel Orientation="Horizontal">
+                      <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Level" Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
+                        <NumericUpDown Value="{Binding DamageCalc.Level, Mode=TwoWay}"
+                                       Minimum="{Binding DamageCalc.MinLevel}"
+                                       Maximum="{Binding DamageCalc.MaxLevel}"
+                                       Increment="1" FormatString="0" Width="120"/>
+                      </StackPanel>
+                      <StackPanel Margin="0,0,16,0" IsVisible="{Binding DamageCalc.ShowMagicResist}">
+                        <TextBlock Text="Magic resist" Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
+                        <NumericUpDown Value="{Binding DamageCalc.MagicResist, Mode=TwoWay}"
+                                       Minimum="0" Maximum="300" Increment="5" FormatString="0" Width="120"/>
+                      </StackPanel>
+                      <StackPanel IsVisible="{Binding DamageCalc.ShowElementalResist}">
+                        <TextBlock Text="{Binding DamageCalc.ElementalResistLabel}"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
+                        <!-- Elemental resist is signed: negative = vulnerability
+                             (the element deals EXTRA damage), 100 = no damage. -->
+                        <NumericUpDown Value="{Binding DamageCalc.ElementalResist, Mode=TwoWay}"
+                                       Minimum="-200" Maximum="200" Increment="5" FormatString="0" Width="120"
+                                       ToolTip.Tip="Negative = the target is vulnerable (extra damage); 100 = immune, above 100 heals it."/>
+                      </StackPanel>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding DamageCalc.GrowthText}"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               FontFamily="{StaticResource FontMono}" FontSize="11"/>
+                  </StackPanel>
+                </Border>
                 <ItemsControl ItemsSource="{Binding GameDataInfo}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:GameDataInfoRow">
@@ -264,6 +310,7 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </StackPanel>
               </ScrollViewer>
             </TabItem>
           </TabControl>

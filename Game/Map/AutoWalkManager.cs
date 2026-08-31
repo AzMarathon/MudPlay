@@ -43,6 +43,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<Direction, string, Action<HiddenSearchResult>>? _hiddenSearchEnqueuer;
     private Action? _hiddenSearchStopAll;
     private bool _awaitingHiddenReveal;
+    private Action<Direction, string, bool, string, Action<WinchResult>>? _winchEnqueuer;
+    private Action? _winchStopAll;
+    private bool _awaitingWinch;
     private Func<RoomKey, RoomKey, string?>? _teleportResolver;
     private Func<bool>? _isLeaderWithFollowers;
     // True when ANY nav engine is driving (loop / auto-lair / point-to-point walk).
@@ -509,6 +512,23 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _hiddenSearchStopAll = stopAll;
     }
 
+    // Winch enqueuer — walker calls this for a MultiActionHidden winch exit to
+    // pull the winch, wait for it to turn + the gate to open, then move. Bound by
+    // MainWindowVM to WinchManager.Enqueue.
+    public void SetWinchEnqueuer(Action<Direction, string, bool, string, Action<WinchResult>> enqueuer)
+    {
+        ArgumentNullException.ThrowIfNull(enqueuer);
+        _winchEnqueuer = enqueuer;
+    }
+
+    // Winch teardown — bound to WinchManager.StopAll. Same stale-state cleanup
+    // rationale as SetDoorStopper.
+    public void SetWinchStopper(Action stopAll)
+    {
+        ArgumentNullException.ThrowIfNull(stopAll);
+        _winchStopAll = stopAll;
+    }
+
     // Teleport-keyword resolver — given (source room, destination room)
     // the walker calls this to look up the verbatim command it should
     // send (from the source room's CMD chain in TBInfoStore). Bound by
@@ -722,6 +742,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // shortcut) across the tracker-Pending deferral.
     private bool _deferredWalkAvoidTeleports;
 
+    // Carries the route picker's "avoid traps" choice (true only when the user chose
+    // the trap-free route over the shorter trapped one) across the deferral.
+    private bool _deferredWalkAvoidTraps;
+
     // One-shot watchdog for the tracker-Pending deferral. A move the server
     // refuses with no room redisplay leaves the tracker stuck Pending, so the
     // Confirmed transition the deferral waits on never arrives and the walk would
@@ -742,6 +766,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // must re-issue WalkTo with these, or a no-teleport (or gate-planned) walk
     // silently reverts to the defaults and takes a teleport it was told to avoid.
     private bool _activeAvoidTeleports;
+    private bool _activeAvoidTraps;
     private bool _activeThroughGates;
     private bool _activeArmAcquisition = true;
 
@@ -761,6 +786,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // teleport route picker's "walk it, don't teleport" choice passes true;
     // every other caller keeps the default (false), which lets BFS take a
     // teleport hop as a normal short edge when it's the shortest route.
+    //
+    // avoidTraps: when true, BFS refuses trapped exits, so the planned route never
+    // crosses a trap. The trap route picker's "avoid traps" choice passes true; every
+    // other caller keeps the default (false), which lets BFS cross a trap as a normal
+    // edge (the walker then disarms it at step time via TrapDisarmManager).
     // supersedeSilently: when this WalkTo interrupts an in-progress walk, clear
     // the old walk with a silent Reset instead of a loud Stopped. The path-item
     // acquisition routers pass true when they redirect the walk to a shop / giver /
@@ -773,6 +803,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool planThroughAcquirableGates = false,
         bool armItemAcquisition = true,
         bool avoidTeleports = false,
+        bool avoidTraps = false,
         bool supersedeSilently = false)
     {
         if (State is WalkState.Walking or WalkState.Paused)
@@ -802,6 +833,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _deferredWalkThroughGates = planThroughAcquirableGates;
             _deferredWalkArmAcquisition = armItemAcquisition;
             _deferredWalkAvoidTeleports = avoidTeleports;
+            _deferredWalkAvoidTraps = avoidTraps;
             _destination = destination;       // populated so status surfaces show the target
             State = WalkState.Walking;
             // Watchdog: if the tracker never settles (the in-flight move was
@@ -815,14 +847,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return true;
         }
 
-        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports);
+        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps);
     }
 
     private bool WalkToImmediate(
         RoomKey destination,
         bool planThroughAcquirableGates = false,
         bool armItemAcquisition = true,
-        bool avoidTeleports = false)
+        bool avoidTeleports = false,
+        bool avoidTraps = false)
     {
         // Callers may arrive here from the WalkTo entry (Idle) OR from
         // the deferred dispatch in OnTrackerStateChanged (Walking with
@@ -885,7 +918,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         BoatRoutePlan? boatPlan = null;
         try
         {
-            path = _bfs.FindPath(source.Key, destination, _filter, refuseTeleports: avoidTeleports);
+            path = _bfs.FindPath(source.Key, destination, _filter,
+                refuseTeleports: avoidTeleports, avoidTraps: avoidTraps);
 
             // A sea-captain sailing can beat (or replace) the land route. Weigh
             // the boat's stitched land-legs against the pure land route; the
@@ -977,6 +1011,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _index = 0;
         _destination = destination;
         _activeAvoidTeleports = avoidTeleports;
+        _activeAvoidTraps = avoidTraps;
         _activeThroughGates = planThroughAcquirableGates;
         _activeArmAcquisition = armItemAcquisition;
         _origin = source.Key;
@@ -1246,6 +1281,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             parts.Add(DescribeDoorGate(doorGate));
         if (reasons.HasFlag(ExitBlockReason.Item)) parts.Add(DescribeMissingItems(missingItems));
         if (reasons.HasFlag(ExitBlockReason.Hazard)) parts.Add("a room hazard you can't survive");
+        if (reasons.HasFlag(ExitBlockReason.Alignment)) parts.Add("an alignment-gated entrance a party member can't enter");
         return "all routes blocked by " + string.Join(" or ", parts);
     }
 
@@ -1537,6 +1573,29 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
+        // Winch MultiActionHidden — route through WinchManager: pull the winch,
+        // wait for it to turn AND the gate to open, then move. Handled ahead of the
+        // synchronous dispatch below so a winch never fires its move blindly (the
+        // gate opens on a delay, so a blind move bonks "The gate is closed!"). Other
+        // MultiActionHidden exits (levers etc.) stay synchronous.
+        if (!step.SkipSpecialDispatch && _winchEnqueuer is not null
+            && WinchManager.IsWinchExit(exit) && WinchManager.PullCommand(exit) is { } winchPull)
+        {
+            if (_tracker.State.OpenDoorDirections is { } openGate && openGate.Contains(step.Direction))
+            {
+                _log?.Info("Walker",
+                    $"step {_index + 1}/{_path!.Count}: gate {step.Direction} already open — skipping winch FSM.");
+                _tracker.NoteMoveSent(step.Direction);
+                _recovery?.NoteEngineStepSent(step.Direction);
+                EmitMoveBytes(EncodeMove(step.Direction), $"move {step.Direction} (gate pre-open)");
+                return;
+            }
+            _awaitingWinch = true;
+            _log?.Info("Walker", $"step {_index + 1}/{_path!.Count}: winching gate {step.Direction} ('{winchPull}').");
+            _winchEnqueuer(step.Direction, winchPull, /*waitForGate:*/ true, "walker", OnWinchReply);
+            return;
+        }
+
         // Synchronous special exits — MultiActionHidden (same-room),
         // Text `(Text: ...)`, and Teleport `(Item: N)` — share one
         // emission path with the loop runner via SpecialExitDispatch so
@@ -1683,6 +1742,51 @@ public sealed class AutoWalkManager : IRecoverableEngine
         }
     }
 
+    private void OnWinchReply(WinchResult result)
+    {
+        if (!_awaitingWinch) return;
+        _awaitingWinch = false;
+
+        switch (result)
+        {
+            case WinchResult.Turned:
+                if (_path is null || _index >= _path.Count) { Reset(); return; }
+                // Cross-room detour pull (a CommandStep): the winch turned in this
+                // room; advance to the next detour step (walk toward the gate room),
+                // exactly as a plain command completion would.
+                if (_path[_index] is CommandStep)
+                {
+                    _stepInFlight = false;
+                    AdvanceStep();
+                    return;
+                }
+                if (_path[_index] is not MoveStep step)
+                {
+                    Reset();
+                    return;
+                }
+                Room? current = _tracker.State.CurrentRoom;
+                if (current is null
+                    || !current.Exits.TryGetValue(step.Direction, out RoomExit exit))
+                {
+                    Raise(new WalkEvent(WalkEventKind.Failed,
+                        "post-winch: step source has no matching exit", _destination));
+                    Reset();
+                    return;
+                }
+                _tracker.NoteMoveSent(step.Direction);
+                _recovery?.NoteEngineStepSent(step.Direction);
+                EmitMoveBytes(EncodeMove(step.Direction), $"move {step.Direction} (post-winch)");
+                return;
+
+            case WinchResult.Failed failed:
+                Raise(new WalkEvent(WalkEventKind.Failed,
+                    $"winch failed: {failed.Reason}", _destination));
+                Reset();
+                return;
+        }
+    }
+
     private void OnTrapReply(string reply)
     {
         if (!_awaitingTrapDisarm) return;
@@ -1752,8 +1856,21 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private void SendCommandStep(CommandStep step)
     {
         _stepInFlight = true;
-        _awaitingPromptForCommand = true;
 
+        // A cross-room detour's winch pull is a strength roll that can "not budge" —
+        // route it through WinchManager so it re-pulls until the winch turns, then
+        // advances (OnWinchReply's CommandStep branch), rather than firing once and
+        // walking on. Pull-only (no gate poll — the detour walks to the gate room
+        // next, covering the open delay). Falls back to fire-and-forget when unwired.
+        if (step.IsWinchPull && _winchEnqueuer is not null)
+        {
+            _awaitingWinch = true;
+            _log?.Info("Walker", $"detour winch pull ('{step.Command}') — re-pulling until it turns.");
+            _winchEnqueuer(Direction.N, step.Command, /*waitForGate:*/ false, "walker", OnWinchReply);
+            return;
+        }
+
+        _awaitingPromptForCommand = true;
         byte[] bytes = Encoding.Latin1.GetBytes(step.Command + "\r");
         WriteBytes(bytes, $"command '{step.Command}'");
     }
@@ -1857,13 +1974,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool throughGates = _deferredWalkThroughGates;
         bool armAcquisition = _deferredWalkArmAcquisition;
         bool avoidTeleports = _deferredWalkAvoidTeleports;
+        bool avoidTraps = _deferredWalkAvoidTraps;
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
+        _deferredWalkAvoidTraps = false;
         _deferredWalkTimer?.Dispose();
         _deferredWalkTimer = null;
-        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports);
+        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps);
     }
 
     // Watchdog fire for a deferral whose Confirmed transition never arrived (the
@@ -1923,7 +2042,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // the room we've since moved into. The sub-FSM clears its flag before
         // emitting the real move, so the genuine arrival transition still lands
         // here normally.
-        if (_awaitingDoorOpen || _awaitingTrapDisarm || _awaitingHiddenReveal)
+        if (_awaitingDoorOpen || _awaitingTrapDisarm || _awaitingHiddenReveal || _awaitingWinch)
             return;
 
         // Tracker lost confidence mid-step — defer to the
@@ -2025,7 +2144,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
             WalkTo(dest,
                 planThroughAcquirableGates: _activeThroughGates,
                 armItemAcquisition: _activeArmAcquisition,
-                avoidTeleports: _activeAvoidTeleports);
+                avoidTeleports: _activeAvoidTeleports,
+                avoidTraps: _activeAvoidTraps);
         }
         finally
         {
@@ -2302,6 +2422,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // skip the late reply that arrives after StopAll.
         if (_awaitingDoorOpen)      _doorStopAll?.Invoke();
         if (_awaitingHiddenReveal)  _hiddenSearchStopAll?.Invoke();
+        if (_awaitingWinch)         _winchStopAll?.Invoke();
         // Drop a pending party-delegation watch so a stray say reply can't
         // resume a superseded walk. Harmless when the trap was local-only.
         if (_awaitingTrapDisarm)    _trapDelegateStopAll?.Invoke();
@@ -2316,6 +2437,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _awaitingTrapDisarm = false;
         _awaitingDoorOpen = false;
         _awaitingHiddenReveal = false;
+        _awaitingWinch = false;
         _boatTimer?.Dispose();
         _boatTimer = null;
         _awaitingBoatArrival = false;
@@ -2326,7 +2448,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
+        _deferredWalkAvoidTraps = false;
         _activeAvoidTeleports = false;
+        _activeAvoidTraps = false;
         _activeThroughGates = false;
         _activeArmAcquisition = true;
         _retryCount = 0;

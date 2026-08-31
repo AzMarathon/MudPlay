@@ -99,7 +99,7 @@ public sealed class PartyInventoryProbeTests
         h.GoInParty();
 
         Task<PartyInventoryProbe.PartyItemResult> task = h.Probe.QueryAsync(175, "rope");
-        h.Reply("Bob", "yes - 3x matching 'rope'");
+        h.Reply("Bob", "yes - 3x 'rope'");
         h.Reply("Al", "no - nothing matching 'rope'");
 
         // Completed by the second reply — no window needed.
@@ -122,7 +122,7 @@ public sealed class PartyInventoryProbeTests
         h.GoInParty();
 
         Task<PartyInventoryProbe.PartyItemResult> task = h.Probe.QueryAsync(175, "rope");
-        h.Reply("Bob", "yes - 2x matching 'rope'");
+        h.Reply("Bob", "yes - 2x 'rope'");
         Assert.False(task.IsCompleted);   // Al hasn't answered
 
         h.FireWindows();
@@ -147,8 +147,8 @@ public sealed class PartyInventoryProbeTests
         Task<PartyInventoryProbe.PartyItemResult> rope = h.Probe.QueryAsync(1, "rope");
         Task<PartyInventoryProbe.PartyItemResult> grapple = h.Probe.QueryAsync(2, "grapple");
 
-        h.Reply("Bob", "yes - 2x matching 'rope'");
-        h.Reply("Bob", "yes - 1x matching 'grapple'");
+        h.Reply("Bob", "yes - 2x 'rope'");
+        h.Reply("Bob", "yes - 1x 'grapple'");
         h.Reply("Al", "no - nothing matching 'rope'");
         h.Reply("Al", "no - nothing matching 'grapple'");
 
@@ -186,7 +186,7 @@ public sealed class PartyInventoryProbeTests
 
         Task<PartyInventoryProbe.PartyItemResult> task = h.Probe.QueryAsync(1, "rope");
         // Bob answers about a different item — must not satisfy the rope query.
-        h.Reply("Bob", "yes - 5x matching 'boat'");
+        h.Reply("Bob", "yes - 5x 'boat'");
         Assert.False(task.IsCompleted);
 
         h.FireWindows();
@@ -202,10 +202,10 @@ public sealed class PartyInventoryProbeTests
         h.GoInParty();
 
         Task<PartyInventoryProbe.PartyItemResult> task = h.Probe.QueryAsync(1, "rope");
-        h.Reply("Stranger", "yes - 9x matching 'rope'");   // not in the party
+        h.Reply("Stranger", "yes - 9x 'rope'");   // not in the party
         Assert.False(task.IsCompleted);
 
-        h.Reply("Bob", "yes - 1x matching 'rope'");
+        h.Reply("Bob", "yes - 1x 'rope'");
         Assert.True(task.IsCompleted);
         PartyInventoryProbe.PartyItemResult r = await task;
         Assert.Equal(1, r.TotalCount);
@@ -221,8 +221,8 @@ public sealed class PartyInventoryProbeTests
         h.GoInParty();
 
         Task<PartyInventoryProbe.PartyItemResult> task = h.Probe.QueryAsync(1, "rope");
-        h.Reply("Bob", "yes - 3x matching 'rope'");
-        h.Reply("Bob", "yes - 3x matching 'rope'");   // duplicate — Bob already removed
+        h.Reply("Bob", "yes - 3x 'rope'");
+        h.Reply("Bob", "yes - 3x 'rope'");   // duplicate — Bob already removed
         Assert.False(task.IsCompleted);   // Al still outstanding
 
         h.Reply("Al", "no - nothing matching 'rope'");
@@ -238,7 +238,7 @@ public sealed class PartyInventoryProbeTests
         h.GoInParty();
 
         Task<PartyInventoryProbe.PartyItemResult> task = h.Probe.QueryAsync(1, "rope");
-        h.Reply("Bob", "yes - 2x matching 'rope'");   // reply uses given name only
+        h.Reply("Bob", "yes - 2x 'rope'");   // reply uses given name only
 
         Assert.True(task.IsCompleted);
         PartyInventoryProbe.PartyItemResult r = await task;
@@ -271,7 +271,7 @@ public sealed class PartyInventoryProbeTests
 
         Task<PartyInventoryProbe.PartyItemResult> task = h.Probe.QueryAsync(1, "small key");
         Assert.Equal("/Bob @have small key\r", h.Sent(0));
-        h.Reply("Bob", "yes - 1x matching 'small key'");
+        h.Reply("Bob", "yes - 1x 'small key'");
 
         Assert.True(task.IsCompleted);
         PartyInventoryProbe.PartyItemResult r = await task;

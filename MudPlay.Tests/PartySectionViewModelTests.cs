@@ -122,46 +122,42 @@ public sealed class PartySectionViewModelTests
         Assert.False(back!.SendHealthToMembers);
     }
 
+    // Party BUFF slots moved to CharacterProfile.PartyBuffs (a dynamic, per-target
+    // list configured in the Party window). The DTO round-trips through JSON.
     [Fact]
-    public void BlessSlots_DefaultToTenEmpties()
+    public void PartyBuffSlots_RoundTripThroughJson()
     {
-        PartySettings dto = new();
-        Assert.Equal(PartySettings.PartyBlessSlotCount, dto.BlessSlots.Count);
-        Assert.Equal(10, dto.BlessSlots.Count);
-        Assert.All(dto.BlessSlots, s =>
+        BuffSettings src = new();
+        src.Slots.Add(new BuffSlot { Spell = "chan", WholePartyOn = true, RecastMarginSec = 20 });
+        src.Slots.Add(new BuffSlot
         {
-            Assert.Null(s.Spell);
-            Assert.Empty(s.ClassNumbers);
-            // A fresh slot carries the shared default recast lead.
-            Assert.Equal(SpellsSettings.DefaultBlessRecastMarginSec, s.RecastMarginSec);
+            Spell = "fren",
+            RecastMarginSec = 0,                 // wait-for-expiry
+            Targets = { "raijin", "goldar" },
         });
+        src.Slots.Add(new BuffSlot { Spell = "dfav", AllMembers = true });
+
+        string json = JsonSerializer.Serialize(src);
+        BuffSettings? back = JsonSerializer.Deserialize<BuffSettings>(json);
+
+        Assert.NotNull(back);
+        Assert.Equal(3, back!.Slots.Count);
+        Assert.Equal("chan", back.Slots[0].Spell);
+        Assert.True(back.Slots[0].WholePartyOn);
+        Assert.Equal(20, back.Slots[0].RecastMarginSec);
+        Assert.Equal(new[] { "raijin", "goldar" }, back.Slots[1].Targets);
+        Assert.Equal(0, back.Slots[1].RecastMarginSec);
+        Assert.True(back.Slots[2].AllMembers);
     }
 
     [Fact]
-    public void BlessSlots_RoundTripSpellAndClassSet()
+    public void PartyBuffSlot_Defaults()
     {
-        PartySettings src = new();
-        src.BlessSlots[0].Spell = "bles";
-        src.BlessSlots[0].ClassNumbers = new() { 1, 4, 9 };
-        src.BlessSlots[0].RecastMarginSec = 25;
-        src.BlessSlots[3].Spell = "shie";
-        src.BlessSlots[3].ClassNumbers = new() { 2 };
-        src.BlessSlots[3].RecastMarginSec = 0;   // wait-for-expiry
-
-        string json = JsonSerializer.Serialize(src);
-        PartySettings? back = JsonSerializer.Deserialize<PartySettings>(json);
-
-        Assert.NotNull(back);
-        Assert.Equal(10, back!.BlessSlots.Count);
-        Assert.Equal("bles", back.BlessSlots[0].Spell);
-        Assert.Equal(new[] { 1, 4, 9 }, back.BlessSlots[0].ClassNumbers);
-        Assert.Equal(25, back.BlessSlots[0].RecastMarginSec);
-        Assert.Equal("shie", back.BlessSlots[3].Spell);
-        Assert.Equal(new[] { 2 }, back.BlessSlots[3].ClassNumbers);
-        Assert.Equal(0, back.BlessSlots[3].RecastMarginSec);
-        // Untouched slots stay empty across the trip and keep the default lead.
-        Assert.Null(back.BlessSlots[1].Spell);
-        Assert.Empty(back.BlessSlots[1].ClassNumbers);
-        Assert.Equal(SpellsSettings.DefaultBlessRecastMarginSec, back.BlessSlots[1].RecastMarginSec);
+        BuffSlot s = new();
+        Assert.Null(s.Spell);
+        Assert.True(s.WholePartyOn);             // whole-party buffs default on
+        Assert.False(s.AllMembers);
+        Assert.Empty(s.Targets);
+        Assert.Equal(SpellsSettings.DefaultBlessRecastMarginSec, s.RecastMarginSec);
     }
 }

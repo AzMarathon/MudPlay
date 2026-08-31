@@ -143,6 +143,7 @@
                 <MenuItem Header="Player Workshop" InputGesture="{Binding WorkshopGesture}" Command="{Binding OpenWorkshopCommand}"/>
                 <MenuItem Header="Navigation"      InputGesture="{Binding NavigationGesture}" Command="{Binding OpenNavigationCommand}"/>
                 <MenuItem Header="Spell Book"    InputGesture="{Binding SpellBookGesture}"  Command="{Binding OpenSpellBookCommand}"/>
+                <MenuItem Header="Monster Intel" InputGesture="{Binding MonsterIntelGesture}" Command="{Binding OpenMonsterIntelCommand}"/>
                 <MenuItem Header="Session Stats" InputGesture="{Binding SessionStatsGesture}" Command="{Binding OpenSessionStatsCommand}"/>
                 <Separator/>
                 <MenuItem Header="Players"  Command="{Binding OpenGameDataPlayersCommand}"/>
@@ -170,6 +171,13 @@
                 <MenuItem Header="Drop All"    Command="{Binding DropAllCommand}"    ToolTip.Tip="Drop every carried (unworn) item"/>
                 <MenuItem Header="Equip All"   Command="{Binding EquipAllCommand}"   ToolTip.Tip="Wear the Default gear set"/>
                 <MenuItem Header="Deposit All" Command="{Binding DepositAllCommand}" ToolTip.Tip="Bank wealth down to the keep-on-hand floor"/>
+                <Separator/>
+
+                <!-- Never pause to rest/heal-wait; forces Auto Combat off for the
+                     duration (restored on turning it back off); still casts heals;
+                     only death stops it. -->
+                <MenuItem Header="Sprint Mode" ToggleType="CheckBox" IsChecked="{Binding IsSprintModeActive, Mode=TwoWay}"
+                          ToolTip.Tip="Never pause to rest — force Auto Combat off, keep casting heals, only death stops it"/>
                 <Separator/>
 
                 <!-- Master auto-responses switch. Snapshot logic lives in
@@ -558,6 +566,7 @@
                         <MenuItem Header="Open Player Workshop" InputGesture="{Binding WorkshopGesture}"     Command="{Binding OpenWorkshopCommand}"/>
                         <MenuItem Header="Open Party"           InputGesture="{Binding PartyGesture}"        Command="{Binding OpenPartyCommand}"/>
                         <MenuItem Header="Open Spell Book"      InputGesture="{Binding SpellBookGesture}"    Command="{Binding OpenSpellBookCommand}"/>
+                        <MenuItem Header="Open Monster Intel"   InputGesture="{Binding MonsterIntelGesture}" Command="{Binding OpenMonsterIntelCommand}"/>
                         <MenuItem Header="Open Conversation"    InputGesture="{Binding ConversationGesture}" Command="{Binding OpenConversationCommand}"/>
                         <MenuItem Header="Open Navigation"      InputGesture="{Binding NavigationGesture}"   Command="{Binding OpenNavigationCommand}"/>
                         <MenuItem Header="Open Session Stats"   InputGesture="{Binding SessionStatsGesture}" Command="{Binding OpenSessionStatsCommand}"/>

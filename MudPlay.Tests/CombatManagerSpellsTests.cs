@@ -56,6 +56,11 @@ public sealed class CombatManagerSpellsTests
         // instead of the zero real elapsed time a synchronous test call has.
         private DateTimeOffset _clock = DateTimeOffset.UtcNow;
 
+        // Models RoundDamageTracker's timer-driven RoundCount: a genuine round
+        // boundary (Tick / TickFast) advances it; a premature same-round tick
+        // (TickSameRound) does not. Drives the attack-spell MaxCasts tally.
+        private int _roundCount;
+
         // When deferPost is set, the cascade switch-dispatch scheduler queues actions
         // into Posted instead of running them inline, so a test can interleave server
         // lines between a deferred switch-dispatch being scheduled and it actually
@@ -89,6 +94,8 @@ public sealed class CombatManagerSpellsTests
                 log: Log);
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.SetClock(() => _clock);
+            // Production counts MaxCasts off RoundDamageTracker.RoundCount; mirror it.
+            Combat.ReadRoundCount = () => _roundCount;
             Combat.SetBackstabHooks(() => Sneaking, n => SeeHidden.Contains(n));
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
             Combat.SetSpellShortResolver(
@@ -150,12 +157,30 @@ public sealed class CombatManagerSpellsTests
                 Name: name,
                 Links: Array.Empty<GameDataLink>()));
 
+        // Moves the fake clock without the round-boundary side effects Tick()/
+        // TickSameRound()/TickFast() carry (they also bump _roundCount and drive
+        // Cast/Combat's tick) — for tests exercising ConfirmedAttackCastCount's own
+        // real-time grouping window directly.
+        public void AdvanceClock(TimeSpan by) => _clock += by;
+
         public void Feed(string line)
         {
             LineExtractor.EmittedLine emitted = new(
                 line, Array.Empty<CellAttributes>(),
                 DateTimeOffset.UtcNow, IsPromptLine: false);
             Router.Dispatch(emitted);
+        }
+
+        // A between-round cast's *Combat Off* that closes the open attack-spell
+        // round. In production RoundDamageTracker (CombatStatus tieBreak 100)
+        // CloseCurrent's that round — RoundCount++ — BEFORE CombatManager's resume
+        // reads the count. RoundDamageTracker isn't wired here (the int _roundCount
+        // is its stand-in), so bump first, then dispatch the Off — mirroring that
+        // ordering so the resume tallies the interrupted spell toward MaxCasts.
+        public void FeedOffClosingRound()
+        {
+            _roundCount++;
+            Feed("*Combat Off*");
         }
 
         /// <summary>One combat round. Mirrors the AppServices tick-subscription
@@ -166,6 +191,7 @@ public sealed class CombatManagerSpellsTests
         public void Tick()
         {
             _clock += TimeSpan.FromSeconds(5);
+            _roundCount++;   // a genuine round boundary closed (mirrors RoundDamage)
             Cast.OnCombatTick();
             Combat.OnCombatTick();
         }
@@ -187,6 +213,7 @@ public sealed class CombatManagerSpellsTests
         public void TickFast()
         {
             _clock += TimeSpan.FromSeconds(3);
+            _roundCount++;   // a genuine (fast) round boundary — must tally, not reject
             Cast.OnCombatTick();
             Combat.OnCombatTick();
         }
@@ -417,6 +444,56 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("mmis giant rat", h.LastSent);
     }
 
+    // Reports paradigm-20260819-121003 / -142147: after lbol caps and the switch to
+    // mmis is DEFERRED, a second tick during the delay window recomputed the switch
+    // (the announce is still the stale lbol, so sameSpell=false takes the ungated
+    // decision-changed branch) and scheduled it AGAIN — the alternate fired twice.
+    // The pending-switch latch must collapse the re-arm so it dispatches exactly once.
+    [Fact]
+    public void CapSwitch_RetickDuringDeferWindow_DispatchesAlternateOnce()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);
+
+        h.Tick();                       // cap-switch to mmis, deferred (queued)
+        Assert.Single(h.Posted);        // one dispatch armed
+        h.TickSameRound();              // re-tick while the switch is still pending
+        Assert.Single(h.Posted);        // still ONE — the latch blocked the double-schedule
+
+        h.DrainPosted();
+        Assert.Equal("mmis giant rat", h.LastSent);
+        Assert.Equal(1, h.AllSent.Count(s => s == "mmis giant rat"));   // exactly one mmis
+    }
+
+    // Report paradigm-20260819-120938: a solo mob's counter-swing tripped a combat
+    // tick WITHIN the engage round (before lbol's round resolved); the MinValue solo
+    // anchor let that premature tick tally lbol and — MaxCasts=1 — cap it, so mmis
+    // went out before lbol ever fired. The tally now keys off the real round count,
+    // so a same-round tick counts nothing and the cap waits for a genuine boundary.
+    [Fact]
+    public void SoloEngage_PrematureSameRoundTick_DoesNotCapBeforeARoundCloses()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);
+
+        h.TickSameRound();                                   // premature — no round closed yet
+        Assert.Equal("lbol giant rat", h.LastSent);          // still lbol; not capped
+        Assert.DoesNotContain("mmis giant rat", h.AllSent);  // mmis did NOT fire early
+
+        h.Tick();                                            // real round boundary → tally → cap → mmis
+        Assert.Equal("mmis giant rat", h.LastSent);
+    }
+
     // Report paradigm-20260815-202319 ("not re-engaging combat after buffing mid-combat"):
     // a between-round self-buff (armr) fires, then the round's nuke (lbol, MaxCasts=1)
     // KILLS one mob in a multi-mob room. The death→re-observe re-picks the live survivor
@@ -459,6 +536,36 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal(sentBeforeOff + 1, h.Sent.Count);
         Assert.Equal("lbol thin leprous outcast", h.LastSent);
+    }
+
+    // Report paradigm-20260820-063541 ("LBOL cast twice"): a between-round survival
+    // cast interrupts an attack spell (lbol, MaxCasts=1) mid-round and drops *Combat
+    // Off*. The heartbeat can't tally the interrupted round (OnCombatTick bails while
+    // _combatOff), so the spell-resume used to re-announce the STILL-current lbol
+    // uncapped — a second lbol before the cascade advanced. RoundDamageTracker now
+    // tie-breaks ahead of CombatManager on that Off and closes the round first; the
+    // resume tallies lbol's cast toward its cap before re-deciding, so it cascades to
+    // the alternate (mmis) instead of firing lbol a second time.
+    [Fact]
+    public void BetweenRoundInterrupt_TalliesAttackSpellRound_ResumeRespectsMaxCasts()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "lbol", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mmis", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("lbol giant rat", h.LastSent);          // engage → lbol (spell mode)
+
+        // A between-round survival cast interrupts lbol's round and drops *Combat Off*.
+        h.Cast.NotifyExternalCastSent();
+        h.Combat.NoteBetweenRoundCast();
+        h.FeedOffClosingRound();                             // round closes (tieBreak) → resume tallies lbol
+
+        // lbol hit MaxCasts=1 on the interrupted round → the resume cascades to the
+        // alternate, NOT a second lbol.
+        Assert.Equal("mmis giant rat", h.LastSent);
+        Assert.Equal(1, h.AllSent.Count(s => s == "lbol giant rat"));   // exactly one lbol
     }
 
     // MaxCasts must count real rounds, not damage-line ticks. A multi-hit attack spell
@@ -544,6 +651,132 @@ public sealed class CombatManagerSpellsTests
         // MaxCasts=1, and switch to mmis so lbol doesn't auto-repeat a second round.
         h.TickFast();
         Assert.Equal("mmis small animated tree", h.LastSent);
+    }
+
+    // Report paradigm-20260822-003106 (second instance): a spell that fires more than
+    // one damage line per cast (a "You cast X at Y for N damage!" line per projectile)
+    // must count as ONE cast toward MaxCasts, not one per line — and a genuinely later,
+    // separate cast must still count as a new one, even with zero round-closing ticks
+    // in between (RoundDamageTracker's own round-close can bundle real casts together
+    // for a fast caster before it ever fires — a live fight measured as a single ~10s
+    // "round" contained two full disr casts, silently under-counting MaxCasts). MaxCasts
+    // 2 makes both halves of that guarantee observable: if the two projectile lines were
+    // miscounted as two casts, the cap would exhaust (and switch) after the FIRST real
+    // cast; if a later, separate cast were missed, the cap would never exhaust at all.
+    [Fact]
+    public void MaxCasts2_ConfirmedCastCount_GroupsProjectiles_CountsSeparateCasts_NoRoundCloseNeeded()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "disr", MinEnemies = 0, MaxCastsPerRoom = 2 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "fierce wraith");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;   // production wiring
+
+        h.Feed("Also here: fierce wraith.");
+        Assert.Equal("disr fierce wraith", h.LastSent);
+
+        // The first real cast's own two projectiles, sub-second apart — grouped as ONE.
+        h.Feed("You cast disrupt at fierce wraith for 75 damage!");
+        h.AdvanceClock(TimeSpan.FromMilliseconds(300));
+        h.Feed("You cast disrupt at fierce wraith for 88 damage!");
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("disr fierce wraith", h.LastSent);   // 1 of 2 allowed casts spent — no switch yet
+
+        // A genuinely separate real cast, well past the grouping window — but with no
+        // round-closing Tick() at all in between. Must still count as cast #2 and cap-switch.
+        h.AdvanceClock(TimeSpan.FromSeconds(2));
+        h.Feed("You cast disrupt at fierce wraith for 77 damage!");
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+        Assert.Equal(2, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("turn fierce wraith", h.LastSent);
+    }
+
+    // Report paradigm-20260822-063043: one disrupt CAST emits exactly TWO
+    // projectile lines. A mob hit/miss can open that round's server burst, causing
+    // TickEngine to fire CombatTickElapsed before either projectile arrives and then
+    // debounce both projectiles. The grouped confirmation must therefore tally the
+    // one cast and arm the disr→turn switch directly, with no post-projectile combat
+    // heartbeat; otherwise the server commits a second disrupt before the next tick.
+    [Fact]
+    public void MaxCasts1_TwoProjectileCast_SwitchesAfterOneCast_WithoutLaterHeartbeat()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.NormalAttackSpell = new CombatSpellSlot
+        {
+            SpellName = "disr",
+            MinEnemies = 0,
+            MaxCastsPerRoom = 1,
+        };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot
+        {
+            SpellName = "turn",
+            MinEnemies = 0,
+        };
+        h.AddMonster(1, "big wraith");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+
+        h.Feed("Also here: big wraith.");
+        Assert.Equal("disr big wraith", h.LastSent);
+
+        // Models the mob's result line firing the damage-driven heartbeat first.
+        // No cast has confirmed yet, so it must not spend disr's cap.
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+        Assert.Equal("disr big wraith", h.LastSent);
+
+        // These are two projectiles from ONE disrupt cast, not two casts.
+        h.Feed("You cast disrupt at big wraith for 61 damage!");
+        h.AdvanceClock(TimeSpan.FromMilliseconds(300));
+        h.Feed("You cast disrupt at big wraith for 77 damage!");
+
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Single(h.Posted);                 // one corpse-safe switch is armed
+        Assert.DoesNotContain("turn big wraith", h.AllSent);
+
+        // No Combat.OnCombatTick call after either projectile. The confirmation
+        // itself owns the cap transition, and its short safety delay now expires.
+        h.DrainPosted();
+
+        Assert.Equal("turn big wraith", h.LastSent);
+        Assert.Equal(1, h.AllSent.Count(s => s == "turn big wraith"));
+    }
+
+    // The confirmation-driven path above must retain the delayed switch's original
+    // purpose: if that one disrupt cast kills, the exp/death packet gets a chance to
+    // clear the target and the queued turn must not be sent at its corpse.
+    [Fact]
+    public void MaxCasts1_TwoProjectileKillingCast_DeferredSwitchStillSkipsCorpse()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.NormalAttackSpell = new CombatSpellSlot
+        {
+            SpellName = "disr",
+            MinEnemies = 0,
+            MaxCastsPerRoom = 1,
+        };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot
+        {
+            SpellName = "turn",
+            MinEnemies = 0,
+        };
+        h.AddMonster(1, "spectre");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+
+        h.Feed("Also here: spectre.");
+        h.Feed("You cast disrupt at spectre for 83 damage!");
+        h.AdvanceClock(TimeSpan.FromMilliseconds(300));
+        h.Feed("You cast disrupt at spectre for 91 damage!");
+
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Single(h.Posted);
+
+        h.Feed("You gain 1500 experience.");
+        h.DrainPosted();
+
+        Assert.DoesNotContain("turn spectre", h.AllSent);
     }
 
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even
@@ -633,8 +866,8 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("harm giant rat", h.LastSent);
         int sentAtEngage = h.Sent.Count;
 
-        List<(CastFailureReason Reason, string Detail)> failures = new();
-        h.Cast.CastFailed += (reason, detail) => failures.Add((reason, detail));
+        List<(CastFailureReason Reason, string Detail, string? Spell)> failures = new();
+        h.Cast.CastFailed += (reason, detail, spell) => failures.Add((reason, detail, spell));
 
         // A survival cast (heal/buff) just went out, same instant.
         h.Cast.NotifyExternalCastSent();
@@ -937,11 +1170,15 @@ public sealed class CombatManagerSpellsTests
         h.Overlays[1] = new MonsterOverlay { OverridePreAttackSpellId = 7, OverridePreAttackCount = 2 };
         h.AddMonster(1, "giant rat");
 
-        // A per-monster pre-attack override (a single-target debuff) fires BEFORE
-        // the attack on engage, keeping its mob ("curse giant rat").
+        // A per-monster pre-attack override (a single-target debuff) fires BEFORE the
+        // attack on engage, keeping its mob ("curse giant rat"), then the combat attack
+        // (here the weapon, no attack spell configured) fires immediately behind it in
+        // the SAME round — the debuff and the attack are independent slots (report
+        // paradigm-20260825-103417).
         h.Feed("Also here: giant rat.");
 
-        Assert.Equal("curse giant rat", h.LastSent);
+        Assert.Contains("curse giant rat", h.AllSent);
+        Assert.Equal("a giant rat", h.LastSent);
     }
 
     // ----- physical-first: weapon exhausted before spells -------------
@@ -1227,7 +1464,7 @@ public sealed class CombatManagerSpellsTests
     // ----- in-between debuff bridge ------------------------------------
 
     [Fact]
-    public void AreaDebuff_FiresBeforeAttack_ThenAttackResumes_OncePerRoom()
+    public void AreaDebuff_FiresBeforeAttack_ThenAttackImmediately_SameRound_OncePerRoom()
     {
         using Harness h = new();
         h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
@@ -1235,18 +1472,104 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "giant rat");
 
         // On engage the area debuff fires BEFORE the attack — cast bare, never
-        // "curse <mob>" — then the attack re-announces on the debuff's *Combat Off*.
-        // (No director wired here, so the pre-attack pass fires the debuff directly.)
+        // "curse <mob>" — and the combat attack fires IMMEDIATELY behind it in the
+        // SAME round rather than waiting a whole round for the debuff's *Combat Off*
+        // (report paradigm-20260825-103417). The between-round debuff and the combat
+        // attack are independent slots. (No director wired here, so the pre-attack
+        // pass fires the debuff directly; the switch-dispatch scheduler runs inline.)
         h.Feed("Also here: giant rat.");
-        Assert.Equal("curse", h.LastSent);
-
-        h.Feed("*Combat Off*");
+        Assert.Contains("curse", h.AllSent);
         Assert.Equal("blast", h.LastSent);
+
+        // The debuff's own *Combat Off* must NOT fire the attack a SECOND time —
+        // the immediate dispatch already sent it this round.
+        h.Feed("*Combat Off*");
+        Assert.Single(h.AllSent, s => s == "blast");
 
         // Once per room: later rounds keep attacking and never re-fire the debuff.
         h.Tick();
         Assert.Equal("blast", h.LastSent);
         Assert.Single(h.AllSent, s => s == "curse");
+    }
+
+    // The corpse-cast guard on the immediate post-debuff attack: an AoE debuff that
+    // kills the room drops the target in the gap before the deferred attack runs, so
+    // the attack must re-validate and skip rather than blast an empty room (report
+    // paradigm-20260825-103417). deferPost models the ~200ms spacing: the attack is
+    // queued, the kills land, then the window elapses.
+    [Fact]
+    public void PreAttackDebuff_KillsRoom_DeferredAttackSkips_NoCorpseCast()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "curse", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "kobold");
+
+        // Engage: the debuff fires directly; the combat attack is scheduled behind it.
+        h.Feed("Also here: giant rat, kobold.");
+        Assert.Equal("curse", h.LastSent);
+        Assert.Single(h.Posted);
+
+        // The AoE debuff wiped the room — two exp gains this round force the roster
+        // re-parse that drops the current target before the deferred attack runs.
+        h.Feed("You gain 100 experience.");
+        h.Feed("You gain 100 experience.");
+
+        // The deferred attack re-validates, sees the target gone, and skips — no
+        // "blast" corpse-cast at the cleared room.
+        h.DrainPosted();
+        Assert.DoesNotContain("blast", h.AllSent);
+    }
+
+    [Fact]
+    public void AoeMultiKill_AllListedHostilesDead_DropsRosterImmediately()
+    {
+        // Report -081208: an AoE that wipes the whole room used to leave the combat
+        // gate held until the 6s idle-stall watchdog — the empty re-display carries no
+        // "Also here:" line, so the classifier fired no observation. When this round's
+        // kills account for EVERY listed hostile, drop the roster now (an empty
+        // observation) so the gate can release on the CR round-trip instead of 6s.
+        using Harness h = new();
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 1 };
+        h.AddMonster(1, "scorpion crab");
+        h.AddMonster(2, "ironshell crab");
+
+        h.Feed("Also here: scorpion crab, ironshell crab.");   // engage; 2 hostiles listed
+
+        int lastMonsterCount = -1;
+        h.Classifier.EntitiesObserved += o =>
+            lastMonsterCount = o.Entities.Count(e => e.Kind == EntityKind.Monster);
+
+        // The AoE kills both this round → two exp gains == the whole listed roster.
+        h.Feed("You gain 100 experience.");
+        h.Feed("You gain 100 experience.");
+
+        Assert.Equal(0, lastMonsterCount);   // roster dropped to empty → gate can release now
+    }
+
+    [Fact]
+    public void AoeMultiKill_SurvivorRemains_DoesNotDropRoster()
+    {
+        // Two exp gains but THREE listed hostiles → a survivor remains, so the roster
+        // is NOT dropped early (the CR re-parse handles it); the gate must not release
+        // over a live mob.
+        using Harness h = new();
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 1 };
+        h.AddMonster(1, "scorpion crab");
+        h.AddMonster(2, "ironshell crab");
+        h.AddMonster(3, "giant crab");
+
+        h.Feed("Also here: scorpion crab, ironshell crab, giant crab.");   // 3 hostiles
+
+        int lastMonsterCount = 99;
+        h.Classifier.EntitiesObserved += o =>
+            lastMonsterCount = o.Entities.Count(e => e.Kind == EntityKind.Monster);
+
+        h.Feed("You gain 100 experience.");
+        h.Feed("You gain 100 experience.");   // 2 kills < 3 listed → survivor
+
+        Assert.NotEqual(0, lastMonsterCount);   // roster NOT wiped to empty (no premature clear)
     }
 
     [Fact]
@@ -1331,6 +1654,35 @@ public sealed class CombatManagerSpellsTests
         h.Tick();
         h.Feed("Your spell has no effect on acid slime."); // icebolt immune → weapon
         Assert.Equal("a acid slime", h.LastSent);
+    }
+
+    // Report paradigm-20260827-081223: the "no effect" reply arrives in the SAME
+    // server burst as the primary cast (< 500ms later), not a round later. Without
+    // bypassing CastCoordinator's MinRecastInterval, the alternate SPELL hit the
+    // 500ms burst guard and deferred a full round (~3-5s late). The re-decide now
+    // passes bypassRecastInterval, so the alternate fires THIS round with no defer.
+    [Fact]
+    public void SpellNoEffect_SameBurstAsPrimary_SwapsThisRound_NoRecastIntervalDefer()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "firebolt" };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "icebolt" };
+        h.AddMonster(1, "acid slime");
+
+        List<(CastFailureReason Reason, string Detail, string? Spell)> failures = new();
+        h.Cast.CastFailed += (reason, detail, spell) => failures.Add((reason, detail, spell));
+
+        h.Feed("Also here: acid slime.");                    // primary firebolt just sent
+        Assert.Equal("firebolt acid slime", h.LastSent);
+        int afterPrimary = h.Sent.Count;
+
+        // No Tick / no clock advance — the no-effect reply lands in the same burst,
+        // well within the 500ms MinRecastInterval window.
+        h.Feed("Your spell has no effect on acid slime.");
+
+        Assert.Equal("icebolt acid slime", h.LastSent);      // alternate fired THIS round
+        Assert.Equal(afterPrimary + 1, h.Sent.Count);        // not deferred to the next tick
+        Assert.DoesNotContain(failures, f => f.Detail == "recast-interval");
     }
 
     [Fact]
@@ -1726,5 +2078,167 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: giant rat.");   // full-roster observe — townsperson gone
         Assert.False(h.Combat.IsUserEngagedInstance("townsperson"));
+    }
+
+    // Report paradigm-20260824-012300: AutoCombat toggled off mid-fight left
+    // _castingSpellTarget / _spellAttackOwed latched to a target no longer being
+    // fought ("between-round cast noted (manual) — resume armed
+    // (spellTarget=small blue dragon hatchling)" with the dragon long gone).
+    // CastingDirector's IsSpellAttackOwed gate is unconditional and runs before
+    // every category, so the stale latch silently blocked every automatic
+    // heal/cure/bless for the rest of the session. Disabling AutoCombat must
+    // drop the whole cascade, not just CurrentTarget.
+    [Fact]
+    public void AutoCombatDisabled_ClearsStaleAttackSpellCascade()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "agon", MinEnemies = 0 };
+        h.AddMonster(1, "small blue dragon hatchling");
+
+        h.Feed("Also here: small blue dragon hatchling.");
+        Assert.Equal("agon small blue dragon hatchling", h.LastSent);
+        h.Combat.NoteBetweenRoundCast();   // a survival cast armed the round-owed latch
+        Assert.True(h.Combat.IsSpellAttackOwed);
+        Assert.Equal("small blue dragon hatchling", h.Combat.Snapshot().CastingSpellTarget);
+
+        h.AutoCombatEnabled = false;
+        h.Feed("Also here: small blue dragon hatchling.");   // next observation, combat off
+
+        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
+        Assert.Null(h.Combat.Snapshot().CurrentTarget);
+    }
+
+    // Same root cause, the death path: the corpse/respawn room has nothing to do
+    // with whatever spell was mid-flight when the character died, but nothing
+    // previously told CombatManager that (report paradigm-20260824-012300 also
+    // documents CastingDirector buff timers surviving death for the same reason —
+    // a full server-side state reset with no matching client-side reset).
+    [Fact]
+    public void OnPlayerDeath_ClearsStaleAttackSpellCascade()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "agon", MinEnemies = 0 };
+        h.AddMonster(1, "small blue dragon hatchling");
+
+        h.Feed("Also here: small blue dragon hatchling.");
+        h.Combat.NoteBetweenRoundCast();
+        Assert.True(h.Combat.IsSpellAttackOwed);
+
+        h.Combat.OnPlayerDeath();
+
+        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
+        Assert.Null(h.Combat.Snapshot().CurrentTarget);
+    }
+
+    // Same root cause again, the disconnect/reconnect path (report
+    // paradigm-20260827-203548): a between-round survival cast (a self-buff)
+    // armed the round-owed latch, then the connection dropped before the
+    // server's *Combat Off* for that cast ever arrived — the ONLY event the
+    // resume logic listens for. The monster kept fighting server-side through
+    // the link-death; on reconnect the CombatGate re-detects it fresh via
+    // room-entry, but with the stale target/latch still set, the character
+    // never resumed attacking and just stood there taking hits. Same fix
+    // shape as OnPlayerDeath above.
+    [Fact]
+    public void OnDisconnected_ClearsStaleAttackSpellCascade()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "agon", MinEnemies = 0 };
+        h.AddMonster(1, "small blue dragon hatchling");
+
+        h.Feed("Also here: small blue dragon hatchling.");
+        h.Combat.NoteBetweenRoundCast();   // self-buff mid-fight; *Combat Off* never lands — connection drops
+        Assert.True(h.Combat.IsSpellAttackOwed);
+
+        h.Combat.OnDisconnected();
+
+        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
+        Assert.Null(h.Combat.Snapshot().CurrentTarget);
+    }
+
+    // Report paradigm-20260824-215802: engaged a fresh shade after a kill left
+    // _combatOff stuck true, but the attack spell lost the round's cast slot to a
+    // self-buff sent moments earlier (blocked by CastCoordinator's MinRecastInterval
+    // guard — a genuine, correct block, not a bug on its own). DispatchRoundAction's
+    // default case only cleared _combatOff inside the TryCast-succeeded branch, so a
+    // blocked engage left it stuck — OnCombatTick's spell-mode heartbeat gates on
+    // !_combatOff, so nothing ever retried the attack for the rest of the fight (the
+    // character sat there getting hit with no offense at all). _combatOff must clear
+    // as soon as the engine commits to engaging this round, whether or not the send
+    // itself succeeds, so the very next tick gets a chance to retry.
+    [Fact]
+    public void EngageBlockedByRecastInterval_ClearsCombatOff_RetriesNextTick()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "shade");
+
+        // A prior kill's *Combat Off* leaves _combatOff true, same as production.
+        h.Feed("*Combat Off*");
+
+        // A cast just went out (e.g. a self-buff) — stamps CastCoordinator's
+        // recast-interval clock.
+        Assert.True(h.Cast.TryCast("vlwa"));
+        Assert.Equal("vlwa", h.LastSent);
+
+        // A fresh engage arrives immediately after — well within MinRecastInterval
+        // (500ms) — so the attack-spell TryCast is synchronously blocked. Before the
+        // fix, _combatOff stayed stuck true here and nothing ever retried.
+        h.Feed("Also here: shade.");
+        Assert.Equal("vlwa", h.LastSent);              // still blocked — nothing new sent
+        Assert.False(h.Combat.CombatOff);              // the fix: cleared regardless of the block
+        Assert.Equal("shade", h.Combat.Snapshot().CastingSpellTarget);
+
+        // Past the recast-interval guard, the next tick must retry and actually attack.
+        h.AdvanceClock(TimeSpan.FromMilliseconds(600));
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+
+        Assert.Equal("turn shade", h.LastSent);
+    }
+
+    // Follow-up report paradigm-20260824-235607 reproduced the same visible stall
+    // after the _combatOff fix, but from a fresh process. With no prior hit/miss,
+    // TickEngine.LastCombatTick was null. The initial attack lost the burst guard to
+    // a login self-buff, no attack reached the server, and the shade's armour-block
+    // wording ("reaches out for you") matched none of TickEngine's generic patterns.
+    // The timer fallback therefore never started, so the "retry next tick" promised
+    // by the earlier fix had no tick to run on. A blocked attack must seed the real
+    // fallback and reserve that next round from CastingDirector.
+    [Fact]
+    public void FreshSession_BlockedEngage_SeedsTickFallbackAndReservesRetryRound()
+    {
+        using Harness h = new();
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        using TickEngine tick = new(h.Router, () => now);
+        h.Combat.SetCombatTickAnchor(tick.EnsureCombatTickAnchor);
+        // Production subscription order: CastCoordinator clears the spent round,
+        // then CombatManager retries the attack. CastingDirector sits between them
+        // and observes IsSpellAttackOwed=true, asserted below.
+        tick.CombatTickElapsed += h.Cast.OnCombatTick;
+        tick.CombatTickElapsed += h.Combat.OnCombatTick;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "shade");
+
+        Assert.Null(tick.LastCombatTick); // brand-new process: no prior combat cadence
+        Assert.True(h.Cast.TryCast("vlwa"));
+
+        h.Feed("Also here: shade.");
+
+        Assert.Equal("vlwa", h.LastSent); // attack was locally burst-blocked
+        Assert.False(h.Combat.CombatOff);
+        Assert.True(h.Combat.IsSpellAttackOwed); // no second buff may steal the retry
+        Assert.NotNull(tick.LastCombatTick);      // production timer fallback can now fire
+
+        // The seeded timer reaches the projected next round without any recognized
+        // combat line—the exact production event that was missing in the report.
+        now += TickEngine.CombatTickInterval;
+        tick.PollTimersForTests();
+
+        Assert.Equal("turn shade", h.LastSent);
+        Assert.False(h.Combat.IsSpellAttackOwed);
     }
 }

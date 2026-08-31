@@ -76,6 +76,14 @@ public sealed class LoopRunner : IRecoverableEngine
     private Action? _hiddenSearchStopAll;
     private bool _awaitingHiddenReveal;
 
+    // Winch enqueuer — mirrors the door/hidden integration for a MultiActionHidden
+    // winch exit crossed mid-circuit: pull the winch, wait for it to turn + the gate
+    // to open, then cross from OnWinchReply. Null until wired (unit harnesses leave it
+    // unbound and keep the synchronous dispatch).
+    private Action<Direction, string, bool, string, Action<WinchResult>>? _winchEnqueuer;
+    private Action? _winchStopAll;
+    private bool _awaitingWinch;
+
     private Loop? _loop;
     private int _index;
 
@@ -87,6 +95,14 @@ public sealed class LoopRunner : IRecoverableEngine
     private bool _stepInFlight;
     private bool _awaitingPromptForCommand;
     private RoomKey? _expectedMoveTarget;
+    // The room the in-flight move was sent FROM. OnTrackerStateChanged ignores
+    // tracker transitions while State != Running (a paused loop doesn't react
+    // to events in real time), so a MoveRefusal that resolves mid-pause — the
+    // tracker reverts Pending → Confirmed at this same room, but the running
+    // handler never sees it — leaves this the only way for the resume path to
+    // tell "refused, still here" apart from "still Pending, awaiting the
+    // reply" or "arrived at target". See OnPauseChanged's resume branches.
+    private RoomKey? _expectedMoveSource;
 
     // True when the runner flipped to LoopState.Paused while still in the approach
     // phase (the walker was driving us toward the loop's entry waypoint). Tells the
@@ -329,6 +345,30 @@ public sealed class LoopRunner : IRecoverableEngine
         // desynced — fail rather than blindly continuing.
         if (_expectedMoveTarget is { } expected && recoveredAnchor.Equals(expected))
         {
+            // State==Paused here is ambiguous: EngineRecoveryGate's own
+            // PauseForRecovery set it, OR an unrelated MovementCoordinator gate
+            // (Search, GhSort, ...) asserted while recovery was already paused
+            // and OnPauseChanged(true) found State==Running-turned-Paused too.
+            // Resolving THIS recovery doesn't mean the coordinator agrees we
+            // should move — if some other gate is still up, sending the next
+            // step here races that gate's eventual clear and can double-send
+            // (OnPauseChanged's own "coordinator resumed" path would ALSO
+            // advance once the other gate clears, since _stepInFlight /
+            // _expectedMoveTarget are unchanged and still describe a completed
+            // step). Defer entirely to that already re-pause-safe, deferred
+            // path instead of advancing here: leave State Paused and just
+            // record that the move landed. This is the fix for the "loop
+            // double-sends a move and desyncs its step counter" bug (a GhSort
+            // gate clearing in the same burst as an authoritative rm resync
+            // sent the SAME cardinal twice, one lap re-entering a room from a
+            // step that no longer matched its real exits — "no exit S" crash).
+            if (_coordinator.IsPaused)
+            {
+                _log?.Info("LoopRunner",
+                    $"ResumeAfterRecovery: recovered at expected target {recoveredAnchor}, but coordinator still paused (gates={string.Join(",", _coordinator.AssertedGates)}); deferring advance to gate clear");
+                return;
+            }
+
             _log?.Info("LoopRunner",
                 $"ResumeAfterRecovery: recovered at expected target {recoveredAnchor}; resuming step {_index + 1}");
             State = LoopState.Running;
@@ -499,6 +539,21 @@ public sealed class LoopRunner : IRecoverableEngine
         _hiddenSearchStopAll = stopAll;
     }
 
+    // Winch enqueuer — mirrors AutoWalkManager.SetWinchEnqueuer. Both engines bind
+    // to the same WinchManager so a loop crosses a winch gate the same way.
+    public void SetWinchEnqueuer(Action<Direction, string, bool, string, Action<WinchResult>> enqueuer)
+    {
+        ArgumentNullException.ThrowIfNull(enqueuer);
+        _winchEnqueuer = enqueuer;
+    }
+
+    // Winch teardown — mirrors AutoWalkManager.SetWinchStopper.
+    public void SetWinchStopper(Action stopAll)
+    {
+        ArgumentNullException.ThrowIfNull(stopAll);
+        _winchStopAll = stopAll;
+    }
+
     // Start running loop. If a loop is already running, it is stopped first. Returns
     // false when the loop is empty.
     public bool Start(Loop loop) => StartInternal(loop, isRecovery: false);
@@ -555,6 +610,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         _expectedMoveTarget = null;
+        _expectedMoveSource = null;
         _approachTarget = null;
         _circleStartRoom = null;
         _expandedSteps = new List<LoopStep>();
@@ -893,6 +949,20 @@ public sealed class LoopRunner : IRecoverableEngine
             _lapStartedAt = now;
             _index = 0;
             Raise(new LoopEvent(LoopEventKind.RepeatStarted, _loop.Name));
+
+            // A RepeatStarted subscriber can react synchronously — e.g. a
+            // room-arrival dispatcher asserting a MovementCoordinator gate to
+            // hold the room the loop just wrapped back into. That reaction
+            // can change State (via OnPauseChanged) or stop the loop
+            // entirely, several frames up the stack from here, but this
+            // method already passed its own State/_stepInFlight guard at
+            // entry and doesn't know to look again. Re-check before falling
+            // through to send the next step: without this, a gate asserted
+            // during the Raise() above is silently ignored for THIS send —
+            // the loop ships the next move anyway, physically leaving the
+            // room a reactor just started dispatching commands for, so
+            // those commands resolve against the wrong room entirely.
+            if (_loop is null || State != LoopState.Running || _stepInFlight) return;
         }
 
         LoopStep step = _expandedSteps[_index];
@@ -921,6 +991,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // cardinal, text command, teleport keyword, or post-action
         // cardinal). _stepInFlight gates the confirmation handler.
         _expectedMoveTarget = exit.Target;
+        _expectedMoveSource = current.Key;
         _stepInFlight = true;
 
         // Predictive room provisioning: light a carried light if the room this lap
@@ -985,6 +1056,26 @@ public sealed class LoopRunner : IRecoverableEngine
                 return;
             }
             FailStep($"hidden exit {step.Direction} mid-circuit — no hidden-reveal flow bound");
+            return;
+        }
+
+        // Winch MultiActionHidden: pull the winch, wait for it to turn AND the gate
+        // to open, then cross from OnWinchReply — a winch gate opens on a delay, so
+        // firing the move blindly (the synchronous path below) bonks "The gate is
+        // closed!". Only when an enqueuer is bound; unwired harnesses fall through to
+        // the synchronous dispatch (fire-and-forget pull + move) unchanged.
+        if (_winchEnqueuer is not null && WinchManager.IsWinchExit(exit)
+            && WinchManager.PullCommand(exit) is { } winchPull)
+        {
+            if (_tracker.State.OpenDoorDirections is { } openGate && openGate.Contains(step.Direction))
+            {
+                EmitCardinal(step.Direction, exit.Target, "gate pre-open");
+                return;
+            }
+            _awaitingWinch = true;
+            _log?.Info("LoopRunner",
+                $"step {_index + 1}/{_expandedSteps.Count}: winching gate {step.Direction} ('{winchPull}').");
+            _winchEnqueuer(step.Direction, winchPull, /*waitForGate:*/ true, "loop", OnWinchReply);
             return;
         }
 
@@ -1062,12 +1153,48 @@ public sealed class LoopRunner : IRecoverableEngine
                     return;
                 }
                 _expectedMoveTarget = exit.Target;
+                _expectedMoveSource = current.Key;
                 _stepInFlight = true;
                 EmitCardinal(step.Direction, exit.Target, "post-door");
                 return;
 
             case DoorOpenResult.Failed failed:
                 FailStep($"door open failed: {failed.Reason}");
+                return;
+        }
+    }
+
+    // Terminal callback from WinchManager for a winch-gate circuit step. Mirrors
+    // OnDoorReply: on Turned re-fetch the exit (the step index hasn't advanced) and
+    // cross with the cardinal; on failure fail the lap.
+    private void OnWinchReply(WinchResult result)
+    {
+        if (!_awaitingWinch) return;
+        _awaitingWinch = false;
+
+        switch (result)
+        {
+            case WinchResult.Turned:
+                if (_loop is null || State != LoopState.Running
+                    || _index >= _expandedSteps.Count
+                    || _expandedSteps[_index] is not MoveLoopStep step)
+                {
+                    return;
+                }
+                if (_tracker.State.CurrentRoom is not { } current
+                    || !current.Exits.TryGetValue(step.Direction, out RoomExit exit))
+                {
+                    FailStep($"post-winch: no exit {step.Direction} from {_tracker.State.CurrentRoom?.Key.ToString() ?? "(unknown)"}");
+                    return;
+                }
+                _expectedMoveTarget = exit.Target;
+                _expectedMoveSource = current.Key;
+                _stepInFlight = true;
+                EmitCardinal(step.Direction, exit.Target, "post-winch");
+                return;
+
+            case WinchResult.Failed failed:
+                FailStep($"winch failed: {failed.Reason}");
                 return;
         }
     }
@@ -1098,6 +1225,7 @@ public sealed class LoopRunner : IRecoverableEngine
                     return;
                 }
                 _expectedMoveTarget = exit.Target;
+                _expectedMoveSource = current.Key;
                 _stepInFlight = true;
                 EmitCardinal(step.Direction, exit.Target, "post-hidden-reveal");
                 return;
@@ -1251,7 +1379,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // blocked-at-source and spuriously enter recovery. The FSM clears its
         // await flag before emitting the real move, so the genuine arrival still
         // lands here.
-        if (_awaitingDoorOpen || _awaitingHiddenReveal) return;
+        if (_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch) return;
 
         // Suspect / Lost / Unknown are real confidence drops we forward
         // to the recovery gate. Pending is the normal Confirmed →
@@ -1367,9 +1495,11 @@ public sealed class LoopRunner : IRecoverableEngine
         StopDelayTimer();
         if (_awaitingDoorOpen) { _doorStopAll?.Invoke(); _awaitingDoorOpen = false; }
         if (_awaitingHiddenReveal) { _hiddenSearchStopAll?.Invoke(); _awaitingHiddenReveal = false; }
+        if (_awaitingWinch) { _winchStopAll?.Invoke(); _awaitingWinch = false; }
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         _expectedMoveTarget = null;
+        _expectedMoveSource = null;
         _approachTarget = null;
         State = LoopState.Recovering;
         Raise(new LoopEvent(LoopEventKind.Paused, $"recovering: {reason}"));
@@ -1540,8 +1670,78 @@ public sealed class LoopRunner : IRecoverableEngine
                     if (_index != overshootIndex || !_stepInFlight) return;
                     _stepInFlight = false;
                     _expectedMoveTarget = null;
+                    _expectedMoveSource = null;
                     AdvanceStep();
                 });
+                return;
+            }
+            // A door / winch / hidden-exit sub-FSM was mid-flight when the pause
+            // hit. Its OWN reply (not a tracker move) drives the step — it sets
+            // _expectedMoveSource and EmitCardinals the move itself — so the tracker
+            // legitimately still reads Confirmed at the source room. The refusal /
+            // Suspect checks below would misread that as "blocked at source" and
+            // spuriously abort the in-progress open (burning a recover attempt);
+            // OnTrackerStateChanged guards the identical case at the top of its
+            // real-time handler. Mirror it here: wait for the sub-FSM's reply,
+            // bounded by the stall watchdog in case the interrupting combat swallowed
+            // it, rather than recovering or resending.
+            if (_stepInFlight
+                && (_awaitingDoorOpen || _awaitingHiddenReveal || _awaitingWinch))
+            {
+                _log?.Info("LoopRunner",
+                    $"resume: step {_index + 1} has a door/winch/hidden sub-FSM in flight; awaiting its reply, not recovering or resending");
+                ArmStallWatchdog($"resume with step {_index + 1} sub-FSM in flight");
+                return;
+            }
+            // A MoveRefusal ("There is no exit in that direction!", a shut
+            // door, etc.) resolved WHILE paused. RoomTracker.NoteMoveBlocked
+            // correctly reverted Pending → Confirmed at the source room and
+            // fired StateChanged, but OnTrackerStateChanged ignores tracker
+            // events while State != Running, so that recovery never happened
+            // in real time — this step is still marked in flight even though
+            // the move is long since dead. Falling through to the blind resend
+            // below would re-issue the exact same doomed direction, get
+            // refused again, and (with no combat gate this time to eventually
+            // clear and retry) just sit there — the loop only recovers by
+            // accident, whenever some unrelated event forces a fresh room
+            // observation (paradigm-20260829-084558, paradigm-20260829-104437:
+            // one stall ran for over an hour). Recognize "Confirmed, still at
+            // the room we sent the move FROM" as the resume-time equivalent of
+            // OnTrackerStateChanged's real-time "blocked at source" branch and
+            // enter recovery immediately instead of resending.
+            if (_stepInFlight
+                && _expectedMoveSource is { } source
+                && _tracker.State.Confidence == RoomConfidence.Confirmed
+                && _tracker.State.CurrentRoom?.Key.Equals(source) == true)
+            {
+                _log?.Warn("LoopRunner",
+                    $"resume: step {_index + 1} was refused while paused (still at {source}, expected {_expectedMoveTarget}); entering recovery");
+                EnterRecovery($"step {_index + 1} refused while paused at {source}");
+                return;
+            }
+            // The tracker landed in Suspect/Lost/Unknown WHILE paused — an
+            // ambiguous room observation it couldn't reconcile against the
+            // pending queue (a combat redisplay, another player's arrival,
+            // etc. mid-pause). OnTrackerStateChanged forwards this to the
+            // recovery gate in real time; while paused it never got the
+            // chance. Falling through to a blind resend here is worse than
+            // useless: NoteMoveSentCore deliberately does NOT re-arm Pending
+            // from Suspect/Lost/Unknown (no confirmed anchor to predict a
+            // landing from), so a subsequent refusal is silently dropped too
+            // — NoteMoveBlocked only acts when confidence is Pending —
+            // stranding the loop in Suspect with no way back
+            // (paradigm-20260829-111627; also the backstop for the bright-cyan
+            // ability-line room misparse of paradigm-20260829-154032, whose
+            // primary fix is RoomDisplayParser keeping the title nearest the
+            // exits line). Forward to the recovery gate exactly like the
+            // real-time branch instead of resending.
+            if (_stepInFlight
+                && _tracker.State.Confidence is RoomConfidence.Suspect or RoomConfidence.Lost or RoomConfidence.Unknown)
+            {
+                _log?.Warn("LoopRunner",
+                    $"resume: step {_index + 1} tracker confidence={_tracker.State.Confidence} after pause; forwarding to recovery gate");
+                _recovery?.NoteSuspectedMismatch(
+                    $"tracker {_tracker.State.Confidence} on resume at step {_index + 1}");
                 return;
             }
             // A move was already on the wire when the pause hit and its
@@ -1552,8 +1752,9 @@ public sealed class LoopRunner : IRecoverableEngine
             // the tracker sticks in Pending-at-target, and the loop hangs on a
             // Confirmed it will never get. Keep the step in flight instead; now
             // that we're Running again the resumed tracker events confirm it and
-            // advance us. Refusals don't hit this — a bonked move fires
-            // NoteMoveBlocked, which drops its pending entry and re-Confirms.
+            // advance us. A refusal doesn't reach this branch — the "refused
+            // while paused" check above already caught it once NoteMoveBlocked
+            // dropped the pending entry and re-Confirmed.
             if (_stepInFlight && _tracker.State.Confidence == RoomConfidence.Pending)
             {
                 _log?.Info("LoopRunner",
@@ -1604,12 +1805,16 @@ public sealed class LoopRunner : IRecoverableEngine
         // Same for a hidden-reveal FSM opening on our behalf.
         if (_awaitingHiddenReveal) _hiddenSearchStopAll?.Invoke();
         _awaitingHiddenReveal = false;
+        // Same for a winch FSM turning a gate on our behalf.
+        if (_awaitingWinch) _winchStopAll?.Invoke();
+        _awaitingWinch = false;
         _loop = null;
         _index = 0;
         _expandedSteps = new List<LoopStep>();
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         _expectedMoveTarget = null;
+        _expectedMoveSource = null;
         _approachTarget = null;
         _circleStartRoom = null;
         _firstWaypointReached = false;

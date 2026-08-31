@@ -42,6 +42,11 @@ public sealed class HealthManagerTests
         /// touch it.</summary>
         public bool HostilesPresent { get; set; }
 
+        /// <summary>When true, a gear-set swap is streaming its wear/rem commands —
+        /// HealthManager holds its rest re-issue so it doesn't thrash the swap.
+        /// Mirrors EquipmentManager.IsApplyingSet. Defaults false.</summary>
+        public bool EquipmentApplying { get; set; }
+
         /// <summary>Hostile-in-room signal gating the emergency hangup —
         /// mirrors CombatStateTracker.HasHostileMonster (auto-attack
         /// independent). Defaults true so the existing hangup tests, which
@@ -116,6 +121,7 @@ public sealed class HealthManagerTests
                 isSolo: () => Solo,
                 onRecovered: () => ShadowRestResumeCount++);
             Health.SetDoNotRestSelector(() => SkipRestHere);
+            Health.SetEquipmentApplyingProbe(() => EquipmentApplying);
             Health.SetPartyRoleSync(
                 isPartyFollower: () => false,
                 requestPartyWait: () => { },
@@ -408,6 +414,28 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
+    public void EquipmentApplying_HoldsRest_ThenRestsWhenSwapDone()
+    {
+        // A pre-rest gear swap streams paced wear/rem, each of which stands the
+        // character; without a hold the rest engine re-fires `rest` between every
+        // command — the rest/stand thrash of report paradigm-20260825-103537. Hold
+        // the rest while the swap is in flight, then rest once it finishes.
+        using Harness h = new() { EquipmentApplying = true };
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 50;
+        Assert.True(h.HealthGateHeld);
+        Assert.DoesNotContain("rest", h.SentLines);   // held during the swap
+        Assert.False(h.Health.RestInFlight);
+
+        h.EquipmentApplying = false;   // swap finished — character standing with new gear
+        h.Health.Evaluate();
+
+        Assert.Contains("rest", h.SentLines);          // now rests, one command
+        Assert.True(h.Health.RestInFlight);
+    }
+
+    [Fact]
     public void ForceClear_ThenHostileReconfirmed_DoesNotRest()
     {
         // The idle-stall watchdog force-cleared combat while a monster was still in
@@ -471,6 +499,35 @@ public sealed class HealthManagerTests
 
         // No reconfirm ever arrives (empty static room, no hostiles). Time passes beyond
         // the backstop; the next Evaluate tick releases the hold and rests.
+        h.Clock += TimeSpan.FromSeconds(5);
+        h.Health.Evaluate();
+
+        Assert.True(h.Health.RestInFlight);
+        Assert.Contains("rest", h.SentLines);
+    }
+
+    [Fact]
+    public void ForceClear_TimeoutReleases_RestsPastStaleHostileLatch()
+    {
+        // paradigm-20260827-082222: the idle-stall "room empty" force-clear does NOT
+        // clear the combat tracker's hostile latch (an empty room emits no occupant
+        // line to re-derive it), so it stays stuck true from the last hostile-filled
+        // room. A stationary character held below the trigger then sat forever — its
+        // meditate/rest blocked by the stale hostiles guard while it passively
+        // regenerated ("meditating state but not Medding / no gear swap"). After the
+        // reconfirm-timeout with no re-display, the room is safe: the held rest fires
+        // past the stale latch.
+        using Harness h = new() { HostilesPresent = true };  // stale latch, room really empty
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.Health.NoteCombatForceCleared();   // idle-stall "room empty" → hold armed
+        h.State.Hp = 50;                      // breach → held (stale hostile blocks the rest)
+
+        Assert.False(h.Health.RestInFlight);
+        Assert.DoesNotContain("rest", h.SentLines);
+
+        // Past the backstop with no re-display: release the hold AND bypass the stale
+        // hostile latch so the genuinely-clear room rests.
         h.Clock += TimeSpan.FromSeconds(5);
         h.Health.Evaluate();
 
@@ -1590,6 +1647,34 @@ public sealed class HealthManagerTests
         Assert.Contains("rest", h.SentLines);
     }
 
+    [Fact]
+    public void Meditate_ServerBreaksMeditate_OutOfCombat_ReMeditates()
+    {
+        // Report: meditate never re-engaged after a bless interrupted it.
+        // We meditate; server confirms (Meditating). A self-bless fires and
+        // knocks us back to (Standing) — same shape as Rest_ServerBreaksRest_
+        // OutOfCombat_ReRests, but for the Meditating position the confirm/
+        // interrupt latch used to never recognize at all.
+        HealthSettings s = new() { UseMeditateAbility = true };
+        using Harness h = new(s);
+        h.State.MaxHp = 200;
+        h.State.Hp = 200;         // HP healthy — only MA gates.
+        h.State.MaxMa = 100;
+        h.State.HasPromptData = true;
+        h.State.Ma = 20;          // below default rest trigger
+        Assert.Equal(1, h.SentLines.Count(l => l == "meditate"));
+
+        // Server prompt confirms we're meditating.
+        h.State.Position = PlayerPosition.Meditating;
+        Assert.True(h.Health.RestInFlight);
+
+        // A bless (or anything else) interrupts it in place — no room move.
+        h.State.Position = PlayerPosition.Standing;
+
+        Assert.Equal(2, h.SentLines.Count(l => l == "meditate"));
+        Assert.True(h.Health.RestInFlight);
+    }
+
     // ----- Hangup-on-emergency (Cluster 5c) -------------------------
 
     [Fact]
@@ -2547,6 +2632,56 @@ public sealed class HealthManagerTests
         h.SetPrompt(hp: 150, maxHp: 200);
 
         Assert.DoesNotContain("rest", h.SentLines);
+    }
+
+    [Fact]
+    public void LeaderWaited_AboveRestMax_StillRestsTowardFull()
+    {
+        // Report -132906: @wait-held leader already above its rest-max floor
+        // (HP 98% / MA 90%) but not full. The old rest-max ceiling left it standing
+        // idle through the whole wait; a wait is bounded downtime, so it now rests
+        // toward FULL (the wait's own release ends it, not the rest-max floor).
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Percentage, RestIfBelowHp = 30, RestMaxHp = 70,
+            MaThresholdMode = ThresholdMode.Percentage, RestIfBelowMa = 30, RestMaxMa = 50,
+            UseMeditateAbility = false,   // deterministic: rest, not meditate
+        };
+        using Harness h = new(s);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => false,
+            requestPartyWait: () => { },
+            requestPartyOk: () => { },
+            isLeaderWaited: () => true,
+            isSelfPoisoned: () => false);
+        h.SetPrompt(hp: 187, maxHp: 189, ma: 139, maxMa: 154);   // above rest-max, below full
+
+        Assert.False(h.HealthGateHeld);   // no floor breach → no gate
+        Assert.Contains("rest", h.SentLines);
+    }
+
+    [Fact]
+    public void LeaderWaited_AtFull_DoesNotRest()
+    {
+        // Nothing to recover at full → no rest even while @wait-held (the downtime
+        // top-off only fires while a pool is short of Max).
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Percentage, RestIfBelowHp = 30, RestMaxHp = 70,
+            MaThresholdMode = ThresholdMode.Percentage, RestIfBelowMa = 30, RestMaxMa = 50,
+            UseMeditateAbility = false,
+        };
+        using Harness h = new(s);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => false,
+            requestPartyWait: () => { },
+            requestPartyOk: () => { },
+            isLeaderWaited: () => true,
+            isSelfPoisoned: () => false);
+        h.SetPrompt(hp: 189, maxHp: 189, ma: 154, maxMa: 154);   // full
+
+        Assert.DoesNotContain("rest", h.SentLines);
+        Assert.DoesNotContain("meditate", h.SentLines);
     }
 
     [Fact]

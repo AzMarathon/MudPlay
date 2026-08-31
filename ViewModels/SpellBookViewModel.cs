@@ -19,14 +19,21 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
 {
     private readonly SpellbookState _book;
     private readonly Func<string?>? _classNameProvider;
+    private readonly Func<int>? _spellcastingProvider;
     private IReadOnlyList<ClassCastItem> _allCastItems = System.Array.Empty<ClassCastItem>();
     private bool _disposed;
 
-    public SpellBookViewModel(SpellbookState book, Func<string?>? classNameProvider = null)
+    public SpellBookViewModel(
+        SpellbookState book,
+        Func<string?>? classNameProvider = null,
+        Func<int>? spellcastingProvider = null)
     {
         ArgumentNullException.ThrowIfNull(book);
         _book = book;
         _classNameProvider = classNameProvider;
+        // Live Spellcasting stat, read fresh on each Rebuild — feeds the per-row
+        // cast-success ("Difficulty") column. Null in tests (rows then show "—").
+        _spellcastingProvider = spellcastingProvider;
         _book.Changed += OnBookChanged;
         _allCastItems = _book.GetCastItems();
         Rebuild();
@@ -85,6 +92,13 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         }
     }
 
+    // Header hint that spells out how the Difficulty column is computed — the
+    // formula in variable form (the per-row tooltip fills in the actual numbers).
+    public string DifficultyFormulaText
+        => _book.Available.Count == 0
+            ? string.Empty
+            : "Difficulty = Spellcasting + spell difficulty  (clamped 0–98%)";
+
     // Footer summary: obtained-of-total + filtered count.
     public string StatusText
     {
@@ -108,6 +122,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         _allCastItems = _book.GetCastItems();
         Rebuild();
         OnPropertyChanged(nameof(HeaderText));
+        OnPropertyChanged(nameof(DifficultyFormulaText));
     }
 
     private void Rebuild()
@@ -137,6 +152,8 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         // so the Lvl column and the level gate reflect when THIS class can learn it.
         IReadOnlyDictionary<int, int> teachLevels = _book.GetTeachLevels();
 
+        int spellcasting = _spellcastingProvider?.Invoke() ?? 0;
+
         string filter = SearchText.Trim();
         Rows.Clear();
         foreach (KnownSpell spell in _book.Available)
@@ -151,7 +168,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
             if (filter.Length > 0 && !Matches(spell, filter)) continue;
             Rows.Add(new SpellBookRowViewModel(
                 spell, obtained, _book.Level, ResolveChain, _book.ResolveSpellName,
-                ResolveTextblockCasts, teachLevel));
+                ResolveTextblockCasts, teachLevel, spellcasting));
         }
 
         // Cast-on-use items: a separate section, filtered by the same search

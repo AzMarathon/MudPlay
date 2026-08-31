@@ -114,14 +114,15 @@ public sealed class RoomHazardIndexTests : IDisposable
     }
 
     [Fact]
-    public void TextBlock_FailItem_IsHazard()
+    public void TextBlock_FailItem_GuardingHarm_IsHazard()
     {
         RoomHazardIndex idx = NewIndex(
             Room(700),
-            // Abil 148 = TextBlock → TBInfo #50.
+            // Abil 148 = TextBlock → TBInfo #50. The failitem guards a teleport
+            // outcome (a movement hazard) — holding item 55 aborts it.
             """ [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 50 } ] """,
             itemsJson: null,
-            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55" } ] """);
+            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55:teleport 12" } ] """);
 
         RoomHazardIndex.RoomHazard? h = idx.HazardForSpell(700);
         Assert.NotNull(h);
@@ -129,17 +130,37 @@ public sealed class RoomHazardIndexTests : IDisposable
     }
 
     [Fact]
+    public void TextBlock_FailItem_BenignBranch_NotIndexed()
+    {
+        // The blackwood-forest shape (report paradigm-20260825-125954): a room-entry
+        // spell with a `failitem` "counter" whose unprotected branch only summons a
+        // monster / shifts alignment / prints a message — no damage, death, or forced
+        // movement. That is NOT a hazard even though it ships a counter item, so the
+        // router must not gate movement into the room.
+        RoomHazardIndex idx = NewIndex(
+            Room(700),
+            """ [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 50 } ] """,
+            itemsJson: null,
+            tbInfoJson: """
+            [ { "Number": 50, "Action": "failitem 55:random 51" },
+              { "Number": 51, "Action": "50:addevil 0\n100:summon 815" } ]
+            """);
+
+        Assert.Null(idx.HazardForSpell(700));
+    }
+
+    [Fact]
     public void TextBlock_MinBaseEncodedTb_IsHazard()
     {
         // The ice-cavern shape (spells 1144/1145): a TextBlock spell whose
-        // AbilVal-0 is 0 — the TBInfo number lives in MinBase/MaxBase instead. The
-        // failitem counter (there, the rope+grapple) must still be indexed, or the
-        // route picker never offers it (report paradigm-20260810-202239).
+        // AbilVal-0 is 0 — the TBInfo number lives in MinBase/MaxBase instead. Its
+        // failitem counter (the rope+grapple) guards a teleport, so it must still be
+        // indexed, or the route picker never offers it (report paradigm-20260810-202239).
         RoomHazardIndex idx = NewIndex(
             Room(700),
             """ [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 0, "MinBase": 50, "MaxBase": 50 } ] """,
             itemsJson: null,
-            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55" } ] """);
+            tbInfoJson: """ [ { "Number": 50, "Action": "failitem 55:teleport 12" } ] """);
 
         RoomHazardIndex.RoomHazard? h = idx.HazardForSpell(700);
         Assert.NotNull(h);
@@ -259,7 +280,11 @@ public sealed class RoomHazardIndexTests : IDisposable
         Assert.True(h.IsSatisfiedBy(item => item == 99));   // wristband alone clears the route
         Assert.True(h.IsSatisfiedBy(item => item == 60));   // waterskin alone clears the route
         // The use-the-item provisioner stays tied to the buff source, not the passive guard.
-        Assert.Equal(new[] { 60 }, Assert.Single(h.BuffCounters).SourceItems);
+        RoomHazardIndex.BuffCounter bc = Assert.Single(h.BuffCounters);
+        Assert.Equal(new[] { 60 }, bc.SourceItems);
+        // ...but the counter also carries the immunity guard, so the provisioner can
+        // skip the `use` when the wristband is held (report -112011).
+        Assert.Contains(99, bc.ImmunityItems);
     }
 
     // A checkspell whose buff spell has no Dur in the data → DurationSeconds 0.
@@ -396,5 +421,37 @@ public sealed class RoomHazardIndexTests : IDisposable
         });
 
         Assert.Equal(new[] { 42 }, hazard.MandatoryItems);
+    }
+
+    // The trollskin-boots / swamp-boots case (report paradigm-20260829-203409):
+    // two items share the same NegateSpell, so they land in the same any-of
+    // group. The route picker resolves to sourcing ONE of them (trollskin), but
+    // the player instead equips the other (swamp boots) they already owned.
+    // GroupSatisfiedByAlternative lets a caller pinned to the originally-chosen
+    // id (trollskin) recognize the substitute already covers the hazard.
+    [Fact]
+    public void GroupSatisfiedByAlternative_OtherGroupMemberCarried_IsTrue()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(485),
+            """ [ { "Number": 485, "Abil-0": 1, "AbilVal-0": 25 } ] """,
+            """
+            [ { "Number": 1232, "NegateSpell-0": 485 },
+              { "Number": 925,  "NegateSpell-0": 485 } ]
+            """);
+
+        Assert.True(idx.GroupSatisfiedByAlternative(1232, id => id == 925));
+        Assert.False(idx.GroupSatisfiedByAlternative(1232, _ => false));
+    }
+
+    [Fact]
+    public void GroupSatisfiedByAlternative_ItemNotInAnyGroup_IsFalse()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(485),
+            """ [ { "Number": 485, "Abil-0": 1, "AbilVal-0": 25 } ] """,
+            """ [ { "Number": 1232, "NegateSpell-0": 485 } ] """);
+
+        Assert.False(idx.GroupSatisfiedByAlternative(999, id => id == 1232));
     }
 }

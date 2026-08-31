@@ -375,6 +375,7 @@ public static class CharacterCalculator
 
             case 34: totals.PlusDodge += abilVal; statKey = "Dodge"; break;
             case 36: totals.PlusMagicResist += abilVal; statKey = "Magic Resist"; break;
+            case 72: totals.PlusShockShield += abilVal; statKey = "ShockShield"; break;
 
             case 116: totals.PlusBSAccuracy += abilVal; statKey = "BS Accuracy"; break;
             case 117: totals.PlusBSMin += abilVal; statKey = "BS Min Dmg"; break;
@@ -388,6 +389,7 @@ public static class CharacterCalculator
             case 37: case 180: totals.PlusPicklocks += abilVal; statKey = "Picklocks"; break;
             case 13: case 14: totals.PlusIlluminate += abilVal; statKey = "Illuminate"; break;
             case 67: totals.PlusQuickness += abilVal; statKey = "Quickness"; break;
+            case 39: totals.PlusThievery += abilVal; statKey = "Thievery"; break;
 
             case 3: totals.PlusColdResist += abilVal; statKey = "Cold Resist"; break;
             case 5: totals.PlusFireResist += abilVal; statKey = "Fire Resist"; break;
@@ -398,6 +400,7 @@ public static class CharacterCalculator
 
             case 24: totals.PlusProtEvil += abilVal; statKey = "Prot Evil"; break;
             case 25: totals.PlusProtGood += abilVal; statKey = "Prot Good"; break;
+            case 1113: totals.PlusVileWard += abilVal; statKey = "VileWard"; break;
 
             case 92: totals.PlusPunchDmg += abilVal; statKey = "Punch Dmg"; break;
             case 89: totals.PlusPunchAccy += abilVal; statKey = "Punch Accy"; break;

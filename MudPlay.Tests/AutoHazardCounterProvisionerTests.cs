@@ -28,12 +28,23 @@ public sealed class AutoHazardCounterProvisionerTests
         Exits = new Dictionary<Direction, RoomExit>(),
     };
 
+    // A passive full-immunity guard (the desert sunstone wristband); item 99 here.
+    // Carrying/wearing it makes the whole hazard a no-op — the provisioner must skip
+    // the `use` entirely.
+    private const int ImmunityItem = 99;
+
     // Buff 300 raised by the waterskin; its lapse-damage spell is 712 (the desert
-    // "you need water, soon!" prompt), which drives the reactive re-raise.
-    private static RoomHazardIndex.RoomHazard WaterskinHazard(int durationSeconds = 300) =>
+    // "you need water, soon!" prompt), which drives the reactive re-raise. When
+    // immunityItem is non-zero the counter also carries a passive immunity guard.
+    private static RoomHazardIndex.RoomHazard WaterskinHazard(int durationSeconds = 300, int immunityItem = 0) =>
         new(
             new IReadOnlyList<int>[] { new[] { 60 } },
-            new[] { new RoomHazardIndex.BuffCounter(300, 712, durationSeconds, new[] { 60 }) });
+            new[]
+            {
+                new RoomHazardIndex.BuffCounter(
+                    300, 712, durationSeconds, new[] { 60 },
+                    immunityItem > 0 ? new[] { immunityItem } : Array.Empty<int>()),
+            });
 
     // The two placeholder-free desert lines the reactive layer keys on: the swig
     // confirmation (buff spell 300) and the lapse-damage prompt (spell 712).
@@ -44,6 +55,7 @@ public sealed class AutoHazardCounterProvisionerTests
     {
         public DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
         public int Carried = 1;   // waterskins on hand
+        public bool ImmuneCarried = false;   // wearing/holding the immunity guard
         public bool WalkActive = true;
         public string? Halted;    // reason from the halt callback, null until halted
         public AutoHazardCounterProvisioner Engine { get; }
@@ -63,8 +75,8 @@ public sealed class AutoHazardCounterProvisionerTests
             Engine = new AutoHazardCounterProvisioner(
                 resolveRoom:    key => key == room.Key ? room : null,
                 hazardForSpell: spell => spell == room.Spell ? hazard : null,
-                carriedCount:   id => id == 60 ? Carried : 0,
-                itemName:       id => id == 60 ? "waterskin" : null,
+                carriedCount:   id => id == 60 ? Carried : (id == ImmunityItem && ImmuneCarried ? 1 : 0),
+                itemName:       id => id == 60 ? "waterskin" : (id == ImmunityItem ? "sunstone wristband" : null),
                 messageMatcherForSpell: matcher,
                 walkActive:     () => WalkActive,
                 haltWalk:       reason => Halted = reason,
@@ -121,6 +133,37 @@ public sealed class AutoHazardCounterProvisionerTests
         Harness h = new();
         h.Engine.OnApproachingRoom(BenignRoom);   // no room / no hazard resolves
         Assert.Empty(h.Sent);
+    }
+
+    // Report -112011: a worn sunstone grants full immunity, so raising the waterskin
+    // buff is a pointless charge. Holding an immunity guard skips the `use` entirely.
+    [Fact]
+    public void ImmunityGuardCarried_SkipsUse()
+    {
+        Harness h = new(WaterskinHazard(immunityItem: ImmunityItem)) { ImmuneCarried = true };
+        h.Engine.OnApproachingRoom(HazardRoom);
+        Assert.Empty(h.Sent);
+    }
+
+    // The guard only suppresses when actually held — configured but not carried, the
+    // provisioner still raises the buff off the waterskin as before.
+    [Fact]
+    public void ImmunityGuardNotCarried_StillRaises()
+    {
+        Harness h = new(WaterskinHazard(immunityItem: ImmunityItem)) { ImmuneCarried = false };
+        h.Engine.OnApproachingRoom(HazardRoom);
+        Assert.Equal(new[] { "use waterskin" }, h.Sent);
+    }
+
+    // A lapse prompt seen while immune neither re-`use`s nor halts — we're safe.
+    [Fact]
+    public void ImmunityGuardCarried_LapsePromptIgnored_NoHalt()
+    {
+        Harness h = new(WaterskinHazard(immunityItem: ImmunityItem)) { ImmuneCarried = true };
+        h.Engine.OnApproachingRoom(HazardRoom);   // armed, no use (immune)
+        h.Engine.OnServerLine(ThirstLine);        // lapse prompt
+        Assert.Empty(h.Sent);
+        Assert.Null(h.Halted);
     }
 
     // Dur 0 (buff duration absent from data) → the fallback periodic refresh

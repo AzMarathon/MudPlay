@@ -338,6 +338,42 @@ public sealed class CombatSpellChooserTests
         Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 4, roomMobKeys: roster3)));
     }
 
+    // report paradigm-20260827-082106: hunting the same species room-to-room, the
+    // AoE debuff fired only in the first room. RawNames repeat across a same-species
+    // loop, so the room we're leaving's tags mark the next room's identical crabs as
+    // "already debuffed" and the once-per-room AoE skips. The pre-move reset
+    // (CombatManager.NotePreMove → ResetForNewRoom) clears the tags before the next
+    // room, so each room fires the AoE again.
+    [Fact]
+    public void ChooseDebuff_Area_SameSpeciesNextRoom_SkippedUntilRoomReset()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("stnk", minEnemies: 2, maxCasts: 1),
+        };
+        // Every room in the loop shows the identical RawNames.
+        string[] crabs = { "ironshell crab", "ironshell crab", "scorpion crab" };
+
+        // Room 1: fires, tags the crabs (per-room cap now spent).
+        CombatSpellDecision? room1 = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: crabs));
+        Assert.Equal(CombatSpellAction.AreaDebuff, room1?.Action);
+        sut.MarkCast(room1!.Value, "ironshell crab", crabs);
+
+        // Same room, next round: all tagged → no re-fire (correct once-per-room).
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: crabs)));
+
+        // Walk into a FRESH room of the same species WITHOUT a reset: the leaving
+        // room's tags bleed in, so the identical crabs read as already-debuffed and
+        // the AoE is wrongly skipped — the reported bug.
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: crabs)));
+
+        // The pre-move hook resets the per-room economy → the new room fires again.
+        sut.ResetForNewRoom();
+        CombatSpellDecision? room2 = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: crabs));
+        Assert.Equal(CombatSpellAction.AreaDebuff, room2?.Action);
+    }
+
     [Fact]
     public void ChooseDebuff_RoomThinsBelowMinEnemies_SingleTakesOver()
     {
@@ -1426,14 +1462,12 @@ public sealed class CombatSpellChooserTests
     private static CombatSpellContext DrainCtx(
         int enemies = 1, int mana = 100, int maxMana = 100,
         bool hpBelow = true, bool eligible = true,
-        IReadOnlySet<CombatSpellAction>? immune = null, bool? hpRelease = null) =>
+        IReadOnlySet<CombatSpellAction>? immune = null,
+        System.Func<string, int?>? manaCostOf = null) =>
         new(enemies, "a rat", mana, maxMana, BackstabPending: false,
             ImmuneAttackSpells: immune,
             HpBelowDrainTrigger: hpBelow, DrainTargetEligible: eligible,
-            // The release threshold is higher than the trigger, so HP below the
-            // trigger is also below the release; default it to hpBelow unless a test
-            // exercises the in-between band (above trigger, below release).
-            HpBelowDrainRelease: hpRelease ?? hpBelow);
+            ManaCostOf: manaCostOf);
 
     [Fact]
     public void Drain_FiresWhenHurtAndEligible_OverridesAttackSpell()
@@ -1449,6 +1483,30 @@ public sealed class CombatSpellChooserTests
 
         Assert.Equal(CombatSpellAction.DrainSpell, d.Action);
         Assert.Equal("vamp", d.Spell);
+    }
+
+    [Fact]
+    public void Drain_NotChosen_BelowRealManaCost_EvenWithZeroReserve()
+    {
+        // Report paradigm-20260820-082741: a DrainSpell with MinManaPerCast=0 was cast
+        // at 5 mana vs its 25 cost — a silent no-op. The chooser now treats the spell's
+        // real cost as a hard floor beneath the reserve, so it's skipped when unaffordable
+        // and fires once affordable.
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("mmis"),   // cheap fallback
+            DrainSpell = Slot("dtch"),          // MinManaPerCast defaults to 0
+        };
+        System.Func<string, int?> cost = code => code == "dtch" ? 25 : 2;
+
+        // Below cost → drain skipped, cascade falls to the affordable normal attack.
+        CombatSpellDecision below = sut.Choose(settings, DrainCtx(mana: 5, manaCostOf: cost));
+        Assert.NotEqual(CombatSpellAction.DrainSpell, below.Action);
+
+        // At/above cost → drain fires as before.
+        CombatSpellDecision ok = sut.Choose(settings, DrainCtx(mana: 25, manaCostOf: cost));
+        Assert.Equal(CombatSpellAction.DrainSpell, ok.Action);
     }
 
     [Fact]
@@ -1608,8 +1666,12 @@ public sealed class CombatSpellChooserTests
     }
 
     [Fact]
-    public void Drain_Hysteresis_HoldsUntilReleaseThreshold()
+    public void Drain_ReleasesAtTrigger_NoOvershootBand()
     {
+        // Report -153630: the drain releases AT the trigger — the moment HP recovers
+        // above it, the round goes back to the normal attack. There is no hysteresis
+        // band keeping it draining above the trigger (which previously pinned to 100%
+        // HP and drained all the way to full).
         CombatSpellChooser sut = new();
         CombatSettings settings = new()
         {
@@ -1617,35 +1679,35 @@ public sealed class CombatSpellChooserTests
             DrainSpell = Slot("vamp"),
         };
 
-        // HP at/under the trigger → engage; the tally arms the hysteresis latch.
-        CombatSpellDecision engage = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
-        Assert.Equal(CombatSpellAction.DrainSpell, engage.Action);
-        sut.MarkCast(engage, "a rat");
+        // HP at/under the trigger → drain.
+        CombatSpellDecision engaged = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
+        Assert.Equal(CombatSpellAction.DrainSpell, engaged.Action);
+        sut.MarkCast(engaged, "a rat");
 
-        // HP recovered ABOVE the trigger but still below the release → keep draining
-        // (this is the anti-thrash case: without hysteresis it would flip to mmis).
-        CombatSpellDecision held = sut.Choose(settings, DrainCtx(hpBelow: false, hpRelease: true, eligible: true));
-        Assert.Equal(CombatSpellAction.DrainSpell, held.Action);
-        sut.MarkCast(held, "a rat");
-
-        // HP recovered past the release → disengage to the normal attack.
-        CombatSpellDecision released = sut.Choose(settings, DrainCtx(hpBelow: false, hpRelease: false, eligible: true));
-        Assert.Equal(CombatSpellAction.NormalAttackSpell, released.Action);
+        // HP now above the trigger → straight back to the attack, no hold-above-trigger.
+        CombatSpellDecision recovered = sut.Choose(settings, DrainCtx(hpBelow: false, eligible: true));
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, recovered.Action);
     }
 
     [Fact]
-    public void Drain_NotYetEngaged_UsesTriggerNotRelease()
+    public void Drain_FiresEveryRoundWhileBelowTrigger_Uncapped()
     {
+        // The default drain slot has no cap, so while HP stays at/under the trigger it
+        // takes the round every round (an emergency heal that keeps healing while hurt)
+        // — the mirror of 101845 (VAMP kept choosing the normal attack because a
+        // MaxCasts of 1 had spent; with no cap it fires each round).
         CombatSpellChooser sut = new();
         CombatSettings settings = new()
         {
             NormalAttackSpell = Slot("mmis"),
-            DrainSpell = Slot("vamp"),
+            DrainSpell = Slot("vamp"),   // no maxCasts → uncapped
         };
 
-        // Fresh (never engaged) and HP is in the band above the trigger but below the
-        // release — must NOT engage; only the trigger starts a drain.
-        CombatSpellDecision d = sut.Choose(settings, DrainCtx(hpBelow: false, hpRelease: true, eligible: true));
-        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
+        for (int round = 0; round < 3; round++)
+        {
+            CombatSpellDecision d = sut.Choose(settings, DrainCtx(hpBelow: true, eligible: true));
+            Assert.Equal(CombatSpellAction.DrainSpell, d.Action);
+            sut.MarkCast(d, "a rat");
+        }
     }
 }

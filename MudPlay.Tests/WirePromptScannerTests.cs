@@ -166,6 +166,40 @@ public sealed class WirePromptScannerTests
         Assert.Equal(38, seen[0].Hp);
     }
 
+    // Report paradigm-20260824-010304: another player pasted their prompt into
+    // gossip. The unanchored scanner read HP=671 as ours, PromptParser ratcheted
+    // MaxHp 176→671, and the major-heal threshold spammed grhe until mana was gone.
+    // Preserve the genuine prompts surrounding that chat row, but never emit the
+    // prompt-shaped substring after the printable "Mindcrime gossips: " prefix.
+    [Fact]
+    public void PromptQuotedInsideGossip_IsRejected_RealPromptsAroundItStillFire()
+    {
+        WirePromptScanner s = new();
+        var seen = Collect(s);
+
+        s.Append(B(
+            "\x1b[79D\x1b[K[HP=157/MA=100]:"
+            + "\x1b[79D\x1b[KMindcrime gossips: \x1b[0;35m[HP=671/KAI=40]:w\r\n"
+            + "\x1b[79D\x1b[K[HP=158/MA=90]:"));
+
+        Assert.Equal(2, seen.Count);
+        Assert.Equal(new[] { 157, 158 }, seen.Select(o => o.Hp));
+        Assert.All(seen, o => Assert.Equal(ManaType.Mana, o.ManaType));
+    }
+
+    [Fact]
+    public void PromptQuotedInsideGossip_DoesNotTriggerCustomStatlineReconcile()
+    {
+        WirePromptScanner s = new();
+        s.InstallRegex(StatlinePromptRegexBuilder.Build("full custom <HP %h>"));
+        int unmatched = 0;
+        s.PromptShapeUnmatched += () => unmatched++;
+
+        s.Append(B("Mindcrime gossips: [HP=671/KAI=40]:w\r\n"));
+
+        Assert.Equal(0, unmatched);
+    }
+
     [Fact]
     public void Reset_DropsCarryoverState()
     {

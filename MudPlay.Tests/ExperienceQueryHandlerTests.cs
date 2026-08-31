@@ -121,7 +121,7 @@ public sealed class ExperienceQueryHandlerTests
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies(engine));
-        Assert.Equal("0 exp this session, rate unknown", reply);
+        Assert.Equal("exp rate + time to level unknown (type exp)", reply);
     }
 
     [Fact]
@@ -132,12 +132,12 @@ public sealed class ExperienceQueryHandlerTests
         activity.NoteExperience(16_200);
         clock.Advance(30); // 16,200 / 0.5h = 32,400/hr
         stats.LevelExpSpan = 500_000;
-        stats.ExpToNext = 32_400; // exactly one hour of exp remaining
+        stats.ExpToNext = 32_400; // one hour of exp remaining → "60m" (under the 90m h/m cutover)
 
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies(engine));
-        Assert.Equal("16,200 exp this session, 32,400/hr, ~1h 0m to level", reply);
+        Assert.Equal("32,400 EXP to level, making 32,400/hr ~60m to level.", reply);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public sealed class ExperienceQueryHandlerTests
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
         string reply = Assert.Single(Replies(engine));
-        Assert.Equal("6,000 exp this session, 12,000/hr, type exp for ETA", reply);
+        Assert.Equal("making 12,000/hr (type exp for time to level)", reply);
     }
 
     [Fact]
@@ -167,8 +167,26 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
-        Assert.Contains("ready to level", Assert.Single(Replies(engine)));
+        Assert.Equal("0 EXP to level, making 12,000/hr ready to level.", Assert.Single(Replies(engine)));
     }
+
+    // ----- @exp rate abbreviation --------------------------------------
+
+    [Theory]
+    [InlineData(0, "0")]                    // guarded upstream (rate>0), but exact below 100k
+    [InlineData(999, "999")]
+    [InlineData(85_377, "85,377")]          // < 100k → exact, comma-grouped
+    [InlineData(99_999, "99,999")]
+    [InlineData(100_000, "100k")]           // 100k–999k → whole thousands (floor)
+    [InlineData(853_777, "853k")]
+    [InlineData(999_999, "999k")]
+    [InlineData(1_000_000, "1m")]           // millions → one decimal, trailing .0 dropped
+    [InlineData(1_100_000, "1.1m")]
+    [InlineData(1_193_744, "1.2m")]
+    [InlineData(10_100_000, "10.1m")]
+    [InlineData(30_000_000, "30m")]
+    public void FormatExpRate_TiersByMagnitude(double rate, string expected)
+        => Assert.Equal(expected, ExperienceQueryHandler.FormatExpRate(rate));
 
     // ----- gating ------------------------------------------------------
 

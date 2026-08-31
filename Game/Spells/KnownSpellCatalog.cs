@@ -210,6 +210,25 @@ public sealed class KnownSpellCatalog
         return null;
     }
 
+    // Resolve a Spells.Number to its raw Targets scope code across the entire Spells
+    // table (no class / magery / learnable filter). Lets a cast-on-use item be
+    // classified by the spell it casts — a whole-party item buff (Targets 10 / 13)
+    // vs a single-target one — without the cast spell needing to be class-learnable.
+    // Returns null when no row has that number.
+    public int? GetTargetsByNumber(int spellNumber)
+    {
+        if (spellNumber < 1) return null;
+        JsonDocument? doc = _cache.GetRawTable("Spells");
+        if (doc is null) return null;
+
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            if (ReadInt(row, "Number") != spellNumber) continue;
+            return ReadInt(row, "Targets");
+        }
+        return null;
+    }
+
     // Resolve a Spells.Number to its SpellFormulaInput across the entire Spells
     // table (no class / magery / learnable filter). Used by the Game Data Items
     // pane to render a weapon's use-cast / proc spell effect without depending
@@ -719,6 +738,8 @@ public sealed class KnownSpellCatalog
             ReqLevel = ReadInt(row, "ReqLevel"),
             EnergyCost = ReadInt(row, "EnergyCost"),
             ManaCost = ReadInt(row, "ManaCost"),
+            Diff = ReadInt(row, "Diff"),
+            AttType = ReadInt(row, "AttType"),
             Abilities = abilities,
         };
     }

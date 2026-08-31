@@ -264,6 +264,30 @@ public sealed class RoomExitParseTests
         Assert.Equal(max, exit.MaxLevel);
     }
 
+    // ----- Alignment gate ("(Alignment: LOW to HIGH)") ---------------
+    // Confirmed from report -144553: the "X to Y" band range gates the exit by
+    // numeric alignment (an evil / good entrance). Stays a plain cardinal step.
+
+    [Fact]
+    public void AlignmentGate_ParsesRange_StaysNoneHint()
+    {
+        Assert.True(RoomExit.TryParseWire("3/496 (Alignment: Neutral to Fiend)", out RoomExit exit));
+        Assert.Equal(RoomExitHint.None, exit.Hint);   // still a plain cardinal step
+        Assert.True(exit.HasAlignmentGate);
+        Assert.Equal((0, 300), exit.AlignmentGate!.Value);   // Neutral..Fiend numeric window
+        Assert.False(exit.HasLevelGate);
+        Assert.False(exit.HasClassGate);
+    }
+
+    [Fact]
+    public void AlignmentGate_SingleBand_StaysUngated()
+    {
+        // Only the confirmed "X to Y" range form gates; a bare "(Alignment: Good)"
+        // stays ungated (deferred) rather than guessing its semantics.
+        Assert.True(RoomExit.TryParseWire("5/55 (Alignment: Good)", out RoomExit exit));
+        Assert.False(exit.HasAlignmentGate);
+    }
+
     [Theory]
     [InlineData(40, 0,  "Level 40+")]
     [InlineData(0,  3,  "Level ≤3")]

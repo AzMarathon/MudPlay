@@ -53,15 +53,26 @@ public sealed class AutoSearchManager : IDisposable
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _isDemandActive;
     private readonly Func<bool> _hasEngageableHostiles;
+    // Whether the client will ACTUALLY fight the hostile (auto-attack armed) —
+    // distinct from _hasEngageableHostiles, which is a pure "is a hostile here"
+    // probe. Deferring the search for combat only makes sense when a fight will
+    // happen and clear the room; with auto-combat off, no attacks fly, the `sea`
+    // wouldn't be lost, and holding just deadlocks the walker (report -074607).
+    private readonly Func<bool> _isCombatEngaging;
     private readonly Func<bool> _hasGetEngineArmed;
+    private readonly Func<bool> _hasQueuedMoves;
     private readonly MovementCoordinator? _coordinator;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
     private readonly DispatcherTimer _classify;
     private readonly DispatcherTimer _settle;
 
-    // A search is owed for the current room (armed on entry while a gate is on).
-    private bool _owed;
+    // The room a search is owed for, keyed to its confirmed identity — armed on entry
+    // while a gate is on, null when nothing is owed. Keying by room (not a bare bool)
+    // means a search armed for one room can never fire after we've moved to another,
+    // and a null-room (death) transition clears it rather than firing in the wrong
+    // room (report paradigm-20260820-090736 Face B).
+    private RoomKey? _owedFor;
     // A fight was seen this room — the search waits for it to clear and the Search
     // gate is held meanwhile.
     private bool _deferredForCombat;
@@ -72,7 +83,9 @@ public sealed class AutoSearchManager : IDisposable
         Func<bool> isEnabled,
         Func<bool>? isDemandActive = null,
         Func<bool>? hasEngageableHostiles = null,
+        Func<bool>? isCombatEngaging = null,
         Func<bool>? hasGetEngineArmed = null,
+        Func<bool>? hasQueuedMoves = null,
         MovementCoordinator? coordinator = null,
         LogService? log = null)
     {
@@ -80,7 +93,11 @@ public sealed class AutoSearchManager : IDisposable
         _isEnabled = isEnabled;
         _isDemandActive = isDemandActive ?? (static () => false);
         _hasEngageableHostiles = hasEngageableHostiles ?? (static () => false);
+        // Default true so an unwired manager (tests) keeps the original defer-on-
+        // hostile behaviour; production wires the auto-attack-aware flag.
+        _isCombatEngaging = isCombatEngaging ?? (static () => true);
         _hasGetEngineArmed = hasGetEngineArmed ?? (static () => false);
+        _hasQueuedMoves = hasQueuedMoves ?? (static () => false);
         _coordinator = coordinator;
         _log = log;
         _classify = new DispatcherTimer { Interval = ClassifyDelay };
@@ -88,6 +105,17 @@ public sealed class AutoSearchManager : IDisposable
         _settle = new DispatcherTimer { Interval = SearchSettle };
         _settle.Tick += (_, _) => OnSettleElapsed();
     }
+
+    // True from the moment a `sea` goes out until its settle window elapses — the
+    // round-trip during which the surfaced "You notice" survey comes back. This is
+    // the ONLY window in which a search re-exposes concealed coin/items, so the
+    // stash-room collect guard keys off it: a pile re-revealed here is the one we
+    // just hid (don't re-grab), whereas coin shown on plain room entry or a corpse
+    // drop is visible loot to collect. The settle gate holds the walker meanwhile,
+    // so the window can never straddle a room change (a stale flag can't leak into
+    // the next room's entry survey). False when no loot consumer is armed — nothing
+    // collects then, so there is nothing to suppress.
+    public bool IsRevealInFlight => _settle.IsEnabled;
 
     // Bind the wire-sender — the gate-wrapped engine pipeline from
     // MainWindowViewModel.
@@ -107,14 +135,18 @@ public sealed class AutoSearchManager : IDisposable
     // Genuine room change. Reset per-room state, discard any pending / held search
     // from the room we left, and — when a search is armed — start the classify
     // delay that resolves clear-room-vs-fight.
-    public void OnRoomChanged()
+    public void OnRoomChanged(RoomKey? key)
     {
         _classify.Stop();
         _settle.Stop();
         ReleaseGate("room changed");
         _deferredForCombat = false;
-        _owed = ShouldSearch();
-        if (_owed)
+        // A null room (death → respawn-pending) leaves nothing to search AND must
+        // clear the owed search — otherwise a search deferred in the room we died in
+        // would fire on the death-driven roster wipe, in a room we've already left.
+        if (key is null) { _owedFor = null; return; }
+        _owedFor = ShouldSearch() ? key : null;
+        if (_owedFor is not null)
         {
             // Hold the walker for THIS room while we classify + search. Without the
             // gate a zero-dwell loop steps out in the same synchronous dispatch as
@@ -133,14 +165,17 @@ public sealed class AutoSearchManager : IDisposable
     // the moment the room clears.
     public void OnRoomObserved()
     {
-        if (_hasEngageableHostiles())
+        // Defer only when a hostile is present AND we'll actually fight it — with
+        // auto-attack off we never clear the room, so holding here deadlocks the
+        // walker (report -074607); fall through and let the classify timer search.
+        if (_hasEngageableHostiles() && _isCombatEngaging())
         {
             // Fight in the room — defer the still-owed search past it and hold the
             // walker so it can't step out before we've searched the cleared room.
-            // Only one search per room: once it has fired (_owed cleared), a fight
+            // Only one search per room: once it has fired (_owedFor cleared), a fight
             // that wanders in later doesn't re-arm another.
             _classify.Stop();
-            if (_owed && !_deferredForCombat)
+            if (_owedFor is not null && !_deferredForCombat)
             {
                 _deferredForCombat = true;
                 AssertGate("hostiles present — search deferred");
@@ -159,8 +194,8 @@ public sealed class AutoSearchManager : IDisposable
     internal void OnClassifyElapsed()
     {
         _classify.Stop();
-        if (!_owed || _deferredForCombat) return;
-        if (_hasEngageableHostiles())
+        if (_owedFor is null || _deferredForCombat) return;
+        if (_hasEngageableHostiles() && _isCombatEngaging())
         {
             // A fight revealed right at the classify boundary — hand off to the
             // defer path. The Search gate we're already holding stays asserted and
@@ -181,9 +216,24 @@ public sealed class AutoSearchManager : IDisposable
 
     private void FireSearch(bool postCombat)
     {
-        _owed = false;
-        _deferredForCombat = false;
         _classify.Stop();
+
+        // Moves still queued → the player hasn't settled in this room (a transit room
+        // of an n;e;n burst). A `sea` only searches the server's current room, so it
+        // would land in whichever room they stop in; skip this room's search entirely
+        // and let the room they settle in arm + fire its own. Gated engine travel
+        // drains the queue at each room, so every room still gets its one search.
+        if (_hasQueuedMoves())
+        {
+            _owedFor = null;
+            _deferredForCombat = false;
+            _log?.Debug(LogCategory, "owed search skipped — moves still queued (transit room)");
+            ReleaseGate("moves queued — skip transit-room search");
+            return;
+        }
+
+        _owedFor = null;
+        _deferredForCombat = false;
 
         if (!ShouldSearch())   // toggle went off between arming and firing
         {

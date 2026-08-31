@@ -143,16 +143,36 @@ public sealed record ItemFinderEntry
     // Carry-capacity bonus (Abil 96) — distinct from the item's own weight (Encum).
     public int EncumBonus { get; init; }
 
-    // Thief / caster skill bonuses (Abil 27 / 70 / 67 / 40+179 / 37+180).
+    // Thief / caster skill bonuses (Abil 27 / 70 / 67 / 40+179 / 37+180 / 39).
     public int Stealth { get; init; }
     public int Spellcasting { get; init; }
     public int Quickness { get; init; }
     public int Traps { get; init; }
     public int Picklocks { get; init; }
+    public int Thievery { get; init; }
 
     // Alignment protection (Abil 24 / 25).
     public int ProtEvil { get; init; }
     public int ProtGood { get; init; }
+
+    // VileWard (Abil 1113) — an AC bonus whose magnitude scales with the wearer's
+    // own evil; the exact scale is unconfirmed, so this is the raw item value for
+    // planning/ranking, not a modelled AC contribution.
+    public int VileWard { get; init; }
+
+    // Combat defense (Abil 34 / 36 / 72).
+    public int Dodge { get; init; }
+    public int MagicResist { get; init; }
+    public int ShockShield { get; init; }
+
+    // Martial-arts (Mystic) bonuses — items rarely carry these, but a few do
+    // (Abil 89-94).
+    public int PunchAccy { get; init; }
+    public int PunchDmg { get; init; }
+    public int KickAccy { get; init; }
+    public int KickDmg { get; init; }
+    public int JumpKickAccy { get; init; }
+    public int JumpKickDmg { get; init; }
 
     // Elemental / shadow resistances (Abil 3 / 5 / 65 / 66 / 147 / 9).
     public int ColdResist { get; init; }
@@ -230,8 +250,19 @@ public sealed record ItemFinderEntry
     public string QuicknessText => Signed(Quickness);
     public string TrapsText => Signed(Traps);
     public string PicklocksText => Signed(Picklocks);
+    public string ThieveryText => Signed(Thievery);
     public string ProtEvilText => Signed(ProtEvil);
     public string ProtGoodText => Signed(ProtGood);
+    public string VileWardText => Signed(VileWard);
+    public string DodgeText => Signed(Dodge);
+    public string MagicResistText => Signed(MagicResist);
+    public string ShockShieldText => Signed(ShockShield);
+    public string PunchAccyText => Signed(PunchAccy);
+    public string PunchDmgText => Signed(PunchDmg);
+    public string KickAccyText => Signed(KickAccy);
+    public string KickDmgText => Signed(KickDmg);
+    public string JumpKickAccyText => Signed(JumpKickAccy);
+    public string JumpKickDmgText => Signed(JumpKickDmg);
     public string ColdResistText => Signed(ColdResist);
     public string FireResistText => Signed(FireResist);
     public string StoneResistText => Signed(StoneResist);
@@ -361,8 +392,19 @@ public sealed record ItemFinderEntry
                 Quickness = t.PlusQuickness,
                 Traps = t.PlusTraps,
                 Picklocks = t.PlusPicklocks,
+                Thievery = t.PlusThievery,
                 ProtEvil = t.PlusProtEvil,
                 ProtGood = t.PlusProtGood,
+                VileWard = t.PlusVileWard,
+                Dodge = t.PlusDodge,
+                MagicResist = t.PlusMagicResist,
+                ShockShield = t.PlusShockShield,
+                PunchAccy = t.PlusPunchAccy,
+                PunchDmg = t.PlusPunchDmg,
+                KickAccy = t.PlusKickAccy,
+                KickDmg = t.PlusKickDmg,
+                JumpKickAccy = t.PlusJumpKickAccy,
+                JumpKickDmg = t.PlusJumpKickDmg,
                 ColdResist = t.PlusColdResist,
                 FireResist = t.PlusFireResist,
                 StoneResist = t.PlusStoneResist,

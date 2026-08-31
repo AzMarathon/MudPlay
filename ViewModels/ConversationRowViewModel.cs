@@ -19,6 +19,19 @@ public sealed class ConversationRowViewModel
     public IBrush MessageBrush { get; }
     public bool IsDaySeparator => Entry.Channel == ChatChannel.DaySeparator;
 
+    // Whether this row has a speaker prefix. Actions/emotes and server notices have
+    // none, so the XAML collapses that column — otherwise its margin leaves an extra
+    // gap between the chip and the message.
+    public bool HasSpeaker => !string.IsNullOrEmpty(SpeakerText);
+
+    // Plain-text form of the row for clipboard copy — the line as it reads on screen
+    // (time + who + message), or just the date for a day separator.
+    public string CopyText => IsDaySeparator
+        ? MessageText
+        : string.IsNullOrEmpty(SpeakerText)
+            ? $"{TimestampText}  {MessageText}"
+            : $"{TimestampText}  {SpeakerText} {MessageText}";
+
     public ConversationRowViewModel(ChatLogEntry entry, Func<ChatChannel, IBrush> brushLookup, Func<ChatChannel, IBrush> textBrushLookup)
     {
         Entry = entry;
@@ -27,7 +40,12 @@ public sealed class ConversationRowViewModel
         SpeakerText   = FormatSpeaker(entry);
         MessageText   = entry.Message;
         ChannelBrush  = brushLookup(entry.Channel);
-        MessageBrush  = textBrushLookup(entry.Channel);
+        // Realm / server notices read as one coloured announcement — colour the whole
+        // message the chip's accent (e.g. red) rather than the body brush, which would
+        // leave the sentence white after a red "who". Other channels keep the body brush.
+        MessageBrush  = entry.Channel is ChatChannel.Server or ChatChannel.RealmEvent
+            ? ChannelBrush
+            : textBrushLookup(entry.Channel);
     }
 
     private static string FormatSpeaker(ChatLogEntry entry)
@@ -48,6 +66,12 @@ public sealed class ConversationRowViewModel
         // shape literally). Surface those as "You" so every chat row has
         // a consistent "<who>" prefix.
         string speaker = string.IsNullOrEmpty(entry.Speaker) ? "You" : entry.Speaker!;
+
+        // A directed say names its target so the reader knows who it's aimed at, even
+        // as a third party overhearing it: "Suijin (to Fujin): hi", or "You (to Fujin):
+        // hi" for our own outgoing one.
+        if (!string.IsNullOrEmpty(entry.DirectedTo))
+            return $"{speaker} (to {entry.DirectedTo}):";
 
         // RealmEvent rows read as a sentence ("Raijin entered the Realm")
         // so the trailing colon would feel wrong. Every other channel

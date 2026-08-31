@@ -283,4 +283,49 @@ public sealed class CasterMessageMatcherTests
         Assert.False(m!.TryMatchDamage("Raijin gossips: hi", out int dmg));
         Assert.Equal(0, dmg);
     }
+
+    // ----- TryResolveTarget (hand-typed single-target buff → full member name) -----
+
+    [Fact]
+    public void TryResolveTarget_LegacyTemplate_PullsFullNameFromShorthand()
+    {
+        // We typed `gbls fuj`; the success line names the resolved target in full.
+        // The capture that STARTS WITH what we typed is the target (not the spell).
+        CasterMessageMatcher? m = CasterMessageMatcher.TryCreate("You cast {s} on {s}!");
+        Assert.NotNull(m);
+
+        Assert.True(m!.TryResolveTarget("You cast greater bless on Fujin!", "fuj", out string target));
+        Assert.Equal("Fujin", target);
+    }
+
+    [Fact]
+    public void TryResolveTarget_SemanticTemplate_PrefersPinnedTargetSlot()
+    {
+        CasterMessageMatcher? m = CasterMessageMatcher.TryCreate("You cast {spellname} on {target}!");
+        Assert.NotNull(m);
+
+        Assert.True(m!.TryResolveTarget("You cast greater bless on Fujin!", "fuj", out string target));
+        Assert.Equal("Fujin", target);
+    }
+
+    [Fact]
+    public void TryResolveTarget_ShorthandMatchesNoCapture_ReturnsFalse()
+    {
+        // The line landed on someone whose name doesn't start with what we typed —
+        // not our cast (or an ambiguous / failed one). Don't resolve a target.
+        CasterMessageMatcher? m = CasterMessageMatcher.TryCreate("You cast {s} on {s}!");
+        Assert.NotNull(m);
+
+        Assert.False(m!.TryResolveTarget("You cast greater bless on Goldar!", "fuj", out string target));
+        Assert.Equal(string.Empty, target);
+    }
+
+    [Fact]
+    public void TryResolveTarget_NonMatchingLine_ReturnsFalse()
+    {
+        CasterMessageMatcher? m = CasterMessageMatcher.TryCreate("You cast {s} on {s}!");
+        Assert.NotNull(m);
+
+        Assert.False(m!.TryResolveTarget("Raijin gossips: hi", "fuj", out _));
+    }
 }

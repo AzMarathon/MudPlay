@@ -21,24 +21,26 @@ public readonly record struct ManaRegenRerollConfig(int? Threshold, int Cap);
 // hard-stopping early if the next cast can't be paid without dropping under the
 // buff floor.
 //
-// Purely a state machine driven by two external events: a confirmed roll-spell
-// landing (OnRollSpellLanded, wired from the CastingDirector's buff-confirmation
-// path) and a parsed abil breakdown (AbilBreakdownParser.BreakdownParsed). It
-// owns no timers, no wire access, and no spell classification: the caller only
-// invokes OnRollSpellLanded for a spell it has already resolved to a code-145
-// roll spell, and supplies the query / recast / afford actions. This keeps the
-// decision logic deterministic and unit-testable.
+// Purely a state machine driven by two external events: the roll spell being CAST
+// (OnRollSpellLanded, wired from the CastingDirector's send path — NOT the
+// applied-line confirm, which never fires for a roll spell because it lands via a
+// shared condition that can't be mapped back to the specific spell) and a parsed
+// abil breakdown (AbilBreakdownParser.BreakdownParsed). It owns no timers, no wire
+// access, and no spell classification: the caller only invokes OnRollSpellLanded
+// for a spell it has already resolved to a code-145 roll spell, and supplies the
+// query / recast / afford actions. This keeps the decision logic deterministic and
+// unit-testable.
 //
 // The Stock realm has no abil breakdown to read, so the reroll path is
 // Paradigm-only; the caller gates construction / invocation on the active
 // realm. Stock infers roll quality from observed regen ticks on a separate
 // path.
 //
-// Cycle life: a landing while idle opens a cycle and zeroes the reroll counter;
-// a landing mid-cycle is the recast we asked for and preserves the counter.
+// Cycle life: a cast while idle opens a cycle and zeroes the reroll counter;
+// a cast mid-cycle is the recast we asked for and preserves the counter.
 // Either way it fires one abil 145 query. The returned breakdown decides accept
 // (roll >= threshold, cap reached, or floor hit) or reroll (recast, counter++).
-// Serial by construction — each abil read is bracketed by a landing, so there
+// Serial by construction — each abil read is bracketed by a cast, so there
 // is never more than one query in flight.
 public sealed class ManaRegenReroller : IDisposable
 {
@@ -66,11 +68,16 @@ public sealed class ManaRegenReroller : IDisposable
     private readonly Action _sendAbilQuery;
     private readonly Action<string> _recast;
     private readonly Func<bool> _canAffordReroll;
+    // True on the Stock realm — there's no `abil 145`, so roll quality is judged from
+    // the observed passive mana TICK (an MP jump on the statline) instead. The
+    // threshold then means the desired tick, not the rolled percent.
+    private readonly Func<bool> _useTickMonitor;
     private readonly LogService? _log;
 
     private string? _activeShort;
     private int _rerollsUsed;
     private bool _awaitingAbil;
+    private bool _awaitingTick;
     private bool _disposed;
 
     public ManaRegenReroller(
@@ -79,6 +86,7 @@ public sealed class ManaRegenReroller : IDisposable
         Action sendAbilQuery,
         Action<string> recast,
         Func<bool> canAffordReroll,
+        Func<bool> useTickMonitor,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(parser);
@@ -87,6 +95,7 @@ public sealed class ManaRegenReroller : IDisposable
         _sendAbilQuery = sendAbilQuery;
         _recast = recast;
         _canAffordReroll = canAffordReroll;
+        _useTickMonitor = useTickMonitor;
         _log = log;
         _parser.BreakdownParsed += OnBreakdown;
     }
@@ -99,11 +108,17 @@ public sealed class ManaRegenReroller : IDisposable
     // idle. For diagnostics / tests.
     public int RerollsUsed => _rerollsUsed;
 
-    // The roll spell spellShort just landed (confirmed via its caster / applied
-    // message). A landing while idle opens a new cycle with the reroll counter
-    // reset; a landing mid-cycle is the recast we triggered and keeps the
-    // counter. Either way, fire an abil 145 query to read what it rolled. No-op
-    // (and abandons any cycle) when rerolling is disabled.
+    // The roll quality last judged — the abil-145 spells value (Paradigm) or the
+    // observed tick (Stock). Null until the first roll is evaluated. For the bug
+    // report, so a "reroll isn't working" capture shows what value the engine saw.
+    public int? LastObservedValue { get; private set; }
+
+    // The roll spell spellShort was just CAST (from the CastingDirector's send path;
+    // the cast is already on the wire, so the abil query below reads the fresh roll).
+    // A cast while idle opens a new cycle with the reroll counter reset; a cast
+    // mid-cycle is the recast we triggered and keeps the counter. Either way, fire an
+    // abil 145 query to read what it rolled. No-op (and abandons any cycle) when
+    // rerolling is disabled.
     public void OnRollSpellLanded(string spellShort)
     {
         if (string.IsNullOrWhiteSpace(spellShort)) return;
@@ -132,9 +147,19 @@ public sealed class ManaRegenReroller : IDisposable
                 $"recast landed spell={spellShort} reroll={_rerollsUsed}/{cfg.Cap}");
         }
 
-        _awaitingAbil = true;
-        _log?.Debug(LogCategory, "querying abil 145 for rolled mana-regen contribution");
-        _sendAbilQuery();
+        // Paradigm reads the rolled contribution off `abil 145`; Stock instead waits
+        // for the next observed passive mana tick (an MP jump on the statline).
+        if (_useTickMonitor())
+        {
+            _awaitingTick = true;
+            _log?.Debug(LogCategory, "awaiting the next passive mana tick to judge the roll");
+        }
+        else
+        {
+            _awaitingAbil = true;
+            _log?.Debug(LogCategory, "querying abil 145 for rolled mana-regen contribution");
+            _sendAbilQuery();
+        }
     }
 
     private void OnBreakdown(AbilBreakdown b)
@@ -143,26 +168,43 @@ public sealed class ManaRegenReroller : IDisposable
         if (b.Code != ManaRegenAbilityCode) return;   // an unrelated abil query — keep waiting
 
         _awaitingAbil = false;
-
-        if (_activeShort is not { } shortCode) return;   // defensive: no active cycle
-
-        ManaRegenRerollConfig cfg = _readConfig();
-        int roll = b.Spells;
         _log?.Debug(LogCategory,
-            $"observed rolled mana-regen contribution spells={roll} (abil total {b.Total})");
+            $"observed rolled mana-regen contribution spells={b.Spells} (abil total {b.Total})");
+        Decide(b.Spells, "roll");
+    }
+
+    // A passive mana tick was observed (Stock): the MP jump IS the roll's quality, so
+    // it stands in for the abil read. Only consumed while a reroll cycle is awaiting a
+    // tick; the caller supplies only CLEAN passive ticks (not while resting / meditating).
+    public void OnManaTickObserved(int tickAmount)
+    {
+        if (!_awaitingTick) return;
+        _awaitingTick = false;
+        _log?.Debug(LogCategory, $"observed passive mana tick={tickAmount}");
+        Decide(tickAmount, "tick");
+    }
+
+    // The shared accept-or-reroll decision. value is the roll's quality — the rolled
+    // percent on Paradigm, the observed tick on Stock — compared against the configured
+    // threshold; reroll while below it, up to the cap, hard-stopping at the mana floor.
+    private void Decide(int value, string valueLabel)
+    {
+        if (_activeShort is not { } shortCode) return;   // defensive: no active cycle
+        LastObservedValue = value;
+        ManaRegenRerollConfig cfg = _readConfig();
 
         // Threshold went null mid-cycle (settings edit) — accept and drop out.
         if (cfg.Threshold is not { } threshold)
         {
-            _log?.Info(LogCategory, $"reroll disabled mid-cycle — accepting spell={shortCode} roll={roll}");
+            _log?.Info(LogCategory, $"reroll disabled mid-cycle — accepting spell={shortCode} {valueLabel}={value}");
             Reset();
             return;
         }
 
-        if (roll >= threshold)
+        if (value >= threshold)
         {
             _log?.Info(LogCategory,
-                $"roll accepted spell={shortCode} roll={roll} >= threshold={threshold} " +
+                $"accepted spell={shortCode} {valueLabel}={value} >= threshold={threshold} " +
                 $"after {_rerollsUsed} reroll(s)");
             Reset();
             return;
@@ -171,7 +213,7 @@ public sealed class ManaRegenReroller : IDisposable
         if (_rerollsUsed >= cfg.Cap)
         {
             _log?.Info(LogCategory,
-                $"reroll cap reached spell={shortCode} roll={roll} < threshold={threshold} " +
+                $"reroll cap reached spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
                 $"cap={cfg.Cap} — accepting");
             Reset();
             return;
@@ -180,7 +222,7 @@ public sealed class ManaRegenReroller : IDisposable
         if (!_canAffordReroll())
         {
             _log?.Info(LogCategory,
-                $"reroll stopped at mana floor spell={shortCode} roll={roll} < threshold={threshold} " +
+                $"reroll stopped at mana floor spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
                 $"after {_rerollsUsed} reroll(s)");
             Reset();
             return;
@@ -188,7 +230,7 @@ public sealed class ManaRegenReroller : IDisposable
 
         _rerollsUsed++;
         _log?.Info(LogCategory,
-            $"rerolling spell={shortCode} roll={roll} < threshold={threshold} " +
+            $"rerolling spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
             $"attempt {_rerollsUsed}/{cfg.Cap}");
         _recast(shortCode);
     }
@@ -200,6 +242,7 @@ public sealed class ManaRegenReroller : IDisposable
         _activeShort = null;
         _rerollsUsed = 0;
         _awaitingAbil = false;
+        _awaitingTick = false;
     }
 
     public void Dispose()

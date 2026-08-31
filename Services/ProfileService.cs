@@ -18,6 +18,21 @@ public sealed class ProfileService
     // explicit Close.
     public CharacterProfile? Current { get; private set; }
 
+    // Decide whether a stored CharacterProfile.Name (the in-game character name — see
+    // CurrentProfileName below for why that's distinct from the profile FILE label)
+    // should be healed from the authoritative `stat` screen, and to what. Returns the
+    // name to store — the full live "Given Family" name — when they differ, or null to
+    // leave it (identical name → no write → no Save churn; blank stat name → nothing to
+    // heal from). Name is otherwise only ever written on create/rename, so a profile
+    // COPIED from another character keeps the old name until this heals it, mis-tagging
+    // "self" in every consumer (report stock-20260828-104653). Pure so it's unit-tested
+    // directly; AppServices' stat-name handler applies the result.
+    public static string? HealedCharacterName(string? currentName, string? statName)
+        => string.IsNullOrWhiteSpace(statName)
+           || string.Equals(currentName, statName, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : statName;
+
     // Profile-name identifier (filename without extension) of the loaded
     // profile, or null when the loaded profile is a blank in-memory draft that
     // hasn't been saved yet. Distinct from Current.Name because the in-game

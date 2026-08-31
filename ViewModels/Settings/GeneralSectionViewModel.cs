@@ -95,6 +95,21 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _scaleTerminalToWindow;
     [ObservableProperty] private bool _typeToTerminalFromOtherWindows = true;
     [ObservableProperty] private bool _showStartupMudAnimation = true;
+    // Install-global (GlobalSettings.SnapWindows), read live by WindowSnapManager.
+    [ObservableProperty] private bool _snapWindows = true;
+
+    // Buff Watchdog window layout — where the config table sits relative to the timer
+    // bars. Persisted on the top-level CharacterProfile.BuffWatchdogLayout; the Buff
+    // Watchdog reads it live (ProfileMutated) and reflows.
+    public IReadOnlyList<BuffLayoutOption> BuffWatchdogLayoutOptions { get; } = new BuffLayoutOption[]
+    {
+        new("Config on top", BuffWatchdogLayout.ConfigTop),
+        new("Config on bottom", BuffWatchdogLayout.ConfigBottom),
+        new("Config on left", BuffWatchdogLayout.ConfigLeft),
+        new("Config on right", BuffWatchdogLayout.ConfigRight),
+    };
+
+    [ObservableProperty] private BuffLayoutOption? _selectedBuffWatchdogLayout;
 
     // PlayerCleanupDays moved to Settings → Other per user direction.
     // GlobalSettings.PlayerCleanupDays remains the canonical store —
@@ -322,6 +337,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             // doesn't edit it, and Apply rebuilds GeneralSettings from scratch, so
             // without carrying it forward a Save here would reset it to false.
             DisableHangups                  = existing.DisableHangups,
+            // Same carry-through for the live "Sprint Mode" toolbar toggle.
+            SprintMode                      = existing.SprintMode,
             ReEnableAutoCombatOnReconnect   = ReEnableAutoCombatOnReconnect,
             ReEnableAutoNukeOnReconnect     = ReEnableAutoNukeOnReconnect,
             ReEnableAutoHealRestOnReconnect = ReEnableAutoHealRestOnReconnect,
@@ -337,6 +354,14 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
 
         profile.Settings ??= new();
         profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+
+        // Buff Watchdog layout is a top-level per-character field; write it straight
+        // onto the profile (not the DTO). The open Buff Watchdog reflows off the
+        // ProfileMutated notice fired after Save below — but only when it actually
+        // changed, since this tab otherwise deliberately avoids the mutated fan-out.
+        BuffWatchdogLayout newLayout = SelectedBuffWatchdogLayout?.Value ?? BuffWatchdogLayout.ConfigTop;
+        bool layoutChanged = profile.BuffWatchdogLayout != newLayout;
+        profile.BuffWatchdogLayout = newLayout;
 
         // Auto-train's boot flag isn't part of AutoMode — it lives in the
         // "AutoTrainer" entry the Auto-Trainer tab owns. Read-modify-write only
@@ -376,7 +401,15 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // Save fires GlobalSettingsChanged, so the live map (NavigationViewModel
         // listens) repaints with the new colours / thickness immediately.
         _globalSettings.Current.NavLines = SnapshotNavLines();
+        // Window snapping is install-global too; WindowSnapManager reads it live off
+        // the same GlobalSettings, so this is all the wiring the toggle needs.
+        _globalSettings.Current.SnapWindows = SnapWindows;
         _globalSettings.Save();
+
+        // A plain profile Save fires neither ProfileLoaded nor ProfileMutated, so the
+        // open Buff Watchdog wouldn't pick up a layout change. Nudge it only when the
+        // layout actually changed, to avoid firing the mutated fan-out on every Save.
+        if (layoutChanged) _profile.NotifyMutated();
 
         ClearDirty();
     }
@@ -429,6 +462,14 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         NavLineStyles? navLines = _globalSettings.Current.NavLines;
         foreach (NavLineStyleRowViewModel row in NavLineRows)
             row.Load(navLines?.Get(row.Kind));
+
+        // Window snapping is Global-tier — reflect the live GlobalSettings value.
+        SnapWindows = _globalSettings.Current.SnapWindows;
+
+        // Buff Watchdog layout is a top-level per-character field (not in the DTO).
+        BuffWatchdogLayout layout = _profile.Current?.BuffWatchdogLayout ?? BuffWatchdogLayout.ConfigTop;
+        SelectedBuffWatchdogLayout = BuffWatchdogLayoutOptions.FirstOrDefault(o => o.Value == layout)
+                                     ?? BuffWatchdogLayoutOptions[0];
 
         SelectedFontFamily = FontFamilyOptions.FirstOrDefault(o => o.Uri == dto.TerminalFontFamily)
                              ?? FontFamilyOptions[0];
@@ -563,8 +604,22 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnScaleTerminalToWindowChanged(bool value)  => Dirty();
     partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();
     partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
-    partial void OnSelectedFontFamilyChanged(FontFamilyOption? value) => Dirty();
-    partial void OnSelectedFontSizeChanged(FontSizeOption? value)     => Dirty();
+    partial void OnSnapWindowsChanged(bool value)                    => Dirty();
+    partial void OnSelectedBuffWatchdogLayoutChanged(BuffLayoutOption? value) => Dirty();
+    // Live preview: push straight to the terminal canvas as the picker
+    // changes, before Save/Cancel commit the choice. Discard reverts by
+    // reloading from disk (LoadFromProfile), which re-fires these handlers
+    // with the saved value and so un-previews it.
+    partial void OnSelectedFontFamilyChanged(FontFamilyOption? value)
+    {
+        AppServices.Current.Display.FontFamily = value?.Uri ?? DisplayConfig.DefaultFontFamily;
+        Dirty();
+    }
+    partial void OnSelectedFontSizeChanged(FontSizeOption? value)
+    {
+        AppServices.Current.Display.FontSize = value?.Value ?? DisplayConfig.DefaultFontSize;
+        Dirty();
+    }
     partial void OnSelectedNavTooltipFontFamilyChanged(FontFamilyOption? value) => Dirty();
     partial void OnSelectedNavTooltipFontSizeChanged(FontSizeOption? value)     => Dirty();
     partial void OnAmAutoCombatChanged(bool value)           => Dirty();
@@ -601,6 +656,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         if (keep != 2 && IsTaskBeginAutoLair) IsTaskBeginAutoLair = false;
     }
 }
+
+// A labelled Buff Watchdog layout choice for the General-tab dropdown.
+public sealed record BuffLayoutOption(string Label, BuffWatchdogLayout Value);
 
 // Font-family picker row: the label shown in the General-tab dropdown and the
 // avares:// URI persisted into GeneralSettings.TerminalFontFamily.

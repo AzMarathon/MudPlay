@@ -2,6 +2,484 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.38.0
+
+- Spell Book gains a **Difficulty** column (between Mana and Effect): your real chance to land the cast — Spellcasting + the spell's difficulty, capped at 98% (100% for Kai) — or "—" when you're not a caster / stats aren't read yet
+- Spell Game Data view overhauled: human-readable field labels (Required Level, Mana Cost, Difficulty, Resist Type, School, Cast Code, …) instead of raw column names
+- Spell Game Data view no longer triple-lists the same affect — a level-scaling stat affect now shows one row with its real range ("AC Blur +5 → +12"), replacing the meaningless "0" row and the duplicate "Magnitude" row
+- Spell DR now shown as the value actually gained (raw ÷ 10, e.g. "+1.0") everywhere it surfaces, not the raw store value ("+10")
+- Spell Energy Cost now spells out its fire rate: 0 → "(between rounds)", otherwise "(up to N times per round)" where N = 1000 ÷ energy cost
+- Damage spells now lead the Game Data tab with an interactive damage calculator: a Level picker (learned level → cap) recomputes min/max damage live, plus Magic-resist and elemental-resist pickers (where they apply) that show how a resistant target cuts the damage — replacing the old two contradictory damage numbers + scaling row
+- Spell Book Difficulty header shows the equation ("Spellcasting N + spell difficulty"); the clipped Difficulty column header is fixed
+- RemovesSpell entries collapse into one linked "Removes" row; display-only message-slot rows dropped
+
+## 3.37.3
+
+- Roomba gangpath announcements now include the start/finish date and time, with the sending client's own timezone (a short name like PST/MST/EST for the common North American zones, a numeric UTC offset otherwise) instead of a bare "starting"/"complete" line
+- Sorting's completion announce now reports items sorted AND items inventoried — its recon and final scan already observe every room's floor the same way an Inventory-only run does, so a sort keeps the item-location log just as current
+- `@roomba <item>` replies now include the last-scanned date/time (with timezone) of that item's freshest sighting, so you can tell a fresh location from a stale one
+
+## 3.37.2
+
+- A profile copied from another character now heals its stored character name from the `stat` screen: the app was only ever writing the in-game name on create/rename, so a copied profile kept the old owner's name and mis-identified "self" everywhere it mattered (corpse recovery, party self-detection, remote-command self-echo). The authoritative name from `stat` now updates the profile once, silently, the first time it differs
+- Corpse recovery now matches your corpse against the live self-name rather than the stored profile name, so a stale profile name can't send it hunting the wrong corpse
+- bug reports addressed: stock-20260828-104653
+
+## 3.37.1
+
+- Terminal no longer faux-bolds bright text: SGR "bold" (which MajorMUD uses for room names, hostile-monster names, etc.) is BRIGHT, not heavy — it now renders as a brighter colour at normal weight, matching MegaMUD and the MX437 bitmap default. On vector fonts (Courier New, Liberation Mono, JetBrains Mono) room names and monster names came out visibly heavier than the reference client; they now match. Applies to the main terminal and the Backscroll window
+
+## 3.37.0
+
+- `@where` reply → map flash: when you `@where` another MudPlay user and their client answers with its location, the Navigation map (if open) flashes that room green and centres on it for ~15 seconds, then drifts back to following you. `@where` several people and each answered square lights up at once, each fading on its own 15s timer; the map re-centres on the newest reply. Ignored while the map is closed
+- Tightened the shared `@where`-reply parser to require the MudPlay `{…(map N, room M)…}` wrapper, so a human telepath merely mentioning a room in prose can't be read as a location reply (also hardens the party @where-probe recovery path)
+
+## 3.36.9
+
+- Fixed mana-regen rerolling never firing on Paradigm: a roll spell (mana flux / nature tap) confirms via a shared "mana regenerating" condition that couldn't be mapped back to the specific spell, so the reroll was keyed on a signal that never arrived — it sat on a bad (even negative) roll forever. The reroll now triggers off the cast itself, reads the fresh `abil 145` value, and rerolls / re-checks after each recast
+- "Reroll below" now labeled "Reroll below abil 145" on Paradigm, with a tip noting the rolled value can be negative
+- "Cast before resting for mana" reworked: the buff is now kept up (recast on expiry) only while you're actually resting for mana — through a combat interruption, until mana tops back up — then stops; unchecked still maintains it always
+- Bug report gains a Mana-regen reroll section (roll signal, cycle state, last observed roll value)
+- bug reports addressed: paradigm-20260830-110918
+
+## 3.36.7
+
+- Scale terminal output to fill the window: now scales width and height independently instead of one uniform zoom factor, so the grid fills the entire window on any aspect ratio with no gray bars top/bottom or left/right
+- The zoom ceiling is now an absolute effective size (never renders past 32pt-equivalent, the largest size in the picker) instead of a flat 8x multiplier of whatever size you picked — a small chosen size no longer gets blown up to look identical to a large one; Font Size now visibly matters again. A very large window can leave a small unfilled edge for a small font rather than stretching past that ceiling
+- Zoomed text now renders crisp and antialiased for any real font (JetBrains Mono, system fonts) instead of blowing up as blocky pixels — only the MX437 bitmap font keeps the blocky nearest-neighbour upscale, on purpose, to stay pixel-authentic
+- Terminal font family/size now live-preview on the terminal canvas as you change them in Settings → General, instead of only applying after Save
+- Room-title detection now keeps the bright-cyan line nearest "Obvious exits:" instead of the first one in the block, so an asynchronous bright-cyan player-ability line arriving just before the real title (or a palette that recolors spell text to the same cyan) no longer gets read as the room name and knocks the tracker off course
+- Fixed a hazard route getting permanently stuck demanding a specific counter item (e.g. trollskin boots) even after the player equipped a different item (swamp boots) that protects against the exact same thing — the need now clears the moment ANY item from the hazard's counter group is carried, not just the one the route originally chose to obtain
+- bug reports addressed: paradigm-20260829-154032, paradigm-20260829-203409
+
+## 3.36.1
+
+- Fixed lost gold in the room after a stash room: stash-room auto-collect was suppressed by reading the "current room" too early (a room's coin line is seen before the room is confirmed), so the next room's coin was mis-attributed to the stash room and left on the floor
+- Stash rooms now collect coin that's visible on entry or dropped by a kill; only a pile that a `search` re-reveals (the coin just stashed) is left alone
+- Same fix applied to auto-stash items
+- bug reports addressed: paradigm-20260829-212158
+
+## 3.36.0
+
+- New **Monster Intel** window (View menu / toolbar) — a fast, searchable monster reference that for the first time surfaces a monster's **elemental resistances / vulnerabilities** (Cold/Fire/Stone/Lightning/Water) and its **spell-immunity / hit-magic requirements**, data the auto-combat engine has always computed internally but never showed. Detail panel: Overview, Elemental Defenses, Casts (what elements it can hit you with), Attacks, Loot, Locations (a quick "placed in N rooms / spawns in M lairs" count), and an Automation tab that opens the per-monster overlay editor in place
+- **Character-centric**: a top character bar shows your live level / HP / mana (or Kai), your worn weapon's HitMagic, and your known attack-spell count — updating live as vitals tick or you swap gear / learn a spell; plus **Hittable** / **Castable** list filters that narrow the list to what your weapon can actually hit or a known spell can get past spell immunity
+- **Your Matchup** (live, character-aware): whether your worn weapon is magical enough to hit the monster, a per-element incoming-threat line vs. your own gear's resists, and every attack spell you've learned ranked by effective damage against that specific monster — with a clear reason (spell immunity, full resist, undead-only / living-only targeting) instead of a silently-wrong number
+- **Side-by-side comparison**: Ctrl/Shift-click 2+ monsters to swap the detail panel for a row of comparison cards
+- **Context bar**: the current room's monster roster as clickable chips
+- **Your Observations**: a per-character log of actual combat outcomes against a monster — landed-hit damage extent / average, hit rate, and confirmed "no effect" discoveries — kept visibly separate from the game-data facts and persisted per character; deliberately doesn't infer "resisted" from a low roll (no wire line distinguishes the two)
+- New typed **`MonsterCatalog`** — the active game-data set's Monsters table parsed once into a shared model, the foundation Monster Intel reads from
+- The list opens wider with a draggable, per-character-remembered splitter; every column is independently sortable; AC and DR are separate columns
+
+## 3.35.4
+
+- Fixed a navigation stall: a move refusal ("There is no exit in that direction!", a shut door, etc.) that resolved while a combat gate had the loop paused was silently dropped — the loop would resume by blindly re-sending the exact same already-refused move, get refused again, and then just sit there until an unrelated event nudged it back to life (observed stalls from several minutes to over an hour). The loop now recognizes this on resume and enters recovery (reroutes) immediately.
+- Fixed a related stall: an ambiguous room observation that landed the tracker in Suspect while the loop was paused was also silently dropped — since the tracker can't re-arm Pending from Suspect, a refusal on the blind resend was ALSO dropped, stranding the loop with no way out. It now forwards this case to the recovery gate on resume, exactly like it does in real time.
+- bug reports addressed: paradigm-20260829-084558, paradigm-20260829-104437, paradigm-20260829-111627
+
+## 3.35.1
+
+- Roomba: starting a sweep or an inventory scan now gangpaths the gang house that it's underway, and finishing announces completion with a count — items moved for a sweep, items inventoried for a scan
+- Counts are true unit totals (a stacked pile counts as its full size, not as one operation) and only fire on a genuine finish, never on a manual stop or an interrupted sweep
+
+## 3.35.0
+
+- Unified buffing: **all** automated buffing — self bless, mana/HP regen, "when HP/MA full", room light, and party buffs — now lives in **one list in the Buff Watchdog** window, replacing the Settings → Spells self-bless pickers and the Party-window buff panel
+- Each buff picks who it's cast on with checkboxes — yourself and/or party members; **"All"** is a select-all (you + every member, auto-adapting to the party) that clears the moment you untick any box
+- Timer bars are grouped **by player** (your name, then each member) instead of a Self/Party split
+- Buff Watchdog layout — config table above / below / left / right of the bars — is chosen on Settings → General, with a draggable splitter that stays put as you resize the window (the config pane keeps its size, the timer bars flex to fill)
+- Buff timer bars now sit directly on the pane background — no sunken strip stretching behind the short bars, no full-width row dividers
+- Buff Watchdog player sections use your real **in-game character name**, not the profile name
+- A configured buff that isn't set to recast on anyone and has no live timer is no longer listed — only maintained or currently-up buffs show a bar
+- A whole-party buff now shows a bar under **each member who was in the party when it was cast**; a member who swaps in afterwards reads **not up**, so you can see who's actually covered (recast stays driven by your own timer)
+- Hand-casting a single-target buff at a party member (`gbls fuj`) now lights up **that member's** bar — the success line's full name is matched back to whoever you targeted, so a shorthand still resolves correctly
+- Add-buff dialog carries per-slot conditions: only-when-HP/MA-full (fires at your rest-max, not literal full), only-when-dark for light spells, and — for a mana-regen roll spell — cast-before-resting plus the reroll threshold / max-rerolls
+- Mana-regen rerolling reads its config from the buff slot (works on Paradigm via `abil 145`); the auto-light system reads the room-light spell from the buff list
+- Your full buff plan is written to the program log on load / edit (and captured in the bug report) so a "buffs aren't working" report shows exactly how they're set up
+- Existing self-bless / regen / light / party-buff configs are migrated into the new list automatically
+
+## 3.34.0
+
+- Party blessing overhaul: buff slots moved from Settings → Party into a live **Party Buffs** panel in the Party window — add/remove slots, pick a learned buff, set a per-slot recast timer
+- Whole-party buffs get a single on/off; single-target buffs bless **all members** or a checklist of specific players (targeting replaces the old per-class checkboxes)
+- Single-target casts now fire only for a member who is **both in your party and in the room** — never at someone who left, was uninvited, or wandered off; targets persist by name across parties dissolving and reforming
+- Party Buffs panel is a compact table: **＋ Add buff** opens a picker (spell + recast timer), each slot has ✎ edit / ⨯ remove, targeting is chosen inline, it's styled to match the member list, and it's hidden entirely for a class with no party-buff spells
+- Settings → Party keeps the *bless while resting / during combat* gates, plus a **Party Buffs panel position** option (Right / Below / Left)
+- Party Buffs panel is now an aligned grid: edit/remove at the left, a `bless - 15s` label, an All/On toggle, and a checkbox column per party member (names as headers); whole-party buffs read "Party Wide" across the columns
+- A given party buff is one slot — a spell already slotted drops out of the Add picker, so it can't be double-added (which was double-tracking its recast timer in the Buff Watchdog)
+- Party Buffs can now be a **cast-on-use item** (e.g. a shimmering greatsword casting a party-wide bless): the picker offers whole-party cast items, auto-detected from the item's spell — a single-target item can't be aimed at a member, so only party-wide ones qualify
+- Buff Watchdog now shows whole-party (and item) party buffs, not just single-target ones, and gives a single-target buff **one timer row per member** (each member is cast individually, so each tracks its own recast) instead of collapsing them into one
+- Checking a member for a buff now queues the cast immediately (assume-uncast) instead of waiting for the next idle tick
+- Party window: buff panel hidden for a class with no party buffs no longer leaves the window stuck at the panel-sized width; tighter member columns with centered, truncated names
+- Fixed: the Party Buffs panel no longer appears for a class with no party-buff spells — a stray blank slot is pruned on load instead of forcing the panel open
+- Fixed: the Game Data → Players list hid the wrong person when a profile was copied from another character — it now identifies "self" by the live `stat` name, not the stored profile name, so a copied profile no longer omits the real other player from your player records
+- Fixed: single-target party buffs now target by **party membership** (a MajorMUD party is always in one room), not the room's `Also here:` list — which never lists the **leader you follow** (shown as "You are following …") and so silently blocked the leader's bless every round
+- A member who's **hiding** (the cast returns "You do not see … here!") is now backed off — the Buff Watchdog shows **"hidden — can't target"** — and retried when you move or they reappear, instead of re-firing the failing cast every round
+- Unticking a member you've already blessed no longer hides their Buff Watchdog timer — the running buff's countdown stays until it actually expires (unticking only stops future recasts)
+- Death and disconnect now match the game: **your death** clears your self-buff timers, a **party member's death** clears the timers you hold on them (death wipes buffs); and when **you** disconnect, party members' timers keep counting down (they stayed online) while only your own self-buff timers reset on reconnect — instead of freezing/preserving everyone's
+- Buff Watchdog: a **✕** on each live timer bar manually clears that buff timer (marks it off — a still-due buff recasts, a stale one just drops)
+- The Party Buffs panel keeps its table layout when docked Below or Left (content pinned to its natural width instead of stretching across the window)
+- bug reports addressed: stock-20260828-104653, stock-20260828-113206, stock-20260828-124347
+
+## 3.33.0
+
+- Equipment Manager: a gear slot holding an item your character can't wear (alignment / level / class) is flagged red with a ⚠ and skipped on swaps, instead of the engine repeatedly bonking the game with a wear it refuses
+- Equipment Manager: when the game refuses a wear/wield ("You may not wear that item!" / "You may not use that weapon." — e.g. an alignment-drift EP-zap), the slot is blocked and a terminal notice tells you to adjust the set; change that slot to clear it
+- Bug report: new "Equipment slot blocks" section listing any unwearable set slots
+
+## 3.32.0
+
+- Game Data menu: new **Modify avoid/stash rooms…** editor listing your avoid rooms and stash rooms together, tagged by type with map/room and name
+- Quick-add a room by type + map/room number, remove selected rows (multi-select), Save to apply or Cancel to discard
+- Navigation Management → Go To tab: each saved room now shows its map/room number after the name
+
+## 3.31.3
+
+- Combat: after a disconnect/reconnect mid-fight, the character resumes attacking instead of standing there taking hits — a between-round survival cast could leave an "attack owed" latch waiting on a *Combat Off* that was lost with the connection, so the stale target/latch is now cleared on disconnect (like it already is on death) and the reconnect's room-entry re-engages clean
+- Combat: toggling **AutoCombat off then back on** mid-fight to un-stick a stalled fight now actually works — turning it back on re-evaluates the current room (it used to re-evaluate only on the off side), so the engine re-picks and resumes attacking the monster still in the room
+- bug reports addressed: paradigm-20260827-203548, paradigm-20260827-203644
+
+## 3.31.1
+
+- Roomba: `@roomba <item>` now shows **each room's own quantity** next to its locator (e.g. `15/12 (3), 15/13 (2)`), not just the summed total — so a high total for a hidden item can be told apart as a genuinely scattered stash vs one room's count looking wrong. (The merge already takes the max of repeated searches rather than summing; this adds the per-room diagnostic and pins that merge behavior with tests)
+
+## 3.31.0
+
+- Item Finder: the trial-set panel is now **Gear Finder**, and **Find Best searches whatever the results grid currently shows** instead of the whole catalog — so "best AC in Leather" for a plate-capable class is finally possible by narrowing Armour Type first (leave the filters default and it searches everything, as before)
+- Item Finder: Find Best's criterion dropdown gained many options (AC/DR combo, Dodge, Magic Resist, ShockShield, VileWard, backstab, the three martial-arts strikes, Thievery, and more), each with a matching results-grid column; a new **Effective AC vs Evil** criterion scores `AC + Prot-Evil` (Prot-Evil is a confirmed 1 AC/point vs evil monsters). VileWard is shown as the item's raw value — its AC scaling with the wearer's own evil isn't modelled
+- Item Finder: a **search order** — chain several criteria (e.g. VileWard, then AC, then Spellcasting) via "+ Add to search order"; Find Best resolves them highest-priority-first, each pass only filling slots the earlier ones left unresolved
+- Item Finder: a **Target weight** dropdown (None/Light/Medium/Heavy) caps Find Best's picks so the projected loadout's encumbrance stays within the chosen band, using the live character's carry capacity
+- Item Finder: each slot dropdown option now shows its stat line on hover, not just the current pick
+
+## 3.30.2
+
+- Toolbar buttons no longer steal keyboard focus — after clicking one, the **spacebar** (and every keystroke) goes to the terminal as before, instead of re-toggling the button
+- Window **hotkeys register on the first press** again — keyboard focus now sits on the terminal from launch, so a shortcut no longer needs a second press to take (a focus issue seen on Windows)
+
+## 3.30.0
+
+- Navigation: the **Choose a route** picker gains a **Show steps…** button — click a route, then Show steps to see the full start-to-finish command sequence it will execute, every **detour** included (a lever pulled in another room, a winch cranked, a door opened), each as `12/431 Tower < s` (the room you're in, then the command sent). A gate the route must **buy/ask/hunt** an item to pass shows as its own step at that gate. It's the same expansion the walker runs, so what you read is what it does
+
+## 3.29.11
+
+- Navigation: the top status line now says **why** an engine is held, folded right into the one line — e.g. *"Looping Ring - step 4 of 12 on lap 3 — resting (low HP)"* or *"Walking to (12/431) Tower — party asked to wait"* (the state chip already shows Fighting / Paused, so those aren't repeated on the line). A route that's **queued but not moving** names its hold (a common one: **auto-engines off (Auto-All)**), and every movement gate that used to show a raw internal name now reads in plain English
+- Navigation: loop and Auto-Lair **failures now surface their reason** instead of going silent — a blocked loop names the door / winch / hidden exit + room, and an Auto-Lair whose approach keeps failing shows *"retrying: …"* rather than sitting on a mute "Approaching"
+- Navigation: the **"Lost — couldn't recover"** dialog now names the last room the engine was sure of, so you have a concrete place to right-click **"I am here"**
+
+## 3.29.9
+
+- Windows: panel windows now snap **flush** to each other instead of leaving a small gap — the snap accounts for the invisible resize border Windows includes in a window's frame (Linux/macOS were already flush and are unchanged)
+- Windows: minimizing everything with **Win+D** (show desktop) then restarting the client no longer scrambles where the extra panes re-open — a minimized window's bogus off-screen position is no longer saved over its real spot
+- bug reports addressed: paradigm-20260827-062950, paradigm-20260827-081318
+
+## 3.29.7
+
+- Combat: hunting the same species room-to-room, the **area-debuff** slot now fires in every room again — it was silently skipped after the first, because the room's per-room "already debuffed" tags carried into the next identical room (every crab shares the same name), so a back-to-back populated loop never reset them. The per-room cast economy is now cleared on each move, so the AoE debuff opens each room exactly once as configured
+- bug reports addressed: paradigm-20260827-082106
+
+## 3.29.6
+
+- Combat: an AoE that **wipes the whole room** no longer leaves a ~6s pause before the next action — when the round's kills account for every hostile the room still lists, the client drops the stale roster immediately so movement / loot / rest resume on the CR round-trip (~1s) instead of waiting out the post-combat idle-stall watchdog. A *partial* kill still waits (a survivor has to be confirmed gone before the walker moves on)
+- bug reports addressed: paradigm-20260827-081208
+
+## 3.29.5
+
+- Combat (life-drain slot): the drain now **releases at the trigger** — it fires each round while HP is at/under the "Heal when ≤ HP" mark and hands the round straight back to your normal attack the instant HP recovers above it. The old hysteresis band pinned to 100% HP at a high trigger, so once engaged it drained you all the way to full (DTCH firing well above 80% HP)
+- Combat (life-drain slot): the drain's **Max casts is a clean per-target cap** (resets when you switch targets) and the row is **uncapped by default**, so left blank it keeps healing you every round while you're hurt — a saved cap of 1 was making the drain fire once per target then fall through to the normal attack while still low (chose LBOL over VAMP)
+- bug reports addressed: paradigm-20260827-153630, paradigm-20260827-101845
+
+## 3.29.3
+
+- Combat: when a spell draws "no effect" on the target, the switch to your **Alt Attack** now fires the **same round** instead of lagging ~a round behind the 500 ms burst guard
+- Combat (dark rooms): a target that didn't follow you through no longer **freezes the fight** — the client drops the gone target and engages the attacker actually in the room with you, instead of sitting there only self-healing
+- Buffs: a self-buff's recast timer is no longer dropped by an **unrelated** "already cast this round" rejection (e.g. from manually spam-healing a dying party member), which had made the buff recast over and over while it was still up
+- bug reports addressed: paradigm-20260827-081223, paradigm-20260827-133337, paradigm-20260827-130111
+
+## 3.29.0
+
+- Navigation: **alignment-aware routing** — the good / evil `(Alignment: X to Y)` entrances are now honored. Routing is whole-party: the party routes **around** an entrance a member's alignment can't enter (the game would stop the party at that member); when a member's alignment isn't known yet it walks **up to** the gate and **halts** there rather than guessing
+- Navigation: an alignment-gated-exit refusal (`Your current alignment prevents you from entering this exit.`) is now recognized, so a mis-planned move reverts cleanly instead of stranding the tracker
+- Desert hazard: the auto waterskin counter no longer spends a charge when a sunstone wristband (or any full-immunity guard) is held or worn — it's a no-op, so it skips the `use`
+- Party: a member `@wait`-held by another now spends the wait resting toward **full** HP/mana (instead of stopping at the rest-max floor and standing idle), ending when the wait releases
+- Party recovery: after failing to reach a stranded follower twice, the leader **gives up** (sends `@forget`) instead of restarting a doomed recovery walk that keeps hijacking its own navigation
+- bug reports addressed: paradigm-20260827-144553, paradigm-20260827-112011, paradigm-20260827-132906, paradigm-20260827-154819
+
+## 3.28.35
+
+- who list: the Players roster no longer stops short — an all-caps FIEND alignment row now parses (alignment matched case-insensitively), and a lone unreadable line is skipped instead of ending the whole list early
+- Gear sets: swapping paired slots (both wrists / both fingers) now sends a single `rem` instead of two — the first `wear` evicts the first-slot item on its own, so only the second slot needs an explicit `rem` cleared ahead of its replacement
+- @have now finds keys — it searches the key ring (the dump's own "You have the following keys:" list) alongside the pack and worn gear, so `@have black star key` answers "yes" instead of "no" when the key's on the ring
+- Conversation: action / realm rows no longer leave a gap between the channel chip and the line (the empty speaker column is collapsed)
+- Conversation: a realm / server line is coloured its chip's colour end-to-end instead of switching to white mid-sentence
+- Remote commands: an @-command sent over say that draws a reply is now answered with a directed say (`>Name ...`) aimed back at the caller, on the same say channel it arrived on
+- Conversation: directed says are logged with their target on both ends — the sender's window shows "You (to Name): ...", the recipient and any third party in the room show "Speaker (to Name): ..."
+- bug reports addressed: paradigm-20260827-103227, paradigm-20260827-103409, paradigm-20260827-082305
+
+## 3.28.28
+
+- Pyramid solver: the timed floors (F1/F2) no longer fire movement faster than the server can process it — on Paradigm a hop is never faster than ~1s, so the old fixed 350 ms pace outran the server, flooded the type-ahead, and desynced the climb (usually failing on floor 1). Paradigm now paces each blind step at the character's real hop time (from the movement formula) plus a 10% lag buffer, the same rate the floor-1 timer preflight already estimates against; stock uses a flat 400 ms (its below-heavy hop is ~0.5–0.6 s). The computed pace is logged so it can be checked against a bug report
+- bug reports addressed: paradigm-20260827-133835
+
+## 3.28.27
+
+- Navigation: winch gates now cross reliably — a gate opened by pulling a winch is pulled (and **re-pulled** while it "does not budge" — the pull is a strength roll), and the walker waits for the gate to turn fully open before stepping through instead of walking into a still-closed gate and stalling. Also handles the **cross-room** case, where the winch is in a different room than the gate it opens: the walk-to detour re-pulls the winch until it turns before walking on
+- bug reports addressed: paradigm-20260827-113513
+
+## 3.28.26
+
+- Gear sets: the `wear`/`rem` commands during a swap now stream back-to-back with no delay (the 100 ms pacing is gone) — a full-loadout swap is near-instant, matching MegaMUD instead of feeling laggy
+- Meditate/rest: a character held below its mana (or HP) rest floor in a room it just cleared no longer sits doing nothing — the idle-stall "room empty" force-clear used to leave a stale hostile latch that blocked the meditate/rest until a fresh room display cleared it (which an empty static room never sends), so it just passively regenerated; after the short reconfirm timeout it now meditates/rests (and gear-swaps) as intended
+- Gear sets: finishing a rest no longer fires the Default swap twice — the in-room recovery-complete revert and the stand-up that follows were both swapping to Default (~1s apart); the redundant stand-up swap is now suppressed
+- bug reports addressed: paradigm-20260827-082222, paradigm-20260827-082305, paradigm-20260827-125103
+
+## 3.28.23
+
+- Navigation map: a walk-to route line no longer draws a stray straight segment across the map after you take manual control — the route now only connects rooms that are actually adjacent on the map graph, so an off-route manual step can't leave a dangling line to a stale next step
+- Navigation: `The gate is closed!` (and the `... in that direction` variant) is now recognized as a movement refusal just like a closed door — a winch/gate that opens a moment later no longer leaves the walker stalled thinking it already moved
+- Navigation: after a forced boat disembark into a duplicate-named room the client now auto-issues a `rm` to re-locate (Paradigm realms), so the map no longer desyncs and strands the walker when the game moves you without a normal step
+- Navigation: with Auto-Combat off, entering a room with a hostile no longer deadlocks the walker waiting for a fight that will never happen — the room search fires and pathing continues
+- bug reports addressed: paradigm-20260827-074607, paradigm-20260827-081044, paradigm-20260827-113513
+
+## 3.28.19
+
+- Cash: "keep on hand" is now **Minimum cash to keep on hand (deposit)** — an amount plus a denomination dropdown, so you can keep e.g. 1 runic on hand; it applies to auto-**deposit** (banking)
+- Cash: new **Only stash coin up to (stash)** dropdown — **Everything** stashes every coin (default), **Nothing** stashes items only (no coin), or pick a denomination to stash up to it and keep the higher coins in hand (e.g. Gold keeps platinum/runic); applies to **stashing** only
+- Cash: new **Enable stashing as a follower** toggle — a party follower dragged through their marked stash rooms by the leader now stashes when it's on (off by default)
+
+## 3.28.16
+
+- Equipment Manager: a **Currently Equipped:** readout next to the Item Finder button shows the last gear set the client equipped this session (via Equip Now or an auto-fire trigger)
+- Gear sets: the pacing between each `wear`/`rem` during a swap is now 100 ms (was 200 ms) **and holds that cadence under load** — the paced sender used to run at background priority and get starved by the terminal redraw during a swap, stretching a swap to ~2.5× and making it feel laggy
+- Gear sets: a swap now removes the conflicting worn piece **first** in both directions — a readied two-handed weapon comes off before an off-hand item goes on, and a worn off-hand comes off before a two-hander is wielded — so neither wear is rejected and stranded to a later re-apply
+- Gear sets: your Default set now auto-equips **only** when you've finished resting (recovered to rest-max, and only if you use pre-rest swap sets), when a loop or Auto-Lair run starts, or on death-pile recovery if that's enabled — it no longer flips back to Default mid-rest (a between-round cast or loot grab that briefly stood you up used to thrash Default↔pre-rest) and no longer swaps on combat entry (a fight interrupting a rest now keeps your pre-rest loadout until you've recovered)
+- Gear sets: the Default swap after resting now finishes **before** you step out of the room — the loop holds in place while any gear set streams its wear/rem commands, so you no longer finish resting, walk into the next room, and only then swap to Default in the middle of a fight
+- Rest: `rest` now goes out the instant a pre-rest gear swap finishes instead of after a multi-second gap
+- Item buffs: a `#item` buff no longer fires before the client knows what you're wearing — on login *or* reconnect — so it never blindly equips the cast item over a readied two-handed weapon, fails, and tracks the buff as active anyway; it now waits until a fresh inventory has actually been read this session (not just any stale copy), then equips the two-hander out of the way correctly
+- bug reports addressed: paradigm-20260826-132742, paradigm-20260826-140341, paradigm-20260826-142625, paradigm-20260826-142732, paradigm-20260826-144339, paradigm-20260826-150242, paradigm-20260826-150539
+
+## 3.28.7
+
+- Buffs: a buff's recast duration is now **always** resolved from game data (the spell's own duration formula), even when it has no caster message in the Messages data — bladed sphere (`blsh`) and any other message-less buff were falling back to a wrong 60-second timer, which also made them expire and re-cast constantly as the top bless slot
+- Buffs: at login (and any time out of combat) the between-round cast loop now runs every round off the 1-second heartbeat, so configured buffs **queue up one-per-round in priority order** instead of trickling in ~30 s apart — the combat-round heartbeat that drives it only used to start once you were in a fight. It pauses while disconnected and resumes on reconnect (the buff recast timers already freeze/resume across a link-drop)
+- Combat log: a new between-round line lists every spell currently **queued** for the round (self/party heals, cure, and buffs) in type-priority order — e.g. `{spells queued=mihe(1), curp(5), bles(6-1), prev(6-2)}` — where the number is the spell-type priority and, for buffs, the second number is the bless-slot; a buff joins the queue as soon as it's within its recast window
+- bug reports addressed: paradigm-20260826-142652, paradigm-20260826-142928, paradigm-20260826-143143
+
+## 3.28.4
+
+- Roomba: sweeps now only visit rooms you tick **Actively Manage** on the Roomba tab — Start Sweep / Start Inventory no longer route across the whole label set. The tick is **per character** (the room labels stay shared per-BBS), so alts in **different gang houses on one BBS** each manage their own house. Rooms you add by hand default on for that character; rooms adopted from a `@roomba sync` default **off**, so Roomba never walks to another gang house (or one you lack the emblem for). Pressing Start with nothing checked shows a red "Select rooms to actively manage" prompt instead of doing nothing; the bug report now lists labeled / actively-managed / circuit room counts
+
+## 3.28.3
+
+- Roomba Master List: new **Export List…** button (right of the filter) saves the whole item log to a text file grouped by room — one header per map/room with its name, then that room's items alphabetically with quantity
+
+## 3.28.2
+
+- Item buffs: a `#item` buff that lives in the **off-hand** (a held tome, a warhorn) now works while you wield a **two-handed weapon** — the two-hander fills both hands, so the sequence now removes it first (`rem weapon → eq buff → use → rem buff → eq weapon`) instead of looping on a rejected `eq buff`
+
+## 3.28.1
+
+- Terminal responsiveness: disabled Nagle on the connection (`TCP_NODELAY`) so keystrokes echo back without the socket batching them — snappier input round-trip
+- Terminal rendering: cell background/foreground brushes are now cached instead of re-allocated for every run on every repaint, cutting allocation churn during heavy server output
+- Terminal rendering: the cursor blink no longer forces a full-screen repaint twice a second when there's no visible caret to blink (server-drawn forms, splash)
+
+## 3.28.0
+
+- Roomba: new `@roomba <item name>` remote command replies with one consolidated line per matching item — total quantity summed across every gang-house room it's currently tracked in, plus the room locators — instead of refusing to answer when a loose query (e.g. "head") matches a whole family of similarly-named items ("severed head of goru-nezar", "severed head of darksong"); gated by its own per-player **Query Roomba** permission
+- Ground items: an item whose own name contains "and" (e.g. "rope and grapple") no longer gets mis-split into two bogus entries when parsing a room's floor survey — affects Roomba's item log, `@what`, and `@get-all` alike
+- Roomba: every room floor Roomba observes during a scan now feeds a persistent BBS-tier item-location log backing `@roomba`, tracked per room (not collapsed to one "last seen" spot) so an item stocked in several rooms at once reports all of them; independent of the current sweep's own state
+- Roomba: room labels, hidden-search settings, and the new item-location log all moved from per-character to **per-BBS** storage — every character on a BBS now shares one gang house instead of re-labeling rooms per character; existing per-character labels are migrated automatically the first time each BBS loads post-upgrade
+- Roomba: new `@roomba sync` hands a client's whole item-location log to another MudPlay user in-game — grouped by room with one sweep-time per room and packed into a handful of **self-contained** chat lines, so it's a fraction of the size and a line the game's telepath flood-control drops costs only its own rooms instead of discarding the whole sync; merged straight in (newest wins silently), no import/export files or merge-review window
+- Roomba: new **Start Inventory** mode — walks the same labeled circuit and feeds the item-location log exactly like a sweep's scan, but never dispatches a single get/drop; for logging a gang house without disturbing an existing manual sort
+- Roomba: new **Master List** button — a sortable table (click any column header) of every item Roomba has seen, where, and its outside market (which shops buy/sell it and for how much at 50 charm), automatically excluding any shop that sits inside the gang house's own labeled rooms
+- Networking: outbound writes are now serialized — two engine sends fired back-to-back (e.g. an `@roomba sync`'s rapid telepath replies) could previously race into the socket concurrently and interleave their bytes, splicing one line's data into another's command prefix; each write now completes before the next begins
+- Roomba: `@roomba sync` hands over the **entire** logged sighting set (dropped the old 500-record cap), packed even tighter (a single-item sighting no longer spends a byte on its quantity)
+- Roomba: `@roomba sync` now paces its telepaths ~800ms apart, and re-sends any the game drops with a rate-limit notice ("typing too quickly" / "too many messages sent") — so a big-house sync trickles out in the background instead of flooding the channel or stalling the responder's own combat/heal/movement
+- Roomba: `@roomba sync` now also hands over the **labeled gang-house rooms** (their sort rules + catch-all), not just the item sightings — so a fresh receiver's Roomba tab fills with the same rooms and can sweep them; a room the receiver has already labeled itself is left untouched
+- Roomba: dropped the separate "Enable @roomba responses" checkbox — answering `@roomba` / `@roomba sync` is now gated solely by the per-player **Query Roomba** permission (renamed from "Query item location"): a client answers a query or hands over its log only to a sender it has granted that permission, and a sender you haven't granted it gets a denial. Adopting a sync reply, in turn, only needs that *you asked* — a `@roombadata` line is merged only inside a short window opened by your own outbound `@roomba sync` (the reply arrives only because they've granted you, so having requested it is the whole gate); a stray sync line you never requested is ignored
+- Roomba Master List: opens instantly even on a big synced log (each item's outside-market value is now priced only when its row scrolls into view, instead of pricing every item up front), gained a **filter box** (by item name, quantity, or seen-in map/room), and **double-clicking a row opens that item's record**
+- Roomba: `@roomba sync` now ends with a `Sync Complete` marker line so the requester can see the whole reply landed; and a sync line arriving when you hadn't requested a sync is now logged (at debug) instead of vanishing silently
+- Roomba tab: a **Roomba Data Timestamp** readout beside "Searches per room" shows the newest sighting in the item-location log (from a local sweep/inventory or an adopted `@roomba sync`), so you can tell at a glance how current the gang house's data is
+
+## 3.27.10
+
+- Combat: a pre-attack debuff no longer wastes a combat round — after the debuff fires (an AoE or single-target weakening spell on engage), the combat attack now goes out immediately behind it in the SAME round instead of waiting for the debuff's `*Combat Off*` a round later (the debuff and the attack are independent slots server-side). If the debuff kills the room, the queued attack re-validates and skips rather than casting at an empty room
+- bug reports addressed: paradigm-20260825-103417
+
+## 3.27.9
+
+- Equipment: a pre-rest gear swap no longer thrashes rest — MudPlay holds the `rest` re-issue while the set's `wear`/`rem` commands stream (each stood the character up, so the rest engine was re-`rest`ing between every one), then rests once the swap finishes
+- Equipment: the manual **Equip All** / `@equip-<set>` path now frees a paired finger/wrist slot before wearing the set's **second** ring/bracelet, so the swap converges instead of the game's `wear` trading with the ring you're keeping
+- BBS: logging into the **wrong realm** is fixed — a BBS folder hand-duplicated to make a same-host sibling (e.g. "Paradigm PVE" copied from "Paradigm PVP") kept the original name inside its config, so its logon steps (and blacklist/leaderboard) resolved to the wrong BBS; the name is now reconciled to the folder on load, so the right realm-select step runs
+- bug reports addressed: paradigm-20260825-103537, paradigm-20260825-102259
+
+## 3.27.7
+
+- Combat: fixed the character sometimes standing in a fight taking hits without ever attacking — an engage whose attack cast lost the round's cast slot to a between-round survival cast (a heal/buff sent moments earlier) left the engine's `_combatOff` latch stuck true, which permanently blocked the spell-mode retry heartbeat since only a successful cast used to clear it; it's now cleared unconditionally the moment the engine commits to engaging
+- Combat: a locally blocked initial attack spell now seeds the five-second combat heartbeat on a fresh session where no prior combat line has anchored the cadence (`LastCombatTick` null) and the monster only shows non-generic armour-block wording such as "reaches out for you" — and marks its round as owed immediately, so a startup self-buff can't steal the deterministic retry round before the attack goes out
+- CastingDirector: a self-buff/heal (e.g. `vlwa`) no longer gets spammed every few seconds after it's already landed — the server's "already cast this round" rejection names no spell, and an unrelated attack-spell cast losing the same round's slot was mistaken for the pending buff failing, dropping its just-armed timer; `CastCoordinator.CastFailed` now carries the cast code the rejection applies to, so shared callers tell their own failure from a collision
+- Bug report: new **Combat off (stuck?)** field (Combat weapon state) — true alongside a live target means the fight is permanently stalled
+- bug reports addressed: paradigm-20260824-215802, paradigm-20260824-233439, paradigm-20260824-235607
+
+## 3.27.4
+
+- Map: a trapped connection is drawn red only on the trapped **side** now — full red = trap both ways, half red (against the room whose exit is trapped) = a one-way trap — instead of the whole line, which falsely implied the return trip was trapped too
+- Navigation: a walk-to whose shortest path crosses a trap now offers a **fewest-traps** alternate route in the picker (pre-selected) — it avoids every avoidable trap and crosses only the unavoidable ones, so it's offered whenever it beats the shortest route's trap count; both cards show their trap count, and the walker disarms any unavoidable trap en route
+- Navigation: when a route must cross an unavoidable gate/hazard, it now takes the fewest-traps approach among the ways in, so a forced crossing no longer also eats a trap it could have skirted
+- Hazards: a room-entry spell is only treated as a movement hazard when it actually **damages, kills, or forces movement** — benign room spells (a monster summon, an alignment shift, a flavor message, quest-item placement: blackwood forest, the area triggers, the class quest-item rooms) no longer gate or reroute travel, even when they carry a counter item
+- bug reports addressed: paradigm-20260825-125954
+
+## 3.27.0
+
+- New feature: **realm-complete, combat-aware death recovery** — recovery now works on both realms: Paradigm recovers your `corpse` in one command; Stock `get`s your items loose off the floor (previously Stock recovered nothing)
+- Recovering with a hostile present: engage first, grab the pile (which doesn't break combat), then pace the re-equip between rounds — weapon first, then armour heaviest-first — re-attacking after each burst; whatever's left goes on the instant the room clears
+- Stock spillover: a deliberate recovery (Recover Now, or an auto-recover walk-to that ends in the death room) sweeps each exit and walks to collect items that overflowed into adjacent rooms — disarming traps in the way (both directions), skipping an exit whose trap it can't get through; an auto-recover walk that passes through a death room grabs your overflow from the rooms right before and after it in-stride, no detour. Manually stepping into a death room grabs the floor but never fires the sweep
+- Stock: a deathpile down to only currency counts as fully recovered — coins recover as cash (never `get`-ed), so they no longer strand the pile at Partial
+- Bug report: new **Re-equip pieces pending** field (shown mid-recovery)
+- Party: dying — including an instant `suicide` (which skips the mortally-wounded drop) — now clears your party state (a follower is removed, a leader's party disbands), so `@join`/`@invite` stop replying "I'm following someone; denied." after a death
+- bug reports addressed: stock-20260825-101612, stock-20260825-104351, stock-20260825-105851, stock-20260825-112233
+
+## 3.26.0
+
+- New feature: **window snapping** — MudPlay's panel windows (Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats) snap flush to each other's edges as you drag them near, on every platform. Dragging the **main** window carries the whole snapped cluster with it; grab any other panel to pull it off freely. Toggle it in **Settings → General → "Snap windows together"** (on by default); child windows opened from within a panel don't snap
+
+## 3.25.5
+
+- Combat: disabling AutoCombat mid-fight, or dying, no longer strands the attack-spell cascade latched to a target that's no longer being fought — CastingDirector's round-owed gate runs before every category (heal, cure, bless, item-cast, party heal/bless, debuff), so a stale latch was silently blocking all of them until the next profile reload
+- CastingDirector's buff-duration timers are now cleared on death — previously only cleared on profile load, so a dead-and-gone buff MudPlay still believed was active could suppress a legitimate recast
+- Auto Bless now re-evaluates immediately when toggled on, matching Auto Heal/Rest — previously it just persisted the flag and could sit doing nothing until an unrelated event happened to trigger a check
+- Bug report: new **Casting spell target** / **Spell attack owed** fields (Combat weapon state) and an **Active buff timers** list (Spell resolution), so a stale-latch recurrence is visible directly in a capture
+- Fixed a prompt-in-chat poisoning bug: another player's own status line quoted inside a chat message (e.g. `Mindcrime gossips: [HP=671/KAI=40]:w`) could be mistaken for the local character's prompt, corrupting MaxHp and triggering a spurious healing/mana-drain spiral — the prompt scanner now only accepts a status line at a real wire boundary or immediately after a chained prompt, rejecting one quoted inside surrounding chat text
+- bug reports addressed: paradigm-20260824-012300, paradigm-20260824-010304
+
+## 3.25.3
+
+- Conversation window: click a highlighted line again to unselect it (or press Escape to clear the whole selection), so a clicked row no longer stays highlighted until it scrolls off
+- Conversation window: click-hold and drag across lines to select (or deselect) a run of them at once — the pressed line sets the direction, and the drag paints the rest
+- Conversation window: copy now works on the whole line — select a line and press Ctrl+C, or right-click → Copy (multi-select copies every highlighted line in order); the message is a plain label again, so right-click Copy no longer copied nothing unless you'd first drag-selected text
+
+## 3.25.0
+
+- New feature: **boss-timer sync** — share respawn timers between clients over chat. On the Player Workshop → Bosses tab, **Sync Timers…** requests timers from other clients (`@timer sync` on gang / telepath / local); each responder answers with its timers compressed onto a couple of chat lines, and a merge table lets you pick, per boss, whether to keep yours or adopt a responder's — folding is always manual, so a stale timer can't silently overwrite yours
+- Boss-timer sync matches on the boss itself (its monster), never on room pins (which are user-editable), and carries only the identity + raw kill time — everything derived is recomputed locally. Adopting a timer for a boss you don't currently track adds it back to your list (recovering a catalog boss you'd removed). Responding reuses the existing `@timer` permission and the standard reply-on-received-channel / channel-ignore rules
+- Typing `@timer sync` by hand (a telepath or say request, not just the **Sync Timers…** button) now auto-opens the merge window so the responders' replies are collected and shown, instead of arriving with nothing listening
+- Boss-timer sync now only prompts you on a real conflict: a timer for a boss you track but have no timer for is adopted automatically, one that matches what you hold is left alone, and the pick buttons appear only when someone's timer disagrees with one you already have (an untracked boss still asks, since adopting it adds it to your list)
+- Boss-timer sync no longer tags requests with a random correlation code — `@timer sync` and the `@timerdata` replies are clean, since each reply already carries the responder's name and the merge table shows one column per responder
+- Remote commands no longer treat your own public-channel echo as an incoming command: a gangpath'd `@timer sync` (or any `@`-command over gang) used to be read back from your own "You gangpath" echo — which the server tags with your character name, not "You" — and bounce a "command invalid or not allowed" reply at the whole gang; the engine now recognizes its own name and skips it
+- Sending `@timer sync` over gang now auto-opens the merge window (previously only telepath / say did), so a gang broadcast collects its responses
+- The sync merge list keeps a buffer below the last row, so a scrolled list always reveals its final entry instead of clipping it
+- Timer-sync now logs the exchange to the program log: which timers were received from whom and over how many response lines, what was done with each set (adopted / already in sync / left for you to resolve), and — on the answering side — which timers were sent (the requester-side log had been silently disabled)
+- bug reports addressed: stock-20260824-001454, stock-20260824-001714, stock-20260824-092811
+
+## 3.24.1
+
+- Combat: a capped single-target attack spell (e.g. `MaxCasts 1`) no longer fires past its cap against a fast caster — MaxCasts now counts directly off each observed cast-result line (grouping a multi-projectile spell's own damage lines into one cast) instead of RoundDamageTracker's 5s-ish round window, which could bundle more than one real cast into a single tally before it ever closed
+- Combat: a confirmed cast now applies to MaxCasts and arms its cap-switch immediately, instead of waiting for the next combat heartbeat — a mob's own hit/miss line could fire that heartbeat before either of a spell's projectile lines arrived, so the confirmed cast sat un-applied until the round after the server had already auto-repeated the capped spell
+- Combat: the cap-switch's built-in delay (added to avoid a corpse-cast) shortened from 750ms to 200ms — still enough to catch a trailing kill packet, without eating enough of the round for the server to auto-repeat the capped spell first
+- bug reports addressed: paradigm-20260822-003106, paradigm-20260822-063043
+
+## 3.24.0
+
+- New feature: Roomba Mode — an automated gang-house item sorter. Right-click map rooms to label their destination rules, then run it from the new Player Workshop "GH Management" tab: it scans the circuit once, carries misfiled items to their labeled destination in the fewest trips, then scans once more to refresh each room. Built on the same loop engine every saved Loop runs on
+- Roomba: one scan lap (the recon-laps picker is gone), a live per-room **Status** column (Scanning / Cleaning / Complete), double-click a room to see its current floor contents, and a **Roomba Log** window with the full move record + an end-of-run summary (rooms sorted, items sorted, and the explicit unmovable list)
+- Roomba: the map right-click is now a single **Toggle: Roomba Room** (adds it, or removes it if already marked — no separate "clear"), labeled rooms show a **robot marker** on the map, the rule picker is titled "Set <map/room> <name> as Roomba Room", and the tab (renamed **Roomba**) gains an **Add Room** box to label a room by map/room number; the tab no longer forces the workshop window ultra-wide
+- Roomba: a per-character **Search rooms for hidden items** toggle (off by default) — normally it sorts only the visible floor; tick it to also `sea` each room and sort what's hidden
+- Roomba: a pickup for an item that's **gone by sort time** (`You don't see X here.`) is dropped from the queue and left in place, instead of being retried every lap forever
+- Roomba: a refused **Start** (fewer than 2 labeled rooms, another engine running, no route) now says why on the GH Management tab instead of doing nothing; a finished sweep prints `[Ganghouse roomba complete]` and shows a moved/left/carried summary
+- Roomba: a plainly-visible item in a room that also holds hidden loot is no longer re-searched before pickup (visible items are grabbed without a wasted `sea`)
+- GH room labels support multiple rules per room (e.g. a "Chain Scale" room admitting both Chainmail and Scalemail), including equip-slot rules (Neck / Wrist / Off-Hand / etc.) for jewelry-style rooms that aren't classified by material or weapon type, and an optional catch-all room for anything matching no explicit rule
+- Item name resolution now also exposes WeaponType / ArmourType / Worn subtype, letting a GH room label narrow past the top-level category (e.g. "Weapons > 1H Blunt") or match by equip slot alone
+- Roomba Mode never sweeps up a gang-house guard emblem as clutter, and only ever acts on items found on a GH room floor during its own recon — never anything already in your pack
+- Fixed Roomba losing the room title in very large wrapped floor lists, repeatedly falling into `rm` recovery, and attributing a newly-entered room's visible items to the room just left
+- Roomba sorting tags items found only by recon search as `(hidden)` and re-searches only those sources before pickup; visible items are grabbed immediately with no post-recon search delay
+- Roomba sorts in the fewest trips between rooms: it fills the pack toward your carry limit (batching several items bound for the same or nearby rooms) before delivering, picking the nearest source that still fits, then the nearest carried destination
+- Roomba tracks every pickup and drop against each item's weight and plans on that ledger without re-reading inventory after each move — it trusts the game's `You took` / `You dropped` lines, only re-checking (`i`) on a `You cannot carry that much!` refusal and then re-planning
+- Roomba splits an oversized item stack (a pile heavier than your whole working carry budget, e.g. 140 torches) across multiple trips instead of abandoning it — only a single item too heavy to carry at all is left in place (surfaced as *too heavy to carry*); Left-in-place entries now say why — no matching room, gone by sort time, or too heavy
+- Roomba no longer stops after a no-progress lap or a fixed number of sorting laps; queued work stays live until every movable item is delivered (or the user stops the run)
+- bug reports addressed: paradigm-20260816-172828, paradigm-20260816-175656, paradigm-20260816-191039, paradigm-20260816-193418, paradigm-20260821-135158
+
+## 3.23.0
+
+- New **Sprint Mode** toolbar toggle (running-figure icon) — a transient "just get me there" movement mode: while on, movement never pauses to rest/heal-wait (configured heal spells still cast), and **Auto-Combat / Get-Items / Search / Get-Cash are forced off** and restored when it ends. It **turns itself off** (restoring those engines) when a go-to walk arrives, a loop begins looping (arriving at the loop start after a walk-to, or wrapping into the next lap), or an auto-lair is about to enter the next lair; manually re-enabling any of those four engines ends it too
+- The **EXP** button is no longer on the default toolbar (still available to add via the toolbar editor)
+- Combat settings: fixed the **Debuff (single target)**, **Normal attack spell**, and **Alternate attack spell** cast-cap tooltips claiming "casts per room" when the engine has always enforced them per-target (a fresh mob gets its own allowance) — misled players into thinking the cap wasn't being honored when many mobs died in quick succession
+- bug reports addressed: paradigm-20260820-164102
+
+## 3.22.35
+
+- Auto-deposit no longer strands the walker at a bank: a bank lobby prints its currency-conversion table behind a blank line in the room display, which room-name recovery read as the end of the block — so the client saw the room as "The currency conversion rates are:", the map stayed on the street outside, and neither the `dep` nor the loop resume fired
+- Room-name recovery now reaches back across an in-display blank line for the bright-cyan name, and the line buffer it scans is deeper — it was exactly the length of a bank arrival, so one floor item or a second occupant evicted the name outright
+
+## 3.22.34
+
+- `@inv` now reports the **entire carried pack** — no more `(and N more items)` truncation; a long inventory splits across numbered replies (`carrying (1/2): …`)
+- Party **HELD** status now clears everywhere: a member's `.@held on`/`.@held off` broadcast toggles the chip on every client like the other ailments (previously held announced once and never cleared party-wide)
+- **Reset States** now clears every party member's ailment chips, not just your own
+- **Auto-search** now searches each room you enter **exactly once** — no redundant re-searches, no rooms skipped; it clears cleanly on death and holds for a room you're transiting with queued moves, so the engine feels responsive again instead of "slow"
+- Combat: a capped attack spell (e.g. **LBOL** at `MaxCasts 1`) no longer fires a **second time** when a between-round heal/buff interrupts its round — the interrupted round is tallied before the resume re-decides, so the cascade advances to the alternate
+- Combat: spell choice now checks a spell's **real mana cost**, not just the reserve floor — an attack/drain spell you can't actually afford is skipped instead of chosen
+- Party heal now fires the **instant** a member's HP drops below the threshold, not a full round late
+- Coin auto-collect is suppressed in your **stash room** while looping, so a stash run doesn't re-grab what it just deposited
+- **Learned spells** no longer lost on upgrade when the profile loads before the game-data set is active — the obtained set is seeded by name and re-resolves once the set loads
+- bug reports addressed: paradigm-20260820-153957, paradigm-20260820-122200, paradigm-20260820-153540, paradigm-20260820-130600, paradigm-20260820-090736, paradigm-20260820-090254, paradigm-20260820-080408, paradigm-20260820-063541, paradigm-20260820-082741, paradigm-20260820-122341, paradigm-20260820-055720, paradigm-20260820-055007
+
+## 3.22.22
+
+- Fixed meditate never re-engaging after something (a self-bless, etc.) interrupted it in place — the auto-rest engine's confirm/interrupt tracking only recognized the "resting" position, never "meditating", so the latch got stuck and blocked every further re-send until the next room move
+
+## 3.22.21
+
+- Fixed max HP/mana drifting stale when equipping/removing gear that grants a flat pool bonus (e.g. severed head of Goru-Nezar's +50 mana) — the health engine's rest and "pool is full" checks now track the change immediately instead of waiting on a manual stat-screen check
+
+## 3.22.20
+
+- Item-cast buffs (e.g. `#emerald-tipped crozier`) now free a `Worn`-bucketed off-hand blocker (a charm/skull the game's `i` text doesn't label `Off-Hand`) before wielding a two-handed cast item, and re-equip it after — previously the whole equip/use/restore sequence silently failed every recast
+- bug reports addressed: paradigm-20260819-234712
+
+## 3.22.19
+
+- Navigation: the search-box dropdown now **groups results by source** — saved GOTO locations first, then boss-table targets, then rooms — instead of interleaving them by relevance
+- Navigation: **door bashing is now rest-aware and uncapped** — a bashable door is bashed until it opens (no fixed attempt cap), pausing to rest to your rest-max whenever HP dips to the rest trigger; the old "Max bash attempts" setting is removed (picking keeps its cap)
+- Combat: the **"clear hostiles when sneak broken by see-hidden monster"** toggle now force-clears the room with **Auto-Combat on or off** (previously combat-off only)
+
+## 3.22.16
+
+- Remote: `@exp` now reads `4,500,000 EXP to level, making 1.1m/hr ~4h 10m to level.` — it leads with the **exp still needed to level**, abbreviates the rate (exact under 100k, `853k` in the hundred-thousands, `1.1m`/`30m` in the millions), and keeps the time-to-level
+- Time-to-level formatting (the `@exp` reply and the status-bar TNL) now shows **plain minutes under 90m** (`89m`, not `1h 29m`) and **rolls up to days past 25h** (`1d 1h 0m`)
+
+## 3.22.15
+
+- Bug report: new **Room combat assessment** section — the engine's live engageability verdict for every monster in the current room (Magical level, spell-immunity, each weapon's hit-magic, and the **CanAct / StuckOnMana / Unkillable** call with its reason), so a "won't attack this monster" report is self-diagnosing without combat logging being on
+- Bug report: new **Spell resolution** section — every configured combat/heal/cure/bless slot resolved to its **Spell number, name, learned flag, ReqLevel, EnergyCost, and mana cost**, so a mis-cast or "spell looks blocked" report shows the bad value at a glance
+- Bug report: new **Monster overrides** section — per-monster attack command / attack spell / pre-attack spell (with counts), relationship, priority, and flags you've customized, tagged with the tier each comes from
+- Bug report: new **Item overrides** section — per-item loot-automation flags (collect / discard / buy / sell / stash / keep-minimum, etc.) you've customized, tagged with the owning tier
+
+## 3.22.11
+
+- Remote: `@have <item>` now reports the **true carried quantity** — a stack of 25 counts as 25, not 1 (it was counting inventory *entries*, and a stack is one entry) — and the reply reads `yes - Nx 'item'` instead of `yes - Nx matching 'item'`
+
+## 3.22.10
+
+- Combat: fixed the **attack-spell level lookup clobbered by duplicate short cast-codes** — a monster/item-triggered spell sharing a player spell's short command (e.g. `disr`) could silently overwrite its ReqLevel with an unrelated one, making the real spell look blocked by a monster's spell immunity when it would actually land; the player's own learnable spell now wins the lookup over any same-code duplicate
+- bug reports addressed: paradigm-20260819-195419
+
+## 3.22.9
+
+- Combat: attack-spell **MaxCasts are now counted once per real combat round** (off the round timer) instead of per damage-line tick — so a spell no longer switches to its alternate before it fires, or blows past its cast cap (the recurring miscount reports)
+- Combat: the cap-switch to the alternate attack now fires **exactly once** — the deferred switch is idempotent, so an alternate like magic-missile can't double-fire after the primary caps or after a between-round buff
+- Healing: the **major heal now takes precedence over the minor heal below its threshold** (self and party) — minor no longer keeps firing while you fall through the major band; if the major heal is unaffordable it falls back to the configured minor, and both respect the HP triggers + the "heal if above" mana floors
+- Navigation: the **pass-through stash now hides your coins in the actual stash room**, not the next one — the stash fires before the loop steps out
+- Navigation: **auto-collect is suppressed in a stash room while looping** — a search there no longer re-exposes and re-grabs the pile you just stashed
+- bug reports addressed: paradigm-20260819-120938, paradigm-20260819-121003, paradigm-20260819-121247, paradigm-20260819-121516, paradigm-20260819-142147, paradigm-20260819-054200
+
+## 3.22.3
+
+- Navigation: the **Room Info** panel now mirrors the map tooltip — monsters are shown in three labelled groups, **Placed** / **Assigned** / **Lair**, instead of one flat tagged list, with the lair's **Max Regen** line beneath the Lair group
+
+## 3.22.2
+
+- Game Data: an item that sits on a room's floor now shows a **"Placed in"** section on its record — a clickable link to each room that holds it, with **Queue Walking here →**; room-only items (like the bogwood box) previously showed no source at all
+- Navigation: the Room Info panel **and the map hover tooltip** now list a room's statically-**placed** floor items, not just ones its `roomitem` command scatters — so an item sitting in a room (like the bogwood box at 14/10415) shows up when you hover / go there
+- Navigation: the room tooltip / Room Info panel now split monsters into **Placed** (a boss / NPC fixture), **Assigned** (roams / rarely spawns there), and **Lair** (a consistent lair spawner) instead of one lumped "Also Here" line — a monster can appear under more than one, showing the distinction at a glance; the lair's **Max Regen** now sits directly beneath the Lair line
+
 ## 3.22.0
 
 - Navigation: the walker now routes through two special exits it couldn't before — an **item-use teleport** (an item whose use transports you, e.g. `use potion of levitation` to reach the far side) and a **room-command reveal** (a hidden exit opened by typing a room command, e.g. `clear rubble`) — so quest routes gated on them, like the trek to the Necromancer at 9/1431, now plan and walk on their own instead of failing with "No path"

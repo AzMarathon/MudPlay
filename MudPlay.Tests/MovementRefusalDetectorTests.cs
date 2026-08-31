@@ -69,6 +69,9 @@ public sealed class MovementRefusalDetectorTests : IDisposable
     [InlineData("You can't see well enough to move.")]
     [InlineData("You are too encumbered to move.")]
     [InlineData("The door is closed.")]
+    [InlineData("The gate is closed!")]
+    [InlineData("The gate is closed.")]
+    [InlineData("The door is closed in that direction!")]
     // Paradigm terminates refusal lines with '!' — the confirmed capture that
     // stranded a Pending move, plus representative variants of the broadened set.
     [InlineData("There is no exit in that direction!")]
@@ -79,6 +82,10 @@ public sealed class MovementRefusalDetectorTests : IDisposable
     // way; recognizing it keeps the tracker from stranding on the unresolved step.
     [InlineData("You are flat on your back!")]
     [InlineData("You are flat on your back.")]
+    // Alignment-gated exit refusal (report -144553) — a route planned through an
+    // exit our alignment can't use bonks here; revert cleanly, don't strand.
+    [InlineData("Your current alignment prevents you from entering this exit.")]
+    [InlineData("Your current alignment prevents you from entering this exit!")]
     public void RefusalLines_RevertPendingToLocated(string line)
     {
         (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();

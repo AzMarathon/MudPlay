@@ -64,6 +64,8 @@ public sealed class SpellRecordDialogService
             Links:           new[] { new GameDataLink("Spells", spellNumber) });
 
         IReadOnlyList<GameDataInfoRow> info = new SpellInfoRowsBuilder(_cache).Build(spellNumber);
+        MudPlay.Game.Spells.SpellFormulaInput? formula =
+            new MudPlay.Game.Spells.KnownSpellCatalog(_cache).GetFormulaByNumber(spellNumber);
 
         MessageEditDialogViewModel vm = new(
             record,
@@ -71,7 +73,8 @@ public sealed class SpellRecordDialogService
             existingRecords: _messages.Messages,
             isNew:           isNew,
             cache:           _cache,
-            gameDataInfo:    info);
+            gameDataInfo:    info,
+            spellFormula:    formula);
 
         MessageEditDialogViewModel? previous = _openVm;
         _openVm = vm;

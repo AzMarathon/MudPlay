@@ -239,6 +239,51 @@ public sealed class WhoListParserTests
         AssertHas(db, given: "Rust",  family: "Oleum",     align: "Neutral", title: "Grunt",            gang: null);
     }
 
+    // Paradigm prints the extreme alignments in ALL CAPS ("FIEND"). A case-sensitive
+    // align match dropped that row, and a dropped row truncated the whole table — so
+    // the list cut off at the first FIEND player (report paradigm-20260827-103227).
+    [Fact]
+    public void ParsesAllCapsFiendAlignment_NormalizesCasing_AndKeepsReadingPastIt()
+    {
+        WhoListParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(new[]
+        {
+            "         Current Adventurers",
+            "         ===================",
+            "",
+            "         Angruin               -  Rogue Prince of The Coma Machine",
+            "   FIEND Deacon Blue           -  Archbishop of Harsh Yeast",
+            "         Durnan                -  Courser of Extra Chromosome",
+            "",
+        }, Now);
+
+        Assert.Equal(3, db.Players.Count);   // the FIEND row parsed, didn't truncate
+        AssertHas(db, given: "Deacon", family: "Blue", align: "Fiend",   title: "Archbishop", gang: "Harsh Yeast");
+        AssertHas(db, given: "Durnan", family: "",     align: "Neutral", title: "Courser",    gang: "Extra Chromosome");
+    }
+
+    // A lone unparseable row must not truncate the table — it's skipped and reading
+    // continues, so a single odd row can't cut the whole list short.
+    [Fact]
+    public void SingleUnparseableRow_IsSkipped_NotTreatedAsBlockEnd()
+    {
+        WhoListParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(new[]
+        {
+            "         Current Adventurers",
+            "         ===================",
+            "",
+            "         Alpha                 -  Rogue of Guild A",
+            "!!! garbled line that is not a player row at all !!!",
+            "         Bravo                 -  Mage of Guild B",
+            "",
+        }, Now);
+
+        Assert.Equal(2, db.Players.Count);
+        AssertHas(db, given: "Alpha", family: "", align: "Neutral", title: "Rogue", gang: "Guild A");
+        AssertHas(db, given: "Bravo", family: "", align: "Neutral", title: "Mage",  gang: "Guild B");
+    }
+
     private static void AssertHas(
         PlayerDatabase db,
         string given,

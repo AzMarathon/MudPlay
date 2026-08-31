@@ -14,7 +14,7 @@ public sealed class CharacterProfile
 {
     // The schema version a freshly-authored (fully-migrated) profile carries.
     // Bump in lockstep with a new Services.ProfileMigrations step.
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 4;
 
     // JSON schema version (see GlobalSettings.SchemaVersion for the contract).
     // A fresh profile is authored at CurrentSchemaVersion so it never triggers a
@@ -172,6 +172,24 @@ public sealed class CharacterProfile
     // null or empty = no stash rooms flagged.
     public List<RoomRef>? StashRooms { get; set; }
 
+    // LEGACY Roomba Mode fields — superseded by the BBS-tier RoombaSettings
+    // (Data/BBS/{bbs}/roomba.json; see GhRoomLabelStore) since every character
+    // on a BBS shares one gang house. Kept ONLY so GhRoomLabelStore can lift an
+    // existing user's pre-upgrade data into the new BBS-tier file on first load
+    // after upgrading; cleared (nulled + saved) once migrated. Never written to
+    // after that point — do not read these directly outside that migration.
+    public List<GhRoomLabel>? GhRoomLabels { get; set; }
+    public int? GhSearchesPerRoom { get; set; }
+    public bool? GhSearchForHidden { get; set; }
+
+    // Gang-house rooms THIS character actively manages — the ones Start Sweep /
+    // Start Inventory visit. The room labels themselves are shared per-BBS (every
+    // character sees the same labeled rooms), but which subset a character sweeps
+    // is per-character, so alts in different gang houses on one BBS each manage
+    // their own house. Each entry is a "map/room" coordinate string. Maintained by
+    // GhManagedRoomStore; null or empty = this character manages nothing yet.
+    public List<string>? GhManagedRooms { get; set; }
+
     // Recent walk-to destinations, newest first, capped at 10. Each entry is a
     // "map/room" coordinate string. Maintained by GotoHistoryStore; drives the
     // Navigation goto-button dropdown. null or empty = no history yet.
@@ -205,6 +223,15 @@ public sealed class CharacterProfile
     // surfaced by the Session Stats → Players Seen window. null / empty means no
     // players seen yet.
     public List<PlayerSighting>? PlayersSeen { get; set; }
+
+    // Per-character log of actual combat outcomes observed against specific
+    // monsters — landed/whiffed swing counts and damage extent, and confirmed
+    // "no effect" discoveries (physical Magical-requirement gate, spell
+    // SpellImmunity gate). Written by Game.Combat.MonsterObservationTracker;
+    // surfaced by Monster Intel's "Your Observations" section, kept visibly
+    // separate from the authoritative MDB facts the rest of that window
+    // shows. null / empty means no observations yet.
+    public List<MonsterObservation>? MonsterObservations { get; set; }
 
     // When true, the DEATH-recovery flow grabs lost items (and re-equips what
     // was worn at death) automatically whenever the character re-enters a room
@@ -255,6 +282,16 @@ public sealed class CharacterProfile
     // the per-slot editor, and trigger evaluation. null means nothing configured
     // yet.
     public EquipmentSettings? Equipment { get; set; }
+
+    // Per-character party-buff plan (Party window) — the dynamic list of buff
+    // slots the party-bless path casts, each with its own recast timer and (for
+    // single-target buffs) its selected party members. Configured live in the
+    // Party window, not the Settings tab. null means nothing configured yet.
+    public BuffSettings? PartyBuffs { get; set; }
+
+    // How the Buff Watchdog window arranges its config table vs the timer bars —
+    // stacked (config top / bottom) or side-by-side (config left / right).
+    public BuffWatchdogLayout BuffWatchdogLayout { get; set; } = BuffWatchdogLayout.ConfigTop;
 
     // Given name of the party leader we were following, remembered so a
     // follower can auto-rejoin after an unexpected drop. Written through by

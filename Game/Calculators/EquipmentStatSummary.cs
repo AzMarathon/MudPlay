@@ -55,8 +55,10 @@ public sealed class EquipmentStatSummary
     public int PlusPicklocks { get; set; }       // Abil 37 + 180 (sum)
     public int PlusIlluminate { get; set; }      // Abil 13 + 14 (sum)
     public int PlusQuickness { get; set; }       // Abil 67
+    public int PlusThievery { get; set; }        // Abil 39
     public int PlusHitMagic { get; set; }        // Abil 28 + 142 (sum from ALL equipped items)
     public int WeaponHitMagic { get; set; }      // Abil 28 + 142 from Weapon Hand only
+    public int PlusShockShield { get; set; }     // Abil 72
 
     // Resistances.
     public int PlusColdResist { get; set; }      // Abil 3
@@ -69,6 +71,11 @@ public sealed class EquipmentStatSummary
     // Protection.
     public int PlusProtEvil { get; set; }        // Abil 24
     public int PlusProtGood { get; set; }        // Abil 25
+
+    // VileWard — AC bonus whose magnitude scales with the wearer's own evil; the
+    // exact scale is unconfirmed (see GAME_MECHANICS.md), so this is the raw item
+    // value for planning/ranking, not a modelled AC contribution.
+    public int PlusVileWard { get; set; }        // Abil 1113
 
     // Weapon data (from item base fields, not abilities).
     public int WeaponHandAccy { get; set; }      // Accy field from Weapon Hand item

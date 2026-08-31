@@ -54,6 +54,18 @@ public static class RouteChoicePrompt
             return;
         }
 
+        // Trap-avoid fork: the shortest route crosses a trap and a trap-free route to
+        // the same room exists. Surface the clean detour so the user can take it
+        // instead of trusting the step-time disarm — a disarm can fail (no picks, no
+        // party disarmer) and some traps aren't worth the hit even when disarmable.
+        RouteChoice? trapAvoid = RouteChoicePlanner.EvaluateTrapAvoid(
+            services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
+        if (trapAvoid is not null)
+        {
+            await RunPickerAsync(services, destination, source.Key, trapAvoid, previewSink);
+            return;
+        }
+
         RouteChoice? choice = RouteChoicePlanner.Evaluate(
             services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
         if (choice is null)
@@ -153,6 +165,16 @@ public static class RouteChoicePrompt
         string? hazardCounterSource = hazardSources.Count > 0
             ? string.Join("; ", hazardSources) : null;
 
+        // The full start-to-finish command sequence for each route — moves + the
+        // lever/winch/door detours the walker expands, with an acquire row at each
+        // gate it must source through. Built here (not in the picker VM) since it
+        // needs the graph / bfs / filter; the VM just displays it.
+        IReadOnlyList<RouteStepRow> freeSteps = choice.HasFreeRoute
+            ? BuildStepRows(services, source, destination, choice.FreePath, gated: false)
+            : Array.Empty<RouteStepRow>();
+        IReadOnlyList<RouteStepRow> gatedSteps =
+            BuildStepRows(services, source, destination, choice.GatedPath, gated: true);
+
         var vm = new RouteChoiceDialogViewModel(
             choice,
             DestinationLabel(services, destination),
@@ -172,12 +194,15 @@ public static class RouteChoicePrompt
             itemId => services.PathItemDropName(itemId, source),
             freeEta,
             gatedEta,
-            hazardCounterSource);
+            hazardCounterSource,
+            freeSteps,
+            gatedSteps);
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and
         // a cancel leaves no stale preview behind.
         if (previewSink is not null)
+        {
             vm.PreviewRequested += r => previewSink(r switch
             {
                 RouteChoiceResult.Free => choice.FreePath,
@@ -186,6 +211,10 @@ public static class RouteChoicePrompt
                 RouteChoiceResult.GatedNoAcquire => choice.GatedPath,
                 _ => null,
             });
+            // A pre-selected route (trap-avoid defaults to the trap-free line) draws
+            // its preview on open, now that the sink is subscribed.
+            vm.RaiseSelectionPreview();
+        }
 
         RouteChoiceResult? result;
         try
@@ -225,6 +254,23 @@ public static class RouteChoicePrompt
             return;
         }
 
+        if (choice.Kind == RouteChoiceKind.TrapAvoid)
+        {
+            switch (result)
+            {
+                case RouteChoiceResult.Free:
+                    // "Avoid traps" — plan the trap-free route (refuse trapped exits).
+                    CommitWalk(services, destination, gated: false, avoidTraps: true);
+                    break;
+                case RouteChoiceResult.Gated:
+                    // "Cross traps" — the walker's default plan, disarming at step time.
+                    CommitWalk(services, destination, gated: false);
+                    break;
+                // null → cancelled: walk nothing.
+            }
+            return;
+        }
+
         switch (result)
         {
             case RouteChoiceResult.Free:
@@ -235,18 +281,22 @@ public static class RouteChoicePrompt
                 // grabbed in place; the rest are forced through the acquire pipeline
                 // (give/shop/drop) even when unflagged — the explicit pick is the
                 // consent. The walk still plans gated (the counter isn't carried
-                // yet at plan time) and crosses safely once it's in hand.
+                // yet at plan time) and crosses safely once it's in hand. A SOLE
+                // route (the gate is unavoidable) also plans avoidTraps, so the
+                // forced crossing takes the fewest-traps approach the planner chose.
                 foreach (int id in floorCounters)
                     if (services.ItemNames.GetName(id) is { Length: > 0 } n)
                         services.SendGameCommand($"get {n}");
                 if (detourCounters.Count > 0)
                     services.ForcePathObtain(detourCounters);
-                CommitWalk(services, destination, gated: true);
+                CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
                 break;
             case RouteChoiceResult.GatedNoAcquire:
                 // "Send it": walk the gated route but don't arm acquisition — the
-                // user asserts they'll clear the gates without provisioning.
-                CommitWalk(services, destination, gated: true, armAcquisition: false);
+                // user asserts they'll clear the gates without provisioning. A sole
+                // route still avoids traps, matching the planner's chosen approach.
+                CommitWalk(services, destination, gated: true,
+                    armAcquisition: false, avoidTraps: !choice.HasFreeRoute);
                 break;
             // null → cancelled: walk nothing (and leave any manual pause intact —
             // the user backed out, so nothing changed).
@@ -261,7 +311,7 @@ public static class RouteChoicePrompt
     // rest / party) are left asserted and re-pause on their own if still relevant.
     private static void CommitWalk(
         AppServices services, RoomKey destination, bool gated,
-        bool armAcquisition = true, bool avoidTeleports = false)
+        bool armAcquisition = true, bool avoidTeleports = false, bool avoidTraps = false)
     {
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
@@ -277,7 +327,91 @@ public static class RouteChoicePrompt
             destination,
             planThroughAcquirableGates: gated,
             armItemAcquisition: armAcquisition,
-            avoidTeleports: avoidTeleports);
+            avoidTeleports: avoidTeleports,
+            avoidTraps: avoidTraps);
+    }
+
+    // Turn a route's RoomKey polyline into the full executable step list: re-derive
+    // the hop directions, run the SAME detour expander the walker uses (lever / winch
+    // / door go-act-return round-trips), then render numbered "room < command" rows.
+    // The gated route also drops an acquire row at each hop it must buy/ask/hunt an
+    // item to cross. Empty when the path is trivial or can't be resolved.
+    private static IReadOnlyList<RouteStepRow> BuildStepRows(
+        AppServices services, RoomKey source, RoomKey destination,
+        IReadOnlyList<RoomKey> path, bool gated)
+    {
+        RoomGraphManager graph = services.RoomGraph;
+        IReadOnlyList<Direction> dirs = DirectionsAlong(graph, path);
+        if (dirs.Count == 0) return Array.Empty<RouteStepRow>();
+
+        // Positioned gates are read with acquirable gates LIVE (so the blocks show);
+        // the expansion runs with them suspended so a lever detour's own sub-route
+        // matches how the gated plan will actually route past them. Only the
+        // auto-sourceable gates (item / ticket / single-counter hazard) get an
+        // acquire row — a door key is cleared by hand, an any-of hazard has no single
+        // buy, both already named in the requirement summary.
+        List<RouteGateStop> stops = new();
+        IReadOnlyList<WalkStep> steps;
+        if (gated)
+        {
+            foreach ((RoomKey room, Direction dir, RouteRequirement req)
+                     in RouteChoicePlanner.PositionedGates(graph, services.Movement, source, dirs))
+                if (IsAutoSourceable(req))
+                    stops.Add(new RouteGateStop(room, dir, req));
+            using (services.Movement.SuspendAcquirableGates())
+                steps = RemoteActionPathExpander.Expand(graph, source, dirs, services.Bfs, services.Movement);
+        }
+        else
+        {
+            steps = RemoteActionPathExpander.Expand(graph, source, dirs, services.Bfs, services.Movement);
+        }
+
+        return RouteStepList.Build(
+            source, steps, stops,
+            key => graph.GetRoom(key)?.DisplayName,
+            services.ItemNames.GetName,
+            req => ObtainLabel(services, req, source, destination));
+    }
+
+    // The hop directions implied by a RoomKey polyline — for each consecutive pair,
+    // the exit off the first room whose target is the next room. Stops at the first
+    // pair the graph can't connect (a stale path); the expander truncates likewise.
+    private static IReadOnlyList<Direction> DirectionsAlong(
+        RoomGraphManager graph, IReadOnlyList<RoomKey> path)
+    {
+        var dirs = new List<Direction>(Math.Max(0, path.Count - 1));
+        for (int i = 0; i + 1 < path.Count; i++)
+        {
+            Room? room = graph.GetRoom(path[i]);
+            if (room is null) break;
+            Direction? hop = null;
+            foreach ((Direction d, RoomExit exit) in room.Exits)
+                if (exit.Target.Equals(path[i + 1])) { hop = d; break; }
+            if (hop is null) break;
+            dirs.Add(hop.Value);
+        }
+        return dirs;
+    }
+
+    private static bool IsAutoSourceable(RouteRequirement req) =>
+        req.Kind is RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket
+        || (req.Kind is RouteRequirementKind.HazardProtection && req.ItemIds.Count == 1);
+
+    // How the run sources a gate item, mirroring the requirement-summary tail: a free
+    // NPC give ("ask X") > a shop buy ("buy at Y") > a monster-drop hunt ("hunt Z").
+    // Null falls back to a generic "get it first" in the step row.
+    private static string? ObtainLabel(
+        AppServices services, RouteRequirement req, RoomKey source, RoomKey destination)
+    {
+        if (req.ItemIds.Count != 1) return null;
+        int id = req.ItemIds[0];
+        if (services.PathItemGiveName(id, source, destination) is { Length: > 0 } giver)
+            return $"ask {giver}";
+        if (services.PathItemShopName(id, source, destination) is { Length: > 0 } shop)
+            return $"buy at {shop}";
+        if (services.PathItemDropName(id, source) is { Length: > 0 } mob)
+            return $"hunt {mob}";
+        return null;
     }
 
     private static string DestinationLabel(AppServices services, RoomKey destination) =>

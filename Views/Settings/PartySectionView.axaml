@@ -152,82 +152,18 @@
                 <TextBlock Classes="FieldLabel" Text="%"/>
             </StackPanel>
 
-            <!-- ============ Party bless (10 slots) ============ -->
-            <!-- Each row = a spell short-code picker + a checkbox per loaded
-                 class. A member receives the buff only when their class is
-                 ticked. Row order is priority order. Class checkboxes come
-                 live from the active set's Classes.json (rebuilt on set swap),
-                 so the list grows / shrinks with whatever gamedata is loaded. -->
-            <!-- Compact rows: a number badge + spell picker. The class toggles
-                 only appear once a spell is chosen, so empty slots stay a
-                 single tidy line and the "who gets it" choice surfaces exactly
-                 when it becomes relevant. -->
-            <TextBlock Classes="SectionHeader" Text="Party bless (10 slots)" Margin="0,28,0,2"/>
-            <TextBlock Classes="FieldLabel" Text="Pick a spell, then tick the classes that receive it. Row order is cast priority."
-                       Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,0,0,6"/>
-            <!-- Column header: label the spell + recast-lead columns once, above the rows. -->
-            <Grid ColumnDefinitions="26,180,Auto,*" ColumnSpacing="10" Margin="0,0,0,2">
-                <TextBlock Grid.Column="1" Text="bless"
-                           Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
-                <TextBlock Grid.Column="2" Text="recast within (s)"
-                           Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
-            </Grid>
-            <ItemsControl ItemsSource="{Binding BlessSlots}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:PartyBlessSlotViewModel">
-                        <!-- Faint divider per row so a slot's class pickers read as
-                             belonging to that slot, not the one below. -->
-                        <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,3,0,7" Margin="0,0,0,3">
-                        <Grid ColumnDefinitions="26,180,Auto,*" ColumnSpacing="10">
-                            <Border Grid.Column="0" Width="26" Height="26"
-                                    Background="{StaticResource ChromeBgElevBrush}"
-                                    CornerRadius="3" VerticalAlignment="Center"
-                                    ToolTip.Tip="{Binding Label}">
-                                <TextBlock Text="{Binding Index}"
-                                           Foreground="{StaticResource ChromeFgBrush}"
-                                           FontWeight="SemiBold"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                            <AutoCompleteBox Grid.Column="1" Width="180" HorizontalAlignment="Left"
-                                             VerticalAlignment="Center"
-                                             Text="{Binding Spell, Mode=TwoWay}"
-                                             ItemsSource="{Binding $parent[ItemsControl].((vm:PartySectionViewModel)DataContext).SpellSuggestions}"
-                                             ValueMemberBinding="{ReflectionBinding Short}"
-                                             ItemFilter="{Binding $parent[ItemsControl].((vm:PartySectionViewModel)DataContext).SpellSuggestionFilter}"
-                                             ItemTemplate="{StaticResource SpellPickItem}"
-                                             PlaceholderText="Code or name…"
-                                             ToolTip.Tip="Beneficial spell cast on party members whose class is ticked to the right. Cast as `&lt;code&gt; &lt;member-name&gt;`."/>
-                            <NumericUpDown Grid.Column="2" Value="{Binding RecastMarginSec, Mode=TwoWay}"
-                                           Minimum="0" Maximum="999" FormatString="0" Increment="1"
-                                           Width="110" VerticalAlignment="Center"
-                                           ToolTip.Tip="Recast this buff when it's within this many seconds of expiring. 0 = don't recast until it actually expires (a wear-off message or the tracked timer running out)."/>
-                            <ItemsControl Grid.Column="3" ItemsSource="{Binding Classes}"
-                                          VerticalAlignment="Center">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel Orientation="Horizontal"/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:PartyBlessClassToggle">
-                                        <CheckBox Content="{Binding Name}"
-                                                  IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                  MinHeight="0" Margin="0,0,10,2"
-                                                  ToolTip.Tip="Cast this slot's bless on party members of this class."/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
+            <!-- ============ Party bless ============ -->
+            <!-- The party-buff SLOTS (which spells, which members, recast timers)
+                 moved to the Party window's buff panel — configure them live there.
+                 Only the two coarse gates below stay here. -->
+            <TextBlock Classes="SectionHeader" Text="Party bless" Margin="0,28,0,2"/>
+            <TextBlock Classes="FieldLabel"
+                       Text="Party buff slots are configured in the Buff Watchdog window (View → Buff Watchdog). These two gates decide when the buff engine may cast."
+                       Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,0,0,6"
+                       TextWrapping="Wrap"/>
             <!-- Bless gating: coarse on/off conditions the party-bless path
                  honors before casting. Both default ON. -->
-            <StackPanel Spacing="2" Margin="0,8,0,0">
+            <StackPanel Spacing="2" Margin="0,2,0,0">
                 <CheckBox Content="Bless party while resting"
                           IsChecked="{Binding BlessWhileResting, Mode=TwoWay}"
                           ToolTip.Tip="When checked (default): the party-bless engine may cast beneficial spells on party members while you're resting."/>

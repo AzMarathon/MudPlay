@@ -106,6 +106,11 @@ public sealed partial class InventoryManager : IDisposable
     // Fired (outside the lock) whenever the snapshot changes.
     public event Action? Changed;
 
+    // Fired only after an authoritative full `i` dump replaces the snapshot.
+    // Consumers that must verify a transaction should not treat incremental
+    // get/drop patches as equivalent to a fresh server inventory.
+    public event Action? FullInventoryParsed;
+
     // Fired with the deposited copper value each time a `You deposit …` echo is
     // parsed — manual or automated `dep` alike, since both produce the same
     // server confirmation. Feeds the transaction-history ledger. (The purse-math
@@ -797,6 +802,7 @@ public sealed partial class InventoryManager : IDisposable
             $"parsed: wealth={wealthCopper} copper, enc={curWeight}/{maxWeight} {category} [{percentage}%], worn={equipped.Count}, carried={carried.Count}, keys={keys.Count}"
             + (readiedLight is { } rl ? $", lit={rl.Name} (Readied/{rl.Readied})" : ""));
         Changed?.Invoke();
+        FullInventoryParsed?.Invoke();
     }
 
     // Apply an in-place edit to the worn set, publishing only if it changed.

@@ -138,6 +138,64 @@ public sealed class ChatRouterTests
         Assert.Equal(ChatChannel.Local, e.Channel);
         Assert.Equal("Forged",   e.Speaker);
         Assert.Equal("hi there", e.Message);
+        Assert.Null(e.DirectedTo);   // undirected
+    }
+
+    [Fact]
+    public void Say_Directed_CapturesTarget_EvenAsAThirdParty()
+    {
+        // A directed say is seen by the target AND third parties in the room; capture
+        // the named target so the window shows "Suijin (to Fujin): hi".
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(@"Suijin says (to Fujin) ""hi"""));
+
+        ChatLogEntry e = Assert.Single(entries);
+        Assert.Equal(ChatChannel.Local, e.Channel);
+        Assert.Equal("Suijin", e.Speaker);
+        Assert.Equal("hi",     e.Message);
+        Assert.Equal("Fujin",  e.DirectedTo);
+    }
+
+    [Fact]
+    public void Say_DirectedToUs_CapturesYouAsTarget()
+    {
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(@"Raijin says (to you) ""hi"""));
+
+        ChatLogEntry e = Assert.Single(entries);
+        Assert.Equal("Raijin", e.Speaker);
+        Assert.Equal("you",    e.DirectedTo);
+    }
+
+    [Fact]
+    public void DirectedSayOut_TypedLine_AttributesMessageAndTarget()
+    {
+        // Our own outgoing directed say: the typed ">Target msg" carries the message,
+        // the "--- Message Directed to Target ---" confirmation the target. Speaker is
+        // null (us) so it renders "You (to Fujin): hi".
+        var (router, _, entries) = Setup();
+        router.Dispatch(Line(">fujin hi"));
+        router.Dispatch(Line("--- Message Directed to Fujin ---"));
+
+        ChatLogEntry e = Assert.Single(entries);
+        Assert.Equal(ChatChannel.Local, e.Channel);
+        Assert.Null(e.Speaker);        // us -> "You"
+        Assert.Equal("hi",    e.Message);
+        Assert.Equal("Fujin", e.DirectedTo);
+    }
+
+    [Fact]
+    public void DirectedSayOut_EngineOutboundBurst_AttributesMessage()
+    {
+        // A gate-wrapped @-command reply never renders on-screen, so the message is
+        // captured from the outbound bytes instead of the terminal line.
+        var (router, chat, entries) = Setup();
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes(">Raijin {HP 100/100}\r"));
+        router.Dispatch(Line("--- Message Directed to Raijin ---"));
+
+        ChatLogEntry e = Assert.Single(entries);
+        Assert.Equal("{HP 100/100}", e.Message);
+        Assert.Equal("Raijin",       e.DirectedTo);
     }
 
     [Fact]

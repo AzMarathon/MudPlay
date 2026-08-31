@@ -17,4 +17,16 @@ public static class EncumbranceCategory
         <= 66 => EncumbranceLevel.Medium,
         _ => EncumbranceLevel.Heavy,
     };
+
+    // Inverse of ForPercent: the highest carry-weight percentage that still stays
+    // within a chosen band. Heavy has no stock upper bound short of MaxWeight itself,
+    // so it ceilings at 100 (can't carry past capacity) — same fallback used for
+    // Unknown/Encumbered, which aren't offered as Find-Best targets.
+    public static int CeilingPercent(EncumbranceLevel level) => level switch
+    {
+        EncumbranceLevel.None => NoneCeiling,
+        EncumbranceLevel.Light => 33,
+        EncumbranceLevel.Medium => 66,
+        _ => 100,
+    };
 }

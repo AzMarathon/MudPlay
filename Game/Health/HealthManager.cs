@@ -106,6 +106,7 @@ public sealed class HealthManager : IDisposable
     private Action? _onRecoveryComplete;        // any rest gate topped off — resume a held neutral engage
     private bool _wasRecovering;                // falling-edge latch for _onRecoveryComplete
     private Func<bool>? _shouldSkipRestHere;    // running loop's current room is a "do not rest" waypoint
+    private Func<bool>? _equipmentApplying;     // a gear-set swap is streaming wear/rem — hold rest so we don't thrash it
     private bool _skipRestDeferredRecovery;     // a do-not-rest room made us skip a needed rest; re-arm on the next room change
     private bool _partyWaitSignaled;            // @wait sent, awaiting @ok
     private bool _hpGateAsserted;
@@ -128,6 +129,16 @@ public sealed class HealthManager : IDisposable
     // real hostile (which the hostiles guard then blocks). Kept short.
     private DateTimeOffset _restHoldSetAt;
     private static readonly TimeSpan RestReconfirmTimeout = TimeSpan.FromSeconds(3);
+    // Armed when the reconfirm hold times out (the room's stayed empty for the
+    // window, so it's safe to rest). The idle-stall force-clear that set the hold
+    // does NOT clear CombatStateTracker's hostile latch — that only re-derives on a
+    // fresh room observation, which an empty static room never emits — so a
+    // stationary character held below the mana trigger would sit forever, its
+    // meditate/rest blocked by a stale hostiles guard while it passively regens
+    // (report paradigm-20260827-082222: "meditating state but not Medding / no gear
+    // swap"). This bypasses that stale guard for the held rest; cleared on the next
+    // genuine observation / room change (which re-derives presence for real).
+    private bool _restHostilesBypassArmed;
     private readonly Func<DateTimeOffset> _now;
     private bool _fledThisCombat;        // reacted to run-trigger (flee OR @heal), awaiting combat end
     private bool _hangFired;             // emergency-hangup latch; re-arms when danger passes
@@ -355,6 +366,16 @@ public sealed class HealthManager : IDisposable
         _shouldSkipRestHere = shouldSkipRestHere;
     }
 
+    // Wire the "gear swap in flight" probe (EquipmentManager.IsApplyingSet). While a
+    // set applies, its paced `wear`/`rem` commands each stand the character up; hold
+    // the rest re-issue so we don't fire `rest` between every command (the rest/stand
+    // thrash of report paradigm-20260825-103537). The one rest lands after the swap.
+    public void SetEquipmentApplyingProbe(Func<bool> equipmentApplying)
+    {
+        ArgumentNullException.ThrowIfNull(equipmentApplying);
+        _equipmentApplying = equipmentApplying;
+    }
+
     // Wire ShadowRest (Paradigm): classes with the ability can rest while
     // hidden/sneaking in a room with monsters without being attacked (see
     // GAME_MECHANICS "ShadowRest"). All three predicates plus the
@@ -529,28 +550,32 @@ public sealed class HealthManager : IDisposable
         if (_state.Hp <= 0) return;
 
         // Rest-interruption recovery on a resting-state change. Two-step
-        // latch so we don't race the (Resting) prompt arrival:
-        //   1. We send `rest` and set _restInFlight=true.
-        //   2. On the FIRST Evaluate tick where Position==Resting, we
-        //      flip _restConfirmedByPrompt=true — the server has put
-        //      us into the resting state.
-        //   3. Any subsequent tick where Position!=Resting (server
-        //      broke our rest because we took damage, entered combat,
-        //      or moved) drops _restInFlight so the rest-out branch
-        //      below re-fires.
+        // latch so we don't race the (Resting)/(Meditating) prompt arrival:
+        //   1. We send `rest` or `meditate` and set _restInFlight=true.
+        //   2. On the FIRST Evaluate tick where Position is Resting OR
+        //      Meditating, we flip _restConfirmedByPrompt=true — the
+        //      server has put us into one of the two resting-family
+        //      positions (ChooseRestCommand picks whichever command the
+        //      moment calls for; either lands here).
+        //   3. Any subsequent tick where Position is neither (server
+        //      broke our rest because we took damage, entered combat, cast
+        //      a bless, or moved) drops _restInFlight so the rest-out
+        //      branch below re-fires.
         // Without step 2, a fast follow-up HP-changed tick that fires
-        // before the (Resting) prompt arrives would spuriously clear
-        // _restInFlight and double-send `rest`.
-        // The re-issue is gated on !InCombat — while a hostile is
-        // engaging us we let CombatManager handle the swing; the
-        // moment combat clears (CombatStateTracker flips InCombat
-        // false), Evaluate ticks again and the rest goes out.
-        if (_restInFlight && _state.Position == PlayerPosition.Resting)
+        // before the prompt arrives would spuriously clear _restInFlight
+        // and double-send the command. Checking only Resting here (report:
+        // meditate never re-engaged after a bless interrupted it) left
+        // step 2 permanently unreached for Meditating — _restConfirmedByPrompt
+        // never flipped true, so step 3's guard never tripped either, and
+        // _restInFlight stuck true until the next room move (NoteRoomChanged
+        // clears it unconditionally) masked the bug for movers but not for a
+        // party member sitting still recovering mana.
+        bool restingFamily = _state.Position is PlayerPosition.Resting or PlayerPosition.Meditating;
+        if (_restInFlight && restingFamily)
         {
             _restConfirmedByPrompt = true;
         }
-        else if (_restInFlight && _restConfirmedByPrompt
-                              && _state.Position != PlayerPosition.Resting)
+        else if (_restInFlight && _restConfirmedByPrompt && !restingFamily)
         {
             _restInFlight = false;
             _restConfirmedByPrompt = false;
@@ -785,16 +810,17 @@ public sealed class HealthManager : IDisposable
             && NeedsOpportunisticTopOff(s);
 
         // Leader-waited rest: WE lead and a member has @wait-held us, so we're
-        // stuck in this room anyway — use the forced downtime to top off. Same
-        // rest-max target and poison gate as the follower's opportunistic path;
-        // the only difference is the trigger (our own held state, not a leader's
-        // posture). A single `rest` emit is enough: the movement gate keeps us
-        // sitting until the @wait clears, at which point the resumed engine's next
-        // move stands us back up.
+        // stuck in this room anyway — use the forced downtime to top off. Unlike the
+        // follower's opportunistic path (which stops at rest-max), a @wait is bounded
+        // downtime the user wants spent fully: rest toward FULL for the whole wait,
+        // ending only when the wait itself releases (the member's @ok or the leading
+        // wait-window timer), not at an intermediate rest-max floor (report
+        // paradigm-20260827-132906). The movement gate keeps us sitting until the
+        // @wait clears, at which point the resumed engine's next move stands us up.
         bool leaderWaitedRest = !anyGate
             && !selfPoisoned
             && (_isLeaderWaited?.Invoke() ?? false)
-            && NeedsOpportunisticTopOff(s);
+            && NeedsWaitDowntimeTopOff();
 
         bool shouldRest = anyGate || opportunistic || leaderWaitedRest;
 
@@ -809,6 +835,15 @@ public sealed class HealthManager : IDisposable
         // HasEngageableHostiles true again and the next breach repeats
         // the cycle (kill → rest → kill → rest), as per user direction.
         bool hostilesPresent = _hasEngageableHostiles?.Invoke() ?? false;
+
+        // A gear-set swap in flight streams paced `wear`/`rem` commands, each of which
+        // stands the character up. Hold the rest re-issue until the swap finishes, or
+        // we fire `rest` between every command and thrash the whole burst (report
+        // paradigm-20260825-103537). The single rest lands once the swap completes and
+        // the character is standing with the (e.g. pre-rest mana) loadout on.
+        bool equipmentApplying = _equipmentApplying?.Invoke() ?? false;
+        if (equipmentApplying && shouldRest && !_state.InCombat && !_restInFlight)
+            _log?.Combat(LogCategory, "rest held — a gear-set swap is in flight (avoiding rest/stand thrash)");
 
         // ShadowRest relaxes the hostiles guard: a solo, stealthed ShadowRest
         // character rests in place even with a monster in the room — the game
@@ -831,6 +866,10 @@ public sealed class HealthManager : IDisposable
         if (_restHeldPendingReconfirm && _now() - _restHoldSetAt > RestReconfirmTimeout)
         {
             _restHeldPendingReconfirm = false;
+            // The room stayed empty for the window — arm the hostiles-guard bypass so
+            // the held rest actually fires past a stale hostile latch the empty-room
+            // re-display never cleared (report paradigm-20260827-082222).
+            _restHostilesBypassArmed = true;
             _log?.Combat(LogCategory,
                 "rest reconfirm-hold timed out — no room re-display re-asserted a hostile, releasing to rest");
         }
@@ -845,7 +884,8 @@ public sealed class HealthManager : IDisposable
                 $"rest held — combat force-cleared, awaiting room re-confirm " +
                 $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
         }
-        else if (shouldRest && !_state.InCombat && !_restInFlight && (!hostilesPresent || shadowRest))
+        else if (shouldRest && !_state.InCombat && !_restInFlight && !equipmentApplying
+            && (!hostilesPresent || shadowRest || _restHostilesBypassArmed))
         {
             // Pick rest vs meditate based on user settings + which
             // pool is the proximate trigger.
@@ -1188,6 +1228,16 @@ public sealed class HealthManager : IDisposable
         return needHp || needMa;
     }
 
+    // True while a @wait-held leader still has any pool short of FULL. Unlike
+    // NeedsOpportunisticTopOff (rest-max ceiling), a wait is bounded downtime the
+    // user wants spent recovering all the way — so the target is Max, not rest-max.
+    // The wait's own release (member @ok / wait-window timer) ends the rest; this
+    // only decides "is there anything left to recover". Each pool guards on Max > 0
+    // so a class with no mana pool never reports a phantom MA deficit.
+    private bool NeedsWaitDowntimeTopOff()
+        => (_state.MaxHp > 0 && _state.Hp < _state.MaxHp)
+        || (_state.MaxMa > 0 && _state.Ma < _state.MaxMa);
+
     // Rest-vs-meditate pick for the opportunistic (leader-resting) path: with no
     // meditate ability it's always rest; otherwise meditate when "meditate before
     // resting" is set and we're short any mana, else meditate when our mana% is
@@ -1228,6 +1278,10 @@ public sealed class HealthManager : IDisposable
     // rest; a genuinely empty room lets the held rest through.
     public void NoteRoomEntitiesReconfirmed()
     {
+        // A genuine occupant observation re-derives the hostile latch, so the
+        // post-timeout bypass has done its job — retire it and let the real guard
+        // be authoritative again (a hostile that re-appeared now blocks the rest).
+        _restHostilesBypassArmed = false;
         if (!_restHeldPendingReconfirm) return;
         _restHeldPendingReconfirm = false;
         Evaluate();
@@ -1264,8 +1318,10 @@ public sealed class HealthManager : IDisposable
 
         // A move re-observes the room, so any post-force-clear rest hold is resolved
         // by the new room's observation — drop it here too (covers the dark-room
-        // force-clear that sends no resync CR).
+        // force-clear that sends no resync CR). The stale-hostiles bypass retires
+        // with it: the new room re-derives presence from scratch.
         _restHeldPendingReconfirm = false;
+        _restHostilesBypassArmed = false;
 
         // Re-arm a rest that a do-not-rest room forced us to skip: the hop out of
         // that room carries no prompt change to re-run Evaluate on its own, so do

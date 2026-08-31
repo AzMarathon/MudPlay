@@ -55,11 +55,6 @@ public sealed class CombatSpellChooser
     private int _normalAttackCasts;
     private int _alternateAttackCasts;
     private int _drainCasts;
-    // Drain hysteresis latch: true once the drain has engaged this target, so the HP
-    // gate uses the higher RELEASE threshold to stay engaged instead of the trigger —
-    // stops a heal that lands you right at the trigger from thrashing drain↔normal
-    // (a re-announce + *Combat Off* every round). Per-target; reset on target change.
-    private bool _drainEngaged;
     private readonly HashSet<string> _singleDebuffedTargets =
         new(StringComparer.OrdinalIgnoreCase);
     // RawName keys of the mobs present when each AoE debuff cast went out this room.
@@ -97,7 +92,6 @@ public sealed class CombatSpellChooser
         _normalAttackCasts = 0;
         _alternateAttackCasts = 0;
         _drainCasts = 0;
-        _drainEngaged = false;
         _singleDebuffedTargets.Clear();
         _attackSpellLatchedOff = false;
         _castSingleTargetAttackThisTarget = false;
@@ -114,7 +108,6 @@ public sealed class CombatSpellChooser
         _normalAttackCasts = 0;
         _alternateAttackCasts = 0;
         _drainCasts = 0;
-        _drainEngaged = false;
         _attackSpellLatchedOff = false;
         _castSingleTargetAttackThisTarget = false;
     }
@@ -283,28 +276,28 @@ public sealed class CombatSpellChooser
     }
 
     // Whether the drain spell should take this round. Fires only when configured,
-    // HP is at/under the trigger, the target is drain-eligible (living + not undead,
-    // and not reactively marked drain-immune off a "no effect" line), mana meets the
-    // slot floor, and the per-target cast cap isn't spent. Yields to the room AoE
-    // (multi-attack) unless DrainsOverrideAoe — see the note in Choose. Unlike the
-    // attack cascade the drain has no per-target latch: it's HP-gated and re-checked
-    // every round while it holds. The HP gate is hysteretic (see _drainEngaged): it
-    // engages at the trigger and disengages only once HP recovers a margin above it.
+    // The drain is a pure HP-driven survival cast (user-confirmed 2026-08-27): it
+    // fires each round while HP is at/under the trigger, mana meets the slot floor,
+    // and the per-TARGET cast cap isn't spent — and stops the instant HP recovers
+    // ABOVE the trigger (no hysteresis band; report paradigm-20260827-153630, where a
+    // trigger+20 release pinned to 100% HP made it drain to full). The per-target cap
+    // resets on a target change so a fresh target gets the full cap again (report
+    // paradigm-20260827-101845). Also needs the target drain-eligible (living + not
+    // undead, and not reactively marked drain-immune off a "no effect" line). Yields
+    // to the room AoE (multi-attack) unless DrainsOverrideAoe — see the note in Choose.
     private bool DrainApplies(
         CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool preferSpell)
     {
         CombatSpellSlot drain = settings.DrainSpell;
         if (!IsConfigured(drain)) return false;
         if (!ctx.SpellsAvailable) return false;
-        // Hysteresis: while already draining this target, keep going until HP clears
-        // the RELEASE threshold (trigger + margin); only start when HP first hits the
-        // trigger. A heal that lands you exactly at the trigger would otherwise flip
-        // drain↔normal every round (a re-announce + *Combat Off* bounce each time).
-        bool hpWantsDrain = _drainEngaged ? ctx.HpBelowDrainRelease : ctx.HpBelowDrainTrigger;
-        if (!hpWantsDrain) { _drainEngaged = false; return false; }
+        // Fire only while HP is at/under the trigger; the moment HP climbs above it,
+        // hand the round back to the normal attack cycle. A big drain-heal jumps HP
+        // well past the trigger, so this naturally fires only while genuinely hurt.
+        if (!ctx.HpBelowDrainTrigger) return false;
         if (!ctx.DrainTargetEligible) return false;          // living + not undead (game data)
         if (IsImmune(ctx, CombatSpellAction.DrainSpell)) return false;   // reactive no-effect backstop
-        if (!CastsOk(drain, _drainCasts)) return false;
+        if (!CastsOk(drain, _drainCasts)) return false;      // per-target cap (reset on target change)
         if (!ManaOk(drain, ctx, mode)) return false;
         // AoE precedence: by default don't steal the round from a multi-attack that
         // would fire this round; the checkbox flips it so the drain wins.
@@ -423,7 +416,6 @@ public sealed class CombatSpellChooser
                 // DOES arm the hysteresis latch so the HP gate holds on the release
                 // threshold until HP recovers past it.
                 _drainCasts++;
-                _drainEngaged = true;
                 break;
             case CombatSpellAction.WeaponAttack:
             default:
@@ -470,8 +462,16 @@ public sealed class CombatSpellChooser
     private static bool CastsOk(int? cap, int castsSoFar) =>
         cap is not { } c || castsSoFar < c;
 
-    private static bool ManaOk(CombatSpellSlot slot, in CombatSpellContext ctx, ThresholdMode mode) =>
-        ManaMeetsReserve(slot.MinManaPerCast, ctx.Mana, ctx.MaxMana, mode);
+    private static bool ManaOk(CombatSpellSlot slot, in CombatSpellContext ctx, ThresholdMode mode)
+    {
+        if (!ManaMeetsReserve(slot.MinManaPerCast, ctx.Mana, ctx.MaxMana, mode)) return false;
+        // Hard affordability floor: never pick a spell we can't actually pay for (the
+        // server silently no-ops a below-cost cast). Unknown cost never blocks — same
+        // convention as CastingDirector.IsAffordable.
+        if (slot.SpellName is { } code && ctx.ManaCostOf?.Invoke(code) is { } cost && ctx.Mana < cost)
+            return false;
+        return true;
+    }
 
     // Whether live MA meets a slot's per-cast mana reserve. In Percentage mode the
     // reserve is compared against the ROUNDED absolute equivalent — the exact value
@@ -578,17 +578,22 @@ public readonly record struct CombatSpellContext(
     bool WeaponIneffective = false,
     bool? AlternationPreferSpell = null,
     // Drain-life gating (see DrainApplies). HpBelowDrainTrigger is true when live HP
-    // is at/under the DrainSpell trigger %; HpBelowDrainRelease is true when it's
-    // at/under the higher RELEASE threshold (trigger + hysteresis margin) — the drain
-    // engages on the trigger and holds until HP clears the release. DrainTargetEligible
-    // is true when the current target is living AND not undead (a drain can't affect
-    // NonLiving / Undead). All default false so a drain never fires unless BuildContext
-    // populates them — unwired callers / tests behave exactly as before.
+    // is at/under the DrainSpell trigger % — the drain fires only while it holds and
+    // releases at the trigger (no hysteresis band). DrainTargetEligible is true when
+    // the current target is living AND not undead (a drain can't affect NonLiving /
+    // Undead). Both default false so a drain never fires unless BuildContext populates
+    // them — unwired callers / tests behave exactly as before.
     bool HpBelowDrainTrigger = false,
     bool DrainTargetEligible = false,
-    bool HpBelowDrainRelease = false,
     // RawNames of every engageable monster in the room this round — the roster the AoE
     // debuff tags on cast and checks for new (untagged) arrivals to decide a re-fire.
     // null when unwired (weapon-only context, tests), where the AoE degrades to
     // once-per-room.
-    IReadOnlyList<string>? RoomMobKeys = null);
+    IReadOnlyList<string>? RoomMobKeys = null,
+    // Resolves a spell's actual mana cost by cast-code (Spellbook.ManaCostOf). ManaOk
+    // uses it as a hard affordability floor beneath the slot's MinManaPerCast reserve:
+    // a MinManaPerCast of 0 means "no reserve", NOT "cast even when you can't afford
+    // it" — a below-cost cast is a silent no-op (report paradigm-20260820-082741, DTCH
+    // spammed at 5/13/20 mana vs its 25 cost). null (unwired / tests) → no cost floor,
+    // old behavior.
+    System.Func<string, int?>? ManaCostOf = null);

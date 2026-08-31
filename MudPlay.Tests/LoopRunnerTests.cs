@@ -392,6 +392,112 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void RefusedWhilePaused_EntersRecoveryOnResume_InsteadOfResendingSameMove()
+    {
+        // Regression (paradigm-20260829-084558 / paradigm-20260829-104437): a
+        // MoveRefusal that resolves WHILE a combat gate has the loop paused
+        // reverts the tracker to Confirmed at the source room via
+        // NoteMoveBlocked, but OnTrackerStateChanged ignores tracker events
+        // while paused (State != Running), so the old resume path never saw
+        // it — the step stayed marked in flight, and resume fell through to
+        // blindly re-sending the exact same already-refused direction. That
+        // resend got refused again, and with no gate left to clear and retry
+        // this time, the loop just sat there — observed stalls of 17 minutes
+        // and, in the worse report, over an hour, only ever "fixed" by an
+        // unrelated external event forcing a fresh room observation. The fix
+        // recognizes "Confirmed, still at the room the move was sent from" on
+        // resume as the equivalent of the real-time "blocked at source"
+        // branch and enters recovery (reroute) immediately instead.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+
+        // Combat gate holds the loop while the move is still in flight.
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        // The refusal resolves WHILE paused — the tracker correctly reverts
+        // to Confirmed at 1/1, but the runner can't react to it in real time.
+        h.Tracker.NoteMoveBlocked();
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+
+        // Resume must NOT blindly re-send "n" a second time on the stale
+        // in-flight flag — it must enter recovery and reroute instead.
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.Contains(h.Events, e =>
+            e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    [Fact]
+    public void RefusedWhilePaused_PersistentBlock_ExhaustsBudget_ThenFails()
+    {
+        // Same shape as BlockedAtSource_PersistentBlock_ExhaustsBudget_ThenFails,
+        // but every refusal resolves while paused — confirms the resume-time
+        // recovery path is bounded by MaxRecoverAttempts exactly like the
+        // real-time one, not an unbounded retry loop.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 4; i++)
+        {
+            h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+            h.Tracker.NoteMoveBlocked();
+            h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        }
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void SuspectWhilePaused_ForwardsToRecoveryGateOnResume_InsteadOfResendingSameMove()
+    {
+        // Regression (paradigm-20260829-111627): an ambiguous room
+        // observation that lands the tracker in Suspect WHILE the loop is
+        // paused (a combat redisplay, another player's arrival, etc.) is
+        // invisible to OnTrackerStateChanged in real time (State != Running)
+        // — the same seam as the "refused while paused" fix above, but for
+        // Suspect/Lost/Unknown instead of a plain refusal. The old resume
+        // path fell through to a blind resend — but NoteMoveSentCore
+        // deliberately never re-arms Pending from Suspect (no confirmed
+        // anchor to predict a landing from), so a refusal on that resent
+        // move is silently dropped too (NoteMoveBlocked only acts from
+        // Pending), stranding the loop in Suspect with no way out. The fix
+        // forwards to the recovery gate on resume, exactly like the
+        // real-time branch already does.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        // An ambiguous/unrecognized observation lands the tracker in
+        // Suspect while paused — the runner never sees the transition in
+        // real time.
+        h.Tracker.NoteRoomObserved(new RoomObservation("Somewhere Else",
+            new HashSet<Direction> { Direction.N }));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        // Resume must forward to the recovery gate, not blindly re-send "n".
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+
+        Assert.Single(h.Sent);   // not re-sent
+        Assert.Single(h.ResyncReasons);
+        Assert.Contains("Suspect", h.ResyncReasons[0]);
+    }
+
+    [Fact]
     public void PassiveSourceRedisplay_WhileMovePending_IsIgnored_NoFalseRecovery()
     {
         // CONFIRMED game mechanic: a refused move never redisplays the room — it
@@ -496,6 +602,52 @@ public sealed class LoopRunnerTests : IDisposable
 
         Assert.Single(h.ResyncReasons);
         Assert.Contains("in-flight stall", h.ResyncReasons[0]);
+    }
+
+    [Fact]
+    public void ResumeWhileMoveInFlight_TrackerBecameSuspectDuringPause_RecoversWithoutReSending()
+    {
+        // Regression (paradigm-20260829-154032): an interleaved bright-cyan
+        // player ability was parsed as the arriving room's name while Combat
+        // had the loop paused. The tracker became Suspect, but the runner's
+        // normal mismatch handler ignores transitions while Paused. Resume then
+        // re-sent the already-completed N step from room B, where N was a wall.
+        // The primary fix is RoomDisplayParser (it no longer misreads the ability
+        // as the title); this pins the shared resume-time backstop that catches a
+        // Suspect-on-resume regardless of cause (same guard as the 111627 case).
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        // The observation carries B's exits but an impossible asynchronous
+        // message as its name, reproducing the parser failure from the report.
+        h.Tracker.NoteRoomObserved(new RoomObservation(
+            "Astro invokes the way of the monkey!",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        // Clearing Combat must request rm recovery and re-pause, never emit a
+        // second N from the room the first N already reached.
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.Single(h.Sent);
+        Assert.Single(h.ResyncReasons);
+        Assert.Contains("on resume at step", h.ResyncReasons[0]);
+
+        // The authoritative reply says the original move reached B. Recovery
+        // advances exactly once and sends the correct return step S.
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Gate!.NoteAuthoritativePosition(new RoomKey(1, 2));
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.DoesNotContain(h.Sent.Skip(1), bytes => Encoding.Latin1.GetString(bytes) == "n\r");
     }
 
     [Fact]
@@ -661,6 +813,208 @@ public sealed class LoopRunnerTests : IDisposable
         // room 1/2, did NOT fail, and is still running.
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void ResumeAfterRecovery_CoordinatorStillPaused_DefersInsteadOfDoubleSending()
+    {
+        // Regression (Roomba Mode field report: a sweep crashed mid-run, stranding
+        // ~15 picked-up items with no drop). Root cause is in shared LoopRunner /
+        // MovementCoordinator plumbing, not Roomba-specific: an authoritative rm
+        // resync (EngineRecoveryGate.NoteAuthoritativePosition) can resolve while an
+        // UNRELATED MovementCoordinator gate is still asserted (e.g. GhSweepManager's
+        // GhSort gate holding a room for a get/drop dispatch, or AutoSearchManager's
+        // Search gate holding for a room-entry search). The old ResumeAfterRecovery
+        // only checked its OWN State==Paused before resuming + sending the next
+        // step's move — State==Paused is ambiguous between "my own recovery pause"
+        // and "some other gate paused me", so it sent the next move while the OTHER
+        // gate was still up, desyncing the loop's step counter one step early. On
+        // this line graph (B has no south exit) the step AFTER that premature send
+        // then fires "s" from the wrong room and fails "no exit S from B" — the exact
+        // crash from the field report.
+        Harness h = NewHarness(LineGraphJson, deferResume: true, wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("line",
+            new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) }));
+        Assert.Single(h.Sent);                        // step 0: "e" -> 1/2
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        // An unrelated gate (standing in for GhSort / Search) asserts on arrival at
+        // 1/2, the way GhSweepManager / AutoSearchManager do.
+        h.Coordinator.AssertGate("TestOtherEngine");
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.W, Direction.N }));
+
+        // A resync that was already in flight (started before the gate asserted)
+        // resolves now, to the room we're already standing in — the step's expected
+        // target, which is the "recovered at expected target" fast path.
+        h.Gate!.NoteSuspectedMismatch("test mismatch");
+        Assert.Single(h.ResyncReasons);
+        h.Gate.NoteAuthoritativePosition(new RoomKey(1, 2));
+
+        // Must NOT have sent a second move — TestOtherEngine is still asserted, so
+        // the resync resolving must defer to it instead of resuming right away.
+        Assert.Single(h.Sent);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+
+        // The other gate clears (its real dispatch finishes) — exactly one deferred
+        // advance fires, sending the CORRECT next step ("n" -> 1/3), never "s" (which
+        // would fail — B has no south exit).
+        h.Coordinator.ClearGate("TestOtherEngine");
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        h.Drain();
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void RoomChangedSubscriber_RegisteredBeforeLoopRunner_HoldsTheLoopBeforeItAdvances()
+    {
+        // Regression (Roomba Mode field report: "its not stopping in the room,
+        // its trying to run in grab stuff and the engine has it leaving the room
+        // before they pick anything up"). Root cause: GhSweepManager originally
+        // subscribed to RoomTracker.StateChanged in its OWN constructor, which
+        // runs AFTER LoopRunner's constructor (GhSweepManager needs the LoopRunner
+        // instance to exist first) — multicast delegates fire in registration
+        // order, so GhSweepManager's handler always ran SECOND on every arrival,
+        // after LoopRunner's own confirm-and-advance had already sent the next
+        // move. The fix moved the subscription to an external wrapper lambda in
+        // AppServices, registered BEFORE LoopRunner is constructed — the same
+        // early-registration pattern AutoSearchManager's own working Search-gate
+        // hold already relied on. This test proves the underlying mechanism
+        // that fix depends on, independent of GhSweepManager's own wiring: a
+        // reactor subscribed to RoomTracker.StateChanged BEFORE LoopRunner's own
+        // subscription can hold the loop (via a MovementCoordinator gate) before
+        // LoopRunner ships the next move; constructing LoopRunner first (as
+        // GhSweepManager used to, indirectly) would let the next move ship first.
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        RoomTracker tracker = new(graph);
+        MovementCoordinator coord = new();
+        BfsMapper bfs = new(graph);
+
+        // The "reactor" — asserts a gate the instant it sees arrival at B (1/2),
+        // exactly what GhSweepManager.OnRoomChanged does on arrival at a labeled
+        // room. Registered BEFORE the LoopRunner below is even constructed.
+        bool reactorFired = false;
+        tracker.StateChanged += t =>
+        {
+            if (t.NewRoom is not { } room || !room.Key.Equals(new RoomKey(1, 2))) return;
+            reactorFired = true;
+            coord.AssertGate("TestReactorGate");
+        };
+
+        TestAvoidFilter filter = new();
+        // Deferred resume-dispatch mode (captured in `posted`, drained manually) —
+        // the same mode every other same-burst-pause test in this file uses;
+        // resume dispatches are deliberately posted past the burst rather than run
+        // inline, so the test drives that explicitly via Drain() below.
+        List<Action> posted = new();
+        LoopRunner runner = new(tracker, coord, graph: graph, bfs: bfs, filter: filter,
+            postToUi: posted.Add);
+        List<byte[]> sent = new();
+        runner.SetWireSender(sent.Add);
+        List<LoopEvent> events = new();
+        runner.Event += e => events.Add(e);
+
+        tracker.SetLocated(new RoomKey(1, 1));
+        runner.Start(AbCycle());
+        Assert.Single(sent);   // step 0: "n" -> 1/2
+
+        // Arrival at 1/2 — the reactor's handler (registered first) runs before
+        // LoopRunner's own OnTrackerStateChanged (registered second via the
+        // constructor above), asserting TestReactorGate before LoopRunner gets a
+        // chance to decide whether to advance.
+        tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.True(reactorFired);
+        Assert.True(coord.IsGateAsserted("TestReactorGate"));
+        // The loop must NOT have shipped the next move ("s") while the reactor's
+        // gate is still up — held, not raced past.
+        Assert.Single(sent);
+        Assert.Equal(LoopState.Paused, runner.State);
+
+        // The reactor's own dispatch finishes and clears its gate — the resume
+        // dispatch is queued (posted), not yet sent.
+        coord.ClearGate("TestReactorGate");
+        Assert.Equal(LoopState.Running, runner.State);
+        Assert.Single(sent);
+        Assert.Single(posted);
+
+        // Burst ends; the deferred resume dispatch runs — exactly one new move.
+        Action[] batch = posted.ToArray();
+        posted.Clear();
+        foreach (Action a in batch) a();
+
+        Assert.Equal(2, sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(sent[1]));
+        Assert.DoesNotContain(events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void RepeatStarted_SubscriberAssertsGateSynchronously_HoldsBeforeWrapAroundMoveShips()
+    {
+        // Regression (Roomba Mode field report: an entire room's worth of `get`
+        // commands dispatched while already standing in a DIFFERENT room —
+        // more severe than the earlier one-step-late desync). Root cause:
+        // SendNextStep checks State/_stepInFlight ONCE at entry, then — on a
+        // lap wrap — calls Raise(RepeatStarted) and unconditionally falls
+        // through to send the new lap's first move, without re-checking
+        // whether the Raise() call itself changed State. A RepeatStarted
+        // subscriber that synchronously asserts a MovementCoordinator gate
+        // (e.g. a room-arrival dispatcher holding the room the loop just
+        // wrapped back into) gets silently overridden: the loop ships the
+        // wrap-around move anyway, physically leaving that room while the
+        // subscriber's own commands are still queued/outstanding against it.
+        // The fix re-checks State/_stepInFlight immediately after Raise()
+        // returns and aborts the fall-through if either changed.
+        Harness h = NewHarness(deferResume: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);   // step 0: "n" -> 1/2
+
+        // Complete step 0 normally (no gate involved yet).
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Equal(2, h.Sent.Count);   // step 1: "s" -> 1/1
+
+        // A RepeatStarted subscriber that asserts a gate the instant the lap
+        // wraps — the same thing a room-arrival dispatcher does on arrival.
+        h.Runner.Event += e =>
+        {
+            if (e.Kind == LoopEventKind.RepeatStarted) h.Coordinator.AssertGate("TestDispatchGate");
+        };
+
+        // Completing step 1 lands back at 1/1 — the lap wraps, RepeatStarted
+        // fires, the subscriber above asserts the gate mid-event, and
+        // SendNextStep (still executing, several frames up) must NOT ship
+        // the new lap's first move ("n" again) while that gate is up.
+        h.Tracker.NoteRoomObserved(new RoomObservation("A",
+            new HashSet<Direction> { Direction.N }));
+
+        Assert.True(h.Coordinator.IsGateAsserted("TestDispatchGate"));
+        Assert.Equal(2, h.Sent.Count);   // NOT 3 — the wrap-around move must be held
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.Equal(1, h.Runner.CompletedLaps);
+
+        // The dispatcher's own work finishes and clears the gate — the held
+        // move ships, exactly once, once the burst ends and the deferred
+        // resume dispatch runs.
+        h.Coordinator.ClearGate("TestDispatchGate");
+        h.Drain();
+
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
@@ -976,6 +1330,47 @@ public sealed class LoopRunnerTests : IDisposable
         doorReply!(DoorOpenResult.Opened.Instance);
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("w\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    [Fact]
+    public void ClosedDoorInFlight_CombatPauseThenResume_WaitsForDoor_DoesNotRecoverOrResend()
+    {
+        // A door-open FSM in flight when a Combat gate pauses the loop must NOT be
+        // aborted on resume. The FSM has set _stepInFlight and _expectedMoveSource
+        // but hasn't crossed yet, so the tracker legitimately reads Confirmed at the
+        // source room — which the resume-time "refused while paused" check would
+        // otherwise misread as blocked-at-source and spuriously enter recovery,
+        // burning a recover attempt and killing the in-progress open. The loop must
+        // wait for the door reply instead.
+        Harness h = NewHarness(DoorGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Action<DoorOpenResult>? doorReply = null;
+        h.Runner.SetDoorEnqueuer((_, _, _, _, _, reply) => doorReply = reply);
+        h.Runner.SetDoorStopper(() => { });
+
+        h.Runner.Start(new Loop("house", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.NotNull(doorReply);
+        Assert.Empty(h.Sent);                        // door FSM in flight, nothing on the wire
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        // Combat asserts mid-open, then clears.
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+
+        // Resume must NOT recover and must NOT resend — the door FSM is still owed
+        // its reply.
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.DoesNotContain(h.Events,
+            e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+        Assert.Empty(h.Sent);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        // The door finally opens — the loop crosses as normal, proving it only waited.
+        doorReply!(DoorOpenResult.Opened.Instance);
+        Assert.Single(h.Sent);
+        Assert.Equal("e\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
     [Fact]

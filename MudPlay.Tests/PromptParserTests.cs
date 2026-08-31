@@ -117,6 +117,27 @@ public sealed class PromptParserTests
     }
 
     [Fact]
+    public void GossipQuotedPrompt_DoesNotPoisonCurrentOrMaximumPools()
+    {
+        // End-to-end regression for paradigm-20260824-010304. Mindcrime's pasted
+        // Ninja prompt must never reach PromptParser, otherwise its ordinary
+        // high-water rule turns Ermias's authoritative 176 MaxHp into 671 and the
+        // percentage-based major-heal trigger remains permanently true.
+        var (scanner, state, parser) = Setup();
+        parser.ApplyStatScreenMax(176, 214);
+        Feed(scanner, "\x1b[79D\x1b[K[HP=157/MA=100]:");
+
+        Feed(scanner,
+            "\x1b[79D\x1b[KMindcrime gossips: \x1b[0;35m[HP=671/KAI=40]:w\r\n");
+
+        Assert.Equal(157, state.Hp);
+        Assert.Equal(176, state.MaxHp);
+        Assert.Equal(100, state.Ma);
+        Assert.Equal(214, state.MaxMa);
+        Assert.Equal(ManaType.Mana, state.ManaType);
+    }
+
+    [Fact]
     public void StatScreenMax_NonPositive_LeavesLearnedMaxIntact()
     {
         var (scanner, state, parser) = Setup();
@@ -142,6 +163,41 @@ public sealed class PromptParserTests
         parser.ApplyStatScreenMax(44, 8);            // exp screen lists MaxMana 8
         Assert.Equal(44, state.MaxHp);               // HP ceiling still applies
         Assert.Equal(0, state.MaxMa);                // ...but no phantom mana pool
+    }
+
+    [Fact]
+    public void EquipmentMaxDelta_ComposesWithPromptRatchet()
+    {
+        var (scanner, state, parser) = Setup();
+        Feed(scanner, "[HP=400/MA=184]:");            // ratchet learns 184.
+
+        parser.ApplyEquipmentMaxDelta(0, 50);          // equip +50-mana item.
+        Assert.Equal(234, state.MaxMa);
+
+        parser.ApplyEquipmentMaxDelta(0, -50);         // remove it again.
+        Assert.Equal(184, state.MaxMa);
+    }
+
+    [Fact]
+    public void EquipmentMaxDelta_FloorsAtZero()
+    {
+        var (scanner, state, parser) = Setup();
+        Feed(scanner, "[HP=20/MA=10]:");
+
+        parser.ApplyEquipmentMaxDelta(-100, -100);
+        Assert.Equal(0, state.MaxHp);
+        Assert.Equal(0, state.MaxMa);
+    }
+
+    [Fact]
+    public void EquipmentMaxDelta_ZeroDelta_LeavesMaxUntouched()
+    {
+        var (scanner, state, parser) = Setup();
+        Feed(scanner, "[HP=400/MA=184]:");
+
+        parser.ApplyEquipmentMaxDelta(0, 0);
+        Assert.Equal(400, state.MaxHp);
+        Assert.Equal(184, state.MaxMa);
     }
 
     [Fact]

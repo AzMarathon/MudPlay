@@ -19,6 +19,7 @@ public enum BuiltInAction
     OpenSettings,
     OpenGameDataBrowser,
     OpenWireInspector,
+    OpenMonsterIntel,
 
     // ---- Connection ----
     ToggleConnection,
@@ -36,6 +37,7 @@ public enum BuiltInAction
     MovementStart,
     MovementPause,
     MovementStop,
+    ToggleSprintMode,
 
     // ---- Bulk one-shot actions (toolbar / Action menu) ----
     ActionGetAll,

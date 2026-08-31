@@ -139,6 +139,19 @@ public sealed class AutoHazardCounterProvisioner
 
     private void TryRaiseBuff(RoomHazardIndex.BuffCounter counter)
     {
+        // A passive immunity guard (the desert sunstone wristband) makes the whole
+        // hazard a no-op just by being POSSESSED — carried or worn, no `use` needed
+        // (user-confirmed: the player only has to have it). Spending a waterskin
+        // charge to raise the buff is pointless while one is held, so skip the `use`
+        // entirely (report -112011: a swig fired in the Scorching Desert though the
+        // sunstone already granted immunity). `_carriedCount` counts pack + worn.
+        if (FirstCarried(counter.ImmunityItems) is int guard and > 0)
+        {
+            _log?.Info(LogCategory,
+                $"buff spell {counter.BuffSpell}: immune via {_itemName(guard) ?? guard.ToString()} — no `use` needed");
+            return;
+        }
+
         int pick = FirstCarried(counter.SourceItems);
         if (pick == 0)
         {
@@ -197,6 +210,15 @@ public sealed class AutoHazardCounterProvisioner
         // Only ever act on a live walk — a lapse line seen while idle is just the
         // player standing in the room, not our route committing to march through.
         if (!_walkActive()) return;
+
+        // Immune via a passive guard — the lapse prompt can't actually harm us, so
+        // neither re-`use` (pointless) nor halt (we're safe). Just walk on.
+        if (FirstCarried(counter.ImmunityItems) is int guard and > 0)
+        {
+            _log?.Debug(LogCategory,
+                $"buff spell {counter.BuffSpell}: lapse prompt ignored — immune via {_itemName(guard) ?? guard.ToString()}");
+            return;
+        }
 
         // A prior `use` never produced its swig: the item drew nothing (out of
         // charges / waterskins). Re-firing would march deeper into a hazard we can

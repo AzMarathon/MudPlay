@@ -164,6 +164,106 @@ public sealed class EquipmentManagerTests
         Assert.Equal(new[] { "wear iron helm", "wear plate mail" }, cmds);
     }
 
+    // ===== PrependTwoHandOffHandConflictRems (pure) =====
+
+    private static IReadOnlyList<EquippedItem> WornSlots(params (string Slot, string Name)[] items)
+        => items.Select(i => new EquippedItem(i.Name, i.Slot)).ToList();
+
+    private static bool TwoHanded(string? w, params string[] twoHanders)
+        => twoHanders.Any(t => string.Equals(w, t, StringComparison.OrdinalIgnoreCase));
+
+    [Fact]
+    public void PrependConflictRems_OffHandWornWhileTwoHander_RemsTheTwoHanderFirst()
+    {
+        // Case 1: swapping the Default set's 2H quarterstaff to the pre-rest set's
+        // off-hand + 1H — the off-hand wear is rejected unless the 2H comes off first.
+        EquipmentSet set = Set("prerest", "Pre-rest",
+            Entry(EquipmentSlot.OffHand, "griffon shield"),
+            Entry(EquipmentSlot.Weapon, "throwing hammers"));
+        var cmds = new List<string> { "wear griffon shield", "wear throwing hammers" };
+
+        List<string> result = EquipmentManager.PrependTwoHandOffHandConflictRems(
+            set, WornSlots(("Weapon Hand", "quarterstaff")),
+            w => TwoHanded(w, "quarterstaff"), cmds);
+
+        Assert.Equal(
+            new[] { "rem quarterstaff", "wear griffon shield", "wear throwing hammers" }, result);
+    }
+
+    [Fact]
+    public void PrependConflictRems_TwoHanderWieldedWhileOffHandWorn_RemsTheOffHandFirst()
+    {
+        // Case 2 (report -142732): swapping the rest set's 1H + shield to the Default
+        // set's 2H quarterstaff — "You may not ready a 2-handed weapon with your
+        // griffon shield worn!" unless the off-hand comes off first.
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Weapon, "quarterstaff"));
+        var cmds = new List<string> { "wear quarterstaff" };
+
+        List<string> result = EquipmentManager.PrependTwoHandOffHandConflictRems(
+            set, WornSlots(("Weapon Hand", "throwing hammers"), ("Off-Hand", "griffon shield")),
+            w => TwoHanded(w, "quarterstaff"), cmds);
+
+        Assert.Equal(new[] { "rem griffon shield", "wear quarterstaff" }, result);
+    }
+
+    [Fact]
+    public void PrependConflictRems_TwoHanderWielded_NoOffHandWorn_LeavesCommandsUnchanged()
+    {
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Weapon, "quarterstaff"));
+        var cmds = new List<string> { "wear quarterstaff" };
+
+        List<string> result = EquipmentManager.PrependTwoHandOffHandConflictRems(
+            set, WornSlots(("Weapon Hand", "throwing hammers")),
+            w => TwoHanded(w, "quarterstaff"), cmds);
+
+        Assert.Equal(new[] { "wear quarterstaff" }, result);
+    }
+
+    [Fact]
+    public void PrependConflictRems_OneHandedWeaponWorn_LeavesCommandsUnchanged()
+    {
+        EquipmentSet set = Set("prerest", "Pre-rest",
+            Entry(EquipmentSlot.OffHand, "griffon shield"),
+            Entry(EquipmentSlot.Weapon, "throwing hammers"));
+        var cmds = new List<string> { "wear griffon shield", "wear throwing hammers" };
+
+        List<string> result = EquipmentManager.PrependTwoHandOffHandConflictRems(
+            set, WornSlots(("Weapon Hand", "long sword")), _ => false, cmds);
+
+        Assert.Equal(new[] { "wear griffon shield", "wear throwing hammers" }, result);
+    }
+
+    [Fact]
+    public void PrependConflictRems_OffHandNotBeingWorn_NoRem()
+    {
+        // Off-hand already on (not in the wear list) ⇒ nothing to clear the hand
+        // for, so a worn two-hander is left alone.
+        EquipmentSet set = Set("prerest", "Pre-rest",
+            Entry(EquipmentSlot.OffHand, "griffon shield"),
+            Entry(EquipmentSlot.Weapon, "throwing hammers"));
+        var cmds = new List<string> { "wear throwing hammers" };
+
+        List<string> result = EquipmentManager.PrependTwoHandOffHandConflictRems(
+            set, WornSlots(("Weapon Hand", "quarterstaff")), _ => true, cmds);
+
+        Assert.Equal(new[] { "wear throwing hammers" }, result);
+    }
+
+    [Fact]
+    public void PrependConflictRems_SetHasNoOffHand_OneHandedWeapon_LeavesCommandsUnchanged()
+    {
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Weapon, "long sword"));
+        var cmds = new List<string> { "wear long sword" };
+
+        List<string> result = EquipmentManager.PrependTwoHandOffHandConflictRems(
+            set, WornSlots(("Weapon Hand", "dagger"), ("Off-Hand", "buckler")), _ => false, cmds);
+
+        Assert.Equal(new[] { "wear long sword" }, result);
+    }
+
     // ===== ApplyVirtualSlots (pure) =====
 
     [Fact]
@@ -311,6 +411,77 @@ public sealed class EquipmentManagerTests
         EquipmentManager mgr = Manager(settings, SnapshotWithWorn("helm"), new CombatSettings());
 
         Assert.Equal(EquipResult.NoChange, mgr.ApplyByKeyword("armor"));
+    }
+
+    // ===== CurrentSetId tracking (Currently Equipped readout) =====
+
+    [Fact]
+    public void ApplyBySetId_RecordsCurrentSet_FiresChangedOnlyOnChange()
+    {
+        EquipmentSettings settings = new()
+        {
+            Sets =
+            {
+                SetWithId("set-1", "Combat", Entry(EquipmentSlot.AlternateWeapon, "bow")),
+                SetWithId("set-2", "Backstab", Entry(EquipmentSlot.AlternateWeapon, "dagger")),
+            },
+        };
+        EquipmentManager mgr = Manager(settings, InventorySnapshot.Empty, new CombatSettings());
+        int fired = 0;
+        mgr.CurrentSetChanged += () => fired++;
+
+        Assert.Null(mgr.CurrentSetId);
+
+        mgr.ApplyBySetId("set-1");
+        Assert.Equal("set-1", mgr.CurrentSetId);
+        Assert.Equal(1, fired);
+
+        // Re-applying the same set doesn't re-fire.
+        mgr.ApplyBySetId("set-1");
+        Assert.Equal("set-1", mgr.CurrentSetId);
+        Assert.Equal(1, fired);
+
+        // A different set updates and fires once.
+        mgr.ApplyBySetId("set-2");
+        Assert.Equal("set-2", mgr.CurrentSetId);
+        Assert.Equal(2, fired);
+    }
+
+    // A physical-slot apply now streams its wear burst synchronously (the paced
+    // DispatcherTimer is gone — report paradigm-20260827-082305 / equip-delay
+    // removal), so the whole delta lands on the wire in one call and the test can
+    // assert it directly (before, the unpumped timer meant nothing was sent).
+    [Fact]
+    public void ApplyByKeyword_PhysicalSet_StreamsWearBurstSynchronously()
+    {
+        EquipmentSettings settings = new()
+        {
+            Sets =
+            {
+                Set("armor", "Armor",
+                    Entry(EquipmentSlot.Head, "iron helm"),
+                    Entry(EquipmentSlot.Torso, "plate mail")),
+            },
+        };
+        EquipmentManager mgr = Manager(settings,
+            SnapshotHeld("iron helm", "plate mail"), new CombatSettings());
+
+        Assert.Equal(EquipResult.Applied, mgr.ApplyByKeyword("armor"));
+        Assert.Equal(new[] { "wear iron helm", "wear plate mail" }, Wire(mgr));
+    }
+
+    [Fact]
+    public void ApplyBySetId_UnknownId_LeavesCurrentSetUnchanged()
+    {
+        EquipmentSettings settings = new()
+        {
+            Sets = { SetWithId("set-1", "Combat", Entry(EquipmentSlot.AlternateWeapon, "bow")) },
+        };
+        EquipmentManager mgr = Manager(settings, InventorySnapshot.Empty, new CombatSettings());
+        mgr.ApplyBySetId("set-1");
+
+        mgr.ApplyBySetId("nope");   // NotFound — never reaches the apply
+        Assert.Equal("set-1", mgr.CurrentSetId);
     }
 
     // ===== ApplyBySetId resolution (trigger coordinator entry point) =====
@@ -735,6 +906,44 @@ public sealed class EquipmentManagerTests
             set, worn, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
     }
 
+    // ===== ComposePairedSlotCommands (both-swap single-rem optimization) =====
+
+    [Fact]
+    public void ComposePairedSlotCommands_BothWristsSwap_InterleavesOneRem_NotTwo()
+    {
+        // Both bracelets swap (worn b1,b2 → set b3,b4): the first `wear` auto-evicts
+        // the first-worn (b1), so only b2 needs an explicit rem — interleaved before
+        // b4's wear. One rem, not two (report paradigm-20260827-082305).
+        EquipmentSet set = Set("mana", "Pre-rest Mana",
+            Entry(EquipmentSlot.Wrist1, "b3"),
+            Entry(EquipmentSlot.Wrist2, "b4"));
+        IReadOnlyList<EquippedItem> worn = WornList(("b1", "Wrist"), ("b2", "Wrist"));
+        var beingWorn = new HashSet<string>(new[] { "b3", "b4" }, StringComparer.OrdinalIgnoreCase);
+        var wears = new List<string> { "wear b3", "wear b4" };
+
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, beingWorn, wears);
+
+        Assert.Equal(new[] { "wear b3", "rem b2", "wear b4" }, cmds);
+    }
+
+    [Fact]
+    public void ComposePairedSlotCommands_OneWristSwap_KeepsPrependedFree()
+    {
+        // Only Wrist1 changes (b1 → b3); the set keeps b2 on the other wrist, so the
+        // single-swap path stands: free the odd b1 up front (can't rely on the wear
+        // trading with the right member).
+        EquipmentSet set = Set("mana", "Pre-rest Mana",
+            Entry(EquipmentSlot.Wrist1, "b3"),
+            Entry(EquipmentSlot.Wrist2, "b2"));
+        IReadOnlyList<EquippedItem> worn = WornList(("b1", "Wrist"), ("b2", "Wrist"));
+        var beingWorn = new HashSet<string>(new[] { "b3" }, StringComparer.OrdinalIgnoreCase);
+        var wears = new List<string> { "wear b3" };
+
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, beingWorn, wears);
+
+        Assert.Equal(new[] { "rem b1", "wear b3" }, cmds);
+    }
+
     [Fact]
     public void BuildEquipCommands_EmptySet_FillsFromCarriedInOrder()
     {
@@ -781,6 +990,28 @@ public sealed class EquipmentManagerTests
             set, carried, WornList(), resolve, EquipAll);
 
         Assert.Equal(new[] { "wear ruby ring", "wear emerald ring" }, cmds);
+    }
+
+    [Fact]
+    public void BuildEquipCommands_SecondPairedSlot_RemsOddWornRingFirst()
+    {
+        // The manual / inventory-aware path (Equip All / @equip) must also free the
+        // odd worn finger before wearing the set's SECOND ring, or the game's `wear`
+        // trades with the kept ring and the pair never converges — the same thrash
+        // the set-only path already guards (report paradigm-20260825-103537).
+        // Set wants pearl (F1) + silver (F2); worn is pearl + gold jeweled; carrying silver.
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Finger1, "pearl ring"),
+            Entry(EquipmentSlot.Finger2, "silver ring"));
+        var carried = new[] { "silver ring" };
+        IReadOnlyList<EquippedItem> worn = WornList(
+            ("pearl ring", "Finger"), ("gold jeweled ring", "Finger"));
+        Func<string, EquipmentSlot?> resolve = Resolver(("silver ring", EquipmentSlot.Finger1));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(set, carried, worn, resolve, EquipAll);
+
+        // rem the odd worn ring FIRST, then wear the set's second ring onto the freed finger.
+        Assert.Equal(new[] { "rem gold jeweled ring", "wear silver ring" }, cmds);
     }
 
     [Fact]
@@ -912,5 +1143,227 @@ public sealed class EquipmentManagerTests
             set, carried, WornList(), resolve, EquipAll);
 
         Assert.Equal(new[] { "wear padded helm" }, cmds);
+    }
+
+    // ===== unwearable-slot blocks =====
+
+    private static EquipmentSet SetWithId(string id, params EquipmentSlotEntry[] slots)
+        => new() { Id = id, Keyword = "k", Name = "N", Slots = slots.ToList() };
+
+    // A manager wired for the block machinery: the restriction predicate decides
+    // which item names are "unwearable"; resolve/canEquip round out the inventory
+    // path but the set-only apply used by these tests doesn't need them.
+    private static EquipmentManager BlockManager(
+        EquipmentSettings settings, InventorySnapshot snapshot, Func<string, bool> restrictsEquip)
+        => new(
+            readEquipment: () => settings,
+            getSnapshot:   () => snapshot,
+            readCombat:    () => new CombatSettings(),
+            writeCombat:   _ => { },
+            canEquipItem:  static _ => true,
+            restrictsEquip: restrictsEquip);
+
+    [Fact]
+    public void BuildWearCommands_SkipsBlockedNames()
+    {
+        EquipmentSet set = Set("armor", "Armor",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "cursed plate"));
+
+        List<string> cmds = EquipmentManager.BuildWearCommands(
+            set, Worn(), blockedNames: Worn("cursed plate"));
+
+        Assert.Equal(new[] { "wear iron helm" }, cmds);
+    }
+
+    [Fact]
+    public void BuildEquipCommands_SkipsBlockedSetPick()
+    {
+        EquipmentSet set = Set("armor", "Armor",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "cursed plate"));
+        var carried = new[] { "iron helm", "cursed plate" };
+        Func<string, EquipmentSlot?> resolve = Resolver(
+            ("iron helm", EquipmentSlot.Head), ("cursed plate", EquipmentSlot.Torso));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(
+            set, carried, WornList(), resolve, EquipAll, blockedNames: Worn("cursed plate"));
+
+        Assert.Equal(new[] { "wear iron helm" }, cmds);
+    }
+
+    [Fact]
+    public void BuildEquipCommands_BlockedItemNotRefilledByFallback()
+    {
+        // The set doesn't name the piece, but it's carried and fits a slot — the
+        // fallback would fill it. A block must keep it out of the fallback too.
+        EquipmentSet set = Set("armor", "Armor");
+        var carried = new[] { "cursed plate" };
+        Func<string, EquipmentSlot?> resolve = Resolver(("cursed plate", EquipmentSlot.Torso));
+
+        List<string> cmds = EquipmentManager.BuildEquipCommands(
+            set, carried, WornList(), resolve, EquipAll, blockedNames: Worn("cursed plate"));
+
+        Assert.Empty(cmds);
+    }
+
+    [Fact]
+    public void RefreshBlocksForSet_RestrictedItem_BlocksAndAnnounces()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: n => n == "evil cuirass");
+
+        EquipmentManager.EquipBlock? announced = null;
+        mgr.SlotBlockedAnnounced += b => announced = b;
+
+        mgr.RefreshBlocksForSet(set, announce: true);
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+        Assert.NotNull(announced);
+        Assert.Equal("evil cuirass", announced!.Value.ItemName);
+    }
+
+    [Fact]
+    public void RefreshBlocksForSet_SilentSeed_DoesNotAnnounce()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => true);
+
+        int announces = 0;
+        mgr.SlotBlockedAnnounced += _ => announces++;
+
+        mgr.RefreshBlocksForSet(set, announce: false);
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+        Assert.Equal(0, announces);
+    }
+
+    [Fact]
+    public void RefreshBlocksForSet_ItemBecomesWearable_ClearsProactiveBlock()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        bool restricted = true;
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => restricted);
+
+        mgr.RefreshBlocksForSet(set);
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+
+        restricted = false;                 // e.g. alignment returned
+        mgr.RefreshBlocksForSet(set);
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void Apply_RestrictedSetItem_IsBlockedAndNotSent()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: n => n == "evil cuirass");
+
+        mgr.ApplyBySetId("s1");
+
+        Assert.Contains("wear iron helm", Wire(mgr));
+        Assert.DoesNotContain("wear evil cuirass", Wire(mgr));
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void NoteWearRefused_BlocksTheAttemptedArmorSlot()
+    {
+        // Nothing restricted up front, so the wear is sent; the game then refuses
+        // it (a stale-alignment EP-zap the client couldn't predict).
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");
+        Assert.Contains("wear evil cuirass", Wire(mgr));
+
+        mgr.NoteWearRefused();
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void NoteEquipSucceeded_DequeuesSoNextRefusalBlocksTheNextPiece()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");                 // sends both wears, oldest first
+
+        mgr.NoteEquipSucceeded("iron helm");    // helm worn OK → drop it from pending
+        mgr.NoteWearRefused();                  // refusal now maps to the cuirass
+
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Head));
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void NoteWeaponRefused_BlocksWeaponSlotNotArmor()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Torso, "evil cuirass"),
+            Entry(EquipmentSlot.Weapon, "unholy blade"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");
+
+        mgr.NoteWeaponRefused();
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Weapon));
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void ServerConfirmedBlock_IsStickyAcrossRefresh_ButClearedByClearBlock()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);   // stub says wearable, but the game refused
+
+        mgr.ApplyBySetId("s1");
+        mgr.NoteWearRefused();
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+
+        // A re-eval that finds the item "wearable" must NOT lift a game-confirmed
+        // refusal — only the user editing the slot clears it.
+        mgr.RefreshBlocksForSet(set);
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+
+        mgr.ClearBlock("s1", EquipmentSlot.Torso);
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    [Fact]
+    public void ResetBlocks_ClearsEverything()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => true);
+
+        mgr.RefreshBlocksForSet(set);
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+
+        mgr.ResetBlocks();
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
     }
 }

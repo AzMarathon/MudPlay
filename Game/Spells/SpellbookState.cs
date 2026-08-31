@@ -103,6 +103,29 @@ public sealed class SpellbookState
     // alongside learnable spells. Empty when no class is set yet.
     public IReadOnlyList<ClassCastItem> GetCastItems() => _catalog.GetClassCastItems(ClassNumber);
 
+    // Cast-on-use items whose spell is a WHOLE-PARTY buff (Targets 10 / 13) and which
+    // are unlimited-use — the only items eligible as a party-buff slot. `use <item>`
+    // takes no target, so a single-target item spell can't be aimed at a party member;
+    // only a party-wide item cast (which blankets everyone in one use) works as a party
+    // buff. Limited-charge items are excluded (they'd burn out on a recast loop).
+    public IReadOnlyList<ClassCastItem> GetWholePartyCastItems()
+    {
+        List<ClassCastItem> result = new();
+        foreach (ClassCastItem item in GetCastItems())
+            if (item.Unlimited && IsWholePartySpellNumber(item.SpellNumber))
+                result.Add(item);
+        return result;
+    }
+
+    // True when the #item-cast token resolves to a whole-party cast item (used to
+    // classify a party-buff slot holding an item token as whole-party).
+    public bool IsTokenWholeParty(string? token) =>
+        ItemCastToken.TryResolve(token, GetCastItems(), out ClassCastItem item)
+        && item.Unlimited && IsWholePartySpellNumber(item.SpellNumber);
+
+    private bool IsWholePartySpellNumber(int spellNumber) =>
+        _catalog.GetTargetsByNumber(spellNumber) is { } targets && BuffClassifier.IsWholeParty(targets);
+
     // Items.Number of the first item that teaches the given spell (LearnSp), or 0
     // when none does. Backs the Spell Book's double-click-to-item-record.
     public int GetTeachingItemNumber(int spellNumber) => _catalog.GetTeachingItemNumber(spellNumber);
@@ -236,6 +259,25 @@ public sealed class SpellbookState
         _obtainedNames.UnionWith(nextNames);
         _obtained.Clear();
         _obtained.UnionWith(nextNums);
+        RebuildAvailablePicks();
+        Changed?.Invoke();
+    }
+
+    // Seed the authoritative obtained-name set directly from a persisted snapshot,
+    // WITHOUT requiring the names to resolve against the current Available list.
+    // Profile load can run before the game-data set is active (Available empty), so
+    // SetObtainedByNames would resolve nothing and drop every persisted name — then
+    // the immediate post-migration Save writes null and the learned set is lost on
+    // upgrade (report paradigm-20260820-055007). This keeps the names as the source
+    // of truth; the numbers re-derive on the next Reseed once Available exists.
+    public void SeedObtainedNames(IEnumerable<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        HashSet<string> nextNames = new(names, StringComparer.OrdinalIgnoreCase);
+        if (nextNames.SetEquals(_obtainedNames)) return;
+        _obtainedNames.Clear();
+        _obtainedNames.UnionWith(nextNames);
+        ResolveObtainedFromNames();
         RebuildAvailablePicks();
         Changed?.Invoke();
     }

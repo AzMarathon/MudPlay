@@ -101,6 +101,10 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.CharacterWorkshop.ManageBossesDialogViewModel,
                 MudPlay.Views.CharacterWorkshop.ManageBossesDialog>();
+            // @timer sync merge window.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.CharacterWorkshop.BossTimerSyncViewModel,
+                MudPlay.Views.CharacterWorkshop.BossTimerSyncWindow>();
 
             // Per-action keybind rebind dialog — opened from any
             // toolbar button or menu item that owns a BuiltInAction.
@@ -168,6 +172,17 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.BlacklistEditorDialogViewModel,
                 MudPlay.Views.BlacklistEditorDialog>();
+
+            // Modify avoid rooms (Game Data menu) — staged editor over the
+            // per-character avoided + stash room sets.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.AvoidRoomsEditorDialogViewModel,
+                MudPlay.Views.AvoidRoomsEditorDialog>();
+
+            // Add party buff (Party window buff panel) — pick a buff + recast timer.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.AddBuffDialogViewModel,
+                MudPlay.Views.AddBuffDialog>();
 
             // Manage Sets… (Game Data menu) — copy/move a set's loop
             // library between sets, or delete a set (tables + loops).
@@ -246,6 +261,13 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.Navigation.WaypointActionEditDialogViewModel,
                 MudPlay.Views.Navigation.WaypointActionEditDialog>();
+
+            // Map right-click "Toggle: Roomba Room" (or the tab's Add Room box) →
+            // Roomba Mode's rule-list editor for that room (category/slot rules +
+            // catch-all flag).
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.Navigation.GhRoomLabelPickerDialogViewModel,
+                MudPlay.Views.Navigation.GhRoomLabelPickerDialog>();
 
             // Navigation → "Manage" chip → loops + auto-lair markers
             // CRUD surface. Modeless; replaces the bottom-strip

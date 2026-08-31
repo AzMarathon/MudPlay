@@ -242,6 +242,7 @@ public static class KnownPatterns
     public const string ConversationTelepathOut = "conversation.telepath-out";   // outgoing "--- Telepath sent to X ---"
     public const string ConversationYell        = "conversation.yell";           // both "X yells" and "You yell"
     public const string ConversationLocal       = "conversation.local";
+    public const string ConversationDirectedSayOut = "conversation.directed-say-out";  // outgoing "--- Message Directed to X ---"
     // Paradigm-only server PvP announcements — every one leads with the
     // "Server PvP Message: " prefix (a kill, "X just killed Y!", is one form).
     // ChatRouter realm-gates these to paradigm before emitting.
@@ -255,7 +256,8 @@ public static class KnownPatterns
     public const string PlayerGets        = "item.player-gets";     // combined: own + others
     public const string PlayerDrops       = "item.player-drops";    // combined: own + others
     public const string UserEquipped      = "item.user-equipped";   // wearing + lit (torches etc.)
-    public const string UserEquipFailed   = "item.user-equip-failed";
+    public const string UserEquipFailed   = "item.user-equip-failed";  // armor: "You may not wear that item!"
+    public const string UserWieldFailed   = "item.user-wield-failed";  // weapon EP-zap: "You may not use that weapon."
     public const string UserRemoved       = "item.user-removed";
     public const string HiddenItems       = "item.hidden-items";
     public const string ShopListHeader    = "item.shop-list-header";
@@ -432,6 +434,13 @@ public static class KnownPatterns
     public const string DoorIsLocked          = "door.islocked";           // "is locked" (open hit a keyed door)
     public const string DoorKeyUnlockSuccess  = "door.key.unlocked";       // "successfully unlocked" (after use <key> <dir>)
     public const string DoorKeyUnknown        = "door.key.unknown";        // "have no <item>" / "you don't have" (use <key> failed)
+
+    // ----- Winch (gate-controlling) — drives WinchManager ----------------
+    // A `pull winch` prerequisite that opens a gate a beat later. Success winds the
+    // winch up (retry until it turns); the gate then opens on a delay with no line
+    // of its own, so WinchManager polls the room's open-gate exit to confirm.
+    public const string WinchTurned           = "winch.turned";            // "You heave mightily on the winch, and it begins to turn!"
+    public const string WinchWontBudge        = "winch.wontbudge";         // "You heave mightily on the winch, but it does not budge."
 
     // ----- Another player forcing a door (LeaderDoorAssistManager) -------
     // Observer-side line emitted when another in-room player fails to bash

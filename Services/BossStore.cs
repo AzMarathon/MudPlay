@@ -78,6 +78,28 @@ public sealed class BossStore
     public IReadOnlyList<BossDef> ResolveForRealm(RealmType realm)
         => Resolve().Where(b => realm == RealmType.ParaMud ? b.InParadigm : b.InStock).ToList();
 
+    // Find a boss ANYWHERE in the catalog — the user's overlay additions AND the seed,
+    // INCLUDING a seed boss the user removed from their list (which Resolve() hides) —
+    // by MDB number first, else by name. Used to adopt a synced timer for a boss the
+    // user isn't currently tracking: the real def (name + respawn config) is recovered
+    // so the boss can be un-hidden rather than the timer orphaned. Returns a clone, or
+    // null when no catalog entry matches.
+    public BossDef? FindInCatalog(int? monsterNumber, string? name)
+    {
+        if (monsterNumber is { } num)
+        {
+            BossDef? byNum = _overlay.Values.FirstOrDefault(b => !b.Removed && b.MonsterNumber == num)
+                             ?? _seed.FirstOrDefault(b => b.MonsterNumber == num);
+            if (byNum is not null) return byNum.Clone();
+        }
+        if (!string.IsNullOrEmpty(name))
+        {
+            if (_overlay.TryGetValue(name, out BossDef? ov) && !ov.Removed) return ov.Clone();
+            if (_seedByName.TryGetValue(name, out BossDef? seed)) return seed.Clone();
+        }
+        return null;
+    }
+
     // Persist the user's boss list to the active set's overlay as a DELTA: a boss
     // matching the seed is dropped (so a later seed update still flows through); an
     // edited / added boss is written; a seed boss the user deleted is written as a

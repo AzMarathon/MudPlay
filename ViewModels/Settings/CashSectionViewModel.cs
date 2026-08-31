@@ -72,6 +72,22 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     // decomposes the excess into largest-first `hide N <coin>` commands.
 
     [ObservableProperty] private long _keepOnHandWealth;
+    // Denomination the keep-on-hand amount is counted in (banking). "1 Runic"
+    // keeps 1,000,000 copper.
+    [ObservableProperty] private CoinDenomination _keepOnHandDenomination = CoinDenomination.Copper;
+
+    // Stash-side coin cutoff: stash coins up to this denomination (Everything = no
+    // filter). Dropdown source below.
+    [ObservableProperty] private StashCoinCutoff _stashCoinCutoff = StashCoinCutoff.Everything;
+    public IReadOnlyList<StashCoinCutoff> StashCoinCutoffChoices { get; } =
+        Enum.GetValues<StashCoinCutoff>();
+
+    // Stash while dragged through a marked stash room as a party follower.
+    [ObservableProperty] private bool _stashAsFollower;
+
+    // Dropdown source for both denomination pickers (low → high).
+    public IReadOnlyList<CoinDenomination> DenominationChoices { get; } =
+        Enum.GetValues<CoinDenomination>();
 
     // ----- Coin encumbrance gate + cascade --------------------------
 
@@ -144,7 +160,11 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
             AutoDepositIfCoinsExceed   = ClampNonNeg(AutoDepositIfCoinsExceed),
             BankRoomKey                = SelectedBank?.Value ?? BankRoomKey ?? string.Empty,
 
-            KeepOnHandWealth = ClampNonNeg(KeepOnHandWealth),
+            KeepOnHandWealth       = ClampNonNeg(KeepOnHandWealth),
+            KeepOnHandDenomination = KeepOnHandDenomination,
+
+            StashCoinCutoff = StashCoinCutoff,
+            StashAsFollower = StashAsFollower,
 
             SkipCollectIfMakesLight    = SkipCollectIfMakesLight,
             SkipCollectIfMakesMedium   = SkipCollectIfMakesMedium,
@@ -209,7 +229,11 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         SelectedBank = BankChoices.FirstOrDefault(c =>
             string.Equals(c.Value, BankRoomKey, StringComparison.OrdinalIgnoreCase));
 
-        KeepOnHandWealth = dto.KeepOnHandWealth;
+        KeepOnHandWealth       = dto.KeepOnHandWealth;
+        KeepOnHandDenomination = dto.KeepOnHandDenomination;
+
+        StashCoinCutoff = dto.StashCoinCutoff;
+        StashAsFollower = dto.StashAsFollower;
 
         SkipCollectIfMakesLight    = dto.SkipCollectIfMakesLight;
         SkipCollectIfMakesMedium   = dto.SkipCollectIfMakesMedium;
@@ -264,6 +288,9 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     partial void OnAutoDepositIfCoinsExceedChanged(long value)        => MarkDirty();
     partial void OnBankRoomKeyChanged(string value)                   => MarkDirty();
     partial void OnKeepOnHandWealthChanged(long value)                => MarkDirty();
+    partial void OnKeepOnHandDenominationChanged(CoinDenomination value) => MarkDirty();
+    partial void OnStashCoinCutoffChanged(StashCoinCutoff value)      => MarkDirty();
+    partial void OnStashAsFollowerChanged(bool value)                => MarkDirty();
     // ----- Encumbrance-gate cascade ---------------------------------
     // The three gates are nested by strictness: Light (strictest) ⊃
     // Medium ⊃ Heavy (loosest). Checking a stricter gate subsumes the

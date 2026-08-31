@@ -180,6 +180,43 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void MajorHeal_TakesOverBelowMajorTrigger_NotMinor()
+    {
+        // Report paradigm-20260819-121247: below the major trigger the engine kept
+        // firing minor (walked first) and never reached major — the player died.
+        // With both configured + major affordable, major must take over in its band.
+        using Harness h = new();
+        h.Spells.MinorHealSpell = "mihe";
+        h.Spells.MajorHealSpell = "mahe";
+        h.Health.MinorHealCombatTrigger = 80;
+        h.Health.MajorHealCombatTrigger = 70;
+
+        h.SetPrompt(hp: 40, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);  // 40 <= 70 → major band
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mahe", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void MinorHeal_FallsBackInMajorBand_WhenMajorUnaffordable()
+    {
+        // In the major band but can't pay for the major heal → minor still fires
+        // (the yield is affordability-gated), rather than healing nothing.
+        using Harness h = new();
+        h.Spells.MinorHealSpell = "mihe";
+        h.Spells.MajorHealSpell = "mahe";
+        h.Health.MinorHealCombatTrigger = 80;
+        h.Health.MajorHealCombatTrigger = 70;
+        h.ManaCosts["mahe"] = 60;   // major costs more than the pool below
+        h.ManaCosts["mihe"] = 10;
+
+        h.SetPrompt(hp: 40, maxHp: 100, ma: 30, maxMa: 100, inCombat: true);  // ma 30 < 60 → can't afford major
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("mihe", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void RoutineCombat_NoCast_WhenAboveThreshold()
     {
         using Harness h = new();
@@ -288,23 +325,23 @@ public sealed class CastingDirectorTests
     // ----- tier interaction -------------------------------------------
 
     [Fact]
-    public void DefaultPriority_MinorBeatsMajor_WhenBothCandidates()
+    public void MajorTakesPrecedence_InMajorBand_EvenAtDefaultPriority()
     {
-        // Default priority: Minor self heal=3, Major self heal=4.
-        // HP=30% triggers BOTH (Minor threshold 70%, Major threshold
-        // 40%). Lower priority number wins → Minor goes first. If
-        // the user wants Major to win at life-threat, they re-order
-        // priorities on the Spells tab.
+        // Default priority walks Minor (3) before Major (4), but severity wins:
+        // once HP is in the major band the minor slot YIELDS to major, so major
+        // fires without the user having to re-order priorities (report
+        // paradigm-20260819-121247). HP=30% is below BOTH triggers (Minor 70%,
+        // Major 40%).
         using Harness h = new();
         h.Spells.MajorHealSpell = "fullheal";
         h.Spells.MinorHealSpell = "heal";
         h.Health.MajorHealCombatTrigger = 40;
         h.Health.MinorHealCombatTrigger = 70;
 
-        h.SetPrompt(hp: 30, maxHp: 100, inCombat: true);
+        h.SetPrompt(hp: 30, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);
 
         Assert.Single(h.CastsSent);
-        Assert.Equal("heal", h.CastsSent[0]);
+        Assert.Equal("fullheal", h.CastsSent[0]);
     }
 
     [Fact]
@@ -531,11 +568,15 @@ public sealed class CastingDirectorTests
         public ConditionTracker Conditions { get; }
         public CastingDirector Director { get; }
         public List<string> CastsSent { get; } = new();
-        public List<string> SelfBuffLanded { get; } = new();
+        public List<string> SelfBuffCast { get; } = new();
         public SpellsSettings Spells { get; set; } = new();
         public HealthSettings Health { get; set; } = new();
         public bool AutoBlessEnabled { get; set; } = true;
         public bool AutoHealRestEnabled { get; set; } = true;
+
+        /// <summary>Extra unified-list buffs (party / member / whole-party) beyond the
+        /// self-bless the tests set via <see cref="Spells"/>. Rarely used here.</summary>
+        public BuffSettings PartyBuffs { get; } = new();
 
         /// <summary>When true the triggered-rest gate reports an active recovery
         /// rest (HP/MA below rest-if-below), so the bless "while resting" gate
@@ -576,6 +617,10 @@ public sealed class CastingDirectorTests
             Director.SetTriggeredRestGate(() => TriggeredRest);
             Director.SetBuffStripRoomGate(() => BuffStripRoom);
             Director.SetClock(() => Now);
+            // Self buffs now live in the unified list. Fold the tests' self-bless
+            // config (Spells.BlessSlots / WhenHp/MaFull) into it at read time, exactly
+            // like ProfileMigrations does on load, so the tests set them the old way.
+            Director.SetPartyBuffSource(FoldedBuffs);
             // Self-buff confirmation: the condition's Name is the buff short
             // in this harness, so map a fired record back to its Name and
             // resolve its duration from BuffInfo.
@@ -584,13 +629,38 @@ public sealed class CastingDirectorTests
                     ? (info.Caster, info.Duration)
                     : null,
                 record => record.Name);
-            // Capture the reroll sink so a test can assert a confirmed self-buff
-            // landing is reported to the mana-regen reroll engine.
-            Director.SetSelfBuffLandedSink(SelfBuffLanded.Add);
+            // Capture the reroll sink so a test can assert a self-buff CAST is
+            // reported to the mana-regen reroll engine (fired from the send path).
+            Director.SetSelfBuffCastSink(SelfBuffCast.Add);
             // Healthy baseline so Tier-1 doesn't fire over the cure path.
             State.MaxHp = 200;
             State.Hp = 200;
             State.HasPromptData = true;
+        }
+
+        // Mirror ProfileMigrations' v2→v3 fold: BlessSlots (in order) + WhenHp/MaFull
+        // become CastOnSelf slots, prepended to any explicit unified-list buffs.
+        private BuffSettings FoldedBuffs()
+        {
+            BuffSettings merged = new();
+            foreach (System.Collections.Generic.KeyValuePair<int, string> kv in
+                     Spells.BlessSlots.OrderBy(k => k.Key))
+            {
+                if (string.IsNullOrWhiteSpace(kv.Value)) continue;
+                int margin = Spells.BlessSlotRecastMargins.TryGetValue(kv.Key, out int m)
+                    ? m : SpellsSettings.DefaultBlessRecastMarginSec;
+                merged.Slots.Add(new BuffSlot { Spell = kv.Value, CastOnSelf = true, RecastMarginSec = margin });
+            }
+            if (!string.IsNullOrWhiteSpace(Spells.WhenHpFullSpell))
+                merged.Slots.Add(new BuffSlot { Spell = Spells.WhenHpFullSpell, CastOnSelf = true, OnlyWhenHpFull = true });
+            if (!string.IsNullOrWhiteSpace(Spells.WhenMaFullSpell))
+                merged.Slots.Add(new BuffSlot { Spell = Spells.WhenMaFullSpell, CastOnSelf = true, OnlyWhenMaFull = true });
+            // Mana-regen also folds into the unified list now (v4 migration) — a
+            // maintained CastOnSelf slot, appended after the bless / when-full slots.
+            if (!string.IsNullOrWhiteSpace(Spells.MaRegenSpell))
+                merged.Slots.Add(new BuffSlot { Spell = Spells.MaRegenSpell, CastOnSelf = true });
+            merged.Slots.AddRange(PartyBuffs.Slots);
+            return merged;
         }
 
         public void RecordCondition(string name, MessageFlags flags,
@@ -642,16 +712,24 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void SelfBuffLanding_NotifiesTheRerollSink()
+    public void SelfBuffCast_NotifiesTheRerollSink()
     {
         using CureHarness h = new();
-        // A confirmed self-buff — its condition Name doubles as the cast short
-        // in this harness, so a resolved landing reports that short to the sink.
-        h.RecordCondition("ntap", MessageFlags.None, "You tap into the mana around you.");
+        // The reroll sink fires when a self-buff is CAST (from the send path), not on
+        // its applied-line confirm — a roll spell confirms via a shared condition that
+        // can't be mapped back to it (paradigm-20260830-110918). Configure a mana-regen
+        // self-buff and drive a between-round pass: casting it must report to the sink.
+        h.Spells.MaRegenSpell = "ntap";
+        h.BuffInfo["ntap"] = ("You tap into the mana around you.", 300);
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
 
-        h.FeedLine("You tap into the mana around you.");
+        h.Director.Evaluate();
 
-        Assert.Contains("ntap", h.SelfBuffLanded);
+        Assert.Contains("ntap", h.CastsSent);
+        Assert.Contains("ntap", h.SelfBuffCast);
     }
 
     [Fact]
@@ -728,6 +806,72 @@ public sealed class CastingDirectorTests
 
         Assert.Single(h.CastsSent);
         Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    // Out of combat the combat tick doesn't free-run, so the between-round loop is
+    // driven off the 1 s heartbeat instead — OnIdleHeartbeat runs the same decision
+    // pass so idle buffs queue up from login instead of trickling in.
+    [Fact]
+    public void OnIdleHeartbeat_OutOfCombat_DrivesBetweenRoundLoop()
+    {
+        using CureHarness h = new();
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        h.CastsSent.Clear();
+        h.Spells.BlessSlots[1] = "bless";   // configured after state — the setup cascade can't have cast it
+
+        h.Director.OnIdleHeartbeat();
+
+        Assert.Contains("bless", h.CastsSent);
+    }
+
+    // Disconnected: the whole loop pauses — a due buff must not cast (the send would
+    // no-op but TryCast would still arm a phantom recast timer). Reconnect resumes it.
+    [Fact]
+    public void Disconnected_PausesLoop_ResumesWhenReconnected()
+    {
+        using CureHarness h = new();
+        h.Director.SetConnectedGate(() => false);   // link down
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        h.CastsSent.Clear();
+        h.Spells.BlessSlots[1] = "bless";
+
+        h.Director.OnIdleHeartbeat();
+        Assert.Empty(h.CastsSent);      // disconnected → no cast, no timer armed
+
+        h.Director.SetConnectedGate(() => true);   // link restored
+        h.Director.OnIdleHeartbeat();
+        Assert.Contains("bless", h.CastsSent);      // resumes on reconnect
+    }
+
+    // In combat the combat tick owns the cadence, so the idle heartbeat must be a
+    // no-op (else a round would be double-evaluated). The OnCombatTick sanity check
+    // proves the buff WAS due — only the in-combat gate held it.
+    [Fact]
+    public void OnIdleHeartbeat_InCombat_NoOp_LeavesCadenceToCombatTick()
+    {
+        using CureHarness h = new();
+        h.State.InCombat = true;
+        h.Spells.SelfBlessDuringCombat = true;   // buffs allowed in combat — only the idle gate can stop this
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.Position = PlayerPosition.Standing;
+        h.CastsSent.Clear();
+        h.Spells.BlessSlots[1] = "bless";
+
+        h.Director.OnIdleHeartbeat();
+        Assert.Empty(h.CastsSent);          // idle heartbeat is out-of-combat only
+
+        h.Director.OnCombatTick();
+        Assert.Contains("bless", h.CastsSent);   // the combat tick DOES cast it (it was due)
     }
 
     [Fact]
@@ -1348,6 +1492,76 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void UnrelatedCastRejection_DoesNotDropPendingSelfBuffTimer()
+    {
+        // Report paradigm-20260824-233439 ("spamming vlwa"): CastCoordinator is
+        // shared with CombatManager's attack-spell cascade, and the server's "You
+        // have already cast a spell this round!" line never names which cast it's
+        // rejecting. A collision from an UNRELATED cast (an attack-spell resume,
+        // simulated here directly via Cast.TryCast) must not be mistaken for the
+        // pending self-buff failing — otherwise a buff that already landed gets its
+        // timer dropped and re-casts again within seconds, over and over.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = false;
+
+        h.Director.Evaluate();                 // casts bles → arms a 300s optimistic timer,
+                                                // still pending (no applied-line confirm yet)
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+
+        // An unrelated attack-spell cast goes out and loses the round's slot — the
+        // same race an interrupt-resume's bypassRecastInterval:true send hits in
+        // production.
+        Assert.True(h.Cast.TryCast("turn", "shade",
+            bypassRoundCooldown: true, bypassRecastInterval: true));
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You have already cast a spell this round!", Array.Empty<CellAttributes>(),
+            DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        // bles's timer must survive — the rejection was about "turn", not "bles".
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("bles", e.Short);
+    }
+
+    [Fact]
+    public void StaleRejection_DoesNotDropPendingSelfBuffTimer()
+    {
+        // Report paradigm-20260827-130111: prev's pending marker dangled (its applied
+        // line never cleared it), and long after, the user's manual `mahe` heals at a
+        // dying party member drew "You have already cast a spell this round!".
+        // CastCoordinator still held prev as its last OWN cast, so the spell-less
+        // rejection matched the pending buff and dropped its LIVE timer — forcing a 5x
+        // recast cascade while 75-150s still remained. A rejection this far past the
+        // arm can't be about our own send, so the buff's timer must survive.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = false;
+
+        h.Director.Evaluate();                 // casts bles → arms a 300s optimistic timer
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+
+        // 30s later (well past the rejection window), an unrelated manual cast spends
+        // the round. CastCoordinator still names bles (our last own cast), so the
+        // rejection carries "bles" and passes the name guard — but the marker is stale.
+        h.Now = h.Now.AddSeconds(30);
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You have already cast a spell this round!", Array.Empty<CellAttributes>(),
+            DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        // bles's timer survives — the stale rejection wasn't about our send.
+        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("bles", e.Short);
+    }
+
+    [Fact]
     public void NoteManualBuffCast_ArmsTimerByCastCode_WithSlotMargin()
     {
         // A hand-typed buff cast code arms its recast timer anchored on the code — so the
@@ -1376,39 +1590,21 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PauseResume_ShiftsTimerByOfflineGap_PreservingRemaining()
+    public void PauseResume_ClearsSelfTimersOnReconnect()
     {
-        // An unexpected drop freezes the timers; reconnect shifts each Until forward by
-        // the offline gap so the remaining at the drop is preserved (not counted down).
+        // WE were the one offline, so on reconnect our own buffs are uncertain — the
+        // self timers (keyed "") are cleared so they re-establish fresh.
         using CureHarness h = new();
         h.Spells.BlessSlots[1] = "bles";
         h.BuffInfo["bles"] = (string.Empty, 300);
-        h.Director.NoteManualBuffCast("bles");     // Until = Now + 300
-        DateTime armedUntil = Assert.Single(h.Director.SnapshotActiveBuffs()).Until;
+        h.Director.NoteManualBuffCast("bles");     // a self timer
+        Assert.Single(h.Director.SnapshotActiveBuffs());
 
         h.Director.PauseBuffTimers();              // drop
         h.Now = h.Now.AddSeconds(45);              // 45s offline
         h.Director.ResumeBuffTimers();             // reconnect
 
-        Game.Spells.ActiveBuffTimer e = Assert.Single(h.Director.SnapshotActiveBuffs());
-        Assert.Equal(armedUntil.AddSeconds(45), e.Until);   // shifted forward by the gap
-    }
-
-    [Fact]
-    public void Resume_OfflineLongerThanLongestBuff_ClearsStaleTimers()
-    {
-        // Gone longer than any buff could possibly last ⇒ the buffs are surely off
-        // server-side now, so resume clears rather than resurrecting stale timers.
-        using CureHarness h = new();
-        h.Spells.BlessSlots[1] = "bles";
-        h.BuffInfo["bles"] = (string.Empty, 300);
-        h.Director.NoteManualBuffCast("bles");
-
-        h.Director.PauseBuffTimers();
-        h.Now = h.Now.AddSeconds(301);             // > 300s total
-        h.Director.ResumeBuffTimers();
-
-        Assert.Empty(h.Director.SnapshotActiveBuffs());
+        Assert.Empty(h.Director.SnapshotActiveBuffs());   // self cleared
     }
 
     [Fact]
@@ -1891,6 +2087,30 @@ public sealed class CastingDirectorTests
         Assert.Equal("heal Tank", h.CastsSent[0]);
     }
 
+    // Report paradigm-20260820-122341 ("party heal fires a round late"): the heal
+    // picker reads each member's HpPercent, but that value is refreshed by the `par`
+    // poll on its own cadence. Before the member-watch, a member falling below the
+    // heal threshold wasn't acted on until the next self-state change or combat tick —
+    // a full round of the member sitting hurt. The director now watches each member's
+    // HpPercent and re-runs the pipeline the instant it drops, with NO self-state
+    // change and NO tick.
+    [Fact]
+    public void PartyHeal_MemberHpDrops_HealsImmediately_NoTickOrSelfChange()
+    {
+        using PartyHarness h = new();
+        h.PartySettings.MinorPartyHealSpell = "heal";
+        h.PartySettings.MinorHealMemberThresholdPercent = 70;
+        PartyMember tank = h.AddMember("Tank", hpPercent: 100);   // joined, healthy
+
+        Assert.Empty(h.CastsSent);                                // nothing due yet
+
+        tank.HpPercent = 50;                                      // `par` refresh drops it below 70
+
+        // Driven purely by the member-watch — no Evaluate()/tick/SetPrompt call.
+        Assert.Single(h.CastsSent);
+        Assert.Equal("heal Tank", h.CastsSent[0]);
+    }
+
     [Fact]
     public void PartyHeal_SelfIsLowest_CastsBareCode_NotOwnParName()
     {
@@ -2182,6 +2402,16 @@ public sealed class CastingDirectorTests
         public HealthSettings Health { get; set; } = new();
         public PartySettings PartySettings { get; set; } = new();
 
+        /// <summary>The party-buff plan the director reads (CharacterProfile.PartyBuffs).</summary>
+        public BuffSettings PartyBuffs { get; } = new();
+
+        /// <summary>Given names currently in the room — the presence gate. AddMember
+        /// puts a member here by default; drop a name to model an absent member.</summary>
+        public HashSet<string> InRoom { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Spell shorts that are whole-party (Targets 10/13).</summary>
+        public HashSet<string> WholeParty { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>When true the triggered-rest gate reports an active recovery
         /// rest. A bare Position=Resting does NOT set this — idle resting still
         /// buffs the party.</summary>
@@ -2193,9 +2423,6 @@ public sealed class CastingDirectorTests
         /// <summary>Buff short → (CasterMessage template, duration seconds).</summary>
         public Dictionary<string, (string Caster, long Duration)> BuffInfo { get; } =
             new(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>Class number → class name (mirrors Classes.json).</summary>
-        public Dictionary<int, string> Classes { get; } = new();
 
         public PartyBlessHarness()
         {
@@ -2218,28 +2445,57 @@ public sealed class CastingDirectorTests
                     : null,
                 // No self-confirm path exercised here.
                 _ => null);
-            Director.SetClassResolver(
-                n => Classes.TryGetValue(n, out string? name) ? name : null);
+            Director.SetPartyBuffSource(() => PartyBuffs);
+            Director.SetRoomPresenceCheck(g => InRoom.Contains(g));
+            Director.SetPartyWideBuffCheck(s => WholeParty.Contains(s));
             // Healthy + full mana so survival categories never pre-empt buffs.
             State.MaxHp = 200; State.Hp = 200;
             State.MaxMa = 100; State.Ma = 100;
             State.HasPromptData = true;
         }
 
-        public PartyMember AddMember(string name, string cls)
+        private static string Given(string name) => name.Split(' ')[0];
+
+        public PartyMember AddMember(string name)
         {
             PartyMember m = new()
             {
                 Name = name,
-                Class = cls,
                 BaselineHp = 100,
                 HpPercent = 100,
                 BaselineMp = 100,
                 MpPercent = 100,
             };
             Party.Members.Add(m);
-            Party.IsInParty = true;   // a member present ⇒ in a party (party-buff slots apply)
+            Party.IsInParty = true;      // a member present ⇒ in a party (party-buff slots apply)
+            InRoom.Add(Given(name));     // present in the room by default
             return m;
+        }
+
+        /// <summary>A single-target slot that blesses the named members (given names).</summary>
+        public BuffSlot AddTargetSlot(string spell, params string[] targets)
+        {
+            BuffSlot slot = new() { Spell = spell };
+            foreach (string t in targets) slot.Targets.Add(t.ToLowerInvariant());
+            PartyBuffs.Slots.Add(slot);
+            return slot;
+        }
+
+        /// <summary>A single-target slot that blesses every in-party, in-room member.</summary>
+        public BuffSlot AddAllMembersSlot(string spell)
+        {
+            BuffSlot slot = new() { Spell = spell, AllMembers = true };
+            PartyBuffs.Slots.Add(slot);
+            return slot;
+        }
+
+        /// <summary>A whole-party slot (one cast, no target). on = WholePartyOn.</summary>
+        public BuffSlot AddWholePartySlot(string spell, bool on = true)
+        {
+            WholeParty.Add(spell);
+            BuffSlot slot = new() { Spell = spell, WholePartyOn = on };
+            PartyBuffs.Slots.Add(slot);
+            return slot;
         }
 
         /// <summary>Simulate a server line arriving on the wired
@@ -2266,15 +2522,13 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyBless_ClassMatch_CastsOnMember()
+    public void PartyBless_SelectedMember_CastsOnMember()
     {
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
 
@@ -2288,12 +2542,10 @@ public sealed class CastingDirectorTests
         // Solo (IsInParty false) ⇒ the party-buff slots never fire, even with a lingering
         // member row — party buffs are used only alongside self buffs while in a party.
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
         h.Party.IsInParty = false;        // now solo
 
         h.Director.Evaluate();
@@ -2302,15 +2554,14 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyBless_ClassMismatch_NoCast()
+    public void PartyBless_UnselectedMember_NoCast()
     {
+        // A member who isn't one of the slot's chosen targets is left alone.
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");   // only Raijin selected
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Goldar", "Warrior");
+        h.AddMember("Goldar");               // Goldar isn't selected
 
         h.Director.Evaluate();
 
@@ -2318,16 +2569,218 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PartyBless_PartyMember_CastAttemptedRegardlessOfAlsoHere()
+    {
+        // Party = same room, so a roster member is castable even when they're NOT in
+        // the room's "Also here:" list (e.g. the leader we follow is never listed
+        // there). The old pre-emptive "Also here:" gate wrongly skipped them.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.InRoom.Clear();                    // not listed in "Also here:" — still cast
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bles Raijin", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyBless_HiddenMember_BacksOffThenRetriesOnMove()
+    {
+        // A HIDING member answers "You do not see <name> here!" to our cast — back off
+        // (no per-round spam) until we move, then retry.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.InRoom.Remove("Raijin");           // hiding ⇒ absent from "Also here:"
+
+        h.Director.Evaluate();               // attempt (in party ⇒ here)
+        Assert.Single(h.CastsSent);
+
+        h.Confirm("You do not see Raijin here!");   // hidden ⇒ back off
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);           // still hiding ⇒ skipped, no spam
+
+        h.Director.NoteRoomChanged();        // we moved ⇒ retry
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bles Raijin", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyBless_HiddenMember_RetriesWhenReappearsInAlsoHere()
+    {
+        // The other clear path: a backed-off hidden member is retried the moment they
+        // reappear in "Also here:" (they unhid).
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.InRoom.Remove("Raijin");           // hiding
+
+        h.Director.Evaluate();
+        h.Confirm("You do not see Raijin here!");
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);           // still hiding
+
+        h.InRoom.Add("Raijin");              // reappears in "Also here:" (unhid)
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_Reconnect_ClearsSelfKeepsPartyCountingDown()
+    {
+        // On OUR reconnect: self timers clear; the party member (online the whole time)
+        // keeps their ABSOLUTE expiry — it isn't shifted forward, so it now reads the
+        // real reduced remaining.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["mysh"] = (string.Empty, 200);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();                          // cast bles on Raijin
+        h.Confirm("You cast bless on Raijin!");         // arm ("raijin", bles)
+        h.Director.NoteManualBuffCast("mysh");          // arm a self buff ("")
+
+        DateTime partyUntil = default;
+        foreach (Game.Spells.ActiveBuffTimer t in h.Director.SnapshotActiveBuffs())
+            if (t.Target.Length > 0) partyUntil = t.Until;
+        Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(45);
+        h.Director.ResumeBuffTimers();
+
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("raijin", kept.Target);            // self gone, party kept
+        Assert.Equal(partyUntil, kept.Until);           // absolute expiry unchanged (not shifted)
+    }
+
+    [Fact]
+    public void PartyBless_OurDeath_ClearsSelfKeepsPartyTimers()
+    {
+        // OUR death wipes OUR buffs only — self timers clear, the (alive) party member's
+        // timer stays so we don't needlessly re-bless them.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["mysh"] = (string.Empty, 200);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        h.Director.NoteManualBuffCast("mysh");
+        Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
+
+        h.Director.ClearSelfBuffTracking();
+
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("raijin", kept.Target);
+    }
+
+    [Fact]
+    public void PartyBless_MemberDeath_ClearsThatMembersTimersOnly()
+    {
+        // A party member's death wipes THEIR buffs — clear the timers we hold on them;
+        // every other member's timer stays.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddAllMembersSlot("bles");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
+
+        h.Director.Evaluate();                           // casts on the first (Raijin)
+        h.Confirm("You cast bless on Raijin!");
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();                           // casts on Goldar
+        h.Confirm("You cast bless on Goldar!");
+        Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
+
+        h.Director.ClearMemberBuffTimers("Raijin");
+
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("goldar", kept.Target);
+    }
+
+    [Fact]
+    public void ClearBuffTimer_RemovesOnlyTheNamedTimer()
+    {
+        // The Buff Watchdog ✕: manually drop one (target, spell) timer, leaving the rest.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddAllMembersSlot("bles");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
+
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Goldar!");
+        Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
+
+        h.Director.ClearBuffTimer("raijin", "bles");   // ✕ on Raijin's row (case-insensitive)
+
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("goldar", kept.Target);
+    }
+
+    [Fact]
     public void PartyBless_SkipsSelf()
     {
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddAllMembersSlot("bles");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        PartyMember self = h.AddMember("Me", "Mage");
+        PartyMember self = h.AddMember("Me");
         self.IsSelf = true;
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_WholeParty_CastsWithNoTarget()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddWholePartySlot("chan");
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("chan", h.CastsSent[0]);   // one cast, no target
+    }
+
+    [Fact]
+    public void PartyBless_WholePartyOff_NoCast()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddWholePartySlot("chan", on: false);   // all-off
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
 
@@ -2338,12 +2791,10 @@ public sealed class CastingDirectorTests
     public void PartyBless_ConfirmStartsTimer_NoImmediateRecast()
     {
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
@@ -2365,12 +2816,10 @@ public sealed class CastingDirectorTests
         // (off in normal play). It now lands on the always-on Info channel with the
         // effect duration and the recast lead (duration − 15s recast margin).
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         h.Confirm("You cast bless on Raijin!");
@@ -2390,12 +2839,10 @@ public sealed class CastingDirectorTests
         // Decision: no confirmation observed ⇒ no timer ⇒ re-attempt. The
         // CastCoordinator cooldown (cleared here) is the only spam guard.
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
@@ -2413,12 +2860,10 @@ public sealed class CastingDirectorTests
     public void PartyBless_RecastWithinExpiryWindow()
     {
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         h.Confirm("You cast bless on Raijin!");
@@ -2440,15 +2885,13 @@ public sealed class CastingDirectorTests
     [Fact]
     public void PartyBless_CyclesAcrossMembers()
     {
-        // Both Mages covered by one slot — cycle blesses each in turn.
+        // Both members covered by one all-members slot — cycle blesses each in turn.
         using PartyBlessHarness h = new();
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddAllMembersSlot("bles");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
-        h.AddMember("Goldar", "Mage");
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
 
         h.Director.Evaluate();
         Assert.Equal("bles Raijin", h.CastsSent[^1]);
@@ -2467,12 +2910,10 @@ public sealed class CastingDirectorTests
         using PartyBlessHarness h = new();
         h.PartySettings.BlessDuringCombat = false;
         h.State.InCombat = true;
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Empty(h.CastsSent);
@@ -2486,12 +2927,10 @@ public sealed class CastingDirectorTests
         h.PartySettings.BlessWhileResting = false;
         h.State.Position = PlayerPosition.Resting;
         h.TriggeredRest = true;                  // active recovery rest
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Empty(h.CastsSent);
@@ -2506,12 +2945,10 @@ public sealed class CastingDirectorTests
         h.PartySettings.BlessWhileResting = false;
         h.State.Position = PlayerPosition.Resting;
         h.TriggeredRest = false;                 // idle rest
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
@@ -2526,12 +2963,10 @@ public sealed class CastingDirectorTests
         using PartyBlessHarness h = new();
         h.PartySettings.BlessDuringCombat = true;
         h.State.InCombat = true;
-        h.Classes[1] = "Mage";
         h.Health.BlessIfAboveMa = 0;
-        h.PartySettings.BlessSlots[0].Spell = "bles";
-        h.PartySettings.BlessSlots[0].ClassNumbers = new() { 1 };
+        h.AddTargetSlot("bles", "Raijin");
         h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
-        h.AddMember("Raijin", "Mage");
+        h.AddMember("Raijin");
 
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);

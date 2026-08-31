@@ -56,6 +56,85 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private bool _grabOnSurvey;
     private GroundItemTracker? _groundItems;
 
+    // Combat-aware re-equip interleaving. Recovering the corpse itself
+    // (`recover corpse`) doesn't break combat, but each re-equip (wear/eq) DOES —
+    // exactly like a between-round cast (see OutboundCastObserver). So when the
+    // corpse comes back in a room with a live hostile, the wear/eq burst is paced
+    // a few pieces per combat round instead of firing all at once, letting the
+    // weapon attack keep landing between bursts; the remainder is flushed the
+    // moment the room clears. _pendingEquip holds the ordered pieces still to go
+    // on; _equipRoom pins the room they belong to (abandon if we leave it). All
+    // delegates are wired by AppServices after the combat engine exists; unbound
+    // (tests / no hostile), ReequipAllWorn sends everything at once as before.
+    private readonly Queue<DeathItem> _pendingEquip = new();
+    private (int Map, int Room)? _equipRoom;
+    private bool _recoveryGateHeld;
+    private Func<bool>? _hostilesPresent;
+    private Action? _armCombatResume;
+    private Action? _assertRecoveryGate;
+    private Action? _clearRecoveryGate;
+    private Func<string, int>? _armourClass;
+
+    // Pieces re-equipped per combat round while a hostile is up. A wear/eq breaks
+    // the round, so ~4 fits the 5 s round window and still leaves time for the
+    // re-attack to land before the next round (user-tuned "3-4 pieces / ~3 s").
+    private const int EquipBurstPerRound = 4;
+
+    // Stock ground recovery. On Stock, death scatters items LOOSE on the floor
+    // (Paradigm packs them in a corpse — the path is chosen by _isParadigm). We
+    // `get <name>` each pile item that's actually in the survey (never an absent
+    // one — that was the old get-spam), confirmed one at a time by "You took
+    // <name>."; when the whole pile is back the record finalises and worn gear
+    // re-equips (paced by the combat interleave). Items not on this floor stay
+    // unrecovered — the pile holds at Partial, retried on re-entry (and, on a
+    // deliberate recovery, swept from adjacent rooms — later stage). _stockRecovering
+    // scopes the "You took" tracking to our own in-progress grab.
+    private Func<bool>? _isParadigm;
+    // Live in-game self-name (PartyManager.LocalCharacterName). Preferred over the
+    // possibly-stale CharacterProfile.Name when matching our own corpse. See
+    // AttachLiveSelfName.
+    private Func<string?>? _liveSelfName;
+    private bool _stockRecovering;
+    // Heartbeats of quiet before the death-room `get` burst counts as settled (so
+    // the spillover sweep can start on the leftovers). Reset by each "You took".
+    private int _stockSettleTicks;
+    // A deliberate recovery (Recover Now, or auto-recover walked TO the death room)
+    // earns the adjacent-room spillover sweep; a pass-through walk does not.
+    private bool _deliberateRecovery;
+    // Set when a deliberate Stock recovery wanted to sweep but a hostile was still
+    // in the death room — the heartbeat starts the sweep once the room clears.
+    private bool _stockSweepPending;
+    // Pass-through spillover grab (Stock only): auto-recover walking through a room
+    // ADJACENT to an unrecovered deathpile grabs our overflow there in-stride, no
+    // detour. Kept separate from the death-room grab so both can run on one walk.
+    private DeathRecord? _spilloverPile;
+    private bool _spilloverGrabOnSurvey;
+    private bool _spilloverRecovering;
+    private readonly DeathGroundSweep _sweep;
+
+    // Spillover COLLECT: after the LOOK sweep names the neighbours holding our items,
+    // we visit each — WalkTo (trap-aware; a trap we can't disarm halts us → skip),
+    // grab on CONFIRMED arrival, walk back — keyed off room arrivals, not walker
+    // events. _collectRoute is the neighbour queue; _collectRecord/_collectHome pin
+    // the pile + the death room to return to.
+    private enum CollectPhase { None, WalkingOut, Grabbing, WalkingBack }
+    private CollectPhase _collectPhase;
+    private readonly Queue<RoomKey> _collectRoute = new();
+    private RoomKey _collectTarget;
+    private RoomKey _collectHome;
+    private DeathRecord? _collectRecord;
+    private int _collectSettle;
+    private int _collectTimeout;
+
+    // Heartbeats (1 s) of quiet after the death-room `get` burst before it counts
+    // as settled and the sweep can start on the leftovers.
+    private const int StockSettleTicks = 2;
+    // Heartbeats to let a neighbour grab confirm before walking back.
+    private const int CollectSettleTicks = 2;
+    // Heartbeats to reach a neighbour / return before giving up on that leg — a
+    // trap we can't disarm (or any stall) halts the walker, so we skip and move on.
+    private const int CollectWalkTimeoutTicks = 20;
+
     public DeathRecoveryManager(
         DeathLineWatcher deathWatcher,
         ProfileService profile,
@@ -69,6 +148,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _profile = profile;
         _roomTracker = roomTracker;
         _log = log;
+        // The spillover LOOK sweep just peeks exits via our Send; the walk-collect is
+        // driven here off confirmed room arrivals (OnRoomChanged), not by the sweep.
+        _sweep = new DeathGroundSweep(Send, log);
 
         _deathWatcher.PlayerDied += OnPlayerDied;
         // Re-entering a room that holds one of our deathpiles drives the
@@ -89,8 +171,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Records));
     }
 
-    // Wire the walker used by WalkToDeathRoom / RecoverNow. Set post-construction
-    // because the AutoWalkManager is built after this manager in AppServices.
+    // Wire the walker used by WalkToDeathRoom / RecoverNow and the spillover
+    // collect legs. Set post-construction because the AutoWalkManager is built after
+    // this manager in AppServices. The collect keys off confirmed room arrivals
+    // (OnRoomChanged), not walker events, so a `look` peek that momentarily desyncs
+    // the position can't fire a premature "arrived" that grabs in the wrong room.
     public void AttachWalker(AutoWalkManager walker) => _walker = walker;
 
     // Bind the gate-wrapped wire sender so auto-recover can send get / wear /
@@ -129,6 +214,58 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _groundItems.SurveyUpdated += OnSurveyUpdated;
     }
 
+    // Wire the combat-interleaving probes so an in-combat corpse recovery paces
+    // its re-equip across rounds instead of dumping the whole wear/eq burst (which
+    // would repeatedly break the round). hostilesPresent reports a live engageable
+    // hostile in the room; armCombatResume nudges the combat engine to re-attack
+    // on the *Combat Off* a burst produces (same signal a between-round cast arms);
+    // assert/clearRecoveryGate hold the walker on the CorpseRecovery gate while
+    // pieces are still going on; armourClass returns an item's game-data ArmourClass
+    // for the highest-AC-first ordering. Bound by AppServices once the combat
+    // engine + tick exist; the tick drives OnRecoveryCombatRound / OnRecoveryHeartbeat.
+    // Unbound, ReequipAllWorn falls back to the immediate all-at-once burst.
+    public void AttachCombatInterleave(
+        Func<bool> hostilesPresent,
+        Action armCombatResume,
+        Action assertRecoveryGate,
+        Action clearRecoveryGate,
+        Func<string, int> armourClass)
+    {
+        ArgumentNullException.ThrowIfNull(hostilesPresent);
+        ArgumentNullException.ThrowIfNull(armCombatResume);
+        ArgumentNullException.ThrowIfNull(assertRecoveryGate);
+        ArgumentNullException.ThrowIfNull(clearRecoveryGate);
+        ArgumentNullException.ThrowIfNull(armourClass);
+        _hostilesPresent = hostilesPresent;
+        _armCombatResume = armCombatResume;
+        _assertRecoveryGate = assertRecoveryGate;
+        _clearRecoveryGate = clearRecoveryGate;
+        _armourClass = armourClass;
+    }
+
+    // Bind the realm probe that chooses the recovery mechanic: Paradigm packs the
+    // pile into a `corpse of <name>` (one `recover corpse`), Stock scatters it
+    // loose on the floor (per-item `get`). Wired by AppServices from the active
+    // game-data set's realm. Unbound, recovery defaults to the corpse path.
+    public void SetRealmProbe(Func<bool> isParadigm)
+    {
+        ArgumentNullException.ThrowIfNull(isParadigm);
+        _isParadigm = isParadigm;
+    }
+
+    // Bind the LIVE self-name (from PartyManager.LocalCharacterName, tracked off the
+    // `stat`/`par` screens) so corpse matching identifies "self" by the authoritative
+    // in-game name, not a possibly-stale CharacterProfile.Name. Approach A already
+    // heals Current.Name from `stat`, so this is belt-and-suspenders for the narrow
+    // pre-stat window (dying before the first stat parse); we still prefer the live
+    // name and fall back to Current.Name only when it's blank. Optional — unbound
+    // (tests) it just reads Current.Name as before.
+    public void AttachLiveSelfName(Func<string?> provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _liveSelfName = provider;
+    }
+
     // Bind the live inventory snapshot provider so SimulateDeath captures a
     // realistic deathpile. Real deaths capture via RoomTracker.NoteDeath; this is
     // only for the test button.
@@ -153,6 +290,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // newest-first for display.
     public IReadOnlyList<DeathRecord> Records =>
         _profile.Current?.DeathHistory is { } list ? list : Array.Empty<DeathRecord>();
+
+    // Worn pieces still queued for the combat-paced re-equip (0 when idle) — a
+    // bug report taken mid-recovery shows how far the in-combat burst has drained.
+    public int PendingReequipCount => _pendingEquip.Count;
 
     // Auto-grab a deathpile's lost items (ignoring per-item auto-get policy) when
     // re-entering the death room. Persisted per-character. The grab itself is
@@ -248,7 +389,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (inRoom)
         {
             _log?.Info(LogCategory, $"recover-now: in death room {where} — surveying for the corpse");
-            BeginRecovery(record, autoGrab: true);
+            BeginRecovery(record, autoGrab: true, deliberate: true);
             // Already standing here, so no room-change survey is coming — re-look
             // to re-render the "You notice" list, which fires SurveyUpdated and
             // drives the corpse grab.
@@ -275,6 +416,20 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // return and finish).
     private void OnRoomChanged(RoomTransition t)
     {
+        // The LOOK sweep is peeking exits (no real movement) — ignore transitions so a
+        // peek that momentarily desyncs the tracker can't drop _activeRecovery or
+        // re-arm a different pile.
+        if (_sweep.Active) return;
+
+        // The COLLECT walk owns every transition while it runs (out to a neighbour,
+        // back to the death room) and advances off these confirmed arrivals.
+        if (_collectPhase != CollectPhase.None) { HandleCollectArrival(t); return; }
+
+        // Fresh room — any prior pass-through spillover grab is done or abandoned.
+        _spilloverGrabOnSurvey = false;
+        _spilloverRecovering = false;
+        _spilloverPile = null;
+
         Room? room = t.NewRoom;
 
         if (_activeRecovery is { Room: { } ar }
@@ -282,16 +437,78 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         {
             _activeRecovery = null;
             _grabOnSurvey = false;
+            _stockRecovering = false;
+            _stockSweepPending = false;
         }
+
+        // Left the room our paced re-equip pieces belong to (rare — the
+        // CorpseRecovery gate holds the walker while pieces are pending, so this is
+        // really only a manual move): stop equipping and release the gate rather
+        // than putting the rest on in the wrong room.
+        if (_pendingEquip.Count > 0 && _equipRoom is { } er
+            && (room is null || er.Map != room.Key.Map || er.Room != room.Key.Room))
+            AbandonPendingEquip();
 
         if (room is null || t.NewConfidence != RoomConfidence.Confirmed) return;
 
         DeathRecord? rec = FindRecoverableAt(room.Key);
-        if (rec is null || ReferenceEquals(_activeRecovery, rec)) return;
+        if (rec is not null && !ReferenceEquals(_activeRecovery, rec))
+        {
+            bool force = ReferenceEquals(_pendingRecoverNow, rec);
+            if (force) _pendingRecoverNow = null;
+            BeginRecovery(rec, autoGrab: AutoRecover || force, deliberate: force || WalkedToDeathRoom(rec));
+            return;
+        }
 
-        bool force = ReferenceEquals(_pendingRecoverNow, rec);
-        if (force) _pendingRecoverNow = null;
-        BeginRecovery(rec, autoGrab: AutoRecover || force);
+        // This room holds no deathpile of ours — but if it's adjacent to one, an
+        // auto-recover pass-through grabs our overflow here in-stride (Stock only),
+        // covering the rooms right before and after a death room on the route.
+        TryArmSpillover(room);
+    }
+
+    // Arm a pass-through spillover grab: when auto-recover is on and the room we
+    // just walked into borders an un-recovered Stock deathpile, get our overflow
+    // off this floor on its next survey — no detour. Paradigm never spills (the
+    // corpse holds everything), so it's Stock-only.
+    private void TryArmSpillover(Room room)
+    {
+        if (!AutoRecover || _isParadigm?.Invoke() == true) return;
+        if (FindPileAdjacentTo(room) is not { } dp) return;
+        _spilloverPile = dp;
+        _spilloverGrabOnSurvey = true;
+        _log?.Info(LogCategory,
+            $"pass-through: {room.Key.Map}/{room.Key.Room} borders deathpile at {dp.RoomKeyText} "
+            + $"({dp.UnrecoveredItems?.Count ?? 0} still out) — arming an in-stride grab");
+    }
+
+    // Newest un-recovered pile whose death room borders `room` (one of its exits
+    // leads there) — the spillover target for a pass-through grab.
+    private DeathRecord? FindPileAdjacentTo(Room room)
+    {
+        if (_profile.Current?.DeathHistory is not { } list) return null;
+        DeathRecord? best = null;
+        foreach (DeathRecord r in list)
+        {
+            if (r.Status is DeathRecoveryStatus.Recovered or DeathRecoveryStatus.Missing) continue;
+            // Nothing item-worthy left (empty or only coins) → nothing to grab in passing.
+            if (FullyRecovered(r) || r.Room is not { } rr) continue;
+            bool borders = room.Exits.Values.Any(e => e.Target.Map == rr.Map && e.Target.Room == rr.Room);
+            if (borders && (best is null || r.RecordNumber > best.RecordNumber)) best = r;
+        }
+        return best;
+    }
+
+    // A recovery is "deliberate" (earns the adjacent-room sweep) ONLY when a
+    // directed walk-to targeted this death room — the walker's destination is this
+    // room. MANUAL movement into a death room (walker idle, destination null) is NOT
+    // deliberate: grab the floor, but don't fire the look-sweep. A walk whose
+    // destination lies beyond this room is a pass-through (also not deliberate).
+    // Recover Now is handled separately (the `force` path), so its walk-back arrival
+    // is deliberate regardless of what the walker reports.
+    private bool WalkedToDeathRoom(DeathRecord rec)
+    {
+        return _walker is { Destination: { } dest }
+            && rec.Room is { } r && dest.Map == r.Map && dest.Room == r.Room;
     }
 
     // Newest un-recovered record whose death room matches key.
@@ -316,17 +533,24 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // "You notice" line lands after this room-change fires, so we can't read it
     // yet (see OnSurveyUpdated / TryCorpseRecover). A known-empty pile (nothing
     // was lost) jumps straight to Recovered.
-    private void BeginRecovery(DeathRecord record, bool autoGrab)
+    private void BeginRecovery(DeathRecord record, bool autoGrab, bool deliberate)
     {
         _activeRecovery = record;
         _grabOnSurvey = false;
+        _stockRecovering = false;
+        _deliberateRecovery = deliberate;
 
         List<string> pile = PileNames(record);
         record.UnrecoveredItems = pile.Count > 0 ? pile : null;   // corpse contents, for the detail panel
 
+        _log?.Info(LogCategory,
+            $"begin recovery: {record.RoomKeyText} realm={(_isParadigm?.Invoke() == true ? "Paradigm" : "Stock")} "
+            + $"deliberate={deliberate} autoGrab={autoGrab} pile={pile.Count} item(s)");
+
         bool known = record.EquippedAtDeath is not null || record.LostItems is not null;
         if (known && pile.Count == 0)
         {
+            _log?.Info(LogCategory, "recovery: nothing was lost at death — done");
             FinalizeRecovered(record, "Nothing was lost at death.");
             return;
         }
@@ -337,14 +561,42 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             SetStatus(record, DeathRecoveryStatus.Partial, "Returned to the death room — recovering.");
 
         _grabOnSurvey = autoGrab;
+        if (!autoGrab)
+            _log?.Info(LogCategory, "recovery: auto-recover off — armed nothing (manual Recover Now only)");
     }
 
     // The room's floor survey ("You notice … here.") was just reparsed. If we're
-    // armed to auto-recover a pile here, act on it now: recover the corpse if it's
-    // present, else mark the pile Missing (nothing on the floor to grab).
+    // armed to auto-recover a pile here, act on it now — via the realm's mechanic:
+    // Paradigm recovers the `corpse of <name>`, Stock `get`s the loose items.
     private void OnSurveyUpdated()
     {
-        if (_activeRecovery is { } record && _grabOnSurvey) TryCorpseRecover(record);
+        // Spillover sweep LOOK phase: each `look <dir>` re-parses the PEEKED room's
+        // floor into GroundItemTracker (it doesn't skip look-direction peeks), and
+        // its Items are already multi-line-stitched — so hand those to the sweep for
+        // the exit we're currently peeking. Reusing the tracker's parser is what
+        // makes a crowded, line-wrapped "You notice" survey match (a naive single-line
+        // parse missed it, so the sweep never walked — report stock-20260825-101612).
+        if (_sweep.Active && _groundItems is { } ground)
+        {
+            _sweep.OnPeekedNotice(ground.Items);
+            return;
+        }
+
+        // Pass-through: grab our overflow off an adjacent-death-room's neighbour we
+        // just walked into (Stock only; armed by TryArmSpillover).
+        if (_spilloverGrabOnSurvey && _spilloverPile is { } sp)
+        {
+            _spilloverGrabOnSurvey = false;
+            if (GetOurItemsHere(sp) > 0)
+            {
+                _spilloverRecovering = true;
+                _log?.Info(LogCategory, "stock-recover: grabbing spillover in a room next to the death room");
+            }
+        }
+
+        if (_activeRecovery is not { } record || !_grabOnSurvey) return;
+        if (_isParadigm?.Invoke() ?? true) TryCorpseRecover(record);
+        else TryGroundRecover(record);
     }
 
     // Stock deathpile = one "corpse of <given-name>" object. If our corpse is in
@@ -366,6 +618,296 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         Send($"recover corpse {corpse}");
     }
 
+    // Stock deathpile = loose items on the floor. `get <name>` each pile item
+    // that's actually in this room's survey (article/count-insensitive match) —
+    // never an absent one, which is what made the old flow spam "You don't see X
+    // here.". Each grab confirms with a "You took <name>." line (see OnStockItemTaken)
+    // that decrements the pile; the record finalises when everything's back. Items
+    // NOT on this floor stay unrecovered — the pile holds at Partial (retried on
+    // re-entry, or swept from adjacent rooms on a deliberate recovery).
+    private void TryGroundRecover(DeathRecord record)
+    {
+        _grabOnSurvey = false;   // one shot per arming — never loop
+        int sent = GetOurItemsHere(record);
+        if (sent > 0)
+        {
+            _stockRecovering = true;
+            _stockSettleTicks = StockSettleTicks;   // heartbeat settles the burst → sweep the leftovers
+            _log?.Info(LogCategory, $"stock-recover: get {sent} pile item(s) from the floor");
+        }
+        else
+        {
+            // Nothing of ours on this floor — no "You took" is coming, so the
+            // death-room phase is already settled (everything spilled / gone).
+            _log?.Info(LogCategory, "stock-recover: none of our pile items on this floor");
+            OnStockDeathRoomSettled(record);
+        }
+    }
+
+    // `get` each of record's still-missing items that's on the CURRENT room's floor
+    // (article/count-insensitive; never an absent one — that avoids the get-spam).
+    // Returns how many gets were sent. Shared by the death-room grab, the spillover
+    // sweep's neighbour grabs, and the pass-through grab.
+    private int GetOurItemsHere(DeathRecord record)
+    {
+        if (record.UnrecoveredItems is not { Count: > 0 } remaining || _groundItems is not { } ground)
+            return 0;
+
+        HashSet<string> floor = ground.Items
+            .Select(ItemNameStore.Normalize)
+            .Where(n => n.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        int sent = 0;
+        foreach (string pileName in remaining)
+        {
+            if (!floor.Contains(ItemNameStore.Normalize(pileName))) continue;
+            Send($"get {pileName}");
+            sent++;
+        }
+        return sent;
+    }
+
+    // The death-room `get` burst has settled with items still missing. Re-equip
+    // whatever worn gear we did get back (combat-paced), then — on a deliberate
+    // recovery in a cleared room with exits to check — sweep the neighbours for the
+    // spillover; otherwise hold the pile at Partial (retried on re-entry / manually).
+    private void OnStockDeathRoomSettled(DeathRecord record)
+    {
+        _stockRecovering = false;
+        _stockSettleTicks = 0;
+        if (record.UnrecoveredItems is not { Count: > 0 } left) return;   // already fully recovered
+
+        ReequipAllWorn(record);   // wear the recovered half now (paced if a hostile's up)
+
+        // Only coins left on the floor — coins recover as cash, not as `get`-ed items,
+        // so the pile is effectively done. Finalise rather than sweeping adjacent rooms
+        // for pocket change.
+        if (FullyRecovered(record))
+        {
+            int total = PileNames(record).Count;
+            _log?.Info(LogCategory, "stock-recover: only currency left in the pile — treating as recovered");
+            FinalizeRecovered(record, $"Recovered the deathpile ({total} item(s)).");
+            return;
+        }
+
+        bool hostile = _hostilesPresent?.Invoke() ?? false;
+        _log?.Info(LogCategory,
+            $"stock-recover: death-room grab settled, {left.Count} item(s) still missing "
+            + $"(deliberate={_deliberateRecovery}, hostile={hostile})");
+
+        if (_deliberateRecovery && _isParadigm?.Invoke() != true && !hostile && StartStockSweep(record))
+            return;
+
+        // Can't sweep now (pass-through, Paradigm, hostile still here, or no exits) —
+        // a hostile just defers it: the heartbeat retries the sweep once clear.
+        _stockSweepPending = _deliberateRecovery && _isParadigm?.Invoke() != true;
+        _log?.Info(LogCategory, _stockSweepPending
+            ? "stock-recover: sweep deferred (hostile in the death room) — retrying on clear"
+            : "stock-recover: no sweep (pass-through / no exits) — holding Partial");
+        SetStatus(record, DeathRecoveryStatus.Partial,
+            $"Recovered what was here — {left.Count} item(s) not in this room.");
+    }
+
+    // Drop one entry matching a "You took <item>." from pile's unrecovered set
+    // (article/count-insensitive). Returns true when an entry was removed. Shared by
+    // the death-room grab and the pass-through grab.
+    private bool RemoveRecoveredItem(DeathRecord pile, string rawItem)
+    {
+        if (pile.UnrecoveredItems is not { } remaining) return false;
+        string norm = ItemNameStore.Normalize(rawItem);
+        if (norm.Length == 0) return false;
+        int idx = remaining.FindIndex(n =>
+            string.Equals(ItemNameStore.Normalize(n), norm, StringComparison.OrdinalIgnoreCase));
+        if (idx < 0) return false;
+        remaining.RemoveAt(idx);
+        OnPropertyChanged(nameof(Records));
+        return true;
+    }
+
+    // A "You took <item>." landed while grabbing the death-room stock pile. Drop it
+    // from the unrecovered set; once the whole pile is back, finalise Recovered and
+    // re-equip the worn half (paced by the combat interleave, same as the corpse path).
+    private void OnStockItemTaken(string rawItem)
+    {
+        if (_activeRecovery is not { } record) return;
+        if (!RemoveRecoveredItem(record, rawItem))
+        {
+            // We `get`-ed a floor item but it matched no unrecovered pile entry —
+            // shouldn't happen (we only `get` pile items), so trace the mismatch for
+            // diagnosis rather than silently leaving the pile count wrong.
+            _log?.Debug(LogCategory,
+                $"stock-recover: 'You took {rawItem}' matched no unrecovered pile item "
+                + $"(remaining: {(record.UnrecoveredItems is { } r ? string.Join(", ", r) : "none")})");
+            return;
+        }
+        _stockSettleTicks = StockSettleTicks;   // more may still be arriving — keep waiting
+        _log?.Info(LogCategory, $"stock-recover: got {rawItem} ({record.UnrecoveredItems?.Count ?? 0} left)");
+
+        // Mid-collect (grabbing at a neighbour): just decrement — CompleteCollect
+        // finalises once every neighbour's been visited, so we don't finish early and
+        // strand the walk-back.
+        if (_collectPhase != CollectPhase.None) return;
+
+        if (FullyRecovered(record))   // empty, or only coins left → done
+        {
+            _stockRecovering = false;
+            int total = PileNames(record).Count;
+            ReequipAllWorn(record);
+            FinalizeRecovered(record, $"Recovered the deathpile ({total} item(s)).");
+        }
+    }
+
+    // Start the spillover LOOK sweep: peek each death-room exit for our still-missing
+    // items. On completion (OnSweepLookComplete) we walk to the neighbours that hold
+    // them. Returns false (caller holds Partial) when it can't run — no current room /
+    // exits, or nothing left to find.
+    private bool StartStockSweep(DeathRecord record)
+    {
+        if (record.UnrecoveredItems is not { Count: > 0 } remaining) return false;
+        // Only sweep for real items — coins recover as cash, never by walking to grab
+        // them, so a pile down to pocket change has nothing to chase into a neighbour.
+        var want = remaining.Where(n => _groundItems is not { } g || !g.IsCashEntry(n)).ToList();
+        if (want.Count == 0) return false;
+        if (_roomTracker.State.CurrentRoom is not { } here) return false;
+
+        var neighbours = new Dictionary<Direction, RoomKey>();
+        foreach ((Direction dir, RoomExit exit) in here.Exits)
+            neighbours[dir] = exit.Target;
+        if (neighbours.Count == 0) return false;
+
+        _collectHome = here.Key;
+        _collectRecord = record;
+        bool started = _sweep.Begin(neighbours, want, hits => OnSweepLookComplete(record, hits));
+        if (started) _log?.Info(LogCategory, "stock-recover: spillover look-sweep started");
+        return started;
+    }
+
+    // The LOOK sweep named the neighbours holding our items. Queue them and start
+    // walking — the collect is driven off confirmed arrivals (HandleCollectArrival)
+    // and the heartbeat (OnCollectHeartbeat), routing through the normal trap-aware
+    // walker. No neighbours → nothing spilled reachably, so finalise now.
+    private void OnSweepLookComplete(DeathRecord record, IReadOnlyList<RoomKey> hits)
+    {
+        _collectRoute.Clear();
+        foreach (RoomKey k in hits) _collectRoute.Enqueue(k);
+        if (_collectRoute.Count == 0) { CompleteCollect(); return; }
+
+        // The `look <dir>` peeks can leave the position tracker desynced — a peek
+        // render gets mistaken for a real move (especially when a post-login stat/i
+        // refresh interleaves into the sweep, and worse when the room name is
+        // ambiguous). Force-anchor back to the death room before we start walking, so
+        // WalkTo routes from where we actually are (report stock-20260825-112233).
+        _roomTracker.SetLocated(_collectHome);
+        StartNextCollectLeg();
+    }
+
+    private void StartNextCollectLeg()
+    {
+        // Everything's back (a neighbour completed the pile, or only coins remain) or
+        // no more neighbours to visit → done.
+        if (_collectRecord is not { } cr || FullyRecovered(cr) || _collectRoute.Count == 0)
+        {
+            CompleteCollect();
+            return;
+        }
+        _collectTarget = _collectRoute.Dequeue();
+        _collectPhase = CollectPhase.WalkingOut;
+        _collectTimeout = CollectWalkTimeoutTicks;
+        _walker?.WalkTo(_collectTarget);
+        _log?.Info(LogCategory, $"stock-sweep: walking to {_collectTarget.Map}/{_collectTarget.Room} to collect");
+    }
+
+    // Nothing left worth recovering as an ITEM — the unrecovered set is empty, or
+    // everything still in it is currency. Coins are recovered as cash (they're
+    // dropped from the ground survey, never `get`-ed like items), so a pile holding
+    // only coins counts as fully recovered rather than lingering at Partial.
+    private bool FullyRecovered(DeathRecord record)
+    {
+        if (record.UnrecoveredItems is not { Count: > 0 } remaining) return true;
+        return _groundItems is { } g && remaining.All(g.IsCashEntry);
+    }
+
+    // A confirmed room transition arrived while collecting. Arriving at the target
+    // neighbour starts its grab; arriving back at the death room moves to the next.
+    private void HandleCollectArrival(RoomTransition t)
+    {
+        if (t.NewRoom is not { } room || t.NewConfidence != RoomConfidence.Confirmed) return;
+
+        if (_collectPhase == CollectPhase.WalkingOut
+            && room.Key.Map == _collectTarget.Map && room.Key.Room == _collectTarget.Room
+            && _collectRecord is { } rec)
+        {
+            _collectPhase = CollectPhase.Grabbing;
+            _collectSettle = CollectSettleTicks;
+            _stockRecovering = true;   // route the neighbour's "You took" to the decrement
+            int got = GetOurItemsHere(rec);
+            _log?.Info(LogCategory, $"stock-sweep: arrived {room.Key.Map}/{room.Key.Room} — get {got} item(s)");
+        }
+        else if (_collectPhase == CollectPhase.WalkingBack
+            && room.Key.Map == _collectHome.Map && room.Key.Room == _collectHome.Room)
+        {
+            StartNextCollectLeg();
+        }
+    }
+
+    // Heartbeat pump for the collect: settle a neighbour grab then head home, and
+    // give up on a leg that never arrives (a trap we can't disarm, or any stall).
+    private void OnCollectHeartbeat()
+    {
+        switch (_collectPhase)
+        {
+            case CollectPhase.Grabbing:
+                if (--_collectSettle > 0) return;
+                _stockRecovering = false;
+                _collectPhase = CollectPhase.WalkingBack;
+                _collectTimeout = CollectWalkTimeoutTicks;
+                _walker?.WalkTo(_collectHome);
+                break;
+            case CollectPhase.WalkingOut:
+                if (--_collectTimeout > 0) return;
+                _log?.Info(LogCategory,
+                    $"stock-sweep: couldn't reach {_collectTarget.Map}/{_collectTarget.Room} "
+                    + "(trapped / blocked?) — skipping, heading back");
+                _collectPhase = CollectPhase.WalkingBack;
+                _collectTimeout = CollectWalkTimeoutTicks;
+                _walker?.WalkTo(_collectHome);
+                break;
+            case CollectPhase.WalkingBack:
+                if (--_collectTimeout > 0) return;
+                _log?.Info(LogCategory, "stock-sweep: couldn't return to the death room — ending the sweep");
+                CompleteCollect();
+                break;
+        }
+    }
+
+    // The collect is done (all neighbours visited, or we couldn't get home). Wear the
+    // recovered worn half and finalise: Recovered if the pile's empty, else Partial.
+    private void CompleteCollect()
+    {
+        _collectPhase = CollectPhase.None;
+        _collectRoute.Clear();
+        _stockRecovering = false;
+        _stockSweepPending = false;
+        if (_collectRecord is not { } record) return;
+        _collectRecord = null;
+
+        ReequipAllWorn(record);
+        if (FullyRecovered(record))   // pile empty, or only coins left
+        {
+            _log?.Info(LogCategory, "stock-sweep: recovered everything via the adjacent-room sweep");
+            FinalizeRecovered(record, "Recovered the deathpile (adjacent-room sweep).");
+        }
+        else
+        {
+            int left = record.UnrecoveredItems?.Count ?? 0;
+            _log?.Info(LogCategory, $"stock-sweep: done — {left} item(s) still missing, holding Partial");
+            SetStatus(record, DeathRecoveryStatus.Partial,
+                $"Adjacent-room sweep done — {left} item(s) still missing.");
+            _activeRecovery = null;
+        }
+    }
+
     // The given name of OUR corpse as it appears in the floor survey ("corpse of
     // Ermias" → "Ermias"), or null when no matching corpse is on the floor. The
     // survey shows the GIVEN name only, so we compare against the first token of
@@ -375,7 +917,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private string? FindOurCorpse()
     {
         if (_groundItems is not { } ground) return null;
-        string ourGiven = FirstToken(_profile.Current?.Name);
+        // Prefer the live in-game name over the profile's stored name, which a copied
+        // profile can leave stale (report stock-20260828-104653) — matching another
+        // player's corpse would be a serious mis-recovery.
+        string? live = _liveSelfName?.Invoke();
+        string ourGiven = FirstToken(!string.IsNullOrWhiteSpace(live) ? live : _profile.Current?.Name);
         string? loneCorpse = null;
         int corpseCount = 0;
         foreach (string item in ground.Items)
@@ -394,57 +940,266 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private static string FirstToken(string? name) =>
         string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim().Split(' ')[0];
 
-    private static List<string> PileNames(DeathRecord record)
+    private List<string> PileNames(DeathRecord record)
     {
         var names = new List<string>();
-        if (record.EquippedAtDeath is { } worn)
-            names.AddRange(worn.Where(i => !string.IsNullOrWhiteSpace(i.Name)).Select(i => i.Name));
-        if (record.LostItems is { } lost)
-            names.AddRange(lost.Where(i => !string.IsNullOrWhiteSpace(i.Name)).Select(i => i.Name));
+        AddPileNames(names, record.EquippedAtDeath);
+        AddPileNames(names, record.LostItems);
         return names;
     }
 
-    // Watch for the single "You have recovered the corpse of <name>." line that
-    // ends a `recover corpse` — the whole pile (items + coins) is back at once, so
-    // finalise and (Auto-Equip) re-wear everything that was worn at death. Works
-    // for a manual `recover corpse` too, since we key off the confirmation, not
-    // who sent the command.
-    private void OnLine(LineExtractor.EmittedLine line)
+    // Expand a captured stack ("15 torch") into per-unit bare names ("torch" ×15).
+    // Stock has no batched `get N <item>` — it'd send a malformed `get 15 torch` —
+    // so each unit needs its own `get torch` and matches its own "You took torch.".
+    // Worn gear is singular and passes through unchanged. Currency ("1500 gold") is
+    // kept as ONE verbatim entry, never expanded per-coin: coins recover as cash (not
+    // `get`-ed), so the count must survive for IsCashEntry to still read it as cash.
+    private void AddPileNames(List<string> into, List<DeathItem>? items)
     {
-        if (line.IsPromptLine || _activeRecovery is null) return;
-        if (!CorpseRecoveredRegex().IsMatch(line.Text)) return;
-
-        DeathRecord record = _activeRecovery;
-        int total = PileNames(record).Count;
-        ReequipAllWorn(record);
-        FinalizeRecovered(record,
-            total > 0 ? $"Recovered the corpse ({total} item(s))." : "Recovered the corpse.");
-    }
-
-    // Re-equip every item worn at death after the corpse is recovered (Auto-Equip).
-    // The recover command drops everything back into the pack; this puts the worn
-    // half back on with its slot-correct verb. A held item (weapon / off-hand) is
-    // equipped with `eq` — matching EquipmentManager's wield path — NOT `hold`, which
-    // only carries the item in hand rather than wielding it (report: corpse recovery
-    // sent "hold platinum mace" for the weapon). Body armour uses `wear`. Lights
-    // never reach here: a readied light is tracked separately (not in the worn slot
-    // set), and it has its own `use` verb (see AutoLightProvisioner).
-    private void ReequipAllWorn(DeathRecord record)
-    {
-        if (!AutoEquip || record.EquippedAtDeath is not { } worn) return;
-        foreach (DeathItem item in worn)
+        if (items is null) return;
+        foreach (DeathItem item in items)
         {
             if (string.IsNullOrWhiteSpace(item.Name)) continue;
-            string verb = item.IsHeld ? "eq" : "wear";
-            _log?.Info(LogCategory, $"auto-equip: {verb} {item.Name}");
-            Send($"{verb} {item.Name}");
+            string name = item.Name.Trim();
+            if (_groundItems?.IsCashEntry(name) == true) { into.Add(name); continue; }
+            (int count, string bare) = CountedCommand.SplitLeadingCount(name);
+            for (int i = 0; i < Math.Max(1, count); i++) into.Add(bare);
         }
+    }
+
+    // Recovery confirmations. Paradigm: the whole pile returns on one "You have
+    // recovered the corpse of <name>." line — finalise and (Auto-Equip) re-wear
+    // everything worn at death (works for a manual `recover corpse` too, since we
+    // key off the confirmation, not who sent it). Stock: items come back one "You
+    // took <item>." at a time — decrement the pile per confirmation.
+    private void OnLine(LineExtractor.EmittedLine line)
+    {
+        // Do NOT skip IsPromptLine here: a `get` confirmation ("You took X.") is
+        // drawn by OVERWRITING the echoed command on the prompt row (the game sends
+        // ^[[K to clear it), so it's flagged as a prompt line — gating on that
+        // silently dropped every stock grab's decrement (reports stock-20260825-101612
+        // / -104351). The content regexes below never match a bare prompt, so it's
+        // safe to run them regardless.
+
+        // While the LOOK sweep runs we're only peeking exits — its floors arrive via
+        // GroundItemTracker → OnSurveyUpdated (multi-line-safe), and no `get` fires, so
+        // there's nothing to do with lines here. (The COLLECT walk isn't sweep-active;
+        // its neighbour "You took" flows through the normal stock path below, since
+        // _stockRecovering is set while grabbing.)
+        if (_sweep.Active) return;
+
+        // Pass-through spillover "You took" is independent of any death-room
+        // recovery (we're standing in a NEIGHBOUR of the death room, not it), so it
+        // runs before the _activeRecovery guard below.
+        if (_spilloverRecovering && YouTookRegex().Match(line.Text) is { Success: true } spill)
+        {
+            OnSpilloverItemTaken(spill.Groups["item"].Value);
+            return;
+        }
+
+        if (_activeRecovery is null) return;
+
+        if (!line.IsPromptLine && CorpseRecoveredRegex().IsMatch(line.Text))
+        {
+            DeathRecord record = _activeRecovery;
+            int total = PileNames(record).Count;
+            _log?.Info(LogCategory, $"paradigm: corpse recovered ({total} item(s)) — re-equipping worn gear");
+            record.UnrecoveredItems = null;   // corpse = the whole pile is back at once
+            ReequipAllWorn(record);
+            FinalizeRecovered(record,
+                total > 0 ? $"Recovered the corpse ({total} item(s))." : "Recovered the corpse.");
+            return;
+        }
+
+        if (_stockRecovering && YouTookRegex().Match(line.Text) is { Success: true } took)
+            OnStockItemTaken(took.Groups["item"].Value);
+    }
+
+    // A "You took <item>." landed while grabbing spillover in a room next to a death
+    // room. Decrement that pile; if this passing grab happened to complete it, wear
+    // the recovered gear and mark it Recovered.
+    private void OnSpilloverItemTaken(string rawItem)
+    {
+        if (_spilloverPile is not { } pile || !RemoveRecoveredItem(pile, rawItem)) return;
+        _log?.Info(LogCategory, $"stock-recover: grabbed spillover {rawItem} ({pile.UnrecoveredItems?.Count ?? 0} left)");
+        if (!FullyRecovered(pile)) return;   // real items still out — stay Partial
+
+        _spilloverRecovering = false;
+        _spilloverPile = null;
+        _log?.Info(LogCategory, $"pass-through: overflow grab completed the pile at {pile.RoomKeyText} — re-equipping");
+        ReequipAllWorn(pile);
+        pile.UnrecoveredItems = null;
+        SetStatus(pile, DeathRecoveryStatus.Recovered, "Recovered — overflow grabbed in passing.");
+    }
+
+    // Re-equip the worn half we've RECOVERED (Auto-Equip). Paradigm gets the whole
+    // pile back at once; a Stock recovery may leave some pieces on a neighbour's
+    // floor, so we only re-wear worn items no longer in UnrecoveredItems (a caller
+    // nulls that list when the whole pile is confirmed back — see the corpse path).
+    // Ordering is weapon(s) first then armour highest-AC-first (see OrderForReequip).
+    // When a hostile is in the room the wear/eq burst would repeatedly break the
+    // combat round, so we don't fire it all at once — enqueue it and pace it across
+    // rounds (OnRecoveryCombatRound), holding the CorpseRecovery gate meanwhile. No
+    // hostile (or interleaving unbound) → put everything on at once, as before.
+    private void ReequipAllWorn(DeathRecord record)
+    {
+        if (!AutoEquip || record.EquippedAtDeath is not { } worn || worn.Count == 0) return;
+
+        HashSet<string> missing = record.UnrecoveredItems is { Count: > 0 } rem
+            ? rem.Select(ItemNameStore.Normalize).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        List<DeathItem> recovered = worn
+            .Where(i => !missing.Contains(ItemNameStore.Normalize(i.Name)))
+            .ToList();
+        if (recovered.Count == 0) return;
+
+        List<DeathItem> ordered = OrderForReequip(recovered, _armourClass);
+
+        if (_hostilesPresent?.Invoke() == true && record.Room is { } room)
+        {
+            _pendingEquip.Clear();
+            foreach (DeathItem item in ordered) _pendingEquip.Enqueue(item);
+            _equipRoom = (room.Map, room.Room);
+            AssertRecoveryGate();
+            _log?.Info(LogCategory,
+                $"auto-equip: hostile present — pacing {_pendingEquip.Count} piece(s) across combat rounds");
+            return;
+        }
+
+        foreach (DeathItem item in ordered) SendEquip(item);
+    }
+
+    // Order the worn set for re-equip: weapon(s) first — so our swings do real
+    // damage sooner while the fight's still on — then armour highest-AC-first
+    // (weakest last). Weapon Hand precedes Off-Hand; armour AC is the item's
+    // game-data ArmourClass (0 when the lookup is unbound or the item's unknown,
+    // which sorts it last). Stable ordering keeps same-AC pieces in captured order.
+    // internal + static so a test can pin the order without a live manager.
+    internal static List<DeathItem> OrderForReequip(
+        IReadOnlyList<DeathItem> worn, Func<string, int>? armourClass)
+    {
+        List<DeathItem> named = worn.Where(i => !string.IsNullOrWhiteSpace(i.Name)).ToList();
+        List<DeathItem> ordered = named
+            .Where(i => i.IsHeld)
+            .OrderBy(i => i.Slot == "Off-Hand" ? 1 : 0)
+            .ToList();
+        ordered.AddRange(named
+            .Where(i => !i.IsHeld)
+            .OrderByDescending(i => armourClass?.Invoke(i.Name) ?? 0));
+        return ordered;
+    }
+
+    // Send one piece's slot-correct equip verb. A held item (weapon / off-hand) is
+    // wielded with `eq` — matching EquipmentManager's wield path — NOT `hold`,
+    // which only carries it in hand rather than wielding it (report: corpse
+    // recovery sent "hold platinum mace" for the weapon). Body armour uses `wear`.
+    // Lights never reach here: a readied light is tracked separately (not in the
+    // worn slot set) and has its own `use` verb (see AutoLightProvisioner).
+    private void SendEquip(DeathItem item)
+    {
+        string verb = item.IsHeld ? "eq" : "wear";
+        _log?.Info(LogCategory, $"auto-equip: {verb} {item.Name}");
+        Send($"{verb} {item.Name}");
+    }
+
+    // Combat-round pulse (TickEngine.CombatTickElapsed, ~5 s, driven by damage
+    // lines — NOT by the *Combat Off* our own equips emit, so it can't re-enter
+    // mid-burst). Put the next handful of pieces on, then nudge the engine to
+    // re-attack on the *Combat Off* they cause. Once the room is clear (the mob
+    // died) or the queue empties, the remainder goes on at once. No-op when nothing
+    // is pending.
+    public void OnRecoveryCombatRound()
+    {
+        if (_pendingEquip.Count == 0) return;
+        if (_hostilesPresent?.Invoke() != true) { FlushEquipQueue(); return; }
+
+        for (int i = 0; i < EquipBurstPerRound && _pendingEquip.Count > 0; i++)
+            SendEquip(_pendingEquip.Dequeue());
+        _armCombatResume?.Invoke();
+
+        if (_pendingEquip.Count == 0) ReleaseRecoveryGate();
+    }
+
+    // 1 s heartbeat. Flushes the paced re-equip the instant the room clears (a kill
+    // between combat rounds), settles the Stock death-room `get` burst so its
+    // leftovers can be swept, paces the sweep's own looks/collects, and starts a
+    // sweep that was deferred while a hostile held the death room.
+    public void OnRecoveryHeartbeat()
+    {
+        if (_pendingEquip.Count > 0 && _hostilesPresent?.Invoke() != true)
+            FlushEquipQueue();
+
+        if (_sweep.Active) { _sweep.OnHeartbeat(); return; }          // LOOK phase paces looks
+        if (_collectPhase != CollectPhase.None) { OnCollectHeartbeat(); return; }   // COLLECT paces walks
+
+        // Death-room grab quieted down with items still out → decide sweep vs Partial.
+        if (_stockRecovering && _stockSettleTicks > 0 && --_stockSettleTicks == 0
+            && _activeRecovery is { } settling)
+            OnStockDeathRoomSettled(settling);
+
+        // A deferred sweep (hostile cleared) can run now.
+        if (_stockSweepPending && !(_hostilesPresent?.Invoke() ?? false)
+            && _activeRecovery is { } pending)
+        {
+            _stockSweepPending = false;
+            if (FullyRecovered(pending))   // only currency left → done, no sweep
+            {
+                _log?.Info(LogCategory, "stock-recover: death room clear — only currency left, treating as recovered");
+                FinalizeRecovered(pending, "Recovered the deathpile.");
+            }
+            else
+            {
+                _log?.Info(LogCategory, "stock-recover: death room clear — starting the deferred spillover sweep");
+                if (!StartStockSweep(pending))
+                    SetStatus(pending, DeathRecoveryStatus.Partial,
+                        pending.UnrecoveredItems is { Count: > 0 } l
+                            ? $"Recovered what was here — {l.Count} item(s) not in this room."
+                            : "Recovered the deathpile.");
+            }
+        }
+    }
+
+    private void FlushEquipQueue()
+    {
+        while (_pendingEquip.Count > 0) SendEquip(_pendingEquip.Dequeue());
+        _equipRoom = null;
+        ReleaseRecoveryGate();
+    }
+
+    // Give up on the remaining pieces (we left the recovery room) — drop them and
+    // release the gate. The items are back in the pack either way; the user can
+    // re-equip manually.
+    private void AbandonPendingEquip()
+    {
+        if (_pendingEquip.Count > 0)
+            _log?.Info(LogCategory,
+                $"auto-equip: left the room with {_pendingEquip.Count} piece(s) unequipped — abandoning");
+        _pendingEquip.Clear();
+        _equipRoom = null;
+        ReleaseRecoveryGate();
+    }
+
+    private void AssertRecoveryGate()
+    {
+        if (_recoveryGateHeld) return;
+        _recoveryGateHeld = true;
+        _assertRecoveryGate?.Invoke();
+    }
+
+    private void ReleaseRecoveryGate()
+    {
+        if (!_recoveryGateHeld) return;
+        _recoveryGateHeld = false;
+        _clearRecoveryGate?.Invoke();
     }
 
     private void FinalizeRecovered(DeathRecord record, string message)
     {
+        _log?.Info(LogCategory, $"recovery complete: {record.RoomKeyText} — {message}");
         _activeRecovery = null;
         _grabOnSurvey = false;
+        _stockRecovering = false;
+        _stockSweepPending = false;
         record.UnrecoveredItems = null;   // everything accounted for
         SetStatus(record, DeathRecoveryStatus.Recovered, message);
     }
@@ -464,9 +1219,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _wireSender(Encoding.Latin1.GetBytes(text + "\r"));
     }
 
-    // Test seam — feed a plain inbound line to the pickup parser.
-    internal void FeedTestLine(string text, DateTimeOffset? when = null)
-        => OnLine(new LineExtractor.EmittedLine(text, [], when ?? DateTimeOffset.UtcNow, false));
+    // Test seam — feed a plain inbound line to the pickup parser. isPromptLine
+    // exercises the "You took" confirmation arriving on a redrawn prompt row.
+    internal void FeedTestLine(string text, DateTimeOffset? when = null, bool isPromptLine = false)
+        => OnLine(new LineExtractor.EmittedLine(text, [], when ?? DateTimeOffset.UtcNow, isPromptLine));
 
     // Append a synthetic death record (the "Simulate Death" button) so the DEATH
     // grid + recovery flow can be exercised without dying in game. Decrements the
@@ -622,11 +1378,16 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _lines = null;
         if (_groundItems is not null) _groundItems.SurveyUpdated -= OnSurveyUpdated;
         _groundItems = null;
+        _sweep.Cancel();
+        _collectPhase = CollectPhase.None;
+        _collectRoute.Clear();
+        AbandonPendingEquip();   // never strand the CorpseRecovery gate asserted
     }
 
     // A floor-survey entry naming our deathpile corpse: "corpse of <given-name>"
-    // (stock renders the given name only, no article). The captured name is the
-    // exact token `recover corpse <name>` takes.
+    // (the survey renders the given name only, no article). The captured name is
+    // the exact token `recover corpse <name>` takes. Paradigm only — Stock scatters
+    // the pile loose instead of packing it in a corpse.
     [GeneratedRegex(@"^corpse of (?<name>.+?)\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex CorpseRegex();
@@ -637,4 +1398,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // record Partial (the user can Mark Recovered); no false transition occurs.
     [GeneratedRegex(@"^You have recovered the corpse of .+?\.$", RegexOptions.CultureInvariant)]
     private static partial Regex CorpseRecoveredRegex();
+
+    // "You took <item>." — the own-pickup confirmation for a Stock ground `get`
+    // (matches KnownPatterns.PlayerGets' own branch; the "<player> picks up" form
+    // is another player and never reaches here). Drives the per-item Stock
+    // deathpile decrement.
+    [GeneratedRegex(@"^You took (?<item>.+?)\.$", RegexOptions.CultureInvariant)]
+    private static partial Regex YouTookRegex();
 }

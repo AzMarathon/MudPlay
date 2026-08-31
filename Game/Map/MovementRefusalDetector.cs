@@ -80,6 +80,7 @@ public sealed partial class MovementRefusalDetector : IDisposable
         CantSeeWellEnoughToMove(),
         TooEncumberedToMove(),
         FlatOnYourBack(),
+        AlignmentBlocksExit(),
     };
 
     [GeneratedRegex(
@@ -124,10 +125,15 @@ public sealed partial class MovementRefusalDetector : IDisposable
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex FlatOnYourBack();
 
-    // Door blocking — server returns this when the user issues a direction
-    // whose exit has a closed door.
+    // Door / gate blocking — server returns this when the user issues a direction
+    // whose exit is shut. Both the plain and the "in that direction" long form are
+    // covered, and "gate" as well as "door" (a fortress gate opened by a `pull
+    // winch` prerequisite bonks with "The gate is closed!" — without matching it,
+    // the pending move never reverts and the tracker latches in Pending, swallowing
+    // even the post-open redisplay: the walker stalls forever, report
+    // paradigm-20260827-113513).
     [GeneratedRegex(
-        @"^\s*The door is closed[.!]?\s*$",
+        @"^\s*The (?:door|gate) is closed(?: in that direction)?[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DoorIsClosed();
 
@@ -138,4 +144,14 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*The door to the (\w+) just closed[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DoorToDirectionJustClosed();
+
+    // Alignment-gated exit — Paradigm refuses an exit whose "(Alignment: X to Y)"
+    // band excludes the mover ("Your current alignment prevents you from entering
+    // this exit."). The router isn't alignment-aware yet, so a route planned through
+    // such an exit bonks here; recognizing it reverts the pending move cleanly
+    // instead of stranding the tracker (report paradigm-20260827-144553).
+    [GeneratedRegex(
+        @"^\s*Your current alignment prevents you from entering this exit[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex AlignmentBlocksExit();
 }

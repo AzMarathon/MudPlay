@@ -93,6 +93,7 @@ it isn't here and you're unsure, ask.
   names are fine — a *silver bracelet* and an *ivory bracelet* equip together.
 - The **finger** and **wrist** families each hold **two** physical pieces (Finger1/Finger2,
   Wrist1/Wrist2), so long as the two are distinct names. Every other slot holds one.
+- **Eviction order when both slots are full** *([CONFIRMED] 2026-08-27, user — report `paradigm-20260827-082305`)*: with both paired slots occupied (e.g. bracelet1 + bracelet2), the **first** `wear` of a new piece evicts the **first-worn** member (the one listed first in `i`), and a **second** `wear` then evicts the **most-recently-worn** piece (the one you just put on). So to swap BOTH members (1,2 → 3,4) you can't just wear both — the second wear would knock off the third you just equipped. The minimal sequence is `wear 3` (evicts 1), `rem 2`, `wear 4` — **one** `rem`, not two. The client's swap builder (`EquipmentManager.ComposePairedSlotCommands`) emits exactly that for a both-members paired swap. Note the client only sees both worn pieces as `(Wrist)` / `(Finger)` in `i`, so it relies on `i`-list order to pick which one to `rem`.
 
 **Other**
 - **[CONFIRMED]** A weapon equip / swap prints a **single** line — `You are now holding <new>.`.
@@ -104,9 +105,33 @@ it isn't here and you're unsure, ask.
   two lines arrive back-to-back but are distinct — the client matches each on its own.
 - **[CONFIRMED]** No effect in the game force-unequips gear (no disarm / removal effects).
   Worn state changes *only* from commands the player or the client issues.
+- **[CONFIRMED 2026-08-24, user]** Equipping (`eq` / `wear` / `wield`) **breaks combat** on **both**
+  Stock and Paradigm — it's a non-swing action, so it interrupts the sustained weapon attack and
+  emits `*Combat Off*`, exactly like a between-round cast (see Combat & backstab). By contrast,
+  **getting items from the ground (`get`) and recovering your corpse (`recover corpse`) do NOT
+  break combat** — you can grab your pile mid-fight without dropping the round. This asymmetry is
+  what makes in-combat death recovery safe to interleave: grab everything freely, but the re-equip
+  burst must be paced across rounds (a few pieces per round, re-attacking after each) so it doesn't
+  stall the fight. The engine re-attacks on the equip's `*Combat Off*` via the same signal a cast
+  arms (`CombatManager.NoteBetweenRoundCast`).
+  - **Death-pile source differs by realm** *([CONFIRMED 2026-08-24, user])*: on **Stock**, death
+    drops **all your items loose on the ground** — they appear in the room's `You notice … here.`
+    survey and, if the floor is already crowded, can **spill into adjacent rooms**; you recover each
+    with `get <item>` (confirmed by `You took <item>.`). On **Paradigm**, your items are held **inside
+    a corpse** (`corpse of <given-name>` in the survey), recovered in one `recover corpse <name>`
+    (confirmed by `You have recovered the corpse of <name>.`). The combat-break rule above is
+    realm-agnostic (it re-times only the wear/eq burst), so it applies to both.
 - **[OBSERVED]** A two-handed weapon needs both hands free; the game rejects the wield while an
   off-hand is occupied (it isn't "usable" until the off-hand is gone), so the off-hand must be
   `rem`'d first.
+- **[CONFIRMED 2026-08-19, user report paradigm-20260819-234712]** The off-hand-occupied block
+  above isn't limited to items the `i` listing prints as `(Off-Hand)` — an item whose MDB `Worn`
+  code is Off-Hand (12) can still print under the generic `(Worn)` bucket in the game's own `i`
+  text (e.g. a *red skull*, a worn charm/skull item), yet it mechanically fills the off-hand and
+  blocks a 2H wield exactly the same: `You may not ready a 2-handed weapon with your <item>
+  worn!`, naming the blocking item. The client's own `EquippedItems.Slot` label (taken verbatim
+  from the game's `i` text) can therefore disagree with what actually blocks a 2H equip — the
+  item's declared MDB `Worn` code is the authoritative signal, not its display bucket.
 - **[OBSERVED]** Re-equipping an item that's already worn draws
   `You do not have <X> left unequipped.`
 - **[CONFIRMED]** Worn gear **persists across logins** — you log back in wearing whatever you
@@ -116,6 +141,12 @@ it isn't here and you're unsure, ask.
   `You may not use that weapon.` (weapon) / `You may not wear that item!` (armor). This is why the
   client must not fire a speculative `eq` before the first `i` dump lands — the desired gear is
   already worn, so a blind equip only draws the already-on refusal (or the EP-zap refusal).
+- **[CONFIRMED]** Item **wear-restrictions** aren't dedicated columns — they're MajorMUD
+  **ability-code flags** in an item's `Abil-N` slots (the `AbilVal-N` is presence noise).
+  Alignment: `97` Good-only, `98` Evil-only, `110` not-Good, `111` not-Evil, `112` Neutral-only,
+  `113` not-Neutral. Level: `135` min-level, `136` max-level. Class is a separate `ClassRest-0..9`
+  allow-list of class Numbers. `ItemEquipFilter.CanEquip` evaluates all of these against the live
+  character; the Equipment Manager blocks a slot whose item fails it (and on the EP-zap refusal).
 
 ## Character points (CP) & training
 
@@ -440,14 +471,19 @@ it isn't here and you're unsure, ask.
   - **An AoE spell's live enemy count drops below `MinEnemies`** → switch to a single-target action.
   - **Room / multi-target** attack spells fire at an empty room and emit a "nothing to hit here" style
     message (exact wording unconfirmed — no test character yet).
-- **[CONFIRMED]** *(2026-08-12, user + fix v3.8.3)* **A configured debuff fires BEFORE the attack on
-  engage — not a round later.** On entering a room, if a debuff slot is due (area debuff at ≥ `MinEnemies`,
-  or a single-target / per-monster pre-attack debuff), the client casts the debuff first, then the attack
-  re-announces on the debuff's `*Combat Off*`. The debuff still obeys the **Spells + Ailments spell-type
-  priority**: a higher-priority in-between survival cast (heal / cure / buff) that's due wins and fires
-  first, and the debuff waits for the next in-between pass. Only when nothing higher-priority is queued
-  does the debuff pre-empt the attack. (Before v3.8.3 the attack dispatched immediately on engage while the
-  debuff rode the next in-between tick, so the attack always went out first — the reported ordering bug.)
+- **[CONFIRMED]** *(2026-08-12 + 2026-08-25, user)* **A configured debuff fires BEFORE the attack on
+  engage, and the attack lands the SAME round — the between-round debuff and the combat attack are
+  independent slots.** On entering a room, if a debuff slot is due (area debuff at ≥ `MinEnemies`, or a
+  single-target / per-monster pre-attack debuff), the debuff is cast first and the combat attack goes out
+  immediately behind it, both in the same combat round. A 0-energy between-round cast (the debuff) and the
+  combat action do not compete for one slot — sending the debuff "has nothing to do with" the combat
+  spell — so pairing them does **not** draw the `You have already cast a spell this round!` rejection that
+  a second *between-round* cast would (see the one-between-round-cast rule). The debuff still obeys the
+  **Spells + Ailments spell-type priority**: a higher-priority in-between survival cast (heal / cure /
+  buff) that's due wins the in-between slot first, and the debuff waits for the next in-between pass. Only
+  when nothing higher-priority is queued does the debuff pre-empt the attack. *(2026-08-25, report
+  `paradigm-20260825-103417`: an AoE debuff went out but the multi-attack spell followed a full round
+  later — the attack had been deferred to the debuff's `*Combat Off*`; corrected to fire same-round.)*
 - **[CONFIRMED]** *(2026-08-05, user)* **`MaxCasts` counts combat ROUNDS, not individual casts.** It is
   the maximum number of rounds the client will spend casting this spell at a target — one round counts
   as one regardless of how many times the spell fires that round (e.g. a spell that casts twice per
@@ -587,10 +623,31 @@ the monster's alignment.**
 `0` Good · `1` Evil · `2` Chaotic Evil · `3` Neutral · `4` Lawful Good · `5` Neutral Evil ·
 `6` Lawful Evil.
 
-**Your alignment-title ladder** (lawful → evil, from the who column):
-Saint / Lawful → Good → Neutral → **Seedy → Outlaw → Criminal → Villain → Fiend**. The last five
+**Your alignment-title ladder** (good → evil, from the who column):
+Saint → Good → Neutral → **Seedy → Outlaw → Criminal → Villain → Fiend**. The last five
 (Seedy and worse) are the **"Evil bucket."** (`AlignmentBucket` collapses this to Good / Neutral /
 Evil for item filtering; the criminal layer below needs the finer title.)
+
+**Numeric alignment values** *([CONFIRMED by user 2026-08-27, capture `paradigm-20260827-144553`])* —
+the underlying alignment number per band, most-good (negative) → most-evil (positive):
+`Saint -201 · Good -100 · Neutral 0 · Seedy 40 · Outlaw 80 · Criminal 120 · Villain 180 · Fiend 300`.
+The **ladder is identical on stock and Paradigm** — the only difference is Paradigm shows your exact
+number where stock shows just the band title. **"Lawful" is NOT its own band**: it's a user-set flag
+that forbids the character from ever committing evil acts, and it's treated as **Good** (-100) for all
+alignment math. The finer evil titles (Villain / Fiend) matter mainly for item-equip gating on
+items in that range — a separate system from the exit gate below.
+
+**Exit alignment gates** *([CONFIRMED by user 2026-08-27] — mechanic for report `paradigm-20260827-144553`)* —
+a room exit can carry an `(Alignment: <low> to <high>)` restriction (e.g. `(Alignment: Neutral to
+Fiend)`), rare (only ~14 exits in the Paradigm dataset). The exit admits a character iff their numeric
+alignment falls **inclusively within [value(low), value(high)]**; outside that band the game refuses
+the move with **"Your current alignment prevents you from entering this exit."** So `Neutral to Fiend`
+= `[0, 300]`, which admits Neutral..Fiend and **blocks Good (-100) / Saint (-201)** (the "evil
+entrance" a Good character can't use). Enforcement is **whole-party** — the party is stopped if ANY
+member's alignment is excluded, so routing must consider every member's alignment (looked up from the
+PlayerDatabase, populated by `who` / look). When a member's alignment is **unknown**, the router does
+NOT detour around the gate; it walks **up to** the gate and **halts** there for the user to decide
+(rather than guessing or risking a bonk).
 
 **Layer 1 — alignment auto-aggro (every monster, straight from `Align`)** *([CONFIRMED])*
 - `Align` **1 / 2 / 5** (Evil / Chaotic Evil / Neutral Evil) — **opens on everyone**, every title.
@@ -672,6 +729,52 @@ comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
   we were fighting, so the engaged name attributes it. Never key kill-attribution on a monster
   number the player can't have seen. (This is what boss-timer kill detection uses.)
 
+## Gang houses & guard emblems *([CONFIRMED] 2026-08-16, user)*
+
+Gang house (GH) guards are conditionally hostile, gated on an item, not on the alignment/title
+system above. A gang house's guards **do not attack** a character who is carrying that house's
+matching emblem item (e.g. a gold house's guards stand down for a **Gold Emblem**, a silver
+house's for a **Silver Emblem** — the emblem's name matches the house's color/name). **Losing or
+dropping the required emblem while inside makes the guards attack.** This is a separate mechanism
+from the `jail`-casting guard/title system in *Monster aggression* above — it is not tied to the
+player's alignment title at all, only to possession of the correct emblem for the specific house.
+
+**Client implication (Roomba Mode / any GH automation):** an emblem item must never be treated as
+disposable clutter by automation that picks up and relocates items inside a gang house — moving it
+away from the player (even temporarily, mid-sweep) risks the guards turning hostile. No item-level
+flag or `ItemType` value in the imported MDB data currently distinguishes an emblem from any other
+item; the only known signal is the item name pattern (`"<Color> Emblem"`). Until a more precise
+data field is identified, automation should treat any item name matching that pattern as
+categorically excluded from being picked up/moved, and should never disturb items the player was
+already carrying before automation started (a stronger, simpler guarantee that also protects a worn
+emblem without needing to specifically recognize it).
+
+### `get` failure responses *([CONFIRMED] 2026-08-21, user — screenshots)*
+
+A `get <item>` that can't succeed replies with one of two shapes:
+
+- **`You don't see <echo> here.`** — the item isn't on the floor (gone: decayed, or another
+  player took it). `<echo>` is whatever text followed `get`, echoed back verbatim (`get rod` →
+  `You don't see rod here.`; `get warhorn` → `You don't see warhorn here.`), so it can be a bare
+  word rather than the item's full name.
+- **`Syntax: GET [Amount] [Currency]`** — the game misparsed the item name as a **currency** get
+  (observed for some multi-word names, e.g. `get silk cape`). No item name is echoed. Retrying the
+  same name can't help.
+- **`You cannot carry that much!`** — a **capacity refusal**: the item is on the floor and gettable,
+  but taking it would exceed the carry limit. The item is NOT gone (unlike the two above) — it's a
+  transient block that clears once weight is shed. No item name is echoed. (Confirmed by screenshot:
+  `get 20 torch` succeeds twice, then a third `get 20 tor` while overloaded → `You cannot carry that
+  much!`.)
+
+**Client implication (Roomba Mode):** the first two shapes mean retrying is futile — the item is
+gone or un-gettable by that name, so drop it from the sort queue (correlate to the outstanding get by
+the echoed word, falling back to the sole pending get for a truncated/absent echo). The capacity
+refusal is different: the item stays queued, but our tracked working-weight has drifted low (we
+thought it fit and it didn't), so re-verify inventory once (`i`) to resync the baseline, then re-plan
+— deliver to free room and retry, or strand the item if it's too heavy for the whole working budget.
+Do **not** name-match a failure line's word to decide anything — match by "we just sent a `get` and
+got a failure back," since the echo can be truncated or absent.
+
 ## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
 
 Two distinct spawn mechanisms, and they respawn on completely different rules. This matters
@@ -702,6 +805,12 @@ directly for exp/hr estimation of a loop (how fast a lair refills vs how fast yo
   plus a lair), so a room's yield is the sum of its NPC target(s) + its lair contribution.
 - For a **loop**, an instant mob still yields only once per lap (bounded by lap time); only a
   stay-in-room **rooming** setup kills it every round.
+
+**`Summoned By` field — three room-reference token kinds *([CONFIRMED] 2026-08-19, data cross-ref)*.** A monster's `Summoned By` lists the rooms it appears in, each token tagged by *how* it spawns there. Verified by the room side: a `Group(lair)` token always points at a room **with** a `Lair` tag, a `Group:` token at one **without**.
+- **`Room m/r`** — the room's `NPC` fixture: a **placed** boss / unique (the NPC-placed mechanic above). Nav tooltip labels these **`Placed:`**.
+- **`Group: m/r`** (no `(lair)`) — an **assigned** roam / rare-random spawn; the room carries no `Lair` tag for it. Tooltip label **`Assigned:`**.
+- **`Group(lair): m/r`** — a **lair** spawn; the room's `Lair` tag lists the same monster. Tooltip label **`Lair:`** (sourced from the room's own `Lair` tag, which also carries the `(Max N)` simultaneous cap).
+- A monster can carry more than one kind for the *same* room (a placed boss that also has a `Group:` roam token — e.g. Aiken `1/398` has both `Room 1/398` and `Group: 1/398`), so the three tooltip lines may legitimately repeat a name. The nav tooltip / Room Info panel split these into Placed / Assigned / Lair; `MonsterSpawnIndex` parses the token kinds, while the combat resolver keeps a permissive union of all of them.
 
 **Boss monsters — a game-limited / long-regen singleton.** *([CONFIRMED] 2026-08-03, user + reports `paradigm-20260803-035136`, `-094657`)*
 - A monster is a **boss** if its **`GameLimit` is 1** (only one exists in the game at a time) OR its
@@ -796,6 +905,20 @@ route resolver never counted.
   spawn before you leave (`× (1 + summonChance)`), scaled by laps/hr. A simplification of the true
   per-tick loop, but it lands close and stops the under-report.
 
+### What makes a room-entry spell a movement HAZARD *([CONFIRMED] 2026-08-25, user)*
+
+For the navigation router's purposes, a room's entry spell (`Rooms.Spell`) is a **hazard** — something to
+route around, gate behind a counter item, or warn on — **only when its unprotected effect actually
+damages the player, kills the player, or forces/prevents their movement** (a teleport/transfer out).
+**A monster summon on entry is NOT a hazard**, and neither is an alignment shift (`addevil`/`addgood`),
+a flavor `message`, or quest-item placement — you can still walk in freely, so the router must treat the
+room as ordinary. This holds **even when the room-entry spell carries a `failitem` "counter"**: e.g.
+Blackwood Forest (`Spell 1040`) only summons a monster + shifts alignment + prints a message, so despite
+its `failitem 185` ("manhole"), it is **not** a movement hazard. Real hazards damage (a `Damage`/`EndCast`
+ability, or a TextBlock `cast` of a damaging spell), gate on a survival buff (`checkspell`/`failspell` — the
+desert heat, the drown chain), or `teleport`/`transfer` you out (the sea/ice/pit rooms). *(Encoded in
+`RoomHazardIndex` — see the harm gate in `BuildHazard`.)*
+
 ## Mana regeneration & the ManaRgn breakpoints *([CONFIRMED] 2026-08-08, against the engine's own reference formula)*
 
 Passive (non-resting, non-meditating) mana regen ticks **every 30 s** (6 rounds) and adds a whole-MP amount computed by one integer formula. `CharacterCalculator.CalcManaRegen` implements it; the Level Projection grid already relies on it.
@@ -813,6 +936,23 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 - **Roll spells (nature tap / mana flux)** carry a code-145 slot with stored value 0; the magnitude is rolled per cast from the level-scaled range `Min/Max = base + trunc(inc/incLVLs · level)` (the same `SpellCalculator.AffectMagnitude` scaling every affect uses). So the worst roll = Min, best = Max, and the rolled value adds straight into `ManaRgn%`. This is why a reroll only helps when the range can cross a truncation breakpoint at the current level — otherwise it just burns mana.
 
 **Unverified / modelled (not from the engine reference, don't hard-depend):** the roll's *distribution* across `[Min,Max]` is treated as linear for "where on the range" purposes but is not proven uniform; the meditate path (10 s tick, ManaRgn% excluded) is a reverse-engineered model; whether the live engine caps summed ManaRgn% is unknown. The mana-regen breakpoint calculator uses only the CONFIRMED passive formula above.
+
+### Rerolling a mana-regen roll spell *([CONFIRMED] 2026-08-28, user + screenshot)*
+
+Only **roll spells** (nature tap / mana flux / `prfl`, and kin — code-145 with stored value 0) are candidates for rerolling: a bad roll drags `ManaRgn%` down, so re-cast to chase a better one. **`CHSU` (chaos surge) is NEVER rerolled** — it's a *constant* mana heal-over-time (the mana analogue of HP regen), not a rolled `ManaRgn%` modifier; maintain it like a normal buff. A fixed (non-zero) code-145 spell isn't rerolled either. (`RegenSpellClassifier` already splits roll / fixed / HoT.)
+
+Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again.
+
+**How the roll is read differs by realm:**
+- **Paradigm** — send **`abil 145`**. The output is three lines for `ManaRegen(145)`:
+  ```
+  granted: N      (innate)
+  worn:    N      (gear/quest +ManaRgn bonuses)
+  spells:  N      (what the mana-regen spell ROLLED — this is the value we gate on)
+  ```
+  The **`spells:` value** is the rolled magnitude (e.g. a priest's `prfl` rolling 32). Reroll if `spells:` < the min gate. **The rolled `spells:` value can be NEGATIVE** *([CONFIRMED] 2026-08-30, report `paradigm-20260830-110918` — mana flux rolled `spells: -31`)*, so a "reroll below 0" gate is a normal setting: it chases any non-negative roll. *(Built: `ManaRegenReroller` sends `abil 145`, parses the `spells:` slice, rerolls below the per-slot threshold up to its cap.)*
+- **Trigger timing** *([CONFIRMED] 2026-08-30, report `paradigm-20260830-110918`)* — a roll spell (mana flux / nature tap) confirms via the **shared `ManaRegenerating` condition**, NOT a spell-specific applied message, so the applied-line path can't map the landing back to the specific spell (#406). The reroll cycle therefore keys off the **cast** (we know what we cast), not the applied-line confirm: after the cast reaches the wire, send `abil 145` and read the fresh roll. Keying it on the confirm meant it never fired at all.
+- **Stock** — there is **no `abil 145`**. Instead, monitor the actual **mana tick**: passive regen lands one tick every ~30 s, so watch the MP jump to measure the realised per-tick amount. Because the tick formula above is known, compute the possible tick range at the current level — worst = tick with the Min roll, best = tick with the Max roll (using worn `ManaRgn%`) — and surface both so the user sets a min-tick threshold on a **0–100 % scale** between worst and best. After a cast, wait for the next tick (~30 s), and if the observed tick is below threshold, recast (up to max); otherwise let it ride. *(Built: the Stock tick-monitor path in `ManaRegenReroller` judges the roll from the observed passive tick.)*
 
 ## Vitality — HP, dropping, and death
 
@@ -858,6 +998,19 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   - the character is **teleported to the graveyard room** appropriate to the **map** they died on.
 - Graveyard rooms are **per-map**; two known graveyards are **`1/2189`** (map 1, room 2189) and
   **`16/542`** (map 16, room 542).
+- **[CONFIRMED]** *(2026-08-28, user)* **Death wipes ALL magical effects on the character** — every
+  buff and debuff is removed. Consequence for a buff-maintaining automation: on **our own** death,
+  clear the timers for **our self-buffs** (they're gone) but **keep** the timers we hold on party
+  members (they didn't die — still buffed); on a **party member's** death (the `<Name> has died.`
+  line), clear the timers we hold **on that member** (their buffs are gone). Distinct from a
+  buff-strip room (which dispels on entry) — this is the death event doing it.
+- **[CONFIRMED]** *(2026-08-28, user)* **When WE (the caster) disconnect, only OUR OWN buffs are in
+  doubt.** The other party members stayed **online**, so their buffs kept **counting down in real
+  time** the whole time we were gone — their absolute expiry doesn't move. So on reconnect: clear our
+  self-buff timers (re-establish fresh), and **leave party-member timers at their real (absolute)
+  expiry** — they now read the correctly reduced remaining (any that lapsed while we were away recast).
+  Do **not** shift party timers forward by the offline gap (the old "freeze + preserve remaining"
+  model over-counted them).
 
 **Death fully clears all effects** *([CONFIRMED] 2026-08-09, user)*
 - Death **wipes every ailment, status effect, buff, and debuff** off the character — poison, disease,
@@ -957,6 +1110,12 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   the client still believed it was partied and following the leader. The **only** reason a dropped
   character still tracks the leader's room is that the leader `drag`s them — following is an artifact
   of the drag, not live party membership.
+- **`suicide` / instant death also removes you — with no drop stage** *([CONFIRMED 2026-08-25, user])*.
+  A `suicide` (or any instant death that costs a life) skips the mortally-wounded / 0-HP drop entirely:
+  it goes straight to `After a LONG thought, you take your own life.` → `You now have N lives remaining.`
+  → respawn. Party removal still happens — a **follower** sees `You are no longer following <leader>.`
+  and is out of the party; a **leader**'s party **disbands** — but there's no `<name> drops to the
+  ground!` line, since the character never passed through the mortally-wounded state.
 - While dropped / mortally wounded the game **rejects every action command**: movement, casting,
   aiding, telepaths all bounce with `You may not do that while you are mortally wounded!`,
   `Your command had no effect.`, or (for remote / telepath commands) `{command invalid or not
@@ -1039,6 +1198,19 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 
 ## Movement & navigation
 
+### Winch gates *([CONFIRMED] 2026-08-27, user — report `paradigm-20260827-113513` + wire capture)*
+
+Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit whose prerequisite is `pull winch`), e.g. the Entrance Hall fortress gate west (`iron gates … a heavy wooden winch`).
+
+- The winch is operated by any of **`pull` / `turn` / `move` / `push` winch** (aliases for the same TBInfo action), yielding exactly one of two lines:
+  - **success:** `You heave mightily on the winch, and it begins to turn!`
+  - **failure:** `You heave mightily on the winch, but it does not budge.`
+- **"Does not budge" is a strength roll, not randomness.** The TBInfo action is `testskill strength 20 …` — a strength check on each pull. **Higher strength = more likely to pass**; a roll can still miss. So failure is a **retry** (keep pulling), not a give-up. (All races start ≥20 strength, so no character is hard-blocked — it just takes more pulls at low strength.)
+- After it turns the gate opens on a **short delay** (the action carries `adddelay 3` ≈ 3s), and there is **no "the gate opens" line** — the gate only reads `open gate <dir>` in a room re-display (a bare `l` / look refreshes it). Moving before the gate is actually open bonks `The gate is closed!` (which the movement-refusal detector reverts).
+- **Same-room vs cross-room.** Most winches sit in the same room as the gate they open. But a winch can `remoteaction` a gate in a **different** room (in Paradigm 1.9.1, the winch in `12/2118` opens the gate off `12/2122`). Then the gate exit is a cross-room remote-action detour, not a same-room exit.
+- Client handling: **same-room** → `WinchManager` (walker + loop) sends the pull, retries on "does not budge", and on "begins to turn" polls a look until the gate reads open, THEN moves — never fires the move blindly. **Cross-room** → the `RemoteActionPathExpander` detour's `pull winch` step is flagged `IsWinchPull` and routed through `WinchManager` pull-only (retry until it turns, no gate poll — the walk back to the gate room covers the open delay).
+- **Paradigm 1.9.1 winches (3):** `12/2099` (Entrance Hall, same-room), `12/2123` (Narrow Precipice, same-room), and `12/2118`→gate off `12/2122` (cross-room).
+
 - **[CONFIRMED — user, 2026-07-22] Per-hop movement speed is realm-specific, and the two realms
   differ enough that no single fixed movement timer can be right for both.**
   - **Paradigm** paces each hop by a deterministic server formula (no lag term):
@@ -1098,6 +1270,14 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   door.`** (not "The door is now open."). `DoorOpenManager` keys on all three; matching only
   present-tense "unlock(s)" or "is now open" stranded the walker at a picked door
   (report stock-20260730-182812).
+- **[CONFIRMED]** **Bashing a door drains the basher's HP.** Each `bash <dir>` swing at a door
+  costs HP (a bashable door opens after some number of swings, gated by RNG, not a single hit),
+  so sustained bashing whittles the character down. `DoorOpenManager` therefore bashes a
+  *bashable* door (per `DoorPolicy`) **uncapped** — no fixed attempt limit — but interleaves
+  rest: once HP falls to the Health-tab **rest-if-below** trigger it pauses bashing so
+  `HealthManager` can rest to **rest-max**, then resumes. (Confirmed by user direction; replaced
+  the old fixed `MaxBashAttempts` cap.) Picking, by contrast, does **not** drain HP and keeps its
+  `MaxPickAttempts` retry cap.
 - **Corollary the tracker relies on:** *a room redisplay that still matches the room you moved
   from is never the result of a refused move.* While a move is pending, seeing the source room
   again can only be a **passive re-look** — a combat-clear, a monster/player arrival or
@@ -1207,6 +1387,16 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   treated as block boundaries. (`RoomDisplayParser.PartyChatterBoundaryPattern` does this — the room
   the follower lands in is displayed immediately after ` -- Following your Party leader <dir> --`, so
   that drag line is the natural boundary.)
+- **[CONFIRMED by user, report `paradigm-20260829-154032`] Bright cyan is not uniquely the room title —
+  an engine-side palette can remap spell/ability text to it.** A player running a palette that shifts
+  spell/ability lines from dark blue to bright cyan makes every `<player> invokes the way of the
+  monkey!`-style broadcast render in the **same bright cyan as room names**, deterministically (not an
+  occasional fluke). Such a line can arrive in the arrival burst immediately **before** the real title.
+  Colour therefore can't tell an ability line from the title under that palette. The room-name detector
+  anchors on **position** instead: the title is the **last** bright-cyan line before `Obvious exits:`
+  (the room display — title → `Also here:` → `Obvious exits:` — is one contiguous block, so async player
+  broadcasts land before it, never between the title and the exits line). `RoomDisplayParser` keeps the
+  nearest bright-cyan line to the exits, not the first in the block.
 - **[CONFIRMED]** **Hidden/foliage exits drag the follower with no direction.** Some Darkwood Forest
   exits are text-only: the leader prints `<leader> shoves aside the foliage, and disappears among the
   trees.` and the follower is pulled through with `You push through the dense foliage, and walk onto a
@@ -1380,6 +1570,14 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
        each has `NegateSpell = [526, 218]`, and they're the only two items that do. `RoomHazardIndex`
        already indexes these (one any-of group {487, 1000}), so the router treats lava exactly like the
        river/desert: avoid unless the player carries a counter.
+     - **[CONFIRMED by user, report `paradigm-20260829-203409`] Misty Bog swamp damage** — `Spell:485`
+       (the bog zone's entry spell) is negated by **either** the **swamp boots (item 925)** or the
+       **trollskin boots (item 1232)** — both share `NegateSpell = [485, 5682]`, an any-of group
+       exactly like the lava amulet/feather pair above. The route picker/walker only ever resolve to
+       *sourcing* one representative item from a multi-item group (whichever the acquisition pipeline
+       can actually reach — here, trollskin via a shop), so a player who instead equips a *different*
+       group member they already own (swamp boots) is just as protected even though the client's
+       path-item tracking was, before this report's fix, still pinned to the one it originally chose.
      - Timer cancel on exit: the `6/1139` up-exit is `(Cast: pre-516, post-0)` → spell **516**
        `151`(EndCast→**515** "stop drowning"), and 515 `153`(KillSpell) **512** & **513** — leaving the
        water cancels the drown timer. (`Cast: pre-N` = cast spell N *before* moving through the exit.)
@@ -1424,17 +1622,21 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
      - **[CONFIRMED by user 2026-07-28, report `paradigm-20260728-201619`] The desert spell does two
        things — damage AND a random teleport — and the two protections are NOT equivalent.** The waterskin
        buff (711) only stops the **damage** portion; it does not stop the random teleport. The **sunstone
-       wristband** (item 1180, worn) prevents the **entire** interaction (damage + teleport), so **if you
-       have the sunstone you don't need a waterskin at all.** In the data the wristband is a `failitem 1180`
+       wristband** (item 1180) prevents the **entire** interaction (damage + teleport), so **if you
+       have the sunstone you don't need a waterskin at all.** **[CONFIRMED by user 2026-08-27, report
+       `paradigm-20260827-112011`] The sunstone grants desert immunity by POSSESSION — it can be worn, but
+       the player only needs to *have* it (carried or worn), matching the `failitem` "if you HOLD the item"
+       mechanic.** In the data the wristband is a `failitem 1180`
        guard sitting one-to-two `random` hops below the `failspell` (e.g. `2653 → random 2655 → random 2700`
        and `2658 → random 2660`), guarding the sandstorm/sinkhole casts (713/714/743) — which are the only
        desert damage that fires above `maxlevel 19`, i.e. what actually hits a high-level character. (Its
        `NegateSpell` covers only 713; the reliable signal is the `failitem`, not the negator.) **Client
        encoding:** a `failitem` guard found by chasing a buff-gate's `random`-linked failure branch is
-       folded into the SAME requirement group as the buff source, so carrying **either** the waterskin **or**
-       the sunstone clears the desert for routing; the buff-refresh provisioner still only ever `use`s the
-       waterskin (the sunstone is passive/worn). This mirrors how the river raft/canoe `failitem` guards
-       (top-level, not nested) let a boat-carrier route the river.
+       folded into the SAME requirement group as the buff source, so having **either** the waterskin **or**
+       the sunstone clears the desert for routing. The `BuffCounter` also carries the immunity guards, so
+       the buff-refresh provisioner **skips the `use waterskin` entirely** when a sunstone is held (carried
+       or worn) rather than spending a pointless charge (report `paradigm-20260827-112011`). This mirrors
+       how the river raft/canoe `failitem` guards (top-level, not nested) let a boat-carrier route the river.
      - **[CONFIRMED by user]** Protection is *duration-based*, not carry-based. `use waterskin` applies
        buff 711, which lasts its listed `Dur` (600 = 10 min game-time). You are protected only **while
        the buff is up** — carrying the item alone does nothing. If you're still in a desert/hazard room
@@ -1965,21 +2167,26 @@ damage-type mitigation is the monster's `M.R.` ability, **not** a `Resist-<type>
 never nulls a spell deterministically from its value alone. It works through **two independent
 effects, each separately gated** (equations below are the reference client's own combat math):
 
-- **Partial damage reduction** — gated by the spell's *damage ability code*. Applies only to code
-  **1** `Damage`; code **17** `Damage(-MR)` **bypasses** it. `baseline M.R. is 50` (the no-change
-  point): for M.R. ≥ 50 the reduction is `(M.R. − 50) / 200`, climbing to a hard **cap of 50%** at
-  M.R. 150 and stopping (the target's own AntiMagic raises the cap to **75%**, via `M.R. / 200`).
-  Below M.R. 50 the term goes negative — low M.R. *amplifies* damage taken. So even an enormous
-  M.R. only ever **halves** (or, under AntiMagic, three-quarters) the damage — it can't reach 0.
-- **Full-resist chance** — gated by the spell's `TypeOfResists` (below). A separate per-cast roll
-  can negate the spell entirely, with probability `M.R. / 2` percent (M.R. 100 → 50% chance,
-  capped at 98% for M.R. ≥ 196) — a *chance*, never a certainty short of the cap.
-- Net: **100 M.R. never means 0 damage**, so M.R. must **never** feed a ≥100%→skip guard. Both
-  example spells actually carry code **17** (bypass the partial cut), which shows how the two
-  gates combine: `magic missile` (code 17 + `TypeOfResists 0`) takes **neither** effect — it
-  always lands full, the reliable nuker; `harm` (code 17 + `TypeOfResists 2`) takes no partial
-  cut but *can* be fully-resist-rolled; a code-**1** Normal spell would eat the capped partial cut
-  on top. In every case a high-M.R. monster can still take Normal-spell damage.
+- **Partial damage reduction** — gated by the spell's *damage ability code*. Applies to code **17**
+  `Damage(-MR)` (the "(−MR)" means M.R. **is** subtracted); code **1** `Damage` takes **no** M.R.
+  cut *([CONFIRMED] 2026-08-30, user + syntax53/MMUD-Explorer `CalculateResistDamage` /
+  `CalculateSpellCast` — **this note previously had the two codes reversed**)*. `baseline M.R. is 50`
+  (the no-change point): for M.R. ≥ 50 the reduction is `(M.R. − 50) / 200`, climbing to a hard **cap
+  of 50%** at M.R. 150 and stopping (the target's own AntiMagic raises the cap to **75%**, via
+  `M.R. / 200`). Below M.R. 50 the term goes negative — low M.R. *amplifies* damage taken. So even
+  an enormous M.R. only ever **halves** (or, under AntiMagic, three-quarters) the damage — never 0.
+- **Full-resist chance** — gated by the spell's `TypeOfResists` (below), **independent of the damage
+  code**. A separate per-cast roll can negate the spell entirely, with probability `M.R. / 2` percent
+  (M.R. 100 → 50% chance, capped at 98% for M.R. ≥ 196) — a *chance*, never a certainty short of the
+  cap.
+- Net: **100 M.R. never means 0 damage** (the partial cut caps at 50%, or 75% under AntiMagic), so
+  M.R. must **never** feed a ≥100%→skip guard. Both example spells carry code **17**, so both take
+  the partial cut: `magic missile` (code 17 + `TypeOfResists 0`) takes the partial cut but **no**
+  full-resist roll — still the most reliable nuker (never fully *negated*), just softened against a
+  high-M.R. target; `harm` (code 17 + `TypeOfResists 2`) takes the partial cut **and** can be
+  fully-resist-rolled. A code-**1** Normal spell would take **neither** M.R. effect (though the
+  full-resist roll, being `TypeOfResists`-gated, could still fire). In every case a high-M.R. monster
+  still takes Normal-spell damage.
 
 *3b-note. `TypeOfResists` — the full-resist eligibility flag.* The Spells-table `TypeOfResists`
 column (values 0/1/2) gates whether the full-resist roll above can fire, independent of the
@@ -1990,12 +2197,50 @@ so their only mitigation is the deterministic elemental cut in 3a — which is e
 elemental resist is safely pre-emptable. Among Normal spells, `magic missile` is `TypeOfResists 0`
 (never rolled-resisted) while `harm` is `TypeOfResists 2`.
 
+*3b-calc. Display damage calculator.* The Game Data spell view's interactive damage calculator
+(`SpellDamageCalculator`) implements the reduction above: the per-cast range comes from Min/MaxBase
+scaling, then the code-17 **magic-resist partial cut** (fraction `(MR−50)/200`, cap 50%; AntiMagic
+`MR/200` cap 75%; below MR 50 it amplifies), then the **elemental flat-% cut** on any elemental spell;
+the probabilistic full-resist chance is shown separately, never folded into the range. **The combat
+engine never estimates M.R.-reduced damage** — it only pre-empts spells on deterministic signals
+(elemental ≥100% resist per 3a via `MonsterResistIndex`, `SpellImmu`, and the `Magical` weapon-hit
+gate), and `CombatSpellChooser` explicitly resist-blocks *elemental* spells only. So correcting the
+code-1↔17 gating above changed **no combat decision** — the old reversed note was never implemented
+in engine code; it drove only the (now-fixed) doc and this display calculator.
+
 *3c. Poison (`AttType 6`) — not resistible, binary immunity.* Poison has **no** resist value and
 **no** `Resist-Poison` code — a target is either affected or immune, never "partially resisted."
 - Immunity is sourced from **race / items**, not a resist stat: the **Kang** race is
   poison-immune, the **golden headdress** item grants poison immunity, and **swamp boots** /
   **snakeskin boots** negate certain room-cast "swamp poison" effects — snakeskin also grants
   immunity to certain poisons, varying by game-data set.
+
+## Spell cast-success chance + the `Diff` column *([CONFIRMED] 2026-08-30, source: syntax53/MMUD-Explorer `GetSpellCastChance`)*
+
+A spell's chance to LAND (not fizzle) is a flat, **level-independent** function of the caster's
+`Spellcasting` stat and the spell's `Diff` (difficulty) column:
+
+```
+success% = clamp(Spellcasting + Diff, 0, cap)
+```
+
+- **`Diff`** is the Spells-table `Diff` column — normally **≤ 0** (a harder spell is more negative, so
+  it lowers the chance; `ethereal shield` = −5). It's added directly to Spellcasting.
+- **cap** = **100** for a **Kai** caster (`Magery` type **5**), else **98** (MajorMUD/stock; Paradigm
+  shares the stock cap — it's a MajorMUD variant, not GreaterMUD, whose cap is 100).
+- **Short-circuits:** `Diff ≥ 200` marks an always-succeeds utility spell → **100%**; a `Spellcasting`
+  of **0** means the character isn't a caster (or the stat line isn't parsed yet) → **no stated
+  chance** (the client shows "—", never a bogus 100%).
+- **Level plays no part** — the caster's level scales a spell's damage/duration, not its landing
+  chance. Modeled in `SpellCastChance`; surfaced as the Spell Book "Difficulty" column.
+
+## `DR` (ability code 7) magnitude — stored at 10× *([CONFIRMED] 2026-08-30, user)*
+
+The `DR` ability's stored value is **ten times** the damage-resistance the character actually gains:
+raw **10 → +1.0** DR, raw **22 → +2.2**, raw **15 → +1.5**. Display it as `raw / 10` to the tenth,
+never the raw store value (a spell/effect showing "DR +10" really grants +1.0). Applied in
+`SpellEffectFormatter` (the effect line) and the spell Game Data view. (Worn-DR on gear via the
+equipment stat path is a separate display not yet audited against this.)
 
 ## The `spells` / `sp` command output *([CONFIRMED] 2026-08-13, user capture, Paradigm)*
 
@@ -2051,6 +2296,26 @@ wave grin bow bleed nod laugh … smile … tickle`) that wraps across lines, wi
   green). Detection = all-green colour + head shape: own `You <lowercase verb>…` minus the
   known green status prefixes (`You are/have/notice/feel/…`); others' `<known room player>
   <lowercase verb>…` minus enter/exit/follow/logon/chat lines (see `ActionEmoteClassifier`).
+
+## Command rate limit — typing/sending too fast *([CONFIRMED] 2026-08-25, user)*
+
+The game throttles how fast a client may send commands (typed input or telepaths).
+Exceeding it **drops** the offending command silently on the game side — it is never
+processed — and the wording of the notice is **realm-specific**:
+
+- **Stock realms** are stricter and give a two-tier signal. As you approach the limit
+  the game nudges: **`Why don't you slow down for a few seconds?`**. If you push past
+  it, the command is dropped with **`You are typing too quickly - command ignored`**.
+- **Paradigm realms** accept moderately-paced rapid input without complaint and give
+  **no** early warning; they only object to a **burst of more than ~10 lines at once**,
+  with the red line **`Too many messages sent - please wait for a few moments before
+  trying again`**. Any lines beyond the burst allowance are dropped.
+
+Implication for bulk sends (e.g. `@roomba sync`, which can be ~20 telepaths): pace them
+out (MudPlay uses ~800ms between telepaths) so a burst never forms, and treat the
+"command ignored" / "too many messages" lines as a signal that the last send was lost
+and should be re-sent. This is distinct from the outbound-write **interleaving** bug
+(that was a client-side concurrency defect in `TelnetClient`, not a game rate limit).
 
 ## Spell targeting: monster type tags
 
@@ -2171,8 +2436,13 @@ slot and displaces only what was there, so restore is **slot-specific**:
   a 1H buff swaps cleanly — `eq buff`, `use`, `eq <2H weapon>` — no off-hand step, the off-hand was
   empty under the two-hander.)
 - **Off-hand buff** (warhorn, a held item) → displaces the **off-hand**; restore the off-hand shield.
-  **The weapon is never touched.** (Restoring the weapon instead — the bug — strands the buff in the
-  off-hand and never puts the shield back.)
+  **The weapon is never touched** *when it's one-handed*. (Restoring the weapon instead — the bug —
+  strands the buff in the off-hand and never puts the shield back.)
+  - **Exception — off-hand buff while wielding a 2H weapon** *([CONFIRMED] 2026-08-26, user)*: a two-hander
+    fills **both** hands, so `eq <off-hand buff>` is **rejected outright** until it comes off — the mirror
+    of the 2H-buff case below. Order: `rem <2H weapon>` → `eq <buff>` → `use` → `rem <buff>` (frees the
+    off-hand) → `eq <2H weapon>` (the game likewise blocks the 2H wield while the off-hand is occupied, so
+    the buff must be removed first). Without this the sequence just loops on a rejected `eq <buff>`.
 - **Worn buff** (amulet/ring/etc.) → displaces **that worn slot**; restore that slot's item.
 - **2H weapon buff** while holding a 1H weapon + off-hand → it needs **both** hands, so the order is:
   `rem <off-hand>` → `eq <2H buff>` → `use` → `eq <1H weapon>` (this drops the two-hander and frees
@@ -2246,6 +2516,18 @@ an encumbrance-adjusted one, since it's a planning aid without a fixed load assu
   `You notice` total — one authoritative pass — never replay the mid-fight drop deltas (they
   double-count against the total, re-queue on every re-render, and go stale). Implemented in
   `CashManager`.
+- **[CONFIRMED 2026-08-29, user]** **Stashed (hidden) coin is only re-surfaced by a `search`.**
+  In a stash room the client `hide`s excess coin; a hidden pile does **not** show on plain room
+  entry or a re-`look` — only a `search` / `sea` re-reveals it, re-rendered through the same
+  `You notice N <coin> here.` line as visible coin. So there are two kinds of coin in a stash room:
+  **visible** coin (present on entry, or dropped by a kill via `N <coin> drop to the ground.`) which
+  is fine to collect, and **search-revealed** coin (the pile we just stashed) which must **not** be
+  re-grabbed. Client consequence: auto-collect is suppressed in a stash room **only while an
+  auto-search reveal is in flight** — coin shown on plain entry or a corpse drop still collects,
+  in the stash room and in the room after it. (Reading "am I in a stash room" alone is wrong: a
+  room's entry survey is parsed before the room is confirmed, so it mis-attributes the *next* room's
+  coin to the stash room just left — report `paradigm-20260829-212158`.) Implemented as
+  `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.
 - **[CONFIRMED]** **Toll exits gate on total wealth, not a specific coin.** A room exit tagged
   `(Toll: N)` in the map data requires the crosser to carry a **wealth value of `N × 100`**
   (copper farthings — the same consolidated `Wealth:` figure), held **on them** (carried coin, not
@@ -2389,6 +2671,11 @@ fresh `@level` lands ≥ 10.)
 ## Party
 
 - **[CONFIRMED]** Party size: minimum 2, maximum 6.
+- **[CONFIRMED]** *(2026-08-28, user)* **Party members are always co-located — a party is a single room.** If a name shows in `par`, they are in your room, full stop. So the correct "is this member reachable?" gate is *party membership* (`par`), **not** the room's `Also here:` line.
+- **[CONFIRMED]** *(2026-08-28, user — report `stock-20260828-124347` + scrollback)* **A party member may be absent from `Also here:` for two reasons, neither meaning they left the room:**
+  1. **The leader you're FOLLOWING is never listed in `Also here:`** — the game prints `You are following <leader>.` as a separate status line instead, and `Also here:` shows only the *other* occupants. Reciprocal: when **you** lead, your followers **do** appear in your `Also here:` (you follow no one).
+  2. **A member who is HIDING** is removed from `Also here:` (see Stealth). They're still in the room and in `par`.
+- **[CONFIRMED]** *(2026-08-28, user + screenshot)* **The only time a targeted cast on a party member misses is when that member is HIDING.** The server answers **`You do not see <name> here!`** (and they aren't in `Also here:`). Automation handling: don't pre-gate single-target party casts on `Also here:` (it wrongly skips the followed leader and any hidden member) — attempt on party membership, and if `You do not see <name> here!` comes back, back that member off until you **move** or they **reappear in `Also here:`** (they unhid), rather than re-firing — and the failure — every round.
 - **[CONFIRMED]** Losing the leader disbands the whole party — whether the leader **disconnects or
   dies**. No grace-window auto-invite for a lost leader; on the leader's own death the party is gone
   by the time they respawn in the graveyard.
@@ -2468,6 +2755,10 @@ fresh `@level` lands ≥ 10.)
 
 - **[CONFIRMED]** Talk modes (say / talk-fast / slow) differ **per realm** — that's game
   configuration, not a client bug. The keyboard period is a say-precursor and stays unbindable.
+- **[CONFIRMED] 2026-08-27, user** — a **directed say** is `><name> <message>` (`>` verb + name,
+  no precursor): it says the message TO one person in the room, so in a crowded room they know it's
+  aimed at them. Distinct from the undirected say-precursor `.<message>` (room-wide). The client
+  answers a say-channel `@`-command with a directed say at the sender (`RemoteCommandManager.SendReply`).
 - **[CONFIRMED] 2026-08-04, user** — the **gang-channel speak verb is `bg`** (broadcast-gang), with
   `gb` and the `broadg…`/`broadgang` long forms as equivalents. **`gang` is NOT a speak command** —
   sending `gang <msg>` does not reach the gang. Anything we emit on the gangpath channel (remote
@@ -2478,6 +2769,15 @@ fresh `@level` lands ≥ 10.)
   feature (Settings → Talk) keys on this exact phrase; if a realm's wording differs it's a
   one-line regex tweak (`DefaultPatterns.PlayerLooksAtYou`). Not present in any imported MDB
   table — it's a live interaction line, so the wording is user-supplied, not data-derived.
+- **[CONFIRMED] 2026-08-24, user** — on a **public / broadcast channel (gangpath, gossip,
+  auction, broadcast)** the server echoes **our own** message back tagged with our **character
+  name**, e.g. `Raijin gangpaths: <msg>` — it does **NOT** use `You`. Only the directed/room
+  channels (say → `You say "…"`, telepath echo → `--- Telepath sent to X ---`) use the `You`
+  form. Consequence for `RemoteCommandManager`: the null-/`You`-speaker self-echo guard can't
+  catch a public-channel self-echo, so it must compare the speaker against our own name
+  (`SelfNameProvider` → `PartyManager.LocalCharacterName`, given-name form) — otherwise our own
+  gangpath'd `@`-command (e.g. `@timer sync`) is read back as an inbound command and bounces a
+  denial at the whole gang.
 
 ## Shop prices — buy & sell *([CONFIRMED] — extracted from the reference client)*
 
@@ -2632,6 +2932,20 @@ glass jug               5               2 gold crowns
   rest once poison clears** (the poison falling edge drops the stale latch) — otherwise it
   sits standing below the rest floor forever, which is what report 092945 hit.
 
+## Casting a spell interrupts resting/meditating *([CONFIRMED] 2026-08-20, user)*
+
+- **Casting a spell on yourself (a self-bless, etc.) while resting or meditating breaks the
+  rest/meditate state** — position drops back to Standing, same as taking a hit or moving.
+  Reported as "meditate not re-engaging automatically after blessing while resting."
+- **Consequence for the auto-rest engine:** `HealthManager`'s confirm/interrupt latch
+  (`_restInFlight` / `_restConfirmedByPrompt`) only recognized `PlayerPosition.Resting`, never
+  `PlayerPosition.Meditating` — so a `meditate` send's confirmation step never fired, the
+  interruption step's guard never tripped either, and the latch stuck `true` forever after a
+  meditate got interrupted in place (no room move to fall back on and clear it via
+  `NoteRoomChanged`). Fixed by treating Resting and Meditating as the same "in a resting-family
+  position" state for the confirm/interrupt check — `rest` was never affected, since its
+  position always matched.
+
 ## Confusion fumbles — actions fail and must be re-sent *([CONFIRMED] 2026-07-14, user)*
 
 - Confusion does **not** block attacking (or acting) outright. Instead each action
@@ -2701,6 +3015,23 @@ glass jug               5               2 gold crowns
   code (`bles`) → the client arms/refreshes that buff's timer anchored on the code (`CastingDirector.NoteManualBuffCast`,
   fed by the `OutboundCastObserver`), exactly as an engine cast does. The following success line just
   confirms it landed; identity comes from the code, never the ambiguous applied message.
+- **[CONFIRMED, user 2026-08-29] Casting syntax — no `c`/`cast` prefix needed.** The bare 4-letter cast code
+  IS the command. A **bare code** casts per the spell's own scope: a self buff on yourself, a **whole-party**
+  buff on the whole party (`unfa` → unholy fanaticism on the party, `chan`, etc.), a room spell on the room —
+  no target token. A **code + a name** is a **single-target** cast (`gbls fuj`, `bles alice`). The name is a
+  **prefix / shorthand** the server resolves against the players (and NPCs, for offensive spells) **in the
+  room**: `gbls fuj` casts greater bless on `Fujin` if that uniquely matches; an ambiguous prefix **bonks**
+  with a "do you mean …" list and casts NOTHING. This is exactly how the engine casts — bare code for
+  self / whole-party, `code given` for a single member.
+- **[CONFIRMED, user 2026-08-29 — game data] Every spell has per-perspective messages in the Messages table**
+  (`MessageRecord`): **CasterMessage** (the line YOU see when YOU cast it), **TargetMessage** (the line YOU
+  see when it lands on YOU — i.e. someone cast it on you), **WitnessMessage** (the line YOU see when someone
+  casts on someone else), and **AppliedMessage** (the buff-applied condition line). A successful cast emits
+  the perspective-appropriate line to each observer, so a buff landing on the party can be recognised from
+  ANY seat — our own cast (Caster), a buff cast ON us (Target), or a buff cast on a party member (Witness).
+  Today the buff-timer engine reads only CasterMessage (our casts) + AppliedMessage (self conditions); it does
+  NOT yet read Target / Witness, so a buff another party member casts — or our own single-target manual cast —
+  isn't tracked in the Buff Watchdog.
 - **[user 2026-08-16] Session vs drop for buff timers.** **Any** disconnect — manual, hangup, or an unexpected
   drop — **freezes** the buff timers (the buffs persist server-side through link-death); the Buff Watchdog
   display freezes at the drop instant too (its 1s heartbeat is a wall clock that keeps ticking offline). The
@@ -2708,15 +3039,25 @@ glass jug               5               2 gold crowns
   instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
   (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
   the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
-- **[user 2026-08-17] Party-buff slots are party-only, and a superseding party buff covers self.**
-  The party-bless slots are cast **only while in a party** (`PartyState.IsInParty`); solo, none fire —
-  self-buffs come from the self-bless slots. A **single-target** party buff is cast per class-matched
-  member and **never targets self** (self uses the self-slots); only a **party-wide** buff (`Spells.Targets`
-  = Full/Divided Party Area, scope 13/10) lands on self. **Supersession:** a spell that carries **RemovesSpell
-  (Abil 122)** removes the named spell (the Spell Book renders it "Removes <spell>"). So when a configured
-  **party-wide** party buff removes a configured self-buff (e.g. **chant removes bless**), in a party we stop
-  self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff
-  "covered by <party buff>". Only party-wide covers count (a single-target party buff can't cover self).
+- **[user 2026-08-17 / 2026-08-28] Party-buff slots are party-only; scope splits whole-party vs
+  single-target; targeting is per-member (not class).**
+  The party-buff slots (`CharacterProfile.PartyBuffs`, configured in the Party window) are cast **only
+  while in a party** (`PartyState.IsInParty`); solo, none fire — self-buffs come from the self-bless slots.
+  **Scope classification** (confirmed against stock + Paradigm data), gated first on **`EnergyCost == 0`**
+  (a buff, not an attack):
+  - **`Spells.Targets` = 2** (Self or User) → a **single-target** beneficial buff cast on ONE other member
+    (`frenzy`, `divine favour`, `blood ritual`, `regeneration`). Never targets self (self uses the self-slots).
+  - **`Spells.Targets` = 10 / 13** (Divided / Full Party Area) → a **whole-party** buff, one cast with no
+    target that blankets the party (`chant`, `mass frenzy`, `unholy fanaticism`, `rejuvenating field`). Lands
+    on self too. Scope 0/1 (self-only), 4/8/9/12 (enemy), 7 (item) are NOT party buffs.
+  - Single-target targeting is by **selected member (given name), not class** — a slot blesses "all members"
+    or a checklist of specific players, and only fires for a name that is BOTH a current `par` party member
+    AND in the room (never casts at someone absent / uninvited / in another room).
+  - **Supersession:** a spell that carries **RemovesSpell (Abil 122)** removes the named spell (the Spell Book
+    renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g.
+    **chant removes bless**), in a party we stop self-casting the removed one and let the party buff cover us —
+    the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a
+    single-target party buff can't cover self).
 
 ## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
 
@@ -2876,6 +3217,47 @@ the attack rotation); the **AoE** debuff is gated by **Auto-Nuke**.
     is** (energy 1–1000) — a last-writer-wins lookup that picked a 0-energy monster
     duplicate misfiled a hand-cast `vamp` as in-between and the engine re-announced its
     attack over it. Classify a shared cast-code by "any entry combat", not the last one.
+- **[CONFIRMED]** *(2026-08-22, user)* **A combat spell is engaged ONCE and auto-repeats.**
+  You type `disr zombie` a single time; the engine then re-fires it **every round on its
+  own** — you do NOT re-issue it per round — until the monster dies or an **in-between-round
+  action breaks combat**. Within each round it fires **`floor(1000 / EnergyCost)` times** —
+  the 1000-energy round budget over the spell's cost. So a **500-cost** spell (`disr`,
+  `mmis`, `lbol`) fires **up to twice** a round, **333** → 3×, **250** → 4×. That is the
+  **maximum**; it fires **fewer** when the monster **dies on an earlier shot** or combat
+  order ends the round first. Concretely for `disr` (500): a **30-HP** mob dies on the first
+  shot → **1 fire total**; a **700-HP** mob → ~3–4 rounds showing **2 fires each round**
+  (absent other damage). The client **cannot suppress a mid-round repeat** (server/energy-
+  driven), so the earliest a spell swap (e.g. a `MaxCastsPerRoom` cap) can take effect is the
+  **next round** — the cap-switch is a client override sent after counting. Consequence for
+  cap-counting: **one round** of a 500-cost cap spell is **up to two** `You cast X …` result
+  lines, and a per-encounter cap must treat that round's fires as **ONE unit**, not two
+  casts. (Deriving the expected per-round fire count from `floor(1000/EnergyCost)` is a more
+  robust "same round" signal than a fixed wall-clock grouping window.)
+
+### Combat order, monster targeting, and attack-last *([CONFIRMED] 2026-08-22, user)*
+
+- **Physical swings per round** come from a swing calculation, hard-capped at **5 on Stock,
+  6 on Paradigm**.
+- **Player attack order = announce order, FIFO.** Players deal their damage in the order
+  they engaged/announced their attacks — first to announce fires first. Party rank does NOT
+  change this order.
+- **Backstab is pre-emptive** — a successful backstab always resolves **first**, ahead of the
+  normal order.
+- **Monster targeting is probabilistic, not deterministic.** A hostile NPC picks its target
+  by **chance**; several factors apply hidden **modifiers** that make a party member more or
+  less likely to be chosen — never guaranteed, and the modifier values aren't visible:
+  - **Party rank** — **frontrank** raises the odds of being targeted, **backrank** lowers
+    them (midrank between).
+  - **Attacking last** raises the odds; **attacking first** lowers them.
+  - These stack: a **frontrank member attacking last** is the most likely target; a
+    **backrank member attacking first** the least — but it's still a weighted roll.
+- **"Attack last" (client setting)** therefore does two independent things:
+  - Resolves your action at the **end** of the round's order — the **mana/energy save**: in a
+    party that *usually but not always* one-rounds a mob, a spellcaster set to attack last
+    casts last, so if the mob is already dead its spell has no target and **never fires —
+    energy/mana saved**; it only spends when the mob survives to the caster's slot.
+  - **Raises** your monster-targeting odds (a positive modifier) — useful for a tank drawing
+    aggro, a cost for a squishy caster.
 
 ## MegaMUD `messages.md` format *([CONFIRMED] 2026-08-17, user + decode of both stock/paramud files)*
 

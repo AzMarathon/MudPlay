@@ -36,6 +36,10 @@ namespace MudPlay.Game.Remote;
 //     (@suicide). Wider than just sysop powers.
 //   - QueryBossTimers — @timer (boss respawn timers being tracked). Its own
 //     category so a user can grant boss-timer queries independently of @where.
+//   - QueryItemLocation — @roomba (last room an item was seen in, per the
+//     BBS-tier Roomba item-sighting log). Its own category, same as
+//     QueryBossTimers/QueryDeaths, since none of these are documented MajorMUD
+//     wiki commands — they're MudPlay-specific extensions.
 //
 // Party-coordination commands (@wait / @ok / @comeback / @forget / @share) map
 // to PlayerRemoteControls.None — they're gated by the engine's party-whitelist
@@ -84,6 +88,7 @@ public static class RemoteCommandCatalog
             ["@who"]          = PlayerRemoteControls.QueryLocation,
             ["@timer"]        = PlayerRemoteControls.QueryBossTimers,   // own permission — grant boss-timer queries separately
             ["@death"]        = PlayerRemoteControls.QueryDeaths,       // own permission — grant unrecovered-death queries separately
+            ["@roomba"]       = PlayerRemoteControls.QueryItemLocation, // own permission — grant item-location queries separately
             ["@help"]         = PlayerRemoteControls.QueryVersion,
             ["@what"]         = PlayerRemoteControls.QueryInventory,
             ["@wealth"]       = PlayerRemoteControls.QueryInventory,

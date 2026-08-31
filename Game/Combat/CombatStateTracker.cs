@@ -478,32 +478,37 @@ public sealed class CombatStateTracker : IDisposable
         // threat until we hit it, so it must not read as "a hostile is here."
         _hostilePresent = attacking > 0;
 
+        // See-hidden force-clear override for stealth runners — applies with
+        // auto-attack ON or OFF (hoisted above the split). A stealth character
+        // (AutoSneak on) sprinting a walk-to route enters a room whose SeeHidden
+        // monster breaks sneak; running onward would drag/stack the room's
+        // monsters across rooms (lethal solo). With the toggle on we force-clear
+        // the WHOLE room — holding the walker gate here, and (via CombatManager's
+        // SeeHiddenClearActive read) bypassing the Min/Max monster gate — so the
+        // route can re-sneak and go back to avoiding combat. Once latched, hold
+        // until every engageable hostile is gone, even after the SeeHidden monster
+        // itself dies.
+        bool seeHiddenArm = _clearWhenSeenHidden?.Invoke() == true
+                            && _isAutoSneakEnabled?.Invoke() == true
+                            && roomHasSeeHidden;
+        if (_seeHiddenClearLatch || seeHiddenArm)
+        {
+            // Hold only while something here is actually killable. If the
+            // remaining hostiles are all un-actionable, standing to clear a room
+            // we can't clear would deadlock the runner — release and let the walker
+            // move past (a fight we can't win is worse than a broken sneak).
+            if (actionable > 0)
+            {
+                _seeHiddenClearLatch = true;
+                AssertGate("seehidden clear (force-clear room)");
+                return;
+            }
+            _seeHiddenClearLatch = false;   // room cleared / un-actionable — release.
+        }
+
         if (!_isAutoAttackEnabled())
         {
-            // Combat-off override for stealth runners. Arm on entry to a
-            // room that breaks sneak (SeeHidden present, AutoSneak on,
-            // toggle on); once latched, HOLD the walker gate until every
-            // engageable hostile is gone so the room is fully cleared —
-            // even after the SeeHidden monster itself dies. Then release.
-            bool armNow = _clearWhenSeenHidden?.Invoke() == true
-                          && _isAutoSneakEnabled?.Invoke() == true
-                          && roomHasSeeHidden;
-            if (_seeHiddenClearLatch || armNow)
-            {
-                // Hold only while something here is actually killable. If the
-                // remaining hostiles are all un-actionable, standing to clear
-                // a room we can't clear would deadlock the runner — release
-                // and let the walker move past (the move-past rule wins even
-                // over the re-sneak concern: a fight we can't win is worse).
-                if (actionable > 0)
-                {
-                    _seeHiddenClearLatch = true;
-                    AssertGate("seehidden clear (combat-off override)");
-                    return;
-                }
-                _seeHiddenClearLatch = false;   // room cleared / un-actionable — release.
-            }
-            // Auto-attack off and no override → never hold the gate.
+            // Auto-attack off and no see-hidden override → never hold the gate.
             // Defensive clear in case it was asserted just before toggle.
             ClearGate("auto-attack disabled");
             // A room clear of engageable hostiles is the authoritative
@@ -515,10 +520,7 @@ public sealed class CombatStateTracker : IDisposable
             return;
         }
 
-        // Auto-attack on — the normal gate owns pausing; the override
-        // latch is a combat-off concept, so drop it.
-        _seeHiddenClearLatch = false;
-
+        // Auto-attack on — the normal gate owns pausing.
         bool withinCountWindow = IsWithinMonsterCountWindow(targetable);
         if (actionable > 0 && withinCountWindow)
         {

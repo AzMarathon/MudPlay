@@ -106,6 +106,11 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     [NotifyPropertyChangedFor(nameof(HasApplyStatus))]
     private string _applyStatus = string.Empty;
 
+    // The last gear set the engine equipped (or confirmed already worn) — shown
+    // next to the Item Finder button. "—" before any apply this session, or when
+    // the tracked id no longer matches a set (e.g. after a profile swap).
+    [ObservableProperty] private string _currentlyEquipped = "—";
+
     // False with no character loaded — gates the set list and the empty state.
     [ObservableProperty] private bool _hasProfile;
 
@@ -145,12 +150,42 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
 
         BuildRows();
         ReloadFromProfile();
+        RefreshCurrentlyEquipped();
 
         _profile.ProfileLoaded += OnProfileLoaded;
         _gameData.ActiveSetChanged += OnActiveSetChanged;
         _stats.PropertyChanged += OnStatsChanged;
         _players.ObservationRecorded += OnObservationRecorded;
         _questBonuses.Changed += OnQuestBonusesChanged;
+        _equipment.CurrentSetChanged += OnCurrentSetChanged;
+        _equipment.BlocksChanged += OnBlocksChanged;
+    }
+
+    // The engine's unwearable-slot block set changed (an apply, a refusal, an
+    // alignment drift / return) — recolour the selected set's rows.
+    private void OnBlocksChanged() => RefreshRowBlocks();
+
+    // Mark each visible row blocked when the engine can't wear its item. Read on
+    // the UI thread (all block mutations originate there), so no marshalling.
+    private void RefreshRowBlocks()
+    {
+        string? setId = SelectedSet?.Id;
+        foreach (EquipmentSlotRowViewModel row in Rows)
+            row.Blocked = setId is not null && _equipment.IsSlotBlocked(setId, row.Slot);
+    }
+
+    // The engine equipped a different set (Equip Now or an auto-fire trigger) —
+    // re-resolve the Currently Equipped name. Fires on the UI thread (all applies
+    // are UI-thread), so the property update is safe without marshalling.
+    private void OnCurrentSetChanged() => RefreshCurrentlyEquipped();
+
+    private void RefreshCurrentlyEquipped()
+    {
+        string? id = _equipment.CurrentSetId;
+        string? name = string.IsNullOrEmpty(id)
+            ? null
+            : SetRows.FirstOrDefault(r => string.Equals(r.Set.Id, id, StringComparison.Ordinal))?.Set.Name;
+        CurrentlyEquipped = string.IsNullOrWhiteSpace(name) ? "—" : name!;
     }
 
     // ----- enable / disable / apply ---------------------------------------
@@ -256,6 +291,16 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     {
         if (_suppress) return;
         PersistRowsToSet();
+        if (SelectedSet is { } set)
+        {
+            // The user addressed this slot — drop any block on it (incl. a
+            // server-confirmed refusal), then re-check the new pick so an item
+            // the current alignment / level / class can't wear is flagged +
+            // skipped straight away (the add-time alignment check).
+            _equipment.ClearBlock(set.Id, row.Slot);
+            _equipment.RefreshBlocksForSet(set);
+        }
+        RefreshRowBlocks();
         RebuildBonusRows();
         ApplyStatus = string.Empty;
     }
@@ -311,6 +356,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
 
         LoadSelectedSetIntoRows();
         RefreshAvailableItems();
+        RefreshCurrentlyEquipped();
     }
 
     // Reconcile the persisted set blob to exactly the four roster entries, one per
@@ -367,6 +413,10 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         }
         finally { _suppress = false; }
 
+        // Colour the freshly-loaded set from the engine's block set — evaluate it
+        // silently first (no terminal notice for a set the user just clicked).
+        if (SelectedSet is { } loaded) _equipment.RefreshBlocksForSet(loaded, announce: false);
+        RefreshRowBlocks();
         RebuildBonusRows();
     }
 
@@ -501,7 +551,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         int protEvil = 0;
         bool hasShadow = false, hasVileWard = false;
 
-        foreach (string code in EnumerateSelfBuffCodes(spells))
+        foreach (string code in EnumerateSelfBuffCodes(spells, _profile.Current?.PartyBuffs))
         {
             if (catalog.GetByShort(code, classNumber, level) is not { } spell) continue;
             foreach (SpellAbility a in spell.Formula.Abilities)
@@ -523,16 +573,17 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     private static double Magnitude(SpellAbility a, in SpellFormulaInput formula, int level)
         => a.Value != 0 ? a.Value : SpellCalculator.AffectMagnitude(formula, level).Max;
 
-    // The canonical self-buff cast-code roster, matching CastingDirector's
-    // self-buff enumeration: the bless slots in slot order, then the mana-regen
-    // and when-HP/MA-full downtime buffs. Blank picks drop out.
-    private static IEnumerable<string> EnumerateSelfBuffCodes(SpellsSettings spells)
+    // The canonical self-buff cast-code roster, matching CastingDirector's self-buff
+    // enumeration: the CastOnSelf slots in the unified buff list (bless + when-full
+    // folded there), then the mana-regen buff still on the Spells tab. Blank picks
+    // drop out.
+    private static IEnumerable<string> EnumerateSelfBuffCodes(SpellsSettings spells, BuffSettings? buffs)
     {
-        foreach (KeyValuePair<int, string> kv in spells.BlessSlots.OrderBy(kv => kv.Key))
-            if (!string.IsNullOrWhiteSpace(kv.Value)) yield return kv.Value.Trim();
+        if (buffs is not null)
+            foreach (BuffSlot slot in buffs.Slots)
+                if (slot.CastOnSelf && !string.IsNullOrWhiteSpace(slot.Spell))
+                    yield return slot.Spell!.Trim();
         if (!string.IsNullOrWhiteSpace(spells.MaRegenSpell)) yield return spells.MaRegenSpell!.Trim();
-        if (!string.IsNullOrWhiteSpace(spells.WhenHpFullSpell)) yield return spells.WhenHpFullSpell!.Trim();
-        if (!string.IsNullOrWhiteSpace(spells.WhenMaFullSpell)) yield return spells.WhenMaFullSpell!.Trim();
     }
 
     // Read the character-tier "Spells" section the same way the settings tab and
@@ -646,5 +697,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         _stats.PropertyChanged -= OnStatsChanged;
         _players.ObservationRecorded -= OnObservationRecorded;
         _questBonuses.Changed -= OnQuestBonusesChanged;
+        _equipment.CurrentSetChanged -= OnCurrentSetChanged;
+        _equipment.BlocksChanged -= OnBlocksChanged;
     }
 }

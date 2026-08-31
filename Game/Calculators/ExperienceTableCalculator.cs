@@ -34,14 +34,20 @@ public static class ExperienceTableCalculator
         return System.TimeSpan.FromHours((double)remaining / expPerHour);
     }
 
-    // Compact h/m/s rendering for a time-to-level estimate — "2h 15m" / "15m" /
-    // "9s". Shared by every surface that shows a TNL (the @exp reply, the status
-    // bar). Rolls up to hours, so a multi-hour ETA never reads as a huge minute
-    // count.
+    // Compact time-to-level rendering, shared by every surface that shows a TNL
+    // (the @exp reply, the status bar). Tiered so each magnitude reads cleanly:
+    //   >= 25h  → "1d 1h 0m"   (rolls up to days rather than a 25+ hour count)
+    //   >= 90m  → "4h 10m"     (hours + minutes)
+    //   >= 1m   → "89m"        (plain minutes — 60–89m stays "89m", not "1h 29m")
+    //   else    → "9s"
+    // The 90-minute / 25-hour thresholds are deliberate: an hour count only earns
+    // its "Hh Mm" shape once there's more than an hour and a half left, and days
+    // only once past a full day plus an hour.
     public static string FormatTimeToLevel(System.TimeSpan ts)
     {
-        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
-        if (ts.TotalMinutes >= 1) return $"{ts.Minutes}m";
+        if (ts.TotalHours >= 25) return $"{ts.Days}d {ts.Hours}h {ts.Minutes}m";
+        if (ts.TotalMinutes >= 90) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        if (ts.TotalMinutes >= 1) return $"{(int)ts.TotalMinutes}m";
         return $"{ts.Seconds}s";
     }
 

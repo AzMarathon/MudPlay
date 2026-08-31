@@ -155,6 +155,13 @@ public sealed class CashManager : IDisposable
     // can be exercised without a real 60-second wait; production reads the wall
     // clock.
     internal Func<DateTime> AutoDepositClock { get; set; } = static () => DateTime.UtcNow;
+
+    // True while standing in a marked stash room with a loop / lair running. Coin
+    // auto-collect is suppressed there so a search's "You notice …" survey can't
+    // re-expose and re-grab the pile the pass-through stash just hid (report
+    // paradigm-20260819-121516). Wired by AppServices to AutoDeposit; defaults to
+    // never-suppress so tests and non-looping play are unaffected.
+    internal Func<bool> SuppressCollectInStashRoom { get; set; } = static () => false;
     private bool _disposed;
 
     // ----- Encumbrance-gated collection --------------------------------
@@ -380,6 +387,15 @@ public sealed class CashManager : IDisposable
         switch (policy)
         {
             case CashPolicy.Collect:
+                // A search in a stash room re-exposed the just-hidden pile — don't
+                // grab our own stash back. Only the reveal survey is gated; coin
+                // shown on plain room entry (this line) collects normally.
+                if (SuppressCollectInStashRoom())
+                {
+                    _log?.Info(LogCategory,
+                        $"stash-room search reveal — not re-grabbing {count} {currency}");
+                    break;
+                }
                 // Specific amount (not bare `get <currency>` which
                 // would grab all available) so encumbrance / weight
                 // tracking can do exact arithmetic instead of waiting
@@ -422,6 +438,15 @@ public sealed class CashManager : IDisposable
 
         if (policy == CashPolicy.Collect)
         {
+            // Corpse drops are freshly-dropped visible coin, never the stashed pile,
+            // so this only trips if a search reveal happens to be in flight as the
+            // drop lands — the guard stays for symmetry with the other collect paths.
+            if (SuppressCollectInStashRoom())
+            {
+                _log?.Info(LogCategory,
+                    $"stash-room search reveal — not re-grabbing corpse {count} {currency}");
+                return;
+            }
             // Fresh coin on the ground → re-arm collection of this currency even if
             // we already took an earlier pile in this room (a new mob wandered in).
             _collectedGround.Remove(currency);
@@ -764,6 +789,18 @@ public sealed class CashManager : IDisposable
     // yet confirmed.
     private void CollectCoins(int count, string currency)
     {
+        // Stash-room guard at the shared funnel so EVERY collect path is covered —
+        // the "You notice N here" room-survey path (what auto-search's `sea`
+        // re-render drives) reached here without passing the per-handler guards, so
+        // a just-stashed pile got grabbed right back while looping (report
+        // paradigm-20260820-055720). The guard fires only while the reveal is in
+        // flight, so a plain-entry survey of a stash room still collects visible coin.
+        if (SuppressCollectInStashRoom())
+        {
+            _log?.Info(LogCategory, $"stash-room search reveal — not re-grabbing {count} {currency}");
+            return;
+        }
+
         CashSettings settings = _readSettings();
         int slot = SlotForCurrency(currency);
         InventorySnapshot snap = _getSnapshot();

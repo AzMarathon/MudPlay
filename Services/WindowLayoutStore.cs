@@ -57,9 +57,15 @@ public sealed class WindowLayoutStore
     private readonly HashSet<string> _autoHeightIds =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public WindowLayoutStore(ProfileService profile)
+    // Edge-snapping / cluster-move for the panel windows. Registered per window in
+    // AttachWindow; notified before a programmatic reposition so it doesn't read a
+    // layout restore as a user drag. Null in tests that construct the store bare.
+    private readonly WindowSnapManager? _snap;
+
+    public WindowLayoutStore(ProfileService profile, WindowSnapManager? snap = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        _snap = snap;
         profile.ProfileLoaded += p => ApplyFromProfile(p.WindowBounds);
         profile.ProfileClosed += () => _bounds.Clear();
         profile.ProfileSaving += p => p.WindowBounds = Snapshot();
@@ -74,6 +80,7 @@ public sealed class WindowLayoutStore
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (autoHeight) _autoHeightIds.Add(id);
+        _snap?.Register(window, id);
 
         window.Opened += (_, _) =>
         {
@@ -134,7 +141,11 @@ public sealed class WindowLayoutStore
         // (CenterOwner) rather than pinning to the desktop origin.
         if (layout.X == 0 && layout.Y == 0) return;
 
-        window.Position = ResolvePosition(window, layout);
+        PixelPoint resolved = ResolvePosition(window, layout);
+        // Tell the snap manager this is our reposition, not a user drag, so a
+        // profile-load re-layout of the main window doesn't haul the cluster.
+        _snap?.ExpectMove(id, resolved);
+        window.Position = resolved;
     }
 
     // Turn a saved position into an on-screen one. Honour a position still
@@ -201,6 +212,15 @@ public sealed class WindowLayoutStore
 
     private void CaptureFrom(Window window, string id)
     {
+        // A minimized window reports a bogus off-screen position (Windows parks
+        // minimized windows at ~(-32000,-32000)), so capturing here would overwrite
+        // the real "where I left it" with garbage that ResolvePosition then treats as
+        // off-screen and re-anchors next to main — the panes "lose their memory" after
+        // a Win+D (show-desktop) minimize-all followed by a client restart (report
+        // paradigm-20260827-081318). Skip the capture and keep the last good bounds.
+        if (window.WindowState == WindowState.Minimized)
+            return;
+
         // Don't capture transient zero / collapsing sizes — those usually
         // happen during the teardown rather than reflecting where the
         // user actually left the window.

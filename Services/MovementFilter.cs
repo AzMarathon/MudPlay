@@ -75,6 +75,18 @@ public sealed class MovementFilter : IRoomFilter
     // When null we don't gate — same rule as an unknown level.
     public Func<int?>? ClassNumberProvider { get; set; }
 
+    // Supplies the numeric alignment of every crosser — the controlling character
+    // plus, when leading a party, each follower — for "(Alignment: X to Y)" exit
+    // gates. Each entry is the member's alignment value, or null when we don't know
+    // it (never who'd / looked). Wired by AppServices to PlayerDatabase alignments
+    // resolved through the confirmed band ladder. Alignment gates are whole-party
+    // (the game stops the party if ANY member is excluded), so IsExitBlocked routes
+    // around a gate a KNOWN member can't cross. An UNKNOWN member does NOT block
+    // routing here — per user direction the walker walks up to the gate and halts
+    // there (the alignment-refusal revert) rather than detouring on a guess. Null
+    // provider → never gate, same rule as an unknown level.
+    public Func<IReadOnlyList<int?>>? PartyAlignmentsProvider { get; set; }
+
     // Fires the party @wealth round-trip. Wired by AppServices to
     // PartyWealthTracker.Probe. Invoked from WarmForRoute (only when the
     // tolls-permitted shortest route actually crosses a toll, so an off-path
@@ -188,7 +200,8 @@ public sealed class MovementFilter : IRoomFilter
     // plain cardinal carrying a window / allowed-class), so each is checked.
     public bool IsExitBlocked(in RoomExit exit) =>
         IsLevelGateBlocked(in exit) || IsTollGateBlocked(in exit) || IsClassGateBlocked(in exit)
-        || IsItemGateBlocked(in exit) || IsImpassableDoorBlocked(in exit) || IsHazardEntryBlocked(in exit);
+        || IsItemGateBlocked(in exit) || IsImpassableDoorBlocked(in exit) || IsHazardEntryBlocked(in exit)
+        || IsAlignmentGateBlocked(in exit);
 
     // Same gate checks as IsExitBlocked, but reports which kinds fire rather
     // than a single bool — so a failed walk names the actual obstacle. A
@@ -209,6 +222,7 @@ public sealed class MovementFilter : IRoomFilter
                 : ExitBlockReason.Item;
         if (IsImpassableDoorBlocked(in exit)) reasons |= ExitBlockReason.Door;
         if (IsHazardEntryBlocked(in exit)) reasons |= ExitBlockReason.Hazard;
+        if (IsAlignmentGateBlocked(in exit)) reasons |= ExitBlockReason.Alignment;
         return reasons;
     }
 
@@ -346,6 +360,22 @@ public sealed class MovementFilter : IRoomFilter
         if (!exit.HasClassGate) return false;
         if (ClassNumberProvider?.Invoke() is not { } myClass) return false;
         return myClass != exit.ClassGate;
+    }
+
+    // An "(Alignment: X to Y)" exit admits only crossers whose alignment value is
+    // inside [X, Y]. Whole-party: block (route around) when ANY member whose
+    // alignment we KNOW falls outside the window — the game stops the party at the
+    // tightest member. A member whose alignment is UNKNOWN (null) does NOT block
+    // here; the walker walks up to the gate and halts on the refusal rather than
+    // detouring on a guess (user-confirmed for report paradigm-20260827-144553). No
+    // provider / no known member → never gate, same rule as an unknown level.
+    private bool IsAlignmentGateBlocked(in RoomExit exit)
+    {
+        if (exit.AlignmentGate is not { } gate) return false;
+        if (PartyAlignmentsProvider?.Invoke() is not { Count: > 0 } aligns) return false;
+        foreach (int? a in aligns)
+            if (a is int v && !Game.Calculators.AlignmentBands.Admits(gate, v)) return true;
+        return false;
     }
 
     private bool IsLevelGateBlocked(in RoomExit exit)
@@ -547,6 +577,32 @@ public sealed class MovementFilter : IRoomFilter
 
         _profile.Save();
         _log?.Info("MovementFilter", $"unstashed {key}");
+        StashChanged?.Invoke();
+    }
+
+    // Replace both the avoided and stash sets in one shot and persist once.
+    // Used by the Modify-Avoid-Rooms dialog on Save — it stages the merged,
+    // type-tagged working copy locally and commits both sets together so Cancel
+    // can discard cleanly (mirrors RoomBlacklistStore.ReplaceAll). No-op when no
+    // profile is loaded. Fires both change events so the map recolours the
+    // affected cells.
+    public void ReplaceAll(IEnumerable<RoomKey> avoided, IEnumerable<RoomKey> stash)
+    {
+        ArgumentNullException.ThrowIfNull(avoided);
+        ArgumentNullException.ThrowIfNull(stash);
+        if (_profile.Current is not { } current) return;
+
+        _avoided.Clear();
+        _stash.Clear();
+        foreach (RoomKey k in avoided) _avoided.Add(k);
+        foreach (RoomKey k in stash) _stash.Add(k);
+
+        current.AvoidedRooms = _avoided.Select(k => new RoomRef(k.Map, k.Room)).ToList();
+        current.StashRooms   = _stash.Select(k => new RoomRef(k.Map, k.Room)).ToList();
+        _profile.Save();
+        _log?.Info("MovementFilter",
+            $"replaced sets: avoided({_avoided.Count}) stash({_stash.Count})");
+        AvoidedChanged?.Invoke();
         StashChanged?.Invoke();
     }
 

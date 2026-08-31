@@ -130,6 +130,14 @@ public sealed class AppServices
     public void SetCenterNavigationIfOpenOpener(Action<Game.Map.RoomKey> opener) => _centerNavigationIfOpenOpener = opener;
     public void CenterNavigationIfOpen(Game.Map.RoomKey key) => _centerNavigationIfOpenOpener?.Invoke(key);
 
+    // Flashes a room green on the map and centres on it for a few seconds ONLY if
+    // the Navigation window is already open — never force-opens it. Driven by
+    // WhereReplyTracker when an @where reply telepath lands, so an answered
+    // "where are you?" lights up on the map. No-op until the main VM binds it.
+    private Action<Game.Map.RoomKey>? _highlightWhereOpener;
+    public void SetHighlightWhereOpener(Action<Game.Map.RoomKey> opener) => _highlightWhereOpener = opener;
+    public void HighlightWhereRoom(Game.Map.RoomKey key) => _highlightWhereOpener?.Invoke(key);
+
     // Single source of truth for "are you sure?" prompts (exit /
     // hangup / save / delete). Lives at Global tier; mirrored from
     // SettingsService on startup and every save.
@@ -178,6 +186,11 @@ public sealed class AppServices
     // snapshotting back on save.
     public WindowLayoutStore WindowLayouts { get; }
 
+    // Edge-snapping + main-window cluster-move for the panel windows. Reads its
+    // on/off from the Global "Snap windows together" setting; fed each window via
+    // WindowLayoutStore.AttachWindow.
+    public WindowSnapManager WindowSnap { get; }
+
     // Per-character splitter-position memory for two-pane resizable
     // dialogs. Each dialog calls SplitterLayoutStore.AttachGrid
     // once during construction with a stable id + the Grid to manage;
@@ -212,6 +225,11 @@ public sealed class AppServices
     // events. ChatHistoryStore and the Conversation window
     // subscribe to EntryClassified.
     public Game.ChatRouter Chat { get; }
+
+    // True while a boss-timer-sync merge window is open. Set by BossTimerSyncViewModel
+    // (ctor/Dispose); read by the main window's auto-open so a user-typed `@timer sync`
+    // doesn't spawn a second window when one is already collecting.
+    public bool TimerSyncWindowActive { get; set; }
 
     // App-singleton chat history. Survives profile swap / connect /
     // disconnect; cleared only on app exit or explicit
@@ -426,6 +444,9 @@ public sealed class AppServices
     // budget is pushed from Settings → Other.
     public Game.Remote.PartyComebackManager PartyComeback { get; private set; } = null!;
 
+    // Recognises an @where reply telepath and flashes its room on the nav map.
+    public Game.Remote.WhereReplyTracker WhereReply { get; private set; } = null!;
+
     // Follower-side @comeback sender. Detects being left
     // behind (a movement-failure line just before "You are no longer
     // following X.") and telepaths @comeback to the leader.
@@ -488,6 +509,10 @@ public sealed class AppServices
     // "exit now visible" signal; max retries pulled live from
     // Models.Profile.OtherSettings.MaxHiddenSearchAttempts.
     public Game.Map.HiddenExitRevealManager HiddenSearch { get; }
+
+    // Winch-gate crossing FSM (pull → turn → wait for gate → move), shared by the
+    // walker + loop the same way Door / HiddenSearch are.
+    public Game.Map.WinchManager Winch { get; }
 
     // Auth boundary + queue gate for @trap: parses the
     // direction, runs the channel-aware Traps-skill gate, and hands
@@ -751,6 +776,16 @@ public sealed class AppServices
     // recovery log. App-lifetime, like the other query handlers.
     public Game.Remote.DeathQueryHandler DeathQuery { get; private set; } = null!;
 
+    // @roomba read-only query handler — reports an item's last-seen gang-house
+    // room from GhItemLocations. App-lifetime, like the other query handlers.
+    public Game.Remote.RoombaQueryHandler RoombaQuery { get; private set; } = null!;
+
+    // Requester-side @roomba sync listener — merges another MudPlay client's
+    // sighting log into GhItemLocations as replies arrive. App-lifetime; unlike
+    // BossTimerSyncCollector it isn't gated to a merge-review window (see the
+    // class comment), so it's always live once constructed.
+    public Game.Remote.RoombaSyncReceiver RoombaSync { get; private set; } = null!;
+
     // Runtime keystroke → macro → wire-send bridge. Constructed up-
     // front; MacroDispatcher.SetSender gets bound from
     // MainWindowViewModel after the telnet client is
@@ -836,6 +871,13 @@ public sealed class AppServices
     // hooks Greet / PlayerLook use (Also-here matches + room walk-ins); persists
     // on the loaded profile.
     public Game.PlayerSightingTracker PlayerSightings { get; private set; } = null!;
+
+    // Per-character log of actual combat outcomes observed against specific
+    // monsters — landed/whiffed swing damage extent and confirmed "no effect"
+    // (Magical / SpellImmunity gate) discoveries. Feeds Monster Intel's "Your
+    // Observations" section, kept visibly separate from MonsterCatalog's
+    // authoritative MDB facts. Persists on the loaded profile.
+    public Game.Combat.MonsterObservationTracker MonsterObservations { get; private set; } = null!;
 
     // Owns PlayerState.InCombat and
     // the Game.Map.MovementCoordinator.CombatGate hold
@@ -945,6 +987,14 @@ public sealed class AppServices
     // Lookup of each spell's AttType (damage element) by cast-code in the active
     // game-data set. Paired with MonsterResist for the resist guard.
     public Game.Combat.SpellAttackTypeIndex SpellAttackType { get; private set; } = null!;
+
+    // Typed, parsed-once view of the active game-data set's Monsters table —
+    // every raw field this codebase reads somewhere, plus the elemental-resist /
+    // Magical / SpellImmu / Dodge / spell-cast-element lookups the individual
+    // Monster*Index classes above compute independently. Feeds Monster Intel.
+    // Not yet a replacement for those indexes — see MonsterCatalog's own
+    // class comment for why they stay separate for now.
+    public Game.Combat.MonsterCatalog MonsterCatalog { get; private set; } = null!;
 
     // Lookup of each spell's Short cast-code by its Spells.Number in the active
     // set — bridges the per-monster override slots (which store a Number) to the
@@ -1143,6 +1193,13 @@ public sealed class AppServices
     // (EquipRemote) and the auto-equip triggers
     // (AutoEquip).
     public Game.Inventory.EquipmentManager Equipment { get; private set; } = null!;
+
+    // Router subscriptions feeding the Equipment Manager's unwearable-slot blocks
+    // (wear-confirmed / armor-refused / weapon-refused). Held for the app lifetime
+    // — AppServices is the singleton, so these live as long as the router.
+    private IDisposable? _equipWearOkSub;
+    private IDisposable? _equipWearFailSub;
+    private IDisposable? _equipWieldFailSub;
 
     // Auto-equip trigger coordinator. Subscribes to
     // Game.PlayerState's position / combat signals and, when the
@@ -1511,6 +1568,20 @@ public sealed class AppServices
     // it into Bfs without further wiring.
     public MovementFilter Movement { get; private set; } = null!;
 
+    // Per-BBS gang-house room labels for Roomba Mode (right-click map labeling +
+    // the GH Management workshop tab read/write through this) — shared by every
+    // character on the BBS.
+    public Game.Map.GhRoomLabelStore GhRoomLabels { get; private set; } = null!;
+
+    // Which of the shared per-BBS labels THIS character actively sweeps. Per-character
+    // (so alts in different gang houses on one BBS each manage their own house);
+    // labels stay per-BBS above. See GhManagedRoomStore.
+    public Game.Map.GhManagedRoomStore GhManagedRooms { get; private set; } = null!;
+
+    // Per-BBS "last seen this item in this room" log, fed by GhSweep and read by
+    // RoombaQuery's @roomba handler.
+    public Game.Map.GhItemLocationStore GhItemLocations { get; private set; } = null!;
+
     // Per-character favourite-room bookmarks. Wires Navigation's
     // GOTO pane + the map's "Add to favorites" context menu;
     // persisted via ProfileService.
@@ -1701,6 +1772,10 @@ public sealed class AppServices
     // right engine. Backs the toolbar movement-flow buttons.
     public Game.Map.MovementController MovementControl { get; private set; } = null!;
 
+    // Roomba Mode: sorts labeled gang-house rooms by building a Loop from
+    // GhRoomLabels and driving it through LoopRunner — see GhSweepManager.
+    public Game.Map.GhSweepManager GhSweep { get; private set; } = null!;
+
 
     // Construct and register the singleton. Idempotent — repeated calls return
     // the existing instance. Touches AppPaths to force
@@ -1812,7 +1887,9 @@ public sealed class AppServices
         // Log already set by ctor parameter — bootstrap log carries the
         // DataMigration entries from before AppServices was constructed.
         Panels = new FloatingPanelHost();
-        WindowLayouts = new WindowLayoutStore(Profile);
+        // Window snapping reads its master on/off live from the Global setting.
+        WindowSnap = new WindowSnapManager(() => Settings.Current.SnapWindows);
+        WindowLayouts = new WindowLayoutStore(Profile, WindowSnap);
         SplitterLayouts = new SplitterLayoutStore(Profile);
         SessionStatsLayout = new SessionStatsLayoutStore(Profile);
         Wire = new WireBuffer();
@@ -1897,6 +1974,11 @@ public sealed class AppServices
         // its own ChatRouter subscription.
         foreach (string token in Game.Conditions.PartyAilmentTracker.AnnounceTokens)
             RemoteCommands.RegisterIgnored(token);
+        // Boss-timer sync responses ride the chat as `@timerdata …` lines the requester
+        // scrapes itself (BossTimerSyncCollector); reserve the token so the engine
+        // swallows it instead of bouncing "{command invalid}" at each responder.
+        RemoteCommands.RegisterIgnored(Game.Remote.BossTimerQueryHandler.SyncResponseToken);
+        RemoteCommands.RegisterIgnored(Game.Remote.RoombaQueryHandler.SyncResponseToken);
         // Stat-screen parser ahead of LivesProvider hookup below so
         // both the engine's @suicide hard-block and the @lives reply
         // path share the same "unknown until first stat poll" source.
@@ -2036,6 +2118,11 @@ public sealed class AppServices
         // Stats itself is constructed above where PartyEssentials needs
         // PlayerStats injected.
         RemoteCommands.LivesProvider = () => Stats.HasParsed ? PlayerStats.Lives : (int?)null;
+        // SelfNameProvider — lets the engine recognise its own gangpath echo (public
+        // channels tag the sender's real name, not "You") and skip it instead of bouncing
+        // a denial at the gang. Party.LocalCharacterName tracks PlayerStats.Name, falling
+        // back to the profile name.
+        RemoteCommands.SelfNameProvider = () => Party.LocalCharacterName;
 
         // Persist stat captures onto the loaded profile so the next
         // session starts hydrated with the last-observed values
@@ -2077,7 +2164,15 @@ public sealed class AppServices
         {
             if (Spellbook.ClassNumber < 1) return;
             IReadOnlyList<string> learned = Spellbook.ObtainedNames;
-            p.LearnedSpells = learned.Count > 0 ? new List<string>(learned) : null;
+            // Only persist when we actually have names. Never overwrite a populated
+            // saved set with null just because the live obtained set is transiently
+            // empty — the immediate save that runs right after a profile-schema
+            // migration fires before the game-data set is active and the first
+            // `spells` poll, so ObtainedNames is momentarily empty; the old code
+            // wrote null there and wiped the learned set on upgrade (report
+            // paradigm-20260820-055007). A genuine reroll-to-zero clears via its own
+            // explicit path, not this passive save.
+            if (learned.Count > 0) p.LearnedSpells = new List<string>(learned);
         };
 
         Stats.ScreenParsed += snapshot =>
@@ -2120,10 +2215,13 @@ public sealed class AppServices
             // which ApplyStatScreenMax ignores.
             Player.ApplyStatScreenMax(p.LastKnownStats?.MaxHits ?? 0, p.LastKnownStats?.MaxMana ?? 0);
             SeedSpellbook(p.LastKnownStats);
-            // Restore the learned checkmarks now the class's available list is
-            // built. Resolves by name against Available, so entries the current
-            // class can't learn (a cross-set carryover) are harmlessly dropped.
-            if (learned is not null) Spellbook.SetObtainedByNames(learned);
+            // Restore the learned checkmarks. Seed the names AUTHORITATIVELY (not
+            // resolve-and-drop): profile load can run before the game-data set is
+            // active (Available still empty), where SetObtainedByNames would drop
+            // everything and the ensuing migration save would persist the wipe
+            // (report paradigm-20260820-055007). The numbers re-derive on the
+            // ActiveSetChanged reseed once Available is built.
+            if (learned is not null) Spellbook.SeedObtainedNames(learned);
         };
         // Persist + restore the last-known carry weight across sessions.
         // Encumbrance only changes in the realm, so the value the client last saw
@@ -2219,13 +2317,19 @@ public sealed class AppServices
         // restarting an engine. Wire-sender is bound by MainWindowVM
         // alongside the trap one (gate-wrapped SendUserInput).
         Door = new Game.Map.DoorOpenManager(Router, PlayerStats,
-            maxBashAttemptsProvider:       () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").MaxBashAttempts,
             maxPickAttemptsProvider:       () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").MaxPickAttempts,
             picklocksOverBashProvider:     () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").PicklocksOverBash,
             itemNameLookup:                id => ItemNames.GetName(id),
             maxBashableStrengthProvider:   () => MaxStrength.MaxAchievableStrength,
             // Read lazily at door-open time — Inventory is constructed after Door.
             holdsKeyItem:                  HoldsKeyItem,
+            // Rest-interleave for bashing (bashing drains HP): pause a bash once HP
+            // falls to the Health-tab rest-if-below trigger, resume once it climbs
+            // back to rest-max. HealthManager owns the actual rest/stand cycle — the
+            // door FSM only gates its swings on these. Reuses PoolThreshold so the
+            // percentage/absolute mode matches the rest engine exactly.
+            bashRestNeeded:                () => BashRestGate(recovered: false),
+            bashRestRecovered:             () => BashRestGate(recovered: true),
             log: Log,
             // UI-thread one-shot so the door FSM's response watchdog fires on the
             // same thread its router-driven handlers run on; keeps Game/Map UI-free
@@ -2237,6 +2341,12 @@ public sealed class AppServices
                 timer.Start();
                 return new DispatcherTimerHandle(timer);
             });
+        // Resume a bash rest-pause the moment live HP climbs back to rest-max,
+        // rather than waiting on the door FSM's periodic watchdog re-check.
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PlayerState.Hp)) Door.NotifyHealthChanged();
+        };
         // LeaderDoorAssistManager — observes the leader failing to bash a
         // door and pitches in. Reads the Party-tab toggle + the Other-tab
         // pick/bash preference live. Wire-sender bound by MainWindowVM
@@ -2300,8 +2410,28 @@ public sealed class AppServices
         Profile.ProfileClosed += ()  => Party.LocalCharacterName = null;
         PlayerStats.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(Game.PlayerStats.Name) && !string.IsNullOrWhiteSpace(PlayerStats.Name))
-                Party.LocalCharacterName = PlayerStats.Name;
+            if (e.PropertyName != nameof(Game.PlayerStats.Name) || string.IsNullOrWhiteSpace(PlayerStats.Name))
+                return;
+            Party.LocalCharacterName = PlayerStats.Name;
+            // Heal a stale CharacterProfile.Name from the authoritative stat screen.
+            // Name is defined as the in-game character name (distinct from the profile
+            // FILE label, CurrentProfileName) and is otherwise only written on
+            // create/rename — so a profile COPIED from another character keeps the old
+            // name and every self-identity consumer of Current.Name mis-identifies self
+            // (report stock-20260828-104653: copied Fujin → renamed to Raijin, but
+            // Current.Name stayed "Fujin", hiding the real Fujin from player records).
+            // Healing it here fixes them all centrally the moment the user sees `stat`.
+            // Store the FULL "Given Family" name; HealedCharacterName returns null when
+            // it already matches, so there's no per-screen Save churn. Touches no
+            // filename or BBS folder — that's CurrentProfileName.
+            if (Profile.Current is { } cur
+                && ProfileService.HealedCharacterName(cur.Name, PlayerStats.Name) is { } healed)
+            {
+                Log.Info("Profile",
+                    $"healing profile character name '{cur.Name}' → '{healed}' from stat screen");
+                cur.Name = healed;
+                Profile.Save();
+            }
         };
         Profile.ProfileClosed += () => Panels.ApplyLayouts(layouts: null);
         Profile.ProfileSaving += p => p.PanelLayouts = Panels.SnapshotLayouts();
@@ -2354,6 +2484,10 @@ public sealed class AppServices
         Profile.ProfileLoaded  += _ => ApplyPartyFromActiveProfile();
         Profile.ProfileClosed  += ResetPartyToDefaults;
         Profile.ProfileMutated += _ => ApplyPartyFromActiveProfile();
+        // Dump the configured buff plan on load / edit so a "buffs aren't working"
+        // report shows exactly how they're set up.
+        Profile.ProfileLoaded  += LogBuffConfiguration;
+        Profile.ProfileMutated += LogBuffConfiguration;
         Profile.ProfileLoaded  += _ => ApplyTalkFromActiveProfile();
         Profile.ProfileClosed  += ResetTalkToDefaults;
         Profile.ProfileMutated += _ => ApplyTalkFromActiveProfile();
@@ -2650,6 +2784,23 @@ public sealed class AppServices
             router: Router,
             log: Log);
 
+        // Winch gates — the nav engines pull a winch, wait for it to turn AND the
+        // gate to open (polling the room's open-gate exit, since there's no gate-open
+        // line), then move. isGateOpen reads the live open-door directions the room
+        // display parses "open gate <dir>" into; scheduleDelay is the same UI-thread
+        // one-shot the door FSM uses (null in tests — they drive lines synchronously).
+        Winch = new Game.Map.WinchManager(
+            Router,
+            isGateOpen: dir => RoomTracker.State.OpenDoorDirections?.Contains(dir) == true,
+            scheduleDelay: (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+                return new DispatcherTimerHandle(timer);
+            },
+            log: Log);
+
         // BFS pathfinding + planar layout. Layout
         // cache invalidates on every graph reload.
         Bfs = new Game.Map.BfsMapper(RoomGraph, Log);
@@ -2663,6 +2814,16 @@ public sealed class AppServices
         // Constructor subscribes ProfileLoaded / ProfileClosed and
         // hydrates from the currently-loaded profile if there is one.
         Movement = new MovementFilter(Profile, Log);
+        // GH room labels + the Roomba item-sighting log are BBS-tier (not
+        // per-character) — every character on a BBS shares the same gang house.
+        // Loaded/reloaded via OnBbsPinApplied, same pattern as RoomBlacklist.
+        GhRoomLabels = new Game.Map.GhRoomLabelStore(Profile, Log);
+        GhManagedRooms = new Game.Map.GhManagedRoomStore(Profile, Log);
+        GhItemLocations = new Game.Map.GhItemLocationStore(ItemNames, Log);
+        Profile.ProfileLoaded += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.ProfileLoaded += _ => GhItemLocations.OnBbsPinApplied(ResolveActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => GhItemLocations.OnBbsPinApplied(ResolveActiveBbs()?.Name);
         // Feed the player's level into Form-A exit level-gate evaluation.
         // null until a stat screen parses — IsExitBlocked never gates on
         // an unknown level, so an unparsed character walks unrestricted.
@@ -2685,6 +2846,7 @@ public sealed class AppServices
                 .ResolveClassProfile(GameData, PlayerStats.Class).ClassNumber;
             return n > 0 ? n : (int?)null;
         };
+        Movement.PartyAlignmentsProvider = PartyAlignmentValues;
         // Acquirable-gate providers — feed inventory / stats / hazard data into
         // item, ticket, locked-door, and hazard-room routing. Inventory readiness
         // and stat parsing gate each check so an unknown build walks unrestricted
@@ -3018,6 +3180,13 @@ public sealed class AppServices
         Combat.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
         CombatTracker.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
 
+        // A combat-spell engage can lose its initial send to a self-buff that just
+        // spent the cast slot. On a fresh process there may be no combat-tick anchor
+        // yet, and because no attack reached the server there is no engagement output
+        // guaranteed to create one. Seed TickEngine's timer fallback so the owed
+        // attack gets a deterministic next-round retry.
+        Combat.SetCombatTickAnchor(Tick.EnsureCombatTickAnchor);
+
         // Simultaneous-arrival settle: a UI-thread one-shot so a burst of "strides
         // in" arrivals + the room re-display resolve to one engage decision on the
         // full group (rooms nuke-first instead of pecking single-target). Same shape
@@ -3149,16 +3318,26 @@ public sealed class AppServices
             isLeaderWaited: () => PartyState.SelfIsLeader && PartyEssentials.IsPaused,
             isSelfPoisoned: () => Conditions.IsPoisoned);
 
-        // Per-waypoint "do not rest in this room": true while a loop is running
-        // and the room we're standing in is one of its waypoints flagged
-        // DoNotRest — HealthManager then suppresses the rest hold so the loop
-        // advances out. Matched by room key (per-room), so it clears the instant
-        // the loop steps into any other room. Loops only.
+        // Wait-edge nudge: a standing-idle leader's PlayerState may not change
+        // between prompt ticks, so without this poke the leader-waited downtime rest
+        // wouldn't start until the next tick (and an HP-only deficit with no regen
+        // ticks could stall). Mirror the leader-rest nudge above — Evaluate on both
+        // the raise edge (start resting) and the clear edge (@ok / timer → post-rest
+        // stand). No-op for solo / followers (isLeaderWaited gates on SelfIsLeader).
+        PartyEssentials.PauseGateChanged += _ => Health.Evaluate();
+
+        // Rest-skip has two independent sources, either one suppresses both rest
+        // gates: (1) Sprint Mode — a global "never pause to rest" toggle (see
+        // ReadSprintMode); (2) the per-waypoint "do not rest in this room" flag —
+        // true while a loop is running and the room we're standing in is one of
+        // its waypoints flagged DoNotRest. Matched by room key (per-room), so it
+        // clears the instant the loop steps into any other room. Loops only.
         Health.SetDoNotRestSelector(() =>
-            LoopRunner.State != Game.Map.LoopState.Idle
-            && RoomTracker.State.CurrentRoom is { } here
-            && LoopRunner.CurrentLoop?.Waypoints is { } wps
-            && wps.Any(w => w.DoNotRest && w.Key.Equals(here.Key)));
+            ReadSprintMode()
+            || (LoopRunner.State != Game.Map.LoopState.Idle
+                && RoomTracker.State.CurrentRoom is { } here
+                && LoopRunner.CurrentLoop?.Waypoints is { } wps
+                && wps.Any(w => w.DoNotRest && w.Key.Equals(here.Key))));
 
         // Server-side resting state clears on move; drop our latch
         // too so the next threshold breach actually fires `rest`
@@ -3169,6 +3348,8 @@ public sealed class AppServices
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
             if (t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
             Health.NoteRoomChanged(t.NewRoom.Key);
+            // A move retries any party-buff targets we'd backed off as hidden.
+            CastDirector.NoteRoomChanged();
         };
 
         // CastCoordinator. Subscribes to spell-failure
@@ -3254,10 +3435,18 @@ public sealed class AppServices
         // via the live spellbook. Combat-tab spells keep their own
         // MinManaPerCast threshold and aren't gated here.
         CastDirector.SetManaCostLookup(Spellbook.ManaCostOf);
+        // Combat chooser affordability floor — same cost source, so an attack/drain
+        // spell whose slot has MinManaPerCast=0 still won't be cast below its real
+        // mana cost (report paradigm-20260820-082741).
+        Combat.SetSpellManaCost(Spellbook.ManaCostOf);
         // Auto-Bless auto-engine gate — when off, the Buffing category is
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));
         CastDirector.SetTriggeredRestGate(() => Health.IsRecoveringRest);
+        // Mana-rest lock for "cast before resting for mana" slots — held while the
+        // mana-recovery gate is asserted (mana below target), durable across a combat
+        // interruption, released when mana tops back up.
+        CastDirector.SetManaRestGate(() => Health.MaGateAsserted);
         // Buff-strip-room gate — the current room casts a buff-removal spell on
         // entry (RemovesSpell / DispellMagic), so suppress buffs here rather than
         // burn mana on a buff the room tears straight back off.
@@ -3281,9 +3470,13 @@ public sealed class AppServices
         // resurrect the old character's buffs. A same-character reconnect does NOT reload
         // the profile, so its paused timers survive to be resumed.
         Profile.ProfileLoaded += _ => CastDirector.ResetBuffTracking();
-        // Party-bless slots store class numbers; PartyMember.Class is a
-        // class name — resolve via the active set's Classes table.
-        CastDirector.SetClassResolver(SpellCatalog.ResolveClassName);
+        // Party-buff plan (Party window) — the dynamic list of buff slots the
+        // party-bless path casts, read live so a Party-window edit takes effect at once.
+        CastDirector.SetPartyBuffSource(() => Profile.Current?.PartyBuffs);
+        // Room-presence gate for single-target party buffs: a member is only blessed
+        // when they're both in the party AND in the room. Backed by the live
+        // room-occupant list (RoomEntityClassifier), matched by given name.
+        CastDirector.SetRoomPresenceCheck(IsGivenNameInRoom);
         // A party-wide buff (Spells.Targets = Full / Divided Party Area) is
         // cast once for the whole party; the picker checks this to skip the
         // per-member loop.
@@ -3305,6 +3498,14 @@ public sealed class AppServices
         // is freed before this round's between-round evaluation runs.
         Tick.CombatTickElapsed += CastDirector.NotifyRoundComplete;
         Tick.CombatTickElapsed += CastDirector.OnCombatTick;
+        // Out of combat the combat tick doesn't free-run (it's only anchored once a
+        // combat line lands), so drive the between-round loop off the 1 s heartbeat
+        // while idle — buffs/cures then queue up one-per-cooldown from login instead
+        // of trickling in on sparse events. In combat OnIdleHeartbeat no-ops (the
+        // combat tick owns the cadence), so the combat engine's per-round economy is
+        // untouched. This drives ONLY the cast loop, not the whole combat tick, so
+        // CombatManager's per-round work never runs out of combat.
+        Tick.HeartbeatElapsed += CastDirector.OnIdleHeartbeat;
 
         // Mana-regen roll-spell reroll (Paradigm only). AbilBreakdown parses
         // `abil 145`; ManaRegen reads its rolled `spells:` slice after each
@@ -3320,17 +3521,26 @@ public sealed class AppServices
             AbilBreakdown,
             readConfig: () =>
             {
-                Models.Profile.SpellsSettings s =
-                    ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-                return new Game.Spells.ManaRegenRerollConfig(
-                    s.ManaRegenRerollThreshold, s.ManaRegenRerollCap);
+                Models.Profile.BuffSlot? slot = ManaRegenRerollSlot();
+                return new Game.Spells.ManaRegenRerollConfig(slot?.RerollThreshold, slot?.RerollCount ?? 0);
             },
             sendAbilQuery: () =>
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
             recast: shortCode => CastDirector.RequestManaRegenReroll(shortCode),
             canAffordReroll: CanAffordManaRegenReroll,
+            // Stock has no `abil 145` — judge the roll from the observed passive mana
+            // tick instead (fed below from RegenTracker).
+            useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             log: Log);
-        CastDirector.SetSelfBuffLandedSink(OnSelfBuffLandedForReroll);
+        CastDirector.SetSelfBuffCastSink(OnSelfBuffCastForReroll);
+        // Feed the reroller clean NATURAL mana ticks (Stock's roll-quality signal).
+        // Meditate ticks are unaffected by spell regen and can stack on a natural tick,
+        // so a tick observed while meditating is skipped; resting doesn't touch mana.
+        Regen.MaTickObserved += sample =>
+        {
+            if (sample.Position == Game.PlayerPosition.Meditating) return;
+            ManaRegen.OnManaTickObserved(sample.Delta);
+        };
 
         // Opt the combat engine into the
         // per-round combat-spell economy (pre-attack debuff + multi/normal/
@@ -3377,7 +3587,7 @@ public sealed class AppServices
             // A hand-typed cast feeds BOTH the combat resume signal and the buff-recast
             // clock: NoteManualBuffCast arms the timer (by cast code) for a hand-cast buff
             // so the Buff Watchdog + recast engine track it the same as an engine cast.
-            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c); });
+            onManualCast: (c, target) => { Combat.OnManualCastObserved(c, target); CastDirector.NoteManualBuffCast(c, target); });
         // Classify a hand-typed cast: a combat spell (round energy 1–1000) is the user
         // taking the round's attack — a user override — while an in-between spell (heal
         // / buff / cure, energy 0) keeps the resume-after-cast. See CombatSpellIndex.
@@ -3389,6 +3599,14 @@ public sealed class AppServices
         OutboundAttack = new Game.Combat.OutboundAttackObserver(
             (verb, target) => Combat.NoteAttackCommandObserved(verb, target));
         Tick.CombatTickElapsed += Combat.OnCombatTick;
+        // Count attack-spell MaxCasts off Combat's own ConfirmedAttackCastCount —
+        // incremented directly off each observed cast-result line — instead of
+        // RoundDamageTracker's timer-driven RoundCount. That tracker's 5s window is
+        // sized for DPS/session stats, not per-cast precision, and can bundle more
+        // than one real cast into a single round for a fast caster, under-counting
+        // MaxCasts (report paradigm-20260822-003106). See ReadRoundCount's
+        // declaration comment on CombatManager for the full reasoning.
+        Combat.ReadRoundCount = () => Combat.ConfirmedAttackCastCount;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a
         // second of its threshold — a final kill that never triggered a resync
@@ -3460,7 +3678,17 @@ public sealed class AppServices
             recoveryPending:     () => Health.IsRecoveringRest,
             hasAttackingHostile: () => CombatTracker.HasHostileMonster,
             clearInCombat:       CombatTracker.ClearInCombatForRecoveryHold);
-        Health.SetRecoveryCompleteCallback(Combat.ResumeAfterRecovery);
+        // Recovery topped off to rest-max (a held rest gate cleared): re-open a held
+        // neutral engage AND — while still resting in the room, before the loop's
+        // deferred step-out — swap back to the Default set, so the swap streams here
+        // and holds the loop via the gear-swap gate instead of landing in the next
+        // room mid-combat (report paradigm-20260826-140341). AutoEquip resolves later
+        // than this wiring point but the callback reads the property at fire time.
+        Health.SetRecoveryCompleteCallback(() =>
+        {
+            Combat.ResumeAfterRecovery();
+            AutoEquip.OnRecoveryComplete();
+        });
 
         // Deterministic magic eligibility — weapon HitMagic ≥ monster Magical
         // picks normal-vs-alternate, spell ReqLevel ≥ monster SpellImmu gates
@@ -3475,6 +3703,7 @@ public sealed class AppServices
         SpellAttackType = new Game.Combat.SpellAttackTypeIndex(GameData);
         Combat.SetMagicEligibility(
             MonsterMagic, ItemMagic, SpellReqLevel, MonsterResist, SpellAttackType);
+        MonsterCatalog = new Game.Combat.MonsterCatalog(GameData);
 
         // Drain-life eligibility — a drain spell can only affect a living, non-undead
         // target; the index tells the chooser which mobs to skip (fall back to the
@@ -3600,6 +3829,33 @@ public sealed class AppServices
                 ? Game.Inventory.EquipmentSlotMap.InventorySlotForWornCode(worn)
                 : null);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
+
+        // Equipment-driven max HP/mana pool sync. A worn item can carry a flat
+        // pool bonus (Items.Abil 88 = +Max HP, Abil 69 = +Max Mana — e.g. the
+        // severed head of Goru-Nezar's +50 mana); PromptParser's high-water
+        // ratchet and periodic stat-screen resync don't react to that changing
+        // mid-session, so equip/remove could leave the health engine's rest and
+        // "pool is full" checks reading a stale ceiling. Reused
+        // CharacterCalculator.AggregateEquipmentStats (already the Character
+        // Info tab's live worn-set bonus reader) resolves the current total;
+        // reseeded (no delta applied) on profile load / active game-data set
+        // change so a character or realm swap doesn't diff against a
+        // now-meaningless prior total.
+        var equipmentMaxSync = new Game.Health.EquipmentMaxPoolSync(
+            equipped =>
+            {
+                Game.Calculators.EquipmentStatSummary totals =
+                    Game.Calculators.CharacterCalculator.AggregateEquipmentStats(equipped, GameData).Totals;
+                return (totals.PlusMaxHp, totals.PlusMaxMana);
+            },
+            Player.ApplyEquipmentMaxDelta);
+        Inventory.Changed += () =>
+        {
+            if (Inventory.IsLoaded) equipmentMaxSync.OnEquippedItemsChanged(Inventory.Snapshot.EquippedItems);
+        };
+        Profile.ProfileLoaded += _ => equipmentMaxSync.Reset();
+        GameData.ActiveSetChanged += _ => equipmentMaxSync.Reset();
+
         // Death-recovery deathpile capture. RoomTracker.NoteDeath
         // records the worn + carried items from the last-known `i` snapshot
         // onto the death record; DeathRecoveryManager.SimulateDeath captures
@@ -3740,6 +3996,12 @@ public sealed class AppServices
         // Auto-recover reads the floor survey to confirm our corpse is in the room
         // before sending `recover corpse` (and arms off its SurveyUpdated event).
         DeathRecovery.AttachGroundItems(GroundItems);
+        // Realm picks the recovery mechanic: Paradigm packs the pile into a corpse
+        // (`recover corpse`), Stock scatters it loose on the floor (per-item `get`).
+        DeathRecovery.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
+        // Match our own corpse by the LIVE in-game name, not a copied profile's stale
+        // Current.Name (report stock-20260828-104653).
+        DeathRecovery.AttachLiveSelfName(() => Party.LocalCharacterName);
 
         // Read-only inventory queries — @wealth / @enc / @have report off the
         // InventoryManager snapshot; @what reports the GroundItems survey. No
@@ -3748,8 +4010,37 @@ public sealed class AppServices
 
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
-        BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData);
+        BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
         DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
+        RoombaQuery = new Game.Remote.RoombaQueryHandler(RemoteCommands, GhItemLocations, GhRoomLabels, Log,
+            // Paced-send scheduler: a UI-thread one-shot (same shape as the combat
+            // switch-dispatch delay) so @roomba sync trickles its telepaths out
+            // ~800ms apart instead of flooding the channel.
+            paceScheduler: (delay, callback) =>
+            {
+                if (delay <= TimeSpan.Zero) { Avalonia.Threading.Dispatcher.UIThread.Post(callback); return; }
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+            });
+        // Adopt an @roomba sync reply only inside the window our own outbound
+        // `@roomba sync` opens (NoteSyncRequested, wired from the outbound-chat
+        // watcher in MainWindowViewModel). The permission gate is on the responder
+        // side, so a reply arriving already proves we're authorized.
+        RoombaSync = new Game.Remote.RoombaSyncReceiver(Chat, GhItemLocations, GhRoomLabels, Log);
+
+        // Rate-limit clobber watcher: the game drops a command when we type too
+        // fast — stock says "You are typing too quickly - command ignored",
+        // paradigm "Too many messages sent - please wait …". Either one during a
+        // paced @roomba sync means the last telepath was lost, so poke the sender
+        // to back off and resend it (no-op when no sync is draining).
+        Router.LineDispatched += line =>
+        {
+            string t = line.Text;
+            if (t.Contains("typing too quickly", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("Too many messages sent", StringComparison.OrdinalIgnoreCase))
+                RoombaQuery.NoteRateLimitClobber();
+        };
 
         // Write-side inventory / cash actions — @get-all / @drop-all /
         // @deposit-all / @share emit get / drop / dep / with / give on the wire.
@@ -3787,7 +4078,20 @@ public sealed class AppServices
             // Stand auto-equip off the slot the item-cast borrows so its own restore
             // isn't doubled by the rest-break the swap triggers (AutoEquip is built
             // just below; this lambda reads it at fire time). See NoteItemCastSwap.
-            onSwap: () => AutoEquip?.NoteItemCastSwap());
+            onSwap: () => AutoEquip?.NoteItemCastSwap(),
+            // A "(Worn)"-bucketed item can still occupy the off-hand mechanically
+            // (Items.Worn == Off-Hand); OffHandNames is built straight from every
+            // Items.json row (not the collision-prone by-name index), so it answers
+            // correctly even for a display name shared with a non-wearable item.
+            isOffHandItem: name => ItemNames.OffHandNames.Contains(name, StringComparer.OrdinalIgnoreCase),
+            // A two-handed wielded weapon fills both hands, so an off-hand buff item
+            // can't be equipped until it's removed — the reverse of a two-handed cast
+            // item. Same game-data 2H check the combat weapon-swap uses.
+            isWornWeaponTwoHanded: IsConfiguredWeaponTwoHanded,
+            // Defer the whole sequence until a full 'i' is parsed this session, so it
+            // never fires against an empty / stale snapshot on login or reconnect
+            // (report paradigm-20260826-150242). Same signal AutoEquip gates on.
+            wornLoadoutKnown: () => Inventory.IsLoaded);
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
 
@@ -3818,8 +4122,64 @@ public sealed class AppServices
             isTwoHanded: IsConfiguredWeaponTwoHanded,
             resolveItemSlot: ResolveEquipItemSlot,
             canEquipItem: CanCharacterEquipItem,
+            restrictsEquip: IsEquipRestricted,
             log: Log);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
+
+        // Unwearable-slot blocks: keep the Equipment tab's block set in sync with
+        // the live character. A profile swap clears the in-memory blocks; a `who`
+        // that refreshes OUR alignment re-evaluates every set (a drift re-blocks,
+        // a realignment lifts the proactive blocks). The game's own wear-result
+        // lines feed the reactive latch — a confirmed wear clears its pending
+        // attempt; a refusal ("You may not wear that item!" armor / "You may not
+        // use that weapon." weapon) blocks the slot it concerns so a swap stops
+        // re-bonking a piece the character can't wear (e.g. after an EP-zap).
+        Profile.ProfileLoaded += _ => Equipment.ResetBlocks();
+        Players.ObservationRecorded += givenName =>
+        {
+            (string self, _) = Models.GameData.PlayerRecord.SplitName(PlayerStats.Name);
+            if (!string.IsNullOrEmpty(self)
+                && string.Equals(self, givenName, StringComparison.OrdinalIgnoreCase))
+                Equipment.ReevaluateAllBlocks();
+        };
+        _equipWearOkSub = Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipped, m =>
+        {
+            if (m.Groups.Count > 0) Equipment.NoteEquipSucceeded(m.Groups[0]);
+        });
+        _equipWearFailSub = Router.Subscribe(
+            Services.Patterns.KnownPatterns.UserEquipFailed, _ => Equipment.NoteWearRefused());
+        _equipWieldFailSub = Router.Subscribe(
+            Services.Patterns.KnownPatterns.UserWieldFailed, _ => Equipment.NoteWeaponRefused());
+
+        // Hold auto-rest while a gear-set swap streams its paced wear/rem commands —
+        // each stands the character up, and without this the rest engine re-sends
+        // `rest` between every command (the rest/stand thrash of a pre-rest gear swap,
+        // report paradigm-20260825-103537).
+        Health.SetEquipmentApplyingProbe(() => Equipment.IsApplyingSet);
+
+        // Hold every movement engine while a paced gear-set apply streams, so the
+        // loop never steps out of a room mid-swap — the "finished resting, moved,
+        // then swapped to Default in the next room mid-combat" report
+        // (paradigm-20260826-140341). The gate clears the instant the swap finishes,
+        // so the step-out lands already in the new set. Engine-wait tier — doesn't
+        // touch the toolbar's user-pause face.
+        Equipment.ApplyingChanged += applying =>
+        {
+            if (applying)
+                MovementCoordinator.AssertGate(
+                    Game.Map.MovementCoordinator.GearSwapGate, "EquipmentManager", "gear-set swap streaming");
+            else
+            {
+                MovementCoordinator.ClearGate(
+                    Game.Map.MovementCoordinator.GearSwapGate, "EquipmentManager", "gear-set swap complete");
+                // Re-evaluate health the instant the swap finishes so a held rest
+                // fires now instead of waiting for the next incidental prompt — the
+                // ~8-second swap→rest gap in report paradigm-20260826-142625 (rest is
+                // held while a swap streams, and nothing re-triggered Evaluate when it
+                // ended).
+                Health.Evaluate();
+            }
+        };
 
         // EquipmentManager is the sole gear actuator: the combat engine decides
         // which weapon it wants and hands the act off here. The backstab-set
@@ -3984,6 +4344,12 @@ public sealed class AppServices
         {
             Cash.OnRoomObserved();
             AutoGetItems.OnRoomObserved();
+            // AutoSearch defers its per-room search "until combat clears" the same way;
+            // without this it never fires the deferred `sea` and the Search gate sticks
+            // held, wedging the walker on "waiting — searching the room" when combat
+            // ended via the idle-stall watchdog rather than a clean room re-display
+            // (report paradigm-20260820-090254).
+            AutoSearch.OnRoomObserved();
         };
 
         // The force-clear is optimistic (a resync CR re-display re-confirms a beat
@@ -4063,6 +4429,11 @@ public sealed class AppServices
             selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
         RoomClassifier.EntitiesObserved += PlayerSightings.NoteAlsoHere;
         RoomEntry.ArrivalObserved += PlayerSightings.NoteArrival;
+        // Monster Intel's "Your Observations" — subscribes to the same fixed
+        // combat-line patterns CombatSessionTracker does, attributed per
+        // monster instead of session-wide; persists on the loaded profile.
+        MonsterObservations = new Game.Combat.MonsterObservationTracker(
+            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log);
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The
@@ -4116,6 +4487,31 @@ public sealed class AppServices
         // drop an item from the override once it's acquired. The abandon-clear on
         // Walker.Event is wired after the walker is constructed (see below).
         Inventory.Changed += () => _forcedPathObtain.RemoveWhere(IsItemCarried);
+
+        // A hazard's any-of counter group can be satisfied by a DIFFERENT item
+        // than the one the route picker / walker chose to source (both resolve
+        // to ONE representative item from the group — whichever the acquisition
+        // pipeline could actually reach). A player who instead equips or
+        // acquires a different group member (e.g. an already-owned alternative
+        // negator, worn to stop taking hazard damage mid-route while the
+        // planned acquisition stalls) never satisfies that one specific id, so
+        // neither the forced-obtain override above nor PathItemDemand's own
+        // resolve (both keyed on the originally-announced item) ever notice —
+        // leaving a permanently stuck "still need item N" need even though the
+        // hazard is already covered. Confirmed via bug report paradigm-20260829-203409
+        // (swamp boots and trollskin boots both negate spell 485; the player
+        // equipped swamp boots but the walk kept demanding trollskin boots).
+        Inventory.Changed += () =>
+        {
+            foreach (Need need in Needs.Outstanding(NeedKind.PathItem))
+            {
+                if (!int.TryParse(need.Descriptor, out int id)) continue;
+                if (!RoomHazards.GroupSatisfiedByAlternative(id, IsItemCarried)) continue;
+                Needs.Resolve(need);
+                _forcedPathObtain.Remove(id);
+                Log.Info("Needs", $"path item {id} need cleared — hazard covered by a different carried item");
+            }
+        };
 
         // Party-level probe + tracker. The probe broadcasts @level and
         // persists each reply into the players table (RecordLevel) — the sole
@@ -4177,13 +4573,29 @@ public sealed class AppServices
         // defers past a fight and holds the walker via the Search gate until the
         // room clears (see AutoSearchManager). Wire-sender bound by
         // MainWindowViewModel after connect.
+        // GhSweep (Roomba Mode) does NOT feed this demand gate — recon drives its
+        // own `sea` sends directly (BeginRoomSearches), the same way Sorting
+        // drives get/drop directly, rather than piggybacking on AutoSearchManager's
+        // single-fire-per-arrival demand mechanism.
         AutoSearch = new Game.Map.AutoSearchManager(
             isEnabled: () => ReadAutoModeFlag(d => d.AutoSearch),
             isDemandActive: () =>
                 PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
-            hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
+            // Probe THIS room's live roster (not CombatTracker.HasEngageableHostiles —
+            // the sticky cross-room gate, which stays asserted while combat winds down
+            // on a left-behind target and made AutoSearch skip empty rooms; report
+            // paradigm-20260820-090736).
+            hasEngageableHostiles: () => Combat.HasEngageableIn(RoomClassifier.Current),
+            // Only defer the search for a fight the client will actually prosecute:
+            // the CombatGate is asserted only when auto-attack is armed. With
+            // auto-combat off, a hostile in the room never gets fought/cleared, so
+            // holding the search would deadlock the walker (report -074607).
+            isCombatEngaging: () => CombatTracker.HasEngageableHostiles,
             hasGetEngineArmed: () =>
                 ReadAutoModeFlag(d => d.AutoGetItems) || ReadAutoModeFlag(d => d.AutoGetCash),
+            // Don't `sea` a transit room the player has already queued past — search
+            // only where movement settles (RoomTracker's pending-move queue is empty).
+            hasQueuedMoves: () => RoomTracker.HasQueuedMoves,
             coordinator: MovementCoordinator,
             log: Log);
 
@@ -4194,15 +4606,40 @@ public sealed class AppServices
         RoomClassifier.EntitiesObserved += _ => AutoSearch.OnRoomObserved();
 
         // Drop the stale queue / ground snapshot when we actually change rooms.
+        //
+        // Registered here — before LoopRunner exists (constructed further below) —
+        // specifically so these reactors get first crack at the SAME RoomTransition
+        // LoopRunner's own OnTrackerStateChanged also subscribes to. Multicast
+        // delegates fire in registration order: anything that needs to assert a
+        // MovementCoordinator gate in reaction to a room arrival (AutoSearch's
+        // Search gate, GhSweep's GhSort gate) MUST be registered before LoopRunner's
+        // subscription, or LoopRunner's own confirm-and-advance-to-the-next-step
+        // path always wins the race and sends the next move before the reactor
+        // gets a turn — this is what let a Roomba sweep leave a room before
+        // picking anything up. GhSweep is assigned later in this constructor (it
+        // needs the LoopRunner instance), but the property is read lazily inside
+        // the lambda body rather than captured at registration time — safe, since
+        // this lambda only ever runs long after the constructor finishes and
+        // GhSweep is assigned, the same forward-reference pattern AutoSearch /
+        // AutoGetItems / GroundItems / Cash above already rely on.
         RoomTracker.StateChanged += t =>
         {
-            if (t.NewRoom is null) return;
-            if (t.PreviousRoom is not null
+            // Same-room refresh (resync CR re-display) — not a genuine change; skip.
+            if (t.NewRoom is not null && t.PreviousRoom is not null
              && t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
-            AutoSearch.OnRoomChanged();
+            // AutoSearch hears every genuine change INCLUDING a null room (death →
+            // respawn-pending), so it can key its owed search and clear a search
+            // deferred in the room we died in (report paradigm-20260820-090736).
+            AutoSearch.OnRoomChanged(t.NewRoom?.Key);
+            if (t.NewRoom is null) return;   // the other engines have nothing to do on death
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();
             Cash.OnRoomChanged();
+            GhSweep.OnRoomChanged(t);
+            // Pass-through stash runs here — ahead of LoopRunner's StateChanged
+            // handler — so its `hide` reaches the wire before the loop's next move
+            // (else the coins hide in the NEXT room; report paradigm-20260819-054200).
+            AutoDeposit?.OnRoomEntered(t);
         };
 
         Walker = new Game.Map.AutoWalkManager(RoomGraph, Bfs, RoomTracker,
@@ -4264,10 +4701,42 @@ public sealed class AppServices
         // the solver's. On stock (no `rm`) the solver uses the look-sweep and this
         // gate no-ops anyway.
         Recovery.TryResync = reason => !MazeSolver.Active && ParadigmResync.TryRequestResync(reason);
+        // Engine-less resync gap: the recovery gate above asks for an `rm` on a
+        // mid-walk mismatch, but no-ops with no engine attached. A manual boat ride
+        // (no engine) that disembarks into a duplicated-name room strands the tracker
+        // in Suspect until the user hand-types `rm` (report paradigm-20260827-081044).
+        // Let the tracker request the fix itself, but ONLY in that no-engine gap so it
+        // can't race the gate's own resync; the maze solver drives its own `rm`, so
+        // stay out of its way too.
+        RoomTracker.RequestAuthoritativeResync = reason =>
+            Recovery.AttachedEngine is null && !MazeSolver.Active
+            && ParadigmResync.TryRequestResync(reason);
         // DeathRecoveryManager's Walk-to-Room / Recover-Now actions route
         // through the walker — attached here since the walker is built
         // after the manager.
         DeathRecovery.AttachWalker(Walker);
+        // Combat-aware re-equip interleaving: recovering a corpse in a room with a
+        // live hostile paces the wear/eq burst across combat rounds (each equip
+        // breaks the round, same as a between-round cast) instead of firing it all
+        // at once. Probes the combat engine for hostiles, re-arms the attack via
+        // the same NoteBetweenRoundCast signal a cast uses, holds the walker on the
+        // CorpseRecovery gate while pieces are pending, and reads item ArmourClass
+        // for the highest-AC-first ordering. The tick drives the pacing/flush.
+        DeathRecovery.AttachCombatInterleave(
+            () => CombatTracker.HasEngageableHostiles,
+            () => Combat.NoteBetweenRoundCast(),
+            () => MovementCoordinator.AssertGate(
+                Game.Map.MovementCoordinator.CorpseRecoveryGate, "DeathRecovery",
+                "recovering — pacing re-equip across combat rounds"),
+            () => MovementCoordinator.ClearGate(
+                Game.Map.MovementCoordinator.CorpseRecoveryGate, "DeathRecovery",
+                "re-equip complete"),
+            name => GameData.FindRowByName("Items", name) is { } row
+                    && row.TryGetProperty("ArmourClass", out System.Text.Json.JsonElement ac)
+                    && ac.ValueKind == System.Text.Json.JsonValueKind.Number
+                    && ac.TryGetInt32(out int acv) ? acv : 0);
+        Tick.CombatTickElapsed += DeathRecovery.OnRecoveryCombatRound;
+        Tick.HeartbeatElapsed += DeathRecovery.OnRecoveryHeartbeat;
         // Route walker over trapped exits through the TrapDisarmManager. The
         // walker only enqueues on a RoomExitHint.Trap — it already knows a trap
         // sits on the exit, so it disarms directly (trapKnown: true) instead of
@@ -4303,6 +4772,10 @@ public sealed class AppServices
         Walker.SetPreMoveHook(() =>
         {
             Combat.PrepBackstabForMove();
+            // Clear the per-room AoE-debuff / attack caps so the next room's crabs
+            // aren't read as "already debuffed" from the room we're leaving (report
+            // paradigm-20260827-082106).
+            Combat.NotePreMove();
             Stealth.RequestPreMoveStealth();
         });
         // PR B — announce the route's possession-gated item ids at walk-start
@@ -4369,10 +4842,8 @@ public sealed class AppServices
             catalogue:   () => Lights.All,
             resolveRoom: RoomGraph.GetRoom,
             wornIllu:    () => PlayerIllumination.WornOnly,
-            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(
-                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell),
-            roomLightSpellName: () =>
-                ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells").RoomLightSpell,
+            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(RoomLightSlotSpell()),
+            roomLightSpellName: RoomLightSlotSpell,
             castRoomLightSpell: name => Cast.TryCast(name),
             settings:    () => ReadSection<Models.Profile.AutoLightSettings>(Profile.Current, "AutoLight"),
             log:         Log);
@@ -4601,6 +5072,10 @@ public sealed class AppServices
         LoopRunner.SetPreMoveHook(() =>
         {
             Combat.PrepBackstabForMove();
+            // Same per-room cap reset the walker does — a loop circuit that hunts the
+            // same species room-to-room otherwise fires its AoE debuff only in the
+            // first room (report paradigm-20260827-082106).
+            Combat.NotePreMove();
             Stealth.RequestPreMoveStealth();
         });
         // Predictive equip on loop laps — same hook the walker uses, so a circuit
@@ -4628,6 +5103,10 @@ public sealed class AppServices
         LoopRunner.Event += e =>
         {
             if (e.Kind != Game.Map.LoopEventKind.ReachedFirstWaypoint) return;
+            // A loop actually beginning is one of the moments the Default gear set
+            // may auto-equip (we're moving out under normal combat gear). Auto-Lair
+            // start does the same via AutoLair.ActiveChanged below.
+            AutoEquip.OnLoopStarted();
             // The HP/MA-history profile is per-loop by definition — a new circuit
             // makes the old step-indexed bands meaningless — so it re-anchors on
             // every loop start, independent of the ResetStatisticsOnLoopStart
@@ -4678,12 +5157,29 @@ public sealed class AppServices
         AutoLair = new Game.Map.AutoLairManager(
             Walker, RoomTracker, RoomGraph, Bfs, LairTimers, Log, MovementCoordinator);
 
+        // Auto-Lair beginning a run is a loop-start for gear purposes — swap to the
+        // Default set, same as LoopRunner's ReachedFirstWaypoint above.
+        AutoLair.ActiveChanged += active => { if (active) AutoEquip.OnLoopStarted(); };
+
         // Always-alive control surface over the three movement engines.
         // Backs the toolbar Start / Pause / Stop buttons (which outlive
         // the window-scoped NavigationViewModel) and stays in sync with
         // the Nav window because both act on the same engine primitives.
         MovementControl = new Game.Map.MovementController(
             Walker, LoopRunner, AutoLair, MovementCoordinator, Log);
+
+        // Roomba Mode — see GhSweepManager. Built on the same LoopRunner
+        // rather than its own navigation engine; refuses to start while
+        // MovementControl shows another engine (walk / loop / auto-lair)
+        // active.
+        GhSweep = new Game.Map.GhSweepManager(
+            GhRoomLabels, LoopRunner, RoomTracker, Bfs, GroundItems, ItemNames, Router, MovementCoordinator,
+            isOtherEngineBusy: () => MovementControl.IsActive,
+            log: Log,
+            isParadigm: onParadigm,
+            inventory: Inventory,
+            itemLocations: GhItemLocations,
+            isRoomActivelyManaged: GhManagedRooms.IsManaged);
 
         // A manually-typed movement step (one the walker / loop / auto-lair didn't
         // send — RoomTracker's echo-claim tells them apart) pauses the active nav
@@ -4758,6 +5254,34 @@ public sealed class AppServices
         // concern is the movement engines) since the reset spans all conditions.
         RoomTracker.PlayerDeathObserved += () => Conditions.ClearAll("death");
 
+        // Same reasoning as the condition reset above, for the attack-spell
+        // cascade and buff-duration tracking: death is a full server-side reset
+        // (every buff drops, whatever spell was mid-flight is moot), but nothing
+        // previously told CombatManager or CastingDirector that. A stale
+        // IsSpellAttackOwed latch or a buff timer for a duration the server
+        // already cleared otherwise survives indefinitely — the former silently
+        // blocks every automatic heal/cure/bless, the latter suppresses a
+        // legitimate recast (report paradigm-20260824-012300).
+        RoomTracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
+        // Our death wipes only OUR buffs — clear the self timers; party members stayed
+        // alive, so their buff timers we hold are kept (don't re-bless them because we
+        // died). A party MEMBER's death wipes THEIR buffs — clear the timers we hold on
+        // that name ("<Name> has died." also fires for mobs, but that's a no-op since we
+        // hold no timer for them).
+        RoomTracker.PlayerDeathObserved += () => CastDirector.ClearSelfBuffTracking();
+        Router.Subscribe(Services.Patterns.KnownPatterns.PartyMemberDied, r =>
+        {
+            if (r.Groups.Count > 0) CastDirector.ClearMemberBuffTimers(r.Groups[0]);
+        });
+
+        // Death drops us from the party server-side — a follower is removed, a
+        // leader's party disbands. PlayerDroppedGate already clears our roster on the
+        // HP<=0 drop, but an INSTANT death (`suicide`) skips mortally-wounded, so that
+        // hook never fires and a leader gets no "no longer following" line either.
+        // Clear on the death event too, so `@join`/`@invite` don't keep replying
+        // "I'm following someone; denied." (report: died via suicide, still following).
+        RoomTracker.PlayerDeathObserved += () => Party.NoteSelfDropped();
+
         // Party-death roster-cleanup bridge. Leader-side: when an active party
         // member dies mid-route it lingers as an [Invited] par slot; we uninvite
         // that phantom once combat clears so the loop / walk-to doesn't stall on
@@ -4793,6 +5317,12 @@ public sealed class AppServices
         // from Settings → Other by ApplyOtherFromActiveProfile on load.
         PartyComeback = new Game.Remote.PartyComebackManager(
             RemoteCommands, Party, RoomTracker, RoomClassifier, Walker, LoopRunner, AutoLair, Router, Bfs, Log);
+
+        // @where reply → nav-map flash. Recognises the wrapped location reply an
+        // @where'd MudPlay client telepaths back and routes it to the (open) map;
+        // HighlightWhereRoom no-ops when the window is closed.
+        WhereReply = new Game.Remote.WhereReplyTracker(Router, Log);
+        WhereReply.TargetLocated += (_, room) => HighlightWhereRoom(room);
 
         // Auto-deposit reroute. Built here
         // (after the movement engines) so it can snapshot / stop / restart
@@ -4846,12 +5376,32 @@ public sealed class AppServices
             lightShop: AutoLightShopRouter,
             carriedCount: CountItemCarried,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
-            log: Log);
+            log: Log,
+            // Party follower = in a party and not the leader; gates the opt-in
+            // follower pass-through stash (Cash → "stash as follower").
+            isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader);
         // Return-leg light provisioning: the reroute owns the walker end-to-end, so
         // the reactive shop router is suppressed (IsRerouting) — this manager runs
         // its own bank -> shop -> origin light detour and needs the `i` dump to
         // notice the bought copy land.
         Inventory.Changed += AutoDeposit.OnInventoryChanged;
+        // In a stash room mid-loop, suppress cash + item auto-collect ONLY while an
+        // auto-search reveal is in flight — the `sea` round-trip that re-exposes the
+        // pile the pass-through stash just hid (reports paradigm-20260819-121516,
+        // -20260820-055720). Gating on the reveal window (not merely "we're in a
+        // stash room") is what lets the character still collect coin that's plainly
+        // visible on entry or dropped by a kill, in the stash room AND in the room
+        // after it: a room's entry survey is parsed BEFORE the room is confirmed, so
+        // reading live CurrentRoom alone mis-attributes the next room's coin to the
+        // stash room we just left and dropped it on the floor (report
+        // paradigm-20260829-212158 — 1788 gold in the room south of a stash room).
+        // The settle gate holds the walker through the reveal, so the window never
+        // straddles a room change. AutoDeposit owns the room/stash/running-engine
+        // state; AutoSearch owns the reveal window; both read live per survey line.
+        Cash.SuppressCollectInStashRoom =
+            () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
+        AutoGetItems.SuppressCollectInStashRoom =
+            () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
         // Bank deposits (already a copper value) join stash hides in the Session
         // Stats stashed/deposited figure. The transaction-history ledger is fed
         // separately from the `You deposit …` echo (InventoryManager.BankDeposited,
@@ -5221,6 +5771,22 @@ public sealed class AppServices
         return Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
     }
 
+    // True when the item EXISTS in game data but the live character can't wear it
+    // (alignment / level / class) — the Equipment Manager's block predicate. Unlike
+    // CanCharacterEquipItem, an UNKNOWN item resolves false here (not a block): a
+    // name that isn't in the active set's Items table just isn't a wearability
+    // problem to flag — it simply never queues. Only a real restriction blocks.
+    private bool IsEquipRestricted(string itemName)
+    {
+        if (GameData.FindRowByName("Items", itemName) is not System.Text.Json.JsonElement row)
+            return false;
+        Game.Inventory.ClassEquipProfile cls =
+            Game.Inventory.ItemEquipFilter.ResolveClassProfile(GameData, PlayerStats.Class);
+        Game.Calculators.AlignmentBucket? bucket =
+            Game.Inventory.ItemEquipFilter.BucketForWord(Players.Find(PlayerStats.Name)?.Alignment);
+        return !Game.Inventory.ItemEquipFilter.CanEquip(row, PlayerStats.Level, cls, bucket);
+    }
+
     // Read a single boolean off the active profile's
     // Models.Profile.GeneralSettings.AutoMode. Used by
     // the engine isEnabled delegates so toggling Settings →
@@ -5249,6 +5815,13 @@ public sealed class AppServices
     // without restarting an engine.
     private bool ReadDisableHangups() =>
         ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups;
+
+    // Live read of Sprint Mode from the char-tier General section — the same
+    // store the toolbar toggle writes. Wired into HealthManager's rest-skip
+    // selector (see the SetDoNotRestSelector call above) so flipping the
+    // toggle takes effect without restarting an engine.
+    private bool ReadSprintMode() =>
+        ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").SprintMode;
 
     // Buff-duration source: map a 4-letter cast code to the
     // buff's Models.GameData.MessageRecord.CasterMessage
@@ -5317,8 +5890,6 @@ public sealed class AppServices
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
         {
             if (!string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase)) continue;
-            Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
-            if (rec is null || string.IsNullOrWhiteSpace(rec.CasterMessage)) return null;
             // An enemy-targeting spell (a debuff / attack scope) is never a self-buff,
             // even if it has a positive duration — so a hand-cast one (e.g. vuln,
             // Targets 8 Monster-or-User) must not arm a self-buff recast timer or show
@@ -5327,13 +5898,22 @@ public sealed class AppServices
             if (Game.Combat.DebuffTargeting.IsSingleTargetEnemy(s.Targets)
                 || Game.Combat.DebuffTargeting.IsAreaEnemy(s.Targets))
                 return null;
-            // Duration is in spell rounds; the recast clock wants wall-clock seconds.
-            // Uses the wall-clock per-round length so "recast within N s" fires at the
-            // buff's REAL remaining time, not ~1-2 s early off the nominal Dur×3.
+            // The real duration ALWAYS comes from game data (Spells.Dur formula), never
+            // the Messages caster line: a buff with no caster message (e.g. bladed
+            // sphere / blsh) still has a real duration and must not fall back to the
+            // 60s default — the fallback made it expire every 60s and, as bless-slot 1,
+            // starve the lower slots at login (report paradigm-20260826-142652). Wall-
+            // clock per-round length so "recast within N s" fires at the buff's REAL
+            // remaining time, not ~1-2 s early off the nominal Dur×3.
             long durSec = (long)System.Math.Round(
                 Game.Spells.SpellCalculator.Duration(s.Formula, Spellbook.Level)
                 * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock);
-            return (rec.CasterMessage, durSec);
+            if (durSec <= 0) return null;   // not a timed buff (an instant / combat spell)
+            // The caster message is only for message-based landing DETECTION (party
+            // confirm + applied-line) — optional; an empty template just skips it, the
+            // computed duration stays authoritative for the recast clock.
+            Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
+            return (rec?.CasterMessage ?? string.Empty, durSec);
         }
         return null;
     }
@@ -5349,9 +5929,30 @@ public sealed class AppServices
     {
         if (string.IsNullOrWhiteSpace(castCode)) return false;
         string target = castCode.Trim();
+        // #item-cast slot: the item casts a spell on `use`, so classify by that
+        // spell's Targets scope (a whole-party item cast blankets everyone in one use).
+        if (Game.Spells.ItemCastToken.IsToken(target))
+            return Spellbook.IsTokenWholeParty(target);
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
             if (string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase))
                 return s.Targets is 10 or 13;
+        return false;
+    }
+
+    // True when a player with the given name is listed in the live "Also here:"
+    // (RoomEntityClassifier). Case-insensitive on the resolved given name. This is NOT
+    // a party-buff cast gate — party membership already means same room; it's only used
+    // to CLEAR a hidden-target back-off when the member reappears in Also-here (a member
+    // absent from Also-here but present in 'par' is simply hiding — including the leader
+    // we follow, who never appears there). Null observation ⇒ not listed.
+    private bool IsGivenNameInRoom(string givenName)
+    {
+        string g = givenName.Trim();
+        if (RoomClassifier?.Current?.Entities is not { } entities) return false;
+        foreach (Game.Combat.RoomEntity e in entities)
+            if (e.Kind == Game.Combat.EntityKind.Player
+                && string.Equals(e.ResolvedName, g, StringComparison.OrdinalIgnoreCase))
+                return true;
         return false;
     }
 
@@ -5368,7 +5969,6 @@ public sealed class AppServices
         if (!PartyState.IsInParty) return map;
 
         Models.Profile.SpellsSettings spells = Resolver.Resolve<Models.Profile.SpellsSettings>("Spells");
-        Models.Profile.PartySettings party = Resolver.Resolve<Models.Profile.PartySettings>("Party");
 
         // Configured self-buffs → (cast code, spell number). #item-cast tokens resolve to
         // no spell and are skipped (an item buff isn't a RemovesSpell target).
@@ -5379,16 +5979,23 @@ public sealed class AppServices
             if (Spellbook.FindByCastCode(code.Trim()) is { } s)
                 selfBuffs.Add((s.Short, s.Number));
         }
-        foreach (string code in spells.BlessSlots.Values) AddSelf(code);
+        Models.Profile.BuffSettings? buffs = Profile.Current?.PartyBuffs;
+        // The unified list's self-cast slots are the covered candidates (bless +
+        // when-full folded here). Whole-party / member-target slots aren't self-casts.
+        if (buffs is not null)
+            foreach (Models.Profile.BuffSlot pslot in buffs.Slots)
+                if (pslot.CastOnSelf && !IsPartyWideBuff(pslot.Spell ?? string.Empty))
+                    AddSelf(pslot.Spell);
+        // HP regen still lives on the Spells tab (mana regen is a unified slot, already
+        // covered by the CastOnSelf loop above).
         AddSelf(spells.HpRegenSpell);
-        AddSelf(spells.MaRegenSpell);
-        AddSelf(spells.WhenHpFullSpell);
-        AddSelf(spells.WhenMaFullSpell);
         if (selfBuffs.Count == 0) return map;
 
-        foreach (Models.Profile.PartyBlessSlot pslot in party.BlessSlots)
+        if (buffs is null) return map;
+        foreach (Models.Profile.BuffSlot pslot in buffs.Slots)
         {
             if (string.IsNullOrWhiteSpace(pslot.Spell)) continue;
+            if (!pslot.WholePartyOn) continue;             // toggled off → not cast → can't cover
             if (!IsPartyWideBuff(pslot.Spell)) continue;   // a single-target party buff never covers self
             HashSet<int> removed = RemovedSpellNumbers(pslot.Spell);
             if (removed.Count == 0) continue;
@@ -5534,24 +6141,122 @@ public sealed class AppServices
         return true;
     }
 
-    // A self-buff of ours landed (confirmed via its AppliedMessage). On
-    // Paradigm, if it's the configured mana-regen spell AND that spell is a
-    // code-145 rolled affect (nature tap / mana flux, not a HoT like chaos
-    // surge), hand it to the reroll engine to read abil 145 and reroll a
-    // bad value. Stock has no abil breakdown, so it's a no-op there.
-    private void OnSelfBuffLandedForReroll(string shortCode)
+    // A self-buff of ours was just CAST (fired from StartSelfBuffTimer, after the cast
+    // reached the wire). If it's the configured mana-regen roll spell (nature tap /
+    // mana flux, a code-145 rolled affect — not a HoT like chaos surge), hand it to the
+    // reroll engine. On Paradigm the engine reads abil 145; on Stock it waits for the
+    // next observed passive mana tick. Either way it rerolls a bad value. Keyed to the
+    // cast (not the AppliedMessage confirm) because a roll spell confirms via the shared
+    // "mana regenerating" condition, which never maps back to the specific spell — so a
+    // confirm-keyed reroll never fired at all (paradigm-20260830-110918).
+    private void OnSelfBuffCastForReroll(string shortCode)
     {
         if (string.IsNullOrWhiteSpace(shortCode)) return;
-        if (GameData.ActiveRealm != Game.RealmType.ParaMud) return;
 
-        Models.Profile.SpellsSettings spells =
-            ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-        string? maRegen = spells.MaRegenSpell?.Trim();
-        if (string.IsNullOrEmpty(maRegen)) return;
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } maRegen) return;
         if (!string.Equals(maRegen, shortCode.Trim(), StringComparison.OrdinalIgnoreCase)) return;
-        if (!IsManaRegenRollSpell(maRegen)) return;
 
         ManaRegen.OnRollSpellLanded(maRegen);
+    }
+
+    // The unified-list slot that drives mana-regen rerolling: a CastOnSelf slot whose
+    // spell is a code-145 rolled regen-rate spell (nature tap / mana flux / prfl). One
+    // per character; null when none is configured. (The reroll config — threshold /
+    // count — rides on this slot.)
+    private Models.Profile.BuffSlot? ManaRegenRerollSlot()
+    {
+        if (Profile.Current?.PartyBuffs is not { } buffs) return null;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+            if (s.CastOnSelf && !string.IsNullOrWhiteSpace(s.Spell) && IsManaRegenRollSpell(s.Spell.Trim()))
+                return s;
+        return null;
+    }
+
+    // Live worst/best passive mana-regen TICK for a mana-regen roll spell at the
+    // current character — feeds the Add-buff dialog's Stock reroll slider so the tick
+    // threshold shows min↔max. The spell's level-scaled roll range spans the slider;
+    // the tick math folds in the summed worn +ManaRgn% (the dominant term). Null when
+    // the spell isn't a resolvable roll spell or the class isn't a caster.
+    public (int Worst, int Best)? ManaRegenTickRange(string? spellCode)
+    {
+        if (string.IsNullOrWhiteSpace(spellCode)) return null;
+        if (Spellbook.FindByCastCode(spellCode.Trim()) is not { } spell) return null;
+        if (!Game.Spells.ManaRegenReroller.IsRollSpell(spell.Formula)) return null;
+
+        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        int mageryType = RowInt(classRow, "MageryType");
+        if (mageryType is not (1 or 2 or 3)) return null;   // non-caster class
+        int mageryLevel = RowInt(classRow, "MageryLVL");
+
+        int level = System.Math.Max(1, PlayerStats.Level);
+        (long rmin, long rmax) = Game.Spells.SpellCalculator.AffectMagnitude(spell.Formula, level);
+        int gearRegen = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
+
+        Game.Calculators.ManaRegenBreakpointCalculator.Inputs inputs = new(
+            Level: level, MageryType: mageryType, Intellect: PlayerStats.Intellect,
+            Willpower: PlayerStats.Willpower, MageryLevel: mageryLevel,
+            GearRegenPercent: gearRegen, Realm: GameData.ActiveRealm);
+        Game.Calculators.ManaRegenBreakpointCalculator.Result r =
+            Game.Calculators.ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
+        return (r.WorstTick, r.BestTick);
+    }
+
+    private static int RowInt(System.Text.Json.JsonElement? row, string property)
+    {
+        if (row is not System.Text.Json.JsonElement el
+            || el.ValueKind != System.Text.Json.JsonValueKind.Object) return 0;
+        return el.TryGetProperty(property, out System.Text.Json.JsonElement v)
+            && v.ValueKind == System.Text.Json.JsonValueKind.Number
+            && v.TryGetInt32(out int n) ? n : 0;
+    }
+
+    // Dump the character's configured buff plan (the unified list) to the program log
+    // on profile load / edit, so a "my buffs aren't working" report shows exactly how
+    // they're set up — target(s), recast lead, and any per-slot conditions.
+    private void LogBuffConfiguration(Models.Profile.CharacterProfile profile)
+    {
+        if (profile.PartyBuffs is not { Slots.Count: > 0 } buffs)
+        {
+            Log.Info("Buffs", "Buff plan: none configured.");
+            return;
+        }
+
+        Log.Info("Buffs", $"Buff plan — {buffs.Slots.Count} slot(s):");
+        int n = 0;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+        {
+            n++;
+            if (string.IsNullOrWhiteSpace(s.Spell)) { Log.Info("Buffs", $"  {n}. (empty)"); continue; }
+
+            System.Collections.Generic.List<string> who = new();
+            if (s.CastOnSelf) who.Add("self");
+            if (s.WholePartyOn && IsPartyWideBuff(s.Spell)) who.Add("party-wide");
+            if (s.AllMembers) who.Add("all-members");
+            else if (s.Targets.Count > 0) who.Add(string.Join("+", s.Targets));
+
+            System.Collections.Generic.List<string> cond = new();
+            if (s.OnlyWhenHpFull) cond.Add("hp-full");
+            if (s.OnlyWhenMaFull) cond.Add("ma-full");
+            if (s.OnlyWhenDark) cond.Add("only-dark");
+            if (s.CastBeforeRestingForMana) cond.Add("pre-rest");
+            if (s.RerollCount > 0) cond.Add($"reroll<{s.RerollThreshold?.ToString() ?? "-"} x{s.RerollCount}");
+
+            string target = who.Count > 0 ? string.Join("/", who) : "no target";
+            string condStr = cond.Count > 0 ? $" [{string.Join(", ", cond)}]" : string.Empty;
+            Log.Info("Buffs", $"  {n}. {s.Spell.Trim()} → {target}, recast@{s.RecastMarginSec}s{condStr}");
+        }
+    }
+
+    // The unified-list "only when dark" light spell the auto-light system casts on
+    // entering a dark room — a CastOnSelf slot flagged OnlyWhenDark. Null when none.
+    private string? RoomLightSlotSpell()
+    {
+        if (Profile.Current?.PartyBuffs is not { } buffs) return null;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+            if (s.CastOnSelf && s.OnlyWhenDark && !string.IsNullOrWhiteSpace(s.Spell))
+                return s.Spell!.Trim();
+        return null;
     }
 
     // True when the spell with cast code shortCode carries a
@@ -5574,10 +6279,7 @@ public sealed class AppServices
         int maxMa = PlayerState.MaxMa;
         if (maxMa <= 0) return false;
 
-        Models.Profile.SpellsSettings spells =
-            ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-        string? shortCode = spells.MaRegenSpell?.Trim();
-        if (string.IsNullOrEmpty(shortCode)) return false;
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } shortCode) return false;
 
         int cost = Spellbook.ManaCostOf(shortCode) ?? 0;
         Models.Profile.HealthSettings health =
@@ -5761,6 +6463,30 @@ public sealed class AppServices
     // lives in one place. Backs PathItemDemand's possession check and the
     // MovementFilter key/item gate.
     private bool IsItemCarried(int itemId) => CountItemHeld(itemId) > 0;
+
+    // Numeric alignment of every crosser for an "(Alignment: X to Y)" exit gate:
+    // the controlling character always, plus each follower when we LEAD the party
+    // through the gate together (whole-party — the game stops the party at the
+    // tightest member). Each entry is the member's alignment value resolved from the
+    // PlayerDatabase (who-title band → number via the confirmed ladder), or null
+    // when we don't know it yet. MovementFilter routes around a gate a KNOWN member
+    // can't cross and leaves an unknown member for the walker to halt on at the gate.
+    private System.Collections.Generic.IReadOnlyList<int?> PartyAlignmentValues()
+    {
+        var vals = new System.Collections.Generic.List<int?> { AlignmentValueOf(PlayerStats.Name) };
+        if (PartyState.IsInParty && PartyState.SelfIsLeader)
+            foreach (Game.PartyMember m in PartyState.Members)
+            {
+                if (m.IsSelf) continue;
+                vals.Add(AlignmentValueOf(m.Name));
+            }
+        return vals;
+    }
+
+    private int? AlignmentValueOf(string? name) =>
+        string.IsNullOrWhiteSpace(name)
+            ? null
+            : Game.Calculators.AlignmentBands.ValueOf(Players.Find(name!)?.Alignment);
 
     // Does 'name' as it appears in a spell line (e.g. "casts hold person on Jroc")
     // name a current party member? Party names can be one or two words and the wire
@@ -5948,6 +6674,22 @@ public sealed class AppServices
             return (long)Math.Ceiling(copper);
         }
         return null;
+    }
+
+    // HP rest gate for DoorOpenManager's bash-interleave. recovered=false → "HP has
+    // fallen to the Health-tab rest-if-below trigger, pause bashing"; recovered=true
+    // → "HP has climbed back to rest-max, resume". Reuses PoolThreshold so the
+    // percentage/absolute mode matches HealthManager's own rest cycle exactly. No
+    // vitals yet (MaxHp<=0) reads as not-needed / already-recovered so a fresh login
+    // never stalls a bash.
+    private bool BashRestGate(bool recovered)
+    {
+        int max = PlayerState.MaxHp;
+        if (max <= 0) return recovered;
+        Models.Profile.HealthSettings hs = Resolver.Resolve<Models.Profile.HealthSettings>("Health");
+        return recovered
+            ? PlayerState.Hp >= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestMaxHp, max)
+            : PlayerState.Hp <= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestIfBelowHp, max);
     }
 
     // Live key-possession check for DoorOpenManager's opportunistic floor grab:

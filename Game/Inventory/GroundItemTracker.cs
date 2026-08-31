@@ -149,19 +149,42 @@ public sealed class GroundItemTracker : IDisposable
     }
 
     // Split "a, b and c" survey wording into individual entries — commas
-    // separate all but the final pair, which uses " and ".
-    private static IEnumerable<string> SplitEntries(string list)
+    // separate all but the final pair, which uses " and ". A naive split on
+    // every " and " wrongly breaks an item whose own canonical name contains
+    // "and" (e.g. "rope and grapple", MDB #191) into two bogus entries — the
+    // survey has no way to mark which "and" is the real separator. Where the
+    // item table is wired (_isKnownItem), re-merge any adjacent pair whose
+    // rejoined text resolves to a real item while neither half does alone —
+    // the same known-item-overrides-heuristic pattern IsCashEntry already
+    // uses for the "2 gold key" ambiguity. Unwired (tests without game data)
+    // the naive split stands alone, same as before.
+    private IEnumerable<string> SplitEntries(string list)
     {
+        List<string> pieces = new();
         foreach (string comma in list.Split(',', StringSplitOptions.TrimEntries
                                               | StringSplitOptions.RemoveEmptyEntries))
         {
-            foreach (string piece in comma.Split(" and ",
-                         StringSplitOptions.TrimEntries
-                         | StringSplitOptions.RemoveEmptyEntries))
+            pieces.AddRange(comma.Split(" and ",
+                StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        if (_isKnownItem is not null)
+        {
+            int i = 0;
+            while (i < pieces.Count - 1)
             {
-                if (piece.Length > 0) yield return piece;
+                string merged = $"{pieces[i]} and {pieces[i + 1]}";
+                if (_isKnownItem(merged) && !_isKnownItem(pieces[i]) && !_isKnownItem(pieces[i + 1]))
+                {
+                    pieces[i] = merged;
+                    pieces.RemoveAt(i + 1);
+                    continue;   // recheck at i in case of a further adjacent merge
+                }
+                i++;
             }
         }
+
+        return pieces.Where(p => p.Length > 0);
     }
 
     // Cash entries in the survey are either a counted coin ("50 gold crowns",
@@ -184,7 +207,10 @@ public sealed class GroundItemTracker : IDisposable
     // record is never cash. Currency isn't in the item table, so a genuine coin
     // pile won't resolve and still reads as cash. Unwired (tests without game
     // data) the heuristic stands alone and the "2 gold key" ambiguity resurfaces.
-    private bool IsCashEntry(string entry)
+    // Public so death recovery can tell whether a captured pile entry is currency
+    // (coins are recovered as cash, not `get`-ed as items — a pile left holding only
+    // coins still counts as fully recovered).
+    public bool IsCashEntry(string entry)
     {
         string[] words = entry.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length < 2) return false;

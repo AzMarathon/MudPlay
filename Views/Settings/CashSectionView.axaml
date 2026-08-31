@@ -108,24 +108,37 @@
                               ToolTip.Tip="Populated from the active game-data Shops table where ShopType == 7 (banks), plus every room you've toggled as a stash on the Navigation map."/>
                 </Grid>
 
-                <!-- Single raw keep-on-hand floor (copper farthings) — honoured
-                     by BOTH the auto-deposit reroute (dep <excess>) and the
-                     stash-room path, which decomposes the excess into
-                     lowest-denomination-first `hide N <coin>` commands so the
-                     fewest coins are left on hand. -->
+                <!-- Minimum cash to keep on hand — BANKING only. An amount of a
+                     chosen denomination; depositing converts it to copper (amount ×
+                     unit) and sends the excess as dep <copper>. Stashing is gated by
+                     the coin-type filter below instead. -->
                 <TextBlock Classes="FieldLabel" Margin="0,8,0,2"
-                           Text="Keep on hand (applies to depositing and stashing)"/>
-
-                <Grid ColumnDefinitions="220,*" RowDefinitions="Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel"
-                               Text="Keep wealth (copper)"/>
-                    <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                   Value="{Binding KeepOnHandWealth, Mode=TwoWay}"
+                           Text="Minimum cash to keep on hand (deposit)"/>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <NumericUpDown Value="{Binding KeepOnHandWealth, Mode=TwoWay}"
                                    Minimum="0" Maximum="100000000" Increment="1"
                                    FormatString="0" ParsingNumberStyle="Integer"
-                                   Width="200" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Raw wealth to keep, in copper farthings (same unit as Wealth and the auto-deposit threshold; 1 silver = 10, gold = 100, platinum = 10,000, runic = 1,000,000). 0 = offload everything. Depositing sends the excess as dep &lt;copper&gt;; stashing decomposes the excess into lowest-denomination-first hide commands, leaving the fewest coins on hand."/>
-                </Grid>
+                                   Width="160"
+                                   ToolTip.Tip="The minimum cash to leave in your pocket after a deposit — the auto-deposit trip, the Deposit All button, and the @deposit-all remote all bank everything above this floor. Enter an amount and pick the denomination beside it: e.g. 1 Runic keeps 1,000,000 copper on hand; 0 keeps nothing. Governs depositing only — stashing is controlled by the coin-type filter below."/>
+                    <ComboBox ItemsSource="{Binding DenominationChoices}"
+                              SelectedItem="{Binding KeepOnHandDenomination, Mode=TwoWay}"
+                              Width="120" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Only stash coin up to — STASHING only. Everything stashes every
+                     denomination; a coin stashes it and everything below, keeping the
+                     higher coins in hand. -->
+                <TextBlock Classes="FieldLabel" Margin="0,10,0,2"
+                           Text="Only stash coin up to (stash)"/>
+                <ComboBox ItemsSource="{Binding StashCoinCutoffChoices}"
+                          SelectedItem="{Binding StashCoinCutoff, Mode=TwoWay}"
+                          Width="140" HorizontalAlignment="Left"
+                          ToolTip.Tip="Caps which coins a stash offloads. Nothing stashes no coin at all (a stash still hides your flagged items). A denomination hides coins up to it and keeps the higher coins in hand — e.g. Gold hides copper/silver/gold and keeps platinum/runic. Everything stashes every denomination. Applies to stashing only."/>
+
+                <!-- Stash as a party follower -->
+                <CheckBox Content="Enable stashing as a follower" Margin="0,10,0,0"
+                          IsChecked="{Binding StashAsFollower, Mode=TwoWay}"
+                          ToolTip.Tip="When you're a party follower (in a party, not leading), stash currency as the leader drags you through your marked stash rooms. Off by default; your own loop is held by the leader-drag gate, so this opts the pass-through back in."/>
 
                 <!-- ============ Collection Rules ============ -->
                 <TextBlock Classes="SectionHeader" Text="Collection Rules"/>

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Avalonia.Threading;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 
@@ -23,9 +22,6 @@ public sealed class EquipmentManager
     // LogService category — [Equipment] rows per apply.
     public const string LogCategory = "Equipment";
 
-    // Spacing between successive wear commands. The game's flood / spam guards
-    // dislike a burst of ~20 wears, so drain the queue one step at a time.
-    private static readonly TimeSpan ApplyStep = TimeSpan.FromMilliseconds(200);
 
     private readonly Func<EquipmentSettings> _readEquipment;
     private readonly Func<InventorySnapshot> _getSnapshot;
@@ -43,6 +39,13 @@ public sealed class EquipmentManager
     // the manual apply paths then fall back to the set-only worn diff.
     private readonly Func<string, EquipmentSlot?>? _resolveItemSlot;
     private readonly Func<string, bool>? _canEquipItem;
+    // Wearability-restriction probe for the block feature: true when the item
+    // EXISTS in game data but the live character can't wear it (alignment /
+    // level / class). Distinct from _canEquipItem, which also returns false for
+    // an unknown item — an unknown name must NOT be block-flagged (it just isn't
+    // queued). Null in tests / before game data is wired disables the block
+    // machinery entirely.
+    private readonly Func<string, bool>? _isEquipRestricted;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
 
@@ -52,8 +55,6 @@ public sealed class EquipmentManager
     // Auto-fire gear-set applies consult it to leave the weapon/off-hand to combat
     // rather than clobbering its swap — see ApplySet.
     private Func<bool>? _combatOwnsWeaponSlot;
-
-    private readonly Queue<string> _pending = new();
 
     // Thrash guard: a gear set that keeps producing commands without converging (a
     // paired-slot swap the game won't satisfy, say) must not re-apply forever. Count
@@ -65,8 +66,60 @@ public sealed class EquipmentManager
     private string? _thrashSetId;
     private readonly Queue<DateTimeOffset> _thrashApplies = new();
     private bool _thrashHolding;
-    private DispatcherTimer? _applyTimer;
     private bool _isEquipping;
+
+    // ----- unwearable-slot blocks ----------------------------------------
+    // A (set, slot) the live character can't wear the configured item in — either
+    // detected up front (alignment / level / class, ServerConfirmed=false) or
+    // confirmed by the game refusing the wear/eq (ServerConfirmed=true). Blocked
+    // slots are skipped when building commands, so a swap never re-bonks a piece
+    // we already know we can't wear (e.g. after an alignment drift EP-zap). In
+    // memory only — self-heals: a fresh session re-detects on the next apply.
+    private readonly record struct BlockInfo(string Name, bool ServerConfirmed);
+    private readonly Dictionary<(string SetId, EquipmentSlot Slot), BlockInfo> _blocked = new();
+    // Silent-seed guard: the first block evaluation after a profile load colours
+    // the tab without a terminal notice (a saved set's already-unwearable items
+    // aren't news); later additions (a drift, an add-time pick, a refusal) do
+    // announce. Reset by ResetBlocks on profile load.
+    private bool _blocksSeeded;
+
+    // A gear-set block surfaced to the user — bridged to a terminal notice.
+    public readonly record struct EquipBlock(string SetId, EquipmentSlot Slot, string ItemName);
+
+    // Fires whenever the blocked-slot set changes — the Equipment tab recolours.
+    public event Action? BlocksChanged;
+    // Fires when a NEW block is surfaced (announce path only) — the terminal
+    // notice bridge. Not fired on the silent post-load seed.
+    public event Action<EquipBlock>? SlotBlockedAnnounced;
+
+    // Ordered wear/eq attempts from the in-flight / last apply so an anonymous
+    // refusal line ("You may not wear that item!" / "You may not use that
+    // weapon.") can be attributed to the specific slot+item it concerns.
+    // Successful wears are removed as their confirmation line arrives; the oldest
+    // remaining attempt of the matching kind is the one the refusal blocks.
+    private readonly record struct PendingEquip(string SetId, EquipmentSlot Slot, string ItemName);
+    private readonly List<PendingEquip> _pending = new();
+    private DateTimeOffset _pendingStamp;
+    private static readonly TimeSpan PendingWindow = TimeSpan.FromSeconds(6);
+
+    // True while a gear-set apply is streaming its `wear`/`rem` commands.
+    // HealthManager reads this to hold its rest re-issue during a swap: each `wear`
+    // stands the character, and without this the rest engine re-sends `rest` between
+    // every command — a rest/stand thrash for the whole burst (report
+    // paradigm-20260825-103537). The swap finishes, then rest resumes once.
+    public bool IsApplyingSet => _isEquipping;
+
+    // Fires true when a gear-set apply starts streaming its `wear`/`rem` commands and
+    // false when it finishes. Wired to a MovementCoordinator gear-swap gate so the
+    // loop holds in-room until the swap completes (report paradigm-20260826-140341).
+    public event Action<bool>? ApplyingChanged;
+
+    // The id of the last gear set the engine applied (or confirmed already worn) —
+    // the "last set applied" the Workshop surfaces as Currently Equipped. Null until
+    // the first apply this session; a stale id (after a profile swap) simply resolves
+    // to no set name at the display side. CurrentSetChanged fires when it changes.
+    public string? CurrentSetId { get; private set; }
+    public event Action? CurrentSetChanged;
 
     public EquipmentManager(
         Func<EquipmentSettings> readEquipment,
@@ -76,6 +129,7 @@ public sealed class EquipmentManager
         Func<string?, bool>? isTwoHanded = null,
         Func<string, EquipmentSlot?>? resolveItemSlot = null,
         Func<string, bool>? canEquipItem = null,
+        Func<string, bool>? restrictsEquip = null,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(readEquipment);
@@ -89,6 +143,7 @@ public sealed class EquipmentManager
         _isTwoHanded = isTwoHanded ?? (static _ => false);
         _resolveItemSlot = resolveItemSlot;
         _canEquipItem = canEquipItem;
+        _isEquipRestricted = restrictsEquip;
         _log = log;
     }
 
@@ -198,6 +253,11 @@ public sealed class EquipmentManager
         // defer — it must recover now — so it sends regardless.
         if (!force && snap.LastUpdated == DateTimeOffset.MinValue) return;
 
+        // This combat weapon path sends wear/eq too, but isn't a set apply — drop
+        // any set-apply pending so a refusal it draws can't be misattributed back
+        // to a set slot (which would wrongly block a wearable set item).
+        _pending.Clear();
+
         string? wornWeapon = SlotItem(snap, "Weapon Hand");
         string? wornOffHand = SlotItem(snap, "Off-Hand");
         bool twoHanded = _isTwoHanded(w);
@@ -268,9 +328,14 @@ public sealed class EquipmentManager
         InventorySnapshot snap = _getSnapshot();
         var worn = new HashSet<string>(
             snap.EquippedItems.Select(e => e.Name), StringComparer.OrdinalIgnoreCase);
-        List<string> cmds = BuildWearCommands(set, worn, armorOnly: true, availableNames: HeldNames(snap));
+        List<string> cmds = BuildWearCommands(set, worn, armorOnly: true,
+            availableNames: HeldNames(snap), blockedNames: BlockedNamesForSet(set));
         if (cmds.Count == 0) return EquipResult.NoChange;
 
+        // Not tracked as set-apply attempts (this is a synchronous pre-sneak
+        // burst); clear any set-apply pending so a refusal here can't misblock a
+        // set slot.
+        _pending.Clear();
         _log?.Info(LogCategory, $"backstab armor — {cmds.Count} piece(s)");
         foreach (string cmd in cmds) _wire.Send(cmd);
         return EquipResult.Applied;
@@ -280,8 +345,28 @@ public sealed class EquipmentManager
     // slot wrote CombatSettings. False when the set is already fully in effect.
     // fillFromInventory lets the user-initiated paths top empty / unowned slots up
     // from carried gear (see BuildApplyCommands); auto-fires pass it false.
+    // Note a set as the current loadout and fire CurrentSetChanged when it differs
+    // from the last. An empty id (an unsaved set) is ignored.
+    private void SetCurrentSet(EquipmentSet set)
+    {
+        if (string.IsNullOrEmpty(set.Id) || string.Equals(CurrentSetId, set.Id, StringComparison.Ordinal))
+            return;
+        CurrentSetId = set.Id;
+        CurrentSetChanged?.Invoke();
+    }
+
     private bool ApplySet(EquipmentSet set, bool fillFromInventory)
     {
+        // Record it as the current loadout — whether it needs commands (a real
+        // swap) or is already fully worn (a no-op Equip Now still confirms it's on).
+        SetCurrentSet(set);
+
+        // Re-evaluate this set's slots against the live character before building,
+        // so an item the current alignment / level / class can't wear is blocked,
+        // surfaced, and skipped below instead of bonking the game. A realigned
+        // character's proactive blocks clear here too.
+        RefreshBlocksForSet(set, announce: true);
+
         bool combatChanged = false;
         CombatSettings combat = _readCombat();
         if (ApplyVirtualSlots(set, combat))
@@ -308,7 +393,8 @@ public sealed class EquipmentManager
             return combatChanged;
 
         _log?.Info(LogCategory, $"applying gear set '{set.Name}' — {cmds.Count} command(s)");
-        StartPacedSend(cmds);
+        RecordPending(set, cmds);
+        SendSet(cmds);
         return true;
     }
 
@@ -353,13 +439,22 @@ public sealed class EquipmentManager
     // haveInventory is false) and what an auto-fire uses.
     private List<string> BuildApplyCommands(
         EquipmentSet set, InventorySnapshot snap, bool fillFromInventory, bool armorOnly = false)
+        => PrependTwoHandOffHandConflictRems(set, snap.EquippedItems, _isTwoHanded,
+            BuildApplyCommandsCore(set, snap, fillFromInventory, armorOnly));
+
+    private List<string> BuildApplyCommandsCore(
+        EquipmentSet set, InventorySnapshot snap, bool fillFromInventory, bool armorOnly = false)
     {
+        // Slots we already know the live character can't wear (alignment / level /
+        // class, or a prior game refusal) — skipped so a swap never re-bonks them.
+        HashSet<string> blocked = BlockedNamesForSet(set);
+
         bool haveInventory = snap.LastUpdated != DateTimeOffset.MinValue;
         if (fillFromInventory && haveInventory
             && _resolveItemSlot is not null && _canEquipItem is not null)
         {
             return BuildEquipCommands(
-                set, snap.CarriedItems, snap.EquippedItems, _resolveItemSlot, _canEquipItem);
+                set, snap.CarriedItems, snap.EquippedItems, _resolveItemSlot, _canEquipItem, blocked);
         }
 
         var worn = new HashSet<string>(
@@ -368,7 +463,7 @@ public sealed class EquipmentManager
         // auto-fire trigger doesn't flood failed wears for gear we no longer hold
         // (e.g. after a death dumped the whole loadout into a deathpile).
         List<string> wears = BuildWearCommands(set, worn, armorOnly: armorOnly,
-            availableNames: haveInventory ? HeldNames(snap) : null);
+            availableNames: haveInventory ? HeldNames(snap) : null, blockedNames: blocked);
         if (wears.Count == 0) return wears;
 
         // Free paired finger / wrist slots first so a swap of one member lands on the
@@ -378,10 +473,7 @@ public sealed class EquipmentManager
             .Where(c => c.StartsWith("wear ", StringComparison.Ordinal))
             .Select(c => c["wear ".Length..])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        List<string> rems = BuildPairedSlotRems(set, snap.EquippedItems, beingWorn);
-        if (rems.Count == 0) return wears;
-        rems.AddRange(wears);
-        return rems;
+        return ComposePairedSlotCommands(set, snap.EquippedItems, beingWorn, wears);
     }
 
     // ----- pure apply logic (unit-tested directly) ------------------------
@@ -402,7 +494,7 @@ public sealed class EquipmentManager
     // and every not-worn set item is issued, preserving the pre-gate behaviour.
     internal static List<string> BuildWearCommands(
         EquipmentSet set, ISet<string> wornNames, bool armorOnly = false,
-        ISet<string>? availableNames = null)
+        ISet<string>? availableNames = null, ISet<string>? blockedNames = null)
     {
         var cmds = new List<string>();
         foreach (EquipmentSlotEntry e in set.Slots)
@@ -413,6 +505,9 @@ public sealed class EquipmentManager
             if (string.IsNullOrEmpty(name)) continue;
             if (wornNames.Contains(name)) continue;
             if (availableNames is not null && !availableNames.Contains(name)) continue;
+            // Known-unwearable (blocked) picks are skipped so a swap doesn't
+            // re-bonk on an item the character can't wear (alignment / refusal).
+            if (blockedNames is not null && blockedNames.Contains(name)) continue;
             cmds.Add($"wear {name}");
         }
         return cmds;
@@ -457,6 +552,117 @@ public sealed class EquipmentManager
         return rems;
     }
 
+    // Compose the paired finger / wrist frees around the set's wears. Starts from the
+    // full odd-out rem list (BuildPairedSlotRems), then optimizes each family that's
+    // swapping BOTH of its members: the game's first `wear` into a full paired family
+    // auto-evicts the FIRST-worn member, so only the SECOND worn member needs an
+    // explicit `rem` — interleaved right before its replacement's wear rather than
+    // prepending both frees. Saves one `rem` line per such family (report
+    // paradigm-20260827-082305). A single-member swap (or a slot already free) keeps
+    // the prepend-all-frees form, which converges safely.
+    //
+    // LIVE-TEST / mechanic: rests on `wear` evicting the FIRST-listed worn member of
+    // the family (worn order = the game's `i` order). worn must be in that order.
+    internal static List<string> ComposePairedSlotCommands(
+        EquipmentSet set, IReadOnlyList<EquippedItem> worn, ISet<string> beingWorn, List<string> wears)
+    {
+        List<string> rems = BuildPairedSlotRems(set, worn, beingWorn);
+        var result = new List<string>(wears);
+
+        foreach (EquipmentSlot family in PairedFamilies)
+        {
+            var setMembers = set.Slots
+                .Where(e => !IsVirtual(e.Slot) && FamilyOf(e.Slot) == family
+                            && !string.IsNullOrWhiteSpace(e.ItemName))
+                .Select(e => e.ItemName!.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (setMembers.Count == 0) continue;
+
+            // Worn members of this family the set doesn't want, in `i` (worn) order.
+            var oddOuts = worn
+                .Where(e => EquipmentSlotMap.FromWornString(e.Slot) is { } s && FamilyOf(s) == family
+                            && !setMembers.Contains(e.Name.Trim()))
+                .Select(e => e.Name.Trim())
+                .ToList();
+            // The family's new-member wears actually queued (set-slot order).
+            var familyWears = result
+                .Where(c => c.StartsWith("wear ", StringComparison.Ordinal)
+                            && setMembers.Contains(c["wear ".Length..]))
+                .ToList();
+
+            // Both members swapping: the first wear evicts oddOuts[0]; drop both
+            // prepended frees and interleave a single `rem oddOuts[1]` before the
+            // second replacement's wear.
+            if (oddOuts.Count >= 2 && familyWears.Count >= 2)
+            {
+                rems.RemoveAll(r =>
+                    string.Equals(r, $"rem {oddOuts[0]}", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(r, $"rem {oddOuts[1]}", StringComparison.OrdinalIgnoreCase));
+                int idxSecondWear = result.IndexOf(familyWears[1]);
+                result.Insert(idxSecondWear, $"rem {oddOuts[1]}");
+            }
+        }
+
+        rems.AddRange(result);
+        return rems;
+    }
+
+    // A two-handed weapon and an off-hand item can't coexist — the game rejects
+    // whichever wear would violate that, so a set swap that changes the hands must
+    // strip the conflicting worn piece FIRST or the wear fails and only sticks on a
+    // later re-apply. Two symmetric cases (both mirror SwapWeapon's own guards):
+    //   1. The set brings an OFF-HAND item on while a two-hander is worn — "You may
+    //      not wear an off-hand item while you have a 2-handed weapon readied."
+    //      (report paradigm-20260826-132742). Rem the worn two-hander first; the
+    //      set's own one-handed weapon re-arms the hand after.
+    //   2. The set wields a TWO-HANDER while an off-hand is worn — "You may not
+    //      ready a 2-handed weapon with your <item> worn!" (report
+    //      paradigm-20260826-142732). Rem the worn off-hand first.
+    // Only fires when the plan actually wears the conflicting piece this pass (an
+    // already-worn item isn't re-issued, so there's nothing to clear).
+    internal static List<string> PrependTwoHandOffHandConflictRems(
+        EquipmentSet set, IReadOnlyList<EquippedItem> worn,
+        Func<string?, bool> isTwoHanded, List<string> cmds)
+    {
+        string? wornWeapon = WornSlotItem(worn, "Weapon Hand");
+        string? wornOffHand = WornSlotItem(worn, "Off-Hand");
+
+        // Case 1: set wears an off-hand while a two-hander is worn → rem the 2H.
+        string? setOffHand = set.Slots
+            .FirstOrDefault(e => e.Slot == EquipmentSlot.OffHand)?.ItemName?.Trim();
+        if (!string.IsNullOrEmpty(setOffHand) && PlanEquips(cmds, setOffHand)
+            && !string.IsNullOrWhiteSpace(wornWeapon) && isTwoHanded(wornWeapon))
+        {
+            cmds.Insert(0, $"rem {wornWeapon.Trim()}");
+            return cmds;
+        }
+
+        // Case 2: set wields a two-hander while an off-hand is worn → rem the off-hand.
+        string? setWeapon = set.Slots
+            .FirstOrDefault(e => e.Slot == EquipmentSlot.Weapon)?.ItemName?.Trim();
+        if (!string.IsNullOrEmpty(setWeapon) && PlanEquips(cmds, setWeapon) && isTwoHanded(setWeapon)
+            && !string.IsNullOrWhiteSpace(wornOffHand))
+        {
+            cmds.Insert(0, $"rem {wornOffHand.Trim()}");
+        }
+        return cmds;
+    }
+
+    // The item worn in a real slot label ("Weapon Hand" / "Off-Hand"), or null.
+    private static string? WornSlotItem(IReadOnlyList<EquippedItem> worn, string slot)
+        => worn
+            .Where(e => string.Equals(e.Slot, slot, StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.Name)
+            .FirstOrDefault();
+
+    // Whether the plan wears/wields the named item this pass — either verb, since a
+    // weapon takes `eq` on the inventory-aware path and `wear` on the set-only diff.
+    private static bool PlanEquips(List<string> cmds, string name) => cmds.Any(c =>
+        (c.StartsWith("wear ", StringComparison.Ordinal)
+            && string.Equals(c["wear ".Length..], name, StringComparison.OrdinalIgnoreCase))
+        || (c.StartsWith("eq ", StringComparison.Ordinal)
+            && string.Equals(c["eq ".Length..], name, StringComparison.OrdinalIgnoreCase)));
+
     // Inventory-aware apply plan for the user-initiated equip paths (Equip All /
     // @equip-<set>). Honors the set's picks the character actually carries (or
     // already wears), then fills any slot the set left empty — or named an item
@@ -475,7 +681,8 @@ public sealed class EquipmentManager
         IReadOnlyList<string> carried,
         IReadOnlyList<EquippedItem> worn,
         Func<string, EquipmentSlot?> resolveSlot,
-        Func<string, bool> canEquip)
+        Func<string, bool> canEquip,
+        ISet<string>? blockedNames = null)
     {
         var result = new List<string>();
         var wornNames = new HashSet<string>(
@@ -500,6 +707,8 @@ public sealed class EquipmentManager
             if (string.IsNullOrEmpty(name)) continue;
             if (wornNames.Contains(name)) { chosen.Add(name); continue; }
             if (chosen.Contains(name)) continue;
+            // Known-unwearable (blocked) pick — skip so we don't re-bonk on it.
+            if (blockedNames is not null && blockedNames.Contains(name)) continue;
             // Not carried ⇒ leave the slot for the fallback to fill from what we have.
             if (!carriedSet.Contains(name)) continue;
             result.Add($"{Verb(entry.Slot)} {name}");
@@ -512,6 +721,7 @@ public sealed class EquipmentManager
         {
             string name = StripStackCount(rawName.Trim());
             if (name.Length == 0 || chosen.Contains(name) || wornNames.Contains(name)) continue;
+            if (blockedNames is not null && blockedNames.Contains(name)) continue;
             if (resolveSlot(name) is not EquipmentSlot slot || IsVirtual(slot)) continue;
             EquipmentSlot family = FamilyOf(slot);
             if (used.GetValueOrDefault(family) >= Capacity(family)) continue;
@@ -521,7 +731,17 @@ public sealed class EquipmentManager
             Bump(used, family);
         }
 
-        return result;
+        // Free the paired finger / wrist slots BEFORE their new members go on — the
+        // same non-convergence guard the set-only path uses. This inventory-aware
+        // path otherwise emitted only wears, so swapping the SECOND ring / bracelet
+        // let the game's `wear` trade with the member the set keeps and never
+        // settled (report paradigm-20260825-103537). Only families actually gaining
+        // a member are pruned, so a loadout already in effect strips nothing.
+        var beingWorn = result
+            .Where(c => c.StartsWith("wear ", StringComparison.Ordinal))
+            .Select(c => c["wear ".Length..])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return ComposePairedSlotCommands(set, worn, beingWorn, result);
     }
 
     // The game lists a stack of identical items as "<count> <name>" (e.g.
@@ -598,39 +818,174 @@ public sealed class EquipmentManager
     private static bool IsVirtual(EquipmentSlot slot) =>
         slot is EquipmentSlot.AlternateWeapon or EquipmentSlot.AlternateOffHand;
 
-    // ----- paced send (UI plumbing — DispatcherTimer not pumped in tests) -
+    // ----- unwearable-slot blocks ----------------------------------------
 
-    private void StartPacedSend(IEnumerable<string> cmds)
+    // True when the (set, slot) is blocked — its item is skipped on apply.
+    public bool IsSlotBlocked(string setId, EquipmentSlot slot) =>
+        _blocked.ContainsKey((setId, slot));
+
+    // Read-only snapshot of every currently-blocked slot — for the bug report.
+    public IReadOnlyList<(string SetId, EquipmentSlot Slot, string ItemName, bool GameRefused)>
+        BlockedSlotsSnapshot() =>
+        _blocked.Select(kv =>
+            (kv.Key.SetId, kv.Key.Slot, kv.Value.Name, kv.Value.ServerConfirmed)).ToList();
+
+    // The blocked item names for a set, so the command builders can skip them.
+    private HashSet<string> BlockedNamesForSet(EquipmentSet set)
     {
-        StopTimer();
-        _pending.Clear();
-        foreach (string c in cmds) _pending.Enqueue(c);
-        if (_pending.Count == 0) return;
-        _isEquipping = true;
-        _applyTimer = new DispatcherTimer(ApplyStep, DispatcherPriority.Background,
-            (_, _) => SendNext());
-        _applyTimer.Start();
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<(string SetId, EquipmentSlot Slot), BlockInfo> kv in _blocked)
+            if (string.Equals(kv.Key.SetId, set.Id, StringComparison.Ordinal))
+                names.Add(kv.Value.Name);
+        return names;
     }
 
-    private void SendNext()
+    private void SetBlock((string SetId, EquipmentSlot Slot) key, string name,
+        bool serverConfirmed, bool announce)
     {
-        if (_pending.Count == 0)
+        if (_blocked.TryGetValue(key, out BlockInfo existing)
+            && string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase))
         {
-            FinishEquip();
+            // Already blocked for this item — only upgrade to server-confirmed.
+            if (serverConfirmed && !existing.ServerConfirmed)
+                _blocked[key] = existing with { ServerConfirmed = true };
             return;
         }
-        _wire.Send(_pending.Dequeue());
+        _blocked[key] = new BlockInfo(name, serverConfirmed);
+        _log?.Info(LogCategory,
+            $"slot {key.Slot} blocked — can't wear '{name}'{(serverConfirmed ? " (game refused)" : "")}");
+        BlocksChanged?.Invoke();
+        if (announce) SlotBlockedAnnounced?.Invoke(new EquipBlock(key.SetId, key.Slot, name));
     }
 
-    private void FinishEquip()
+    private bool RemoveBlock((string SetId, EquipmentSlot Slot) key)
     {
-        StopTimer();
+        if (!_blocked.Remove(key)) return false;
+        BlocksChanged?.Invoke();
+        return true;
+    }
+
+    // Clear a slot's block — the Equipment tab calls this when the user edits the
+    // slot's item ("adjust set and save to correct"). Clears both proactive and
+    // server-confirmed blocks; the user has addressed it.
+    public void ClearBlock(string setId, EquipmentSlot slot) => RemoveBlock((setId, slot));
+
+    // Drop every block for a set — used when a profile unloads / the block set
+    // must be rebuilt from scratch.
+    public void ResetBlocks()
+    {
+        if (_blocked.Count > 0) { _blocked.Clear(); BlocksChanged?.Invoke(); }
+        _pending.Clear();
+        _blocksSeeded = false;
+    }
+
+    // Re-evaluate every physical slot of the set against the live character's
+    // wearability (alignment / level / class). Blocks slots whose item the
+    // character currently can't wear, and clears PROACTIVE blocks whose item is
+    // wearable again (e.g. an alignment return) — a server-confirmed refusal
+    // block is sticky until the user edits the slot. announce surfaces newly
+    // blocked slots as a terminal notice. No-op without the restriction probe.
+    public void RefreshBlocksForSet(EquipmentSet set, bool announce = true)
+    {
+        if (_isEquipRestricted is null) return;
+        foreach (EquipmentSlotEntry e in set.Slots)
+        {
+            if (IsVirtual(e.Slot)) continue;
+            (string SetId, EquipmentSlot Slot) key = (set.Id, e.Slot);
+            string? name = e.ItemName?.Trim();
+            if (string.IsNullOrEmpty(name)) { RemoveBlock(key); continue; }
+            if (_isEquipRestricted(name))
+                SetBlock(key, name, serverConfirmed: false, announce: announce);
+            else if (_blocked.TryGetValue(key, out BlockInfo b) && !b.ServerConfirmed)
+                RemoveBlock(key);   // proactive block lifted; a refusal block stays
+        }
+    }
+
+    // Re-evaluate blocks across every configured set — wired to the live
+    // alignment refresh so a drift re-blocks (and a realignment clears the
+    // proactive ones) without needing a swap. The first pass after a profile
+    // load seeds silently; later passes announce new blocks.
+    public void ReevaluateAllBlocks()
+    {
+        bool announce = _blocksSeeded;
+        foreach (EquipmentSet set in _readEquipment().Sets)
+            RefreshBlocksForSet(set, announce);
+        _blocksSeeded = true;
+    }
+
+    // Record the wear/eq attempts a just-built apply is about to send, so an
+    // anonymous refusal line can be attributed back to the slot+item. Only the
+    // set's own picks are tracked (an inventory-fallback fill isn't a set slot).
+    private void RecordPending(EquipmentSet set, IReadOnlyList<string> cmds)
+    {
+        _pending.Clear();
+        _pendingStamp = DateTimeOffset.Now;
+        foreach (string c in cmds)
+        {
+            string? name =
+                c.StartsWith("wear ", StringComparison.Ordinal) ? c["wear ".Length..] :
+                c.StartsWith("eq ", StringComparison.Ordinal) ? c["eq ".Length..] : null;
+            if (name is null) continue;
+            EquipmentSlotEntry? entry = set.Slots.FirstOrDefault(s =>
+                !IsVirtual(s.Slot)
+                && string.Equals(s.ItemName?.Trim(), name, StringComparison.OrdinalIgnoreCase));
+            if (entry is null) continue;
+            _pending.Add(new PendingEquip(set.Id, entry.Slot, name));
+        }
+    }
+
+    private void ExpirePending()
+    {
+        if (_pending.Count > 0 && DateTimeOffset.Now - _pendingStamp > PendingWindow)
+            _pending.Clear();
+    }
+
+    // The game confirmed a wear ("You are now wearing X") — drop it from the
+    // pending attempts so a later refusal isn't misattributed to it.
+    public void NoteEquipSucceeded(string itemName)
+    {
+        ExpirePending();
+        string n = itemName.Trim();
+        _pending.RemoveAll(p => string.Equals(p.ItemName, n, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // The game refused an armor wear ("You may not wear that item!"). Attribute
+    // it to the oldest unresolved armor attempt (weapon attempts excluded) and
+    // block that slot — server-confirmed, sticky until the user edits it.
+    public void NoteWearRefused() => BlockOldestPending(weapon: false);
+
+    // The game refused a weapon wield ("You may not use that weapon." — the
+    // weapon EP-zap). Attribute it to the oldest unresolved weapon attempt.
+    public void NoteWeaponRefused() => BlockOldestPending(weapon: true);
+
+    private void BlockOldestPending(bool weapon)
+    {
+        ExpirePending();
+        int idx = _pending.FindIndex(p => (p.Slot == EquipmentSlot.Weapon) == weapon);
+        if (idx < 0) return;
+        PendingEquip p = _pending[idx];
+        _pending.RemoveAt(idx);
+        SetBlock((p.SetId, p.Slot), p.ItemName, serverConfirmed: true, announce: true);
+    }
+
+    // ----- gear-set send -------------------------------------------------
+
+    // Stream a gear-set delta's wear/rem commands to the wire back-to-back, no
+    // inter-command spacing. MajorMUD/Paradigm buffers typed-ahead input, so a
+    // full-loadout swap goes out as one burst for Mega-parity speed (the old paced
+    // DispatcherTimer stretched a ~13-command swap to over a second and felt laggy);
+    // TelnetClient serialises the outbound writes, so command order is preserved.
+    // IsApplyingSet is true only for this synchronous span, so the GearSwap movement
+    // gate asserts and clears around it — a concurrent loop step still holds until
+    // the swap's commands are out, then steps out already in the new loadout.
+    private void SendSet(IReadOnlyList<string> cmds)
+    {
+        if (cmds.Count == 0) return;
+        bool wasEquipping = _isEquipping;
+        _isEquipping = true;
+        if (!wasEquipping) ApplyingChanged?.Invoke(true);
+        foreach (string c in cmds) _wire.Send(c);
         _isEquipping = false;
-    }
-
-    private void StopTimer()
-    {
-        _applyTimer?.Stop();
-        _applyTimer = null;
+        if (!wasEquipping) ApplyingChanged?.Invoke(false);
     }
 }

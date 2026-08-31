@@ -26,10 +26,10 @@ public sealed class ToolbarSettingsTests
         "MovementStart",
         "MovementPause",
         "MovementStop",
+        "ToggleSprintMode",
         null,
         "OpenParty",
         "OpenBackscroll",
-        "SendExp",
         null,
         "ToggleAllAutoOff",
         "ToggleAutoCombat",
@@ -79,6 +79,9 @@ public sealed class ToolbarSettingsTests
         Assert.DoesNotContain(defaults, i => i.ActionId == "ActionGetAll");
         Assert.DoesNotContain(defaults, i => i.ActionId == "ActionDropAll");
         Assert.DoesNotContain(defaults, i => i.ActionId == "ToggleAutoTrain");
+        // EXP is a fire-once command, not a default button — kept in the
+        // catalogue so a user can still add it, just not on the stock toolbar.
+        Assert.DoesNotContain(defaults, i => i.ActionId == "SendExp");
     }
 
     [Fact]

@@ -167,6 +167,81 @@ public sealed class MovementFilterTests
         Assert.Equal(2, stashFires);
     }
 
+    // ----- ReplaceAll: the Modify-Avoid-Rooms dialog Save-commit path -----
+
+    [Fact]
+    public void ReplaceAll_SetsBothSets_AndPersistsToProfile()
+    {
+        (ProfileService profile, MovementFilter filter) = NewPair();
+        CharacterProfile draft = profile.LoadBlank();
+
+        filter.ReplaceAll(
+            avoided: new[] { new RoomKey(1, 5), new RoomKey(2, 9) },
+            stash:   new[] { new RoomKey(3, 7) });
+
+        Assert.True(filter.IsAvoided(new RoomKey(1, 5)));
+        Assert.True(filter.IsAvoided(new RoomKey(2, 9)));
+        Assert.True(filter.IsStash(new RoomKey(3, 7)));
+        Assert.Equal(2, draft.AvoidedRooms!.Count);
+        Assert.Single(draft.StashRooms!);
+    }
+
+    [Fact]
+    public void ReplaceAll_DropsEntriesNotInNewSets()
+    {
+        (ProfileService profile, MovementFilter filter) = NewPair();
+        profile.LoadBlank();
+        filter.MarkAvoided(new RoomKey(1, 1));
+        filter.MarkAvoided(new RoomKey(1, 2));
+        filter.MarkStash(new RoomKey(1, 3));
+
+        // Save a working copy that keeps only 1/1 avoided and drops the stash.
+        filter.ReplaceAll(avoided: new[] { new RoomKey(1, 1) }, stash: Array.Empty<RoomKey>());
+
+        Assert.True(filter.IsAvoided(new RoomKey(1, 1)));
+        Assert.False(filter.IsAvoided(new RoomKey(1, 2)));
+        Assert.Empty(filter.Stash);
+    }
+
+    [Fact]
+    public void ReplaceAll_MoveRoomBetweenSets()
+    {
+        (ProfileService profile, MovementFilter filter) = NewPair();
+        profile.LoadBlank();
+        filter.MarkAvoided(new RoomKey(4, 4));
+
+        // Editor removed the avoid row and added the same room as a stash.
+        filter.ReplaceAll(avoided: Array.Empty<RoomKey>(), stash: new[] { new RoomKey(4, 4) });
+
+        Assert.False(filter.IsAvoided(new RoomKey(4, 4)));
+        Assert.True(filter.IsStash(new RoomKey(4, 4)));
+    }
+
+    [Fact]
+    public void ReplaceAll_FiresBothChangedEvents()
+    {
+        (ProfileService profile, MovementFilter filter) = NewPair();
+        profile.LoadBlank();
+
+        int avoidedFires = 0, stashFires = 0;
+        filter.AvoidedChanged += () => avoidedFires++;
+        filter.StashChanged   += () => stashFires++;
+
+        filter.ReplaceAll(avoided: new[] { new RoomKey(1, 1) }, stash: new[] { new RoomKey(1, 2) });
+
+        Assert.Equal(1, avoidedFires);
+        Assert.Equal(1, stashFires);
+    }
+
+    [Fact]
+    public void ReplaceAll_NoProfile_IsNoOp()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.ReplaceAll(avoided: new[] { new RoomKey(1, 1) }, stash: Array.Empty<RoomKey>());
+        Assert.Empty(filter.Avoided);
+        Assert.Empty(filter.Stash);
+    }
+
     [Fact]
     public void ProfileSwap_RehydratesIntoFreshSet()
     {
@@ -325,6 +400,66 @@ public sealed class MovementFilterTests
         // Wrong class, but the exit has no class gate — must not block.
         filter.ClassNumberProvider = () => 1;
         Assert.False(filter.IsExitBlocked(GatedExit(0, 0)));
+    }
+
+    // ----- IsExitBlocked: (Alignment: X to Y) alignment-gate (report -144553) -----
+
+    // "(Alignment: Neutral to Fiend)" = numeric [0, 300] — the evil entrance.
+    private static RoomExit AlignmentGatedExit() =>
+        new(new RoomKey(1, 2), RoomExitHint.None, RawHint: null,
+            AlignmentGate: (0, 300));
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_NoProvider_DoesNotBlock()
+    {
+        (_, MovementFilter filter) = NewPair();
+        Assert.False(filter.IsExitBlocked(AlignmentGatedExit()));   // can't evaluate → don't gate
+    }
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_KnownExcludedMember_Blocks()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // A Good (-100) character can't enter a Neutral-to-Fiend [0,300] gate.
+        filter.PartyAlignmentsProvider = () => new int?[] { -100 };
+        Assert.True(filter.IsExitBlocked(AlignmentGatedExit()));
+    }
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_AllInside_Allows()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Neutral (0) and Fiend (300) both sit inside [0,300].
+        filter.PartyAlignmentsProvider = () => new int?[] { 0, 300 };
+        Assert.False(filter.IsExitBlocked(AlignmentGatedExit()));
+    }
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_WholeParty_BlocksOnTightestMember()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Leader Neutral (0, inside) but a follower Good (-100, outside) → the whole
+        // party is stopped at the tightest member.
+        filter.PartyAlignmentsProvider = () => new int?[] { 0, -100 };
+        Assert.True(filter.IsExitBlocked(AlignmentGatedExit()));
+    }
+
+    [Fact]
+    public void IsExitBlocked_AlignmentGate_UnknownMember_DoesNotBlock()
+    {
+        (_, MovementFilter filter) = NewPair();
+        // Unknown alignment (null) doesn't route around — the walker walks up to the
+        // gate and halts there instead of detouring on a guess.
+        filter.PartyAlignmentsProvider = () => new int?[] { null };
+        Assert.False(filter.IsExitBlocked(AlignmentGatedExit()));
+    }
+
+    [Fact]
+    public void DescribeExitBlock_AlignmentGate_NamesAlignment()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.PartyAlignmentsProvider = () => new int?[] { -100 };
+        Assert.Equal(ExitBlockReason.Alignment, filter.DescribeExitBlock(AlignmentGatedExit()));
     }
 
     // ----- IsExitBlocked: key-only door ------------------------------

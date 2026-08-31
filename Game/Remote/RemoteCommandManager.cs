@@ -76,6 +76,16 @@ public sealed class RemoteCommandManager : IDisposable
     // to 0..9.
     public int MaxSuicideLivesThreshold { get; set; } = 5;
 
+    // The local character's own name. Public channels (gangpath / gossip / auction /
+    // broadcast) echo the player's OWN line back tagged with their character name — never
+    // "You" — so the null / "You" self-echo guards below can't catch a self-echo on those
+    // channels. The engine listens on Gangpath, so without this a player's own gangpath'd
+    // @-command is processed as if a stranger sent it (and, lacking a self-grant, bounces
+    // a denial to the whole gang). Wired in AppServices to Party.LocalCharacterName; null
+    // until the name is known (pre-first-stat-parse), where the null/"You" guards still
+    // cover say / telepath.
+    public Func<string?>? SelfNameProvider { get; set; }
+
     // ----- Settings.Talk-driven knobs --------------------------------------
     // Pushed by TalkSectionViewModel.ApplyToServices on Apply / on profile
     // load. Defaults match the TalkSettings DTO defaults — anything not yet
@@ -286,6 +296,16 @@ public sealed class RemoteCommandManager : IDisposable
         if (entry.Speaker.Equals("You", StringComparison.OrdinalIgnoreCase)) return;
         if (string.IsNullOrEmpty(entry.Message)) return;
         if (entry.Message[0] != '@') return;             // Not an @-command.
+        // Public-channel self-echo: a gangpath (also gossip / auction / broadcast) echoes
+        // our OWN line back tagged with our character name, so it slipped past the null /
+        // "You" guards above. We never issue remote commands to ourselves, so skip it —
+        // otherwise our own @timer-sync / @party broadcast bounces a denial at the gang.
+        if (IsSelfEcho(entry.Speaker))
+        {
+            _log?.Log(LogSeverity.Debug, "RemoteCmd",
+                $"Skipping own {entry.Channel} echo of {entry.Message} (self).");
+            return;
+        }
 
         // Parse: command = first whitespace token (lower-cased for the
         // registry lookup); args = remaining tokens.
@@ -687,11 +707,12 @@ public sealed class RemoteCommandManager : IDisposable
     // the given-name strip is a no-op for the engine but the rule's worth stating
     // for any future callers.
     //
-    // Local (say) replies use the period say-precursor (`.<msg>`), not the `say`
-    // verb: on this realm the keyboard period is the say precursor (confirmed
-    // mechanic), and a command arriving on say must be answered back on say the
-    // same way the player would. Every @-command reply routes through here, so
-    // this one switch fixes the channel for all of them.
+    // Local (say) replies are DIRECTED at the sender with the `>` verb
+    // (`><name> <msg>`, confirmed mechanic): say is room-wide, so in a room with
+    // several players the `>name` prefix tells the specific player who used the
+    // @-command that the reply is for them. (The period say-precursor `.<msg>` is the
+    // UNDIRECTED say form; the `>` directed verb needs no precursor.) Every @-command
+    // reply routes through here, so this one switch fixes the channel for all of them.
     //
     // Reply payload is encapsulated in { } braces — every remote-command response
     // carries the curly-brace meta-line convention so the recipient's terminal
@@ -707,12 +728,22 @@ public sealed class RemoteCommandManager : IDisposable
         {
             RemoteChannel.Telepath => $"/{given} {payload}",
             RemoteChannel.Gangpath => $"bg {payload}",   // gang-channel speak verb is `bg`, not `gang`
-            RemoteChannel.Local    => $".{payload}",
+            RemoteChannel.Local    => $">{given} {payload}",   // directed say at the @-command's sender
             _                      => payload,
         };
         byte[] bytes = Encoding.Latin1.GetBytes(wire + "\r");
         LastSentForTests.Add(bytes);
         _wireSender?.Invoke(bytes);
+    }
+
+    // True when speaker is the local character (a public-channel self-echo). The gang
+    // echo carries a single-word given name, while our own name may be "Given Family", so
+    // compare on the given-name form — the same convention IsActivePartyMember uses.
+    private bool IsSelfEcho(string speaker)
+    {
+        string? self = SelfNameProvider?.Invoke();
+        if (string.IsNullOrEmpty(self)) return false;
+        return GivenName(self).Equals(GivenName(speaker), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GivenName(string name)

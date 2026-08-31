@@ -82,6 +82,14 @@ public sealed class MovementCoordinator
     // configured meditate trigger; clears when MA recovers past the target.
     public const string ManaRecoveryGate = "ManaRecovery";
 
+    // Asserted while a paced gear-set apply streams its `wear`/`rem` commands
+    // (EquipmentManager.ApplyingChanged). Holds every movement engine so the loop
+    // never steps out of a room mid-swap — the reported "finished resting, moved,
+    // then swapped to Default in the next room mid-combat" (paradigm-20260826-140341).
+    // Clears the instant the swap finishes, so the step-out lands already in the
+    // new set. Engine-wait tier — never touches the toolbar's user-pause face.
+    public const string GearSwapGate = "GearSwap";
+
     // Asserted for the WHOLE time the Auto-All kill switch is engaged: with Auto-All
     // off, no movement engine (walk / loop / auto-lair / a right-click Queue-walk-to)
     // may run — a start plans but holds here until Auto-All is restored, then auto-
@@ -102,6 +110,12 @@ public sealed class MovementCoordinator
     // engines collect it before the loop sneaks and steps on. Engine-wait tier —
     // never flips the toolbar Start/Pause/Stop; self-clears on the settle timer.
     public const string SearchGate = "Search";
+
+    // Asserted by GhSweepManager (Roomba Mode) while a get/drop dispatched at
+    // a gang-house circuit room is being searched or a transaction is outstanding, so the sweep's own loop
+    // doesn't step out mid-dispatch. Engine-wait tier — never flips the
+    // toolbar Start/Pause/Stop.
+    public const string GhSortGate = "GhSort";
 
     // Asserted by DeathRecoveryManager while the corpse-recovery loop is
     // running. Clears when recovery finishes.

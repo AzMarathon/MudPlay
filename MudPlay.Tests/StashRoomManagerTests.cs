@@ -9,10 +9,11 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // StashRoomManager on-entry stash dispatch driven by user-marked rooms from
-// CharacterProfile.StashRooms + the single raw KeepOnHandWealth floor on
-// CashSettings. The manager decomposes coin held above that copper-farthing
-// floor into lowest-denomination-first `hide N <coin>` commands, so the coins
-// left on hand are the fewest possible. Held amounts come from the authoritative
+// CharacterProfile.StashRooms. The manager offloads every coin denomination at or
+// below CashSettings.StashCoinCutoff (or all of them when it's Everything) into
+// lowest-denomination-first `hide N <coin>` commands, so the coins left on hand
+// are the fewest possible. The keep-on-hand floor is a BANKING rule (tested with
+// AutoDepositManager), not a stash rule. Held amounts come from the authoritative
 // InventorySnapshot (the `i`-seeded, delta-tracked holdings) — not a local
 // pickup tally, which would undercount the starting balance.
 public sealed class StashRoomManagerTests
@@ -92,26 +93,31 @@ public sealed class StashRoomManagerTests
     }
 
     [Fact]
-    public void Enter_MatchingRoom_KeepsConfiguredAmount()
+    public void Enter_OnlyStashUpTo_KeepsHigherDenominations()
     {
+        // "Only stash up to Gold" hides copper / silver / gold and keeps the higher
+        // platinum / runic in hand.
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
-        h.CashSettings.KeepOnHandWealth = 10_000; // 100 gold worth of copper
-        h.Snapshot = Coins(gold: 500);
+        h.CashSettings.StashCoinCutoff = StashCoinCutoff.Gold;
+        h.Snapshot = Coins(silver: 30, gold: 40, platinum: 5, runic: 2);
 
         h.Stash.ExecuteStash(new RoomKey(1, 42));
 
-        Assert.Single(h.Sent);
-        Assert.Equal("hide 400 gold crown", h.SentLines().First());
+        List<string> lines = h.SentLines().ToList();
+        Assert.Equal(2, lines.Count);   // platinum + runic left in hand
+        Assert.Equal("hide 30 silver noble", lines[0]);
+        Assert.Equal("hide 40 gold crown", lines[1]);
     }
 
     [Fact]
-    public void Enter_HeldAtOrBelowKeep_NoDispatch()
+    public void Enter_OnlyStashUpTo_AllHeldAboveFilter_NoDispatch()
     {
+        // Holding only platinum with "up to Gold" ⇒ nothing eligible, no coin hide.
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
-        h.CashSettings.KeepOnHandWealth = 10_000; // 100 gold worth of copper
-        h.Snapshot = Coins(gold: 80);
+        h.CashSettings.StashCoinCutoff = StashCoinCutoff.Gold;
+        h.Snapshot = Coins(platinum: 5);
 
         h.Stash.ExecuteStash(new RoomKey(1, 42));
 
@@ -133,13 +139,10 @@ public sealed class StashRoomManagerTests
     [Fact]
     public void Enter_MultipleCurrencies_DispatchesEach()
     {
-        // Held = 50 silver (500) + 250 gold (25,000) + 12 platinum (120,000) =
-        // 145,500 copper. Keep 100,000 → 45,500 excess. Greedy lowest-first sheds
-        // the cheap coins to leave the fewest on hand: 50 silver (500) leaves
-        // 45,000 → 250 gold (25,000) leaves 20,000 → 2 platinum (20,000) leaves 0.
+        // No coin filter ⇒ every held denomination is offloaded whole, one
+        // `hide N <coin>` apiece, lowest denomination first.
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
-        h.CashSettings.KeepOnHandWealth = 100_000;
         h.Snapshot = Coins(silver: 50, gold: 250, platinum: 12);
 
         h.Stash.ExecuteStash(new RoomKey(1, 42));
@@ -148,7 +151,7 @@ public sealed class StashRoomManagerTests
         List<string> lines = h.SentLines().ToList();
         Assert.Equal("hide 50 silver noble", lines[0]);
         Assert.Equal("hide 250 gold crown", lines[1]);
-        Assert.Equal("hide 2 platinum piece", lines[2]);
+        Assert.Equal("hide 12 platinum piece", lines[2]);
         Assert.Equal(3, h.Executed[0].Currencies.Count);
     }
 
@@ -173,34 +176,39 @@ public sealed class StashRoomManagerTests
     }
 
     [Fact]
-    public void RawKeep_MixedCurrency_KeepsFloor()
+    public void OnlyStashUpTo_Platinum_KeepsRunic()
     {
-        // The reported scenario: keep 100,000 copper while holding mixed coin.
-        // Held = 3 platinum (30,000) + 40 gold (4,000) + 900 silver (9,000) +
-        // 8,000 copper = 51,000 — all below the floor, so nothing is stashed.
+        // "Up to Platinum" stashes copper → platinum whole and keeps runic in hand.
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
-        h.CashSettings.KeepOnHandWealth = 100_000;
-        h.Snapshot = Coins(copper: 8_000, silver: 900, gold: 40, platinum: 3);
+        h.CashSettings.StashCoinCutoff = StashCoinCutoff.Platinum;
+        h.Snapshot = Coins(copper: 8_000, silver: 900, gold: 40, platinum: 3, runic: 2);
 
-        h.Stash.ExecuteStash(new RoomKey(1, 42));
-
-        Assert.Empty(h.Sent);
-
-        // Now add platinum to clear the floor: held = 120,000 + 4,000 + 9,000 +
-        // 8,000 = 141,000. Keep 100,000 → 41,000 excess. Lowest-first sheds the
-        // cheap coins whole: 8,000 copper (8,000) leaves 33,000 → 900 silver
-        // (9,000) leaves 24,000 → 40 gold (4,000) leaves 20,000 → 2 platinum
-        // (20,000) leaves 0, keeping the remaining platinum on hand.
-        h.Snapshot = Coins(copper: 8_000, silver: 900, gold: 40, platinum: 12);
         h.Stash.ExecuteStash(new RoomKey(1, 42));
 
         List<string> lines = h.SentLines().ToList();
-        Assert.Equal(4, lines.Count);
+        Assert.Equal(4, lines.Count);   // runic kept
         Assert.Equal("hide 8000 copper farthing", lines[0]);
         Assert.Equal("hide 900 silver noble", lines[1]);
         Assert.Equal("hide 40 gold crown", lines[2]);
-        Assert.Equal("hide 2 platinum piece", lines[3]);
+        Assert.Equal("hide 3 platinum piece", lines[3]);
+    }
+
+    [Fact]
+    public void StashCoinCutoff_Nothing_StashesItemsButNoCoin()
+    {
+        // "Nothing" hides flagged items but leaves every coin in hand.
+        using Harness h = new();
+        h.MarkRoomAsStash(1, 42);
+        h.CashSettings.StashCoinCutoff = StashCoinCutoff.Nothing;
+        h.Snapshot = Coins(gold: 500, carried: new[] { "a torch" });
+        h.AutoStashItems.Add("a torch");
+
+        h.Stash.ExecuteStash(new RoomKey(1, 42));
+
+        Assert.Equal(new[] { "hide a torch" }, h.SentLines().ToList());   // item only, no coin
+        Assert.Empty(h.Executed[0].Currencies);
+        Assert.Equal(new[] { "a torch" }, h.Executed[0].Items);
     }
 
     [Fact]
@@ -227,20 +235,18 @@ public sealed class StashRoomManagerTests
     }
 
     [Fact]
-    public void SecondVisit_AfterHoldingsDrop_NoReDispatch()
+    public void SecondVisit_AfterHoldingsStashed_NoReDispatch()
     {
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
-        h.CashSettings.KeepOnHandWealth = 10_000; // 100 gold worth of copper
         h.Snapshot = Coins(gold: 500);
 
         h.Stash.ExecuteStash(new RoomKey(1, 42));
         Assert.Single(h.Sent);
 
-        // After the server confirms the hide, the InventoryManager
-        // snapshot drops to the kept floor — a re-entry finds nothing
-        // above keep and stays quiet.
-        h.Snapshot = Coins(gold: 100);
+        // After the server confirms the hide, the InventoryManager snapshot drops
+        // to empty — a re-entry finds no coin to stash and stays quiet.
+        h.Snapshot = Coins();
         h.Stash.ExecuteStash(new RoomKey(1, 42));
         Assert.Single(h.Sent);
     }
@@ -279,7 +285,6 @@ public sealed class StashRoomManagerTests
     {
         using Harness h = new();
         h.MarkRoomAsStash(1, 42);
-        h.CashSettings.KeepOnHandWealth = 10_000; // 100 gold worth of copper
         h.Snapshot = Coins(gold: 500, carried: new[] { "a torch", "a rusty dagger" });
         h.AutoStashItems.Add("a torch");
         h.AutoStashItems.Add("a rusty dagger");
@@ -287,7 +292,7 @@ public sealed class StashRoomManagerTests
         h.Stash.ExecuteStash(new RoomKey(1, 42));
 
         List<string> lines = h.SentLines().ToList();
-        Assert.Contains("hide 400 gold crown", lines);
+        Assert.Contains("hide 500 gold crown", lines);
         Assert.Contains("hide a torch", lines);
         Assert.Contains("hide a rusty dagger", lines);
         Assert.Single(h.Executed[0].Currencies);

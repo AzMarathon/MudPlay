@@ -110,6 +110,8 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _monsterProtectSub;
     private readonly IDisposable _bsResolveHitsSub;
     private readonly IDisposable _bsResolveMissesSub;
+    private readonly IDisposable _attackConfirmHitsSub;
+    private readonly IDisposable _attackConfirmMissesSub;
 
     // Minimum gap between safety-net `l` refreshes. Keeps a flurry of miss/hit
     // lines from spamming the server.
@@ -221,12 +223,25 @@ public sealed partial class CombatManager : IDisposable
     // paradigm-20260815-201731 / -202241, confirmed high-mana so it's the cap-switch, not
     // the mana fallback). Instead delay the switch dispatch a short REAL-TIME window so
     // the adjacent kill packet lands and the exp-inferred drop nulls the target first;
-    // the delayed dispatch then re-validates and skips a dead target. The window sits far
-    // under a ~5s combat round, so a live-target switch still lands the same round (the
-    // server swaps next round) — the cap-preempt (report 061340) is preserved. Injected
-    // one-shot scheduler; null in tests that don't opt in (falls back to _post).
-    private static readonly TimeSpan SwitchDispatchDelay = TimeSpan.FromMilliseconds(750);
+    // the delayed dispatch then re-validates and skips a dead target. 750ms was the
+    // original window, chosen as "far under" a 5s round — but a capped multi-projectile
+    // attack spell (e.g. a priest's disr) resolves its own cast in under 2s, so the
+    // 750ms wait was itself eating most of the remaining reaction time before the
+    // server locked in one more round of the capped spell (MaxCasts=1 still firing
+    // twice; report paradigm-20260822-003106). Bridging one adjacent network packet
+    // only needs on the order of a round-trip, not half a second, so the window is cut
+    // to 200ms — still enough for the trailing kill packet to land and re-validate away,
+    // while leaving far more of the round for the switch to actually beat the server's
+    // next auto-repeat. Injected one-shot scheduler; null in tests that don't opt in
+    // (falls back to _post).
+    private static readonly TimeSpan SwitchDispatchDelay = TimeSpan.FromMilliseconds(200);
     private Action<TimeSpan, Action>? _scheduleSwitchDispatch;
+
+    // Starts TickEngine's timer fallback when a combat-spell engage is locally
+    // blocked before any attack reaches the server. Optional injection keeps the
+    // combat layer UI/timer-free; production wires TickEngine.EnsureCombatTickAnchor.
+    // Once a real combat line has anchored the cycle, the callback is a no-op.
+    private Action? _ensureCombatTickAnchor;
 
     // Backstab flee-on-failure action, bound in AppServices to
     // HealthManager.RunFromBackstabFailure. null until wired; even when wired it
@@ -282,10 +297,50 @@ public sealed partial class CombatManager : IDisposable
     private static readonly TimeSpan AlternationAdvanceMinGap = TimeSpan.FromSeconds(4);
 
     // Real-time stamp of the last attack-spell MaxCasts tally in the spell heartbeat,
-    // gated by AttackTallyMinGap. Reset to MinValue wherever the per-target cascade
-    // resets (alongside _lastAlternationAdvanceAt) so a fresh fight's first cast round
-    // always tallies rather than being blocked by a stale stamp.
+    // gated by AttackTallyMinGap. LEGACY FALLBACK — only used when ReadRoundCount is
+    // unwired (tests that don't opt in). Reset to MinValue wherever the per-target
+    // cascade resets (alongside _lastAlternationAdvanceAt).
     private DateTimeOffset _lastAttackTallyAt = DateTimeOffset.MinValue;
+
+    // Robust round-count tally. When wired, MaxCasts counts one cast per REAL combat
+    // round instead of the fragile AttackTallyMinGap wall-clock on the damage-line
+    // heartbeat — the heartbeat trips several times a round (our multi-hit + the mob's
+    // swing + a stale interval), and no single wall-clock threshold separates a genuine
+    // round tick from a premature one: reports paradigm-20260819-120938 (premature
+    // tally → capped before lbol fired) vs -055820 (genuine fast tick rejected →
+    // tallied a round late) are that exact tension. One round = one tally.
+    // Set to the current round on engage so the first tally waits for the next round
+    // CLOSE; unwired leaves it -1 and the legacy wall-clock path runs.
+    //
+    // Wired (AppServices) to ConfirmedAttackCastCount, NOT RoundDamageTracker's own
+    // RoundCount — that tracker's 5s timer-driven window is sized for DPS/session
+    // stats, not for this. A fast multi-projectile caster can complete more than one
+    // real cast inside a single RoundDamageTracker window (its "first hit" anchor
+    // only starts counting once combat produces a damage line, so a slow-opening
+    // fight's window can span 8-10s+), silently under-counting MaxCasts by exactly
+    // the number of casts that landed inside one window (report paradigm-20260822-003106:
+    // MaxCasts=1 still cast twice, on a fight RoundDamageTracker measured as one
+    // 10s round). ConfirmedAttackCastCount instead increments directly off each
+    // observed cast-confirmation line, so it can't bundle two real casts into one tally.
+    internal Func<int>? ReadRoundCount { get; set; }
+    private int _lastTalliedRound = -1;
+
+    // How many real single-target attack-spell casts OnAttackCastConfirmed has
+    // observed landing this session — the precise signal ReadRoundCount is wired to
+    // (see its comment). Monotonic, like RoundDamageTracker.RoundCount; callers
+    // baseline against it via _lastTalliedRound, never read it as a target-scoped
+    // count.
+    internal int ConfirmedAttackCastCount { get; private set; }
+
+    // Real-time stamp of the last OnAttackCastConfirmed increment, for the
+    // multi-projectile grouping window (ConfirmedCastGroupWindow) — a spell that
+    // fires more than one damage line per cast (many single-target attack spells do)
+    // must count as ONE cast, not one per line. 1.2s comfortably covers the
+    // sub-second spacing observed between one cast's own projectiles while staying
+    // well under the shortest real round-to-round gap.
+    private DateTimeOffset _lastConfirmedAttackCastAt = DateTimeOffset.MinValue;
+    private string? _lastConfirmedAttackCastTarget;
+    private static readonly TimeSpan ConfirmedCastGroupWindow = TimeSpan.FromMilliseconds(1200);
 
     // Minimum real time between two MaxCasts tallies — the SAME round-spacing guard
     // AlternationAdvanceMinGap applies to the phase advance, for the same reason: the
@@ -318,6 +373,12 @@ public sealed partial class CombatManager : IDisposable
     // short-circuiting on the stale _currentTarget ("server still swinging").
     // Cleared the moment we send any attack or the server reports Engaged.
     private bool _combatOff;
+
+    // CastingDirector/diagnostics view of _combatOff — stuck true here with a live
+    // CastingSpellTarget is the signature of report paradigm-20260824-215802: an
+    // engage whose attack cast got blocked (round already spent) left OnCombatTick's
+    // spell-mode heartbeat permanently gated, so nothing ever retried the attack.
+    public bool CombatOff => _combatOff;
 
     // Timestamp of the last interrupt-resume (see TryResumeEngage) — paces
     // re-engages to one per round so a non-sustaining attack (KAI pummel, which
@@ -407,6 +468,18 @@ public sealed partial class CombatManager : IDisposable
     // CastingDirector's view of _spellAttackOwed — the round belongs to the
     // pending attack spell, not another survival cast.
     public bool IsSpellAttackOwed => _spellAttackOwed;
+
+    // A pre-attack DEBUFF fired the combat attack immediately this round
+    // (TryPreAttackInBetween → DeferPostDebuffAttack) instead of deferring it to the
+    // debuff's *Combat Off*. Every *Combat Off* carrying THIS between-round stamp must
+    // then be barred from the resume paths, or the attack fires a second time (the
+    // debuff and the attack are independent slots, report paradigm-20260825-103417).
+    // Keyed to the stamp, not a one-shot flag, because casting the attack between
+    // rounds can itself drop a quick second Off inside CastInterruptResumeWindow — a
+    // bool would only catch the first. A later genuine between-round cast re-stamps
+    // _betweenRoundCastAt, so its Off no longer matches and resumes normally; reset to
+    // MinValue on any target/round reset so a stale stamp can't bar a legit resume.
+    private DateTimeOffset _suppressResumeForBetweenRoundStamp = DateTimeOffset.MinValue;
 
     // When a monster death was last detected this burst (stamped by
     // NoteMonsterDied / NoteUnattributedDeath). The between-round-cast resume
@@ -614,6 +687,15 @@ public sealed partial class CombatManager : IDisposable
         // so its breadth (it also matches self-emotes) is harmless.
         _bsResolveHitsSub   = router.Subscribe(KnownPatterns.UserHits,   OnBackstabResolutionLine);
         _bsResolveMissesSub = router.Subscribe(KnownPatterns.UserMisses, OnBackstabResolutionLine);
+
+        // High tieBreak so this runs ahead of TickEngine's own UserHits subscription
+        // (default 0) — ConfirmedAttackCastCount must already reflect a landed cast
+        // by the time that same line's cascade reaches OnCombatTick's re-decide. Both
+        // hits AND misses count — MaxCasts caps cast ATTEMPTS (what the server auto-
+        // repeats each round), not just successful hits, so a spell that keeps
+        // whiffing must still hit its cap instead of casting forever unpunished.
+        _attackConfirmHitsSub   = router.Subscribe(KnownPatterns.UserHits,   OnAttackCastConfirmed, tieBreak: 50);
+        _attackConfirmMissesSub = router.Subscribe(KnownPatterns.UserMisses, OnAttackCastConfirmed);
     }
 
     // Bind the wire sender — typically the TelnetClient.SendAsync wrapper that
@@ -630,6 +712,15 @@ public sealed partial class CombatManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(now);
         _now = now;
+    }
+
+    // Wire the recovery anchor for a blocked initial combat-spell dispatch. The
+    // next projected combat round then drives OnCombatTick even in a fresh session
+    // where no hit/miss line has seeded TickEngine yet.
+    public void SetCombatTickAnchor(Action ensureAnchor)
+    {
+        ArgumentNullException.ThrowIfNull(ensureAnchor);
+        _ensureCombatTickAnchor = ensureAnchor;
     }
 
     // Wire the dark-room probe (RoomTracker.IsInDarkRoom). With it set, the CR
@@ -697,7 +788,16 @@ public sealed partial class CombatManager : IDisposable
         // Passive neutrals the user hand-engaged (turned hostile), which the engine is
         // now finishing like enemies. A "why isn't it fighting the neutral I attacked?"
         // report needs to see whether the instance actually got marked.
-        IReadOnlyList<string> UserEngagedInstances);
+        IReadOnlyList<string> UserEngagedInstances,
+        // The attack-spell cascade's own latched state — surfaced separately from
+        // CurrentTarget/AnnouncedSpell because these two can legitimately go stale
+        // relative to it (report paradigm-20260824-012300: a spellTarget on a
+        // monster long gone, with IsSpellAttackOwed stuck true, silently blocked
+        // every automatic heal/cure/bless). A report showing a CastingSpellTarget
+        // that doesn't match CurrentTarget, or SpellAttackOwed=true with no live
+        // fight, is this bug re-occurring.
+        string? CastingSpellTarget,
+        bool SpellAttackOwed);
 
     // UI-thread only (router handlers + the capture both run there), so no lock.
     public DebugState Snapshot() => new(
@@ -705,7 +805,8 @@ public sealed partial class CombatManager : IDisposable
         _awaitingBackstabResolution, _pendingBackstabSpecies,
         _guardBlockedTarget, _alternationRound,
         _lastCastAction?.ToString(), _announcedSpellCode,
-        _userEngagedInstances.ToArray());
+        _userEngagedInstances.ToArray(),
+        _castingSpellTarget, _spellAttackOwed);
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
     // holds any stealth that opens a backstab — sneaking OR (optimistically) hidden
@@ -992,27 +1093,29 @@ public sealed partial class CombatManager : IDisposable
             _guardBlockedTarget = null;
         }
 
-        // Combat-off override for stealth runners. Normally combat-off
-        // means we don't engage at all. But a stealth character sprinting
-        // a walk-to route (AutoSneak on, combat off) that hits a room with
-        // a SeeHidden monster can't re-sneak there — and running onward
-        // would drag/stack monsters across rooms, lethal when solo.
-        // CombatStateTracker owns the decision + latch (and holds the
-        // walker gate so we actually stop); when it has force-clear
-        // latched, we engage anyway and bypass the Min/Max gate to clear
-        // EVERYTHING so the route can resume sneaking.
-        bool seeHiddenOverride = false;
-        if (!_isEnabled())
+        // See-hidden force-clear override for stealth runners — honoured with
+        // auto-attack ON or OFF. A stealth character sprinting a walk-to route
+        // (AutoSneak on) that hits a room with a SeeHidden monster can't re-sneak
+        // there, and running onward would drag/stack monsters across rooms (lethal
+        // solo). CombatStateTracker owns the decision + latch (and holds the walker
+        // gate so we actually stop); when it's force-clear latched we bypass the
+        // Min/Max gate below to clear EVERYTHING so the route can resume sneaking.
+        // With combat OFF the latch additionally makes us engage despite being
+        // disabled; with combat ON we'd engage anyway, and the latch's job is only
+        // the Min/Max bypass.
+        bool seeHiddenOverride = _seeHiddenClearActive?.Invoke() == true;
+        if (!_isEnabled() && !seeHiddenOverride)
         {
-            if (_seeHiddenClearActive?.Invoke() == true)
-            {
-                seeHiddenOverride = true;
-            }
-            else
-            {
-                _currentTarget = null;
-                return;
-            }
+            _currentTarget = null;
+            // AutoCombat going off mid-fight must drop the attack-spell cascade
+            // too, not just the target — CastingDirector's IsSpellAttackOwed gate
+            // (armed by NoteBetweenRoundCast while _castingSpellTarget is live)
+            // otherwise survives the toggle and silently blocks every automatic
+            // heal/cure/bless until something else happens to clear it (report
+            // paradigm-20260824-012300: a stale spellTarget on a monster long
+            // gone suppressed grhe for the rest of the session).
+            ClearAttackSpellCascadeState();
+            return;
         }
 
         // Score every Monster entity once. We need BOTH names:
@@ -1422,18 +1525,7 @@ public sealed partial class CombatManager : IDisposable
         _speciesByNumber.Clear();
         _cannotAttackAnnounced.Clear();
         ClearBackstabResolution();
-
-        // Reset the combat-spell room economy — per-room debuff-once /
-        // cast-cap / multi-attack counters + the damage-immunity map all
-        // start fresh next room.
-        _castingSpellTarget = null;
-        _lastCastAction = null;
-        _alternationRound = 0;
-        _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
-        _lastAttackTallyAt = DateTimeOffset.MinValue;
-        _spellAttackOwed = false;
-        _attackSpellImmuneSpecies.Clear();
-        _spellChooser.ResetForNewRoom();
+        ClearAttackSpellCascadeState();
 
         // Revert an alt-weapon swap so the next fight opens on the normal
         // weapon — but skip it when backstab is active, since the pre-move
@@ -1444,6 +1536,75 @@ public sealed partial class CombatManager : IDisposable
         if (!backstabActive && _usingAlternateWeapon)
             _swapWeapon?.Invoke(settings.NormalWeapon, settings.NormalOffHand, false);
         _usingAlternateWeapon = false;
+    }
+
+    // Reset the attack-spell cascade's per-target/per-room economy — the
+    // announced spell, the round-owed latch CastingDirector gates every
+    // survival cast on (IsSpellAttackOwed), the alternation/tally clocks, the
+    // observed-immunity set, and the chooser's own cast-cap counters. Shared by
+    // OnRoomCleared (a genuine end-of-fight), the AutoCombat-disabled early
+    // return (toggling combat off must not leave the round latched to a target
+    // that's no longer being fought), and OnPlayerDeath (the corpse/respawn
+    // room has nothing to do with whatever spell was mid-flight). Report
+    // paradigm-20260824-012300: a stale spellTarget on a monster long gone
+    // left IsSpellAttackOwed permanently true, silently blocking every
+    // automatic heal/cure/bless for the rest of the session.
+    private void ClearAttackSpellCascadeState()
+    {
+        _castingSpellTarget = null;
+        _lastCastAction = null;
+        _alternationRound = 0;
+        _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
+        _lastAttackTallyAt = DateTimeOffset.MinValue;
+        _spellAttackOwed = false;
+        // Drop a pending pre-attack-debuff suppress: if the fight ended (room clear,
+        // combat off, death) before the debuff's *Combat Off* arrived, a stale stamp
+        // could bar the first legit resume in the NEXT fight (unlikely — a new cast
+        // re-stamps _betweenRoundCastAt — but cheap insurance).
+        _suppressResumeForBetweenRoundStamp = DateTimeOffset.MinValue;
+        _attackSpellImmuneSpecies.Clear();
+        _spellChooser.ResetForNewRoom();
+    }
+
+    // Player death: the corpse room and whatever comes after (recovery walk,
+    // respawn) share nothing with the fight that just ended. Clears the same
+    // attack-spell cascade state OnRoomCleared does, plus the current target —
+    // OnRoomCleared alone isn't reached here since the room the fight was IN
+    // doesn't necessarily go through its own clear path on a death mid-fight.
+    // Wired to RoomTracker.PlayerDeathObserved in AppServices, alongside the
+    // existing Conditions.ClearAll("death") wire.
+    public void OnPlayerDeath()
+    {
+        _currentTarget = null;
+        ClearAttackSpellCascadeState();
+    }
+
+    // A disconnect/reconnect invalidates any mid-round combat state. The
+    // CombatGate correctly re-detects a hostile fresh on room-entry after
+    // reconnect, but a stale _currentTarget / _castingSpellTarget surviving the
+    // drop makes the resume logic think an attack spell is already in flight,
+    // waiting on a *Combat Off* that was lost along with the connection — the
+    // resume path only fires within CastInterruptResumeWindow of the interrupted
+    // cast, so an Off that never arrives means the round-owed latch
+    // (IsSpellAttackOwed) never clears and the character never resumes
+    // attacking, even though the monster (still fighting server-side through the
+    // link-death) keeps attacking back (report paradigm-20260827-203548; same
+    // failure shape as paradigm-20260824-012300's stale-spellTarget lockup,
+    // different trigger). Wired to the disconnect handler in
+    // MainWindowViewModel alongside CastDirector's buff-timer pause and
+    // Conditions.ClearAll("disconnect") — everything else about the fight is
+    // gone the instant the wire drops (the server has moved the round on
+    // without us by the time we're back), so the next room-entry engagement
+    // starts clean and re-casts rather than waiting on an event that can no
+    // longer arrive.
+    public void OnDisconnected()
+    {
+        if (_currentTarget is not null || _spellAttackOwed)
+            _log?.Combat(LogCategory,
+                $"disconnect cleared stale combat state — target={_currentTarget ?? "(none)"}, "
+                + $"spellTarget={_castingSpellTarget ?? "(none)"}, spellAttackOwed={_spellAttackOwed}");
+        _currentTarget = null;
+        ClearAttackSpellCascadeState();
     }
 
     // Pre-move backstab prep — invoked from the walker / loop-runner pre-move
@@ -1468,6 +1629,23 @@ public sealed partial class CombatManager : IDisposable
         _prepBackstabArmor?.Invoke();
         _usingAlternateWeapon = false;
     }
+
+    // Pre-move hook: reset the chooser's per-room cast economy before we step into
+    // the next room. The AoE debuff / multi-attack caps count PER ROOM, and the AoE
+    // debuff tags each mob's RawName so it fires once per room, re-firing only for a
+    // later NEW arrival. RawNames repeat across a same-species hunt loop (every room
+    // is "ironshell crab, scorpion crab, …"), so a room's tags would otherwise carry
+    // into the next room and read the fresh crabs as "already debuffed" — the
+    // once-per-room AoE silently skipped for the rest of the loop (report
+    // paradigm-20260827-082106). The room-clear reset (OnRoomCleared) only fires on
+    // an OBSERVED empty room, which a back-to-back populated loop never produces: the
+    // new room's "Also here:" parses BEFORE the move confirms, so the classifier
+    // emits no empty observation between rooms and the cap bleeds. Resetting here —
+    // on the walker / loop-runner pre-move hook, which fires before the new room
+    // displays — lands ahead of the next room's opener, so each room fires its AoE
+    // debuff exactly once with no double-fire. Fires for every mover (backstab or
+    // not), so unlike PrepBackstabForMove it is not gated on DoBackstab.
+    public void NotePreMove() => _spellChooser.ResetForNewRoom();
 
     // Re-arm the surprise round for a fresh hide established in the current room —
     // the stationary hidden opener (a monster walks into a room the character is
@@ -2073,6 +2251,59 @@ public sealed partial class CombatManager : IDisposable
         }
     }
 
+    // Increments ConfirmedAttackCastCount once per REAL single-target attack/
+    // alternate/drain-spell cast landing (or missing) against the current target —
+    // the precise signal ReadRoundCount now runs on (see its declaration comment).
+    // Gated on _castingSpellTarget: that field is only set while the round's action
+    // is our announced single-target spell (a weapon swing clears it on send), so any
+    // qualifying combat-result line reaching here while it's set is that spell's own
+    // result, never a swing. The "You " prefix and target-name check mirror
+    // OnBackstabResolutionLine's filtering — both UserHits and UserMisses also fire
+    // for party members' actions and (UserMisses) self-emotes. Consecutive lines
+    // inside ConfirmedCastGroupWindow are one cast's own multi-projectile results,
+    // not a second cast — only the group's first line increments. The grouping also
+    // requires the SAME target: a kill that immediately re-engages a fresh mob within
+    // the window must still count that mob's opening cast, not fold it into the
+    // corpse's tally.
+    private void OnAttackCastConfirmed(MatchResult match)
+    {
+        if (_castingSpellTarget is not { } target) return;
+
+        string text = match.Text;
+        if (!text.StartsWith("You ", StringComparison.Ordinal)) return;
+        if (text.IndexOf(target, StringComparison.OrdinalIgnoreCase) < 0) return;
+
+        DateTimeOffset now = _now();
+        bool grouped = now - _lastConfirmedAttackCastAt < ConfirmedCastGroupWindow
+            && string.Equals(_lastConfirmedAttackCastTarget, target, StringComparison.OrdinalIgnoreCase);
+        _lastConfirmedAttackCastAt = now;
+        _lastConfirmedAttackCastTarget = target;
+        if (grouped)
+        {
+            _log?.Combat(LogCategory,
+                $"attack-cast projectile grouped spell={_announcedSpellCode ?? "?"} "
+                + $"target='{target}' confirmedCount={ConfirmedAttackCastCount}");
+            return;
+        }
+
+        ConfirmedAttackCastCount++;
+        _log?.Combat(LogCategory,
+            $"attack-cast confirmed spell={_announcedSpellCode ?? "?"} target='{target}' "
+            + $"confirmedCount={ConfirmedAttackCastCount}");
+
+        // Do not wait for TickEngine's next CombatTickElapsed to consume this
+        // confirmation. A mob hit/miss commonly opens the server's round burst and
+        // fires that heartbeat BEFORE our spell-result lines arrive; TickEngine then
+        // debounces the immediately-following projectile lines. Waiting for another
+        // heartbeat therefore postpones a MaxCasts=1 switch until the NEXT round,
+        // after the server has already auto-repeated the capped spell. The Spells
+        // partial applies the newly-observed cast directly to the existing chooser
+        // tally and deferred-switch path. Its ReadRoundCount gate makes this active
+        // only when the configured count source actually advanced (production wires
+        // that source to ConfirmedAttackCastCount).
+        ApplyConfirmedAttackCastToCap();
+    }
+
     // Backstab surprise-round resolver. The opener swings exactly once; the first
     // of OUR combat-result lines naming the target settles the outcome:
     //   * carries "surprise" (e.g. "You surprise punch orc rogue for 30 damage!")
@@ -2130,14 +2361,29 @@ public sealed partial class CombatManager : IDisposable
         if (_wireSender is null) return;
         if (_currentTarget is null) return;
 
+        string gone = _currentTarget;
         _log?.Combat(LogCategory,
-            $"target-not-here — dropping target={_currentTarget} + refreshing room");
+            $"target-not-here — dropping target={gone} + refreshing room");
         _currentTarget = null;
         // The server says the named target isn't here — a guarded priority we were
         // chasing is genuinely gone, so end the redirect chase (breaks the retry
         // loop if a guard-retry "aa <priority>" was what drew this line).
         _guardBlockedTarget = null;
         ClearBackstabResolution();
+
+        // In a DARK room TrySendRoomRefresh is a no-op (a bare CR returns no "Also
+        // here:" line to rebuild the roster), so the named-gone target would linger in
+        // the classifier roster and every re-pick would re-choose it → "You don't see
+        // X here!" forever, while a DIFFERENT attacker already in the room never gets
+        // engaged (report paradigm-20260827-133337: sat taking hits from a zombie cat,
+        // only self-healing). Drop the phantom directly so the classifier re-fires an
+        // observation and re-picks the present attacker. Lit rooms still use the CR
+        // re-display, which rebuilds the roster and masks this.
+        if (_isInDarkRoom?.Invoke() == true)
+        {
+            _classifier.RemoveDepartedEntity(gone);
+            return;
+        }
 
         // Force a refresh (debounce shared with OnCombatLine so a
         // simultaneous miss-line + target-not-here doesn't double-send).
@@ -2162,8 +2408,9 @@ public sealed partial class CombatManager : IDisposable
         if (_wireSender is null) return;
         if (_currentTarget is null) return;
 
+        string gone = _currentTarget;
         _log?.Combat(LogCategory,
-            $"command-no-effect — dropping target={_currentTarget} + refreshing room");
+            $"command-no-effect — dropping target={gone} + refreshing room");
         _currentTarget = null;
         // A no-effect swing / cast means the named target isn't hittable now — a
         // spell→weapon switch that raced the kill fires `aa <corpse>` and lands
@@ -2174,6 +2421,15 @@ public sealed partial class CombatManager : IDisposable
         // that won't resolve.
         _guardBlockedTarget = null;
         ClearBackstabResolution();
+
+        // Dark-room path (same as target-not-here): the CR refresh can't rebuild the
+        // roster in the dark, so drop the phantom directly to re-fire an observation
+        // and re-pick a present attacker instead of freezing on the gone target.
+        if (_isInDarkRoom?.Invoke() == true)
+        {
+            _classifier.RemoveDepartedEntity(gone);
+            return;
+        }
 
         TrySendRoomRefresh("command-no-effect");
     }
@@ -2557,6 +2813,27 @@ public sealed partial class CombatManager : IDisposable
         _castingSpellTarget = null;
         _inferredKillPendingRemoval = null;
         ClearBackstabResolution();
+
+        // When this round's kills account for EVERY engageable mob the roster still
+        // lists, the AoE emptied the room — drop the stale roster NOW (an empty
+        // observation) so the combat gate releases on the CR round-trip instead of
+        // waiting out the 6s idle-stall watchdog. An emptied room's bare-CR re-display
+        // carries no "Also here:" line, so without this the classifier fires no
+        // observation and the gate sits held ~6s after every AoE room-wipe (report
+        // paradigm-20260827-081208, an hsto mage's every fight). SAFE: it fires only
+        // when kills >= the listed roster, so a survivor (fewer kills than mobs) leaves
+        // the roster intact and the CR re-parse below still handles it; the CR also
+        // re-asserts any hostile that arrived unlisted, exactly the idle-stall
+        // watchdog's own optimistic-clear-plus-safety-probe pattern.
+        int listed = _classifier.Current is { } cur ? CountEngageable(cur) : 0;
+        if (listed > 0 && _expGainsThisRound >= listed)
+        {
+            _log?.Combat(LogCategory,
+                $"AoE multi-kill ({_expGainsThisRound} exp) cleared all {listed} listed hostile(s) — "
+                + "dropping the stale roster so the combat gate releases without the idle-stall wait");
+            _classifier.NoteRoomChanged();
+        }
+
         if (TrySendRoomRefresh(context))
             _log?.Combat(LogCategory,
                 $"AoE multi-kill ({_expGainsThisRound} exp this round) — re-parsing room with "
@@ -2595,6 +2872,22 @@ public sealed partial class CombatManager : IDisposable
         {
             _combatOff = true;
             _engageConfirmed = false;
+
+            // A pre-attack debuff already fired this round's combat attack immediately
+            // (DeferPostDebuffAttack); every *Combat Off* carrying that debuff's
+            // between-round stamp must NOT run either resume below, or the attack
+            // double-fires. Matched by stamp (not a one-shot flag) so a quick second
+            // Off from casting the attack between rounds is caught too; a genuine later
+            // between-round cast re-stamps _betweenRoundCastAt and resumes normally. The
+            // MinValue guard keeps a fight that never armed the suppress (both fields at
+            // their MinValue default) from matching itself on every ordinary Off.
+            bool suppressBetweenRoundResume =
+                _suppressResumeForBetweenRoundStamp != DateTimeOffset.MinValue
+                && _betweenRoundCastAt == _suppressResumeForBetweenRoundStamp;
+            if (suppressBetweenRoundResume)
+                _log?.Combat(LogCategory,
+                    "*Combat Off* carries the pre-attack debuff's stamp — between-round-cast "
+                    + "resume suppressed (the combat attack already fired this round)");
 
             // Prompt kill drop. A fresh exp gain explains this Off (wire: death →
             // exp → Off) while NO between-round survival cast does — so it's our
@@ -2678,7 +2971,8 @@ public sealed partial class CombatManager : IDisposable
                     + $"castAtOrAfterLastSwing={_lastAttackSentAt <= _betweenRoundCastAt}, "
                     + $"spellResumeAlreadyFired={_betweenRoundCastAt == _lastSpellResumeForBetweenRoundCastAt}");
 
-            if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
+            if (!suppressBetweenRoundResume
+                && DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _castingSpellTarget is null
                 && _classifier.Current is { } live
                 && HasEngageable(live))
@@ -2731,7 +3025,8 @@ public sealed partial class CombatManager : IDisposable
                 && string.Equals(curT, _castingSpellTarget, StringComparison.OrdinalIgnoreCase);
             bool manualPaced = _lastBetweenRoundCastManual
                 && DateTimeOffset.Now - _lastManualCastResumeAt < ManualResumePacing;
-            if (DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
+            if (!suppressBetweenRoundResume
+                && DateTimeOffset.Now - _betweenRoundCastAt < CastInterruptResumeWindow
                 && _betweenRoundCastAt != _lastSpellResumeForBetweenRoundCastAt
                 && !manualPaced
                 && !_userAttackOverride   // user hand-typed this round's attack — hold our own until next round
@@ -2753,6 +3048,26 @@ public sealed partial class CombatManager : IDisposable
                 // set here, a single lost race parks the engine in spell mode with no path back
                 // to a retry: the reported "won't re-engage after buffing/healing, sits there
                 // until manual input" stall.
+                // The interrupted attack spell held the round the between-round cast
+                // just closed. RoundDamageTracker tie-breaks ahead of us on CombatStatus,
+                // so it has already CloseCurrent'd that round (RoundCount++) — tally it
+                // toward MaxCasts NOW, before the re-decide inside DispatchRoundAction.
+                // The heartbeat can't (it bails while _combatOff), so without this the
+                // resume re-announces the just-capped spell uncapped (LBOL 2x, report
+                // paradigm-20260820-063541). Round-delta gated so a heal that interrupted
+                // BEFORE the spell's first fire (no round opened) doesn't over-count;
+                // death-window gated so the kill-left-a-survivor path (a legitimately
+                // fresh cast on the survivor) is untouched.
+                if (_announcedSpellCode is { } interruptedSpell
+                    && _lastCastAction is { } interruptedAction
+                    && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
+                    && ReadRoundCount?.Invoke() is { } interruptedRound
+                    && interruptedRound != _lastTalliedRound)
+                {
+                    _spellChooser.MarkCast(
+                        new CombatSpellDecision(interruptedAction, interruptedSpell), spellTarget);
+                    _lastTalliedRound = interruptedRound;
+                }
                 _combatOff = false;
                 _announcedSpellCode = null;
                 // Mark this specific interrupt as resumed BEFORE dispatching — the
@@ -2847,6 +3162,13 @@ public sealed partial class CombatManager : IDisposable
         SendAttack(_readSettings().NormalAttackCommand, priority, refire: true,
                    refireReason: "guard retry");
     }
+
+    // Public current-room engageability probe for consumers (AutoSearch) that must
+    // gate on THIS room's live roster, not the sticky cross-room combat gate
+    // (HasEngageableHostiles), which stays asserted while combat winds down on a
+    // left-behind target and made AutoSearch skip genuinely-empty rooms (report
+    // paradigm-20260820-090736). Null (no observation yet) reads as "no hostile".
+    public bool HasEngageableIn(RoomEntitiesObservation? obs) => obs is { } o && HasEngageable(o);
 
     private bool HasEngageable(RoomEntitiesObservation obs)
     {
@@ -3030,6 +3352,8 @@ public sealed partial class CombatManager : IDisposable
         _monsterProtectSub.Dispose();
         _bsResolveHitsSub.Dispose();
         _bsResolveMissesSub.Dispose();
+        _attackConfirmHitsSub.Dispose();
+        _attackConfirmMissesSub.Dispose();
     }
 
     private readonly record struct EngageableCandidate(

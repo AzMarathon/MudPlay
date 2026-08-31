@@ -127,7 +127,8 @@
                  Background="{StaticResource ChromeBgSunkenBrush}"
                  BorderThickness="0"
                  Padding="4"
-                 SelectionMode="Multiple">
+                 SelectionMode="Multiple,Toggle"
+                 KeyDown="OnRowsKeyDown">
             <ListBox.Styles>
                 <Style Selector="ListBoxItem">
                     <Setter Property="Padding" Value="0"/>
@@ -137,6 +138,14 @@
             <ListBox.ItemTemplate>
                 <DataTemplate DataType="vm:ConversationRowViewModel">
                     <Grid Margin="4,2">
+                        <Grid.ContextMenu>
+                            <!-- Right-click a line to copy the whole entry (time + who +
+                                 message). Copies the selection when the clicked row is
+                                 part of it, else just this row — see OnCopyRow. -->
+                            <ContextMenu>
+                                <MenuItem Header="Copy" Click="OnCopyRow" InputGesture="Ctrl+C"/>
+                            </ContextMenu>
+                        </Grid.ContextMenu>
                         <!-- Day separator: horizontal rule with the date
                              centered. Other rows: timestamp + tag + speaker
                              + message in a single line. -->
@@ -174,19 +183,25 @@
                             </Border>
                             <TextBlock Grid.Column="2"
                                        Text="{Binding SpeakerText}"
+                                       IsVisible="{Binding HasSpeaker}"
                                        Foreground="{Binding ChannelBrush}"
                                        FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
                                        FontSize="{Binding DataContext.MetaFontSize, ElementName=RowsList}"
                                        FontWeight="Medium"
                                        VerticalAlignment="Center"
                                        Margin="0,0,8,0"/>
-                            <SelectableTextBlock Grid.Column="3"
-                                                 views:ConversationMessageInlines.Message="{Binding MessageText}"
-                                                 Foreground="{Binding MessageBrush}"
-                                                 FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
-                                                 FontSize="{Binding DataContext.MessageFontSize, ElementName=RowsList}"
-                                                 TextWrapping="Wrap"
-                                                 VerticalAlignment="Center"/>
+                            <!-- Plain TextBlock (not SelectableTextBlock): row-level
+                                 Copy / Ctrl+C handles the whole entry, and a built-in
+                                 partial-text-selection menu here only copied empty
+                                 unless you'd first dragged a selection. Inline web links
+                                 still render + click via ConversationMessageInlines. -->
+                            <TextBlock Grid.Column="3"
+                                       views:ConversationMessageInlines.Message="{Binding MessageText}"
+                                       Foreground="{Binding MessageBrush}"
+                                       FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
+                                       FontSize="{Binding DataContext.MessageFontSize, ElementName=RowsList}"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
                         </Grid>
                     </Grid>
                 </DataTemplate>

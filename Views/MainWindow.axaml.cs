@@ -72,6 +72,12 @@ public partial class MainWindow : Window
         {
             _combatTickLabel = this.FindControl<TextBlock>("CombatTickLabel");
             AppServices.Current.Tick.CombatTickElapsed += OnCombatTickElapsed;
+            // Put keyboard focus on the terminal from launch (not only on connect),
+            // so the window's KeyBindings fire on the FIRST hotkey press. With focus
+            // sitting on nothing (or on a toolbar button), the first press was being
+            // spent taking focus and only the second registered. Deferred so it wins
+            // over Avalonia's default initial focus assignment.
+            Dispatcher.UIThread.Post(() => Terminal.Focus());
         };
         Closed += (_, _) =>
         {
@@ -270,6 +276,11 @@ public partial class MainWindow : Window
         {
             Header  = "Modify Blacklist…",
             Command = vm.OpenBlacklistEditorCommand,
+        });
+        GameDataMenu.Items.Add(new MenuItem
+        {
+            Header  = "Modify avoid/stash rooms…",
+            Command = vm.OpenAvoidRoomsEditorCommand,
         });
     }
 }

@@ -117,6 +117,11 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlySet<RoomKey>?> StashRoomsProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(StashRooms));
 
+    // Rooms the user labeled for Roomba Mode (GH sorting). Rendered with a small
+    // robot-head marker so a labeled destination reads at a glance.
+    public static readonly StyledProperty<IReadOnlySet<RoomKey>?> GhRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(GhRooms));
+
     public static readonly StyledProperty<IReadOnlyDictionary<RoomKey, int>?> LoopSequenceNumbersProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyDictionary<RoomKey, int>?>(nameof(LoopSequenceNumbers));
 
@@ -181,6 +186,12 @@ public sealed class MapControl : Control
     // recognisable as the goal, mirroring the "you are here" treatment.
     public static readonly StyledProperty<RoomKey?> DestinationRoomKeyProperty =
         AvaloniaProperty.Register<MapControl, RoomKey?>(nameof(DestinationRoomKey));
+
+    // Rooms an @where reply just located — each flashed green for a few seconds,
+    // then dropped independently by the VM as its own timer expires. A set so several
+    // answered @where's light up at once (mirrors the other room-set overlays).
+    public static readonly StyledProperty<IReadOnlySet<RoomKey>?> WhereTargetRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(WhereTargetRooms));
 
     public static readonly StyledProperty<MudPlay.Models.Profile.KeyChord> UpStepChordProperty =
         AvaloniaProperty.Register<MapControl, MudPlay.Models.Profile.KeyChord>(nameof(UpStepChord),
@@ -301,6 +312,12 @@ public sealed class MapControl : Control
         set => SetValue(StashRoomsProperty, value);
     }
 
+    public IReadOnlySet<RoomKey>? GhRooms
+    {
+        get => GetValue(GhRoomsProperty);
+        set => SetValue(GhRoomsProperty, value);
+    }
+
     public IReadOnlyDictionary<RoomKey, int>? LoopSequenceNumbers
     {
         get => GetValue(LoopSequenceNumbersProperty);
@@ -375,6 +392,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(DestinationRoomKeyProperty);
         set => SetValue(DestinationRoomKeyProperty, value);
+    }
+
+    public IReadOnlySet<RoomKey>? WhereTargetRooms
+    {
+        get => GetValue(WhereTargetRoomsProperty);
+        set => SetValue(WhereTargetRoomsProperty, value);
     }
 
     // Fired when the user steps the crawler up or down — the layout host is
@@ -719,6 +742,11 @@ public sealed class MapControl : Control
     {
         LineCap = PenLineCap.Round,
     };
+    // @where target flash — a translucent green fill under a bright green ring, so an
+    // answered "where are you?" reads as a lit-up marked square the moment it lands.
+    // Cleared by the VM's ~12s timer.
+    private static readonly IBrush WhereTargetFill = new SolidColorBrush(Color.Parse("#8833DD66"));
+    private static readonly IPen   WhereTargetPen  = new Pen(new SolidColorBrush(Color.Parse("#FF33DD66")), 2.5);
     // Death-marker skull — bone-white silhouette with dark hollows, drawn on
     // rooms that still hold an un-recovered deathpile. The dark eye / nose / tooth
     // features carry the contrast so the glyph reads on both light and dark room
@@ -779,11 +807,11 @@ public sealed class MapControl : Control
             HighlightShopsProperty, SpellModeProperty,
             WalkPathProperty, LoopPathProperty, LoopBuilderPathProperty, LoopBuilderWaypointsProperty,
             AutoLairWaypointsProperty, AutoLairApproachPathProperty,
-            LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, LoopSequenceNumbersProperty,
+            LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, GhRoomsProperty, LoopSequenceNumbersProperty,
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
             PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
             BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty,
-            NavLineStylesProperty);
+            WhereTargetRoomsProperty, NavLineStylesProperty);
 
         // Auto-centre on the player's current room every time it
         // changes — but only when the
@@ -1208,11 +1236,19 @@ public sealed class MapControl : Control
 
             DrawRoomNode(context, cell, kvp.Value);
 
+            // @where target — a transient green flash the VM clears after ~12s.
+            // Drawn right on the node so it reads as a marked square.
+            if (WhereTargetRooms is { } whereRooms && whereRooms.Contains(kvp.Value))
+                DrawWhereHighlight(context, cell);
+
             if (AvoidedRooms is not null && AvoidedRooms.Contains(kvp.Value))
                 DrawAvoidX(context, cell);
 
             if (StashRooms is not null && StashRooms.Contains(kvp.Value))
                 DrawStashX(context, cell);
+
+            if (GhRooms is not null && GhRooms.Contains(kvp.Value))
+                DrawRobotIcon(context, cell);
 
             if (DeathRooms is not null && DeathRooms.Contains(kvp.Value))
                 DrawSkull(context, cell);
@@ -1379,12 +1415,18 @@ public sealed class MapControl : Control
                 // routing info ("needs a command/action — a lever, an
                 // ask-door, or a `go path`-style named exit");
                 // hidden-cyan is reveal info ("needs sea <dir>").
-                bool isTrap = IsTrapEdge(source, dir)
-                           || IsTrapEdge(bCoord, Opposite(dir));
-                bool isAction = !isTrap
-                    && (IsActionRequiredEdge(source, dir)
-                     || IsActionRequiredEdge(bCoord, Opposite(dir)));
-                bool isHidden = !isTrap && !isAction
+                // Traps are DIRECTIONAL — a trap on A's exit toward B does not imply
+                // B's exit back is trapped. Track each side separately: the connector
+                // is split at its midpoint so only the trapped HALF is red. Full red =
+                // trapped both ways; half red (against the room whose exit is trapped)
+                // = a one-way trap; no red = clean both ways. Painting the whole line
+                // red for a one-way trap wrongly implied the return trip was dangerous.
+                bool srcTrap = IsTrapEdge(source, dir);
+                bool tgtTrap = IsTrapEdge(bCoord, Opposite(dir));
+                bool isTrap = srcTrap || tgtTrap;
+                bool isAction = IsActionRequiredEdge(source, dir)
+                             || IsActionRequiredEdge(bCoord, Opposite(dir));
+                bool isHidden = !isAction
                     && (IsHiddenEdge(source, dir)
                      || IsHiddenEdge(bCoord, Opposite(dir)));
 
@@ -1400,10 +1442,10 @@ public sealed class MapControl : Control
                     case ConnectionKind.Adjacent:
                     {
                         // Grid-adjacent — clean continuous connector.
-                        IPen pen = isTrap ? TrapPen : isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;
+                        IPen basePen = isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;
                         Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
-                        ctx.DrawLine(pen, srcPt, tgtPt);
-                        if (oneWay) DrawOneWayArrow(ctx, pen, srcPt, tgtPt, tilePixels);
+                        DrawExitConnector(ctx, srcPt, tgtPt, basePen, TrapPen, srcTrap, tgtTrap);
+                        if (oneWay) DrawOneWayArrow(ctx, isTrap ? TrapPen : basePen, srcPt, tgtPt, tilePixels);
                         if (isSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, tgtPt), dir, tilePixels);
                         break;
                     }
@@ -1412,11 +1454,11 @@ public sealed class MapControl : Control
                         // Connected but not grid-adjacent — dashed direct
                         // line between the two room centres, angled along
                         // the real connection instead of a stub into space.
-                        IPen pen = isTrap ? TrapBridgePen : isAction ? ActionBridgePen
+                        IPen baseBridge = isAction ? ActionBridgePen
                                  : isHidden ? HiddenBridgePen : ExitBridgePen;
                         Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
-                        ctx.DrawLine(pen, srcPt, tgtPt);
-                        if (oneWay) DrawOneWayArrow(ctx, pen, srcPt, tgtPt, tilePixels);
+                        DrawExitConnector(ctx, srcPt, tgtPt, baseBridge, TrapBridgePen, srcTrap, tgtTrap);
+                        if (oneWay) DrawOneWayArrow(ctx, isTrap ? TrapBridgePen : baseBridge, srcPt, tgtPt, tilePixels);
                         if (isSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, tgtPt), dir, tilePixels);
                         break;
                     }
@@ -1443,6 +1485,24 @@ public sealed class MapControl : Control
                 }
             }
         }
+    }
+
+    // Draw one room-to-room connector, colouring each HALF by whether the exit
+    // leaving that end is trapped. Both trapped → one solid trap line; neither →
+    // one base line; exactly one → split at the midpoint so only the trapped half
+    // (the half against the room whose exit is trapped) is red. Keeps a one-way trap
+    // from reading as a two-way one.
+    private static void DrawExitConnector(DrawingContext ctx, Point srcPt, Point tgtPt,
+        IPen basePen, IPen trapPen, bool srcTrap, bool tgtTrap)
+    {
+        if (srcTrap == tgtTrap)
+        {
+            ctx.DrawLine(srcTrap ? trapPen : basePen, srcPt, tgtPt);
+            return;
+        }
+        Point mid = Midpoint(srcPt, tgtPt);
+        ctx.DrawLine(srcTrap ? trapPen : basePen, srcPt, mid);
+        ctx.DrawLine(tgtTrap ? trapPen : basePen, mid, tgtPt);
     }
 
     // How a single exit connection should be rendered.
@@ -1580,7 +1640,18 @@ public sealed class MapControl : Control
             // even placed in this layout (the hop is one-way), so the gap is
             // implicit — this also covers a two-way shortcut that lands both
             // endpoints on the same plane.
-            if (prev is { } p && !(prevKey is { } pk && IsTeleportHop(pk, key)))
+            // Only connect two consecutive rooms that share a real graph exit.
+            // A paused walker's RemainingRoomKeys prepends the LIVE room, so after
+            // a manual move OFF the route its first pair is the (off-route) current
+            // room and the stale next step — not adjacent, and without this guard
+            // that pair renders as a straight line clear across the map (report
+            // paradigm walk-to→manual artifact). Gap-bridged edges (graph-connected
+            // but not grid-adjacent) still carry an exit, so they stay drawn; only a
+            // genuinely unconnected pair is skipped. Teleport hops are excluded too
+            // — their two sides draw on their own planes.
+            if (prev is { } p && prevKey is { } pk
+                && !IsTeleportHop(pk, key)
+                && RoomsConnected(pk, key))
                 ctx.DrawLine(pen, p, here);
             prev = here;
             prevKey = key;
@@ -1591,6 +1662,21 @@ public sealed class MapControl : Control
         => Graph?.GetRoom(from) is { } room
            && room.Exits.TryGetValue(Direction.Teleport, out RoomExit tele)
            && tele.Target.Equals(to);
+
+    // Whether a graph exit joins the two rooms in either direction — the test for
+    // whether a route polyline segment between them is real (a valid walk step is
+    // always a graph edge) rather than a stale cross-map jump.
+    private bool RoomsConnected(RoomKey a, RoomKey b)
+    {
+        if (Graph is null) return false;
+        if (Graph.GetRoom(a) is { } ra)
+            foreach (RoomExit e in ra.Exits.Values)
+                if (e.Target.Equals(b)) return true;
+        if (Graph.GetRoom(b) is { } rb)
+            foreach (RoomExit e in rb.Exits.Values)
+                if (e.Target.Equals(a)) return true;
+        return false;
+    }
 
     private static void DrawAvoidX(DrawingContext ctx, Rect cell)
         => DrawCellX(ctx, cell, AvoidXPen);
@@ -1610,6 +1696,44 @@ public sealed class MapControl : Control
         Point bottomRight = new(cell.Right - inset, cell.Bottom - inset);
         ctx.DrawLine(pen, topLeft, bottomRight);
         ctx.DrawLine(pen, topRight, bottomLeft);
+    }
+
+    // Green flash for the room an @where reply located — a translucent fill + ring
+    // over the whole cell so it stands out at a glance; the VM clears it after ~12s.
+    private static void DrawWhereHighlight(DrawingContext ctx, Rect cell)
+        => ctx.DrawRectangle(WhereTargetFill, WhereTargetPen, new RoundedRect(cell.Deflate(1), cell.Width * 0.14));
+
+    // A tiny robot head marking a room the user labeled for Roomba Mode — antenna,
+    // rounded head, two eyes. Cyan so it reads distinctly against the red avoid and
+    // gold stash crosses. Vector primitives (no emoji glyph) so it renders at any
+    // zoom on any font.
+    private static readonly IBrush RobotFillBrush = new SolidColorBrush(Color.Parse("#FF7FE0FF"));
+    private static readonly IPen   RobotRimPen    = new Pen(new SolidColorBrush(Color.Parse("#FF10384A")), 1.0);
+    private static readonly IBrush RobotEyeBrush  = new SolidColorBrush(Color.Parse("#FF10384A"));
+
+    private static void DrawRobotIcon(DrawingContext ctx, Rect cell)
+    {
+        double s = Math.Max(cell.Width * 0.34, 3.5);
+        double cxm = cell.X + cell.Width / 2.0;
+        double cym = cell.Y + cell.Height / 2.0;
+
+        // Head placed so the antenna above balances the head below — the whole glyph
+        // (tip to head-bottom) stays centred on the cell, ~0.4 cell tall, so it sits
+        // fully inside the room square rather than poking out the top.
+        double hw = s * 0.5, hh = s * 0.40;
+        Rect head = new(cxm - hw, cym - hh + s * 0.14, hw * 2, hh * 2);
+        ctx.DrawRectangle(RobotFillBrush, RobotRimPen, new RoundedRect(head, s * 0.14));
+
+        // Antenna: stalk + tip above the head.
+        double ax = cxm, ayBase = head.Y, ayTip = head.Y - s * 0.20;
+        ctx.DrawLine(RobotRimPen, new Point(ax, ayBase), new Point(ax, ayTip));
+        ctx.DrawEllipse(RobotFillBrush, RobotRimPen, new Point(ax, ayTip), s * 0.08, s * 0.08);
+
+        // Two eyes.
+        double eyeR = Math.Max(s * 0.08, 0.7);
+        double eyeY = head.Y + head.Height * 0.45;
+        ctx.DrawEllipse(RobotEyeBrush, null, new Point(head.X + head.Width * 0.32, eyeY), eyeR, eyeR);
+        ctx.DrawEllipse(RobotEyeBrush, null, new Point(head.X + head.Width * 0.68, eyeY), eyeR, eyeR);
     }
 
     // A small bone-white skull marking a room that still holds an un-recovered

@@ -274,6 +274,32 @@ public partial class MainWindowViewModel : ObservableObject
     // disconnects, not auto-engines.
     [ObservableProperty] private bool _isDisableHangupsActive;
 
+    // Sprint Mode. A transient "just get me there" movement mode. While on:
+    // HealthManager never pauses movement to rest/heal-wait (still casts
+    // configured heal spells), and Auto-Combat / Get-Items / Search / Get-Cash
+    // are forced off (nothing to fight / loot / search for). It auto-turns-off
+    // — restoring exactly the engines it silenced — the instant a go-to walk
+    // arrives, a loop starts its next lap, or an auto-lair is about to enter the
+    // next lair; and manually turning any of those four engines back on ends it
+    // too. See OnIsSprintModeActiveChanged + the nav-event handlers. Persisted
+    // in Models.Profile.GeneralSettings.SprintMode, reseeded on profile load.
+    // Not part of IsAllAutoOff — it's a movement mode, not an auto-engine.
+    [ObservableProperty] private bool _isSprintModeActive;
+
+    // The auto-engines Sprint Mode forced off when it turned on — remembered so
+    // ending Sprint restores exactly those (and only those). Sprint forces off
+    // only engines that were ON, so one the user later re-enables by hand is
+    // never in this set and its state is preserved. Session-only, not persisted.
+    private bool _sprintTurnedOffCombat;
+    private bool _sprintTurnedOffGetItems;
+    private bool _sprintTurnedOffSearch;
+    private bool _sprintTurnedOffGetCash;
+
+    // True while Sprint is programmatically flipping those engines (force-off on
+    // start, restore on end), so their change handlers don't misread Sprint's
+    // own writes as a manual re-enable and recurse.
+    private bool _sprintDrivingEngines;
+
     // True when every wired auto-engine is off — drives the "Auto-All" master
     // toggle's depressed/checked state. Mirrors
     // Game.AutoModeController.AllWiredOff but computed from the live
@@ -350,11 +376,21 @@ public partial class MainWindowViewModel : ObservableObject
     public bool EngineActionIsLooping => !_autoLairOn &&  _loopRunning;
     public bool EngineActionIsLair    =>  _autoLairOn;
 
-    private void OnWalkerEngineEvent(Game.Map.WalkEvent _)
+    private void OnWalkerEngineEvent(Game.Map.WalkEvent e)
         => Dispatcher.UIThread.Post(() =>
         {
             _walkerState = AppServices.Current.Walker.State;
             RefreshEngineActionChip();
+            // A go-to walk arriving ends Sprint Mode (restoring the engines it
+            // silenced). Only a STANDALONE walk-to counts — during a loop or
+            // auto-lair the walker also fires Finished on each sub-path, and those
+            // are ended by the lap-boundary / pre-lair hooks instead. Guard on the
+            // live engine state, not cached flags, to avoid a stale-field race.
+            if (e.Kind == Game.Map.WalkEventKind.Finished
+                && IsSprintModeActive
+                && AppServices.Current.LoopRunner.State == Game.Map.LoopState.Idle
+                && !AppServices.Current.AutoLair.IsActive)
+                IsSprintModeActive = false;
         });
 
     private void OnLoopRunnerEngineEvent(Game.Map.LoopEvent e)
@@ -366,6 +402,15 @@ public partial class MainWindowViewModel : ObservableObject
             // event so the lap counter ticks over on RepeatStarted and the slot
             // clears on Stopped.
             RefreshLocationSlot();
+            // A loop moving from its walk-to-start INTO looping (ReachedFirstWaypoint)
+            // or wrapping into its next lap (RepeatStarted) ends Sprint Mode — you
+            // sprinted the leg that got you here; looping runs normally with the
+            // engines restored. Done BEFORE the base-modes reconcile below so base
+            // modes get the final word over Sprint's restore at a loop start.
+            if ((e.Kind == Game.Map.LoopEventKind.ReachedFirstWaypoint
+                 || e.Kind == Game.Map.LoopEventKind.RepeatStarted)
+                && IsSprintModeActive)
+                IsSprintModeActive = false;
             // Circuit reached its first waypoint (walk-to done, looping begins) —
             // settle the live auto-engines into the character's base modes. Fires
             // once per run (the event itself is one-shot), never on lap wraps.
@@ -390,6 +435,12 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnAutoLairPhaseChangedForBase(Game.Map.AutoLairPhase phase)
         => Dispatcher.UIThread.Post(() =>
         {
+            // About to step into the next lair — end Sprint so we cross the
+            // threshold with the engines (combat especially) restored and fight it
+            // normally. Sprint got us here fast; it doesn't enter the lair.
+            if (phase == Game.Map.AutoLairPhase.Entering && IsSprintModeActive)
+                IsSprintModeActive = false;
+
             if (phase != Game.Map.AutoLairPhase.Engaging) return;
             if (_autoLairBaseReconciled) return;
             _autoLairBaseReconciled = true;
@@ -567,6 +618,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
+        AppServices.Current.SetHighlightWhereOpener(HighlightWhereRoomIfOpen);
         AppServices.Current.SetNavManagerOpener(OpenNavManager);
         AppServices.Current.SetTypedInputSender(SendUserText);
 
@@ -753,6 +805,14 @@ public partial class MainWindowViewModel : ObservableObject
         // yellow terminal notice.
         AppServices.Current.QuestAvailability.QuestBecameAvailable += OnQuestAvailable;
 
+        // Roomba sweep finished → a terminal notice, same style as the quest one.
+        AppServices.Current.GhSweep.SweepCompleted += OnGhSweepCompleted;
+
+        // A gear-set slot got blocked (can't wear the item — alignment/level/class
+        // or the game refused the wear) → a yellow terminal notice so the user
+        // knows to adjust the set instead of the engine silently skipping it.
+        AppServices.Current.Equipment.SlotBlockedAnnounced += OnEquipSlotBlocked;
+
         // Room-display + movement-refusal parsers feeding RoomTracker.
         // Same per-session LineExtractor binding shape as the who/look
         // parsers above.
@@ -910,6 +970,13 @@ public partial class MainWindowViewModel : ObservableObject
         // Settings → Talk reactive-look — needs the wire-sender to emit
         // look-back / look-on-arrival at other players.
         AppServices.Current.PlayerLook.SetWireSender(engineSend);
+        // A user-typed `@timer sync` (instead of the Bosses-tab "Sync Timers…" button)
+        // should still surface the responses — auto-open the merge window when we see
+        // our own request go out on chat. See OnChatForTimerSync.
+        AppServices.Current.Chat.EntryClassified += OnChatForTimerSync;
+        // Same idea for `@roomba sync`: seeing our own request go out opens the
+        // receiver's adopt window so the replies aren't ignored. See OnChatForRoombaSync.
+        AppServices.Current.Chat.EntryClassified += OnChatForRoombaSync;
         // Poller needs the same wire-sender to send @health round-trip
         // requests and the periodic par poll.
         AppServices.Current.PartyPoller.SetWireSender(engineSend);
@@ -1045,6 +1112,9 @@ public partial class MainWindowViewModel : ObservableObject
         // StashRoomManager's `hide N <coin>` commands ride the same
         // gate-wrapped pipeline.
         AppServices.Current.Stash.SetWireSender(engineSend);
+        // Roomba Mode's `get`/`drop` sort-phase commands ride the same
+        // gate-wrapped pipeline.
+        AppServices.Current.GhSweep.SetWireSender(engineSend);
         // Auto-deposit reroute's bank `dep` command rides the same
         // gate-wrapped pipeline.
         AppServices.Current.AutoDeposit.SetWireSender(engineSend);
@@ -1087,6 +1157,14 @@ public partial class MainWindowViewModel : ObservableObject
         // uncovered with sea <dir> instead of failing the lap.
         AppServices.Current.LoopRunner.SetHiddenSearchEnqueuer(AppServices.Current.HiddenSearch.Enqueue);
         AppServices.Current.LoopRunner.SetHiddenSearchStopper(AppServices.Current.HiddenSearch.StopAll);
+        // WinchManager — same gate-wrapped sender so the pull + poll `l` can't land
+        // mid-password-prompt. Both engines route a winch gate here so it's pulled +
+        // waited-open instead of firing the move blindly into a still-closed gate.
+        AppServices.Current.Winch.SetWireSender(engineSend);
+        AppServices.Current.Walker.SetWinchEnqueuer(AppServices.Current.Winch.Enqueue);
+        AppServices.Current.Walker.SetWinchStopper(AppServices.Current.Winch.StopAll);
+        AppServices.Current.LoopRunner.SetWinchEnqueuer(AppServices.Current.Winch.Enqueue);
+        AppServices.Current.LoopRunner.SetWinchStopper(AppServices.Current.Winch.StopAll);
         // Teleport-exit wiring — walker resolves (source, destination)
         // → keyword via TBInfoTeleportResolver against the active
         // TBInfoStore, and pre-broadcasts the keyword to followers via
@@ -1168,6 +1246,10 @@ public partial class MainWindowViewModel : ObservableObject
             () => !AppServices.Current.CombatTracker.HasEngageableHostiles
                 && !AppServices.Current.PlayerState.InCombat);
         AppServices.Current.CleanupLogout.SetConnectedCheck(() => IsConnected);
+        // Pause the between-round cast loop while the link is down (its heartbeat
+        // driver keeps firing regardless of connection); the buff timers already
+        // freeze/resume across the gap.
+        AppServices.Current.CastDirector.SetConnectedGate(() => IsConnected);
         AppServices.Current.CleanupLogout.SetAutoLogoutEnabledCheck(
             () => ResolveActiveBbs()?.ReconnectAfterCleanup ?? false);
         AppServices.Current.CleanupLogout.SetDisconnectCallback(
@@ -1281,6 +1363,7 @@ public partial class MainWindowViewModel : ObservableObject
          && e.PropertyName != nameof(IsAutoHideActive)
          && e.PropertyName != nameof(IsAutoSearchActive)
          && e.PropertyName != nameof(IsDisableHangupsActive)
+         && e.PropertyName != nameof(IsSprintModeActive)
          && e.PropertyName != nameof(IsAllAutoOff)) return;
 
         foreach (ToolbarButtonItem row in ToolbarItems)
@@ -1303,6 +1386,9 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             case "ToggleDisableHangups":
                 row.IsActive = IsDisableHangupsActive;
+                break;
+            case "ToggleSprintMode":
+                row.IsActive = IsSprintModeActive;
                 break;
             case "ToggleAutoCombat":
                 row.IsActive = IsAutoCombatActive;
@@ -1461,6 +1547,16 @@ public partial class MainWindowViewModel : ObservableObject
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             WriteTerminalStatus($"[{questName} Quest is Now Available]", TerminalStatusKind.Notice));
 
+    private void OnEquipSlotBlocked(Game.Inventory.EquipmentManager.EquipBlock block)
+        => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            WriteTerminalStatus(
+                $"[{block.ItemName} skipped, unable to wear — adjust set to correct]",
+                TerminalStatusKind.Notice));
+
+    private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
+        => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            WriteTerminalStatus("[Ganghouse roomba complete]", TerminalStatusKind.Notice));
+
     // The login sequence sends stat / exp / inventory (and the user's who, etc.) right
     // after entering the realm. Wait for that to finish rendering, then dump the quests
     // this character can now begin so the lines land as a clean block at the end of login.
@@ -1476,7 +1572,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     private async void ShowLostRecoveryDialogAsync(Game.Map.RecoveryFailedEvent e)
     {
-        var vm = new ViewModels.Navigation.LostRecoveryDialogViewModel(e.EngineName, e.Detail);
+        var vm = new ViewModels.Navigation.LostRecoveryDialogViewModel(e.EngineName, e.Detail, e.LastGoodRoom);
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.Navigation.LostRecoveryDialogViewModel, bool>(vm);
     }
@@ -2630,6 +2726,12 @@ public partial class MainWindowViewModel : ObservableObject
                 // than clearing, so a brief drop doesn't lose the recast clock.
                 AppServices.Current.Conditions.ClearAll("disconnect");
                 AppServices.Current.ManaRegen.Reset();
+                // Combat's mid-round state (current target, an in-flight attack
+                // spell, the between-round-cast resume latch) can't survive the
+                // drop either — see CombatManager.OnDisconnected for why a stale
+                // latch here silently stops the character from ever resuming the
+                // fight after reconnect (report paradigm-20260827-203548).
+                AppServices.Current.Combat.OnDisconnected();
 
                 // Categorise: if the user clicked Disconnect, the flag was
                 // set in DisconnectInternalAsync. Otherwise check for a
@@ -2875,6 +2977,67 @@ public partial class MainWindowViewModel : ObservableObject
         {
             AppServices.Current.Log.Error("Telnet", $"Unexpected send failure: {ex.Message}");
         }
+    }
+
+    // Auto-open the boss-timer merge window when the user sends `@timer sync` by hand
+    // (rather than via the Bosses-tab "Sync Timers…" button) — otherwise nothing is
+    // collecting and the responders' `@timerdata` replies vanish, the "I got a string
+    // back but nothing happened" report. Only our own outbound request should trigger
+    // it: TelepathOutgoing is always ours, and a Local "You say" line has a null speaker
+    // (the self-say form), so an inbound request we're merely responding to is excluded.
+    // A hand-typed gang request ("You gangpath:" — unclassified) isn't caught; that path
+    // uses the button.
+    private void OnChatForTimerSync(MudPlay.Game.ChatLogEntry e)
+    {
+        // Our own outbound request looks different per channel: a directed telepath is its
+        // own TelepathOutgoing echo, a say echoes as "You say" (null speaker), and a gang
+        // (or say) line on some boards echoes tagged with our character name — so treat a
+        // self-named Gangpath / Local line as outgoing too. An inbound request we'd merely
+        // respond to has someone else's name and is excluded.
+        bool selfSpoke = e.Speaker is null || IsSelfName(e.Speaker);
+        bool outgoing = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing
+                     || ((e.Channel == MudPlay.Game.ChatChannel.Gangpath
+                          || e.Channel == MudPlay.Game.ChatChannel.Local) && selfSpoke);
+        if (!outgoing) return;
+        if (!e.Message.TrimStart().StartsWith("@timer sync", StringComparison.OrdinalIgnoreCase)) return;
+        OpenTimerSyncWindow();
+    }
+
+    private static bool IsSelfName(string speaker)
+    {
+        string? self = AppServices.Current.Party.LocalCharacterName;
+        if (string.IsNullOrEmpty(self)) return false;
+        static string Given(string n) { int s = n.IndexOf(' '); return s >= 0 ? n[..s] : n; }
+        return Given(self).Equals(Given(speaker), StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Our own outbound `@roomba sync` opens the receiver's adopt window, so the
+    // responders' `@roombadata` replies are accepted (the reply proves they've
+    // granted us — the receiver only needs to know we asked). Same self-outgoing
+    // detection as OnChatForTimerSync.
+    private void OnChatForRoombaSync(MudPlay.Game.ChatLogEntry e)
+    {
+        bool selfSpoke = e.Speaker is null || IsSelfName(e.Speaker);
+        bool outgoing = e.Channel == MudPlay.Game.ChatChannel.TelepathOutgoing
+                     || ((e.Channel == MudPlay.Game.ChatChannel.Gangpath
+                          || e.Channel == MudPlay.Game.ChatChannel.Local) && selfSpoke);
+        if (!outgoing) return;
+        if (!e.Message.TrimStart().StartsWith("@roomba sync", StringComparison.OrdinalIgnoreCase)) return;
+        AppServices.Current.RoombaSync.NoteSyncRequested();
+    }
+
+    private async void OpenTimerSyncWindow()
+    {
+        if (AppServices.Current.TimerSyncWindowActive) return;   // already collecting
+        var vm = new ViewModels.CharacterWorkshop.BossTimerSyncViewModel(
+            AppServices.Current.Bosses,
+            AppServices.Current.BossTimers,
+            AppServices.Current.GameData,
+            AppServices.Current.Chat,
+            AppServices.Current.SendTypedInput,
+            preArmed: true);
+        await AppServices.Current.Dialogs
+            .OpenWindowAsync<ViewModels.CharacterWorkshop.BossTimerSyncViewModel, bool>(vm);
     }
 
     // Convenience: encode a text line (Latin-1 + CRLF) and send it to the
@@ -3621,6 +3784,18 @@ public partial class MainWindowViewModel : ObservableObject
             ViewModels.BlacklistEditorDialogViewModel, bool>(vm);
     }
 
+    // Game Data menu → "Modify avoid rooms…". Staged editor over the
+    // per-character avoided + stash room sets (both on MovementFilter). Save
+    // commits both sets + recolours the map; Cancel discards.
+    [RelayCommand]
+    private async Task OpenAvoidRoomsEditorAsync()
+    {
+        var svc = AppServices.Current;
+        ViewModels.AvoidRoomsEditorDialogViewModel vm = new(svc.Movement, svc.RoomGraph);
+        await svc.Dialogs.OpenWindowAsync<
+            ViewModels.AvoidRoomsEditorDialogViewModel, bool>(vm);
+    }
+
     // Game Data menu → "Manage Sets…". Immediate-action dialog: copy or
     // move a set's loop library into another set, or delete a set
     // (game-data tables + loops). A delete drops the set from the menu, so
@@ -4117,6 +4292,15 @@ public partial class MainWindowViewModel : ObservableObject
             vm.OnFloorChangeRequested(key);
     }
 
+    // Flash + centre an @where reply's room on the map, but only if it's open —
+    // an answered "where are you?" lights up where they are without summoning the
+    // window over what you're doing.
+    private void HighlightWhereRoomIfOpen(Game.Map.RoomKey key)
+    {
+        if (_navigationWindow?.DataContext is ViewModels.Navigation.NavigationViewModel vm)
+            vm.ShowWhereHighlight(key);
+    }
+
     // Toolbar Start, which doubles as Resume. USER-paused → resume. Idle with a
     // loop staged (Manage dialog's Load) → run it straight away. Otherwise — idle
     // with nothing staged, OR already running a loop/goto — open the shared Manage
@@ -4233,10 +4417,36 @@ public partial class MainWindowViewModel : ObservableObject
         {
             DataContext = new SpellBookViewModel(
                 AppServices.Current.Spellbook,
-                () => AppServices.Current.Profile.Current?.LastKnownStats?.Class),
+                () => AppServices.Current.Profile.Current?.LastKnownStats?.Class,
+                () => AppServices.Current.PlayerStats.Spellcasting),
         };
         window.Closed += (_, _) => _spellBook = null;
         _spellBook = window;
+        window.Show(main);
+    }
+
+    // Singleton handle for the live MonsterIntelWindow — re-press toggles closed.
+    private MonsterIntelWindow? _monsterIntel;
+
+    [RelayCommand]
+    private void OpenMonsterIntel()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_monsterIntel is { } existing) { existing.Close(); return; }
+
+        var svc = AppServices.Current;
+        MonsterIntelWindow window = new()
+        {
+            DataContext = new MonsterIntelViewModel(
+                svc.GameData, svc.MonsterCatalog, svc.Dialogs, svc.Resolver,
+                svc.MonsterOverlaySeed, svc.RoomGraph,
+                svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic,
+                svc.RoomClassifier, svc.MonsterObservations, svc.PlayerState),
+        };
+        window.Closed += (_, _) => _monsterIntel = null;
+        _monsterIntel = window;
         window.Show(main);
     }
 
@@ -4408,6 +4618,7 @@ public partial class MainWindowViewModel : ObservableObject
     public string WorkshopGesture         => GetGesture(Models.Profile.BuiltInAction.OpenWorkshop);
     public string NavigationGesture       => GetGesture(Models.Profile.BuiltInAction.OpenNavigation);
     public string SpellBookGesture        => GetGesture(Models.Profile.BuiltInAction.OpenSpellBook);
+    public string MonsterIntelGesture     => GetGesture(Models.Profile.BuiltInAction.OpenMonsterIntel);
     public string LogPaneGesture          => GetGesture(Models.Profile.BuiltInAction.OpenLogPane);
     public string BackscrollGesture       => GetGesture(Models.Profile.BuiltInAction.OpenBackscroll);
     public string SessionStatsGesture     => GetGesture(Models.Profile.BuiltInAction.OpenSessionStats);
@@ -4551,6 +4762,13 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ToggleDisableHangups() => IsDisableHangupsActive = !IsDisableHangupsActive;
 
+    // Flip the live IsSprintModeActive bit (the partial OnXxxChanged hook
+    // persists it to GeneralSettings.SprintMode, forces/restores Auto Combat,
+    // and the toolbar IsActive badge follows). Bound from the toolbar /
+    // Action-menu / hotkey.
+    [RelayCommand]
+    private void ToggleSprintMode() => IsSprintModeActive = !IsSprintModeActive;
+
     // File-menu toggle for the app-level "reopen last profile on startup" setting.
     // Reads / writes GlobalSettings directly (it's global, not per-profile) so the
     // check state always reflects what startup will do; the getter needs no reseed.
@@ -4579,7 +4797,8 @@ public partial class MainWindowViewModel : ObservableObject
     // owner's ActiveFlags edge: the Confused / Held self-chips clear, their
     // ConfusionGate / HeldGate release, and the ailment @wait balances to @ok.
     // Then it sweeps the remaining self-row ailment chips so the party window
-    // shows a clean self row. Self-only — other members' state is untouched.
+    // shows a clean self row, and sweeps the ailment chips of EVERY party member
+    // (a stuck badge on another member, e.g. the leader, is the reported case).
     // Finally it force-clears combat state so a stuck Combat gate (stale roster
     // parking the walker "fighting" an empty room) releases and the Fighting chip
     // goes away — the conditions sweep alone never touched it.
@@ -4594,14 +4813,21 @@ public partial class MainWindowViewModel : ObservableObject
     {
         AppServices.Current.Conditions.ClearAll("reset");
 
+        // Clear the ailment chips for EVERY party member, not just self. A stuck
+        // HELD / ailment badge on another member (e.g. the leader) can't self-clear
+        // when that client never sent the matching off-signal, and Reset States is
+        // the manual escape hatch for it (report paradigm-20260820-122200). Reading
+        // the roster names and clearing by name is safe (SetMemberAilment normalises
+        // to given name); a member with no name is skipped.
         Game.PartyManager party = AppServices.Current.Party;
-        if (party.LocalCharacterName is { Length: > 0 } me)
+        foreach (Game.PartyMember m in party.State.Members)
         {
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Confused, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.MovementPrevented, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Poisoned, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Blinded, false);
-            party.SetMemberAilment(me, Models.GameData.MessageFlags.Diseased, false);
+            if (string.IsNullOrWhiteSpace(m.Name)) continue;
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Confused, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.MovementPrevented, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Poisoned, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Blinded, false);
+            party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Diseased, false);
         }
 
         AppServices.Current.CombatTracker.ResetCombatState("Reset States (manual)");
@@ -4750,12 +4976,20 @@ public partial class MainWindowViewModel : ObservableObject
         if (_suppressAutoEngineWriteback > 0) return;
         AppServices.Current.CombatTracker?.OnAutoAttackChanged();
         // OnAutoAttackChanged clears only the Combat gate. Sibling room-observation
-        // gate-holders (the deferred-cash / get-items / search Acquisition holds)
-        // re-evaluate solely on a fresh observation, so turning combat off with one
-        // of them asserted strands the walker "Paused by: Acquisition" until a
-        // manual room re-display. Re-emit the current observation once the fight is
-        // disengaged so every gate-holder re-evaluates together.
-        if (!value) AppServices.Current.RoomClassifier?.ReemitCurrent();
+        // gate-holders (the deferred-cash / get-items / search Acquisition holds) —
+        // and CombatManager's own re-pick — re-evaluate solely on a fresh
+        // observation, so toggling AutoCombat with none pending strands things
+        // until a manual room re-display. Turning it OFF mid-fight needs this to
+        // release the walker (and clear InCombat if the room is clear); turning it
+        // back ON needs it just as much, or CombatManager.OnEntitiesObserved never
+        // runs again for the unchanged current roster — its early-return while
+        // disabled already nulled _currentTarget, and nothing re-picks a target
+        // for it until some UNRELATED fresh observation happens to arrive (report
+        // paradigm-20260827-203644: toggling AutoCombat off then back on mid-fight,
+        // meant to un-stick a stalled fight, silently did nothing — the character
+        // never resumed attacking the monster still sitting in the same room).
+        AppServices.Current.RoomClassifier?.ReemitCurrent();
+        MaybeEndSprintOnManualEngineEnable(value);
     }
 
     partial void OnIsAutoNukeActiveChanged(bool value)
@@ -4775,16 +5009,33 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     partial void OnIsAutoBlessActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoBless", value, d => d.AutoBless = value);
+    {
+        PersistAutoModeFlag("AutoBless", value, d => d.AutoBless = value);
+        // Mirror OnIsAutoHealRestActiveChanged: a genuine flip must re-evaluate
+        // CastingDirector at once rather than waiting for the next unrelated HP/
+        // mana/position/combat event to happen to trigger one — previously
+        // enabling Auto Bless could sit doing nothing for an arbitrary stretch
+        // (report paradigm-20260824-012300). Evaluate() already gates bless on
+        // _autoBlessEnabled internally, so calling it on either transition is
+        // safe — a disable just finds nothing eligible to fire.
+        if (_suppressAutoEngineWriteback > 0) return;
+        AppServices.Current.CastDirector?.Evaluate();
+    }
 
     partial void OnIsAutoLightActiveChanged(bool value)
         => PersistAutoModeFlag("AutoLight", value, d => d.AutoLight = value);
 
     partial void OnIsAutoGetItemsActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
+    {
+        PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
+        MaybeEndSprintOnManualEngineEnable(value);
+    }
 
     partial void OnIsAutoGetCashActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoGetCash", value, d => d.AutoGetCash = value);
+    {
+        PersistAutoModeFlag("AutoGetCash", value, d => d.AutoGetCash = value);
+        MaybeEndSprintOnManualEngineEnable(value);
+    }
 
     partial void OnIsAutoSneakActiveChanged(bool value)
         => PersistAutoModeFlag("AutoSneak", value, d => d.AutoSneak = value);
@@ -4793,10 +5044,76 @@ public partial class MainWindowViewModel : ObservableObject
         => PersistAutoModeFlag("AutoHide", value, d => d.AutoHide = value);
 
     partial void OnIsAutoSearchActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoSearch", value, d => d.AutoSearch = value);
+    {
+        PersistAutoModeFlag("AutoSearch", value, d => d.AutoSearch = value);
+        MaybeEndSprintOnManualEngineEnable(value);
+    }
 
     partial void OnIsDisableHangupsActiveChanged(bool value)
         => PersistGeneralFlag("DisableHangups", value, g => g.DisableHangups = value);
+
+    partial void OnIsSprintModeActiveChanged(bool value)
+    {
+        PersistGeneralFlag("SprintMode", value, g => g.SprintMode = value);
+        // A profile reseed sets this without a real user toggle — skip the engine
+        // coupling so loading a Sprint-on character doesn't stomp the engines'
+        // own independently-reseeded values.
+        if (_suppressAutoEngineWriteback > 0) return;
+        if (value) ForceEnginesOffForSprint();
+        else RestoreEnginesAfterSprint();
+    }
+
+    // Sprint forces Auto-Combat / Get-Items / Search / Get-Cash off for the
+    // duration (a "just keep moving" mode has nothing to fight / loot / search
+    // for) and remembers which it actually turned off so it can restore exactly
+    // those. Guarded so the engines' own change handlers don't read these writes
+    // as a manual re-enable.
+    private void ForceEnginesOffForSprint()
+    {
+        _sprintDrivingEngines = true;
+        try
+        {
+            _sprintTurnedOffCombat   = IsAutoCombatActive;
+            _sprintTurnedOffGetItems = IsAutoGetItemsActive;
+            _sprintTurnedOffSearch   = IsAutoSearchActive;
+            _sprintTurnedOffGetCash  = IsAutoGetCashActive;
+            if (IsAutoCombatActive)   IsAutoCombatActive   = false;
+            if (IsAutoGetItemsActive) IsAutoGetItemsActive = false;
+            if (IsAutoSearchActive)   IsAutoSearchActive   = false;
+            if (IsAutoGetCashActive)  IsAutoGetCashActive  = false;
+        }
+        finally { _sprintDrivingEngines = false; }
+    }
+
+    // Turn back on exactly the engines Sprint forced off. One the user re-enabled
+    // by hand was never in the turned-off set, so it's left as the user set it.
+    private void RestoreEnginesAfterSprint()
+    {
+        _sprintDrivingEngines = true;
+        try
+        {
+            if (_sprintTurnedOffCombat)   IsAutoCombatActive   = true;
+            if (_sprintTurnedOffGetItems) IsAutoGetItemsActive = true;
+            if (_sprintTurnedOffSearch)   IsAutoSearchActive   = true;
+            if (_sprintTurnedOffGetCash)  IsAutoGetCashActive  = true;
+        }
+        finally
+        {
+            _sprintTurnedOffCombat = _sprintTurnedOffGetItems =
+                _sprintTurnedOffSearch = _sprintTurnedOffGetCash = false;
+            _sprintDrivingEngines = false;
+        }
+    }
+
+    // Sprint Mode and its four suppressed engines are mutually exclusive: turning
+    // any of them back on by hand ends Sprint. Ending Sprint restores the others
+    // it silenced; the one just re-enabled is already on, so restore leaves it on.
+    // Ignored while Sprint itself is driving the engine and during a profile reseed.
+    private void MaybeEndSprintOnManualEngineEnable(bool value)
+    {
+        if (!value || _sprintDrivingEngines || _suppressAutoEngineWriteback > 0) return;
+        if (IsSprintModeActive) IsSprintModeActive = false;
+    }
 
     // Reset the LIVE auto-engine state (AutoMode) to the character's BASE modes —
     // the Settings → General base-modes checkboxes (GeneralSettings.AutoModeBase).
@@ -4888,6 +5205,7 @@ public partial class MainWindowViewModel : ObservableObject
                 : ReadGeneralFromProfile(profile);
             Models.Profile.AutoActionDefaults am = general.AutoMode;
             IsDisableHangupsActive = general.DisableHangups;
+            IsSprintModeActive   = general.SprintMode;
             IsAutoCombatActive   = am.AutoCombat;
             IsAutoNukeActive     = am.AutoNuke;
             IsAutoHealRestActive = am.AutoHealRest;

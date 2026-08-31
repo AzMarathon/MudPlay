@@ -550,6 +550,22 @@ public static class AppPaths
     public static string BbsLeaderboardFile(string bbsName) =>
         Path.Combine(BbsFolder(bbsName), "leaderboard.json");
 
+    // Per-BBS Roomba Mode settings: labeled gang-house rooms, hidden-search
+    // config, and the @roomba remote-response toggle. Lives at the BBS tier (not
+    // per-character) because a BBS ties to one game-data set and every character
+    // on it shares the same gang house — labeling rooms once on any character
+    // makes them available (and sortable/queryable) to every other character on
+    // that board.
+    public static string BbsRoombaFile(string bbsName) =>
+        Path.Combine(BbsFolder(bbsName), "roomba.json");
+
+    // Per-BBS Roomba item-sighting log: the last room each item was observed in
+    // during a sweep, backing @roomba's replies. Separate file from
+    // BbsRoombaFile — sightings update far more often (every room arrival during
+    // a sweep) than the room-label settings do.
+    public static string BbsRoombaItemsFile(string bbsName) =>
+        Path.Combine(BbsFolder(bbsName), "roomba_items.json");
+
     // Per-BBS folder holding every character that connects to that BBS. Profiles
     // live UNDER the BBS folder because each MajorMUD server allows only one
     // character of a given name — so the same character name on two different

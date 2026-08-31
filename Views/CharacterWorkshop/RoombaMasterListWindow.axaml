@@ -1,0 +1,51 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="820" d:DesignHeight="560"
+        x:Class="MudPlay.Views.CharacterWorkshop.RoombaMasterListWindow"
+        x:DataType="vm:RoombaMasterListViewModel"
+        Title="Roomba Master List"
+        Width="820" Height="560"
+        MinWidth="480" MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Grid Margin="16" RowDefinitions="Auto,*">
+        <Grid Grid.Row="0" Margin="0,0,0,8" ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0"
+                     Text="{Binding Filter, Mode=TwoWay}"
+                     PlaceholderText="Filter by item name, quantity, or map/room (e.g. 15/12)…"
+                     ToolTip.Tip="Narrows the list live. Double-click a row to open that item's record."/>
+            <Button Grid.Column="1" Content="Export List…" Margin="8,0,0,0"
+                    Click="OnExport"
+                    ToolTip.Tip="Save the whole list to a text file, grouped by room — each room's items listed alphabetically with quantity. Ignores the filter."/>
+        </Grid>
+
+        <DataGrid Grid.Row="1"
+                  x:Name="RowsGrid"
+                  ItemsSource="{Binding Rows}"
+                  DoubleTapped="OnRowDoubleTapped"
+                  Background="{StaticResource ChromeBgSunkenBrush}"
+                  BorderThickness="1"
+                  BorderBrush="{StaticResource ChromeBorderBrush}"
+                  IsReadOnly="True"
+                  AutoGenerateColumns="False"
+                  CanUserSortColumns="True"
+                  CanUserResizeColumns="True"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Item" Binding="{ReflectionBinding ItemName}" SortMemberPath="ItemName"
+                                    Width="180" Foreground="{StaticResource ChromeFgBrush}"/>
+                <DataGridTextColumn Header="Qty" Binding="{ReflectionBinding Quantity}" SortMemberPath="Quantity"
+                                    Width="60" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="Seen In" Binding="{ReflectionBinding SeenIn}" SortMemberPath="SeenIn"
+                                    Width="220" Foreground="{StaticResource ChromeFgBrush}"/>
+                <DataGridTextColumn Header="Market (outside this gang house)" Binding="{ReflectionBinding Market}" SortMemberPath="Market"
+                                    Width="*" Foreground="{StaticResource ChromeFgBrush}"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Window>
