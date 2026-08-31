@@ -2,11 +2,34 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.36.10
+## 3.37.3
 
 - Roomba gangpath announcements now include the start/finish date and time, with the sending client's own timezone (a short name like PST/MST/EST for the common North American zones, a numeric UTC offset otherwise) instead of a bare "starting"/"complete" line
 - Sorting's completion announce now reports items sorted AND items inventoried — its recon and final scan already observe every room's floor the same way an Inventory-only run does, so a sort keeps the item-location log just as current
 - `@roomba <item>` replies now include the last-scanned date/time (with timezone) of that item's freshest sighting, so you can tell a fresh location from a stale one
+
+## 3.37.2
+
+- A profile copied from another character now heals its stored character name from the `stat` screen: the app was only ever writing the in-game name on create/rename, so a copied profile kept the old owner's name and mis-identified "self" everywhere it mattered (corpse recovery, party self-detection, remote-command self-echo). The authoritative name from `stat` now updates the profile once, silently, the first time it differs
+- Corpse recovery now matches your corpse against the live self-name rather than the stored profile name, so a stale profile name can't send it hunting the wrong corpse
+- bug reports addressed: stock-20260828-104653
+
+## 3.37.1
+
+- Terminal no longer faux-bolds bright text: SGR "bold" (which MajorMUD uses for room names, hostile-monster names, etc.) is BRIGHT, not heavy — it now renders as a brighter colour at normal weight, matching MegaMUD and the MX437 bitmap default. On vector fonts (Courier New, Liberation Mono, JetBrains Mono) room names and monster names came out visibly heavier than the reference client; they now match. Applies to the main terminal and the Backscroll window
+
+## 3.37.0
+
+- `@where` reply → map flash: when you `@where` another MudPlay user and their client answers with its location, the Navigation map (if open) flashes that room green and centres on it for ~15 seconds, then drifts back to following you. `@where` several people and each answered square lights up at once, each fading on its own 15s timer; the map re-centres on the newest reply. Ignored while the map is closed
+- Tightened the shared `@where`-reply parser to require the MudPlay `{…(map N, room M)…}` wrapper, so a human telepath merely mentioning a room in prose can't be read as a location reply (also hardens the party @where-probe recovery path)
+
+## 3.36.9
+
+- Fixed mana-regen rerolling never firing on Paradigm: a roll spell (mana flux / nature tap) confirms via a shared "mana regenerating" condition that couldn't be mapped back to the specific spell, so the reroll was keyed on a signal that never arrived — it sat on a bad (even negative) roll forever. The reroll now triggers off the cast itself, reads the fresh `abil 145` value, and rerolls / re-checks after each recast
+- "Reroll below" now labeled "Reroll below abil 145" on Paradigm, with a tip noting the rolled value can be negative
+- "Cast before resting for mana" reworked: the buff is now kept up (recast on expiry) only while you're actually resting for mana — through a combat interruption, until mana tops back up — then stops; unchecked still maintains it always
+- Bug report gains a Mana-regen reroll section (roll signal, cycle state, last observed roll value)
+- bug reports addressed: paradigm-20260830-110918
 
 ## 3.36.7
 

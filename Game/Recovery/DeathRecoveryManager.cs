@@ -90,6 +90,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // deliberate recovery, swept from adjacent rooms — later stage). _stockRecovering
     // scopes the "You took" tracking to our own in-progress grab.
     private Func<bool>? _isParadigm;
+    // Live in-game self-name (PartyManager.LocalCharacterName). Preferred over the
+    // possibly-stale CharacterProfile.Name when matching our own corpse. See
+    // AttachLiveSelfName.
+    private Func<string?>? _liveSelfName;
     private bool _stockRecovering;
     // Heartbeats of quiet before the death-room `get` burst counts as settled (so
     // the spillover sweep can start on the leftovers). Reset by each "You took".
@@ -247,6 +251,19 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         ArgumentNullException.ThrowIfNull(isParadigm);
         _isParadigm = isParadigm;
+    }
+
+    // Bind the LIVE self-name (from PartyManager.LocalCharacterName, tracked off the
+    // `stat`/`par` screens) so corpse matching identifies "self" by the authoritative
+    // in-game name, not a possibly-stale CharacterProfile.Name. Approach A already
+    // heals Current.Name from `stat`, so this is belt-and-suspenders for the narrow
+    // pre-stat window (dying before the first stat parse); we still prefer the live
+    // name and fall back to Current.Name only when it's blank. Optional — unbound
+    // (tests) it just reads Current.Name as before.
+    public void AttachLiveSelfName(Func<string?> provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _liveSelfName = provider;
     }
 
     // Bind the live inventory snapshot provider so SimulateDeath captures a
@@ -900,7 +917,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private string? FindOurCorpse()
     {
         if (_groundItems is not { } ground) return null;
-        string ourGiven = FirstToken(_profile.Current?.Name);
+        // Prefer the live in-game name over the profile's stored name, which a copied
+        // profile can leave stale (report stock-20260828-104653) — matching another
+        // player's corpse would be a serious mis-recovery.
+        string? live = _liveSelfName?.Invoke();
+        string ourGiven = FirstToken(!string.IsNullOrWhiteSpace(live) ? live : _profile.Current?.Name);
         string? loneCorpse = null;
         int corpseCount = 0;
         foreach (string item in ground.Items)

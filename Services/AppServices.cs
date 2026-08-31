@@ -130,6 +130,14 @@ public sealed class AppServices
     public void SetCenterNavigationIfOpenOpener(Action<Game.Map.RoomKey> opener) => _centerNavigationIfOpenOpener = opener;
     public void CenterNavigationIfOpen(Game.Map.RoomKey key) => _centerNavigationIfOpenOpener?.Invoke(key);
 
+    // Flashes a room green on the map and centres on it for a few seconds ONLY if
+    // the Navigation window is already open — never force-opens it. Driven by
+    // WhereReplyTracker when an @where reply telepath lands, so an answered
+    // "where are you?" lights up on the map. No-op until the main VM binds it.
+    private Action<Game.Map.RoomKey>? _highlightWhereOpener;
+    public void SetHighlightWhereOpener(Action<Game.Map.RoomKey> opener) => _highlightWhereOpener = opener;
+    public void HighlightWhereRoom(Game.Map.RoomKey key) => _highlightWhereOpener?.Invoke(key);
+
     // Single source of truth for "are you sure?" prompts (exit /
     // hangup / save / delete). Lives at Global tier; mirrored from
     // SettingsService on startup and every save.
@@ -435,6 +443,9 @@ public sealed class AppServices
     // Game.Remote.PartyComebackManager.MaxBacktrackRooms
     // budget is pushed from Settings → Other.
     public Game.Remote.PartyComebackManager PartyComeback { get; private set; } = null!;
+
+    // Recognises an @where reply telepath and flashes its room on the nav map.
+    public Game.Remote.WhereReplyTracker WhereReply { get; private set; } = null!;
 
     // Follower-side @comeback sender. Detects being left
     // behind (a movement-failure line just before "You are no longer
@@ -2391,8 +2402,28 @@ public sealed class AppServices
         Profile.ProfileClosed += ()  => Party.LocalCharacterName = null;
         PlayerStats.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(Game.PlayerStats.Name) && !string.IsNullOrWhiteSpace(PlayerStats.Name))
-                Party.LocalCharacterName = PlayerStats.Name;
+            if (e.PropertyName != nameof(Game.PlayerStats.Name) || string.IsNullOrWhiteSpace(PlayerStats.Name))
+                return;
+            Party.LocalCharacterName = PlayerStats.Name;
+            // Heal a stale CharacterProfile.Name from the authoritative stat screen.
+            // Name is defined as the in-game character name (distinct from the profile
+            // FILE label, CurrentProfileName) and is otherwise only written on
+            // create/rename — so a profile COPIED from another character keeps the old
+            // name and every self-identity consumer of Current.Name mis-identifies self
+            // (report stock-20260828-104653: copied Fujin → renamed to Raijin, but
+            // Current.Name stayed "Fujin", hiding the real Fujin from player records).
+            // Healing it here fixes them all centrally the moment the user sees `stat`.
+            // Store the FULL "Given Family" name; HealedCharacterName returns null when
+            // it already matches, so there's no per-screen Save churn. Touches no
+            // filename or BBS folder — that's CurrentProfileName.
+            if (Profile.Current is { } cur
+                && ProfileService.HealedCharacterName(cur.Name, PlayerStats.Name) is { } healed)
+            {
+                Log.Info("Profile",
+                    $"healing profile character name '{cur.Name}' → '{healed}' from stat screen");
+                cur.Name = healed;
+                Profile.Save();
+            }
         };
         Profile.ProfileClosed += () => Panels.ApplyLayouts(layouts: null);
         Profile.ProfileSaving += p => p.PanelLayouts = Panels.SnapshotLayouts();
@@ -3408,6 +3439,10 @@ public sealed class AppServices
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));
         CastDirector.SetTriggeredRestGate(() => Health.IsRecoveringRest);
+        // Mana-rest lock for "cast before resting for mana" slots — held while the
+        // mana-recovery gate is asserted (mana below target), durable across a combat
+        // interruption, released when mana tops back up.
+        CastDirector.SetManaRestGate(() => Health.MaGateAsserted);
         // Buff-strip-room gate — the current room casts a buff-removal spell on
         // entry (RemovesSpell / DispellMagic), so suppress buffs here rather than
         // burn mana on a buff the room tears straight back off.
@@ -3493,7 +3528,7 @@ public sealed class AppServices
             // tick instead (fed below from RegenTracker).
             useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             log: Log);
-        CastDirector.SetSelfBuffLandedSink(OnSelfBuffLandedForReroll);
+        CastDirector.SetSelfBuffCastSink(OnSelfBuffCastForReroll);
         // Feed the reroller clean NATURAL mana ticks (Stock's roll-quality signal).
         // Meditate ticks are unaffected by spell regen and can stack on a natural tick,
         // so a tick observed while meditating is skipped; resting doesn't touch mana.
@@ -3956,6 +3991,9 @@ public sealed class AppServices
         // Realm picks the recovery mechanic: Paradigm packs the pile into a corpse
         // (`recover corpse`), Stock scatters it loose on the floor (per-item `get`).
         DeathRecovery.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
+        // Match our own corpse by the LIVE in-game name, not a copied profile's stale
+        // Current.Name (report stock-20260828-104653).
+        DeathRecovery.AttachLiveSelfName(() => Party.LocalCharacterName);
 
         // Read-only inventory queries — @wealth / @enc / @have report off the
         // InventoryManager snapshot; @what reports the GroundItems survey. No
@@ -5272,6 +5310,12 @@ public sealed class AppServices
         PartyComeback = new Game.Remote.PartyComebackManager(
             RemoteCommands, Party, RoomTracker, RoomClassifier, Walker, LoopRunner, AutoLair, Router, Bfs, Log);
 
+        // @where reply → nav-map flash. Recognises the wrapped location reply an
+        // @where'd MudPlay client telepaths back and routes it to the (open) map;
+        // HighlightWhereRoom no-ops when the window is closed.
+        WhereReply = new Game.Remote.WhereReplyTracker(Router, Log);
+        WhereReply.TargetLocated += (_, room) => HighlightWhereRoom(room);
+
         // Auto-deposit reroute. Built here
         // (after the movement engines) so it can snapshot / stop / restart
         // the running Loop or Auto-Lair when CashManager's gate crosses.
@@ -6089,12 +6133,15 @@ public sealed class AppServices
         return true;
     }
 
-    // A self-buff of ours landed (confirmed via its AppliedMessage). If it's the
-    // configured mana-regen roll spell (nature tap / mana flux, a code-145 rolled
-    // affect — not a HoT like chaos surge), hand it to the reroll engine. On Paradigm
-    // the engine reads abil 145; on Stock it waits for the next observed passive mana
-    // tick. Either way it rerolls a bad value.
-    private void OnSelfBuffLandedForReroll(string shortCode)
+    // A self-buff of ours was just CAST (fired from StartSelfBuffTimer, after the cast
+    // reached the wire). If it's the configured mana-regen roll spell (nature tap /
+    // mana flux, a code-145 rolled affect — not a HoT like chaos surge), hand it to the
+    // reroll engine. On Paradigm the engine reads abil 145; on Stock it waits for the
+    // next observed passive mana tick. Either way it rerolls a bad value. Keyed to the
+    // cast (not the AppliedMessage confirm) because a roll spell confirms via the shared
+    // "mana regenerating" condition, which never maps back to the specific spell — so a
+    // confirm-keyed reroll never fired at all (paradigm-20260830-110918).
+    private void OnSelfBuffCastForReroll(string shortCode)
     {
         if (string.IsNullOrWhiteSpace(shortCode)) return;
 
