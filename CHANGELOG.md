@@ -2,6 +2,16 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.38.3
+
+- Monster Intel refocused into a fast pre-fight check — "can I safely fight this right now?" The master list now shows **Name / HP / EXP / Accuracy / Hits You % / Est. Rounds to Kill**, dropping the broad reference view (still available on the Game Data Browser's Monsters tab)
+- **Hits You %** — that monster's own physical attack's chance to land on you, given your live AC / Dodge and whichever ward applies (Prot Evil / Prot Good, plus the flat +10 Shadow AC bonus that applies against every attacker)
+- **Est. Rounds to Kill** — projected rounds for your currently-equipped weapon's Normal attack to drop the monster (live accuracy / damage / swings / crit; reuses the Character Workshop Calculators tab's MonsterMatchupCalculator); shows "—" when unarmed or unable to out-damage it, and caps at a tunable ceiling (default 999, editable in the window) shown as `<cap>+` so a superboss doesn't project into the millions
+- Replaced the single Safe threshold with a row of **Hits-You-% checkboxes** — six contiguous bands (2 / 5 / 10 / 20 / 40 / 40%+, covering 0-2, 3-5, 6-10, 11-20, 21-40, 41-100 with no gap or overlap); check any combination and a monster shows if it matches any checked band
+- Character bar gains **AC vs Evil** — your Armour Class plus your worn Prot Evil, the combined defense an evil monster's attack actually rolls against
+- A monster with no computable Hits You % (an NPC / caster-only record with no physical attack — trainer, quest-giver, etc.) is dropped from the list once a character is loaded, instead of showing blank
+- Removed from the window (all still on the Game Data Browser's Monsters tab): the "In this room" context bar, the Overview grab-bag, the Elemental Defenses matrix, the Casts panel, Loot, Locations, the Automation overlay editor, and multi-select comparison — kept: Attacks, Your Matchup, and Your Observations
+
 ## 3.38.2
 
 - Spell Book: the "Difficulty" column is renamed **Success %** — the number it shows is your chance to land the cast, so "Difficulty" read backwards; the header equation now reads "Success % = your Spellcasting + the spell's difficulty (capped at 98%, 100% for Kai)"

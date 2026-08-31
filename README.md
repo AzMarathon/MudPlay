@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.38.2**
-> - Spell Book: the "Difficulty" column is renamed **Success %** — the number it shows is your chance to land the cast, so "Difficulty" read backwards; the header equation now reads "Success % = your Spellcasting + the spell's difficulty (capped at 98%, 100% for Kai)"
-> - Game Data → Items filter now matches the friendly column labels, so you can type `weapon`, `feet`, or `plate` to filter by item type / worn slot / weapon or armour type — not just the raw code
+> **Version 3.38.3**
+> - Monster Intel refocused into a fast pre-fight check — "can I safely fight this right now?" The master list now shows Name / HP / EXP / Accuracy / **Hits You %** / **Est. Rounds to Kill**, dropping the broad reference view (still on the Game Data Browser's Monsters tab)
+> - Hits-You-% threshold checkboxes (six contiguous bands, no gap) narrow the list by how dangerous a monster's attack is; a rounds-to-kill cap (editable in the window) keeps a superboss from projecting into the millions
+> - Character bar gains **AC vs Evil**; monsters with no computable Hits You % (NPC / caster-only records) drop from the list once a character is loaded
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

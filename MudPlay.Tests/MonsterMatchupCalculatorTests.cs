@@ -189,6 +189,82 @@ public sealed class MonsterMatchupCalculatorSpellsTests
     public void WeaponMeetsMagical_ComparesHitMagicToMonsterMagical(int weaponHitMagic, int monsterMagical, bool expected)
         => Assert.Equal(expected, MonsterMatchupCalculatorSpells.WeaponMeetsMagical(weaponHitMagic, monsterMagical));
 
+    // Backs Monster Intel's "Hits You %" column / Safe filter — every catalog
+    // row needs this, not just one picked monster, so it's a standalone
+    // function rather than folded into Compute().
+    [Fact]
+    public void IncomingHitPercent_NoPhysicalAccuracy_ReturnsNull()
+    {
+        Assert.Null(MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            physicalAccuracy: null, alignment: 0,
+            defenderAc: 50, defenderDodge: 10, protEvil: 20, protGood: 20,
+            realm: RealmType.ParaMud));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(6)]
+    public void IncomingHitPercent_EvilAlignment_AppliesProtEvilNotProtGood(int evilAlign)
+    {
+        int withProtEvil = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), evilAlign, defenderAc: 60, defenderDodge: 0, protEvil: 20, protGood: 0, RealmType.ParaMud)!.Value;
+        int noWard = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), evilAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud)!.Value;
+        int protGoodOnly = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), evilAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.ParaMud)!.Value;
+
+        Assert.True(withProtEvil < noWard);
+        Assert.Equal(noWard, protGoodOnly);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    public void IncomingHitPercent_GoodAlignment_AppliesProtGoodNotProtEvil(int goodAlign)
+    {
+        int withProtGood = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.ParaMud)!.Value;
+        int noWard = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud)!.Value;
+        int protEvilOnly = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 20, protGood: 0, RealmType.ParaMud)!.Value;
+
+        Assert.True(withProtGood < noWard);
+        Assert.Equal(noWard, protEvilOnly);
+    }
+
+    [Fact]
+    public void IncomingHitPercent_NeutralAlignment_IgnoresBothWards()
+    {
+        int withWards = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (120, 120), alignment: 3, defenderAc: 100, defenderDodge: 0, protEvil: 50, protGood: 50, RealmType.ParaMud)!.Value;
+        int noWards = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (120, 120), alignment: 3, defenderAc: 100, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud)!.Value;
+
+        Assert.Equal(noWards, withWards);
+    }
+
+    // Regression: an earlier version of IncomingHitPercent never passed
+    // hasShadow through to CombatCalculator, silently ignoring the flat
+    // +10 AC Shadow (Abil 9) grants against every attacker regardless of
+    // alignment (unlike Prot Evil/Good, which are alignment-conditional).
+    // Caught via a live character's own @st readout: AC vs Evil and AC vs
+    // Good both included the same Shadow bonus on top of bare AC.
+    [Fact]
+    public void IncomingHitPercent_HasShadow_LowersHitChance()
+    {
+        int withShadow = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), alignment: 2, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            realm: RealmType.ParaMud, hasShadow: true)!.Value;
+        int noShadow = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), alignment: 2, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            realm: RealmType.ParaMud, hasShadow: false)!.Value;
+
+        Assert.True(withShadow < noShadow);
+    }
+
     [Fact]
     public void RankAttackSpells_BelowSpellImmu_IsBlockedWithReason()
     {

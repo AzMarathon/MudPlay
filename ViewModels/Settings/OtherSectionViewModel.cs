@@ -253,6 +253,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             MaxComebackBacktrackRooms = Math.Clamp(MaxComebackBacktrackRooms, 1, 50),
             AutoRequestComebackWhenLeftBehind = AutoRequestComebackWhenLeftBehind,
             ShowMonsterHpLookup   = ShowMonsterHpLookup,
+            // Not edited on this tab (Monster Intel owns it directly) —
+            // carry the current Character-tier value through so Apply here
+            // doesn't reset it to the compile-time default.
+            RoundsToKillCap       = ReadOrDefault().RoundsToKillCap,
         };
 
         profile.Settings ??= new();
