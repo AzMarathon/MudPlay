@@ -88,10 +88,6 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         {
             Assert.Equal(999, vm.RoundsToKillCap);   // default, nothing persisted yet
             vm.RoundsToKillCap = 42;
-
-            MonsterIntelEntry entry = Assert.Single(
-                vm.RowsView.Cast<MonsterIntelEntry>().Where(e => e.Name == "test goblin"));
-            Assert.Equal(42, entry.RoundsToKillCap);
         }
 
         Assert.Equal(42, resolver.Resolve<OtherSettings>("Other").RoundsToKillCap);
@@ -122,19 +118,16 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         inventory.Dispose();
     }
 
-    // EstimatedRoundsToKillText caps display at RoundsToKillCap -- a
-    // superboss can otherwise project into the millions of rounds, which
-    // isn't a meaningful number to show. Pure record-level test, no VM or
-    // settings resolver needed.
+    // EstimatedRoundsToKillText never needs a "<cap>+" placeholder -- a
+    // monster projecting past the cap is dropped from the list entirely
+    // (see RoundsToKillCap_FiltersOutSlowerFights below), so anything that
+    // reaches display always shows its literal number.
     [Theory]
-    [InlineData(-1, 999, "")]
-    [InlineData(0, 999, "—")]
-    [InlineData(5, 999, "5")]
-    [InlineData(999, 999, "999")]
-    [InlineData(1000, 999, "999+")]
-    [InlineData(2_200_000, 999, "999+")]
-    [InlineData(50, 20, "20+")]
-    public void EstimatedRoundsToKillText_RespectsCap(int rounds, int cap, string expected)
+    [InlineData(-1, "")]
+    [InlineData(0, "—")]
+    [InlineData(5, "5")]
+    [InlineData(999, "999")]
+    public void EstimatedRoundsToKillText_ShowsLiteralNumber(int rounds, string expected)
     {
         var cache = new GameDataCache(_root);
         cache.SwitchSet("test-set");
@@ -142,9 +135,53 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         MonsterIntelEntry entry = MonsterIntelEntry.BuildCatalog(catalog).First();
 
         entry.EstimatedRoundsToKill = rounds;
-        entry.RoundsToKillCap = cap;
 
         Assert.Equal(expected, entry.EstimatedRoundsToKillText);
+    }
+
+    // Regression: the rounds-to-kill cap is a triage filter, not display
+    // rounding -- a monster that would take more rounds than the cap must
+    // be dropped from the list entirely, not just relabeled "<cap>+".
+    // "Not killable at all" (0 rounds -- no weapon, or can't out-damage it)
+    // is different information and must stay visible regardless of the cap.
+    [Fact]
+    public void RoundsToKillCap_FiltersOutSlowerFights()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 10, Agility = 50, Charm = 50 };
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
+        var itemMagic = new ItemMagicIndex(cache);
+
+        var profile = new ProfileService();
+        profile.LoadBlank();   // non-null Current; Save() is a no-op for a blank draft
+        var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
+
+        using var vm = new MonsterIntelViewModel(
+            cache, catalog, resolver, stats, inventory, spellbook, itemMagic,
+            observations: null, playerState: null);
+
+        FieldInfo allField = typeof(MonsterIntelViewModel).GetField("_all", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var all = (List<MonsterIntelEntry>)allField.GetValue(vm)!;
+        MonsterIntelEntry entry = all.First(e => e.Name == "test goblin");
+
+        vm.RoundsToKillCap = 10;
+
+        entry.EstimatedRoundsToKill = 10;
+        vm.RowsView.Refresh();
+        Assert.Contains(vm.RowsView.Cast<MonsterIntelEntry>(), e => e.Name == "test goblin");
+
+        entry.EstimatedRoundsToKill = 11;
+        vm.RowsView.Refresh();
+        Assert.DoesNotContain(vm.RowsView.Cast<MonsterIntelEntry>(), e => e.Name == "test goblin");
+
+        // "Not killable at all" is still shown even under a small cap --
+        // it's meaningfully different from "too slow to bother with".
+        entry.EstimatedRoundsToKill = 0;
+        vm.RowsView.Refresh();
+        Assert.Contains(vm.RowsView.Cast<MonsterIntelEntry>(), e => e.Name == "test goblin");
     }
 
     // Accuracy/AccuracyText surface the monster's own physical-attack
@@ -214,6 +251,41 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         // 30 AC + 10 Shadow (Abil 9, flat once) + 15 Prot Evil (Abil 24)
         // from the worn "wraith ward".
         Assert.Equal(55, vm.EffectiveAcVsEvil);
+    }
+
+    // Regression: EffectiveAcVsEvil must be genuinely adjustable, not just a
+    // cosmetic label -- the whole point is correcting for AC-boosting spell
+    // buffs the auto-calc doesn't see yet, so the override has to actually
+    // change the Hits You % math for evil monsters, and it must survive a
+    // subsequent gear/spell rebuild rather than getting silently
+    // overwritten back to the gear-only total.
+    [Fact]
+    public void EffectiveAcVsEvil_ManualEdit_AffectsHitsYouPercentAndSticks()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 10, Agility = 50, Charm = 50 };
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
+        var itemMagic = new ItemMagicIndex(cache);
+
+        using var vm = new MonsterIntelViewModel(
+            cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
+            observations: null, playerState: null);
+
+        MonsterIntelEntry Goblin() => vm.RowsView.Cast<MonsterIntelEntry>().Single(e => e.Name == "test goblin");
+        Assert.Equal(10, vm.EffectiveAcVsEvil);   // no gear worn: AC alone
+        int baseline = Goblin().IncomingHitPercent;
+
+        vm.EffectiveAcVsEvil = 200;   // hand-correct for a buff the auto-calc misses
+        Assert.True(Goblin().IncomingHitPercent < baseline);
+
+        // A later gear/spell rebuild must not silently revert the correction.
+        typeof(MonsterIntelViewModel)
+            .GetMethod("RebuildCharacterCapabilities", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(vm, null);
+        Assert.Equal(200, vm.EffectiveAcVsEvil);
     }
 
     // Six contiguous, non-overlapping Hits-You-% bands covering 0-100% with

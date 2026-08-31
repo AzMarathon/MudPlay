@@ -89,8 +89,11 @@
                     </StackPanel>
                     <StackPanel Grid.Column="5">
                         <TextBlock Classes="FieldLabel" Text="AC vs Evil"
-                                   ToolTip.Tip="Your Armour Class plus your worn Prot Evil — the combined defense an evil monster's attack actually rolls against."/>
-                        <TextBlock Classes="DetailLine" Text="{Binding EffectiveAcVsEvil}"/>
+                                   ToolTip.Tip="Your Armour Class plus Shadow (+10, if any) plus your worn Prot Evil — the combined defense an evil monster's attack actually rolls against. Editable: doesn't yet account for AC-boosting spell buffs, so hand-correct it to match your in-game @st reading if it looks off. Your edit also feeds Hits You % for evil monsters, and sticks until you reopen this window."/>
+                        <NumericUpDown Value="{Binding EffectiveAcVsEvil, Mode=TwoWay}"
+                                       Minimum="0" Maximum="9999" Increment="1"
+                                       FormatString="0" ShowButtonSpinner="True"
+                                       Width="90" MinWidth="90" Padding="4,0"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -131,7 +134,7 @@
                                        Minimum="1" Maximum="999999" Increment="1"
                                        FormatString="0" ShowButtonSpinner="True"
                                        Width="110" MinWidth="110"
-                                       ToolTip.Tip="A monster projecting more rounds to kill than this shows '&lt;cap&gt;+' instead of the literal number — a superboss can otherwise project into the millions. Saved automatically, per character."/>
+                                       ToolTip.Tip="A monster projecting more rounds to kill than this is hidden from the list entirely — a superboss can otherwise project into the millions of rounds. Saved automatically, per character."/>
                     </StackPanel>
                 </StackPanel>
 

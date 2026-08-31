@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.39.2
+
+- Fixed: Monster Intel's rounds-to-kill cap now actually hides monsters that take longer than the cap to kill, instead of just relabeling them "<cap>+" — a monster you can't kill at all still shows as "—", since that's different information from "too slow"
+- Monster Intel's AC vs Evil is now editable — a hand correction for when the auto-calc doesn't yet account for an active AC-boosting spell buff; the edit also feeds Hits You % for evil monsters, not just the display number, and sticks until the window is reopened
+
 ## 3.39.0
 
 - Game Data → Monsters filter panel reworked: grouped into labelled sections (Combat / Elemental defenses / Casting & immunity / Type & alignment / Loot & lairs) with friendlier labels + tooltips, an **Apply** and a **Reset** button, and the range boxes are plain text fields so you can type any value (including a negative resist to find vulnerabilities)

@@ -49,17 +49,14 @@ public sealed record MonsterIntelEntry
     // can't out-damage the monster's regen/HP at all).
     public int EstimatedRoundsToKill { get; set; } = -1;
 
-    // Display ceiling (Settings → Other, default 999) — a superboss can
-    // otherwise project into the millions of rounds, which isn't a
-    // meaningful number, just noise. Set alongside EstimatedRoundsToKill by
-    // RebuildCharacterCapabilities every entry gets the same live value.
-    public int RoundsToKillCap { get; set; } = 999;
-
+    // A monster projecting more rounds than the cap (Monster Intel's
+    // rounds-to-kill cap spinner) is dropped from the list entirely by
+    // MonsterIntelViewModel.PassesFilter — it never reaches display, so
+    // this never needs to show a "<cap>+" placeholder.
     public string EstimatedRoundsToKillText => EstimatedRoundsToKill switch
     {
         < 0 => string.Empty,
         0 => "—",
-        _ when EstimatedRoundsToKill > RoundsToKillCap => $"{RoundsToKillCap}+",
         _ => EstimatedRoundsToKill.ToString(Inv),
     };
 

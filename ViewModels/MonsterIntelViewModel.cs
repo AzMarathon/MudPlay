@@ -66,6 +66,13 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // immediately writing the same value straight back out via
     // OnRoundsToKillCapChanged.
     private bool _suppressCapPersist;
+    // Once the user hand-corrects EffectiveAcVsEvil (e.g. an active AC buff
+    // spell the auto-calc doesn't see yet), RebuildCharacterCapabilities
+    // stops overwriting it on the next gear/spell change -- the correction
+    // sticks for the rest of this window's life. _suppressAcVsEvilAutoSet
+    // guards the auto-computed write itself from tripping that flag.
+    private bool _acVsEvilManuallySet;
+    private bool _suppressAcVsEvilAutoSet;
 
     public event Action? CloseRequested;
 
@@ -179,8 +186,13 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _manaLabel = "Mana";
     [ObservableProperty] private string? _weaponSummaryText;
     [ObservableProperty] private int _knownAttackSpellCount;
-    // AC + Prot Evil — see the assignment in RebuildCharacterCapabilities for
-    // why this sum, not bare AC, is "effective AC vs Evil."
+    // AC + Shadow + Prot Evil — see the assignment in
+    // RebuildCharacterCapabilities for why this sum, not bare AC, is
+    // "effective AC vs Evil." User-editable (NumericUpDown in the character
+    // bar): the auto-calc doesn't yet account for AC-boosting spell buffs
+    // (see OnEffectiveAcVsEvilChanged), so a hand correction is the escape
+    // hatch until that's nailed down. The correction also feeds Hits You %
+    // for evil monsters, not just this display number.
     [ObservableProperty] private int _effectiveAcVsEvil;
 
     // Hits-You-% threshold checkboxes: independent, OR'd together — checking
@@ -270,27 +282,37 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // CalculateHitChance's non-backstab branch) — the single number
         // that actually answers "how well-defended am I against an evil
         // monster right now." (Confirmed against a live @st vs Evil/vs Good
-        // readout: both include the same flat Shadow bonus.)
-        EffectiveAcVsEvil = _playerAc + (_playerHasShadow ? 10 : 0) + _playerProtEvil;
+        // readout: both include the same flat Shadow bonus.) Skipped once
+        // the user's hand-corrected it — see OnEffectiveAcVsEvilChanged.
+        if (!_acVsEvilManuallySet)
+        {
+            _suppressAcVsEvilAutoSet = true;
+            EffectiveAcVsEvil = _playerAc + (_playerHasShadow ? 10 : 0) + _playerProtEvil;
+            _suppressAcVsEvilAutoSet = false;
+        }
 
         // The monster → player direction — the master list's "Hits You %"
-        // column and threshold checkboxes.
+        // column and threshold checkboxes. Evil monsters use whatever
+        // ProtEvil-equivalent reconciles back to EffectiveAcVsEvil (so a
+        // manual correction there — e.g. an AC buff spell the calc above
+        // doesn't see — actually changes this math, not just the display
+        // number); good monsters are unaffected, still the auto gear total.
+        int effectiveProtEvilForCalc = EffectiveAcVsEvil - _playerAc - (_playerHasShadow ? 10 : 0);
         foreach (MonsterIntelEntry entry in _all)
             entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.IncomingHitPercent(
                 entry.Source.PhysicalAccuracy, entry.Source.Align,
-                _playerAc, _playerDodge, _playerProtEvil, _playerProtGood,
+                _playerAc, _playerDodge, effectiveProtEvilForCalc, _playerProtGood,
                 _gameData.ActiveRealm, _playerHasShadow) ?? -1;
 
         // Estimated Rounds to Kill — the player-offense direction, our current
         // weapon's projected DPS against each monster's HP/AC/DR, via the same
-        // Compute() the Character Workshop's Hit Calculator uses. Capped for
-        // display (a superboss can otherwise project into the millions of
-        // rounds) at RoundsToKillCap, editable right in this window.
+        // Compute() the Character Workshop's Hit Calculator uses. Anything
+        // projecting past RoundsToKillCap is dropped entirely by
+        // PassesFilter — a triage cap, not just display rounding.
         PlayerMatchupProfile playerProfile =
             CharacterCalculator.BuildNormalAttackProfile(_stats, worn, encum, _gameData);
         foreach (MonsterIntelEntry entry in _all)
         {
-            entry.RoundsToKillCap = RoundsToKillCap;
             if (entry.Hp <= 0) { entry.EstimatedRoundsToKill = -1; continue; }
             MonsterCatalogEntry m = entry.Source;
             var monsterProfile = new MonsterMatchupProfile(
@@ -315,19 +337,34 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (SelectedEntry is not null) RebuildDetail();
     }
 
-    // Persists the new cap (Character tier, "Other") and re-stamps every
-    // entry without a full RebuildCharacterCapabilities — only the display
-    // ceiling changed, not the underlying rounds-to-kill projections.
+    // Persists the new cap (Character tier, "Other") and re-filters the
+    // list — PassesFilter drops anything above it, so a lower cap hides
+    // slow fights immediately and a higher one brings them back.
     // Resolve-then-write (not a bare new OtherSettings) so this doesn't
     // clobber the tab's other fields at the Character tier.
     partial void OnRoundsToKillCapChanged(int value)
     {
         if (_suppressCapPersist || !_hasCharacterContext) return;
-        foreach (MonsterIntelEntry entry in _all) entry.RoundsToKillCap = value;
         OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
         dto.RoundsToKillCap = value;
         _resolver.WriteAt(SettingsTier.Character, "Other", dto);
         RowsView.Refresh();
+        OnPropertyChanged(nameof(CountText));
+    }
+
+    // Marks EffectiveAcVsEvil as hand-corrected so the next gear/spell
+    // rebuild leaves it alone (see the field's own doc comment), then
+    // re-runs the Hits You % / Rounds to Kill math immediately so the edit
+    // takes effect without waiting on a gear change. Ignored when the
+    // auto-calc itself is the one writing the value.
+    partial void OnEffectiveAcVsEvilChanged(int value)
+    {
+        if (_suppressAcVsEvilAutoSet) return;
+        _acVsEvilManuallySet = true;
+        if (!_hasCharacterContext) return;
+        RebuildCharacterCapabilities();
+        RowsView.Refresh();
+        OnPropertyChanged(nameof(CountText));
     }
 
     private void OnPlayerStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -348,6 +385,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // trainer or quest-giver) isn't a meaningful "can this thing hurt me"
         // entry, so it's dropped unconditionally, not just under a checkbox.
         if (_hasCharacterContext && e.IncomingHitPercent < 0) return false;
+
+        // Rounds-to-kill cap is a triage filter, not just display rounding —
+        // anything genuinely too slow to be worth fighting drops out
+        // entirely. 0 ("not killable at all" — no weapon, or can't
+        // out-damage it) is never > the cap, so it still shows as "—" —
+        // that's meaningful "you can't touch this" info, not the same as
+        // "too slow."
+        if (_hasCharacterContext && e.EstimatedRoundsToKill > RoundsToKillCap) return false;
 
         bool anyThresholdChecked = ShowHits2 || ShowHits5 || ShowHits10 || ShowHits20 || ShowHits40 || ShowHits100;
         if (anyThresholdChecked)
