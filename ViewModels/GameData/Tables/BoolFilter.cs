@@ -4,9 +4,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace MudPlay.ViewModels.GameData.Tables;
 
 // A single-checkbox filter in a table's curation panel (e.g. "Undead only").
-// When checked, keeps only rows whose raw cell value "qualifies" per the supplied
-// predicate. LIVE — ticking the box re-filters immediately (the panel VM
-// subscribes to IsChecked).
+// When applied, keeps only rows whose raw cell value "qualifies" per the supplied
+// predicate. The checkbox is a pending edit until the panel's "Apply" button
+// calls Commit(); filtering reads the committed state.
 public sealed partial class BoolFilter : ObservableObject
 {
     public string Label { get; }
@@ -16,6 +16,9 @@ public sealed partial class BoolFilter : ObservableObject
     public string? Hint { get; }
 
     [ObservableProperty] private bool _isChecked;
+
+    // The applied state; only Commit (Apply) copies IsChecked into it.
+    private bool _committed;
 
     private readonly Func<string?, bool> _qualifies;
 
@@ -27,9 +30,11 @@ public sealed partial class BoolFilter : ObservableObject
         Hint = hint;
     }
 
-    public bool IsActive => IsChecked;
+    public void Commit() => _committed = IsChecked;
 
-    public bool Passes(string? rawValue) => !IsChecked || _qualifies(rawValue);
+    public bool IsActive => _committed;
+
+    public bool Passes(string? rawValue) => !_committed || _qualifies(rawValue);
 
     public void Clear() => IsChecked = false;
 }

@@ -68,6 +68,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["AcDr"]       = "AC/DR",
             ["MagicRes"]   = "Magic Res",
             ["Accuracy"]   = "Acc (typ/max)",
+            ["Damage"]      = "Avg Damage",
             ["Mag"]         = "Mag-wpn req",
             ["Efficiency"]  = "Exp Eff",
             ["AvgLairExp"]  = "Lair Exp",
@@ -159,8 +160,8 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
                 new RangeFilter("HP", "HP"),
                 new RangeFilter("Avg damage", "Damage", "Average damage it deals per round"),
                 new RangeFilter("Accuracy", "Accuracy", "Its attack accuracy — higher means it hits you more"),
-                new RangeFilter("Armour Class", "ArmourClass", "Harder to hit as this rises"),
-                new RangeFilter("Damage Resist", "DamageResist", "Flat reduction to physical damage it takes"),
+                new RangeFilter("AC", "ArmourClass", "Armour Class — harder to hit as this rises"),
+                new RangeFilter("DR", "DamageResist", "Damage Resist — flat reduction to physical damage it takes"),
                 new RangeFilter("Dodge", "Dodge"),
                 new RangeFilter("Magic Resist", "MagicRes", "Cuts spell damage once above 50; never fully immune"),
             }));
@@ -212,8 +213,6 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             {
                 new BoolFilter("Drops an item", "HasLoot", FlagPresent),
             }));
-
-        WireLiveFilters();
     }
 
     // A flag facet stores "1" when present, blank otherwise.
@@ -231,13 +230,15 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     // Programmatically set "Accuracy ≥ minAcc" and show the result — the Hit
     // Calculator's "Show me the Monsters" action opens this tab and calls here with
-    // the accuracy that hits the player at the picked hit-%. Setting the range's Min
-    // re-filters live; the value persists so a cold-load (tab not yet opened) picks
-    // it up when Reload/LoadAsync re-applies the filter.
+    // the accuracy that hits the player at the picked hit-%. Commits the value (the
+    // panel is otherwise apply-gated) so it takes effect immediately, and it
+    // persists so a cold-load (tab not yet opened) re-applies it via Reload/LoadAsync.
     public void FilterByAccuracyAtLeast(int minAcc)
     {
         RangeFilter? acc = FilterGroups.SelectMany(g => g.Ranges).FirstOrDefault(r => r.Column == "Accuracy");
-        if (acc is not null) acc.Min = minAcc;
+        if (acc is null) return;
+        acc.Min = minAcc;
+        ApplyFiltersCommand.Execute(null);   // commit the pending value + re-filter
     }
 
     // Monster Number → lair stats from the room graph: Count (# rooms whose lair tag

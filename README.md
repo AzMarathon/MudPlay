@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.39.0**
-> - Game Data → Monsters filter panel reworked: filters are now **live** (edit any control and the list re-curates immediately — no "Apply" button), grouped into labelled sections (Combat / Elemental defenses / Casting & immunity / Type & alignment / Loot & lairs), with friendlier labels + tooltips
+> - Game Data → Monsters filter panel reworked: grouped into labelled sections (Combat / Elemental defenses / Casting & immunity / Type & alignment / Loot & lairs) with friendlier labels + tooltips, an **Apply** and a **Reset** button, and free-text range boxes (type any value, including a negative resist to find vulnerabilities)
 > - Every numeric monster filter is now a **min/max range** (either bound optional) so you can bracket — HP 500–2000, or AC ≤ 20 to find easy kills — not just "at least N"
 > - Monster filtering absorbs Monster Intel's dimensions: per-element resists (signed, to find vulnerabilities), spell-immunity level, magic-weapon requirement, Type, Undead / Animal / Non-living flags, "casts spells", "drops an item"
 > - The search box FINDS a monster within the list; the filter panel CURATES which monsters are in it

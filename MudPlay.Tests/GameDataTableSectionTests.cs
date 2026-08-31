@@ -120,9 +120,9 @@ public sealed class GameDataTableSectionTests : IDisposable
         => vm.FilterGroups.SelectMany(g => g.Ranges).Single(r => r.Column == column);
 
     [Fact]
-    public async Task RangeFilters_StackWithAnd_AndAreLive()
+    public async Task RangeFilters_StackWithAnd()
     {
-        // Range filters are LIVE (no Apply step) and stack with AND. EXP min then HP
+        // Range filters are pending until Apply, then stack with AND. EXP min then HP
         // min narrows the set — report paradigm-20260814-103219's scenario.
         SeedMonsters("v1.11p",
             "[{\"Number\":1,\"Name\":\"Goblin\",\"HP\":10,\"EXP\":3}," +
@@ -132,13 +132,16 @@ public sealed class GameDataTableSectionTests : IDisposable
         MonstersSectionViewModel vm = new(_cache);
         await vm.LoadAsync();
 
-        // EXP min 9000 keeps Orc, Dragon (Goblin excluded) — no Apply call.
+        // Editing a box does nothing until Apply.
         Range(vm, "EXP").Min = 9000;
-        Assert.Equal(2, vm.FilteredRows.Count);
+        Assert.Equal(3, vm.FilteredRows.Count);   // not yet applied
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(2, vm.FilteredRows.Count);   // Orc, Dragon
         Assert.DoesNotContain(vm.FilteredRows, r => r.Get("Name") == "Goblin");
 
         // HP min 100 stacks on top: only Dragon (HP 500) survives.
         Range(vm, "HP").Min = 100;
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Dragon", vm.FilteredRows[0].Get("Name"));
     }
@@ -155,6 +158,7 @@ public sealed class GameDataTableSectionTests : IDisposable
         await vm.LoadAsync();
 
         Range(vm, "ArmourClass").Max = 20;
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Goblin", vm.FilteredRows[0].Get("Name"));
     }
@@ -171,7 +175,8 @@ public sealed class GameDataTableSectionTests : IDisposable
         await vm.LoadAsync();
 
         BoolFilter undead = vm.FilterGroups.SelectMany(g => g.Bools).Single(b => b.Column == "Undead");
-        undead.IsChecked = true;   // live
+        undead.IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Equal(2, vm.FilteredRows.Count);    // Skeleton, Zombie
         Assert.All(vm.FilteredRows, r => Assert.Equal("✗", r.GetDisplay("Undead")));
     }
@@ -217,7 +222,8 @@ public sealed class GameDataTableSectionTests : IDisposable
         string fiendAlign = vm.AllRows.Single(r => r.Get("Name") == "Fiend").GetDisplay("Align")!;
         Assert.Contains(fiendAlign, align.Options);   // fixed option list includes every alignment
 
-        align.Selected = fiendAlign;   // live
+        align.Selected = fiendAlign;
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Fiend", vm.FilteredRows[0].Get("Name"));
     }
@@ -238,11 +244,13 @@ public sealed class GameDataTableSectionTests : IDisposable
         await vm.LoadAsync();
 
         Range(vm, "ResCold").Min = 50;                    // resistant
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Iceling", vm.FilteredRows[0].Get("Name"));
 
         Range(vm, "ResCold").Min = null;
         Range(vm, "ResCold").Max = -1;                    // vulnerable
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Flamewisp", vm.FilteredRows[0].Get("Name"));
     }
@@ -261,14 +269,17 @@ public sealed class GameDataTableSectionTests : IDisposable
         await vm.LoadAsync();
 
         Bool(vm, "Animal").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Equal("Wolf", Assert.Single(vm.FilteredRows).Get("Name"));
         Bool(vm, "Animal").IsChecked = false;
 
         Bool(vm, "HasLoot").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Equal("Looter", Assert.Single(vm.FilteredRows).Get("Name"));
         Bool(vm, "HasLoot").IsChecked = false;
 
         Bool(vm, "CastsSpells").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
         Assert.Equal("Caster", Assert.Single(vm.FilteredRows).Get("Name"));
     }
 

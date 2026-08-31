@@ -17,16 +17,12 @@
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
         </Style>
-        <!-- Range boxes sit two-across (min / max), so hide the spin buttons to
-             leave room for the number; the user types the bracket values. -->
-        <Style Selector="NumericUpDown.range">
+        <!-- Range boxes sit two-across (min / max). Plain text boxes (not spinners)
+             so the user can freely type any value, including a leading minus for a
+             negative resist — a NumericUpDown refuses that in an empty box. -->
+        <Style Selector="TextBox.rangebox">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <Setter Property="HorizontalContentAlignment" Value="Right"/>
-            <Setter Property="ShowButtonSpinner" Value="False"/>
-            <Setter Property="Minimum" Value="-100000000"/>
-            <Setter Property="Maximum" Value="100000000"/>
-            <Setter Property="Increment" Value="1"/>
-            <Setter Property="FormatString" Value="0"/>
+            <Setter Property="TextAlignment" Value="Right"/>
         </Style>
         <Style Selector="TextBlock.FilterLabel">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
@@ -121,20 +117,26 @@
                 BorderThickness="1"
                 CornerRadius="3">
             <DockPanel LastChildFill="True">
-                <!-- The panel CURATES the list live (edit any control → re-filters);
-                     the top search box FINDS a monster within the curated list. -->
-                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-                    <TextBlock Grid.Column="0" Text="Filters"
-                               Foreground="{StaticResource ChromeFgBrush}"
-                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <!-- The panel CURATES the list (which rows qualify) as a deliberate
+                     act — edit the controls, then press Apply. The top search box
+                     FINDS a monster within the curated list. -->
+                <TextBlock DockPanel.Dock="Top" Text="Filters"
+                           Foreground="{StaticResource ChromeFgBrush}"
+                           FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,*" ColumnSpacing="6" Margin="0,0,0,10">
+                    <Button Grid.Column="0" Content="Apply"
+                            Command="{Binding ApplyFiltersCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Apply the filter boxes below to curate the list"/>
                     <Button Grid.Column="1" Content="Reset"
                             Command="{Binding ResetFiltersCommand}"
-                            Padding="10,2" FontSize="11"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             ToolTip.Tip="Clear every filter (and the search box)"/>
                 </Grid>
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding FilterGroups}">
+                    <!-- Right margin keeps the max boxes clear of the overlay scrollbar. -->
+                    <ItemsControl ItemsSource="{Binding FilterGroups}" Margin="0,0,10,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:FilterGroup">
                                 <StackPanel Margin="0,0,0,6">
@@ -149,16 +151,16 @@
                                                     <TextBlock Classes="FilterLabel" Text="{Binding Label}"
                                                                ToolTip.Tip="{Binding Hint}"/>
                                                     <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="4">
-                                                        <NumericUpDown Grid.Column="0" Classes="range"
-                                                                       PlaceholderText="min"
-                                                                       Value="{Binding Min, Mode=TwoWay}"
-                                                                       ToolTip.Tip="Minimum (blank = no lower limit)"/>
+                                                        <TextBox Grid.Column="0" Classes="rangebox"
+                                                                 PlaceholderText="min"
+                                                                 Text="{Binding Min, Converter={x:Static vm:NullableIntConverter.Instance}, Mode=TwoWay}"
+                                                                 ToolTip.Tip="Minimum (blank = no lower limit; negatives allowed)"/>
                                                         <TextBlock Grid.Column="1" Text="–" VerticalAlignment="Center"
                                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                                        <NumericUpDown Grid.Column="2" Classes="range"
-                                                                       PlaceholderText="max"
-                                                                       Value="{Binding Max, Mode=TwoWay}"
-                                                                       ToolTip.Tip="Maximum (blank = no upper limit)"/>
+                                                        <TextBox Grid.Column="2" Classes="rangebox"
+                                                                 PlaceholderText="max"
+                                                                 Text="{Binding Max, Converter={x:Static vm:NullableIntConverter.Instance}, Mode=TwoWay}"
+                                                                 ToolTip.Tip="Maximum (blank = no upper limit; negatives allowed)"/>
                                                     </Grid>
                                                 </StackPanel>
                                             </DataTemplate>

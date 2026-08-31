@@ -487,7 +487,7 @@ Click a section to open it. Each table has its own **Filter…** box (this one f
 
 The **Monsters** table carries a full column set for browsing and filtering monster stats: **Respawn** (respawn timer), **Exp** (the actual experience earned per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **Magic Res**, **Acc (typ/max)** (typical/highest attack accuracy), **Damage**, **Exp Eff** (an exp-per-effort efficiency score), **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**, **Mag-wpn req** (the HitMagic level a weapon must meet to land a hit), and **Undead**.
 
-It also carries a **filter sidebar** on the right — drag its left edge to resize it — that **curates** which monsters are in the list. It's split into labelled sections, each control a **live** filter (edit it and the list re-curates immediately — no Apply button), all AND'd together:
+It also carries a **filter sidebar** on the right — drag its left edge to resize it — that **curates** which monsters are in the list. Edit the boxes, then press **Apply** to run them (a deliberate step, so a half-typed range never re-filters mid-edit); **Reset** clears every filter and the search box at once. It's split into labelled sections, all AND'd together:
 
 - **Combat** — Exp, HP, Avg damage, Accuracy, Armour Class, Damage Resist, Dodge, Magic Resist.
 - **Elemental defenses** — Cold / Fire / Stone / Lightning / Water resist %. These are **signed**: a *negative* resist means the monster is **vulnerable** (takes extra of that element), so bracket the max at −1 to find things a given element shreds.

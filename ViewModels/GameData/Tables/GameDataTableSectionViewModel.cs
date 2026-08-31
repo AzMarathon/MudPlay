@@ -296,12 +296,12 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     }
 
     // ----- Curation filter panel (subclasses populate FilterGroups; empty = no panel) -----
-    // A LIVE sidebar beside the grid: min/max ranges, checkboxes, and dropdowns,
-    // grouped into labelled sections. Editing any control re-filters immediately —
-    // there is no Apply step. Distinct from the always-live "Filter…" text box: the
-    // panel CURATES the list (which rows qualify); the text box FINDS a specific one
-    // within it. Empty by default, so tables that declare no groups render no
-    // sidebar. Subclasses build FilterGroups once and call WireLiveFilters.
+    // A sidebar beside the grid: min/max ranges, checkboxes, and dropdowns, grouped
+    // into labelled sections. The panel CURATES the list (which rows qualify) as a
+    // deliberate act — editing a control is a PENDING edit that does nothing until
+    // "Apply" is pressed (CommitPanelFilters copies each box's value over). Distinct
+    // from the always-live "Filter…" text box, which FINDS a specific row within the
+    // curated list. Empty by default, so tables with no groups render no sidebar.
     public ObservableCollection<FilterGroup> FilterGroups { get; } = new();
     public bool HasFilterPanel => FilterGroups.Count > 0;
 
@@ -309,25 +309,20 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     private IEnumerable<BoolFilter> AllBoolFilters => FilterGroups.SelectMany(g => g.Bools);
     private IEnumerable<CategoryFilter> AllCategoryFilters => FilterGroups.SelectMany(g => g.Categories);
 
-    // Suppresses the per-filter live re-filter during a bulk change (Reset), so the
-    // whole panel re-filters once at the end rather than once per cleared box.
-    private bool _suppressLiveFilter;
-
-    // Subscribe every panel filter's change to a live re-filter. Called by the
-    // subclass after it has populated FilterGroups.
-    protected void WireLiveFilters()
+    // Commit every pending panel edit and re-filter. The "Apply" button.
+    [RelayCommand]
+    private void ApplyFilters()
     {
-        foreach (RangeFilter r in AllRangeFilters) r.PropertyChanged += OnPanelFilterChanged;
-        foreach (BoolFilter b in AllBoolFilters) b.PropertyChanged += OnPanelFilterChanged;
-        foreach (CategoryFilter c in AllCategoryFilters) c.PropertyChanged += OnPanelFilterChanged;
-        OnPropertyChanged(nameof(HasFilterPanel));
-    }
-
-    private void OnPanelFilterChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (_suppressLiveFilter) return;
+        CommitPanelFilters();
         ApplyFilter();
         OnPropertyChanged(nameof(StatusText));
+    }
+
+    private void CommitPanelFilters()
+    {
+        foreach (RangeFilter r in AllRangeFilters) r.Commit();
+        foreach (BoolFilter b in AllBoolFilters) b.Commit();
+        foreach (CategoryFilter c in AllCategoryFilters) c.Commit();
     }
 
     // Drives ApplyFilter's "run even with an empty text box" path (see ApplyFilter).
@@ -342,16 +337,15 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         }
     }
 
-    // Empties every panel filter (and the text box) and re-filters once.
+    // Empties every panel filter (and the text box) and re-filters. The "Reset" button.
     [RelayCommand]
     private void ResetFilters()
     {
-        _suppressLiveFilter = true;
         foreach (RangeFilter r in AllRangeFilters) r.Clear();
         foreach (BoolFilter b in AllBoolFilters) b.Clear();
         foreach (CategoryFilter c in AllCategoryFilters) c.Clear();
-        _suppressLiveFilter = false;
         SearchText = string.Empty;   // OnSearchTextChanged re-applies (no-op if already empty)
+        CommitPanelFilters();        // make the cleared boxes take effect
         ApplyFilter();
         OnPropertyChanged(nameof(StatusText));
     }
