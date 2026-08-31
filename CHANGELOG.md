@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.37.7
+
+- Monster Intel's Hits-You-% checkboxes reworked from 5 bands (2/5/10/15/25%+) to 6 contiguous bands with no gap (2/5/10/20/40/40%+, covering 0-2, 3-5, 6-10, 11-20, 21-40, 41-100) — the old scheme left a dead 16-24% zone no box covered, and dumped roughly 40% of a geared character's fightable monsters into one undifferentiated "25%+" bucket
+
 ## 3.37.6
 
 - Monster Intel master list gains two columns: **EXP** and **Est. Rounds to Kill** (projected rounds for your currently-equipped weapon's Normal attack to drop the monster, at your live accuracy/damage/swings/crit — reuses the same MonsterMatchupCalculator the Character Workshop's Calculators tab already uses; shows "—" when unarmed or unable to out-damage it)

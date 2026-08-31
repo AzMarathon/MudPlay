@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.6**
-> - Monster Intel master list gains two columns: EXP and Est. Rounds to Kill (projected rounds for your equipped weapon's Normal attack to drop the monster, at your live accuracy/damage/swings/crit)
+> **Version 3.37.7**
+> - Monster Intel's Hits-You-% checkboxes reworked from 5 bands to 6 contiguous bands with no gap (2/5/10/20/40/40%+) — the old scheme left a dead 16-24% zone and lumped ~40% of a geared character's monsters into one "25%+" bucket
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

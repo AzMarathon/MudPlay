@@ -99,7 +99,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         {
             if (e.PropertyName is nameof(NameFilter) or nameof(HittableOnly) or nameof(CastableOnly)
                 or nameof(ShowHits2) or nameof(ShowHits5) or nameof(ShowHits10)
-                or nameof(ShowHits15) or nameof(ShowHits25Plus))
+                or nameof(ShowHits20) or nameof(ShowHits40) or nameof(ShowHits100))
             { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
             else if (e.PropertyName == nameof(SelectedEntry)) RebuildDetail();
         };
@@ -167,15 +167,21 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // Hits-You-% threshold checkboxes: independent, OR'd together — checking
     // none shows every monster (still subject to the "no computable value"
     // drop below); checking one or more keeps a monster if it falls in ANY
-    // checked band. Each is its OWN discrete, non-overlapping band (0-2,
-    // 3-5, 6-10, 11-15) — checking 10% alone must never also surface a 1%
-    // or 2% monster. The last checkbox is the odd one out: >=25%, the
-    // opposite direction, for deliberately looking at what's risky.
+    // checked band. Six discrete, non-overlapping, contiguous bands covering
+    // the full 0-100% range with no gap (0-2, 3-5, 6-10, 11-20, 21-40,
+    // 41-100) — checking 10% alone must never also surface a 1% or 2%
+    // monster. Doubling scale rather than flat 5%-wide steps: against a
+    // catalog-wide distribution pull (see the PR discussion), a leveled
+    // character's Hits You % spreads across the full range rather than
+    // clustering low, so the old 5-band scheme (topping out at "25%+") left
+    // roughly 40% of fightable monsters undifferentiated in one catch-all
+    // bucket, plus a dead 16-24% zone no box covered at all.
     [ObservableProperty] private bool _showHits2;
     [ObservableProperty] private bool _showHits5;
     [ObservableProperty] private bool _showHits10;
-    [ObservableProperty] private bool _showHits15;
-    [ObservableProperty] private bool _showHits25Plus;
+    [ObservableProperty] private bool _showHits20;
+    [ObservableProperty] private bool _showHits40;
+    [ObservableProperty] private bool _showHits100;
 
     // Recomputes weapon HitMagic, the owned-attack-spell set, and the live
     // AC/Dodge/ward totals behind the Hittable / Castable filters and the
@@ -290,20 +296,22 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // entry, so it's dropped unconditionally, not just under a checkbox.
         if (_hasCharacterContext && e.IncomingHitPercent < 0) return false;
 
-        bool anyThresholdChecked = ShowHits2 || ShowHits5 || ShowHits10 || ShowHits15 || ShowHits25Plus;
+        bool anyThresholdChecked = ShowHits2 || ShowHits5 || ShowHits10 || ShowHits20 || ShowHits40 || ShowHits100;
         if (anyThresholdChecked)
         {
             // Each box is its OWN discrete band, not "at or under" — checking
             // 10% must show only the 6-10% band, never the 2%/5% monsters
             // underneath it too (report: checking 10% alone showed 1%/2%
-            // entries because this used to be cumulative thresholds).
+            // entries because this used to be cumulative thresholds). Bands
+            // are contiguous across the full 0-100% range with no gap.
             int hp = e.IncomingHitPercent;
             bool inCheckedBand =
                 (ShowHits2 && hp is >= 0 and <= 2)
                 || (ShowHits5 && hp is >= 3 and <= 5)
                 || (ShowHits10 && hp is >= 6 and <= 10)
-                || (ShowHits15 && hp is >= 11 and <= 15)
-                || (ShowHits25Plus && hp >= 25);
+                || (ShowHits20 && hp is >= 11 and <= 20)
+                || (ShowHits40 && hp is >= 21 and <= 40)
+                || (ShowHits100 && hp >= 41);
             if (!inCheckedBand) return false;
         }
         return true;

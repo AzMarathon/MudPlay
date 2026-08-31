@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using MudPlay.Game;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
@@ -63,5 +65,77 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.NotEqual(string.Empty, entry.EstimatedRoundsToKillText);
 
         inventory.Dispose();
+    }
+
+    // Six contiguous, non-overlapping Hits-You-% bands covering 0-100% with
+    // no gap: 0-2, 3-5, 6-10, 11-20, 21-40, 41-100. Pins the exact boundaries
+    // so a future edit can't silently reopen a dead zone (the 16-24% gap the
+    // old 5-band scheme left) or make a band overlap its neighbor.
+    [Theory]
+    [InlineData(0, nameof(MonsterIntelViewModel.ShowHits2))]
+    [InlineData(2, nameof(MonsterIntelViewModel.ShowHits2))]
+    [InlineData(3, nameof(MonsterIntelViewModel.ShowHits5))]
+    [InlineData(5, nameof(MonsterIntelViewModel.ShowHits5))]
+    [InlineData(6, nameof(MonsterIntelViewModel.ShowHits10))]
+    [InlineData(10, nameof(MonsterIntelViewModel.ShowHits10))]
+    [InlineData(11, nameof(MonsterIntelViewModel.ShowHits20))]
+    [InlineData(20, nameof(MonsterIntelViewModel.ShowHits20))]
+    [InlineData(21, nameof(MonsterIntelViewModel.ShowHits40))]
+    [InlineData(40, nameof(MonsterIntelViewModel.ShowHits40))]
+    [InlineData(41, nameof(MonsterIntelViewModel.ShowHits100))]
+    [InlineData(100, nameof(MonsterIntelViewModel.ShowHits100))]
+    public void HitsYouPercentBand_ChecksOnlyItsOwnRange(int incomingHitPercent, string ownBoxProperty)
+    {
+        using MonsterIntelViewModel vm = BuildViewModelWithSyntheticEntry(incomingHitPercent);
+        string[] allBoxes =
+        {
+            nameof(MonsterIntelViewModel.ShowHits2), nameof(MonsterIntelViewModel.ShowHits5),
+            nameof(MonsterIntelViewModel.ShowHits10), nameof(MonsterIntelViewModel.ShowHits20),
+            nameof(MonsterIntelViewModel.ShowHits40), nameof(MonsterIntelViewModel.ShowHits100),
+        };
+
+        // Check exactly one box at a time (never zero -- zero means "no
+        // restriction, show everything" and would trivially pass) and
+        // confirm the entry shows only when that box is its own band.
+        foreach (string box in allBoxes)
+        {
+            SetBox(vm, box, true);
+            bool visible = vm.RowsView.Cast<MonsterIntelEntry>().Any(e => e.Name == "test goblin");
+            Assert.True(visible == (box == ownBoxProperty),
+                $"hp={incomingHitPercent}, box={box}: expected visible={box == ownBoxProperty}, got {visible}");
+            SetBox(vm, box, false);
+        }
+    }
+
+    private static void SetBox(MonsterIntelViewModel vm, string property, bool value)
+        => typeof(MonsterIntelViewModel).GetProperty(property)!.SetValue(vm, value);
+
+    private MonsterIntelViewModel BuildViewModelWithSyntheticEntry(int incomingHitPercent)
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 10, Agility = 50, Charm = 50 };
+        var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
+        var itemMagic = new ItemMagicIndex(cache);
+
+        var vm = new MonsterIntelViewModel(
+            cache, catalog, stats, inventory, spellbook, itemMagic,
+            observations: null, playerState: null);
+        inventory.Dispose();
+
+        // Mutate the VM's backing list in place (same object RowsView was
+        // constructed over) rather than replacing the field -- RowsView
+        // wraps that exact List<T> by reference, so a field swap wouldn't
+        // reach it, but Refresh() re-enumerates its current contents.
+        FieldInfo allField = typeof(MonsterIntelViewModel).GetField("_all", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var all = (List<MonsterIntelEntry>)allField.GetValue(vm)!;
+        MonsterIntelEntry synthetic = all.First(e => e.Name == "test goblin");
+        synthetic.IncomingHitPercent = incomingHitPercent;
+        all.Clear();
+        all.Add(synthetic);
+        vm.RowsView.Refresh();
+        return vm;
     }
 }

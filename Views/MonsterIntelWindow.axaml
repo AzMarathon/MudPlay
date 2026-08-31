@@ -119,10 +119,12 @@
                                   ToolTip.Tip="Show monsters whose own attack has 3-5% chance to hit you."/>
                         <CheckBox Content="10%" IsChecked="{Binding ShowHits10, Mode=TwoWay}"
                                   ToolTip.Tip="Show monsters whose own attack has 6-10% chance to hit you."/>
-                        <CheckBox Content="15%" IsChecked="{Binding ShowHits15, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 11-15% chance to hit you."/>
-                        <CheckBox Content="25%+" IsChecked="{Binding ShowHits25Plus, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 25% or more chance to hit you."/>
+                        <CheckBox Content="20%" IsChecked="{Binding ShowHits20, Mode=TwoWay}"
+                                  ToolTip.Tip="Show monsters whose own attack has 11-20% chance to hit you."/>
+                        <CheckBox Content="40%" IsChecked="{Binding ShowHits40, Mode=TwoWay}"
+                                  ToolTip.Tip="Show monsters whose own attack has 21-40% chance to hit you."/>
+                        <CheckBox Content="40%+" IsChecked="{Binding ShowHits100, Mode=TwoWay}"
+                                  ToolTip.Tip="Show monsters whose own attack has 41% or more chance to hit you."/>
                     </StackPanel>
                 </StackPanel>
 
