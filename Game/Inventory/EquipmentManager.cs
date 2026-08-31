@@ -389,6 +389,24 @@ public sealed class EquipmentManager
         if (cmds.Count == 0)
             return combatChanged;
 
+        // In-flight guard: the previous apply of this set is still awaiting the
+        // game's `wear` confirmations, so the worn snapshot hasn't caught up and
+        // re-diffing re-emits the very same wears. A burst of auto-fire triggers
+        // (a rest-complete + posture + walker churn while Default and a pre-rest
+        // set overlap the same slots, with HP hovering at the rest threshold)
+        // otherwise re-sends the identical `wear`s several times a second — the
+        // first lands, the rest bounce off as "you do not have X left unequipped"
+        // (report paradigm-20260831-071637). Hold until the confirmations arrive
+        // (NoteEquipSucceeded clears _pending) or the pending window lapses; the
+        // thrash net still backstops a genuine non-convergence.
+        if (IsReapplyInFlight(set, cmds))
+        {
+            _log?.Debug(LogCategory,
+                $"gear set '{set.Name}': prior apply still in flight — not re-sending "
+                + $"{cmds.Count} duplicate command(s)");
+            return combatChanged;
+        }
+
         if (IsThrashing(set))
             return combatChanged;
 
@@ -396,6 +414,32 @@ public sealed class EquipmentManager
         RecordPending(set, cmds);
         SendSet(cmds);
         return true;
+    }
+
+    // True when every item this apply would (re)wear is already outstanding for
+    // THIS set from a prior apply whose confirmations haven't landed yet — a pure
+    // re-send. A genuinely new / changed slot (not yet pending) falls through so
+    // the real swap still goes out. _pending is cleared as each wear confirms
+    // (NoteEquipSucceeded) or when the pending window lapses (ExpirePending).
+    private bool IsReapplyInFlight(EquipmentSet set, IReadOnlyList<string> cmds)
+    {
+        ExpirePending();
+        if (_pending.Count == 0) return false;
+
+        bool any = false;
+        foreach (string c in cmds)
+        {
+            string? name =
+                c.StartsWith("wear ", StringComparison.Ordinal) ? c["wear ".Length..] :
+                c.StartsWith("eq ", StringComparison.Ordinal) ? c["eq ".Length..] : null;
+            if (name is null) continue;   // a `rem` prepend isn't a wear
+            any = true;
+            string n = name.Trim();
+            if (!_pending.Any(p => string.Equals(p.SetId, set.Id, StringComparison.Ordinal)
+                                   && string.Equals(p.ItemName, n, StringComparison.OrdinalIgnoreCase)))
+                return false;             // a wear that isn't already in flight — let it through
+        }
+        return any;
     }
 
     // Whether the same set has produced commands too many times in the window — i.e.

@@ -1,7 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.40.0**
+> **Version 3.40.1**
+> - Fixed the auto-equip spamming the same `wear` commands several times a second when a Default set and a Pre-rest set overlap the same slots (a re-apply now waits for the previous swap's wears to confirm)
 > - Monster Intel **Edit Attacks** picker: choose which of your attacks (every usable melee type + your attack spells) show in Your Matchup, and which one drives the Est. Rounds to Kill column
 > - Your Matchup now lists your melee attacks (rounds/hit%/dmg vs the monster) alongside the ranked spells
 > - Monster Intel top bar shows plain **AC** (worn gear + configured buffs + Shadow) instead of "AC vs Evil" — evil-only wards no longer inflate it against neutral/good monsters

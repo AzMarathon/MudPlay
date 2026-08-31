@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.40.1
+
+- Fixed the auto-equip spamming the same `wear` commands several times a second when a Default set and a Pre-rest set overlap the same slots — a re-apply now holds while the previous swap's wears are still awaiting confirmation, instead of re-sending the identical commands until the thrash guard trips
+- bug reports addressed: paradigm-20260831-071637
+
 ## 3.40.0
 
 - Monster Intel **Edit Attacks** picker (button top-right): check which of your attacks — every usable melee type *and* each obtained attack spell — appear in Your Matchup, and pick (radio) which one drives the **Est. Rounds to Kill** column, so you can ask "how fast if I nuke it?" vs "if I swing my weapon?"

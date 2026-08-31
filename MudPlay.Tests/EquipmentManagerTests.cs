@@ -388,6 +388,49 @@ public sealed class EquipmentManagerTests
         Assert.Equal(EquipResult.Applied, mgr.ApplyByKeyword("fighting"));
     }
 
+    // Regression (report paradigm-20260831-071637): a burst of auto-fire triggers
+    // re-applied the Default set several times a second, spamming the same wears
+    // faster than the game could confirm them. The in-flight guard suppresses a
+    // re-apply while the prior apply's wears are still outstanding, then releases
+    // once they confirm.
+    [Fact]
+    public void ApplyByTrigger_ReapplyWhileWearsInFlight_SuppressedUntilConfirmed()
+    {
+        EquipmentSet def = Set("default", "Default",
+            Entry(EquipmentSlot.Waist, "multicoloured sash"),
+            Entry(EquipmentSlot.Feet, "adamantite chainmail boots"));
+        def.Id = "def";
+        def.Trigger = EquipTriggerType.Default;
+        EquipmentSettings settings = new() { Sets = { def } };
+
+        // Worn: the pre-rest items in those two slots; the set's items sit in the
+        // pack (available to wear), so the Default apply diffs to two wears.
+        InventorySnapshot snap = InventorySnapshot.Empty with
+        {
+            EquippedItems = new List<EquippedItem>
+            {
+                new("trollskin belt", "Waist"),
+                new("trollskin boots", "Feet"),
+            },
+            CarriedItems = new List<string> { "multicoloured sash", "adamantite chainmail boots" },
+            LastUpdated = DateTimeOffset.UtcNow,
+        };
+        EquipmentManager mgr = Manager(settings, snap, new CombatSettings());
+
+        // First apply sends the two wears.
+        Assert.Equal(EquipResult.Applied, mgr.ApplyByTrigger(EquipTriggerType.Default));
+        Assert.Equal(
+            new[] { "wear multicoloured sash", "wear adamantite chainmail boots" }, Wire(mgr));
+
+        // Re-applied while those wears are still in flight → suppressed, no re-send.
+        Assert.Equal(EquipResult.NoChange, mgr.ApplyByTrigger(EquipTriggerType.Default));
+
+        // Once the game confirms both wears, the guard releases.
+        mgr.NoteEquipSucceeded("multicoloured sash");
+        mgr.NoteEquipSucceeded("adamantite chainmail boots");
+        Assert.Equal(EquipResult.Applied, mgr.ApplyByTrigger(EquipTriggerType.Default));
+    }
+
     [Fact]
     public void ApplyByKeyword_VirtualSlotAlreadyInEffect_NoChange()
     {
