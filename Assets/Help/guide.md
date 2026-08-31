@@ -511,14 +511,9 @@ Values group with thousands separators. Unlike the live **Filter…** text box, 
 
 **Character bar** — a strip across the top (once a character is loaded) showing your name/level/class, live HP, live Mana or Kai (whichever your class uses), your currently-equipped weapon's HitMagic, and how many attack spells you've obtained. It updates live as HP/mana tick and stays current if you swap gear or learn a new spell while the window is open.
 
-The left list is filterable by name and shows five columns — **Name**, **HP**, **EXP**, **Hits You %** (that monster's own attack's chance to land on you, given your live AC/Dodge and whichever ward — Prot Evil/Prot Good — applies to its alignment), and **Est. Rounds to Kill** (rounds for your currently-equipped weapon's Normal attack to drop it, at your live accuracy/damage/swings/crit — the same projection the Character Workshop's Calculators tab uses, shown here as "—" when you're unarmed or can't out-damage it). Every column is independently sortable (click a header; click again to reverse). **Once a character is loaded, a monster with no computable Hits You % (an NPC/caster-only record with no catalogued physical attack — a trainer, quest-giver, etc.) is dropped from the list entirely** — it isn't a meaningful "can this thing hurt me" entry, so it's never just left blank.
+The left list is filterable by name and shows five columns — **Name**, **HP**, **EXP**, **Hits You %** (that monster's own attack's chance to land on you, given your live AC/Dodge and whichever ward — Prot Evil/Prot Good — applies to its alignment), and **Est. Rounds to Kill** (rounds for your currently-equipped weapon's Normal attack to drop it, at your live accuracy/damage/swings/crit — the same projection the Character Workshop's Calculators tab uses, shown here as "—" when you're unarmed or can't out-damage it). A monster that would take longer than the Settings → Other **rounds-to-kill cap** (default 999) shows as `<cap>+` instead of the literal number — a superboss can otherwise project into the millions of rounds, which isn't a meaningful figure to see. Every column is independently sortable (click a header; click again to reverse). **Once a character is loaded, a monster with no computable Hits You % (an NPC/caster-only record with no catalogued physical attack — a trainer, quest-giver, etc.) is dropped from the list entirely** — it isn't a meaningful "can this thing hurt me" entry, so it's never just left blank.
 
-Two checkboxes narrow the list to what you can actually engage right now (both need a character loaded):
-
-- **Hittable** — keeps only monsters your equipped weapon's HitMagic actually clears.
-- **Castable** — keeps only monsters where at least one attack spell you've obtained gets past their spell immunity.
-
-Below those, a row of **Hits You %** threshold checkboxes — **2%, 5%, 10%, 20%, 40%, 40%+** — narrows by how dangerous a monster's own attack is. Each box is its own discrete band, and together they cover the full 0-100% range with no gap: **0-2%, 3-5%, 6-10%, 11-20%, 21-40%, 41-100%** — so checking **10%** alone shows only monsters in the 6-10% band, not the 1-2% or 3-5% ones too. The bands widen as they go up (a doubling scale, not flat 5%-wide steps) — a leveled character's Hits You % spreads across the *whole* range rather than staying low, so the top end needs room too, not one catch-all bucket. Check as many as you like: a monster shows if it matches **any** checked box (checking both 5% and 40%+ shows the safe end and the risky end while hiding the middle). Checking none shows every monster regardless of Hits You %.
+A row of **Hits You %** threshold checkboxes — **2%, 5%, 10%, 20%, 40%, 40%+** — narrows by how dangerous a monster's own attack is. Each box is its own discrete band, and together they cover the full 0-100% range with no gap: **0-2%, 3-5%, 6-10%, 11-20%, 21-40%, 41-100%** — so checking **10%** alone shows only monsters in the 6-10% band, not the 1-2% or 3-5% ones too. The bands widen as they go up (a doubling scale, not flat 5%-wide steps) — a leveled character's Hits You % spreads across the *whole* range rather than staying low, so the top end needs room too, not one catch-all bucket. Check as many as you like: a monster shows if it matches **any** checked box (checking both 5% and 40%+ shows the safe end and the risky end while hiding the middle). Checking none shows every monster regardless of Hits You %.
 
 Select a monster to fill the right-hand detail panel:
 
@@ -1783,6 +1778,11 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 **Default:** On
 **What it does:** When you `look <monster>`, MudPlay shows its estimated remaining hit points — both in the status bar's **TGT HP:** slot and as a yellow line printed to the terminal (e.g. `[orc remaining Hitpoints: 35-48]`). Turning this off suppresses both.
+
+### Monster Intel rounds-to-kill cap
+
+**Default:** 999 (range 1–999999)
+**What it does:** Caps the **Est. Rounds to Kill** column in Monster Intel's master list. A monster projecting past this many rounds (a superboss with huge HP/AC) shows `<cap>+` instead of the literal number, which for something like a 2.2-million-round fight isn't a meaningful figure anyway. Read live, so a change here takes effect on Monster Intel's next gear/spell recompute — no need to reopen the window.
 
 ### Enable the Great Pyramid climb solver / Enable the asylum (random-teleport maze) solver
 

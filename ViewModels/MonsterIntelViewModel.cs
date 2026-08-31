@@ -34,6 +34,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 {
     private readonly GameDataCache _gameData;
     private readonly MonsterCatalog _catalog;
+    private readonly SettingsResolver _resolver;
     private readonly PlayerStats? _stats;
     private readonly PlayerState? _playerState;
     private readonly InventoryManager? _inventory;
@@ -45,7 +46,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly bool _hasCharacterContext;
     private readonly List<PlayerAttackSpell> _ownedAttackSpells = new();
     private int _weaponHitMagic;
-    private int _maxKnownAttackSpellReqLevel = -1;
     // Live player combat totals behind the Hits-You-% threshold checkboxes /
     // master-list "Hits You %" column — recomputed alongside weapon/spell
     // capabilities in RebuildCharacterCapabilities whenever gear changes.
@@ -71,15 +71,17 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     public bool ShowPlaceholder => !HasSelection;
 
     public MonsterIntelViewModel(
-        GameDataCache gameData, MonsterCatalog catalog,
+        GameDataCache gameData, MonsterCatalog catalog, SettingsResolver resolver,
         PlayerStats? stats = null, InventoryManager? inventory = null,
         SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null,
         MonsterObservationTracker? observations = null, PlayerState? playerState = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(resolver);
         _gameData = gameData;
         _catalog = catalog;
+        _resolver = resolver;
         _stats = stats;
         _playerState = playerState;
         _inventory = inventory;
@@ -97,7 +99,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(NameFilter) or nameof(HittableOnly) or nameof(CastableOnly)
+            if (e.PropertyName is nameof(NameFilter)
                 or nameof(ShowHits2) or nameof(ShowHits5) or nameof(ShowHits10)
                 or nameof(ShowHits20) or nameof(ShowHits40) or nameof(ShowHits100))
             { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
@@ -160,10 +162,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string? _weaponSummaryText;
     [ObservableProperty] private int _knownAttackSpellCount;
 
-    // ----- character-aware list filters -----
-    [ObservableProperty] private bool _hittableOnly;
-    [ObservableProperty] private bool _castableOnly;
-
     // Hits-You-% threshold checkboxes: independent, OR'd together — checking
     // none shows every monster (still subject to the "no computable value"
     // drop below); checking one or more keeps a monster if it falls in ANY
@@ -184,12 +182,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private bool _showHits100;
 
     // Recomputes weapon HitMagic, the owned-attack-spell set, and the live
-    // AC/Dodge/ward totals behind the Hittable / Castable filters and the
-    // threshold checkboxes / master list's "Hits You %" column. Called once
-    // at startup and again
-    // whenever gear or the spellbook changes, so a mid-session weapon swap or
-    // a newly-obtained spell updates the character bar and re-filters the
-    // list without reselecting a monster.
+    // AC/Dodge/ward totals behind the Hits-You-% threshold checkboxes,
+    // the master list's "Hits You %" / "Est. Rounds to Kill" columns, and
+    // Your Matchup. Called once at startup and again whenever gear or the
+    // spellbook changes, so a mid-session weapon swap or a newly-obtained
+    // spell updates the character bar and re-filters the list without
+    // reselecting a monster.
     private void RebuildCharacterCapabilities()
     {
         IReadOnlyList<EquippedItem> worn = _inventory!.Snapshot.EquippedItems;
@@ -218,8 +216,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 undeadOnly, livingOnly));
         }
         KnownAttackSpellCount = _ownedAttackSpells.Count;
-        _maxKnownAttackSpellReqLevel = _ownedAttackSpells.Count > 0
-            ? _ownedAttackSpells.Max(s => s.ReqLevel) : -1;
 
         // Same equipment-aggregation recipe CalculatorsSectionViewModel uses to
         // seed its own live player-side matchup inputs (AggregateEquipmentStats
@@ -235,9 +231,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _playerProtEvil = totals.PlusProtEvil;
         _playerProtGood = totals.PlusProtGood;
 
-        // The direction Hittable/Castable don't cover (those gate whether WE
-        // can land a hit/spell; this is whether the monster can land one on
-        // US) — the master list's "Hits You %" column and threshold checkboxes.
+        // The monster → player direction — the master list's "Hits You %"
+        // column and threshold checkboxes.
         foreach (MonsterIntelEntry entry in _all)
             entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.IncomingHitPercent(
                 entry.Source.PhysicalAccuracy, entry.Source.Align,
@@ -246,11 +241,16 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         // Estimated Rounds to Kill — the player-offense direction, our current
         // weapon's projected DPS against each monster's HP/AC/DR, via the same
-        // Compute() the Character Workshop's Hit Calculator uses.
+        // Compute() the Character Workshop's Hit Calculator uses. Capped for
+        // display (a superboss can otherwise project into the millions of
+        // rounds) at a user-tunable ceiling (Settings → Other), read live so
+        // a mid-session change takes effect on the next gear/spell rebuild.
         PlayerMatchupProfile playerProfile =
             CharacterCalculator.BuildNormalAttackProfile(_stats, worn, encum, _gameData);
+        int roundsToKillCap = _resolver.Resolve<OtherSettings>("Other").RoundsToKillCap;
         foreach (MonsterIntelEntry entry in _all)
         {
+            entry.RoundsToKillCap = roundsToKillCap;
             if (entry.Hp <= 0) { entry.EstimatedRoundsToKill = -1; continue; }
             MonsterCatalogEntry m = entry.Source;
             var monsterProfile = new MonsterMatchupProfile(
@@ -287,8 +287,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (o is not MonsterIntelEntry e) return false;
         if (!string.IsNullOrWhiteSpace(NameFilter)
             && !e.Name.Contains(NameFilter, StringComparison.OrdinalIgnoreCase)) return false;
-        if (HittableOnly && e.Magical > _weaponHitMagic) return false;
-        if (CastableOnly && _maxKnownAttackSpellReqLevel < e.Source.SpellImmunity) return false;
 
         // Once a character is loaded, a monster with no computable Hits You %
         // (no catalogued physical attack — an NPC/caster-only record, e.g. a

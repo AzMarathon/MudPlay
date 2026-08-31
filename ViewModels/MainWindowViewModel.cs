@@ -4443,7 +4443,7 @@ public partial class MainWindowViewModel : ObservableObject
         MonsterIntelWindow window = new()
         {
             DataContext = new MonsterIntelViewModel(
-                svc.GameData, svc.MonsterCatalog,
+                svc.GameData, svc.MonsterCatalog, svc.Resolver,
                 svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic,
                 svc.MonsterObservations, svc.PlayerState),
         };

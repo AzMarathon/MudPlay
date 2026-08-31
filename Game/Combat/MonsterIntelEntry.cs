@@ -23,11 +23,6 @@ public sealed record MonsterIntelEntry
     public int Exp => Source.Exp;
     public string ExpText => Exp > 0 ? Exp.ToString("N0", Inv) : string.Empty;
 
-    // Sole gate for the Hittable filter: keep only if the equipped weapon's
-    // HitMagic meets or exceeds this. Plain int (not Source.Magical) so the
-    // grid sorts on the number, not lexically on a formatted string.
-    public int Magical => Source.Magical;
-
     // Chance this monster's own attack lands on the current character, given
     // their live AC/Dodge/wards — the one field on this record that ISN'T a
     // pure projection of Source, since it depends on live player state rather
@@ -45,10 +40,18 @@ public sealed record MonsterIntelEntry
     // computed); 0 = computed but not killable (no weapon, or the weapon
     // can't out-damage the monster's regen/HP at all).
     public int EstimatedRoundsToKill { get; set; } = -1;
+
+    // Display ceiling (Settings → Other, default 999) — a superboss can
+    // otherwise project into the millions of rounds, which isn't a
+    // meaningful number, just noise. Set alongside EstimatedRoundsToKill by
+    // RebuildCharacterCapabilities every entry gets the same live value.
+    public int RoundsToKillCap { get; set; } = 999;
+
     public string EstimatedRoundsToKillText => EstimatedRoundsToKill switch
     {
         < 0 => string.Empty,
         0 => "—",
+        _ when EstimatedRoundsToKill > RoundsToKillCap => $"{RoundsToKillCap}+",
         _ => EstimatedRoundsToKill.ToString(Inv),
     };
 

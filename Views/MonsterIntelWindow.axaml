@@ -105,12 +105,6 @@
 
                 <StackPanel Grid.Row="1" Spacing="6" Margin="0,0,0,8"
                             IsVisible="{Binding HasCharacterContext}">
-                    <StackPanel Orientation="Horizontal" Spacing="14">
-                        <CheckBox Content="Hittable" IsChecked="{Binding HittableOnly, Mode=TwoWay}"
-                                  ToolTip.Tip="Only show monsters your currently-equipped weapon is magical enough to hit physically."/>
-                        <CheckBox Content="Castable" IsChecked="{Binding CastableOnly, Mode=TwoWay}"
-                                  ToolTip.Tip="Only show monsters where at least one of your known attack spells clears their spell immunity."/>
-                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <TextBlock Classes="FieldLabel" Text="Hits You %:" VerticalAlignment="Center"/>
                         <CheckBox Content="2%" IsChecked="{Binding ShowHits2, Mode=TwoWay}"

@@ -42,6 +42,13 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { /* best-effort cleanup */ }
     }
 
+    // No profile/BBS is loaded in these tests, so Resolve<T> falls through to
+    // plain defaults -- same pattern several other tests already use to
+    // construct these three services directly (no isolation ceremony needed;
+    // Resolve<T> tolerates a null active profile/BBS via null-conditional).
+    private static SettingsResolver NewResolver()
+        => new(new SettingsService(), new BbsProfileStore(), new ProfileService());
+
     [Fact]
     public void MasterList_ShowsEntries_ImmediatelyOnConstruction_WithCharacterContext()
     {
@@ -55,7 +62,7 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         var itemMagic = new ItemMagicIndex(cache);
 
         using var vm = new MonsterIntelViewModel(
-            cache, catalog, stats, inventory, spellbook, itemMagic,
+            cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
             observations: null, playerState: null);
 
         Assert.True(vm.HasCharacterContext);
@@ -65,6 +72,31 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.NotEqual(string.Empty, entry.EstimatedRoundsToKillText);
 
         inventory.Dispose();
+    }
+
+    // EstimatedRoundsToKillText caps display at RoundsToKillCap -- a
+    // superboss can otherwise project into the millions of rounds, which
+    // isn't a meaningful number to show. Pure record-level test, no VM or
+    // settings resolver needed.
+    [Theory]
+    [InlineData(-1, 999, "")]
+    [InlineData(0, 999, "—")]
+    [InlineData(5, 999, "5")]
+    [InlineData(999, 999, "999")]
+    [InlineData(1000, 999, "999+")]
+    [InlineData(2_200_000, 999, "999+")]
+    [InlineData(50, 20, "20+")]
+    public void EstimatedRoundsToKillText_RespectsCap(int rounds, int cap, string expected)
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        MonsterIntelEntry entry = MonsterIntelEntry.BuildCatalog(catalog).First();
+
+        entry.EstimatedRoundsToKill = rounds;
+        entry.RoundsToKillCap = cap;
+
+        Assert.Equal(expected, entry.EstimatedRoundsToKillText);
     }
 
     // Six contiguous, non-overlapping Hits-You-% bands covering 0-100% with
@@ -121,7 +153,7 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         var itemMagic = new ItemMagicIndex(cache);
 
         var vm = new MonsterIntelViewModel(
-            cache, catalog, stats, inventory, spellbook, itemMagic,
+            cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
             observations: null, playerState: null);
         inventory.Dispose();
 

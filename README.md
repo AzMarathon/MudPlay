@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.7**
-> - Monster Intel's Hits-You-% checkboxes reworked from 5 bands to 6 contiguous bands with no gap (2/5/10/20/40/40%+) — the old scheme left a dead 16-24% zone and lumped ~40% of a geared character's monsters into one "25%+" bucket
+> **Version 3.37.9**
+> - Monster Intel: removed the Hittable/Castable checkboxes (redundant with Est. Rounds to Kill, and they gave no visibility into what they checked against)
+> - Monster Intel's Est. Rounds to Kill now caps at a tunable ceiling (Settings → Other, default 999) instead of showing a literal number that can run into the millions
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -22,7 +23,7 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Cash & items** — automated loot collection with sell/buy/stash/discard engines, banking, and equipment sets with auto-equip triggers.
 - **Character Workshop** — a unified hub for character management and development: live stats; **Equipment Manager** gear sets; an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons; **CP allocation** plans; **level projection**; quest, boss, and death tracking (with boss respawn timers you can sync between clients); character-info calculators; and **Roomba** — an automated gang-house item sorter backed by a shared item-location log you can query in-game with `@roomba`.
 - **Automation tools** — macros, aliases, triggers, and events; auto-engine toggles with per-character base modes and reconnect reconciliation; a one-press all-off kill switch; and a Sprint mode.
-- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window answers "can I safely fight this thing right now" — Hittable/Castable filters plus Hits-You-% threshold checkboxes against your live weapon, spells, and AC/Dodge, an estimated rounds-to-kill per monster, plus its attacks and your own combat history against it — without digging into the Browser.
+- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window answers "can I safely fight this thing right now" — Hits-You-% threshold checkboxes against your live AC/Dodge, an estimated rounds-to-kill per monster with your current weapon, plus its attacks and your own combat history against it — without digging into the Browser.
 - **Conversation & chat** — a dedicated conversation pane with per-channel filtering, search, logging, and history.
 - **Tools & diagnostics** — a timestamped full-ANSI scrollback with search/filter, a **Program Log**, **Session Stats**, a **Wire Inspector** for raw/classified stream inspection, and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES — IT CAPTURES FAR MORE THAN YOU CAN DESCRIBE OR SHOW IN A SCREENSHOT)***.
 - **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.

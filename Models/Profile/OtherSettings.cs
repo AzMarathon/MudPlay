@@ -108,6 +108,13 @@ public sealed class OtherSettings
     // the terminal scrollback. Off suppresses both. Char-tier; Settings → Other.
     public bool ShowMonsterHpLookup { get; set; } = true;
 
+    // Ceiling for Monster Intel's "Est. Rounds to Kill" column — a monster
+    // whose projected rounds exceed this shows "<cap>+" instead of the raw
+    // number (a superboss can otherwise project into the millions, which
+    // isn't a meaningful number, just noise). Default 999, range 1..999999.
+    // Char-tier; surfaced in Settings → Other.
+    public int RoundsToKillCap { get; set; } = 999;
+
     // Note: the former per-character verbose toggles (VerboseCombat /
     // VerboseRoomClassifier / VerboseCasting / VerboseCash / VerboseStealth) +
     // WriteCombatRoundTrace lived here briefly. They moved to the Log pane menu

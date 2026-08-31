@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.37.9
+
+- Monster Intel: removed the Hittable/Castable checkboxes — they silently gated on your current weapon/spells with no way to see or select what they were checking against, and are now redundant with the Est. Rounds to Kill column (a monster you can't effectively hurt just shows a huge or capped rounds figure, which is more informative than a plain yes/no)
+- Monster Intel's "Est. Rounds to Kill" now caps at a tunable ceiling (Settings → Other → rounds-to-kill cap, default 999) — a monster projecting past it shows `<cap>+` instead of a literal number that can run into the millions for a superboss
+
 ## 3.37.7
 
 - Monster Intel's Hits-You-% checkboxes reworked from 5 bands (2/5/10/15/25%+) to 6 contiguous bands with no gap (2/5/10/20/40/40%+, covering 0-2, 3-5, 6-10, 11-20, 21-40, 41-100) — the old scheme left a dead 16-24% zone no box covered, and dumped roughly 40% of a geared character's fightable monsters into one undifferentiated "25%+" bucket
