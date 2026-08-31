@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.37.13
+
+- Fixed: Monster Intel's AC vs Evil and Hits You % both omitted the flat +10 Shadow AC bonus (confirmed: it applies against every attacker, not just evil ones) — caught against a live character's own stat readout showing AC vs Evil/vs Good both 10 higher than AC + Prot Evil/Good alone
+
 ## 3.37.12
 
 - Monster Intel character bar gains **AC vs Evil** — your Armour Class plus your worn Prot Evil, the combined defense an evil monster's attack actually rolls against

@@ -197,7 +197,7 @@ public static class MonsterMatchupCalculatorSpells
     public static int? IncomingHitPercent(
         (int Majority, int Max)? physicalAccuracy, int alignment,
         int defenderAc, int defenderDodge, int protEvil, int protGood,
-        RealmType realm)
+        RealmType realm, bool hasShadow = false)
     {
         if (physicalAccuracy is not { } acc) return null;
         bool isEvil = alignment is 1 or 2 or 5 or 6;
@@ -208,6 +208,7 @@ public static class MonsterMatchupCalculatorSpells
             defenderDodge: defenderDodge,
             protEvil: isEvil ? protEvil : 0,
             protGood: isGood ? protGood : 0,
+            hasShadow: hasShadow,
             realmType: realm).OverallHitPercent;
     }
 

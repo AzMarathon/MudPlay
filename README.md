@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.12**
-> - Monster Intel character bar gains AC vs Evil (your Armour Class plus worn Prot Evil)
-> - Monster Intel master list gains an Accuracy column — the monster's own physical-attack accuracy
+> **Version 3.37.13**
+> - Fixed: Monster Intel's AC vs Evil and Hits You % both omitted the flat +10 Shadow AC bonus, which applies against every attacker
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

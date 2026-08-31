@@ -45,7 +45,7 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         """);
         File.WriteAllText(Path.Combine(setDir, "Items.json"), """
         [
-          { "Name": "wraith ward", "Abil-0": 24, "AbilVal-0": 15 }
+          { "Name": "wraith ward", "Abil-0": 24, "AbilVal-0": 15, "Abil-1": 9, "AbilVal-1": 50 }
         ]
         """);
     }
@@ -176,11 +176,14 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.Equal(string.Empty, entry.AccuracyText);
     }
 
-    // EffectiveAcVsEvil = AC + Prot Evil -- the combined "defense" term
-    // CombatCalculator.CalculateHitChance folds together against an evil
-    // attacker, surfaced in the character bar so it's clear at a glance.
+    // EffectiveAcVsEvil = AC + Shadow(+10 once) + Prot Evil -- the combined
+    // "defense" term CombatCalculator.CalculateHitChance folds together
+    // against an evil attacker. Regression: an earlier version omitted the
+    // Shadow term entirely, undercounting AC vs Evil by exactly the flat
+    // +10 a real @st readout includes (caught against a live character's
+    // AC(64) + Shadow(10) + Prev(10) = AC vs Evil(84)).
     [Fact]
-    public void EffectiveAcVsEvil_IsArmourClassPlusWornProtEvil()
+    public void EffectiveAcVsEvil_IsArmourClassPlusShadowPlusWornProtEvil()
     {
         var cache = new GameDataCache(_root);
         cache.SwitchSet("test-set");
@@ -208,8 +211,9 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
             observations: null, playerState: null);
 
-        // 30 AC + 15 Prot Evil from the worn "wraith ward" (Abil 24).
-        Assert.Equal(45, vm.EffectiveAcVsEvil);
+        // 30 AC + 10 Shadow (Abil 9, flat once) + 15 Prot Evil (Abil 24)
+        // from the worn "wraith ward".
+        Assert.Equal(55, vm.EffectiveAcVsEvil);
     }
 
     // Six contiguous, non-overlapping Hits-You-% bands covering 0-100% with

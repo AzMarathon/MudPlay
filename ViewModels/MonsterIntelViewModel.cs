@@ -53,6 +53,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private int _playerDodge;
     private int _playerProtEvil;
     private int _playerProtGood;
+    // Shadow (Abil 9) is a flat +10 AC that stacks only once no matter how
+    // many worn sources carry it — a boolean gate, not the raw accumulated
+    // PlusShadowResist total (see GAME_MECHANICS.md's Armour Class section).
+    private bool _playerHasShadow;
     private bool _disposed;
     // Guards the initial RoundsToKillCap load (from the resolver) from
     // immediately writing the same value straight back out via
@@ -249,11 +253,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             encum.CurrentWeight, encum.MaxWeight);
         _playerProtEvil = totals.PlusProtEvil;
         _playerProtGood = totals.PlusProtGood;
-        // AC + Prot Evil is exactly the "defense" term CombatCalculator folds
-        // together against an evil attacker (see CalculateHitChance's
-        // non-backstab branch) — the single number that actually answers
-        // "how well-defended am I against an evil monster right now."
-        EffectiveAcVsEvil = _playerAc + _playerProtEvil;
+        _playerHasShadow = totals.PlusShadowResist > 0;
+        // AC + Shadow(+10 once) + Prot Evil is exactly the "defense" term
+        // CombatCalculator folds together against an evil attacker (see
+        // CalculateHitChance's non-backstab branch) — the single number
+        // that actually answers "how well-defended am I against an evil
+        // monster right now." (Confirmed against a live @st vs Evil/vs Good
+        // readout: both include the same flat Shadow bonus.)
+        EffectiveAcVsEvil = _playerAc + (_playerHasShadow ? 10 : 0) + _playerProtEvil;
 
         // The monster → player direction — the master list's "Hits You %"
         // column and threshold checkboxes.
@@ -261,7 +268,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.IncomingHitPercent(
                 entry.Source.PhysicalAccuracy, entry.Source.Align,
                 _playerAc, _playerDodge, _playerProtEvil, _playerProtGood,
-                _gameData.ActiveRealm) ?? -1;
+                _gameData.ActiveRealm, _playerHasShadow) ?? -1;
 
         // Estimated Rounds to Kill — the player-offense direction, our current
         // weapon's projected DPS against each monster's HP/AC/DR, via the same

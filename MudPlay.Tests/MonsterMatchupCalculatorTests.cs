@@ -246,6 +246,25 @@ public sealed class MonsterMatchupCalculatorSpellsTests
         Assert.Equal(noWards, withWards);
     }
 
+    // Regression: an earlier version of IncomingHitPercent never passed
+    // hasShadow through to CombatCalculator, silently ignoring the flat
+    // +10 AC Shadow (Abil 9) grants against every attacker regardless of
+    // alignment (unlike Prot Evil/Good, which are alignment-conditional).
+    // Caught via a live character's own @st readout: AC vs Evil and AC vs
+    // Good both included the same Shadow bonus on top of bare AC.
+    [Fact]
+    public void IncomingHitPercent_HasShadow_LowersHitChance()
+    {
+        int withShadow = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), alignment: 2, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            realm: RealmType.ParaMud, hasShadow: true)!.Value;
+        int noShadow = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), alignment: 2, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            realm: RealmType.ParaMud, hasShadow: false)!.Value;
+
+        Assert.True(withShadow < noShadow);
+    }
+
     [Fact]
     public void RankAttackSpells_BelowSpellImmu_IsBlockedWithReason()
     {
