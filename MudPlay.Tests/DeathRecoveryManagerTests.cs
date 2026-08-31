@@ -152,6 +152,27 @@ public sealed class DeathRecoveryManagerTests
     }
 
     [Fact]
+    public void CorpseMatch_UsesLiveName_NotStaleProfileName()
+    {
+        // report stock-20260828-104653: a profile COPIED from another character keeps
+        // the old name in CharacterProfile.Name. Corpse matching must identify self by
+        // the LIVE in-game name (PartyManager.LocalCharacterName), never the stale
+        // profile name — matching another player's corpse would be a mis-recovery.
+        // The lone-corpse rule only auto-takes when we have NO name to match, so
+        // recovering "corpse of Raijin" here proves it matched the live name, not
+        // the stale "Fujin" (which would leave it unmatched → nothing sent).
+        using GraphHarness h = new("Fujin");                     // stale copied-profile name
+        h.Recovery.AttachLiveSelfName(() => "Raijin WuzHere");   // the real, live name
+        Die(h, new[] { new EquippedItem("rusty dagger", "Weapon Hand") }, new[] { "torch" });
+        h.Recovery.AutoRecover = true;
+
+        h.EnterGates();
+        h.FeedSurvey("corpse of Raijin");
+
+        Assert.Contains("recover corpse Raijin", h.Sent);
+    }
+
+    [Fact]
     public void ReEntry_AutoRecover_CorpseAbsent_MarksMissing_SendsNothing()
     {
         // The reported bug: the pile's corpse is gone (only coins on the floor).
