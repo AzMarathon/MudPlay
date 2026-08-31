@@ -32,12 +32,13 @@ public sealed class SpellBookRowViewModel
         // Cast-success chance for THIS character (Spellcasting stat + the spell's
         // Diff), null when we can't state one — a non-caster class, or the stat
         // line hasn't been read yet (Spellcasting 0). Level plays no part.
-        int? success = SpellCastChance.Compute(
-            spellcasting, spell.Formula.Diff, isKai: spell.Magery == SpellCastChance.KaiMagery);
+        bool isKai = spell.Magery == SpellCastChance.KaiMagery;
+        int? success = SpellCastChance.Compute(spellcasting, spell.Formula.Diff, isKai);
         DifficultySort = success ?? -1;
         DifficultyText = success is { } pct
             ? $"{pct.ToString(System.Globalization.CultureInfo.InvariantCulture)}%"
             : "—";
+        DifficultyTooltip = BuildDifficultyTooltip(spellcasting, spell.Formula.Diff, isKai, success);
 
         Mana = SpellCalculator.ManaCost(spell.Formula);
         ManaText = Mana.ToString();
@@ -83,6 +84,31 @@ public sealed class SpellBookRowViewModel
 
     // Success percent for column sorting; -1 for the "—" rows so they group.
     public int DifficultySort { get; }
+
+    // Hover breakdown for the Difficulty cell: the equation with THIS spell's
+    // actual numbers (Spellcasting + its difficulty), including any clamp.
+    public string DifficultyTooltip { get; }
+
+    // "Spellcasting 94 + spell difficulty (-5) = 89%" with the clamp spelled out,
+    // or the reason there's no chance to state.
+    private static string BuildDifficultyTooltip(int spellcasting, int diff, bool isKai, int? success)
+    {
+        if (success is null)
+            return "No cast chance yet — not a caster class, or your stats haven't been read "
+                + "(type `stat` in the game, then reopen the book).";
+        if (diff >= SpellCastChance.AlwaysSucceedsDiff)
+            return "Always succeeds — a utility spell that never fizzles.";
+
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        int cap = isKai ? SpellCastChance.KaiCap : SpellCastChance.StockCap;
+        int raw = spellcasting + diff;
+        string signedDiff = diff >= 0 ? $"+{diff.ToString(c)}" : diff.ToString(c);
+        string line = $"Spellcasting {spellcasting.ToString(c)} + spell difficulty ({signedDiff})"
+            + $" = {raw.ToString(c)}%";
+        if (raw > cap) line += $"  →  capped at {cap.ToString(c)}%";
+        else if (raw < 0) line += "  →  floored at 0%";
+        return line;
+    }
 
     // Per-round mana cost — numeric, for column sorting.
     public long Mana { get; }

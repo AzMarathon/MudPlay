@@ -226,7 +226,7 @@
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:SpellBookRowViewModel">
                             <TextBlock Text="{Binding DifficultyText}" Classes="cellDim"
-                                       ToolTip.Tip="Chance this character lands the cast (Spellcasting + spell difficulty)"
+                                       ToolTip.Tip="{Binding DifficultyTooltip}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        FontFamily="{StaticResource FontMono}"/>
                         </DataTemplate>

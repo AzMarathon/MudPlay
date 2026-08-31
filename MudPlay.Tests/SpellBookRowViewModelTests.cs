@@ -571,6 +571,28 @@ public sealed class SpellBookRowViewModelTests
 
         Assert.Equal("—", row.DifficultyText);
         Assert.Equal(-1, row.DifficultySort);
+        Assert.Contains("not a caster", row.DifficultyTooltip);
+    }
+
+    [Fact]
+    public void DifficultyTooltip_ShowsTheBreakdown()
+    {
+        SpellFormulaInput f = new() { Number = 43, Diff = -5, Abilities = [new SpellAbility(2, 10)] };
+        KnownSpell s = Spell("shld", "shield", 5, f);
+        SpellBookRowViewModel row = new(s, isObtained: true, level: 6, NoChain, spellcasting: 94);
+
+        Assert.Equal("Spellcasting 94 + spell difficulty (-5) = 89%", row.DifficultyTooltip);
+    }
+
+    [Fact]
+    public void DifficultyTooltip_SpellsOutTheCap()
+    {
+        SpellFormulaInput f = new() { Number = 44, Diff = -5, Abilities = [new SpellAbility(2, 10)] };
+        KnownSpell s = Spell("shld", "shield", 5, f);
+        SpellBookRowViewModel row = new(s, isObtained: true, level: 6, NoChain, spellcasting: 120);
+
+        Assert.Contains("= 115%", row.DifficultyTooltip);
+        Assert.Contains("capped at 98%", row.DifficultyTooltip);
     }
 
     [Fact]

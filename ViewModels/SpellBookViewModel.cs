@@ -92,20 +92,12 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         }
     }
 
-    // Header hint that spells out how the Difficulty column is computed, so the
-    // number isn't a black box: your live Spellcasting stat + the spell's own
-    // difficulty, clamped 0–98%. Omits the value when Spellcasting isn't known.
+    // Header hint that spells out how the Difficulty column is computed — the
+    // formula in variable form (the per-row tooltip fills in the actual numbers).
     public string DifficultyFormulaText
-    {
-        get
-        {
-            if (_book.Available.Count == 0) return string.Empty;
-            int sc = _spellcastingProvider?.Invoke() ?? 0;
-            return sc > 0
-                ? $"Difficulty = Spellcasting {sc} + spell difficulty  (clamped 0–98%)"
-                : "Difficulty = Spellcasting + spell difficulty  (clamped 0–98%)";
-        }
-    }
+        => _book.Available.Count == 0
+            ? string.Empty
+            : "Difficulty = Spellcasting + spell difficulty  (clamped 0–98%)";
 
     // Footer summary: obtained-of-total + filtered count.
     public string StatusText
