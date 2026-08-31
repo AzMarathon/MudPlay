@@ -64,23 +64,14 @@ public sealed class MonsterIntelEntry : INotifyPropertyChanged
         set { if (_estimatedRoundsToKill == value) return; _estimatedRoundsToKill = value; Raise(nameof(EstimatedRoundsToKill)); Raise(nameof(EstimatedRoundsToKillText)); }
     }
 
-    // Display ceiling (Settings → Other, default 999) — a superboss can
-    // otherwise project into the millions of rounds, which isn't a
-    // meaningful number, just noise. Set alongside EstimatedRoundsToKill by
-    // RebuildCharacterCapabilities every entry gets the same live value, and
-    // re-applied live when the window's cap spinner changes.
-    private int _roundsToKillCap = 999;
-    public int RoundsToKillCap
-    {
-        get => _roundsToKillCap;
-        set { if (_roundsToKillCap == value) return; _roundsToKillCap = value; Raise(nameof(RoundsToKillCap)); Raise(nameof(EstimatedRoundsToKillText)); }
-    }
-
+    // The rounds-to-kill cap is applied as a LIST FILTER in the view model, not
+    // a per-row display clamp: a monster over the cap is dropped from the table
+    // entirely (see MonsterIntelViewModel.PassesFilter), so this text only ever
+    // renders a real number, a "—" for can't-kill, or blank for no-context.
     public string EstimatedRoundsToKillText => EstimatedRoundsToKill switch
     {
         < 0 => string.Empty,
         0 => "—",
-        _ when EstimatedRoundsToKill > RoundsToKillCap => $"{RoundsToKillCap}+",
         _ => EstimatedRoundsToKill.ToString(Inv),
     };
 

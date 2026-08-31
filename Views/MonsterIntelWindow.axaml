@@ -44,55 +44,90 @@
 
             <!-- ===== Character bar: who you are, right now ===== -->
             <Border Grid.Row="0" Classes="Group" Margin="0,0,0,10" IsVisible="{Binding HasCharacterContext}">
-                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="28">
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Classes="FieldLabel" Text="Character"/>
-                        <TextBlock Classes="DetailLine">
-                            <TextBlock.Text>
-                                <MultiBinding StringFormat="{}{0} — Level {1} {2}">
-                                    <Binding Path="Stats.Name"/>
-                                    <Binding Path="Stats.Level"/>
-                                    <Binding Path="Stats.Class"/>
-                                </MultiBinding>
-                            </TextBlock.Text>
-                        </TextBlock>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Classes="FieldLabel" Text="HP"/>
-                        <TextBlock Classes="DetailLine">
-                            <TextBlock.Text>
-                                <MultiBinding StringFormat="{}{0}/{1}">
-                                    <Binding Path="Live.Hp"/>
-                                    <Binding Path="Live.MaxHp"/>
-                                </MultiBinding>
-                            </TextBlock.Text>
-                        </TextBlock>
-                    </StackPanel>
-                    <StackPanel Grid.Column="2">
-                        <TextBlock Classes="FieldLabel" Text="{Binding ManaLabel}"/>
-                        <TextBlock Classes="DetailLine">
-                            <TextBlock.Text>
-                                <MultiBinding StringFormat="{}{0}/{1}">
-                                    <Binding Path="Live.Ma"/>
-                                    <Binding Path="Live.MaxMa"/>
-                                </MultiBinding>
-                            </TextBlock.Text>
-                        </TextBlock>
-                    </StackPanel>
-                    <StackPanel Grid.Column="3">
-                        <TextBlock Classes="FieldLabel" Text="Weapon"/>
-                        <TextBlock Classes="DetailLine" Text="{Binding WeaponSummaryText}"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="4">
-                        <TextBlock Classes="FieldLabel" Text="Known attack spells"/>
-                        <TextBlock Classes="DetailLine" Text="{Binding KnownAttackSpellCount}"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="5">
-                        <TextBlock Classes="FieldLabel" Text="AC"
-                                   ToolTip.Tip="Your Armour Class — worn gear plus your configured buffs, and the flat Shadow bonus if you have it. This is the defense every monster's attack rolls against. Evil-only wards (Prot Evil, Vile Ward) add more, but only versus evil monsters, so they're not folded in here."/>
-                        <TextBlock Classes="DetailLine" Text="{Binding EffectiveAc}"/>
-                    </StackPanel>
-                </Grid>
+                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="28">
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Classes="FieldLabel" Text="Character"/>
+                            <TextBlock Classes="DetailLine">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0} — Level {1} {2}">
+                                        <Binding Path="Stats.Name"/>
+                                        <Binding Path="Stats.Level"/>
+                                        <Binding Path="Stats.Class"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Classes="FieldLabel" Text="HP"/>
+                            <TextBlock Classes="DetailLine">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0}/{1}">
+                                        <Binding Path="Live.Hp"/>
+                                        <Binding Path="Live.MaxHp"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Classes="FieldLabel" Text="{Binding ManaLabel}"/>
+                            <TextBlock Classes="DetailLine">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0}/{1}">
+                                        <Binding Path="Live.Ma"/>
+                                        <Binding Path="Live.MaxMa"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel Grid.Column="3">
+                            <TextBlock Classes="FieldLabel" Text="Weapon"/>
+                            <TextBlock Classes="DetailLine" Text="{Binding WeaponSummaryText}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="4">
+                            <TextBlock Classes="FieldLabel" Text="Known attack spells"/>
+                            <TextBlock Classes="DetailLine" Text="{Binding KnownAttackSpellCount}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ===== Defense simulator: editable what-if defense ===== -->
+                    <!-- Seeds to your live worn+buff loadout on open (and re-seeds on a
+                         real gear swap); every field re-runs each monster's Hits-You-%.
+                         AC and Shadow apply vs every attacker; Prot Evil and Vile Ward
+                         are evil-only. The align picker is YOUR evil tier, scaling how
+                         much raw Vile Ward becomes AC. -->
+                    <Border BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+                        <WrapPanel>
+                            <TextBlock Classes="FieldLabel" Text="Defense (what-if):" VerticalAlignment="Center" Margin="0,0,14,0"
+                                       ToolTip.Tip="A defense simulator — tweak these to see how each monster's chance to hit you changes. It seeds to your current worn gear + configured buffs when the window opens, and re-seeds if you swap gear."/>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Classes="FieldLabel" Text="AC" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding SimAc, Mode=TwoWay}" Minimum="0" Maximum="9999" Increment="1"
+                                               FormatString="0" ShowButtonSpinner="True" Width="96" MinWidth="96"
+                                               ToolTip.Tip="Armour Class vs every attacker (worn gear + buffs). Seeded from your live loadout."/>
+                            </StackPanel>
+                            <CheckBox Content="Shadow AC" IsChecked="{Binding SimShadow, Mode=TwoWay}"
+                                      VerticalAlignment="Center" Margin="0,0,16,0"
+                                      ToolTip.Tip="A flat +10 AC that applies against every attacker (stacks only once)."/>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Classes="FieldLabel" Text="Prot Evil" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding SimProtEvil, Mode=TwoWay}" Minimum="0" Maximum="9999" Increment="1"
+                                               FormatString="0" ShowButtonSpinner="True" Width="96" MinWidth="96"
+                                               ToolTip.Tip="Protection from Evil — 1 extra AC per point, but only versus an evil monster."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Classes="FieldLabel" Text="Vile Ward" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding SimVileWard, Mode=TwoWay}" Minimum="0" Maximum="99999" Increment="1"
+                                               FormatString="0" ShowButtonSpinner="True" Width="104" MinWidth="104"
+                                               ToolTip.Tip="Raw Vile Ward from your gear/buffs. Converts to AC versus evil monsters, scaled by the alignment picker to the right (~10 Vile Ward = 1 AC at full)."/>
+                                <ComboBox ItemsSource="{Binding VileWardAlignOptions}"
+                                          SelectedIndex="{Binding SimVileWardAlignIndex, Mode=TwoWay}"
+                                          MinWidth="170" VerticalAlignment="Center"
+                                          ToolTip.Tip="YOUR alignment tier — it scales how much of your raw Vile Ward becomes AC: not evil = 0%, outlaw/criminal = 50%, villain/fiend = 100%."/>
+                            </StackPanel>
+                        </WrapPanel>
+                    </Border>
+                </StackPanel>
             </Border>
 
             <Grid Grid.Row="1" x:Name="PanesGrid" ColumnDefinitions="1.5*,6,*">
@@ -166,7 +201,7 @@
                                        Minimum="1" Maximum="999999" Increment="1"
                                        FormatString="0" ShowButtonSpinner="True"
                                        Width="110" MinWidth="110"
-                                       ToolTip.Tip="A monster projecting more rounds to kill than this shows '&lt;cap&gt;+' instead of the literal number — a superboss can otherwise project into the millions. Saved automatically, per character."/>
+                                       ToolTip.Tip="A monster the selected attack needs more than this many rounds to kill is filtered OUT of the list, so you see only fights you can finish quickly. Raise it to include tougher monsters. Saved automatically, per character."/>
                     </StackPanel>
                 </WrapPanel>
 

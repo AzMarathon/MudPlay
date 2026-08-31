@@ -88,10 +88,6 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         {
             Assert.Equal(999, vm.RoundsToKillCap);   // default, nothing persisted yet
             vm.RoundsToKillCap = 42;
-
-            MonsterIntelEntry entry = Assert.Single(
-                vm.RowsView.Cast<MonsterIntelEntry>().Where(e => e.Name == "test goblin"));
-            Assert.Equal(42, entry.RoundsToKillCap);
         }
 
         Assert.Equal(42, resolver.Resolve<OtherSettings>("Other").RoundsToKillCap);
@@ -163,19 +159,17 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         inventory.Dispose();
     }
 
-    // EstimatedRoundsToKillText caps display at RoundsToKillCap -- a
-    // superboss can otherwise project into the millions of rounds, which
-    // isn't a meaningful number to show. Pure record-level test, no VM or
-    // settings resolver needed.
+    // EstimatedRoundsToKillText renders the raw projection: blank for no-context
+    // (-1), "—" for can't-kill (0), else the plain number. The rounds-to-kill cap
+    // is a LIST FILTER now (MonsterIntelViewModel.PassesFilter drops monsters over
+    // it), not a per-row display clamp, so this text is never "<cap>+".
     [Theory]
-    [InlineData(-1, 999, "")]
-    [InlineData(0, 999, "—")]
-    [InlineData(5, 999, "5")]
-    [InlineData(999, 999, "999")]
-    [InlineData(1000, 999, "999+")]
-    [InlineData(2_200_000, 999, "999+")]
-    [InlineData(50, 20, "20+")]
-    public void EstimatedRoundsToKillText_RespectsCap(int rounds, int cap, string expected)
+    [InlineData(-1, "")]
+    [InlineData(0, "—")]
+    [InlineData(5, "5")]
+    [InlineData(999, "999")]
+    [InlineData(2_200_000, "2200000")]
+    public void EstimatedRoundsToKillText_RendersRawProjection(int rounds, string expected)
     {
         var cache = new GameDataCache(_root);
         cache.SwitchSet("test-set");
@@ -183,7 +177,6 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         MonsterIntelEntry entry = MonsterIntelEntry.BuildCatalog(catalog).First();
 
         entry.EstimatedRoundsToKill = rounds;
-        entry.RoundsToKillCap = cap;
 
         Assert.Equal(expected, entry.EstimatedRoundsToKillText);
     }
@@ -217,12 +210,14 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.Equal(string.Empty, entry.AccuracyText);
     }
 
-    // EffectiveAc = AC + Shadow(+10 once), the defense that applies vs EVERY
-    // attacker. Prot Evil (and Vile Ward) are deliberately excluded — they're
-    // secondary AC only vs evil monsters, so folding them into one headline
-    // number would overstate defense against a neutral / good monster.
+    // The defense simulator seeds to the live loadout on open: SimAc is the plain
+    // AC that applies vs every attacker (worn gear + buffs, NOT Shadow — that's
+    // the separate SimShadow toggle), while the evil-only wards seed into their
+    // own fields. Worn "wraith ward" grants Shadow (Abil 9) + 15 Prot Evil (Abil
+    // 24), so Shadow lands as the toggle, Prot Evil as its own value, and neither
+    // inflates the plain AC.
     [Fact]
-    public void EffectiveAc_IsArmourClassPlusShadow_ExcludesWornProtEvil()
+    public void DefenseSimulator_SeedsFromLiveLoadout_OnOpen()
     {
         var cache = new GameDataCache(_root);
         cache.SwitchSet("test-set");
@@ -250,10 +245,11 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
             observations: null, playerState: null);
 
-        // 30 AC + 10 Shadow (Abil 9, flat once); the worn "wraith ward" also
-        // grants 15 Prot Evil (Abil 24) but that's evil-only, so it's NOT in
-        // the plain AC figure.
-        Assert.Equal(40, vm.EffectiveAc);
+        // SimAc is the plain vs-all AC (30, no Shadow folded in); Shadow lands as
+        // its own toggle (Abil 9); Prot Evil seeds to 15 (Abil 24, evil-only).
+        Assert.Equal(30, vm.SimAc);
+        Assert.True(vm.SimShadow);
+        Assert.Equal(15, vm.SimProtEvil);
     }
 
     // Six contiguous, non-overlapping Hits-You-% bands covering 0-100% with

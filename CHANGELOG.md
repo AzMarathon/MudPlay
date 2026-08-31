@@ -2,8 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
-## 3.40.5
+## 3.41.0
 
+- Monster Intel gains a **defense simulator** at the top: **AC** is now an editable field (seeded to your worn gear + configured buffs on open), alongside a **Shadow AC** checkbox, a **Prot Evil** field, and a raw **Vile Ward** field with an **alignment** picker (not evil 0% / outlaw-criminal 50% / villain-fiend 100%). Edit any of them and every monster's **Hits You %** recomputes live — a what-if for how safe a fight is with different defense. The evil-only wards (Prot Evil, Vile Ward) apply only versus evil monsters; Shadow is +10 vs all
+- Monster Intel's **rounds-to-kill cap now filters** monsters over it out of the list (was: showing "&lt;cap&gt;+") — the table shows only fights you can finish within the cap; a monster you can't kill at all still shows "—"
 - Fixed swings per round being over-counted for **every** character — the energy formula used `level × (CombatLVL + 2)` where the game uses `level × CombatLVL`, an extra `level × 2` in the divisor that inflated every swings / DPS / rounds-to-kill figure (Character Info, Calculators tab, Monster Intel). A L28 Paladin's bash read 4.5 where the game's `stat all` shows 3.572; normal read 9 vs the game's 7.143. Matched to MMUD-Explorer's `GetClassCombat` and confirmed against the live game to the decimal (accuracy already used the raw CombatLVL and was correct)
 - Fixed physical swings per round capping at 5 on Paradigm — the cap should be **6** (it was a fixed constant, so a fast weapon was clipped a swing on Paradigm). Verified the full swing/energy math (Normal / Bash / Smash / martial-arts, both realms) against the MMUD-Explorer reference (incl. jumpkick 1900 Stock / 2800 Paradigm)
 
