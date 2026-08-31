@@ -275,8 +275,8 @@
                         <!-- Elemental resist is signed: negative = vulnerability
                              (the element deals EXTRA damage), 100 = no damage. -->
                         <NumericUpDown Value="{Binding DamageCalc.ElementalResist, Mode=TwoWay}"
-                                       Minimum="-100" Maximum="100" Increment="5" FormatString="0" Width="120"
-                                       ToolTip.Tip="Negative = the target is vulnerable (extra damage); 100 = immune."/>
+                                       Minimum="-200" Maximum="200" Increment="5" FormatString="0" Width="120"
+                                       ToolTip.Tip="Negative = the target is vulnerable (extra damage); 100 = immune, above 100 heals it."/>
                       </StackPanel>
                     </WrapPanel>
                     <TextBlock Text="{Binding DamageCalc.GrowthText}"
