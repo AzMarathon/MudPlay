@@ -349,6 +349,50 @@ public static class CharacterCalculator
     // glance doesn't need full DPS-simulator fidelity.
     public static PlayerMatchupProfile BuildNormalAttackProfile(
         PlayerStats stats, IReadOnlyList<EquippedItem> worn, EncumbranceReading encum, GameDataCache gameData)
+        => BuildMeleeAttackProfile(MudAttackType.Normal, stats, worn, encum, gameData);
+
+    // The melee attack types this character can actually use, in the order the
+    // Character Info panel lists them: Normal + Bash are always available, the
+    // rest are class/race-gated. Monster Intel iterates this to offer a
+    // rounds-to-kill line per usable attack instead of Normal alone. The gates
+    // mirror CharacterInfoSectionViewModel.ComputeDerivedCombat exactly, so the
+    // two surfaces never disagree on what a character can do.
+    public static IReadOnlyList<MudAttackType> UsableMeleeAttacks(PlayerStats stats, GameDataCache gameData)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+        ArgumentNullException.ThrowIfNull(gameData);
+
+        JsonElement? classRow = gameData.FindRowByName("Classes", stats.Class);
+        JsonElement? raceRow = gameData.FindRowByName("Races", stats.Race);
+
+        var attacks = new List<MudAttackType> { MudAttackType.Normal, MudAttackType.Bash };
+
+        // A null smash set means "no class-restricted smash chain in the active
+        // set, so assume every class can" — matching CharacterInfo's gate.
+        HashSet<string>? smashClasses = ClassCapabilities.GetSmashCapableClasses(gameData);
+        bool canSmash = smashClasses is null
+            || (!string.IsNullOrEmpty(stats.Class) && smashClasses.Contains(stats.Class));
+        if (canSmash) attacks.Add(MudAttackType.Smash);
+
+        if (ClassCapabilities.ClassHasStealth(classRow) || ClassCapabilities.RaceHasStealth(raceRow))
+            attacks.Add(MudAttackType.Backstab);
+
+        if (ClassCapabilities.ClassHasPunch(classRow)) attacks.Add(MudAttackType.Punch);
+        if (ClassCapabilities.ClassHasKick(classRow)) attacks.Add(MudAttackType.Kick);
+        if (ClassCapabilities.ClassHasJumpKick(classRow)) attacks.Add(MudAttackType.Jumpkick);
+
+        return attacks;
+    }
+
+    // Builds the matchup profile for one melee attack type. The defensive side
+    // (AC / dodge / prot wards / DR) and the realm are identical across every
+    // type; only the offensive fields (to-hit, avg damage, swings, crit) branch
+    // on the attack. Each branch mirrors the corresponding path in
+    // CharacterInfoSectionViewModel.ComputeDerivedCombat so Monster Intel's
+    // rounds-to-kill and the Character Info sheet compute from one recipe.
+    public static PlayerMatchupProfile BuildMeleeAttackProfile(
+        MudAttackType type, PlayerStats stats, IReadOnlyList<EquippedItem> worn,
+        EncumbranceReading encum, GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(worn);
@@ -365,30 +409,114 @@ public static class CharacterCalculator
         int nCombatLevel = classRow is JsonElement cr ? GetInt(cr, "CombatLVL") : 0;
         int effectiveAbil22 = realm == RealmType.ParaMud ? t.PlusAccuracy : t.MaxSingleAbil22;
 
-        int accuracy = CombatCalculator.CalcAccuracy(
-            MudAttackType.Normal, realm, stats.Level, nCombatLevel,
-            stats.Strength, stats.Agility, stats.Intellect, stats.Charm,
-            t.TotalWornAccy, effectiveAbil22, encum.CurrentWeight, encum.MaxWeight, t.WeaponStrReq);
+        int accuracy;
+        int avgDamage;
+        double swingsPerRound;
+        bool hasWeapon;
+        int critChance = 0;
+        int avgCritDamage = 0;
 
-        MeleeOffense offense = CombatCalculator.ComputeMeleeOffense(
-            MudAttackType.Normal, realm, stats.Level, nCombatLevel,
-            stats.Strength, stats.Agility, t.WeaponMin, t.WeaponMax, t.WeaponSpeed, t.WeaponStrReq,
-            t.PlusMaxDamage, t.PlusMinDamage, t.PlusCrits, encum.CurrentWeight, encum.MaxWeight);
+        switch (type)
+        {
+            case MudAttackType.Normal:
+            case MudAttackType.Bash:
+            case MudAttackType.Smash:
+            {
+                accuracy = CombatCalculator.CalcAccuracy(
+                    type, realm, stats.Level, nCombatLevel,
+                    stats.Strength, stats.Agility, stats.Intellect, stats.Charm,
+                    t.TotalWornAccy, effectiveAbil22, encum.CurrentWeight, encum.MaxWeight, t.WeaponStrReq);
+
+                // ComputeMeleeOffense already zeroes crit for non-Normal and locks
+                // Smash to a single swing, so no per-type special-casing is needed.
+                MeleeOffense offense = CombatCalculator.ComputeMeleeOffense(
+                    type, realm, stats.Level, nCombatLevel,
+                    stats.Strength, stats.Agility, t.WeaponMin, t.WeaponMax, t.WeaponSpeed, t.WeaponStrReq,
+                    t.PlusMaxDamage, t.PlusMinDamage, t.PlusCrits, encum.CurrentWeight, encum.MaxWeight);
+
+                avgDamage = offense.AvgDamage;
+                swingsPerRound = offense.SwingsPerRound;
+                hasWeapon = offense.HasWeapon;
+                critChance = offense.CritChance;
+                avgCritDamage = offense.AvgCritDamage;
+                break;
+            }
+            case MudAttackType.Backstab:
+            {
+                bool hasClassStealth = ClassCapabilities.ClassHasStealth(classRow);
+                int bsNormAccy = t.TotalWornAccy + effectiveAbil22;
+                accuracy = CombatCalculator.CalcBackstabAccuracy(
+                    stats.Stealth, stats.Agility, stats.Level, stats.Strength, t.WeaponStrReq,
+                    t.PlusBSAccuracy, bsNormAccy, hasClassStealth, realm);
+
+                // WeaponMin/Max are 0 unarmed, which CalcBSDamage folds into the
+                // strength-only profile — a backstab still lands bare-handed, so
+                // gate HasWeapon on damage output rather than a weapon being worn.
+                BSDamageResult bsDmg = CombatCalculator.CalcBSDamage(
+                    stats.Level, stats.Stealth, stats.Strength, t.WeaponMin, t.WeaponMax,
+                    t.PlusBSMin, t.PlusBSMax, t.PlusMaxDamage, hasClassStealth, realm);
+                avgDamage = (bsDmg.MinDamage + bsDmg.MaxDamage) / 2;
+                swingsPerRound = 1;   // a backstab is always a single strike
+                hasWeapon = avgDamage > 0;
+                break;
+            }
+            case MudAttackType.Punch:
+            case MudAttackType.Kick:
+            case MudAttackType.Jumpkick:
+            {
+                // A martial-arts strike ignores the wielded weapon's accuracy, so
+                // strip the weapon/off-hand accy off before the normal-attack base.
+                int maWornAccy = t.TotalWornAccy - t.WeaponHandAccy - t.OffHandAccy;
+                if (maWornAccy < 0) maWornAccy = 0;
+                int maBaseAccy = CombatCalculator.CalcAccuracy(
+                    MudAttackType.Normal, realm, stats.Level, nCombatLevel,
+                    stats.Strength, stats.Agility, stats.Intellect, stats.Charm,
+                    maWornAccy, effectiveAbil22, encum.CurrentWeight, encum.MaxWeight, weaponStrReq: 0);
+
+                // GreaterMUD applies a per-attack accuracy penalty (kick -10,
+                // jumpkick -15); Stock has none.
+                int kickPenalty = realm == RealmType.ParaMud ? 10 : 0;
+                int jumpKickPenalty = realm == RealmType.ParaMud ? 15 : 0;
+                (int accyBonus, int maPlusDmg) = type switch
+                {
+                    MudAttackType.Punch => (t.PlusPunchAccy, t.PlusPunchDmg),
+                    MudAttackType.Kick => (t.PlusKickAccy - kickPenalty, t.PlusKickDmg),
+                    _ => (t.PlusJumpKickAccy - jumpKickPenalty, t.PlusJumpKickDmg),
+                };
+                accuracy = maBaseAccy + accyBonus;
+
+                // The damage formula takes the item-granted +MA-skill bonus floored
+                // to 1, never the Martial Arts skill stat (that stat drives accuracy).
+                const int maPlusSkill = 1;
+                MeleeDamageResult d = CombatCalculator.CalcMartialArtsDamage(
+                    type, realm, stats.Level, maPlusSkill, stats.Strength, t.PlusMaxDamage, maPlusDmg);
+                avgDamage = (d.MinDamage + d.MaxDamage) / 2;
+
+                swingsPerRound = CombatCalculator.CalcSwings(
+                    nCombatLevel, stats.Level, CombatCalculator.MartialArtsSpeed(type, realm),
+                    stats.Agility, stats.Strength, weaponStrReq: 0,
+                    encum.CurrentWeight, encum.MaxWeight, realmType: realm).RawSwings;
+                hasWeapon = avgDamage > 0;
+                break;
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(type), type, "Not a melee attack type.");
+        }
 
         return new PlayerMatchupProfile(
             Realm: realm,
             NormalAccuracy: accuracy,
-            AvgWeaponDamage: offense.AvgDamage,
-            SwingsPerRound: offense.SwingsPerRound,
-            HasWeapon: offense.HasWeapon,
+            AvgWeaponDamage: avgDamage,
+            SwingsPerRound: swingsPerRound,
+            HasWeapon: hasWeapon,
             ArmourClass: stats.ArmourClass,
             Dodge: CombatCalculator.CalcDodge(
                 stats.Level, stats.Agility, stats.Charm, t.PlusDodge, encum.CurrentWeight, encum.MaxWeight),
             ProtEvil: t.PlusProtEvil,
             ProtGood: t.PlusProtGood,
             DamageResist: (int)t.PlusDR,
-            CritChancePercent: offense.CritChance,
-            AvgCritDamage: offense.AvgCritDamage);
+            CritChancePercent: critChance,
+            AvgCritDamage: avgCritDamage);
     }
 
     // Maps a single MajorMUD ability ID + value onto the matching summary field

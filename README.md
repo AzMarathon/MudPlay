@@ -1,12 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.39.7**
-> - Hit Calculator: removed the "Hits me %" picker and "Show me the Monsters" button — the Monsters game-data tab's own filters cover the same ground
+> **Version 3.40.0**
+> - Monster Intel **Edit Attacks** picker: choose which of your attacks (every usable melee type + your attack spells) show in Your Matchup, and which one drives the Est. Rounds to Kill column
+> - Your Matchup now lists your melee attacks (rounds/hit%/dmg vs the monster) alongside the ranked spells
 > - Monster Intel top bar shows plain **AC** (worn gear + configured buffs + Shadow) instead of "AC vs Evil" — evil-only wards no longer inflate it against neutral/good monsters
-> - Editing the rounds-to-kill cap now re-applies to the list immediately; the cap spinner moved inline to the right of the Hits-You-% checkboxes
-> - Filter-by-name box no longer resizes as the monster count changes
+> - Editing the rounds-to-kill cap now re-applies to the list immediately; the cap spinner moved inline to the right of the Hits-You-% checkboxes; filter box no longer resizes as the count changes
 > - Removed the in-window Close button (the title-bar X closes it); double-click a monster row to open its full Game Data record
+> - Hit Calculator: removed the redundant "Hits me %" picker and "Show me the Monsters" button
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

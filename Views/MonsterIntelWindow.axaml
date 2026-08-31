@@ -99,7 +99,7 @@
 
             <!-- ===== Left: searchable master list ===== -->
             <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*" Margin="0,0,12,0">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
                     <TextBox Grid.Column="0" Classes="clearable" Text="{Binding NameFilter, Mode=TwoWay}"
                              PlaceholderText="Filter by name…"/>
                     <!-- Reserve room for a 5-digit count so the label never resizes the
@@ -108,6 +108,37 @@
                     <TextBlock Grid.Column="1" Text="{Binding CountText}" Margin="8,0,0,0" MinWidth="96"
                                Foreground="{StaticResource ChromeFgSecBrush}"
                                FontSize="{StaticResource FontSizeSm}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="2" Content="Edit Attacks…" Margin="8,0,0,0"
+                            IsVisible="{Binding HasCharacterContext}"
+                            ToolTip.Tip="Pick which of your attacks show in Your Matchup, and which one drives the Est. Rounds to Kill column.">
+                        <Button.Flyout>
+                            <Flyout Placement="Bottom">
+                                <StackPanel MinWidth="300" Spacing="6">
+                                    <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="320"
+                                               Text="Checkbox: show the attack in Your Matchup.   Radio: use it for Est. Rounds to Kill."/>
+                                    <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl ItemsSource="{Binding AttackOptions}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:AttackPickRow">
+                                                    <Grid ColumnDefinitions="Auto,Auto,*" Margin="0,2">
+                                                        <CheckBox Grid.Column="0" VerticalAlignment="Center"
+                                                                  IsChecked="{Binding Shown, Mode=TwoWay}"
+                                                                  ToolTip.Tip="Show this attack in Your Matchup"/>
+                                                        <RadioButton Grid.Column="1" GroupName="MiRoundsAttack" Margin="10,0"
+                                                                     VerticalAlignment="Center"
+                                                                     IsChecked="{Binding IsRoundsAttack, Mode=TwoWay}"
+                                                                     ToolTip.Tip="Use this attack for Est. Rounds to Kill"/>
+                                                        <TextBlock Grid.Column="2" Classes="DetailLine" VerticalAlignment="Center"
+                                                                   Text="{Binding Label}"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
                 </Grid>
 
                 <!-- The Hits-You-% checkboxes and the rounds-to-kill cap share one row
@@ -192,6 +223,17 @@
                             <StackPanel IsVisible="{Binding IncomingThreatLines.Count}">
                                 <TextBlock Classes="FieldLabel" Text="Incoming elemental threat" Margin="0,4,0,2"/>
                                 <ItemsControl ItemsSource="{Binding IncomingThreatLines}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Classes="DetailLine" TextWrapping="Wrap" Text="{Binding}"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <StackPanel IsVisible="{Binding MatchupMeleeLines.Count}">
+                                <TextBlock Classes="FieldLabel" Text="Your melee attacks" Margin="0,4,0,2"/>
+                                <ItemsControl ItemsSource="{Binding MatchupMeleeLines}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="x:String">
                                             <TextBlock Classes="DetailLine" TextWrapping="Wrap" Text="{Binding}"/>

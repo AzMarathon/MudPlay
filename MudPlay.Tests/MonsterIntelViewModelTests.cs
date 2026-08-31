@@ -97,6 +97,47 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.Equal(42, resolver.Resolve<OtherSettings>("Other").RoundsToKillCap);
     }
 
+    // Edit Attacks picker: the roster always offers the usable melee attacks
+    // (Normal + Bash at least), exactly one is the rounds-to-kill basis (default
+    // Normal), the radio is single-select, and both the pick and a hide persist
+    // to the Character tier.
+    [Fact]
+    public void EditAttacks_DefaultsToNormal_SingleSelect_AndPersists()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 10, Agility = 50, Charm = 50 };
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
+        var itemMagic = new ItemMagicIndex(cache);
+
+        var profile = new ProfileService();
+        profile.LoadBlank();
+        var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
+
+        using (var vm = new MonsterIntelViewModel(
+            cache, catalog, resolver, stats, inventory, spellbook, itemMagic,
+            observations: null, playerState: null))
+        {
+            Assert.NotEmpty(vm.AttackOptions);
+            AttackPickRow normal = vm.AttackOptions.Single(o => o.Label == "Normal");
+            Assert.True(normal.IsRoundsAttack);                                 // default basis
+            Assert.Single(vm.AttackOptions.Where(o => o.IsRoundsAttack));
+
+            AttackPickRow bash = vm.AttackOptions.Single(o => o.Label == "Bash");
+            bash.IsRoundsAttack = true;                                         // switch basis
+            Assert.False(normal.IsRoundsAttack);                               // single-select enforced
+            Assert.Single(vm.AttackOptions.Where(o => o.IsRoundsAttack));
+
+            normal.Shown = false;                                               // hide from Your Matchup
+        }
+
+        OtherSettings saved = resolver.Resolve<OtherSettings>("Other");
+        Assert.Equal("melee:Bash", saved.MonsterIntelRoundsAttack);
+        Assert.Contains("melee:Normal", saved.MonsterIntelHiddenAttacks);
+    }
+
     [Fact]
     public void MasterList_ShowsEntries_ImmediatelyOnConstruction_WithCharacterContext()
     {

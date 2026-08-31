@@ -116,6 +116,16 @@ public sealed class OtherSettings
     // changing it shouldn't mean leaving the window).
     public int RoundsToKillCap { get; set; } = 999;
 
+    // Monster Intel "Edit Attacks" picker state, Char-tier, edited in the window.
+    // Attack keys are stable strings: "melee:<MudAttackType>" (e.g. "melee:Normal",
+    // "melee:Backstab") for the character's usable melee attacks, and "spell:<Short>"
+    // (e.g. "spell:mm") for an obtained attack spell. HiddenAttacks lists the attacks
+    // hidden from the Your Matchup panel (empty = show all). RoundsAttack is the one
+    // attack whose projection fills the master list's "Est. Rounds to Kill" column;
+    // null / unset / no-longer-available falls back to the Normal melee attack.
+    public List<string> MonsterIntelHiddenAttacks { get; set; } = new();
+    public string? MonsterIntelRoundsAttack { get; set; }
+
     // Note: the former per-character verbose toggles (VerboseCombat /
     // VerboseRoomClassifier / VerboseCasting / VerboseCash / VerboseStealth) +
     // WriteCombatRoundTrace lived here briefly. They moved to the Log pane menu
