@@ -120,6 +120,29 @@ public sealed class GameDataTableSectionTests : IDisposable
         => vm.FilterGroups.SelectMany(g => g.Ranges).Single(r => r.Column == column);
 
     [Fact]
+    public async Task SearchText_MatchesFormattedEnumLabel_NotJustRawCode()
+    {
+        // Items tab: ItemType / Worn render friendly labels ("Weapon", "Feet") via
+        // formatters, while the raw cell holds the numeric code. Typing the label the
+        // user actually sees must filter — the base match now checks display values
+        // as well as raw, so "weapon" / "feet" hit even though the raw is "1" / "5".
+        SeedTable("v1.11p", "Items",
+            "[{\"Number\":1,\"Name\":\"long sword\",\"ItemType\":1,\"Worn\":0}," +
+             "{\"Number\":2,\"Name\":\"leather boots\",\"ItemType\":0,\"Worn\":5}]");
+        _cache.SwitchSet("v1.11p");
+        ItemsSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        vm.SearchText = "weapon";          // ItemType 1 -> "Weapon"
+        Assert.Single(vm.FilteredRows);
+        Assert.Equal("long sword", vm.FilteredRows[0].Get("Name"));
+
+        vm.SearchText = "feet";            // Worn 5 -> "Feet"
+        Assert.Single(vm.FilteredRows);
+        Assert.Equal("leather boots", vm.FilteredRows[0].Get("Name"));
+    }
+
+    [Fact]
     public async Task RangeFilters_StackWithAnd()
     {
         // Range filters are pending until Apply, then stack with AND. EXP min then HP

@@ -212,6 +212,14 @@ public sealed class MonsterCatalogTests : IDisposable
         => Assert.Null(NewCatalog().Get(2)!.PhysicalAccuracy);
 
     [Fact]
+    public void PrimaryPhysicalAvgDamage_SinglePhysicalSlot_AveragesMinAndMax()
+        => Assert.Equal(2, NewCatalog().Get(1)!.PrimaryPhysicalAvgDamage);
+
+    [Fact]
+    public void PrimaryPhysicalAvgDamage_SpellOnlyMonster_IsZero()
+        => Assert.Equal(0, NewCatalog().Get(2)!.PrimaryPhysicalAvgDamage);
+
+    [Fact]
     public void All_ReturnsEveryParsedMonster()
         => Assert.Equal(4, NewCatalog().All.Count);
 

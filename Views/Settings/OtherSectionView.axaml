@@ -187,6 +187,12 @@
                       Margin="0,8,0,0"
                       ToolTip.Tip="When checked (default): looking at a monster shows its estimated remaining hit points — both in the status bar's &quot;TGT HP:&quot; slot and as a yellow line printed to the terminal (e.g. [orc remaining Hitpoints: 35-48]). When unchecked, neither is shown. Applies only for this character."/>
 
+            <!-- Note: Monster Intel's "Est. Rounds to Kill" cap moved out of
+                 here and lives entirely in that window now (a NumericUpDown
+                 next to the Hits-You-% checkboxes) — editing it doesn't mean
+                 leaving Monster Intel to come back. Still backed by
+                 OtherSettings.RoundsToKillCap at the Character tier. -->
+
             <!-- Navigation puzzle-solver master toggles (Global tier — one switch
                  per install). Off → a walk-to that would hand off to the solver
                  just fails like any unroutable destination. Read live via

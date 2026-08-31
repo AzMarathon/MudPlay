@@ -11,6 +11,29 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Monster record Abilities now list one per line (easier to read), and the meaningless "Damage" ability code is no longer shown
 - Clicking a monster filter range box selects its whole value, so you can overtype or clear it in one action
 
+## 3.38.5
+
+- Character Workshop → Calculators tab: fixed the outgoing weapon damage / DPS / rounds-to-kill silently undercounting **+MinDamage gear** (ability-1 "Damage" items — the flat low-end add) — it never fed that bonus into the melee-damage math
+- The Calculators tab and Monster Intel's matchup now compute melee offense through one shared helper, so the two can't drift apart (Monster Intel already had this right)
+- **Defense readouts now assume your configured buffs are up.** Monster Intel's Hits-You-% / AC-vs-Evil, the Equipment Manager's projected AC, and Character Info all fold in the AC (and DR) your configured self-buffs grant — computed once, identically, from the same shared calculator so the three never disagree
+- Buff roster is "everything that lands on you" — self-only spells, whole-party buffs you keep on, and single-target buffs you cast on yourself — which also fixes the Equipment Manager previously ignoring whole-party AC buffs
+- Character Info gains an **AC / DR breakdown** below Wealth: one line for what worn gear grants, one for what your buffs add on top
+
+## 3.38.3
+
+- Monster Intel refocused into a fast pre-fight check — "can I safely fight this right now?" The master list now shows **Name / HP / EXP / Accuracy / Hits You % / Est. Rounds to Kill**, dropping the broad reference view (still available on the Game Data Browser's Monsters tab)
+- **Hits You %** — that monster's own physical attack's chance to land on you, given your live AC / Dodge and whichever ward applies (Prot Evil / Prot Good, plus the flat +10 Shadow AC bonus that applies against every attacker)
+- **Est. Rounds to Kill** — projected rounds for your currently-equipped weapon's Normal attack to drop the monster (live accuracy / damage / swings / crit; reuses the Character Workshop Calculators tab's MonsterMatchupCalculator); shows "—" when unarmed or unable to out-damage it, and caps at a tunable ceiling (default 999, editable in the window) shown as `<cap>+` so a superboss doesn't project into the millions
+- Replaced the single Safe threshold with a row of **Hits-You-% checkboxes** — six contiguous bands (2 / 5 / 10 / 20 / 40 / 40%+, covering 0-2, 3-5, 6-10, 11-20, 21-40, 41-100 with no gap or overlap); check any combination and a monster shows if it matches any checked band
+- Character bar gains **AC vs Evil** — your Armour Class plus your worn Prot Evil, the combined defense an evil monster's attack actually rolls against
+- A monster with no computable Hits You % (an NPC / caster-only record with no physical attack — trainer, quest-giver, etc.) is dropped from the list once a character is loaded, instead of showing blank
+- Removed from the window (all still on the Game Data Browser's Monsters tab): the "In this room" context bar, the Overview grab-bag, the Elemental Defenses matrix, the Casts panel, Loot, Locations, the Automation overlay editor, and multi-select comparison — kept: Attacks, Your Matchup, and Your Observations
+
+## 3.38.2
+
+- Spell Book: the "Difficulty" column is renamed **Success %** — the number it shows is your chance to land the cast, so "Difficulty" read backwards; the header equation now reads "Success % = your Spellcasting + the spell's difficulty (capped at 98%, 100% for Kai)"
+- Game Data → Items filter now matches the friendly column labels, so you can type `weapon`, `feet`, or `plate` to filter by item type / worn slot / weapon or armour type — not just the raw code (applies to every MDB tab's Filter… box)
+
 ## 3.38.0
 
 - Spell Book gains a **Difficulty** column (between Mana and Effect): your real chance to land the cast — Spellcasting + the spell's difficulty, capped at 98% (100% for Kai) — or "—" when you're not a caster / stats aren't read yet

@@ -27,8 +27,8 @@
         <Style Selector="DataGridRow:selected TextBlock.cellName"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
         <Style Selector="DataGridRow:selected TextBlock.cellDim"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
         <Style Selector="DataGridRow:selected TextBlock.cellEffect"><Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/></Style>
-        <!-- Tighten the default column-header padding so a longer header
-             ("Difficulty") isn't clipped in a snug column. -->
+        <!-- Tighten the default column-header padding so a header isn't
+             clipped in a snug column. -->
         <Style Selector="DataGridColumnHeader"><Setter Property="Padding" Value="4,0"/></Style>
     </Window.Styles>
 
@@ -47,10 +47,10 @@
                            Foreground="{StaticResource ChromeFgBrush}"
                            FontSize="13"
                            VerticalAlignment="Center"/>
-                <!-- How the Difficulty column is computed, surfaced in the blank
+                <!-- How the Success % column is computed, surfaced in the blank
                      space between the class/level and the filters. -->
                 <TextBlock Grid.Column="0"
-                           Text="{Binding DifficultyFormulaText}"
+                           Text="{Binding SuccessFormulaText}"
                            HorizontalAlignment="Right"
                            Margin="0,0,16,0"
                            Foreground="{StaticResource ChromeFgMutedBrush}"
@@ -222,11 +222,11 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Difficulty" SortMemberPath="DifficultySort" Width="86">
+                <DataGridTemplateColumn Header="Success %" SortMemberPath="SuccessSort" Width="86">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:SpellBookRowViewModel">
-                            <TextBlock Text="{Binding DifficultyText}" Classes="cellDim"
-                                       ToolTip.Tip="{Binding DifficultyTooltip}"
+                            <TextBlock Text="{Binding SuccessText}" Classes="cellDim"
+                                       ToolTip.Tip="{Binding SuccessTooltip}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        FontFamily="{StaticResource FontMono}"/>
                         </DataTemplate>

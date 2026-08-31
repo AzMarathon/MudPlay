@@ -338,6 +338,59 @@ public static class CharacterCalculator
         }
     }
 
+    // Resolves the player's live Normal-attack matchup profile (accuracy,
+    // average weapon damage, swings/round, crit chance) for
+    // MonsterMatchupCalculator.Compute — the same equipment + race/class
+    // aggregation the Character Workshop's Calculators tab performs for its
+    // own Normal-attack case (see CalculatorsSectionViewModel.CaptureActuals /
+    // ComputeWeaponOffense), extracted here for Monster Intel's rounds-to-kill
+    // estimate. Deliberately skips completed-quest bonuses — that tracker
+    // isn't wired into Monster Intel's constructor, and a quick pre-fight
+    // glance doesn't need full DPS-simulator fidelity.
+    public static PlayerMatchupProfile BuildNormalAttackProfile(
+        PlayerStats stats, IReadOnlyList<EquippedItem> worn, EncumbranceReading encum, GameDataCache gameData)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+        ArgumentNullException.ThrowIfNull(worn);
+        ArgumentNullException.ThrowIfNull(gameData);
+
+        EquipmentStatBreakdown combined = AggregateEquipmentStats(worn, gameData);
+        JsonElement? classRow = gameData.FindRowByName("Classes", stats.Class);
+        JsonElement? raceRow = gameData.FindRowByName("Races", stats.Race);
+        if (raceRow is JsonElement r) ApplyAbilityBonuses(combined, r, stats.Race);
+        if (classRow is JsonElement c) ApplyAbilityBonuses(combined, c, stats.Class);
+        EquipmentStatSummary t = combined.Totals;
+
+        RealmType realm = gameData.ActiveRealm;
+        int nCombatLevel = classRow is JsonElement cr ? GetInt(cr, "CombatLVL") : 0;
+        int effectiveAbil22 = realm == RealmType.ParaMud ? t.PlusAccuracy : t.MaxSingleAbil22;
+
+        int accuracy = CombatCalculator.CalcAccuracy(
+            MudAttackType.Normal, realm, stats.Level, nCombatLevel,
+            stats.Strength, stats.Agility, stats.Intellect, stats.Charm,
+            t.TotalWornAccy, effectiveAbil22, encum.CurrentWeight, encum.MaxWeight, t.WeaponStrReq);
+
+        MeleeOffense offense = CombatCalculator.ComputeMeleeOffense(
+            MudAttackType.Normal, realm, stats.Level, nCombatLevel,
+            stats.Strength, stats.Agility, t.WeaponMin, t.WeaponMax, t.WeaponSpeed, t.WeaponStrReq,
+            t.PlusMaxDamage, t.PlusMinDamage, t.PlusCrits, encum.CurrentWeight, encum.MaxWeight);
+
+        return new PlayerMatchupProfile(
+            Realm: realm,
+            NormalAccuracy: accuracy,
+            AvgWeaponDamage: offense.AvgDamage,
+            SwingsPerRound: offense.SwingsPerRound,
+            HasWeapon: offense.HasWeapon,
+            ArmourClass: stats.ArmourClass,
+            Dodge: CombatCalculator.CalcDodge(
+                stats.Level, stats.Agility, stats.Charm, t.PlusDodge, encum.CurrentWeight, encum.MaxWeight),
+            ProtEvil: t.PlusProtEvil,
+            ProtGood: t.PlusProtGood,
+            DamageResist: (int)t.PlusDR,
+            CritChancePercent: offense.CritChance,
+            AvgCritDamage: offense.AvgCritDamage);
+    }
+
     // Maps a single MajorMUD ability ID + value onto the matching summary field
     // and records the per-item contribution.
     private static void MapAbilityToStat(EquipmentStatBreakdown result, EquipmentStatSummary totals,
