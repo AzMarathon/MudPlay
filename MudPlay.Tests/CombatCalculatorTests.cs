@@ -533,17 +533,22 @@ public sealed class CombatCalculatorTests
         Assert.True(under > meets);
     }
 
-    [Fact]
-    public void CalcSwings_RawSwingsCappedAtMax()
+    // Swings are hard-capped per realm: 5 on Stock, 6 on Paradigm (GAME_MECHANICS).
+    // A max-speed weapon hits the cap exactly — pins that Paradigm gets 6, not 5.
+    [Theory]
+    [InlineData(RealmType.ParaMud, 6)]
+    [InlineData(RealmType.Stock, 5)]
+    public void CalcSwings_RawSwingsCappedAtRealmMax(RealmType realm, int cap)
     {
         SwingCalcResult r = CombatCalculator.CalcSwings(
             combatLevel: 10, level: 100, attackSpeed: 1, agility: 200,
             strength: 200, weaponStrReq: 0, currentEncum: 0, maxEncum: 100,
-            realmType: RealmType.ParaMud);
+            realmType: realm);
 
-        Assert.True(r.RawSwings <= CombatCalculator.MAX_SWINGS);
+        Assert.Equal(cap, CombatCalculator.MaxSwingsForRealm(realm));
+        Assert.Equal((double)cap, r.RawSwings);
         Assert.Equal(10, r.SwingsPerRound.Length);
-        Assert.All(r.SwingsPerRound, s => Assert.True(s <= CombatCalculator.MAX_SWINGS));
+        Assert.All(r.SwingsPerRound, s => Assert.True(s <= cap));
     }
 
     [Fact]

@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.40.5
+
+- Fixed physical swings per round capping at 5 on Paradigm — the cap should be **6** (it was a fixed constant, so every Paradigm swings / DPS / rounds-to-kill figure was undercounted for a fast weapon, across Character Info, the Calculators tab, and Monster Intel). Verified the full swing/energy math (Normal / Bash / Smash / martial-arts, both realms) against the MMUD-Explorer reference — only the realm cap was wrong; everything else matches (incl. jumpkick 1900 Stock / 2800 Paradigm)
+
 ## 3.40.4
 
 - Fixed the auto-equip spamming the same `wear` commands several times a second when a Default set and a Pre-rest set overlap the same slots — a re-apply now holds while the previous swap's wears are still awaiting confirmation, instead of re-sending the identical commands until the thrash guard trips

@@ -24,8 +24,10 @@ public static class CombatCalculator
     public const int PARAMUD_DODGE_SOFTCAP = 55;
     // ParaMUD dodge hard ceiling.
     public const int PARAMUD_DODGE_CAP = 98;
-    // Maximum swings landable in a single round.
-    public const int MAX_SWINGS = 5;
+    // Maximum swings landable in a single round — realm-dependent: hard-capped
+    // at 5 on Stock, 6 on Paradigm (GAME_MECHANICS.md "Combat order… swings per
+    // round"). A fixed 5 under-counted every Paradigm swing/DPS/rounds figure.
+    public static int MaxSwingsForRealm(RealmType realm) => realm == RealmType.ParaMud ? 6 : 5;
 
     // ----- Hit chance ------------------------------------------------------
 
@@ -686,8 +688,9 @@ public static class CombatCalculator
 
         int qndBonus = CalcQuickAndDeadlyBonus(agility, energy, encumPercent, realmType);
 
+        int maxSwings = MaxSwingsForRealm(realmType);
         double rawSwings = 1000.0 / energy;
-        if (rawSwings > MAX_SWINGS) rawSwings = MAX_SWINGS;
+        if (rawSwings > maxSwings) rawSwings = maxSwings;
 
         var swingsPerRound = new int[10];
         var energyRemaining = new int[10];
@@ -696,7 +699,7 @@ public static class CombatCalculator
         for (int round = 0; round < 10; round++)
         {
             int swings = remaining / energy;
-            if (swings > MAX_SWINGS) swings = MAX_SWINGS;
+            if (swings > maxSwings) swings = maxSwings;
             swingsPerRound[round] = swings;
             remaining = (remaining % energy) + 1000;
             energyRemaining[round] = remaining - 1000; // carry into next round
