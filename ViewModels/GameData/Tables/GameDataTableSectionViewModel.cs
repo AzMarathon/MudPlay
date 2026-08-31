@@ -295,10 +295,21 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         FilteredRows = new ObservableCollection<GameDataRow>(matched);
     }
 
-    // Panel filters (thresholds / checkboxes / dropdowns) are pending until applied —
-    // editing a box doesn't re-filter. "Apply filter" commits every box's current value
-    // and runs the filter; "Clear filters" empties the boxes (and the text search) and
-    // applies that. The always-present "Filter…" text box stays live on its own.
+    // ----- Curation filter panel (subclasses populate FilterGroups; empty = no panel) -----
+    // A sidebar beside the grid: min/max ranges, checkboxes, and dropdowns, grouped
+    // into labelled sections. The panel CURATES the list (which rows qualify) as a
+    // deliberate act — editing a control is a PENDING edit that does nothing until
+    // "Apply" is pressed (CommitPanelFilters copies each box's value over). Distinct
+    // from the always-live "Filter…" text box, which FINDS a specific row within the
+    // curated list. Empty by default, so tables with no groups render no sidebar.
+    public ObservableCollection<FilterGroup> FilterGroups { get; } = new();
+    public bool HasFilterPanel => FilterGroups.Count > 0;
+
+    private IEnumerable<RangeFilter> AllRangeFilters => FilterGroups.SelectMany(g => g.Ranges);
+    private IEnumerable<BoolFilter> AllBoolFilters => FilterGroups.SelectMany(g => g.Bools);
+    private IEnumerable<CategoryFilter> AllCategoryFilters => FilterGroups.SelectMany(g => g.Categories);
+
+    // Commit every pending panel edit and re-filter. The "Apply" button.
     [RelayCommand]
     private void ApplyFilters()
     {
@@ -309,66 +320,58 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
 
     private void CommitPanelFilters()
     {
-        foreach (ThresholdFilter t in ThresholdFilters) t.Commit();
-        foreach (BoolFilter b in BoolFilters) b.Commit();
-        foreach (CategoryFilter c in CategoryFilters) c.Commit();
+        foreach (RangeFilter r in AllRangeFilters) r.Commit();
+        foreach (BoolFilter b in AllBoolFilters) b.Commit();
+        foreach (CategoryFilter c in AllCategoryFilters) c.Commit();
     }
-
-    // A row matches the filter when any column's raw value contains the filter substring
-    // (case-insensitive). Raw values drive the match so numeric codes (e.g. 1) are findable
-    // even when the grid renders them via a formatter ("Weapon"). Virtual so a tab with a
-    // richer notion of a match (e.g. Rooms' "map,room" coordinate query) can intercept
-    // before falling back to this substring pass.
-    // ----- Multi-field filter panel (subclasses populate; empty = no panel) -----
-    // An always-visible sidebar beside the grid: single-threshold numeric filters,
-    // boolean checkboxes, and categorical dropdowns, on top of the always-present
-    // text box. All empty by default, so tables that declare none render no sidebar.
-    public ObservableCollection<ThresholdFilter> ThresholdFilters { get; } = new();
-    public ObservableCollection<BoolFilter> BoolFilters { get; } = new();
-    public ObservableCollection<CategoryFilter> CategoryFilters { get; } = new();
-    public bool HasFilterPanel => ThresholdFilters.Count > 0 || BoolFilters.Count > 0 || CategoryFilters.Count > 0;
 
     // Drives ApplyFilter's "run even with an empty text box" path (see ApplyFilter).
     protected bool HasExtraFilter
     {
         get
         {
-            foreach (ThresholdFilter t in ThresholdFilters) if (t.IsActive) return true;
-            foreach (BoolFilter b in BoolFilters) if (b.IsActive) return true;
-            foreach (CategoryFilter c in CategoryFilters) if (c.IsActive) return true;
+            foreach (RangeFilter r in AllRangeFilters) if (r.IsActive) return true;
+            foreach (BoolFilter b in AllBoolFilters) if (b.IsActive) return true;
+            foreach (CategoryFilter c in AllCategoryFilters) if (c.IsActive) return true;
             return false;
         }
     }
 
+    // Empties every panel filter (and the text box) and re-filters. The "Reset" button.
     [RelayCommand]
-    private void ClearFilters()
+    private void ResetFilters()
     {
-        foreach (ThresholdFilter t in ThresholdFilters) t.Clear();
-        foreach (BoolFilter b in BoolFilters) b.Clear();
-        foreach (CategoryFilter c in CategoryFilters) c.Clear();
-        SearchText = string.Empty;   // OnSearchTextChanged re-applies
+        foreach (RangeFilter r in AllRangeFilters) r.Clear();
+        foreach (BoolFilter b in AllBoolFilters) b.Clear();
+        foreach (CategoryFilter c in AllCategoryFilters) c.Clear();
+        SearchText = string.Empty;   // OnSearchTextChanged re-applies (no-op if already empty)
         CommitPanelFilters();        // make the cleared boxes take effect
         ApplyFilter();
         OnPropertyChanged(nameof(StatusText));
     }
 
-    // Panel filters (threshold + bool + category), all AND'd together. Empty
-    // collections pass everything, so non-panel tables are unaffected. Threshold
-    // filters test the leading integer of the raw cell; bool filters test the raw
-    // value via their predicate; category filters match the rendered display value.
+    // Panel filters (range + bool + category), all AND'd together. Empty groups pass
+    // everything, so non-panel tables are unaffected. Range filters test the leading
+    // integer of the raw cell; bool filters test the raw value via their predicate;
+    // category filters match the rendered display value.
     private bool PassesPanelFilters(GameDataRow row)
     {
-        foreach (ThresholdFilter t in ThresholdFilters)
-            if (t.IsActive && (!TryLeadingInt(row.Get(t.Column), out int v) || !t.Passes(v)))
+        foreach (RangeFilter r in AllRangeFilters)
+            if (r.IsActive && (!TryLeadingInt(row.Get(r.Column), out int v) || !r.Passes(v)))
                 return false;
-        foreach (BoolFilter b in BoolFilters)
+        foreach (BoolFilter b in AllBoolFilters)
             if (b.IsActive && !b.Passes(row.Get(b.Column)))
                 return false;
-        foreach (CategoryFilter c in CategoryFilters)
+        foreach (CategoryFilter c in AllCategoryFilters)
             if (c.IsActive && !c.Passes(row.GetDisplay(c.Column)))
                 return false;
         return true;
     }
+
+    // A row matches the text filter when any column's raw value contains the substring
+    // (case-insensitive), so numeric codes are findable even when the grid renders them
+    // via a formatter. Virtual so a tab with a richer match (Rooms' "map,room" query)
+    // can intercept before this substring pass.
 
     // Leading signed integer of a cell string — "12345" → 12345, "2hp@90s" → 2,
     // "10/42/8" → 10, "1–11" → 1. False when there's no leading number.

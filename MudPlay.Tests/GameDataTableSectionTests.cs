@@ -116,6 +116,9 @@ public sealed class GameDataTableSectionTests : IDisposable
         Assert.All(vm.FilteredRows, r => Assert.Contains("Goblin", r.Get("Name")!));
     }
 
+    private static RangeFilter Range(MonstersSectionViewModel vm, string column)
+        => vm.FilterGroups.SelectMany(g => g.Ranges).Single(r => r.Column == column);
+
     [Fact]
     public async Task SearchText_MatchesFormattedEnumLabel_NotJustRawCode()
     {
@@ -140,11 +143,10 @@ public sealed class GameDataTableSectionTests : IDisposable
     }
 
     [Fact]
-    public async Task ThresholdFilters_AtLeast_StackWithAnd()
+    public async Task RangeFilters_StackWithAnd()
     {
-        // Every Monsters threshold is "at least" (≥). Stacking two of them AND's — the
-        // report paradigm-20260814-103219 scenario: EXP ≥ then HP ≥ narrows the set
-        // rather than leaving it unchanged.
+        // Range filters are pending until Apply, then stack with AND. EXP min then HP
+        // min narrows the set — report paradigm-20260814-103219's scenario.
         SeedMonsters("v1.11p",
             "[{\"Number\":1,\"Name\":\"Goblin\",\"HP\":10,\"EXP\":3}," +
              "{\"Number\":2,\"Name\":\"Orc\",\"HP\":25,\"EXP\":9000}," +
@@ -153,20 +155,35 @@ public sealed class GameDataTableSectionTests : IDisposable
         MonstersSectionViewModel vm = new(_cache);
         await vm.LoadAsync();
 
-        // EXP ≥ 9000 keeps Orc, Dragon (Goblin excluded).
-        ThresholdFilter exp = vm.ThresholdFilters.Single(t => t.Column == "EXP");
-        exp.Value = 9000;
-        vm.ApplyFiltersCommand.Execute(null);  // panel filters are pending until applied
-        Assert.Equal(2, vm.FilteredRows.Count);
+        // Editing a box does nothing until Apply.
+        Range(vm, "EXP").Min = 9000;
+        Assert.Equal(3, vm.FilteredRows.Count);   // not yet applied
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(2, vm.FilteredRows.Count);   // Orc, Dragon
         Assert.DoesNotContain(vm.FilteredRows, r => r.Get("Name") == "Goblin");
 
-        // HP ≥ 100 stacks on top: only Dragon (HP 500) survives — the Orc drops out.
-        ThresholdFilter hp = vm.ThresholdFilters.Single(t => t.Column == "HP");
-        Assert.Equal(ThresholdDirection.AtLeast, hp.Direction);
-        hp.Value = 100;
+        // HP min 100 stacks on top: only Dragon (HP 500) survives.
+        Range(vm, "HP").Min = 100;
         vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Dragon", vm.FilteredRows[0].Get("Name"));
+    }
+
+    [Fact]
+    public async Task RangeFilter_Max_FindsEasyTargets()
+    {
+        // A max bound (no min) brackets the low end — "AC ≤ 20" for easy kills.
+        SeedMonsters("v1.11p",
+            "[{\"Number\":1,\"Name\":\"Goblin\",\"ArmourClass\":5}," +
+             "{\"Number\":2,\"Name\":\"Dragon\",\"ArmourClass\":80}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        Range(vm, "ArmourClass").Max = 20;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Single(vm.FilteredRows);
+        Assert.Equal("Goblin", vm.FilteredRows[0].Get("Name"));
     }
 
     [Fact]
@@ -180,7 +197,7 @@ public sealed class GameDataTableSectionTests : IDisposable
         MonstersSectionViewModel vm = new(_cache);
         await vm.LoadAsync();
 
-        BoolFilter undead = vm.BoolFilters.Single(b => b.Column == "Undead");
+        BoolFilter undead = vm.FilterGroups.SelectMany(g => g.Bools).Single(b => b.Column == "Undead");
         undead.IsChecked = true;
         vm.ApplyFiltersCommand.Execute(null);
         Assert.Equal(2, vm.FilteredRows.Count);    // Skeleton, Zombie
@@ -224,14 +241,69 @@ public sealed class GameDataTableSectionTests : IDisposable
         MonstersSectionViewModel vm = new(_cache);
         await vm.LoadAsync();
 
-        CategoryFilter align = vm.CategoryFilters.Single(c => c.Column == "Align");
+        CategoryFilter align = vm.FilterGroups.SelectMany(g => g.Categories).Single(c => c.Column == "Align");
         string fiendAlign = vm.AllRows.Single(r => r.Get("Name") == "Fiend").GetDisplay("Align")!;
-        Assert.Contains(fiendAlign, align.Options);
+        Assert.Contains(fiendAlign, align.Options);   // fixed option list includes every alignment
 
         align.Selected = fiendAlign;
         vm.ApplyFiltersCommand.Execute(null);
         Assert.Single(vm.FilteredRows);
         Assert.Equal("Fiend", vm.FilteredRows[0].Get("Name"));
+    }
+
+    private static BoolFilter Bool(MonstersSectionViewModel vm, string column)
+        => vm.FilterGroups.SelectMany(g => g.Bools).Single(b => b.Column == column);
+
+    [Fact]
+    public async Task ElementalResistFacet_FiltersOnAbilityValue_IncludingNegative()
+    {
+        // Resist-Cold is ability code 3; the value is signed (negative = vulnerable).
+        SeedMonsters("v1.11p",
+            "[{\"Number\":1,\"Name\":\"Iceling\",\"Abil-0\":3,\"AbilVal-0\":80}," +
+             "{\"Number\":2,\"Name\":\"Flamewisp\",\"Abil-0\":3,\"AbilVal-0\":-20}," +
+             "{\"Number\":3,\"Name\":\"Plainrat\"}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        Range(vm, "ResCold").Min = 50;                    // resistant
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Single(vm.FilteredRows);
+        Assert.Equal("Iceling", vm.FilteredRows[0].Get("Name"));
+
+        Range(vm, "ResCold").Min = null;
+        Range(vm, "ResCold").Max = -1;                    // vulnerable
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Single(vm.FilteredRows);
+        Assert.Equal("Flamewisp", vm.FilteredRows[0].Get("Name"));
+    }
+
+    [Fact]
+    public async Task FlagFacets_KeepMatchingMonsters()
+    {
+        // Animal (code 78), loot (DropItem-N), and casts (MidSpell-N) each surface a
+        // synthesised flag facet the checkbox filters on.
+        SeedMonsters("v1.11p",
+            "[{\"Number\":1,\"Name\":\"Wolf\",\"Abil-0\":78}," +
+             "{\"Number\":2,\"Name\":\"Looter\",\"DropItem-0\":500,\"DropItem%-0\":50}," +
+             "{\"Number\":3,\"Name\":\"Caster\",\"MidSpell-0\":42,\"MidSpell%-0\":30}]");
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+
+        Bool(vm, "Animal").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal("Wolf", Assert.Single(vm.FilteredRows).Get("Name"));
+        Bool(vm, "Animal").IsChecked = false;
+
+        Bool(vm, "HasLoot").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal("Looter", Assert.Single(vm.FilteredRows).Get("Name"));
+        Bool(vm, "HasLoot").IsChecked = false;
+
+        Bool(vm, "CastsSpells").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal("Caster", Assert.Single(vm.FilteredRows).Get("Name"));
     }
 
     [Fact]

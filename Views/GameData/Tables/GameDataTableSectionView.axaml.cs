@@ -1,8 +1,12 @@
 using System.Collections.Generic;
+using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Data;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using MudPlay.ViewModels.GameData.Tables;
 
 namespace MudPlay.Views.GameData.Tables;
@@ -88,6 +92,42 @@ public partial class GameDataTableSectionView : UserControl
             if (e.Property == DataGrid.ItemsSourceProperty)
                 Dispatcher.UIThread.Post(RestoreSort, DispatcherPriority.Background);
         };
+
+        // Single click into a filter range box selects the whole entry so it
+        // can be overtyped or cleared in one action. Wired at the container
+        // level because the boxes live inside the filter ItemsControl template
+        // and can't be named; the pointer press is tunnelled so we can preempt
+        // the TextBox's own caret placement on that first click.
+        AddHandler(InputElement.PointerPressedEvent, OnRangeBoxPointerPressed, RoutingStrategies.Tunnel);
+    }
+
+    // Walk up from a routed-event source to the enclosing filter range box, if
+    // the source sits inside one (a pointer press reports the inner presenter,
+    // not the TextBox itself).
+    private static TextBox? FindRangeBox(object? source)
+    {
+        Visual? v = source as Visual;
+        while (v is not null)
+        {
+            if (v is TextBox tb && tb.Classes.Contains("rangebox")) return tb;
+            v = v.GetVisualParent();
+        }
+        return null;
+    }
+
+    private void OnRangeBoxPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        // First click into an unfocused range box: focus + select-all rather
+        // than dropping the caret, so the value can be replaced or deleted at
+        // once. Handling the press stops the TextBox from repositioning the
+        // caret (which would collapse the selection); once focused, clicks fall
+        // through for normal caret placement.
+        if (FindRangeBox(e.Source) is { IsFocused: false } box)
+        {
+            e.Handled = true;
+            box.Focus();
+            box.SelectAll();
+        }
     }
 
     // Capture the grid's live sort so a reload can restore it.

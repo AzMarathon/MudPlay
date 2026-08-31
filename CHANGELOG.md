@@ -2,6 +2,15 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.39.0
+
+- Game Data → Monsters filter panel reworked: grouped into labelled sections (Combat / Elemental defenses / Casting & immunity / Type & alignment / Loot & lairs) with friendlier labels + tooltips, an **Apply** and a **Reset** button, and the range boxes are plain text fields so you can type any value (including a negative resist to find vulnerabilities)
+- Every numeric monster filter is now a **min/max range** (either bound optional), so you can bracket — HP 500–2000, or AC ≤ 20 to find easy kills — not just "at least N"
+- Monster filtering absorbs Monster Intel's dimensions: per-element resists (Cold/Fire/Stone/Lightning/Water, signed so you can find vulnerabilities), spell-immunity level, magic-weapon requirement, monster Type, Undead / Animal / Non-living flags, "casts spells", and "drops an item"
+- The search box and the filter panel are now clearly split: the box FINDS a monster within the list, the panel CURATES which monsters are in it
+- Monster record Abilities now list one per line (easier to read), and the meaningless "Damage" ability code is no longer shown
+- Clicking a monster filter range box selects its whole value, so you can overtype or clear it in one action
+
 ## 3.38.5
 
 - Character Workshop → Calculators tab: fixed the outgoing weapon damage / DPS / rounds-to-kill silently undercounting **+MinDamage gear** (ability-1 "Damage" items — the flat low-end add) — it never fed that bonus into the melee-damage math
