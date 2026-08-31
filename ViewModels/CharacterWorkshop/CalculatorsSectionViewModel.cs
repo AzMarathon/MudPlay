@@ -224,7 +224,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // Suspends RecomputeManaRegen while a multi-input seed / rebuild is in flight,
     // so the outputs recompute once at the end rather than per property.
     private bool _suspendManaRecompute;
-    private int _plusMaxDamage, _plusCrits;
+    private int _plusMaxDamage, _plusMinDamage, _plusCrits;
     private int _equipWeaponMin, _equipWeaponMax, _equipWeaponSpeed, _equipWeaponStrReq;
 
     // Accuracy inputs captured on refresh: the worn accy total and the effective
@@ -837,6 +837,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             // crit for the selected attack type through the shared helpers so the
             // weapon picker + attack-type dropdown can re-run them in isolation.
             _plusMaxDamage = t.PlusMaxDamage;
+            _plusMinDamage = t.PlusMinDamage;   // abil 1 "Damage" — the low-end add, was previously dropped
             _plusCrits = t.PlusCrits;
             _equipWeaponMin = t.WeaponMin;
             _equipWeaponMax = t.WeaponMax;
@@ -970,33 +971,17 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         int wSpeed = _hasSelectedWeapon ? _selWeaponSpeed : _equipWeaponSpeed;
         int wStrReq = _hasSelectedWeapon ? _selWeaponStrReq : _equipWeaponStrReq;
 
-        _hasWeapon = wMax > 0;
-        MeleeDamageResult dmg = CombatCalculator.CalcMeleeDamage(
-            type, _realm, _str, wMin, wMax, _plusMaxDamage);
-        _avgWeaponDamage = _hasWeapon ? (dmg.MinDamage + dmg.MaxDamage) / 2 : 0;
-
-        SwingCalcResult swings = CombatCalculator.CalcSwings(
-            _nCombatLevel, _level, wSpeed, _agi, _str, wStrReq,
-            _encumCur, _encumMax, isBashing: type == MudAttackType.Bash, realmType: _realm);
-        // Smash locks the round to a single swing regardless of weapon speed.
-        _swingsPerRound = type == MudAttackType.Smash ? (_hasWeapon ? 1 : 0) : swings.RawSwings;
-
-        // Crit folds into DPS only for the plain Attack, the same way CalculateAttack
-        // does: gear/quest crit (abil 58) + the Quick-and-Deadly bonus (only when STR
-        // meets the weapon's requirement), then diminishing returns; a crit averages
-        // 3× the max. Bash / Smash crit interaction isn't a verified mechanic, so
-        // those project without a crit term.
-        if (type == MudAttackType.Normal && _hasWeapon)
-        {
-            int qnd = (wStrReq <= 0 || _str >= wStrReq) ? swings.QnDCritBonus : 0;
-            _critChance = CombatCalculator.CalcCritChance(_plusCrits, qnd, _realm);
-            _avgCritDamage = dmg.MaxDamage * 3;
-        }
-        else
-        {
-            _critChance = 0;
-            _avgCritDamage = 0;
-        }
+        // Damage / swings / crit through the shared CombatCalculator helper, so
+        // this and Monster Intel's rounds-to-kill read identically (it carries the
+        // +MinDamage add — abil 1 — the old inline call here silently dropped).
+        MeleeOffense off = CombatCalculator.ComputeMeleeOffense(
+            type, _realm, _level, _nCombatLevel, _str, _agi, wMin, wMax, wSpeed, wStrReq,
+            _plusMaxDamage, _plusMinDamage, _plusCrits, _encumCur, _encumMax);
+        _hasWeapon = off.HasWeapon;
+        _avgWeaponDamage = off.AvgDamage;
+        _swingsPerRound = off.SwingsPerRound;
+        _critChance = off.CritChance;
+        _avgCritDamage = off.AvgCritDamage;
     }
 
     // Punch / Kick / Jumpkick — a bare-handed strike whose fixed attack speed

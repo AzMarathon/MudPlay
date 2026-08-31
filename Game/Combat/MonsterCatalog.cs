@@ -94,18 +94,42 @@ public sealed record MonsterCatalogEntry(
     {
         get
         {
-            int majAcc = 0, maxAcc = 0;
+            int maxAcc = 0;
+            foreach (MonsterAttackSlot a in Attacks)
+            {
+                if (a.Type != 1 && a.Type != 3) continue;
+                if (a.Percent <= 0) continue;
+                if (a.Accuracy > maxAcc) maxAcc = a.Accuracy;
+            }
+            return PrimaryPhysicalSlot is { } p ? (p.Accuracy, maxAcc) : null;
+        }
+    }
+
+    // The physical/rob slot (Type 1 or 3) with the highest TruePercent chance —
+    // the same "majority" slot PhysicalAccuracy tracks — exposed on its own so
+    // Monster Intel's rounds-to-kill estimate can also read its damage range,
+    // not just its accuracy.
+    private MonsterAttackSlot? PrimaryPhysicalSlot
+    {
+        get
+        {
+            MonsterAttackSlot? best = null;
             double bestChance = -1;
             foreach (MonsterAttackSlot a in Attacks)
             {
                 if (a.Type != 1 && a.Type != 3) continue;
                 if (a.Percent <= 0) continue;
-                if (a.TruePercent > bestChance) { bestChance = a.TruePercent; majAcc = a.Accuracy; }
-                if (a.Accuracy > maxAcc) maxAcc = a.Accuracy;
+                if (a.TruePercent > bestChance) { bestChance = a.TruePercent; best = a; }
             }
-            return bestChance < 0 ? null : (majAcc, maxAcc);
+            return best;
         }
     }
+
+    // Average damage of the primary physical slot, before the player's
+    // damage resist — the other half (with PhysicalAccuracy) of what
+    // MonsterMatchupCalculator needs to project a rounds-to-kill estimate.
+    public int PrimaryPhysicalAvgDamage
+        => PrimaryPhysicalSlot is { } s ? (s.MinDamage + s.MaxDamage) / 2 : 0;
 }
 
 // Typed, parsed-once view of the active game-data set's Monsters table (cross-

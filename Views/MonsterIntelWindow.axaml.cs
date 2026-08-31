@@ -8,11 +8,9 @@ namespace MudPlay.Views;
 
 // Modeless Monster Intel window. Bound to MonsterIntelViewModel; code-behind
 // attaches the persisted window layout, wires global hotkeys, closes the
-// window when the VM's in-window Close button fires, syncs the DataGrid's
-// multi-selection into the VM's SelectedEntries for the comparison view,
-// persists the list/detail pane split ratio, and disposes the VM on close (it
-// holds live room / observation / inventory / spellbook / player-state
-// subscriptions).
+// window when the VM's in-window Close button fires, persists the
+// list/detail pane split ratio, and disposes the VM on close (it holds live
+// room / observation / inventory / spellbook / player-state subscriptions).
 public partial class MonsterIntelWindow : Window
 {
     // Stable id under which the list/detail column split persists in
@@ -41,20 +39,4 @@ public partial class MonsterIntelWindow : Window
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
-
-    // Avalonia's DataGrid exposes SelectedItems as a non-bindable IList, so
-    // this has to be wired imperatively (mirrors GameDataTableSectionView's
-    // own SelectedRows sync for the same limitation). Reached via `sender`,
-    // not a named-control field — this window's own InitializeComponent
-    // (=> AvaloniaXamlLoader.Load) doesn't populate those (see
-    // MonsterIntelWindow's SpellBookWindow-style constructor / that window's
-    // own OnSpellRowDoubleTapped comment for the same constraint).
-    private void OnMonsterGridSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (sender is not DataGrid grid || DataContext is not MonsterIntelViewModel vm) return;
-        vm.SelectedEntries.Clear();
-        foreach (object? item in grid.SelectedItems)
-            if (item is MonsterIntelEntry entry) vm.SelectedEntries.Add(entry);
-        vm.NotifyComparisonChanged();
-    }
 }

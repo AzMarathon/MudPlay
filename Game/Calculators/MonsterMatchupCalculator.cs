@@ -43,8 +43,13 @@ public static class MonsterMatchupCalculator
             ? playerHit.OverallHitPercent / 100.0 * effectivePerHit * player.SwingsPerRound
             : 0;
         // RoundsToKill is 0 when the player can't out-damage a kill (no weapon
-        // or zero effective DPS) — the UI renders that as "—".
-        int roundsToKill = dps > 0 ? (int)System.Math.Ceiling(monster.Hp / dps) : 0;
+        // or zero effective DPS) — the UI renders that as "—". Clamp before the
+        // int cast: a pathological superboss (Hp/dps past int range — e.g. a
+        // high-DR boss chipped only by a crit sliver) saturates to int.MaxValue,
+        // which the caller's rounds-to-kill cap then shows as "<cap>+", rather
+        // than wrapping to a negative that renders blank.
+        double rounds = dps > 0 ? System.Math.Ceiling(monster.Hp / dps) : 0;
+        int roundsToKill = rounds >= int.MaxValue ? int.MaxValue : (int)rounds;
 
         // Monster → player. Only the primary physical slot is previewed.
         int monsterHit = 0;
@@ -186,6 +191,31 @@ public static class MonsterMatchupCalculatorSpells
     // ability reads 0, so any weapon (including bare hands, HitMagic 0) hits.
     public static bool WeaponMeetsMagical(int weaponHitMagic, int monsterMagical)
         => weaponHitMagic >= monsterMagical;
+
+    // Chance THIS monster's own attack lands on a defender with the given
+    // live AC/Dodge, given whichever ward (Prot Evil/Prot Good) applies
+    // against its alignment — the Monster → player direction Compute() above
+    // already implements, exposed standalone since Monster Intel's "Hits You
+    // %" column needs it for every catalog row, not a single picked monster.
+    // Null when the monster has no catalogued physical attack to compute
+    // against. MajorMUD alignment codes 1/2/5/6 are evil, 0/4 are good.
+    public static int? IncomingHitPercent(
+        (int Majority, int Max)? physicalAccuracy, int alignment,
+        int defenderAc, int defenderDodge, int protEvil, int protGood,
+        RealmType realm, bool hasShadow = false)
+    {
+        if (physicalAccuracy is not { } acc) return null;
+        bool isEvil = alignment is 1 or 2 or 5 or 6;
+        bool isGood = alignment is 0 or 4;
+        return CombatCalculator.CalculateHitChance(
+            attackerAccuracy: acc.Majority,
+            defenderAC: defenderAc,
+            defenderDodge: defenderDodge,
+            protEvil: isEvil ? protEvil : 0,
+            protGood: isGood ? protGood : 0,
+            hasShadow: hasShadow,
+            realmType: realm).OverallHitPercent;
+    }
 
     // Rank the player's known attack spells by effective damage against one
     // monster: a spell whose ReqLevel is below the monster's SpellImmu never

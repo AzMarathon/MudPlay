@@ -34,11 +34,11 @@ public sealed class SpellBookRowViewModel
         // line hasn't been read yet (Spellcasting 0). Level plays no part.
         bool isKai = spell.Magery == SpellCastChance.KaiMagery;
         int? success = SpellCastChance.Compute(spellcasting, spell.Formula.Diff, isKai);
-        DifficultySort = success ?? -1;
-        DifficultyText = success is { } pct
+        SuccessSort = success ?? -1;
+        SuccessText = success is { } pct
             ? $"{pct.ToString(System.Globalization.CultureInfo.InvariantCulture)}%"
             : "—";
-        DifficultyTooltip = BuildDifficultyTooltip(spellcasting, spell.Formula.Diff, isKai, success);
+        SuccessTooltip = BuildSuccessTooltip(spellcasting, spell.Formula.Diff, isKai, success);
 
         Mana = SpellCalculator.ManaCost(spell.Formula);
         ManaText = Mana.ToString();
@@ -78,20 +78,20 @@ public sealed class SpellBookRowViewModel
 
     // Cast-success chance for this character as "95%", or "—" when none can be
     // stated (non-caster, or Spellcasting not yet parsed). Column header is
-    // "Difficulty" — the spell's static Diff turned into the caster's real
+    // "Success %" — the spell's static Diff turned into the caster's real
     // landing chance. See SpellCastChance.
-    public string DifficultyText { get; }
+    public string SuccessText { get; }
 
     // Success percent for column sorting; -1 for the "—" rows so they group.
-    public int DifficultySort { get; }
+    public int SuccessSort { get; }
 
-    // Hover breakdown for the Difficulty cell: the equation with THIS spell's
+    // Hover breakdown for the Success % cell: the equation with THIS spell's
     // actual numbers (Spellcasting + its difficulty), including any clamp.
-    public string DifficultyTooltip { get; }
+    public string SuccessTooltip { get; }
 
     // "Spellcasting 94 + spell difficulty (-5) = 89%" with the clamp spelled out,
     // or the reason there's no chance to state.
-    private static string BuildDifficultyTooltip(int spellcasting, int diff, bool isKai, int? success)
+    private static string BuildSuccessTooltip(int spellcasting, int diff, bool isKai, int? success)
     {
         if (success is null)
             return "No cast chance yet — not a caster class, or your stats haven't been read "
