@@ -2,6 +2,19 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.40.0
+
+- Monster Intel **Edit Attacks** picker (button top-right): check which of your attacks — every usable melee type *and* each obtained attack spell — appear in Your Matchup, and pick (radio) which one drives the **Est. Rounds to Kill** column, so you can ask "how fast if I nuke it?" vs "if I swing my weapon?"
+- Your Matchup now lists your **melee attacks** (rounds to kill / hit% / dmg-per-hit vs the selected monster) alongside the ranked spells; both honor the picker's show/hide
+- Rounds-to-kill for any melee type (Bash / Smash / Backstab / Martial Arts) reuses the same per-type combat math the Character Info sheet uses — no drift
+- Hit Calculator: removed the "Hits me %" picker and "Show me the Monsters" button — the Monsters game-data tab's own filters cover the same ground
+- Monster Intel top bar now shows plain **AC** (worn gear + configured buffs + Shadow) instead of "AC vs Evil" — the evil-only wards (Prot Evil, Vile Ward) no longer inflate the number against a neutral or good monster
+- Editing the rounds-to-kill cap now re-applies to the list immediately, not just on reopen
+- Rounds-to-kill cap spinner moved inline, to the right of the Hits-You-% checkboxes
+- Filter-by-name box no longer resizes as the monster count changes; the count reserves room for 5 digits
+- Removed the in-window Close button — the title-bar X closes it
+- Double-click a monster row to open its full record in the Game Data Browser
+
 ## 3.39.0
 
 - Game Data → Monsters filter panel reworked: grouped into labelled sections (Combat / Elemental defenses / Casting & immunity / Type & alignment / Loot & lairs) with friendlier labels + tooltips, an **Apply** and a **Reset** button, and the range boxes are plain text fields so you can type any value (including a negative resist to find vulnerabilities)

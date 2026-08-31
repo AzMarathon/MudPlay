@@ -106,11 +106,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // Your raw dodge used in the incoming-hit calc — seeded from actuals, editable. May be negative.
     [ObservableProperty] private int _playerDodge;
 
-    // "Show me the Monsters" picker: the % chance a monster hits you (vs your AC +
-    // dodge above). The button below finds the accuracy that produces this hit-% and
-    // opens the Monsters game-data tab filtered to Acc ≥ that value.
-    [ObservableProperty] private int _hitPercentTarget = 50;
-
     // ----- Monster → You (incoming) --------------------------------------
     // One row per monster physical attack — or a single "Custom attack" row when
     // no monster is picked, so the incoming-hit calculator always works. Each
@@ -1232,16 +1227,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         MonsterAttacks.Add(row);
         RenumberAttacks();
         RecomputeRow(row);
-    }
-
-    // "Show me the Monsters": turn the hit-% picker into the monster accuracy that
-    // hits you that often (inverting the live hit formula against your AC + dodge),
-    // then open the Monsters game-data tab filtered to Acc ≥ that accuracy.
-    [RelayCommand]
-    private void ShowMonstersAtHitPercent()
-    {
-        int acc = CombatCalculator.AccuracyForHitChance(HitPercentTarget, PlayerAc, PlayerDodge, _realm);
-        AppServices.Current.OpenMonstersWithAccuracy(acc);
     }
 
     // Row-invoked removal. Keep at least one row so the incoming calc is never

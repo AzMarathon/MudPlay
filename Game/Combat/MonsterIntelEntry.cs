@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 
@@ -11,7 +12,11 @@ namespace MudPlay.Game.Combat;
 // check, not a monster database browser, so this carries only what the
 // master list and its filters need — not the full record (that's the Game
 // Data Browser's Monsters tab).
-public sealed record MonsterIntelEntry
+// A class, not a record: the three live fields below are mutated in place after
+// construction and the row lives in a bound DataGrid, so it needs reference
+// identity (stable selection) and change notification (cells re-render when the
+// cap / hit% / rounds change) — value equality over mutating fields gives neither.
+public sealed class MonsterIntelEntry : INotifyPropertyChanged
 {
     public required MonsterCatalogEntry Source { get; init; }
 
@@ -38,7 +43,12 @@ public sealed record MonsterIntelEntry
     // MonsterIntelViewModel.RebuildCharacterCapabilities whenever gear
     // changes. -1 = no character context, or the monster has no catalogued
     // physical attack to compute against.
-    public int IncomingHitPercent { get; set; } = -1;
+    private int _incomingHitPercent = -1;
+    public int IncomingHitPercent
+    {
+        get => _incomingHitPercent;
+        set { if (_incomingHitPercent == value) return; _incomingHitPercent = value; Raise(nameof(IncomingHitPercent)); Raise(nameof(IncomingHitPercentText)); }
+    }
     public string IncomingHitPercentText => IncomingHitPercent >= 0 ? $"{IncomingHitPercent}%" : string.Empty;
 
     // Projected rounds for the player to kill this monster with their current
@@ -47,13 +57,24 @@ public sealed record MonsterIntelEntry
     // by RebuildCharacterCapabilities. -1 = no character context (not yet
     // computed); 0 = computed but not killable (no weapon, or the weapon
     // can't out-damage the monster's regen/HP at all).
-    public int EstimatedRoundsToKill { get; set; } = -1;
+    private int _estimatedRoundsToKill = -1;
+    public int EstimatedRoundsToKill
+    {
+        get => _estimatedRoundsToKill;
+        set { if (_estimatedRoundsToKill == value) return; _estimatedRoundsToKill = value; Raise(nameof(EstimatedRoundsToKill)); Raise(nameof(EstimatedRoundsToKillText)); }
+    }
 
     // Display ceiling (Settings → Other, default 999) — a superboss can
     // otherwise project into the millions of rounds, which isn't a
     // meaningful number, just noise. Set alongside EstimatedRoundsToKill by
-    // RebuildCharacterCapabilities every entry gets the same live value.
-    public int RoundsToKillCap { get; set; } = 999;
+    // RebuildCharacterCapabilities every entry gets the same live value, and
+    // re-applied live when the window's cap spinner changes.
+    private int _roundsToKillCap = 999;
+    public int RoundsToKillCap
+    {
+        get => _roundsToKillCap;
+        set { if (_roundsToKillCap == value) return; _roundsToKillCap = value; Raise(nameof(RoundsToKillCap)); Raise(nameof(EstimatedRoundsToKillText)); }
+    }
 
     public string EstimatedRoundsToKillText => EstimatedRoundsToKill switch
     {
@@ -62,6 +83,9 @@ public sealed record MonsterIntelEntry
         _ when EstimatedRoundsToKill > RoundsToKillCap => $"{RoundsToKillCap}+",
         _ => EstimatedRoundsToKill.ToString(Inv),
     };
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void Raise(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 

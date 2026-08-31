@@ -97,6 +97,47 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.Equal(42, resolver.Resolve<OtherSettings>("Other").RoundsToKillCap);
     }
 
+    // Edit Attacks picker: the roster always offers the usable melee attacks
+    // (Normal + Bash at least), exactly one is the rounds-to-kill basis (default
+    // Normal), the radio is single-select, and both the pick and a hide persist
+    // to the Character tier.
+    [Fact]
+    public void EditAttacks_DefaultsToNormal_SingleSelect_AndPersists()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 10, Agility = 50, Charm = 50 };
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
+        var itemMagic = new ItemMagicIndex(cache);
+
+        var profile = new ProfileService();
+        profile.LoadBlank();
+        var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
+
+        using (var vm = new MonsterIntelViewModel(
+            cache, catalog, resolver, stats, inventory, spellbook, itemMagic,
+            observations: null, playerState: null))
+        {
+            Assert.NotEmpty(vm.AttackOptions);
+            AttackPickRow normal = vm.AttackOptions.Single(o => o.Label == "Normal");
+            Assert.True(normal.IsRoundsAttack);                                 // default basis
+            Assert.Single(vm.AttackOptions.Where(o => o.IsRoundsAttack));
+
+            AttackPickRow bash = vm.AttackOptions.Single(o => o.Label == "Bash");
+            bash.IsRoundsAttack = true;                                         // switch basis
+            Assert.False(normal.IsRoundsAttack);                               // single-select enforced
+            Assert.Single(vm.AttackOptions.Where(o => o.IsRoundsAttack));
+
+            normal.Shown = false;                                               // hide from Your Matchup
+        }
+
+        OtherSettings saved = resolver.Resolve<OtherSettings>("Other");
+        Assert.Equal("melee:Bash", saved.MonsterIntelRoundsAttack);
+        Assert.Contains("melee:Normal", saved.MonsterIntelHiddenAttacks);
+    }
+
     [Fact]
     public void MasterList_ShowsEntries_ImmediatelyOnConstruction_WithCharacterContext()
     {
@@ -176,14 +217,12 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.Equal(string.Empty, entry.AccuracyText);
     }
 
-    // EffectiveAcVsEvil = AC + Shadow(+10 once) + Prot Evil -- the combined
-    // "defense" term CombatCalculator.CalculateHitChance folds together
-    // against an evil attacker. Regression: an earlier version omitted the
-    // Shadow term entirely, undercounting AC vs Evil by exactly the flat
-    // +10 a real @st readout includes (caught against a live character's
-    // AC(64) + Shadow(10) + Prev(10) = AC vs Evil(84)).
+    // EffectiveAc = AC + Shadow(+10 once), the defense that applies vs EVERY
+    // attacker. Prot Evil (and Vile Ward) are deliberately excluded — they're
+    // secondary AC only vs evil monsters, so folding them into one headline
+    // number would overstate defense against a neutral / good monster.
     [Fact]
-    public void EffectiveAcVsEvil_IsArmourClassPlusShadowPlusWornProtEvil()
+    public void EffectiveAc_IsArmourClassPlusShadow_ExcludesWornProtEvil()
     {
         var cache = new GameDataCache(_root);
         cache.SwitchSet("test-set");
@@ -211,9 +250,10 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
             observations: null, playerState: null);
 
-        // 30 AC + 10 Shadow (Abil 9, flat once) + 15 Prot Evil (Abil 24)
-        // from the worn "wraith ward".
-        Assert.Equal(55, vm.EffectiveAcVsEvil);
+        // 30 AC + 10 Shadow (Abil 9, flat once); the worn "wraith ward" also
+        // grants 15 Prot Evil (Abil 24) but that's evil-only, so it's NOT in
+        // the plain AC figure.
+        Assert.Equal(40, vm.EffectiveAc);
     }
 
     // Six contiguous, non-overlapping Hits-You-% bands covering 0-100% with

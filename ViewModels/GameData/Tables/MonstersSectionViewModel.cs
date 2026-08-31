@@ -228,19 +228,6 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         return list;
     }
 
-    // Programmatically set "Accuracy ≥ minAcc" and show the result — the Hit
-    // Calculator's "Show me the Monsters" action opens this tab and calls here with
-    // the accuracy that hits the player at the picked hit-%. Commits the value (the
-    // panel is otherwise apply-gated) so it takes effect immediately, and it
-    // persists so a cold-load (tab not yet opened) re-applies it via Reload/LoadAsync.
-    public void FilterByAccuracyAtLeast(int minAcc)
-    {
-        RangeFilter? acc = FilterGroups.SelectMany(g => g.Ranges).FirstOrDefault(r => r.Column == "Accuracy");
-        if (acc is null) return;
-        acc.Min = minAcc;
-        ApplyFiltersCommand.Execute(null);   // commit the pending value + re-filter
-    }
-
     // Monster Number → lair stats from the room graph: Count (# rooms whose lair tag
     // names it = # Lairs), SumMax + MaxMax of those rooms' per-room "(Max N)" caps
     // (for the average / biggest lair size). Sourced from the immutable

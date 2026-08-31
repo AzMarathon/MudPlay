@@ -67,7 +67,16 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // OnRoundsToKillCapChanged.
     private bool _suppressCapPersist;
 
-    public event Action? CloseRequested;
+    // "Edit Attacks" picker state. AttackOptions is the picker's rows (usable
+    // melee attacks + obtained attack spells); _hiddenAttackKeys are the attacks
+    // hidden from Your Matchup; _roundsAttackKey is the single attack driving the
+    // master list's Est. Rounds to Kill. Persisted per character in OtherSettings;
+    // _buildingOptions suppresses row-event write-back while the list is (re)built.
+    private readonly List<MudAttackType> _usableMelee = new();
+    private readonly HashSet<string> _hiddenAttackKeys = new(System.StringComparer.Ordinal);
+    private string _roundsAttackKey = MeleeKey(MudAttackType.Normal);
+    private bool _buildingOptions;
+    public ObservableCollection<AttackPickRow> AttackOptions { get; } = new();
 
     public DataGridCollectionView RowsView { get; }
 
@@ -124,9 +133,13 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         if (_hasCharacterContext)
         {
+            OtherSettings saved = _resolver.Resolve<OtherSettings>("Other");
             _suppressCapPersist = true;
-            RoundsToKillCap = _resolver.Resolve<OtherSettings>("Other").RoundsToKillCap;
+            RoundsToKillCap = saved.RoundsToKillCap;
             _suppressCapPersist = false;
+            foreach (string k in saved.MonsterIntelHiddenAttacks) _hiddenAttackKeys.Add(k);
+            if (!string.IsNullOrEmpty(saved.MonsterIntelRoundsAttack))
+                _roundsAttackKey = saved.MonsterIntelRoundsAttack!;
 
             // RowsView was just constructed with Filter = PassesFilter, which
             // reads IncomingHitPercent — still every entry's default -1 until
@@ -179,9 +192,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _manaLabel = "Mana";
     [ObservableProperty] private string? _weaponSummaryText;
     [ObservableProperty] private int _knownAttackSpellCount;
-    // AC + Prot Evil — see the assignment in RebuildCharacterCapabilities for
-    // why this sum, not bare AC, is "effective AC vs Evil."
-    [ObservableProperty] private int _effectiveAcVsEvil;
+    // Plain AC that applies vs every attacker — worn gear + configured buffs +
+    // the flat Shadow bonus. Evil-only wards (Prot Evil / Vile Ward) are left
+    // out; see the assignment in RebuildCharacterCapabilities.
+    [ObservableProperty] private int _effectiveAc;
 
     // Hits-You-% threshold checkboxes: independent, OR'd together — checking
     // none shows every monster (still subject to the "no computable value"
@@ -265,13 +279,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _playerProtEvil = totals.PlusProtEvil;
         _playerProtGood = totals.PlusProtGood;
         _playerHasShadow = totals.PlusShadowResist > 0;
-        // AC + Shadow(+10 once) + Prot Evil is exactly the "defense" term
-        // CombatCalculator folds together against an evil attacker (see
-        // CalculateHitChance's non-backstab branch) — the single number
-        // that actually answers "how well-defended am I against an evil
-        // monster right now." (Confirmed against a live @st vs Evil/vs Good
-        // readout: both include the same flat Shadow bonus.)
-        EffectiveAcVsEvil = _playerAc + (_playerHasShadow ? 10 : 0) + _playerProtEvil;
+        // The panel shows plain AC — worn gear + configured buffs + the flat
+        // Shadow bonus, all of which apply against EVERY attacker. Prot Evil
+        // and Vile Ward are deliberately excluded: they're secondary AC only
+        // versus evil monsters, so folding them into one headline number
+        // overstates your defense against a neutral / good monster. The
+        // evil-only wards still count per-row in Hits You %, which knows each
+        // monster's alignment.
+        EffectiveAc = _playerAc + (_playerHasShadow ? 10 : 0);
 
         // The monster → player direction — the master list's "Hits You %"
         // column and threshold checkboxes.
@@ -281,31 +296,175 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 _playerAc, _playerDodge, _playerProtEvil, _playerProtGood,
                 _gameData.ActiveRealm, _playerHasShadow) ?? -1;
 
-        // Estimated Rounds to Kill — the player-offense direction, our current
-        // weapon's projected DPS against each monster's HP/AC/DR, via the same
-        // Compute() the Character Workshop's Hit Calculator uses. Capped for
-        // display (a superboss can otherwise project into the millions of
-        // rounds) at RoundsToKillCap, editable right in this window.
-        PlayerMatchupProfile playerProfile =
-            CharacterCalculator.BuildNormalAttackProfile(_stats, worn, encum, _gameData);
+        // The character's usable attacks feed the Edit Attacks picker — every
+        // melee type they can throw (CharacterCalculator gates by class/race) plus
+        // each obtained attack spell built above. Rebuilt on gear/spell change,
+        // preserving the user's show/hide + rounds-attack picks.
+        _usableMelee.Clear();
+        _usableMelee.AddRange(CharacterCalculator.UsableMeleeAttacks(_stats!, _gameData));
+        RebuildAttackOptions();
+
+        // Estimated Rounds to Kill — the player-offense direction against each
+        // monster's HP/AC/DR, using whichever attack the picker selected (default:
+        // the Normal melee swing). Capped for display (a superboss can otherwise
+        // project into the millions of rounds) at RoundsToKillCap.
+        ComputeRoundsToKill(worn, encum);
+    }
+
+    // Fill every entry's Est. Rounds to Kill from the currently-selected attack:
+    // a melee pick runs the full Compute() matchup; a spell pick divides the
+    // monster's HP by that spell's resist-adjusted per-round damage against it.
+    private void ComputeRoundsToKill(IReadOnlyList<EquippedItem> worn, EncumbranceReading encum)
+    {
+        MudAttackType? roundsMelee = MeleeTypeForKey(_roundsAttackKey);
+        PlayerAttackSpell? roundsSpell = roundsMelee is null ? SpellForKey(_roundsAttackKey) : null;
+        if (roundsMelee is null && roundsSpell is null) roundsMelee = MudAttackType.Normal;  // saved pick gone
+        PlayerMatchupProfile? meleeProfile = roundsMelee is { } mt
+            ? CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData)
+            : null;
+
         foreach (MonsterIntelEntry entry in _all)
         {
             entry.RoundsToKillCap = RoundsToKillCap;
             if (entry.Hp <= 0) { entry.EstimatedRoundsToKill = -1; continue; }
             MonsterCatalogEntry m = entry.Source;
-            var monsterProfile = new MonsterMatchupProfile(
-                ArmourClass: m.ArmourClass,
-                DamageResist: m.DamageResist,
-                Hp: m.Hp,
-                Dodge: m.Dodge,
-                HasPhysicalAttack: m.PhysicalAccuracy is not null,
-                AttackAccuracy: m.PhysicalAccuracy?.Majority ?? 0,
-                AvgAttackDamage: m.PrimaryPhysicalAvgDamage,
-                IsEvil: m.Align is 1 or 2 or 5 or 6,
-                IsGood: m.Align is 0 or 4);
-            entry.EstimatedRoundsToKill = MonsterMatchupCalculator.Compute(playerProfile, monsterProfile).RoundsToKill;
+            entry.EstimatedRoundsToKill = meleeProfile is { } mp
+                ? MonsterMatchupCalculator.Compute(mp, MonsterProfileFor(m)).RoundsToKill
+                : SpellRoundsToKill(roundsSpell!.Value, m);
         }
     }
+
+    private static MonsterMatchupProfile MonsterProfileFor(MonsterCatalogEntry m) => new(
+        ArmourClass: m.ArmourClass, DamageResist: m.DamageResist, Hp: m.Hp, Dodge: m.Dodge,
+        HasPhysicalAttack: m.PhysicalAccuracy is not null,
+        AttackAccuracy: m.PhysicalAccuracy?.Majority ?? 0,
+        AvgAttackDamage: m.PrimaryPhysicalAvgDamage,
+        IsEvil: m.Align is 1 or 2 or 5 or 6, IsGood: m.Align is 0 or 4);
+
+    // Rounds for one attack spell to drop a monster: HP / its resist-adjusted
+    // per-round damage (the same RankAttackSpells the Your Matchup panel uses).
+    // 0 when the spell can't land (SpellImmu too high, fully resisted, wrong
+    // target type) — the column renders that as "—", like an unkillable weapon.
+    private int SpellRoundsToKill(PlayerAttackSpell spell, MonsterCatalogEntry m)
+    {
+        SpellEffectivenessResult r = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { spell }, m.SpellImmunity, m.ElementalResists, m.Undead)[0];
+        if (!r.Eligible || r.EffectiveDamage <= 0) return 0;
+        double rounds = System.Math.Ceiling(m.Hp / (double)r.EffectiveDamage);
+        return rounds >= int.MaxValue ? int.MaxValue : (int)rounds;
+    }
+
+    // ----- Edit Attacks picker -----
+
+    // Stable persistence keys: a melee attack is its enum name, a spell its cast
+    // code, each namespaced so the two can never collide.
+    private static string MeleeKey(MudAttackType t) => "melee:" + t;
+    private static string SpellKey(string shortCode) => "spell:" + shortCode;
+
+    private static string MeleeLabel(MudAttackType t) => t == MudAttackType.Jumpkick ? "Jump Kick" : t.ToString();
+
+    // The selected key back to a usable melee type / owned spell, or null when it
+    // names the other kind (so ComputeRoundsToKill can branch) or is stale.
+    private MudAttackType? MeleeTypeForKey(string key)
+    {
+        const string prefix = "melee:";
+        if (!key.StartsWith(prefix, System.StringComparison.Ordinal)) return null;
+        return System.Enum.TryParse(key[prefix.Length..], out MudAttackType t) && _usableMelee.Contains(t)
+            ? t : null;
+    }
+
+    private PlayerAttackSpell? SpellForKey(string key)
+    {
+        const string prefix = "spell:";
+        if (!key.StartsWith(prefix, System.StringComparison.Ordinal)) return null;
+        string shortCode = key[prefix.Length..];
+        foreach (PlayerAttackSpell s in _ownedAttackSpells)
+            if (string.Equals(s.Short, shortCode, System.StringComparison.OrdinalIgnoreCase)) return s;
+        return null;
+    }
+
+    // Rebuild the picker rows from the current usable-melee + owned-spell sets,
+    // carrying the user's show/hide + rounds-attack picks across the rebuild. If
+    // the saved rounds pick is no longer available (spell unlearned / class swap),
+    // fall back to Normal so the column always has a basis.
+    private void RebuildAttackOptions()
+    {
+        _buildingOptions = true;
+        foreach (AttackPickRow r in AttackOptions) r.PropertyChanged -= OnAttackOptionChanged;
+        AttackOptions.Clear();
+
+        foreach (MudAttackType t in _usableMelee)
+            AttackOptions.Add(NewOption(MeleeKey(t), MeleeLabel(t), isSpell: false));
+        foreach (PlayerAttackSpell s in _ownedAttackSpells)
+            AttackOptions.Add(NewOption(SpellKey(s.Short), s.Name, isSpell: true));
+
+        if (AttackOptions.Count > 0 && !AttackOptions.Any(o => o.IsRoundsAttack))
+        {
+            AttackPickRow fallback = AttackOptions.FirstOrDefault(o => o.Key == MeleeKey(MudAttackType.Normal))
+                ?? AttackOptions[0];
+            fallback.IsRoundsAttack = true;
+            _roundsAttackKey = fallback.Key;
+        }
+        _buildingOptions = false;
+    }
+
+    private AttackPickRow NewOption(string key, string label, bool isSpell)
+    {
+        var row = new AttackPickRow(key, label, isSpell,
+            shown: !_hiddenAttackKeys.Contains(key), isRoundsAttack: key == _roundsAttackKey);
+        row.PropertyChanged += OnAttackOptionChanged;
+        return row;
+    }
+
+    private void OnAttackOptionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_buildingOptions || sender is not AttackPickRow row) return;
+        if (e.PropertyName == nameof(AttackPickRow.Shown))
+        {
+            if (row.Shown) _hiddenAttackKeys.Remove(row.Key);
+            else _hiddenAttackKeys.Add(row.Key);
+            SaveAttackSettings();
+            if (SelectedEntry is not null) RebuildDetail();   // re-filter Your Matchup
+        }
+        // Radio: react only to the newly-checked row, and enforce single-selection
+        // in the model ourselves (don't lean on XAML GroupName reaching across the
+        // ItemsControl) — uncheck every other row before recomputing.
+        else if (e.PropertyName == nameof(AttackPickRow.IsRoundsAttack) && row.IsRoundsAttack)
+        {
+            _buildingOptions = true;
+            foreach (AttackPickRow other in AttackOptions)
+                if (!ReferenceEquals(other, row)) other.IsRoundsAttack = false;
+            _buildingOptions = false;
+            _roundsAttackKey = row.Key;
+            SaveAttackSettings();
+            RecomputeRoundsColumn();
+        }
+    }
+
+    // Refill only the rounds column (the radio changed, not gear/spells).
+    private void RecomputeRoundsColumn()
+    {
+        if (!_hasCharacterContext) return;
+        ComputeRoundsToKill(_inventory!.Snapshot.EquippedItems, _inventory.Snapshot.Encumbrance);
+        RowsView.Refresh();
+        if (SelectedEntry is not null) RebuildDetail();
+    }
+
+    // Char-tier resolve-then-write, mirroring OnRoundsToKillCapChanged — never a
+    // bare new OtherSettings, so this doesn't clobber the tab's other fields.
+    private void SaveAttackSettings()
+    {
+        if (!_hasCharacterContext) return;
+        OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
+        dto.MonsterIntelHiddenAttacks = _hiddenAttackKeys.OrderBy(k => k, System.StringComparer.Ordinal).ToList();
+        dto.MonsterIntelRoundsAttack = _roundsAttackKey;
+        _resolver.WriteAt(SettingsTier.Character, "Other", dto);
+    }
+
+    // "12 rounds", or "999+ rounds" past the display cap (same ceiling the column uses).
+    private string FormatRounds(int rounds)
+        => rounds > RoundsToKillCap ? $"{RoundsToKillCap}+ rounds"
+                                    : $"{rounds} round{(rounds == 1 ? "" : "s")}";
 
     private void OnCharacterCapabilitiesChanged()
     {
@@ -370,9 +529,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         return true;
     }
 
-    [RelayCommand]
-    private void Close() => CloseRequested?.Invoke();
-
     // ----- detail panel -----
     // Deliberately narrow: this window answers "can I fight this thing right
     // now," not "tell me everything about it" (that's the Game Data Browser's
@@ -390,6 +546,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     // ----- Your Matchup (needs a live character; blank without one) -----
     public ObservableCollection<string> MatchupLines { get; } = new();
+    // Per-shown melee attack vs the selected monster (rounds to kill / hit% /
+    // dmg-per-hit) — the melee counterpart to SpellEffectiveness, both gated by
+    // the Edit Attacks picker's show/hide checkboxes.
+    public ObservableCollection<string> MatchupMeleeLines { get; } = new();
     public ObservableCollection<SpellEffectivenessResult> SpellEffectiveness { get; } = new();
     public ObservableCollection<string> IncomingThreatLines { get; } = new();
     [ObservableProperty] private bool _hasMatchupContext;
@@ -403,6 +563,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     {
         AttackRows.Clear();
         MatchupLines.Clear();
+        MatchupMeleeLines.Clear();
         SpellEffectiveness.Clear();
         IncomingThreatLines.Clear();
         ObservationLines.Clear();
@@ -491,9 +652,26 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 : $"{element}: your gear resists {myResist:+0;-0}%");
         }
 
+        // Melee attacks the picker keeps shown — each projected against THIS
+        // monster (rounds to kill, hit%, dmg/hit), the same per-type math the
+        // master list's rounds column and the Character Info sheet use.
+        EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
+        foreach (MudAttackType mt in _usableMelee)
+        {
+            if (_hiddenAttackKeys.Contains(MeleeKey(mt))) continue;
+            MonsterMatchupResult res = MonsterMatchupCalculator.Compute(
+                CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData),
+                MonsterProfileFor(m));
+            MatchupMeleeLines.Add(res.HasWeapon && res.RoundsToKill > 0
+                ? $"{MeleeLabel(mt)}: {FormatRounds(res.RoundsToKill)} to kill · {res.PlayerHitPercent}% hit · {res.PlayerDamagePerHit} dmg/hit · {res.PlayerSwingsPerRound:0.0} swings"
+                : $"{MeleeLabel(mt)}: can't out-damage it");
+        }
+
+        // Attack spells, ranked by effective damage — hidden picks filtered out.
         foreach (SpellEffectivenessResult r in MonsterMatchupCalculatorSpells.RankAttackSpells(
             _ownedAttackSpells, m.SpellImmunity, m.ElementalResists, m.Undead))
-            SpellEffectiveness.Add(r);
+            if (!_hiddenAttackKeys.Contains(SpellKey(r.Short)))
+                SpellEffectiveness.Add(r);
     }
 
     // "Majority" resolves a spell-attack slot's Accuracy field back to a spell
