@@ -551,6 +551,26 @@ public sealed class CombatCalculatorTests
         Assert.All(r.SwingsPerRound, s => Assert.True(s <= cap));
     }
 
+    // Live-game regression: a L28 Paladin (CombatLVL 6), STR 135, AGI 77, 57% encum,
+    // throwing hammers (speed 1100, StrReq 0). Paradigm `stat all` shows normal 7.143
+    // and bash 3.572. Pins that the energy term is level × CombatLVL — MMUD-Explorer
+    // feeds GetClassCombat (CombatLVL−2) into a (nCombat+2) form; passing the raw
+    // CombatLVL into a (combatLevel+2) form (the bug) inflated swings ~26%.
+    [Fact]
+    public void CalcEnergyUsed_UsesRawCombatLvl_MatchesLiveGameSwings()
+    {
+        int energy = CombatCalculator.CalcEnergyUsed(
+            combatLevel: 6, level: 28, attackSpeed: 1100, agility: 77,
+            strength: 135, weaponStrReq: 0, encumPercent: 57);
+        Assert.Equal(140, energy);            // 1000 / 140 = 7.143 normal swings (game's stat all)
+
+        SwingCalcResult bash = CombatCalculator.CalcSwings(
+            combatLevel: 6, level: 28, attackSpeed: 1100, agility: 77,
+            strength: 135, weaponStrReq: 0, currentEncum: 57, maxEncum: 100,
+            isBashing: true, realmType: RealmType.ParaMud);
+        Assert.Equal(3.57, bash.RawSwings, 2);  // 1000 / (140×2), the reported "should be 3.572"
+    }
+
     [Fact]
     public void CalcSwings_BashingDoublesEnergyPerSwing()
     {

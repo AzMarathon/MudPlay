@@ -644,7 +644,16 @@ public static class CombatCalculator
     {
         int speed = hasSlowness ? (attackSpeed * 3) / 2 : attackSpeed;
 
-        int divisor = ((level * (combatLevel + 2)) + 45) * (agility + 150) / 6;
+        // Combat term is level × the class CombatLVL. MMUD-Explorer feeds this
+        // formula GetClassCombat (= CombatLVL − 2, modMMudDatabase.bas) into a
+        // (nCombat + 2) form — net level × CombatLVL. We pass the raw CombatLVL and
+        // drop the +2, which is identical. Passing the raw CombatLVL into a
+        // (combatLevel + 2) form was the bug: an extra level×2 in the divisor
+        // undercut energy ~26% and inflated every swing/DPS/rounds figure (report:
+        // L28 Paladin, throwing hammers speed 1100, 57% encum — read 9 swings
+        // uncapped / bash 4.5 where the game shows 7.143 / 3.572). Accuracy keeps
+        // the raw CombatLVL (CalcAccuracy), which the game does too.
+        int divisor = ((level * combatLevel) + 45) * (agility + 150) / 6;
         if (divisor < 1) divisor = 1;
         int energy = (speed * 1000) / divisor;
 

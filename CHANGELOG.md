@@ -4,7 +4,8 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 
 ## 3.40.5
 
-- Fixed physical swings per round capping at 5 on Paradigm — the cap should be **6** (it was a fixed constant, so every Paradigm swings / DPS / rounds-to-kill figure was undercounted for a fast weapon, across Character Info, the Calculators tab, and Monster Intel). Verified the full swing/energy math (Normal / Bash / Smash / martial-arts, both realms) against the MMUD-Explorer reference — only the realm cap was wrong; everything else matches (incl. jumpkick 1900 Stock / 2800 Paradigm)
+- Fixed swings per round being over-counted for **every** character — the energy formula used `level × (CombatLVL + 2)` where the game uses `level × CombatLVL`, an extra `level × 2` in the divisor that inflated every swings / DPS / rounds-to-kill figure (Character Info, Calculators tab, Monster Intel). A L28 Paladin's bash read 4.5 where the game's `stat all` shows 3.572; normal read 9 vs the game's 7.143. Matched to MMUD-Explorer's `GetClassCombat` and confirmed against the live game to the decimal (accuracy already used the raw CombatLVL and was correct)
+- Fixed physical swings per round capping at 5 on Paradigm — the cap should be **6** (it was a fixed constant, so a fast weapon was clipped a swing on Paradigm). Verified the full swing/energy math (Normal / Bash / Smash / martial-arts, both realms) against the MMUD-Explorer reference (incl. jumpkick 1900 Stock / 2800 Paradigm)
 
 ## 3.40.4
 

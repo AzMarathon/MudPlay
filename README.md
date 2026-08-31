@@ -2,7 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.40.5**
-> - Fixed physical swings per round capping at 5 on Paradigm (should be 6) — undercounted every Paradigm swings/DPS/rounds figure app-wide; verified the full swing/energy math against the MMUD-Explorer reference (only the cap was wrong)
+> - Fixed swings per round being over-counted for every character — the energy formula added a phantom `level × 2` to the divisor (used `CombatLVL + 2` where the game uses `CombatLVL`), inflating every swings/DPS/rounds figure app-wide; a Paladin's bash read 4.5 where the game shows 3.572. Matched to MMUD-Explorer and confirmed against the live game
+> - Fixed physical swings per round capping at 5 on Paradigm (should be 6); verified the full swing/energy math against the MMUD-Explorer reference
 > - Fixed a loop wedging forever when a move's confirmation got swallowed by an unrelated line — the stall watchdog is now armed on every move sent
 > - Fixed a self-buff spamming a reject/retry loop out of combat (the cast-blocked latch now clears on the correct ~5.5s cadence, not a too-short 3s)
 > - Monster Intel **Edit Attacks** picker: choose which of your attacks (every usable melee type + your attack spells) show in Your Matchup, and which one drives the Est. Rounds to Kill column
