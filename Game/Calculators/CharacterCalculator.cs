@@ -364,41 +364,31 @@ public static class CharacterCalculator
         RealmType realm = gameData.ActiveRealm;
         int nCombatLevel = classRow is JsonElement cr ? GetInt(cr, "CombatLVL") : 0;
         int effectiveAbil22 = realm == RealmType.ParaMud ? t.PlusAccuracy : t.MaxSingleAbil22;
-        bool hasWeapon = t.WeaponMax > 0;
 
         int accuracy = CombatCalculator.CalcAccuracy(
             MudAttackType.Normal, realm, stats.Level, nCombatLevel,
             stats.Strength, stats.Agility, stats.Intellect, stats.Charm,
             t.TotalWornAccy, effectiveAbil22, encum.CurrentWeight, encum.MaxWeight, t.WeaponStrReq);
 
-        MeleeDamageResult dmg = CombatCalculator.CalcMeleeDamage(
-            MudAttackType.Normal, realm, stats.Strength, t.WeaponMin, t.WeaponMax,
-            t.PlusMaxDamage, t.PlusMinDamage);
-        int avgWeaponDamage = hasWeapon ? (dmg.MinDamage + dmg.MaxDamage) / 2 : 0;
-
-        SwingCalcResult swings = CombatCalculator.CalcSwings(
-            nCombatLevel, stats.Level, t.WeaponSpeed, stats.Agility, stats.Strength, t.WeaponStrReq,
-            encum.CurrentWeight, encum.MaxWeight, isBashing: false, realmType: realm);
-
-        int qnd = hasWeapon && (t.WeaponStrReq <= 0 || stats.Strength >= t.WeaponStrReq)
-            ? swings.QnDCritBonus : 0;
-        int critChance = hasWeapon ? CombatCalculator.CalcCritChance(t.PlusCrits, qnd, realm) : 0;
-        int avgCritDamage = hasWeapon ? dmg.MaxDamage * 3 : 0;
+        MeleeOffense offense = CombatCalculator.ComputeMeleeOffense(
+            MudAttackType.Normal, realm, stats.Level, nCombatLevel,
+            stats.Strength, stats.Agility, t.WeaponMin, t.WeaponMax, t.WeaponSpeed, t.WeaponStrReq,
+            t.PlusMaxDamage, t.PlusMinDamage, t.PlusCrits, encum.CurrentWeight, encum.MaxWeight);
 
         return new PlayerMatchupProfile(
             Realm: realm,
             NormalAccuracy: accuracy,
-            AvgWeaponDamage: avgWeaponDamage,
-            SwingsPerRound: hasWeapon ? swings.RawSwings : 0,
-            HasWeapon: hasWeapon,
+            AvgWeaponDamage: offense.AvgDamage,
+            SwingsPerRound: offense.SwingsPerRound,
+            HasWeapon: offense.HasWeapon,
             ArmourClass: stats.ArmourClass,
             Dodge: CombatCalculator.CalcDodge(
                 stats.Level, stats.Agility, stats.Charm, t.PlusDodge, encum.CurrentWeight, encum.MaxWeight),
             ProtEvil: t.PlusProtEvil,
             ProtGood: t.PlusProtGood,
             DamageResist: (int)t.PlusDR,
-            CritChancePercent: critChance,
-            AvgCritDamage: avgCritDamage);
+            CritChancePercent: offense.CritChance,
+            AvgCritDamage: offense.AvgCritDamage);
     }
 
     // Maps a single MajorMUD ability ID + value onto the matching summary field
