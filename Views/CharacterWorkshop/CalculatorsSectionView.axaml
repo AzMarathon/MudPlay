@@ -149,21 +149,7 @@
                         <!-- ===== Monster values ===== -->
                         <Border Classes="SubBox">
                             <StackPanel Spacing="10">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="Section" Text="Monster Values" VerticalAlignment="Center"/>
-                                    <!-- Hit-% picker + jump: find the accuracy that hits you this
-                                         often (vs your AC + dodge) and show those monsters. -->
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                        <TextBlock Classes="FieldLabel" Text="Hits me" VerticalAlignment="Center"/>
-                                        <NumericUpDown Value="{Binding HitPercentTarget, Mode=TwoWay}"
-                                                       Minimum="0" Maximum="100" Increment="5" FormatString="0"
-                                                       Width="128" MinWidth="128" VerticalAlignment="Center"/>
-                                        <TextBlock Classes="FieldLabel" Text="%" VerticalAlignment="Center"/>
-                                        <Button Content="Show me the Monsters"
-                                                Command="{Binding ShowMonstersAtHitPercentCommand}"
-                                                ToolTip.Tip="Open the Monsters game-data tab filtered to monsters accurate enough to hit you at least this often, given your AC + dodge above."/>
-                                    </StackPanel>
-                                </Grid>
+                                <TextBlock Classes="Section" Text="Monster Values"/>
 
                                 <AutoCompleteBox ItemsSource="{Binding MonsterNames}"
                                                  SelectedItem="{Binding SelectedMonsterName, Mode=TwoWay}"

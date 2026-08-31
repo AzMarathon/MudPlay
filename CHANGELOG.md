@@ -2,6 +2,10 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.39.1
+
+- Hit Calculator: removed the "Hits me %" picker and "Show me the Monsters" button — the Monsters game-data tab's own filters cover the same ground
+
 ## 3.39.0
 
 - Game Data → Monsters filter panel reworked: grouped into labelled sections (Combat / Elemental defenses / Casting & immunity / Type & alignment / Loot & lairs) with friendlier labels + tooltips, an **Apply** and a **Reset** button, and the range boxes are plain text fields so you can type any value (including a negative resist to find vulnerabilities)

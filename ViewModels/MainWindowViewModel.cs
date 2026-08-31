@@ -613,7 +613,6 @@ public partial class MainWindowViewModel : ObservableObject
         // Same for the room-detail popup: monster names jump to a monster
         // record, and the room title / exits centre the Nav map on a room.
         AppServices.Current.SetMonsterGameDataOpener(OpenMonsterGameData);
-        AppServices.Current.SetMonstersAccuracyOpener(OpenMonstersWithAccuracy);
         AppServices.Current.SetRoomGameDataOpener(OpenRoomGameData);
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
@@ -3902,31 +3901,6 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.PlayerStats,
             AppServices.Current.ItemSources,
             initialSectionId);
-
-    // Registered on AppServices: the Hit Calculator's "Show me the Monsters" opens
-    // (or re-focuses) the browser at the Monsters section with an "Acc ≥ minAcc"
-    // filter. Unlike the toggle command, this never closes an open browser — it
-    // always ends with the Monsters tab shown and filtered.
-    private void OpenMonstersWithAccuracy(int minAcc)
-    {
-        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
-            return;
-
-        if (_gameDataBrowser is { } existing)
-        {
-            (existing.DataContext as MudPlay.ViewModels.GameData.GameDataBrowserViewModel)
-                ?.NavigateToMonstersAccuracy(minAcc);
-            existing.Activate();
-            return;
-        }
-
-        MudPlay.ViewModels.GameData.GameDataBrowserViewModel newVm = NewGameDataBrowserVm("monsters");
-        MudPlay.Views.GameData.GameDataBrowserWindow window = new() { DataContext = newVm };
-        window.Closed += (_, _) => _gameDataBrowser = null;
-        _gameDataBrowser = window;
-        window.Show(main);
-        newVm.NavigateToMonstersAccuracy(minAcc);
-    }
 
     // Items bound to File → Game Data → Active set. Each entry has a
     // checkbox-style header (checked = currently active set) and a command

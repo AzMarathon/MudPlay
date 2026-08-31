@@ -146,26 +146,6 @@ public static class CombatCalculator
             DodgeCap: dodgeCap);
     }
 
-    // Inverse of CalculateHitChance for a normal monster→player attack: the smallest
-    // attacker accuracy whose overall hit chance against the given defences reaches
-    // targetHitPercent. Binary search over the same formula (hit chance is monotonic
-    // in accuracy), so it stays exact to whatever the live calculator produces. Used by
-    // the Hit Calculator to turn a "% chance to hit me" into a monster accuracy to
-    // filter on. No alignment wards — a generic monster of unknown alignment.
-    public static int AccuracyForHitChance(int targetHitPercent, int defenderAC, int defenderDodge, RealmType realmType)
-    {
-        targetHitPercent = Math.Clamp(targetHitPercent, 0, 100);
-        int lo = 1, hi = 9999, result = 9999;
-        while (lo <= hi)
-        {
-            int mid = (lo + hi) / 2;
-            int hit = CalculateHitChance(mid, defenderAC, defenderDodge, realmType: realmType).OverallHitPercent;
-            if (hit >= targetHitPercent) { result = mid; hi = mid - 1; }
-            else lo = mid + 1;
-        }
-        return result;
-    }
-
     // Scale a defender's vile ward by evil level: <=Seedy → 0, <=Criminal →
     // halved, then always divided by 10.
     private static int AdjustVileWard(int vileWard, EvilLevel evilLevel)

@@ -591,23 +591,4 @@ public sealed class CombatCalculatorTests
         Assert.True(bonus <= 20);
     }
 
-    [Theory]
-    [InlineData(250, 78, 40)]
-    [InlineData(150, 50, 0)]
-    [InlineData(400, 120, 60)]
-    public void AccuracyForHitChance_RoundTripsToTheHitFormula(int acc, int ac, int dodge)
-    {
-        // The accuracy the search returns must be the smallest one whose hit % against
-        // these defences reaches the target (so its own hit % is >= target), and no
-        // larger than the accuracy that produced the target in the first place.
-        int hit = CombatCalculator.CalculateHitChance(acc, ac, dodge, realmType: RealmType.ParaMud).OverallHitPercent;
-        int found = CombatCalculator.AccuracyForHitChance(hit, ac, dodge, RealmType.ParaMud);
-
-        Assert.InRange(found, 1, acc);
-        Assert.True(CombatCalculator.CalculateHitChance(found, ac, dodge, realmType: RealmType.ParaMud).OverallHitPercent >= hit);
-    }
-
-    [Fact]
-    public void AccuracyForHitChance_ZeroTargetIsMinimalAccuracy()
-        => Assert.Equal(1, CombatCalculator.AccuracyForHitChance(0, 100, 40, RealmType.ParaMud));
 }

@@ -1,13 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.39.0**
-> - Game Data → Monsters filter panel reworked: grouped into labelled sections (Combat / Elemental defenses / Casting & immunity / Type & alignment / Loot & lairs) with friendlier labels + tooltips, an **Apply** and a **Reset** button, and free-text range boxes (type any value, including a negative resist to find vulnerabilities)
-> - Every numeric monster filter is now a **min/max range** (either bound optional) so you can bracket — HP 500–2000, or AC ≤ 20 to find easy kills — not just "at least N"
-> - Monster filtering absorbs Monster Intel's dimensions: per-element resists (signed, to find vulnerabilities), spell-immunity level, magic-weapon requirement, Type, Undead / Animal / Non-living flags, "casts spells", "drops an item"
-> - The search box FINDS a monster within the list; the filter panel CURATES which monsters are in it
-> - Monster records list Abilities one per line, and the meaningless "Damage" ability code is no longer shown
-> - Clicking a monster filter range box selects its whole value for quick overtyping or clearing
+> **Version 3.39.1**
+> - Hit Calculator: removed the "Hits me %" picker and "Show me the Monsters" button — the Monsters game-data tab's own filters cover the same ground
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

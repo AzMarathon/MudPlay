@@ -71,13 +71,6 @@ public sealed class AppServices
     public System.Threading.Tasks.Task OpenSpellRecordAsync(int spellNumber)
         => SpellRecord.OpenAsync(spellNumber);
 
-    // Opens (or re-focuses) the Monsters section with an "Acc ≥ minAcc" filter
-    // applied — the Hit Calculator's "Show me the Monsters" jumps here with the
-    // accuracy that hits the player at the picked hit-%.
-    private Action<int>? _monstersAccuracyOpener;
-    public void SetMonstersAccuracyOpener(Action<int> opener) => _monstersAccuracyOpener = opener;
-    public void OpenMonstersWithAccuracy(int minAccuracy) => _monstersAccuracyOpener?.Invoke(minAccuracy);
-
     // Same indirection for the Rooms section — lets an item's clickable
     // bought/sold shop line jump to the host room's Rooms-tab record (by
     // Map Number + Room Number) without a back-reference to the main VM.
