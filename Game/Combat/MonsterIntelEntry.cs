@@ -23,6 +23,14 @@ public sealed record MonsterIntelEntry
     public int Exp => Source.Exp;
     public string ExpText => Exp > 0 ? Exp.ToString("N0", Inv) : string.Empty;
 
+    // The monster's own physical-attack accuracy — the same "majority" slot
+    // value IncomingHitPercent feeds into CombatCalculator.CalculateHitChance
+    // as attackerAccuracy, surfaced directly so it's clear WHY a monster
+    // hits at the percent shown, not just the outcome. Empty for a monster
+    // with no physical attack (Source.PhysicalAccuracy is null).
+    public int Accuracy => Source.PhysicalAccuracy?.Majority ?? 0;
+    public string AccuracyText => Source.PhysicalAccuracy is not null ? Accuracy.ToString(Inv) : string.Empty;
+
     // Chance this monster's own attack lands on the current character, given
     // their live AC/Dodge/wards — the one field on this record that ISN'T a
     // pure projection of Source, since it depends on live player state rather

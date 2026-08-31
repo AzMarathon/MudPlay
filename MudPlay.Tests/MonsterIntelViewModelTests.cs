@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,6 +9,7 @@ using MudPlay.Game.Inventory;
 using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.Terminal;
 using MudPlay.ViewModels;
 using Xunit;
 
@@ -33,7 +35,17 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             "Number": 1, "Name": "test goblin", "Type": 1, "Align": 2, "HP": 10, "EXP": 50,
             "AttType-0": 1, "AttName-0": "hits you", "Att%-0": 100, "AttTrue%-0": 100,
             "AttAcc-0": 50, "AttMin-0": 1, "AttMax-0": 5, "AttEnergy-0": 100, "AttHitSpell-0": 0
+          },
+          {
+            "Number": 2, "Name": "test wraith", "Type": 1, "Align": 2, "HP": 10, "EXP": 50,
+            "AttType-0": 2, "AttName-0": "casts at you", "Att%-0": 100, "AttTrue%-0": 100,
+            "AttAcc-0": 501, "AttMin-0": 5, "AttMax-0": 80, "AttEnergy-0": 100, "AttHitSpell-0": 0
           }
+        ]
+        """);
+        File.WriteAllText(Path.Combine(setDir, "Items.json"), """
+        [
+          { "Name": "wraith ward", "Abil-0": 24, "AbilVal-0": 15 }
         ]
         """);
     }
@@ -133,6 +145,71 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         entry.RoundsToKillCap = cap;
 
         Assert.Equal(expected, entry.EstimatedRoundsToKillText);
+    }
+
+    // Accuracy/AccuracyText surface the monster's own physical-attack
+    // accuracy directly (the same value IncomingHitPercent already feeds
+    // into CombatCalculator as attackerAccuracy) -- empty for a spell-only
+    // monster with no physical slot, matching HpText/ExpText's "no data"
+    // convention rather than showing 0.
+    [Fact]
+    public void AccuracyText_PhysicalAttacker_ShowsMajoritySlotAccuracy()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        MonsterIntelEntry entry = MonsterIntelEntry.BuildCatalog(catalog).Single(e => e.Name == "test goblin");
+
+        Assert.Equal(50, entry.Accuracy);
+        Assert.Equal("50", entry.AccuracyText);
+    }
+
+    [Fact]
+    public void AccuracyText_SpellOnlyMonster_IsEmpty()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        MonsterIntelEntry entry = MonsterIntelEntry.BuildCatalog(catalog).Single(e => e.Name == "test wraith");
+
+        Assert.Equal(0, entry.Accuracy);
+        Assert.Equal(string.Empty, entry.AccuracyText);
+    }
+
+    // EffectiveAcVsEvil = AC + Prot Evil -- the combined "defense" term
+    // CombatCalculator.CalculateHitChance folds together against an evil
+    // attacker, surfaced in the character bar so it's clear at a glance.
+    [Fact]
+    public void EffectiveAcVsEvil_IsArmourClassPlusWornProtEvil()
+    {
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("test-set");
+        var catalog = new MonsterCatalog(cache);
+        var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 30, Agility = 50, Charm = 50 };
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        var lines = new LineExtractor(new TerminalEmulator(80, 24));
+        inventory.AttachLineExtractor(lines);
+        FieldInfo field = typeof(LineExtractor).GetField(
+            "LineEmitted", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var handler = (Action<LineExtractor.EmittedLine>)field.GetValue(lines)!;
+        void Feed(string text) => handler(new LineExtractor.EmittedLine(
+            text, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        // PatchEquipped (which the wearing line below drives) is a no-op
+        // until a full 'i' dump sets InventoryManager._loaded -- establish
+        // that baseline first, then apply the incremental wear.
+        Feed("You are carrying 0 copper farthings.");
+        Feed("Wealth:    0 copper farthings");
+        Feed("Encumbrance:    0/100  -  Light  [0%]");
+        Feed("You are now wearing wraith ward.");
+        var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
+        var itemMagic = new ItemMagicIndex(cache);
+
+        using var vm = new MonsterIntelViewModel(
+            cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
+            observations: null, playerState: null);
+
+        // 30 AC + 15 Prot Evil from the worn "wraith ward" (Abil 24).
+        Assert.Equal(45, vm.EffectiveAcVsEvil);
     }
 
     // Six contiguous, non-overlapping Hits-You-% bands covering 0-100% with

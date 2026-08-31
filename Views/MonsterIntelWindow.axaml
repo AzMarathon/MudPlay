@@ -44,7 +44,7 @@
 
             <!-- ===== Character bar: who you are, right now ===== -->
             <Border Grid.Row="0" Classes="Group" Margin="0,0,0,10" IsVisible="{Binding HasCharacterContext}">
-                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="28">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="28">
                     <StackPanel Grid.Column="0">
                         <TextBlock Classes="FieldLabel" Text="Character"/>
                         <TextBlock Classes="DetailLine">
@@ -86,6 +86,11 @@
                     <StackPanel Grid.Column="4">
                         <TextBlock Classes="FieldLabel" Text="Known attack spells"/>
                         <TextBlock Classes="DetailLine" Text="{Binding KnownAttackSpellCount}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="5">
+                        <TextBlock Classes="FieldLabel" Text="AC vs Evil"
+                                   ToolTip.Tip="Your Armour Class plus your worn Prot Evil — the combined defense an evil monster's attack actually rolls against."/>
+                        <TextBlock Classes="DetailLine" Text="{Binding EffectiveAcVsEvil}"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -142,6 +147,7 @@
                         <DataGridTextColumn Header="Name"       Binding="{ReflectionBinding Name}"                 Width="*"    MinWidth="160" MaxWidth="300" SortMemberPath="Name"/>
                         <DataGridTextColumn Header="HP"         Binding="{ReflectionBinding HpText}"               Width="Auto" MinWidth="80"  SortMemberPath="Hp"/>
                         <DataGridTextColumn Header="EXP"        Binding="{ReflectionBinding ExpText}"              Width="Auto" MinWidth="90"  SortMemberPath="Exp"/>
+                        <DataGridTextColumn Header="Accuracy"   Binding="{ReflectionBinding AccuracyText}"         Width="Auto" MinWidth="90"  SortMemberPath="Accuracy"/>
                         <DataGridTextColumn Header="Hits You %" Binding="{ReflectionBinding IncomingHitPercentText}" Width="Auto" MinWidth="90" SortMemberPath="IncomingHitPercent"/>
                         <DataGridTextColumn Header="Est. Rounds to Kill" Binding="{ReflectionBinding EstimatedRoundsToKillText}" Width="Auto" MinWidth="130" SortMemberPath="EstimatedRoundsToKill"/>
                     </DataGrid.Columns>

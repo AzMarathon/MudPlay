@@ -169,6 +169,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _manaLabel = "Mana";
     [ObservableProperty] private string? _weaponSummaryText;
     [ObservableProperty] private int _knownAttackSpellCount;
+    // AC + Prot Evil — see the assignment in RebuildCharacterCapabilities for
+    // why this sum, not bare AC, is "effective AC vs Evil."
+    [ObservableProperty] private int _effectiveAcVsEvil;
 
     // Hits-You-% threshold checkboxes: independent, OR'd together — checking
     // none shows every monster (still subject to the "no computable value"
@@ -246,6 +249,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             encum.CurrentWeight, encum.MaxWeight);
         _playerProtEvil = totals.PlusProtEvil;
         _playerProtGood = totals.PlusProtGood;
+        // AC + Prot Evil is exactly the "defense" term CombatCalculator folds
+        // together against an evil attacker (see CalculateHitChance's
+        // non-backstab branch) — the single number that actually answers
+        // "how well-defended am I against an evil monster right now."
+        EffectiveAcVsEvil = _playerAc + _playerProtEvil;
 
         // The monster → player direction — the master list's "Hits You %"
         // column and threshold checkboxes.

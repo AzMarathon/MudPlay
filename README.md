@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.10**
-> - Monster Intel's rounds-to-kill cap moved out of Settings → Other and into the Monster Intel window itself — no need to leave the window to change it
+> **Version 3.37.12**
+> - Monster Intel character bar gains AC vs Evil (your Armour Class plus worn Prot Evil)
+> - Monster Intel master list gains an Accuracy column — the monster's own physical-attack accuracy
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
