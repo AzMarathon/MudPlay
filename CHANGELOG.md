@@ -2,6 +2,11 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.38.2
+
+- Spell Book: the "Difficulty" column is renamed **Success %** — the number it shows is your chance to land the cast, so "Difficulty" read backwards; the header equation now reads "Success % = your Spellcasting + the spell's difficulty (capped at 98%, 100% for Kai)"
+- Game Data → Items filter now matches the friendly column labels, so you can type `weapon`, `feet`, or `plate` to filter by item type / worn slot / weapon or armour type — not just the raw code (applies to every MDB tab's Filter… box)
+
 ## 3.38.0
 
 - Spell Book gains a **Difficulty** column (between Mana and Effect): your real chance to land the cast — Spellcasting + the spell's difficulty, capped at 98% (100% for Kai) — or "—" when you're not a caster / stats aren't read yet
