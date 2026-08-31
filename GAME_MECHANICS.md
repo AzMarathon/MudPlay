@@ -2199,6 +2199,33 @@ elemental resist is safely pre-emptable. Among Normal spells, `magic missile` is
   **snakeskin boots** negate certain room-cast "swamp poison" effects — snakeskin also grants
   immunity to certain poisons, varying by game-data set.
 
+## Spell cast-success chance + the `Diff` column *([CONFIRMED] 2026-08-30, source: syntax53/MMUD-Explorer `GetSpellCastChance`)*
+
+A spell's chance to LAND (not fizzle) is a flat, **level-independent** function of the caster's
+`Spellcasting` stat and the spell's `Diff` (difficulty) column:
+
+```
+success% = clamp(Spellcasting + Diff, 0, cap)
+```
+
+- **`Diff`** is the Spells-table `Diff` column — normally **≤ 0** (a harder spell is more negative, so
+  it lowers the chance; `ethereal shield` = −5). It's added directly to Spellcasting.
+- **cap** = **100** for a **Kai** caster (`Magery` type **5**), else **98** (MajorMUD/stock; Paradigm
+  shares the stock cap — it's a MajorMUD variant, not GreaterMUD, whose cap is 100).
+- **Short-circuits:** `Diff ≥ 200` marks an always-succeeds utility spell → **100%**; a `Spellcasting`
+  of **0** means the character isn't a caster (or the stat line isn't parsed yet) → **no stated
+  chance** (the client shows "—", never a bogus 100%).
+- **Level plays no part** — the caster's level scales a spell's damage/duration, not its landing
+  chance. Modeled in `SpellCastChance`; surfaced as the Spell Book "Difficulty" column.
+
+## `DR` (ability code 7) magnitude — stored at 10× *([CONFIRMED] 2026-08-30, user)*
+
+The `DR` ability's stored value is **ten times** the damage-resistance the character actually gains:
+raw **10 → +1.0** DR, raw **22 → +2.2**, raw **15 → +1.5**. Display it as `raw / 10` to the tenth,
+never the raw store value (a spell/effect showing "DR +10" really grants +1.0). Applied in
+`SpellEffectFormatter` (the effect line) and the spell Game Data view. (Worn-DR on gear via the
+equipment stat path is a separate display not yet audited against this.)
+
 ## The `spells` / `sp` command output *([CONFIRMED] 2026-08-13, user capture, Paradigm)*
 
 `sp` is the accepted abbreviation of `spells` and produces the identical listing of the character's

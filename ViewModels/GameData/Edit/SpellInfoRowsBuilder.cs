@@ -44,6 +44,47 @@ public sealed class SpellInfoRowsBuilder
         "Dur", "DurInc", "DurIncLVLs", "Cap",
     };
 
+    // Human-readable labels for the raw MDB column keys — the Game Data tab reads
+    // as plain English instead of the terse Jet column names. A field not listed
+    // here keeps its raw name (Number, Name, Learned From, Classes already read
+    // fine as-is).
+    private static readonly IReadOnlyDictionary<string, string> _friendlyLabels =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Short"] = "Cast Code",
+            ["ReqLevel"] = "Required Level",
+            ["EnergyCost"] = "Energy Cost",
+            ["ManaCost"] = "Mana Cost",
+            ["Diff"] = "Difficulty",
+            ["TypeOfResists"] = "Resist Type",
+            ["Magery"] = "School",
+            ["Casted By"] = "Cast By",
+            ["LVL Cap"] = "Level Cap",
+            ["LVL Increases"] = "Level Scaling",
+        };
+
+    private static string FriendlyLabel(string field)
+        => _friendlyLabels.TryGetValue(field, out string? friendly) ? friendly : field;
+
+    // Ability codes that are display-only message-record pointers (their AbilVal
+    // is a Messages row number, not a magnitude). Meaningless as a field row, so
+    // they're dropped from the Game Data tab the same way the effect summary
+    // skips them. ConfuseMsg (101), DescMsg (115), StartMsg (120), ShockMsg (137).
+    private static readonly HashSet<int> _messageOnlyCodes = new() { 101, 115, 120, 137 };
+
+    // DR (Abil 7) — stored at 10x the applied value (raw 10 -> +1.0 DR).
+    private const int DamageResistAbil = 7;
+
+    // Pure-flag ability codes: they carry NO magnitude, so a zero AbilVal on one
+    // must render name-only, never a scaled range inherited from a coexisting
+    // damage/heal magnitude (e.g. NonMagicalSpell 144 beside a damage spell).
+    // Mirrors SpellEffectFormatter's flag list — kept local so this display
+    // builder doesn't reach into the formatter's internals.
+    private static readonly HashSet<int> _flagOnlyAbil = new()
+    {
+        23, 51, 52, 80, 97, 98, 100, 108, 109, 110, 111, 112, 113, 119, 138, 144, 178,
+    };
+
     public SpellInfoRowsBuilder(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
@@ -102,6 +143,7 @@ public sealed class SpellInfoRowsBuilder
 
         bool teleportRendered = false;
         bool growthRendered = false;
+        bool removesRendered = false;
         foreach (JsonProperty prop in el.EnumerateObject())
         {
             string field = prop.Name;
@@ -123,7 +165,7 @@ public sealed class SpellInfoRowsBuilder
             if (string.Equals(field, "Magery", StringComparison.OrdinalIgnoreCase))
             {
                 if (MageryDisplay(el, prop.Value) is { } magery)
-                    rows.Add(new GameDataInfoRow("Magery", magery));
+                    rows.Add(new GameDataInfoRow(FriendlyLabel("Magery"), magery));
                 continue;
             }
 
@@ -192,7 +234,57 @@ public sealed class SpellInfoRowsBuilder
                     continue;
                 }
 
+                // RemovesSpell (122) — collapse every slot into one linked
+                // "Removes" row (the removed spells by name) rather than a raw
+                // "RemovesSpell: 132 (mageshield)" line per slot, mirroring the
+                // effect summary's "Removes …" clause.
+                if (code == 122)
+                {
+                    if (!removesRendered)
+                    {
+                        List<int> removed = CollectAbilVals(el, 122);
+                        if (removed.Count > 0) rows.Add(BuildLinkRow("Removes", "Spells", removed));
+                        removesRendered = true;
+                    }
+                    continue;
+                }
+
+                // Display-only message-record pointers (DescMsg, StartMsg, …) —
+                // their value is a Messages row number, meaningless as a field.
+                if (_messageOnlyCodes.Contains(code)) continue;
+
                 string abilName = AbilityNames.GetName(code) ?? $"Ability {code}";
+
+                // DR is stored at 10x the applied value — show the real +N.N gain.
+                if (code == DamageResistAbil)
+                {
+                    long drRaw = val != 0 || formula is not { } drF
+                        ? val
+                        : SpellCalculator.AffectMagnitude(drF, ScaleTopLevel(drF)).Max;
+                    rows.Add(new GameDataInfoRow(abilName, SignedTenth(drRaw)));
+                    continue;
+                }
+
+                // A zero stored value on a plain stat-affect means it SCALES with
+                // level off the growth block's Min/Max base. Show the affect's real
+                // range (required level -> cap) instead of a meaningless "0" — this
+                // is what the effect summary's "AC Blur +5" and the growth block's
+                // "Magnitude" both derived from, now stated once against its affect.
+                // Flags carry no magnitude and no-magnitude affects fall through to
+                // the generic path (they've nothing to scale).
+                if (val == 0 && formula is { } affF
+                    && ResolveAbilityReference(code, val) is null && !_flagOnlyAbil.Contains(code))
+                {
+                    long loVal = SpellCalculator.AffectMagnitude(affF, affF.ReqLevel).Max;
+                    long hiVal = SpellCalculator.AffectMagnitude(affF, ScaleTopLevel(affF)).Max;
+                    if (loVal != 0 || hiVal != 0)
+                    {
+                        rows.Add(new GameDataInfoRow(
+                            abilName, loVal == hiVal ? Signed(hiVal) : $"{Signed(loVal)} → {Signed(hiVal)}"));
+                        continue;
+                    }
+                }
+
                 string valueText = val.ToString(CultureInfo.InvariantCulture);
                 if (ResolveAbilityReference(code, val) is { } refName)
                     valueText += $" ({refName})";
@@ -210,7 +302,7 @@ public sealed class SpellInfoRowsBuilder
             }
 
             if (RenderField(field, prop.Value) is { } rendered)
-                rows.Add(new GameDataInfoRow(field, rendered));
+                rows.Add(new GameDataInfoRow(FriendlyLabel(field), rendered));
         }
 
         AppendNegatedByRow(rows, spellNumber);
@@ -272,7 +364,7 @@ public sealed class SpellInfoRowsBuilder
             names.Add(display);
             links.Add(new GameDataRecordLink(display, ", ", open, linked));
         }
-        if (links.Count == 0) return cappedInData ? new GameDataInfoRow(field, "+ more") : null;
+        if (links.Count == 0) return cappedInData ? new GameDataInfoRow(FriendlyLabel(field), "+ more") : null;
 
         // Trim the last real link's separator, then append the cap marker as text.
         GameDataRecordLink last = links[^1];
@@ -280,7 +372,7 @@ public sealed class SpellInfoRowsBuilder
         if (cappedInData) links.Add(new GameDataRecordLink("+ more", string.Empty, NoOpCommand, isLinked: false));
 
         string text = string.Join(", ", names) + (cappedInData ? ", + more" : string.Empty);
-        return new GameDataInfoRow(field, text, links);
+        return new GameDataInfoRow(FriendlyLabel(field), text, links);
     }
 
     private static readonly ICommand NoOpCommand = new RelayCommand(() => { });
@@ -362,12 +454,19 @@ public sealed class SpellInfoRowsBuilder
     {
         if (formula is not { } f) return;
 
-        if (SpellGrowthFormatter.MagnitudeRange(f) is { } range)
-            rows.Add(new GameDataInfoRow(SpellGrowthFormatter.MagnitudeLabel(f), range));
+        // Show the magnitude range ONLY when it names a real damage/heal affect
+        // ("Damage(-MR): 18 to 68") — that's data no ability row carries. For a
+        // scaling stat-affect the label falls back to a bare "Magnitude", which
+        // just repeats the affect's own row (now shown as "AC Blur +5 → +12"), so
+        // it's suppressed here to kill the duplication.
+        string magnitudeLabel = SpellGrowthFormatter.MagnitudeLabel(f);
+        if (!string.Equals(magnitudeLabel, "Magnitude", StringComparison.Ordinal)
+            && SpellGrowthFormatter.MagnitudeRange(f) is { } range)
+            rows.Add(new GameDataInfoRow(magnitudeLabel, range));
         if (f.Cap > 0)
-            rows.Add(new GameDataInfoRow("LVL Cap", f.Cap.ToString(CultureInfo.InvariantCulture)));
+            rows.Add(new GameDataInfoRow(FriendlyLabel("LVL Cap"), f.Cap.ToString(CultureInfo.InvariantCulture)));
         if (SpellGrowthFormatter.GrowthFormula(f) is { } growth)
-            rows.Add(new GameDataInfoRow("LVL Increases", growth));
+            rows.Add(new GameDataInfoRow(FriendlyLabel("LVL Increases"), growth));
         long durSecs = SpellGrowthFormatter.DurationSeconds(f);
         if (durSecs > 0)
             rows.Add(new GameDataInfoRow(
@@ -391,6 +490,20 @@ public sealed class SpellInfoRowsBuilder
         for (int i = 0; i < 10; i++)
             if (ReadInt(el, $"Abil-{i}") == code) return ReadInt(el, $"AbilVal-{i}");
         return 0;
+    }
+
+    // Every AbilVal on the row whose Abil code matches, in slot order — used to
+    // collapse the repeated RemovesSpell (122) slots into a single linked row.
+    private static List<int> CollectAbilVals(JsonElement el, int code)
+    {
+        List<int> vals = new();
+        for (int i = 0; i < 10; i++)
+            if (ReadInt(el, $"Abil-{i}") == code)
+            {
+                int v = ReadInt(el, $"AbilVal-{i}");
+                if (v > 0 && !vals.Contains(v)) vals.Add(v);
+            }
+        return vals;
     }
 
     // Resolve a (map, room) pair to the room's Name in the Rooms table.
@@ -424,9 +537,44 @@ public sealed class SpellInfoRowsBuilder
             return string.IsNullOrWhiteSpace(formatted) ? null : formatted;
         }
 
+        // Boolean / enum-coded columns read better as words than raw integers.
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int n))
+        {
+            if (string.Equals(field, "Learnable", StringComparison.OrdinalIgnoreCase))
+                return n != 0 ? "Yes" : "No";
+            // TypeOfResists gates the full-resist roll: 0 never, 1 only vs an
+            // AntiMagic target, 2 always eligible (see GAME_MECHANICS).
+            if (string.Equals(field, "TypeOfResists", StringComparison.OrdinalIgnoreCase))
+                return n switch
+                {
+                    0 => "none",
+                    1 => "only vs AntiMagic",
+                    2 => "normal",
+                    _ => n.ToString(CultureInfo.InvariantCulture),
+                };
+        }
+
         if (value.ValueKind == JsonValueKind.Number) return value.GetRawText();
         if (value.ValueKind == JsonValueKind.String) return CleanString(value.GetString());
         return null;
+    }
+
+    // The top level a spell's scaling reaches — its Cap, or ReqLevel when
+    // uncapped — used to show an affect's at-cap value.
+    private static int ScaleTopLevel(in SpellFormulaInput f) => f.Cap > 0 ? f.Cap : f.ReqLevel;
+
+    // "+10" / "-5" signed magnitude (negatives carry their own minus sign).
+    private static string Signed(long value)
+        => value > 0
+            ? $"+{value.ToString(CultureInfo.InvariantCulture)}"
+            : value.ToString(CultureInfo.InvariantCulture);
+
+    // Signed value stored at 10x the applied figure (DR), shown to the tenth:
+    // raw 10 -> "+1.0", raw 22 -> "+2.2".
+    private static string SignedTenth(long raw)
+    {
+        string s = (raw / 10.0).ToString("0.0", CultureInfo.InvariantCulture);
+        return raw > 0 ? $"+{s}" : s;
     }
 
     // Reference-bearing ability codes → the table their AbilVal points at, resolved to that row's

@@ -19,7 +19,8 @@ public sealed class SpellBookRowViewModel
         Func<int, SpellFormulaInput?> resolveChain,
         Func<int, string?>? resolveSpellName = null,
         Func<int, IReadOnlyList<KnownSpell>>? resolveTextblockCasts = null,
-        int teachLevel = 0)
+        int teachLevel = 0,
+        int spellcasting = 0)
     {
         Number = spell.Number;
         Short = spell.Short;
@@ -27,6 +28,16 @@ public sealed class SpellBookRowViewModel
         ReqLevel = spell.ReqLevel;
         EffectiveLevel = System.Math.Max(spell.ReqLevel, teachLevel);
         IsObtained = isObtained;
+
+        // Cast-success chance for THIS character (Spellcasting stat + the spell's
+        // Diff), null when we can't state one — a non-caster class, or the stat
+        // line hasn't been read yet (Spellcasting 0). Level plays no part.
+        int? success = SpellCastChance.Compute(
+            spellcasting, spell.Formula.Diff, isKai: spell.Magery == SpellCastChance.KaiMagery);
+        DifficultySort = success ?? -1;
+        DifficultyText = success is { } pct
+            ? $"{pct.ToString(System.Globalization.CultureInfo.InvariantCulture)}%"
+            : "—";
 
         Mana = SpellCalculator.ManaCost(spell.Formula);
         ManaText = Mana.ToString();
@@ -63,6 +74,15 @@ public sealed class SpellBookRowViewModel
 
     // The effective unlock level as a bare number — the Lvl cell.
     public string ReqLevelText => EffectiveLevel.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    // Cast-success chance for this character as "95%", or "—" when none can be
+    // stated (non-caster, or Spellcasting not yet parsed). Column header is
+    // "Difficulty" — the spell's static Diff turned into the caster's real
+    // landing chance. See SpellCastChance.
+    public string DifficultyText { get; }
+
+    // Success percent for column sorting; -1 for the "—" rows so they group.
+    public int DifficultySort { get; }
 
     // Per-round mana cost — numeric, for column sorting.
     public long Mana { get; }

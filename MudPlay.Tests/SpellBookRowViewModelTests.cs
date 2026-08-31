@@ -549,4 +549,38 @@ public sealed class SpellBookRowViewModelTests
         Assert.Contains("base 6–10", row.FormulaText);
         Assert.Contains("max +2/1lv", row.FormulaText);
     }
+
+    [Fact]
+    public void Difficulty_IsSpellcastingPlusDiff()
+    {
+        // ethereal shield shape: Diff -5, non-Kai (Magery 1). 100 SC → 95%.
+        SpellFormulaInput f = new() { Number = 40, Diff = -5, Abilities = [new SpellAbility(2, 10)] };
+        KnownSpell s = Spell("shld", "shield", 5, f);
+        SpellBookRowViewModel row = new(s, isObtained: true, level: 6, NoChain, spellcasting: 100);
+
+        Assert.Equal("95%", row.DifficultyText);
+        Assert.Equal(95, row.DifficultySort);
+    }
+
+    [Fact]
+    public void Difficulty_NoSpellcasting_ShowsDash()
+    {
+        SpellFormulaInput f = new() { Number = 41, Diff = -5, Abilities = [new SpellAbility(2, 10)] };
+        KnownSpell s = Spell("shld", "shield", 5, f);
+        SpellBookRowViewModel row = new(s, isObtained: true, level: 6, NoChain, spellcasting: 0);
+
+        Assert.Equal("—", row.DifficultyText);
+        Assert.Equal(-1, row.DifficultySort);
+    }
+
+    [Fact]
+    public void DrAffect_ShownAppliedToTheTenth()
+    {
+        // DR (code 7) is stored at 10x the applied value — raw 10 renders "+1.0".
+        SpellFormulaInput f = new() { Number = 42, Abilities = [new SpellAbility(7, 10)] };
+        KnownSpell s = Spell("shld", "shield", 5, f);
+        SpellBookRowViewModel row = new(s, isObtained: true, level: 6, NoChain);
+
+        Assert.Equal("DR +1.0", row.EffectText);
+    }
 }

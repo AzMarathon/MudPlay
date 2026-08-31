@@ -208,6 +208,16 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Difficulty" SortMemberPath="DifficultySort" Width="80">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="vm:SpellBookRowViewModel">
+                            <TextBlock Text="{Binding DifficultyText}" Classes="cellDim"
+                                       ToolTip.Tip="Chance this character lands the cast (Spellcasting + spell difficulty)"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       FontFamily="{StaticResource FontMono}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTemplateColumn Header="Effect" SortMemberPath="EffectText" Width="*" MinWidth="220">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:SpellBookRowViewModel">

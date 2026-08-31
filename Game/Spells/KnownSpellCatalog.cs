@@ -738,6 +738,7 @@ public sealed class KnownSpellCatalog
             ReqLevel = ReadInt(row, "ReqLevel"),
             EnergyCost = ReadInt(row, "EnergyCost"),
             ManaCost = ReadInt(row, "ManaCost"),
+            Diff = ReadInt(row, "Diff"),
             Abilities = abilities,
         };
     }

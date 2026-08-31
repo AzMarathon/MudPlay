@@ -131,6 +131,12 @@ public static class SpellEffectFormatter
     // number, resolved to a name when a resolver is supplied.
     private const int SummonCode = 12;
 
+    // DR (Abil 7) — damage resistance. The stored value is 10× what the
+    // character actually gains: raw 10 grants +1.0 DR, raw 22 grants +2.2. Show
+    // the applied figure (to the tenth) rather than the raw store value.
+    // (Formula: MajorMUD engine math — user-confirmed.)
+    private const int DamageResistCode = 7;
+
     // Display-only friendly wording for the effect string — plain English for
     // the jargon-y ability names that surface here. Canonical AbilityNames is
     // deliberately left untouched (it still drives the spell's field-by-field
@@ -281,6 +287,15 @@ public static class SpellEffectFormatter
             if (a.Value == 0 && Array.IndexOf(_flagOnly, a.Code) >= 0)
             {
                 parts.Add(name);
+                continue;
+            }
+
+            // DR: stored at 10× the applied value — show the real +N.N gain.
+            if (a.Code == DamageResistCode)
+            {
+                long drMin = a.Value != 0 ? a.Value : affMin;
+                long drMax = a.Value != 0 ? a.Value : affMax;
+                parts.Add(drMin == 0 && drMax == 0 ? name : $"{name} {SignedTenths(drMin, drMax)}");
                 continue;
             }
 
@@ -468,6 +483,17 @@ public static class SpellEffectFormatter
 
     private static string SignedRange(long min, long max)
         => min == max ? Signed(min) : $"{Signed(min)} to {Signed(max)}";
+
+    // Signed magnitude carried at 10× the applied value (DR), shown to the tenth:
+    // raw 10 -> "+1.0", raw 22 -> "+2.2", raw -15 -> "-1.5".
+    private static string SignedTenths(long minRaw, long maxRaw)
+        => minRaw == maxRaw ? SignedTenth(minRaw) : $"{SignedTenth(minRaw)} to {SignedTenth(maxRaw)}";
+
+    private static string SignedTenth(long raw)
+    {
+        string s = (raw / 10.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+        return raw > 0 ? $"+{s}" : s;
+    }
 
     // Unsigned magnitude range — for reference values (TextBlock record
     // numbers) where a leading + would be misleading.
