@@ -159,7 +159,13 @@ public sealed class RoombaQueryHandler : IDisposable
         int extra = locators.Count - MaxRoomsShown;
         if (extra > 0) rooms += $", +{extra} more";
 
-        return $"total: {total}x {name} - seen in {rooms}";
+        // The freshest of this item's per-room sightings — tells the asking
+        // gang member how stale the location is (a room not re-swept in weeks
+        // is a much weaker signal than one scanned this session).
+        DateTimeOffset lastSeen = sightings.Max(s => s.SeenAt);
+
+        return $"total: {total}x {name} - seen in {rooms} - last scanned "
+            + $"{lastSeen:yyyy-MM-dd HH:mm} {TimeZoneAbbreviation.For(lastSeen)}";
     }
 
     // Reply to `@roomba sync` with this client's entire sighting log, encoded

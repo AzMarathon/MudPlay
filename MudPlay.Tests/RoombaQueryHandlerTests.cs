@@ -174,6 +174,25 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         Assert.Contains("1/200 (2)", reply);
     }
 
+    // A gang member asking @roomba needs to know how fresh the location is —
+    // a room swept minutes ago is a much stronger signal than one last swept
+    // weeks back. RecordRoom stamps SeenAt off the wall clock, so the reply's
+    // formatted minute matches "now" at test time.
+    [Fact]
+    public void Roomba_Reply_IncludesLastScannedTimestamp()
+    {
+        var (engine, players, _, locations) = Setup();
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
+        DateTimeOffset before = DateTimeOffset.Now;
+        locations.RecordRoom(new RoomKey(1, 100), new[] { "long sword" });
+
+        engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
+
+        string reply = Assert.Single(Replies(engine));
+        Assert.Contains(
+            $"last scanned {before:yyyy-MM-dd HH:mm} {TimeZoneAbbreviation.For(before)}", reply);
+    }
+
     // Beyond MaxRoomsShown, the room list folds into a "+N more" tail instead
     // of further lines — the whole point of consolidating is staying at one
     // line even for an item scattered across many rooms.

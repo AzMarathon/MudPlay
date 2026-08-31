@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.37.2**
-> - A profile copied from another character now heals its stored character name from the `stat` screen: the app only ever wrote the in-game name on create/rename, so a copied profile kept the old owner's name and mis-identified "self" everywhere it mattered (corpse recovery, party self-detection, remote-command self-echo). The authoritative name from `stat` now updates the profile once, silently, the first time it differs
-> - Corpse recovery now matches your corpse against the live self-name rather than the stored profile name, so a stale profile name can't send it hunting the wrong corpse
+> **Version 3.37.3**
+> - Roomba gangpath announcements now include the start/finish date and time, with the sending client's own timezone (a short name like PST/MST/EST for the common North American zones, a numeric UTC offset otherwise) instead of a bare "starting"/"complete" line
+> - Sorting's completion announce now reports items sorted AND items inventoried — its recon and final scan already observe every room's floor the same way an Inventory-only run does, so a sort keeps the item-location log just as current
+> - `@roomba <item>` replies now include the last-scanned date/time (with timezone) of that item's freshest sighting, so you can tell a fresh location from a stale one
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

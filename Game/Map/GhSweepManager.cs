@@ -201,6 +201,11 @@ public sealed class GhSweepManager : IDisposable
     // before any run ever started still prints something meaningful.
     public SweepMode Mode { get; private set; } = SweepMode.Sort;
 
+    // Wall-clock time the current (or most recently finished) run started —
+    // set fresh on every Start(). Feeds the start/completion gangpath
+    // announcements' timestamps.
+    public DateTimeOffset? StartedAt { get; private set; }
+
     // Why the last Start() attempt refused (null when the last Start succeeded or
     // none has run). The GH Management tab shows this so a refused Start isn't a
     // silent no-op — the common one being fewer than 2 labeled rooms on first run.
@@ -359,6 +364,7 @@ public sealed class GhSweepManager : IDisposable
         }
 
         Mode = mode;
+        StartedAt = DateTimeOffset.Now;
         _observedByRoom.Clear();
         _visibleByRoom.Clear();
         _hiddenByRoom.Clear();
@@ -401,9 +407,11 @@ public sealed class GhSweepManager : IDisposable
         // LoopRunner.Start) as part of confirming the route is walkable, so
         // this announce lands right after it rather than strictly before —
         // only fires once a start is genuinely confirmed, never on a refusal.
+        DateTimeOffset startedAt = StartedAt ?? DateTimeOffset.Now;
+        string startStamp = $"{startedAt:yyyy-MM-dd HH:mm} {TimeZoneAbbreviation.For(startedAt)}";
         Send(Mode == SweepMode.InventoryOnly
-            ? "bg Roomba inventory mode starting."
-            : "bg Roomba sorting starting.");
+            ? $"bg Roomba inventory mode starting - {startStamp}."
+            : $"bg Roomba sorting starting - {startStamp}.");
         PhaseChanged?.Invoke();
         return true;
     }
@@ -1372,24 +1380,31 @@ public sealed class GhSweepManager : IDisposable
         _log?.Info(LogCategory,
             $"{Mode} complete: moved={_movedSoFar.Count} left-in-place={_leftInPlace.Count}"
             + (_stranded.Count > 0 ? $" stranded={_stranded.Count}" : string.Empty));
+        DateTimeOffset started = StartedAt ?? DateTimeOffset.Now;
+        DateTimeOffset finished = DateTimeOffset.Now;
+        string timespan = $"started {started:yyyy-MM-dd HH:mm} {TimeZoneAbbreviation.For(started)}, "
+            + $"finished {finished:yyyy-MM-dd HH:mm} {TimeZoneAbbreviation.For(finished)}";
+        // _observedByRoom's raw floor tokens can carry a leading stack count
+        // ("35 orc-head") the same way a `get`/`drop` command line does, so the
+        // unit total needs the same split — a raw list length would undercount
+        // every stacked item to 1. Sort mode's recon + final-recon already
+        // populate _observedByRoom the same way InventoryOnly's single recon
+        // does (see OnSurveyUpdated), so a Sort run is inherently also a full
+        // inventory pass — this reports that instead of only the moved count.
+        int inventoried = _observedByRoom.Values
+            .SelectMany(items => items)
+            .Sum(item => CountedCommand.SplitLeadingCount(item).Count);
         if (Mode == SweepMode.InventoryOnly)
         {
-            // _observedByRoom's raw floor tokens can carry a leading stack
-            // count ("35 orc-head") the same way a `get`/`drop` command line
-            // does, so the unit total needs the same split — a raw list
-            // length would undercount every stacked item to 1.
-            int inventoried = _observedByRoom.Values
-                .SelectMany(items => items)
-                .Sum(item => CountedCommand.SplitLeadingCount(item).Count);
-            Send($"bg Roomba inventory complete - inventoried {inventoried} item(s).");
+            Send($"bg Roomba inventory complete - inventoried {inventoried} item(s). {timespan}.");
         }
         else
         {
             // report.Moved is one entry per relocation, not per unit —
             // SplitOversizedMoves can split one big stack across several
             // trips, so the item total is the sum of each move's Count.
-            int moved = report.Moved.Sum(m => m.Count);
-            Send($"bg Roomba sorting complete - moved {moved} item(s).");
+            int sorted = report.Moved.Sum(m => m.Count);
+            Send($"bg Roomba sorting complete - sorted {sorted} item(s), inventoried {inventoried} item(s). {timespan}.");
         }
         ResetToIdle(Mode == SweepMode.InventoryOnly ? "roomba inventory scan complete" : "roomba sweep complete");
         SweepCompleted?.Invoke(report);
