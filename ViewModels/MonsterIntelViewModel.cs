@@ -66,6 +66,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // immediately writing the same value straight back out via
     // OnRoundsToKillCapChanged.
     private bool _suppressCapPersist;
+    // Defense-simulator seeding: the last worn-set signature we seeded from, so a
+    // gear swap re-seeds the what-if inputs but backpack/loot churn doesn't; and a
+    // latch so seeding the sim fields doesn't fire a recompute per field.
+    private string _lastWornSignature = "";
+    private bool _suppressSimRecompute;
 
     // "Edit Attacks" picker state. AttackOptions is the picker's rows (usable
     // melee attacks + obtained attack spells); _hiddenAttackKeys are the attacks
@@ -124,9 +129,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         {
             if (e.PropertyName is nameof(NameFilter)
                 or nameof(ShowHits2) or nameof(ShowHits5) or nameof(ShowHits10)
-                or nameof(ShowHits20) or nameof(ShowHits40) or nameof(ShowHits100))
+                or nameof(ShowHits20) or nameof(ShowHits40) or nameof(ShowHits100)
+                or nameof(HideRegenMonsters))
             { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
-            else if (e.PropertyName == nameof(SelectedEntry)) RebuildDetail();
+            else if (e.PropertyName == nameof(SelectedEntry)) { RebuildDetail(); UpdateAcVsTarget(); }
         };
 
         if (_observations is not null) _observations.Changed += OnObservationsChanged;
@@ -192,10 +198,42 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _manaLabel = "Mana";
     [ObservableProperty] private string? _weaponSummaryText;
     [ObservableProperty] private int _knownAttackSpellCount;
-    // Plain AC that applies vs every attacker — worn gear + configured buffs +
-    // the flat Shadow bonus. Evil-only wards (Prot Evil / Vile Ward) are left
-    // out; see the assignment in RebuildCharacterCapabilities.
-    [ObservableProperty] private int _effectiveAc;
+
+    // ----- Defense simulator (top bar) -----
+    // The AC / Prot Evil / Vile Ward / Shadow up top are EDITABLE what-if inputs,
+    // not read-only labels: they seed to the character's live worn+buff loadout on
+    // open (and whenever the worn set changes), and every edit re-runs each
+    // monster's Hits-You-%. AC (worn gear + buffs) and Shadow (+10) apply against
+    // every attacker; Prot Evil and Vile Ward are evil-only (they raise defense
+    // only versus an evil monster). The Vile-Ward alignment picker is the
+    // character's OWN evil tier — it scales how much raw Vile Ward converts to AC
+    // (not evil 0% / outlaw-criminal 50% / villain-fiend 100%), matching
+    // CombatCalculator's AdjustVileWard.
+    [ObservableProperty] private int _simAc;
+    [ObservableProperty] private int _simProtEvil;
+    [ObservableProperty] private int _simVileWard;
+    [ObservableProperty] private bool _simShadow;
+    // Default Villain/Fiend: worn Vile Ward implies an evil character, and with
+    // zero Vile Ward the tier is inert anyway (AdjustVileWard returns 0), so a
+    // full-benefit default never overstates a non-evil character's defense.
+    [ObservableProperty] private int _simVileWardAlignIndex = 2;
+
+    public IReadOnlyList<string> VileWardAlignOptions { get; } =
+        new[] { "Not evil (0%)", "Outlaw / Criminal (50%)", "Villain / Fiend (100%)" };
+
+    private EvilLevel SimEvilLevel => SimVileWardAlignIndex switch
+    {
+        1 => EvilLevel.Criminal,
+        2 => EvilLevel.Fiend,
+        _ => EvilLevel.Saint,
+    };
+
+    // The effective AC the selected monster's attack actually rolls against —
+    // base AC (worn + buffs) + Shadow (vs all) + the wards that apply to THAT
+    // monster's alignment (Prot Evil + converted Vile Ward vs evil, Prot Good vs
+    // good). "—" until a monster is selected. This is the same `defense` figure
+    // that feeds Hits You %, surfaced as a plain number for the picked target.
+    [ObservableProperty] private string _acVsTargetText = "—";
 
     // Hits-You-% threshold checkboxes: independent, OR'd together — checking
     // none shows every monster (still subject to the "no computable value"
@@ -215,6 +253,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private bool _showHits20;
     [ObservableProperty] private bool _showHits40;
     [ObservableProperty] private bool _showHits100;
+
+    // Drop monsters that respawn on their own timer (a non-zero RegenTime — bosses,
+    // lair leaders, other timed spawns) so the list shows only freely-farmable
+    // monsters. Session-only, like the Hits-You-% boxes it sits beside.
+    [ObservableProperty] private bool _hideRegenMonsters;
 
     // Ceiling for the master list's "Est. Rounds to Kill" column — edited
     // right here instead of Settings → Other so changing it doesn't mean
@@ -279,22 +322,28 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _playerProtEvil = totals.PlusProtEvil;
         _playerProtGood = totals.PlusProtGood;
         _playerHasShadow = totals.PlusShadowResist > 0;
-        // The panel shows plain AC — worn gear + configured buffs + the flat
-        // Shadow bonus, all of which apply against EVERY attacker. Prot Evil
-        // and Vile Ward are deliberately excluded: they're secondary AC only
-        // versus evil monsters, so folding them into one headline number
-        // overstates your defense against a neutral / good monster. The
-        // evil-only wards still count per-row in Hits You %, which knows each
-        // monster's alignment.
-        EffectiveAc = _playerAc + (_playerHasShadow ? 10 : 0);
 
-        // The monster → player direction — the master list's "Hits You %"
-        // column and threshold checkboxes.
-        foreach (MonsterIntelEntry entry in _all)
-            entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-                entry.Source.PhysicalAccuracy, entry.Source.Align,
-                _playerAc, _playerDodge, _playerProtEvil, _playerProtGood,
-                _gameData.ActiveRealm, _playerHasShadow) ?? -1;
+        // Seed the editable defense simulator to the live loadout — but only when
+        // the WORN set actually changed (first open + a real gear swap). Backpack
+        // and loot churn also fires _inventory.Changed, and re-seeding on that
+        // would wipe a what-if the user is mid-edit on. The alignment tier is the
+        // player's own and gear-independent, so it stays at its field default.
+        string wornSig = string.Join("|", worn.Select(w => $"{w.Slot}={w.Name}"));
+        if (wornSig != _lastWornSignature)
+        {
+            _lastWornSignature = wornSig;
+            _suppressSimRecompute = true;
+            SimAc = _playerAc;                   // worn + buffs; Shadow is its own toggle
+            SimProtEvil = _playerProtEvil;
+            SimVileWard = totals.PlusVileWard;
+            SimShadow = _playerHasShadow;
+            _suppressSimRecompute = false;
+        }
+
+        // The monster → player direction — the master list's "Hits You %" column
+        // and threshold checkboxes — computed from the (possibly tweaked) simulator.
+        RecomputeIncomingHits();
+        UpdateAcVsTarget();
 
         // The character's usable attacks feed the Edit Attacks picker — every
         // melee type they can throw (CharacterCalculator gates by class/race) plus
@@ -306,8 +355,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         // Estimated Rounds to Kill — the player-offense direction against each
         // monster's HP/AC/DR, using whichever attack the picker selected (default:
-        // the Normal melee swing). Capped for display (a superboss can otherwise
-        // project into the millions of rounds) at RoundsToKillCap.
+        // the Normal melee swing). The rounds-to-kill cap then filters the list
+        // (see PassesFilter), so a superboss projecting into the millions of
+        // rounds simply drops out rather than showing a noise number.
         ComputeRoundsToKill(worn, encum);
     }
 
@@ -325,7 +375,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         foreach (MonsterIntelEntry entry in _all)
         {
-            entry.RoundsToKillCap = RoundsToKillCap;
             if (entry.Hp <= 0) { entry.EstimatedRoundsToKill = -1; continue; }
             MonsterCatalogEntry m = entry.Source;
             entry.EstimatedRoundsToKill = meleeProfile is { } mp
@@ -333,6 +382,65 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 : SpellRoundsToKill(roundsSpell!.Value, m);
         }
     }
+
+    // Refill every entry's Hits-You-% from the current defense-simulator inputs
+    // (AC / Prot Evil / Vile Ward + its alignment scale / Shadow). Dodge and Prot
+    // Good stay at their live worn values (the simulator doesn't expose them). The
+    // evil-only wards are applied per row against each monster's own alignment
+    // inside IncomingHitPercent.
+    private void RecomputeIncomingHits()
+    {
+        if (!_hasCharacterContext) return;
+        EvilLevel evil = SimEvilLevel;
+        foreach (MonsterIntelEntry entry in _all)
+            entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+                entry.Source.PhysicalAccuracy, entry.Source.Align,
+                SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+                _gameData.ActiveRealm, SimShadow, SimVileWard, evil) ?? -1;
+    }
+
+    // A defense-simulator input changed — recompute Hits-You-%, re-filter, and
+    // refresh the selected-target AC readout.
+    private void OnSimInputChanged()
+    {
+        if (_suppressSimRecompute || !_hasCharacterContext) return;
+        RecomputeIncomingHits();
+        RowsView.Refresh();
+        OnPropertyChanged(nameof(CountText));
+        UpdateAcVsTarget();
+    }
+
+    // Effective AC vs the currently-selected monster: base AC + Shadow (always) +
+    // the alignment-applicable wards (Prot Evil + converted Vile Ward vs an evil
+    // target, Prot Good vs a good one). Mirrors the `defense` term in
+    // CombatCalculator.CalculateHitChance so it matches that monster's Hits You %.
+    private void UpdateAcVsTarget()
+    {
+        if (!_hasCharacterContext || SelectedEntry is not { } sel)
+        {
+            AcVsTargetText = "—";
+            return;
+        }
+        int align = sel.Source.Align;
+        bool isEvil = align is 1 or 2 or 5 or 6;
+        bool isGood = align is 0 or 4;
+        int ac = SimAc + (SimShadow ? 10 : 0);
+        if (isEvil)
+        {
+            ac += SimProtEvil;
+            // Vile Ward only counts on Paradigm — CalculateHitChance gates it there.
+            if (_gameData.ActiveRealm == RealmType.ParaMud)
+                ac += CombatCalculator.AdjustVileWard(SimVileWard, SimEvilLevel);
+        }
+        if (isGood) ac += _playerProtGood;
+        AcVsTargetText = ac.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    partial void OnSimAcChanged(int value) => OnSimInputChanged();
+    partial void OnSimProtEvilChanged(int value) => OnSimInputChanged();
+    partial void OnSimVileWardChanged(int value) => OnSimInputChanged();
+    partial void OnSimShadowChanged(bool value) => OnSimInputChanged();
+    partial void OnSimVileWardAlignIndexChanged(int value) => OnSimInputChanged();
 
     private static MonsterMatchupProfile MonsterProfileFor(MonsterCatalogEntry m) => new(
         ArmourClass: m.ArmourClass, DamageResist: m.DamageResist, Hp: m.Hp, Dodge: m.Dodge,
@@ -474,19 +582,19 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (SelectedEntry is not null) RebuildDetail();
     }
 
-    // Persists the new cap (Character tier, "Other") and re-stamps every
-    // entry without a full RebuildCharacterCapabilities — only the display
-    // ceiling changed, not the underlying rounds-to-kill projections.
-    // Resolve-then-write (not a bare new OtherSettings) so this doesn't
-    // clobber the tab's other fields at the Character tier.
+    // Persists the new cap (Character tier, "Other") and re-filters the list —
+    // the cap now DROPS monsters the selected attack can't drop within it,
+    // rather than captioning them "<cap>+", so the table shows only fights you
+    // can finish in that many rounds. Resolve-then-write (not a bare new
+    // OtherSettings) so this doesn't clobber the tab's other fields.
     partial void OnRoundsToKillCapChanged(int value)
     {
         if (_suppressCapPersist || !_hasCharacterContext) return;
-        foreach (MonsterIntelEntry entry in _all) entry.RoundsToKillCap = value;
         OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
         dto.RoundsToKillCap = value;
         _resolver.WriteAt(SettingsTier.Character, "Other", dto);
         RowsView.Refresh();
+        OnPropertyChanged(nameof(CountText));
     }
 
     private void OnPlayerStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -502,11 +610,21 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (!string.IsNullOrWhiteSpace(NameFilter)
             && !e.Name.Contains(NameFilter, StringComparison.OrdinalIgnoreCase)) return false;
 
+        // Optionally drop timed/boss respawns — a non-zero per-monster RegenTime.
+        if (HideRegenMonsters && e.HasRegenTimer) return false;
+
         // Once a character is loaded, a monster with no computable Hits You %
         // (no catalogued physical attack — an NPC/caster-only record, e.g. a
         // trainer or quest-giver) isn't a meaningful "can this thing hurt me"
         // entry, so it's dropped unconditionally, not just under a checkbox.
         if (_hasCharacterContext && e.IncomingHitPercent < 0) return false;
+
+        // The rounds-to-kill cap FILTERS rather than captioning: a monster the
+        // selected attack needs more than the cap to drop is removed (it used to
+        // show "<cap>+"). A monster it can't drop at all still shows as "—" — a
+        // different axis (can't-kill, not slow-kill) whose Hits-You-% read stays
+        // useful — so only a positive projection over the cap is filtered.
+        if (_hasCharacterContext && e.EstimatedRoundsToKill > RoundsToKillCap) return false;
 
         bool anyThresholdChecked = ShowHits2 || ShowHits5 || ShowHits10 || ShowHits20 || ShowHits40 || ShowHits100;
         if (anyThresholdChecked)

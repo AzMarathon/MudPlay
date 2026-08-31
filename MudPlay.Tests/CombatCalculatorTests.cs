@@ -533,17 +533,42 @@ public sealed class CombatCalculatorTests
         Assert.True(under > meets);
     }
 
-    [Fact]
-    public void CalcSwings_RawSwingsCappedAtMax()
+    // Swings are hard-capped per realm: 5 on Stock, 6 on Paradigm (GAME_MECHANICS).
+    // A max-speed weapon hits the cap exactly — pins that Paradigm gets 6, not 5.
+    [Theory]
+    [InlineData(RealmType.ParaMud, 6)]
+    [InlineData(RealmType.Stock, 5)]
+    public void CalcSwings_RawSwingsCappedAtRealmMax(RealmType realm, int cap)
     {
         SwingCalcResult r = CombatCalculator.CalcSwings(
             combatLevel: 10, level: 100, attackSpeed: 1, agility: 200,
             strength: 200, weaponStrReq: 0, currentEncum: 0, maxEncum: 100,
-            realmType: RealmType.ParaMud);
+            realmType: realm);
 
-        Assert.True(r.RawSwings <= CombatCalculator.MAX_SWINGS);
+        Assert.Equal(cap, CombatCalculator.MaxSwingsForRealm(realm));
+        Assert.Equal((double)cap, r.RawSwings);
         Assert.Equal(10, r.SwingsPerRound.Length);
-        Assert.All(r.SwingsPerRound, s => Assert.True(s <= CombatCalculator.MAX_SWINGS));
+        Assert.All(r.SwingsPerRound, s => Assert.True(s <= cap));
+    }
+
+    // Live-game regression: a L28 Paladin (CombatLVL 6), STR 135, AGI 77, 57% encum,
+    // throwing hammers (speed 1100, StrReq 0). Paradigm `stat all` shows normal 7.143
+    // and bash 3.572. Pins that the energy term is level × CombatLVL — MMUD-Explorer
+    // feeds GetClassCombat (CombatLVL−2) into a (nCombat+2) form; passing the raw
+    // CombatLVL into a (combatLevel+2) form (the bug) inflated swings ~26%.
+    [Fact]
+    public void CalcEnergyUsed_UsesRawCombatLvl_MatchesLiveGameSwings()
+    {
+        int energy = CombatCalculator.CalcEnergyUsed(
+            combatLevel: 6, level: 28, attackSpeed: 1100, agility: 77,
+            strength: 135, weaponStrReq: 0, encumPercent: 57);
+        Assert.Equal(140, energy);            // 1000 / 140 = 7.143 normal swings (game's stat all)
+
+        SwingCalcResult bash = CombatCalculator.CalcSwings(
+            combatLevel: 6, level: 28, attackSpeed: 1100, agility: 77,
+            strength: 135, weaponStrReq: 0, currentEncum: 57, maxEncum: 100,
+            isBashing: true, realmType: RealmType.ParaMud);
+        Assert.Equal(3.57, bash.RawSwings, 2);  // 1000 / (140×2), the reported "should be 3.572"
     }
 
     [Fact]

@@ -3237,7 +3237,20 @@ the attack rotation); the **AoE** debuff is gated by **Auto-Nuke**.
 ### Combat order, monster targeting, and attack-last *([CONFIRMED] 2026-08-22, user)*
 
 - **Physical swings per round** come from a swing calculation, hard-capped at **5 on Stock,
-  6 on Paradigm**.
+  6 on Paradigm**. The uncapped raw figure can exceed the cap (e.g. Paradigm `stat all` may
+  read 7.143) — the cap limits the per-round *integer* swings; the surplus over the cap feeds
+  the Quick-and-Deadly bonus, it isn't discarded. *([CONFIRMED] 2026-08-31, user — Paradigm
+  `stat all` shows 7.143 attacks "capped to 6, and the extra then applies towards the QND
+  bonus".)*
+- **Swing energy uses `level × CombatLVL`, NOT `level × (CombatLVL + 2)`.** The per-swing
+  energy divisor is `((level × combatLvl) + 45) × (agi + 150) / 6`, where `combatLvl` is the
+  class's raw **CombatLVL** field. MMUD-Explorer expresses the same value via
+  `GetClassCombat = CombatLVL − 2` (modMMudDatabase.bas) fed into a `(nCombat + 2)` form — the
+  −2 and +2 cancel, so the net is `level × CombatLVL`. Accuracy is the exception: it uses the
+  raw CombatLVL directly (MMUD-Explorer re-adds the +2: `nCombatLevel = GetClassCombat + 2`).
+  *([CONFIRMED] 2026-08-31 vs MMUD-Explorer + live game — a L28 Paladin (CombatLVL 6) with
+  throwing hammers (speed 1100) at 57% encum reads normal 7.143 / bash 3.572 in `stat all`,
+  matching `level × 6`; `level × 8` inflated it to 9 / 4.5.)*
 - **Player attack order = announce order, FIFO.** Players deal their damage in the order
   they engaged/announced their attacks — first to announce fires first. Party rank does NOT
   change this order.

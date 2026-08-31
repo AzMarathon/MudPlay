@@ -246,6 +246,35 @@ public sealed class MonsterMatchupCalculatorSpellsTests
         Assert.Equal(noWards, withWards);
     }
 
+    // Monster Intel's defense simulator feeds a raw Vile Ward through to
+    // CombatCalculator's AdjustVileWard: it lowers an EVIL monster's hit chance
+    // (scaled by the defender's own evil tier), does NOTHING versus a neutral
+    // monster (evil-only ward), and the higher the alignment tier the bigger the
+    // AC it converts to (villain/fiend > outlaw/criminal).
+    [Fact]
+    public void IncomingHitPercent_VileWard_EvilOnly_ScalesWithEvilTier()
+    {
+        int noVile = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), alignment: 1, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Saint)!.Value;
+        int halfTier = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), alignment: 1, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Criminal)!.Value;
+        int fullTier = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), alignment: 1, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Fiend)!.Value;
+        int neutralFull = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), alignment: 3, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Fiend)!.Value;
+        int neutralNone = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), alignment: 3, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 0, defenderEvil: EvilLevel.Fiend)!.Value;
+
+        Assert.True(halfTier < noVile);        // "not evil" tier converts nothing; Criminal halves the ward to AC
+        Assert.True(fullTier < halfTier);      // Fiend converts the full ward → more AC → fewer hits
+        Assert.Equal(neutralNone, neutralFull); // evil-only: no effect on a neutral monster
+    }
+
     // Regression: an earlier version of IncomingHitPercent never passed
     // hasShadow through to CombatCalculator, silently ignoring the flat
     // +10 AC Shadow (Abil 9) grants against every attacker regardless of

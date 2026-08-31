@@ -202,17 +202,24 @@ public static class MonsterMatchupCalculatorSpells
     public static int? IncomingHitPercent(
         (int Majority, int Max)? physicalAccuracy, int alignment,
         int defenderAc, int defenderDodge, int protEvil, int protGood,
-        RealmType realm, bool hasShadow = false)
+        RealmType realm, bool hasShadow = false,
+        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint)
     {
         if (physicalAccuracy is not { } acc) return null;
         bool isEvil = alignment is 1 or 2 or 5 or 6;
         bool isGood = alignment is 0 or 4;
+        // Prot Evil and Vile Ward are evil-only wards: they raise the defender's
+        // defense only when the attacker (this monster) is evil, so both are
+        // zeroed against a neutral/good monster. Vile Ward's raw value is scaled
+        // by the defender's own evil tier inside CalculateHitChance (AdjustVileWard).
         return CombatCalculator.CalculateHitChance(
             attackerAccuracy: acc.Majority,
             defenderAC: defenderAc,
             defenderDodge: defenderDodge,
             protEvil: isEvil ? protEvil : 0,
             protGood: isGood ? protGood : 0,
+            vileWard: isEvil ? vileWard : 0,
+            evilLevel: defenderEvil,
             hasShadow: hasShadow,
             realmType: realm).OverallHitPercent;
     }

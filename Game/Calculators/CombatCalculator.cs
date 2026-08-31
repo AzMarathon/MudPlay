@@ -24,8 +24,10 @@ public static class CombatCalculator
     public const int PARAMUD_DODGE_SOFTCAP = 55;
     // ParaMUD dodge hard ceiling.
     public const int PARAMUD_DODGE_CAP = 98;
-    // Maximum swings landable in a single round.
-    public const int MAX_SWINGS = 5;
+    // Maximum swings landable in a single round — realm-dependent: hard-capped
+    // at 5 on Stock, 6 on Paradigm (GAME_MECHANICS.md "Combat order… swings per
+    // round"). A fixed 5 under-counted every Paradigm swing/DPS/rounds figure.
+    public static int MaxSwingsForRealm(RealmType realm) => realm == RealmType.ParaMud ? 6 : 5;
 
     // ----- Hit chance ------------------------------------------------------
 
@@ -147,8 +149,10 @@ public static class CombatCalculator
     }
 
     // Scale a defender's vile ward by evil level: <=Seedy → 0, <=Criminal →
-    // halved, then always divided by 10.
-    private static int AdjustVileWard(int vileWard, EvilLevel evilLevel)
+    // halved, then always divided by 10. Public so callers computing a displayed
+    // "effective AC vs an evil target" (Monster Intel) convert the raw ward the
+    // same way the hit-chance math does, instead of re-deriving the ~10:1 rate.
+    public static int AdjustVileWard(int vileWard, EvilLevel evilLevel)
     {
         if (vileWard <= 0 || evilLevel <= EvilLevel.Saint) return 0;
         if (evilLevel <= EvilLevel.Seedy) return 0;
@@ -642,7 +646,16 @@ public static class CombatCalculator
     {
         int speed = hasSlowness ? (attackSpeed * 3) / 2 : attackSpeed;
 
-        int divisor = ((level * (combatLevel + 2)) + 45) * (agility + 150) / 6;
+        // Combat term is level × the class CombatLVL. MMUD-Explorer feeds this
+        // formula GetClassCombat (= CombatLVL − 2, modMMudDatabase.bas) into a
+        // (nCombat + 2) form — net level × CombatLVL. We pass the raw CombatLVL and
+        // drop the +2, which is identical. Passing the raw CombatLVL into a
+        // (combatLevel + 2) form was the bug: an extra level×2 in the divisor
+        // undercut energy ~26% and inflated every swing/DPS/rounds figure (report:
+        // L28 Paladin, throwing hammers speed 1100, 57% encum — read 9 swings
+        // uncapped / bash 4.5 where the game shows 7.143 / 3.572). Accuracy keeps
+        // the raw CombatLVL (CalcAccuracy), which the game does too.
+        int divisor = ((level * combatLevel) + 45) * (agility + 150) / 6;
         if (divisor < 1) divisor = 1;
         int energy = (speed * 1000) / divisor;
 
@@ -686,8 +699,9 @@ public static class CombatCalculator
 
         int qndBonus = CalcQuickAndDeadlyBonus(agility, energy, encumPercent, realmType);
 
+        int maxSwings = MaxSwingsForRealm(realmType);
         double rawSwings = 1000.0 / energy;
-        if (rawSwings > MAX_SWINGS) rawSwings = MAX_SWINGS;
+        if (rawSwings > maxSwings) rawSwings = maxSwings;
 
         var swingsPerRound = new int[10];
         var energyRemaining = new int[10];
@@ -696,7 +710,7 @@ public static class CombatCalculator
         for (int round = 0; round < 10; round++)
         {
             int swings = remaining / energy;
-            if (swings > MAX_SWINGS) swings = MAX_SWINGS;
+            if (swings > maxSwings) swings = maxSwings;
             swingsPerRound[round] = swings;
             remaining = (remaining % energy) + 1000;
             energyRemaining[round] = remaining - 1000; // carry into next round
