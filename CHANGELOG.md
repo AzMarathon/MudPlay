@@ -8,6 +8,7 @@ Notable changes per merged PR, **newest first**. The top of the [README](README.
 - Spell Game Data view overhauled: human-readable field labels (Required Level, Mana Cost, Difficulty, Resist Type, School, Cast Code, …) instead of raw column names
 - Spell Game Data view no longer triple-lists the same affect — a level-scaling stat affect now shows one row with its real range ("AC Blur +5 → +12"), replacing the meaningless "0" row and the duplicate "Magnitude" row
 - Spell DR now shown as the value actually gained (raw ÷ 10, e.g. "+1.0") everywhere it surfaces, not the raw store value ("+10")
+- Spell Energy Cost now spells out its fire rate: 0 → "(between rounds)", otherwise "(up to N times per round)" where N = 1000 ÷ energy cost
 - RemovesSpell entries collapse into one linked "Removes" row; display-only message-slot rows dropped
 
 ## 3.37.3

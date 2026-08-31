@@ -188,6 +188,22 @@ public sealed class SpellInfoRowsBuilderTests : IDisposable
         Assert.DoesNotContain(new SpellInfoRowsBuilder(cache).Build(4), r => r.Label == "DescMsg");
     }
 
+    [Theory]
+    [InlineData(0, "0 (between rounds)")]
+    [InlineData(500, "500 (up to 2 times per round)")]   // 1000/500 fires twice
+    [InlineData(334, "334 (up to 2 times per round)")]   // floor(1000/334) = 2
+    [InlineData(1000, "1000 (once per round)")]
+    [InlineData(700, "700 (once per round)")]            // floor(1000/700) = 1
+    public void Build_EnergyCost_AnnotatesFireRate(int energy, string expected)
+    {
+        var spell = new Dictionary<string, object>
+        {
+            ["Number"] = 70, ["Name"] = "test spell", ["EnergyCost"] = energy,
+        };
+        var rows = new SpellInfoRowsBuilder(NewCache(spells: [spell])).Build(70);
+        Assert.Equal(expected, ValueOf(rows, "Energy Cost"));
+    }
+
     [Fact]
     public void Build_FlagBesideDamage_NotGivenScaledRange()
     {

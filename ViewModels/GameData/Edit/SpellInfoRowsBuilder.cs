@@ -542,6 +542,17 @@ public sealed class SpellInfoRowsBuilder
         {
             if (string.Equals(field, "Learnable", StringComparison.OrdinalIgnoreCase))
                 return n != 0 ? "Yes" : "No";
+            // EnergyCost is spend-per-fire against the 1000-energy round budget:
+            // 0 = a buff cast between combat rounds; otherwise it fires up to
+            // floor(1000 / EnergyCost) times a round (a 500-cost nuke twice).
+            if (string.Equals(field, "EnergyCost", StringComparison.OrdinalIgnoreCase))
+            {
+                if (n <= 0) return "0 (between rounds)";
+                int perRound = 1000 / n;
+                return perRound <= 1
+                    ? $"{n.ToString(CultureInfo.InvariantCulture)} (once per round)"
+                    : $"{n.ToString(CultureInfo.InvariantCulture)} (up to {perRound.ToString(CultureInfo.InvariantCulture)} times per round)";
+            }
             // TypeOfResists gates the full-resist roll: 0 never, 1 only vs an
             // AntiMagic target, 2 always eligible (see GAME_MECHANICS).
             if (string.Equals(field, "TypeOfResists", StringComparison.OrdinalIgnoreCase))
