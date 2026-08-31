@@ -359,6 +359,10 @@
                 <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,0" Spacing="6" VerticalAlignment="Top">
                     <Button Content="Move up"     Command="{Binding MoveContextMenuUpCommand}"     HorizontalAlignment="Stretch"/>
                     <Button Content="Move down"   Command="{Binding MoveContextMenuDownCommand}"   HorizontalAlignment="Stretch"/>
+                    <Button Content="Into folder →" Command="{Binding MoveContextMenuIntoFolderCommand}" HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Move the selected item into the folder directly above it."/>
+                    <Button Content="← Out of folder" Command="{Binding MoveContextMenuOutOfFolderCommand}" HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Move the selected item out of its folder, back to the top level."/>
                     <Button Content="New folder"  Command="{Binding AddContextMenuFolderCommand}"  HorizontalAlignment="Stretch"
                             ToolTip.Tip="Add a named folder (a fly-out submenu). Select it, then add items from the right to put them inside."/>
                     <Button Content="Add separator" Command="{Binding AddContextMenuSeparatorCommand}" HorizontalAlignment="Stretch"/>

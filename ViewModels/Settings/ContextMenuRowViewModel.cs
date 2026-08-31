@@ -19,8 +19,11 @@ public sealed partial class ContextMenuRowViewModel : ObservableObject
     public bool IsFolder { get; }
 
     // 0 = top level, 1 = a child inside the folder above it. Folders are one
-    // level deep, so a child is never itself a folder.
-    public int Depth { get; }
+    // level deep, so a child is never itself a folder. Mutable so the editor can
+    // move a placed item into / out of a folder.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Indent))]
+    private int _depth;
 
     // Catalogue id this row links to (null for a separator or folder). Stable
     // even after a rename.

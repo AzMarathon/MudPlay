@@ -69,6 +69,8 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(RemoveContextMenuEntryCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveContextMenuUpCommand))]
     [NotifyCanExecuteChangedFor(nameof(MoveContextMenuDownCommand))]
+    [NotifyCanExecuteChangedFor(nameof(MoveContextMenuIntoFolderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(MoveContextMenuOutOfFolderCommand))]
     [NotifyPropertyChangedFor(nameof(AddContextMenuButtonText))]
     private ContextMenuRowViewModel? _selectedContextMenuRow;
 
@@ -955,6 +957,70 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         while (next < ContextMenuRows.Count && ContextMenuRows[next].Depth == 1) next++;
         MoveContextMenuBlock(end, next, i);
         Dirty();
+    }
+
+    private void RefreshFolderMoveCanExec()
+    {
+        MoveContextMenuIntoFolderCommand.NotifyCanExecuteChanged();
+        MoveContextMenuOutOfFolderCommand.NotifyCanExecuteChanged();
+        // The row's depth changed under the same selection, so the Add-button
+        // label (which reads the selected row's depth) must re-evaluate.
+        OnPropertyChanged(nameof(AddContextMenuButtonText));
+    }
+
+    // The folder a selected top-level item can indent into: the folder directly
+    // above it (its header, or the folder whose last child sits just above), or
+    // -1 when the item isn't adjacent to a folder. Mirrors outline-editor "Tab".
+    private int FolderForIndent()
+    {
+        if (SelectedContextMenuRow is not { IsFolder: false, Depth: 0 } sel) return -1;
+        int i = ContextMenuRows.IndexOf(sel);
+        if (i <= 0) return -1;
+        ContextMenuRowViewModel above = ContextMenuRows[i - 1];
+        if (above.IsFolder) return i - 1;
+        if (above.Depth == 1)
+            for (int k = i - 2; k >= 0; k--)
+                if (ContextMenuRows[k].IsFolder) return k;
+        return -1;
+    }
+
+    // Move an already-placed top-level item INTO the folder above it (appended to
+    // that folder's children).
+    private bool CanMoveContextMenuIntoFolder() => FolderForIndent() >= 0;
+    [RelayCommand(CanExecute = nameof(CanMoveContextMenuIntoFolder))]
+    private void MoveContextMenuIntoFolder()
+    {
+        if (SelectedContextMenuRow is not { } row) return;
+        int f = FolderForIndent();
+        if (f < 0) return;
+        int i = ContextMenuRows.IndexOf(row);
+        ContextMenuRows.RemoveAt(i);
+        int insertAt = f + 1;   // f < i, so unaffected by the removal
+        while (insertAt < ContextMenuRows.Count && ContextMenuRows[insertAt].Depth == 1) insertAt++;
+        row.Depth = 1;
+        ContextMenuRows.Insert(insertAt, row);
+        SelectedContextMenuRow = row;
+        Dirty();
+        RefreshFolderMoveCanExec();
+    }
+
+    // Move a folder child OUT to the top level, just after its folder's block.
+    private bool CanMoveContextMenuOutOfFolder() => SelectedContextMenuRow is { Depth: 1 };
+    [RelayCommand(CanExecute = nameof(CanMoveContextMenuOutOfFolder))]
+    private void MoveContextMenuOutOfFolder()
+    {
+        if (SelectedContextMenuRow is not { Depth: 1 } row) return;
+        int i = ContextMenuRows.IndexOf(row);
+        int f = i - 1;
+        while (f >= 0 && !ContextMenuRows[f].IsFolder) f--;   // parent folder (always exists)
+        ContextMenuRows.RemoveAt(i);
+        int insertAt = f + 1;
+        while (insertAt < ContextMenuRows.Count && ContextMenuRows[insertAt].Depth == 1) insertAt++;
+        row.Depth = 0;
+        ContextMenuRows.Insert(insertAt, row);
+        SelectedContextMenuRow = row;
+        Dirty();
+        RefreshFolderMoveCanExec();
     }
 
     [RelayCommand]
