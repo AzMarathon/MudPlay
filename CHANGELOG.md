@@ -2,6 +2,16 @@
 
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
+## 3.42.0
+
+- The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts, at the bottom). The pinned Favorites / Recent walk shortcuts still lead it; everything below is yours to arrange
+- Add **whole main menus** (File / View / Action / Tools) as nested submenus, or any **individual command** on its own
+- Add a **direct link to a Player Workshop tab** (opens the Workshop straight to Character Info / Equipment / Calculators / Bosses / Roomba / …)
+- Add a **direct link to a calculator** — opens the Workshop on the Calculators tab with that calculator **expanded and centered** (Hit / Movement / Swing / Backstab / Mana Regen / Realm Rankings)
+- **Rename** any entry to whatever you want while it still links to the same action; reorder, add separators, or Reset to the built-in menu
+- **Import** a menu from another character or a shared `.json` file, and **Export** yours to share with friends
+- Saved per character
+
 ## 3.41.0
 
 - Monster Intel gains a **defense simulator** at the top: **AC** is now an editable field (seeded to your worn gear + configured buffs on open), alongside a **Shadow AC** checkbox, a **Prot Evil** field, and a raw **Vile Ward** field with an **alignment** picker (not evil 0% / outlaw-criminal 50% / villain-fiend 100%). Edit any of them and every monster's **Hits You %** recomputes live — a what-if for how safe a fight is with different defense. The evil-only wards (Prot Evil, Vile Ward) apply only versus evil monsters; Shadow is +10 vs all

@@ -116,6 +116,11 @@ public partial class MainWindowViewModel : ObservableObject
     // edits in Settings → Toolbar apply immediately on Apply / OK.
     public Services.ToolbarConfig Toolbar => AppServices.Current.Toolbar;
 
+    // Live layout for the customizable terminal right-click menu — the MainWindow
+    // code-behind rebuilds the ContextMenu from this and re-runs on its
+    // CollectionChanged, mirroring how the toolbar rebuilds from Toolbar.Layout.
+    public Services.ContextMenuConfig ContextMenu => AppServices.Current.ContextMenu;
+
     // Render-ready view-models for the dynamic toolbar ItemsControl. Mirrors
     // ToolbarConfig.Layout; each entry resolves through ToolbarItemCatalogue
     // and binds against the matching command on this view-model. Rebuilt
@@ -3589,7 +3594,18 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenWorkshopDeath() => OpenWorkshopAt("death");
 
-    private void OpenWorkshopAt(string? sectionId)
+    // Terminal right-click "Workshop: <tab>" deep-link — opens the Workshop on a
+    // section (string param = the WorkshopSectionViewModel.Id).
+    [RelayCommand]
+    private void OpenWorkshopTab(string? sectionId) => OpenWorkshopAt(sectionId);
+
+    // Terminal right-click "Calculator: <x>" deep-link — opens the Workshop on the
+    // Calculators tab and reveals that calculator (param = CalculatorId name).
+    [RelayCommand]
+    private void OpenWorkshopCalculator(string? calculatorId)
+        => OpenWorkshopAt("calculators", calculatorId);
+
+    private void OpenWorkshopAt(string? sectionId, string? calculatorId = null)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
@@ -3606,6 +3622,8 @@ public partial class MainWindowViewModel : ObservableObject
                 ViewModels.CharacterWorkshop.WorkshopSectionViewModel? section = vm.Sections
                     .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
                 if (section is not null) vm.SelectedSection = section;
+                if (calculatorId is not null && section is ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calc)
+                    calc.NavigateToCalculator(calculatorId);
                 existing.Activate();
                 return;
             }
@@ -3637,6 +3655,17 @@ public partial class MainWindowViewModel : ObservableObject
         };
         _workshop = window;
         window.Show(main);
+
+        // Calculator deep-link on a fresh open: the section is already selected
+        // via the ctor's initialSectionId; reveal the target calculator (its view
+        // builds lazily, so NavigateToCalculator arms a pending-scroll the view
+        // honors on first layout).
+        if (calculatorId is not null
+            && workshopVm.Sections.FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase))
+                is ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calcSection)
+        {
+            calcSection.NavigateToCalculator(calculatorId);
+        }
     }
 
     // Singleton-ish handle to the Quick Connect window so re-press of the

@@ -327,6 +327,93 @@
             </StackPanel>
         </Grid>
 
+        <!-- ===== Terminal right-click menu editor (Char tier) ===== -->
+        <!-- Customize the entries below the pinned Favorites / Recent walk
+             shortcuts: add whole main menus as submenus, individual commands,
+             or direct links to a Player Workshop tab or a calculator; rename
+             any of them; reorder; import from another character or a shared
+             file; export to share. Persisted on Apply, per character. -->
+        <TextBlock Classes="SectionHeader" Text="TERMINAL RIGHT-CLICK MENU"
+                   IsVisible="{Binding HasProfile}"/>
+        <StackPanel IsVisible="{Binding HasProfile}" Spacing="8">
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource ChromeFgMutedBrush}"
+                       FontSize="{StaticResource FontSizeSm}"
+                       Text="What appears when you right-click the terminal, below the Favorites / Recent shortcuts. Add whole menus, single commands, or a direct link to a Workshop tab or calculator — rename any of them — then Apply."/>
+
+            <Grid ColumnDefinitions="*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Classes="SectionHeader" Margin="0,0,0,4" Text="IN THE MENU (TOP TO BOTTOM)"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Classes="SectionHeader" Margin="0,0,0,4" Text="ADD AN ITEM"/>
+
+                <Border Grid.Row="1" Grid.Column="0" Height="234" VerticalAlignment="Top"
+                        BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1"
+                        Background="{StaticResource ChromeBgSunkenBrush}">
+                    <ListBox Classes="RowList" Background="Transparent" BorderThickness="0"
+                             ItemsSource="{Binding ContextMenuRows}"
+                             SelectedItem="{Binding SelectedContextMenuRow, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ContextMenuRowViewModel">
+                                <TextBlock Text="{Binding DisplayLabel}" VerticalAlignment="Center"
+                                           Classes.SeparatorRow="{Binding IsSeparator}"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,0" Spacing="6" VerticalAlignment="Top">
+                    <Button Content="Move up"     Command="{Binding MoveContextMenuUpCommand}"     HorizontalAlignment="Stretch"/>
+                    <Button Content="Move down"   Command="{Binding MoveContextMenuDownCommand}"   HorizontalAlignment="Stretch"/>
+                    <Button Content="Add separator" Command="{Binding AddContextMenuSeparatorCommand}" HorizontalAlignment="Stretch"/>
+                    <Button Content="Remove"      Command="{Binding RemoveContextMenuEntryCommand}" HorizontalAlignment="Stretch"/>
+                    <Button Content="Reset"       Command="{Binding ResetContextMenuCommand}"       HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Restore the built-in right-click menu."/>
+                </StackPanel>
+
+                <Border Grid.Row="1" Grid.Column="2" Height="234" VerticalAlignment="Top"
+                        BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1"
+                        Background="{StaticResource ChromeBgSunkenBrush}">
+                    <ListBox Classes="RowList" Background="Transparent" BorderThickness="0"
+                             ItemsSource="{Binding ContextMenuPool}"
+                             SelectedItem="{Binding SelectedContextMenuPoolRow, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ContextMenuRowViewModel">
+                                <TextBlock Text="{Binding PoolDisplay}" VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <!-- Rename the selected placed entry (real entries only). -->
+                <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
+                            IsVisible="{Binding SelectedContextMenuRow.CanRename, FallbackValue=False}">
+                    <TextBlock Text="Name" VerticalAlignment="Center"
+                               Foreground="{StaticResource ChromeFgSecBrush}" FontSize="{StaticResource FontSizeSm}"/>
+                    <TextBox Width="200" Text="{Binding SelectedContextMenuRow.CustomLabel, Mode=TwoWay}"
+                             PlaceholderText="{Binding SelectedContextMenuRow.DefaultLabel}"
+                             ToolTip.Tip="Custom name for this entry — leave blank to use the default. The entry still links to the same action."/>
+                    <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSizeSm}"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               Text="{Binding SelectedContextMenuRow.DefaultLabel, StringFormat='→ {0}'}"/>
+                </StackPanel>
+
+                <Button Grid.Row="2" Grid.Column="2" Content="◄ Add to menu" Margin="0,8,0,0"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding AddContextMenuEntryCommand}"/>
+
+                <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal"
+                            Spacing="8" Margin="0,12,0,0">
+                    <Button Content="Import from profile…" Command="{Binding ImportContextMenuFromProfileCommand}"
+                            ToolTip.Tip="Copy the right-click menu from another character."/>
+                    <Button Content="Import from file…"    Command="{Binding ImportContextMenuFileCommand}"
+                            ToolTip.Tip="Load a shared right-click menu (.json)."/>
+                    <Button Content="Export to file…"      Command="{Binding ExportContextMenuFileCommand}"
+                            ToolTip.Tip="Save the current right-click menu to a .json file to share."/>
+                    <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="240"
+                               Foreground="{StaticResource ChromeFgSecBrush}" FontSize="{StaticResource FontSizeSm}"
+                               Text="{Binding ContextMenuStatus}"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+
     </StackPanel>
     </ScrollViewer>
 </UserControl>

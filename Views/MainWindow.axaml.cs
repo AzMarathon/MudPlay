@@ -1,11 +1,13 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Reactive;
 using Avalonia.Threading;
+using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
 using MudPlay.ViewModels;
@@ -65,6 +67,8 @@ public partial class MainWindow : Window
                 RebuildGameDataMenu(vm);
                 vm.HelpLinks.CollectionChanged += OnHelpLinksChanged;
                 RebuildHelpMenu(vm);
+                vm.ContextMenu.Layout.CollectionChanged += OnContextMenuLayoutChanged;
+                RebuildTerminalContextMenu(vm);
             }
         };
 
@@ -223,6 +227,117 @@ public partial class MainWindow : Window
             Header  = "About MudPlay",
             Command = vm.OpenAboutCommand,
         });
+    }
+
+    // ----- Customizable terminal right-click menu -----------------------------
+    // The ContextMenu's first three items (Favorites submenu, Recent submenu, and
+    // their trailing separator) are fixed in XAML so their live bindings keep
+    // working; everything after is rebuilt from AppServices.ContextMenu.Layout.
+    // Each entry resolves through MenuActionCatalogue into a MenuItem — a command,
+    // a toggle, a whole-menu submenu, a Workshop-tab link, or a calculator link —
+    // reusing the same reflection bridge the toolbar/keybinds use for commands.
+    private const int ContextMenuFixedLeadingItems = 3;
+    private bool _ctxRebuildQueued;
+
+    private void OnContextMenuLayoutChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // ApplyFrom clears + re-adds item-by-item, so coalesce the burst into a
+        // single rebuild on the next dispatcher turn.
+        if (_ctxRebuildQueued) return;
+        _ctxRebuildQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _ctxRebuildQueued = false;
+            if (DataContext is MainWindowViewModel vm) RebuildTerminalContextMenu(vm);
+        });
+    }
+
+    private void RebuildTerminalContextMenu(MainWindowViewModel vm)
+    {
+        if (TerminalContextMenu is null) return;
+        ItemCollection items = TerminalContextMenu.Items;
+        // Drop everything a previous build appended; keep the fixed leaders.
+        while (items.Count > ContextMenuFixedLeadingItems)
+            items.RemoveAt(items.Count - 1);
+
+        foreach (ContextMenuEntry entry in vm.ContextMenu.Layout)
+        {
+            if (entry.Kind == ContextMenuEntryKind.Separator)
+            {
+                items.Add(new Separator());
+                continue;
+            }
+            MenuActionCatalogue.Entry? def = MenuActionCatalogue.Find(entry.Id);
+            if (def is null) continue;   // stale / unknown id — skip, never add a dead item
+            if (BuildContextMenuEntry(def, vm, entry.Label) is { } built) items.Add(built);
+        }
+    }
+
+    // Resolve one catalogue entry into a MenuItem, or null when it can't be built
+    // (an unresolvable command, or an empty submenu). Recurses for submenu members.
+    // customLabel (the user's chosen name) overrides the catalogue label when set.
+    private static Control? BuildContextMenuEntry(MenuActionCatalogue.Entry def, MainWindowViewModel vm, string? customLabel = null)
+    {
+        string header = string.IsNullOrWhiteSpace(customLabel) ? def.Label : customLabel!;
+        switch (def.EntryKind)
+        {
+            case MenuActionCatalogue.Kind.Submenu:
+            {
+                MenuItem parent = new() { Header = header };
+                if (def.Members is { } members)
+                {
+                    foreach (string memberId in members)
+                    {
+                        if (MenuActionCatalogue.Find(memberId) is { } child
+                            && BuildContextMenuEntry(child, vm) is { } builtChild)
+                            parent.Items.Add(builtChild);
+                    }
+                }
+                return parent.Items.Count > 0 ? parent : null;
+            }
+            case MenuActionCatalogue.Kind.Toggle:
+            {
+                MenuItem item = new() { Header = header, ToggleType = MenuItemToggleType.CheckBox };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                item.Bind(MenuItem.IsCheckedProperty,
+                    new Binding(def.ToggleProperty!) { Source = vm, Mode = BindingMode.TwoWay });
+                return item;
+            }
+            case MenuActionCatalogue.Kind.WorkshopTab:
+            {
+                MenuItem item = new()
+                {
+                    Header = header,
+                    Command = vm.OpenWorkshopTabCommand,
+                    CommandParameter = def.Parameter,
+                };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                return item;
+            }
+            case MenuActionCatalogue.Kind.Calculator:
+            {
+                MenuItem item = new()
+                {
+                    Header = header,
+                    Command = vm.OpenWorkshopCalculatorCommand,
+                    CommandParameter = def.Parameter,
+                };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                return item;
+            }
+            default: // Command — reflection-resolve CommandName → ICommand, like the toolbar.
+            {
+                ICommand? cmd = def.CommandName is null
+                    ? null
+                    : vm.GetType().GetProperty(def.CommandName)?.GetValue(vm) as ICommand;
+                if (cmd is null) return null;
+                MenuItem item = new() { Header = header, Command = cmd };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                if (def.GestureProperty is not null)
+                    item.Bind(MenuItem.InputGestureProperty, new Binding(def.GestureProperty) { Source = vm });
+                return item;
+            }
+        }
     }
 
     // Compose the Game Data menu's items: every imported set on top

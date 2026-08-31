@@ -61,7 +61,8 @@
     </UserControl.Styles>
 
     <Grid Margin="22">
-        <ScrollViewer VerticalScrollBarVisibility="Auto"
+        <ScrollViewer x:Name="CalcScroll"
+                      VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Auto">
             <!-- Each calculator is its own collapsible Expander; add more here as
                  sibling Expanders to grow the tab into a calculator toolbox. The
@@ -71,7 +72,8 @@
             <StackPanel Spacing="14" HorizontalAlignment="Left">
 
                 <!-- ===== Hit Calculator ===== -->
-                <Expander Width="560" HorizontalAlignment="Left">
+                <Expander x:Name="HitCalc" Width="560" HorizontalAlignment="Left"
+                          IsExpanded="{Binding HitExpanded, Mode=TwoWay}">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Hit Calculator"/>
                     </Expander.Header>
@@ -218,7 +220,8 @@
                 </Expander>
 
                 <!-- ===== Movement Speed ===== -->
-                <Expander Width="560" HorizontalAlignment="Left">
+                <Expander x:Name="MovementCalc" Width="560" HorizontalAlignment="Left"
+                          IsExpanded="{Binding MovementExpanded, Mode=TwoWay}">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Movement Speed"/>
                     </Expander.Header>
@@ -288,7 +291,8 @@
                 </Expander>
 
                 <!-- ===== Swing Calculator ===== -->
-                <Expander Width="560" HorizontalAlignment="Left">
+                <Expander x:Name="SwingCalc" Width="560" HorizontalAlignment="Left"
+                          IsExpanded="{Binding SwingExpanded, Mode=TwoWay}">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Swing Calculator"/>
                     </Expander.Header>
@@ -396,7 +400,8 @@
                 </Expander>
 
                 <!-- ===== Backstab Calculator ===== -->
-                <Expander Width="560" HorizontalAlignment="Left">
+                <Expander x:Name="BackstabCalc" Width="560" HorizontalAlignment="Left"
+                          IsExpanded="{Binding BackstabExpanded, Mode=TwoWay}">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Backstab Calculator"/>
                     </Expander.Header>
@@ -465,7 +470,8 @@
                 </Expander>
 
                 <!-- ===== Mana Regen ===== -->
-                <Expander Width="560" HorizontalAlignment="Left">
+                <Expander x:Name="ManaRegenCalc" Width="560" HorizontalAlignment="Left"
+                          IsExpanded="{Binding ManaRegenExpanded, Mode=TwoWay}">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Mana Regen"/>
                     </Expander.Header>
@@ -588,7 +594,8 @@
                 <!-- Unlike the fixed-560 calculators above, this one grows to the
                      full leaderboard table when expanded; MinWidth keeps it flush
                      with their width while collapsed. See the parent StackPanel. -->
-                <Expander MinWidth="560" HorizontalAlignment="Left">
+                <Expander x:Name="RealmRankingsCalc" MinWidth="560" HorizontalAlignment="Left"
+                          IsExpanded="{Binding RealmRankingsExpanded, Mode=TwoWay}">
                     <Expander.Header>
                         <TextBlock Classes="BoxTitle" Text="Realm Rankings"/>
                     </Expander.Header>

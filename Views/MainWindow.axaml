@@ -520,7 +520,7 @@
                                  HorizontalAlignment="Center"
                                  VerticalAlignment="Center">
                 <ctl:TerminalControl.ContextMenu>
-                    <ContextMenu>
+                    <ContextMenu x:Name="TerminalContextMenu">
                         <ContextMenu.Resources>
                             <!-- Shared item theme for the walk-to flyouts (Favorites +
                                  Recent destinations). Header = the item itself, rendered
@@ -560,26 +560,14 @@
                                   ItemsSource="{Binding RecentDestinations}"
                                   ItemContainerTheme="{StaticResource WalkFlyoutItemTheme}"/>
                         <Separator IsVisible="{Binding HasWalkFlyouts}"/>
-                        <!-- Panel quick-opens — the windows most useful to reach
-                             from a right-click on the canvas. -->
-                        <MenuItem Header="Open Backscroll"      InputGesture="{Binding BackscrollGesture}"   Command="{Binding OpenBackscrollCommand}"/>
-                        <MenuItem Header="Open Player Workshop" InputGesture="{Binding WorkshopGesture}"     Command="{Binding OpenWorkshopCommand}"/>
-                        <MenuItem Header="Open Party"           InputGesture="{Binding PartyGesture}"        Command="{Binding OpenPartyCommand}"/>
-                        <MenuItem Header="Open Spell Book"      InputGesture="{Binding SpellBookGesture}"    Command="{Binding OpenSpellBookCommand}"/>
-                        <MenuItem Header="Open Monster Intel"   InputGesture="{Binding MonsterIntelGesture}" Command="{Binding OpenMonsterIntelCommand}"/>
-                        <MenuItem Header="Open Conversation"    InputGesture="{Binding ConversationGesture}" Command="{Binding OpenConversationCommand}"/>
-                        <MenuItem Header="Open Navigation"      InputGesture="{Binding NavigationGesture}"   Command="{Binding OpenNavigationCommand}"/>
-                        <MenuItem Header="Open Session Stats"   InputGesture="{Binding SessionStatsGesture}" Command="{Binding OpenSessionStatsCommand}"/>
-                        <Separator/>
-                        <!-- Recovery — clear my own stuck ailments / waits /
-                             movement holds and return to an idle state. -->
-                        <MenuItem Header="Reset States" Command="{Binding ResetStatesCommand}"
-                                  ToolTip.Tip="Clear my own stuck ailments, waits, and movement holds — return to idle"/>
-                        <Separator/>
-                        <!-- Diagnostics — freeze current client state + recent
-                             output into a Markdown report on the Desktop. -->
-                        <MenuItem Header="Bug report…" Command="{Binding ReportBugCommand}"
-                                  ToolTip.Tip="Capture current client state and recent output to a report file on your Desktop"/>
+                        <!-- Everything below the pinned Favorites / Recent walk
+                             flyouts is user-customizable (Settings → Toolbar +
+                             Shortcuts → Terminal right-click menu) and rebuilt in
+                             code-behind from AppServices.ContextMenu.Layout — see
+                             RebuildTerminalContextMenu. The three leading items
+                             above (Favorites, Recent, separator) stay fixed so
+                             their live IsVisible/ItemsSource bindings keep
+                             working; the builder appends after them. -->
                     </ContextMenu>
                 </ctl:TerminalControl.ContextMenu>
             </ctl:TerminalControl>
