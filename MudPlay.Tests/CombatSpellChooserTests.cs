@@ -374,6 +374,36 @@ public sealed class CombatSpellChooserTests
         Assert.Equal(CombatSpellAction.AreaDebuff, room2?.Action);
     }
 
+    // reports paradigm-20260901-123720 / -140747: a pre-attack AoE debuff is sent
+    // optimistically, so MarkCast tags the room BEFORE the server accepts it. When the
+    // cast is rejected ("You have already cast a spell this round!" — it collided with a
+    // buff or the user's manual cast), UnmarkCast rolls the tag + per-room count back so
+    // the debuff re-fires next round instead of the room staying falsely debuffed.
+    [Fact]
+    public void UnmarkCast_Area_RejectedSend_RefiresNextRound()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("isto", minEnemies: 2, maxCasts: 1),
+        };
+        string[] roster = { "slimeworm", "slimeworm" };
+
+        CombatSpellDecision? first = sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster));
+        Assert.Equal(CombatSpellAction.AreaDebuff, first?.Action);
+        sut.MarkCast(first!.Value, "slimeworm", roster);      // optimistic tag, per-room cap spent
+
+        // Same round, still tagged → won't re-offer (correct once-per-room).
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster)));
+
+        // The send was rejected — roll the mark back.
+        sut.UnmarkCast(first.Value, "slimeworm", roster);
+
+        // Re-fires next round as though never cast.
+        CombatSpellDecision? again = sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster));
+        Assert.Equal(CombatSpellAction.AreaDebuff, again?.Action);
+    }
+
     [Fact]
     public void ChooseDebuff_RoomThinsBelowMinEnemies_SingleTakesOver()
     {

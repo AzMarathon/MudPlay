@@ -18,11 +18,13 @@ public static class MenuActionCatalogue
 {
     public enum Kind
     {
-        Command,      // CommandName → ICommand on MainWindowViewModel
-        Toggle,       // ToggleProperty → two-way bool on MainWindowViewModel
-        WorkshopTab,  // Parameter → CharacterWorkshop section id (OpenWorkshopTab)
-        Calculator,   // Parameter → calculator id (OpenWorkshopCalculator)
-        WalkFlyout,   // Parameter "favorites"/"recent" → the dynamic walk submenu
+        Command,         // CommandName → ICommand on MainWindowViewModel
+        Toggle,          // ToggleProperty → two-way bool on MainWindowViewModel
+        WorkshopTab,     // Parameter → CharacterWorkshop section id (OpenWorkshopTab)
+        Calculator,      // Parameter → calculator id (OpenWorkshopCalculator)
+        SettingsTab,     // Parameter → Settings section id (OpenSettingsTab)
+        GameDataSection, // Parameter → Game Data Browser section id (OpenGameDataSection)
+        WalkFlyout,      // Parameter "favorites"/"recent" → the dynamic walk submenu
     }
 
     public sealed record Entry(
@@ -63,10 +65,6 @@ public static class MenuActionCatalogue
         new("view.spellbook", "Spell Book", Kind.Command, "View", CommandName: "OpenSpellBookCommand", GestureProperty: "SpellBookGesture"),
         new("view.monsterintel", "Monster Intel", Kind.Command, "View", CommandName: "OpenMonsterIntelCommand", GestureProperty: "MonsterIntelGesture"),
         new("view.sessionstats", "Session Stats", Kind.Command, "View", CommandName: "OpenSessionStatsCommand", GestureProperty: "SessionStatsGesture"),
-        new("view.gdplayers", "Players (Game Data)", Kind.Command, "View", CommandName: "OpenGameDataPlayersCommand"),
-        new("view.gdmacros", "Macros (Game Data)", Kind.Command, "View", CommandName: "OpenGameDataMacrosCommand"),
-        new("view.gdtriggers", "Triggers (Game Data)", Kind.Command, "View", CommandName: "OpenGameDataTriggersCommand"),
-        new("view.gdaliases", "Aliases (Game Data)", Kind.Command, "View", CommandName: "OpenGameDataAliasesCommand"),
         new("view.events", "Events", Kind.Command, "View", CommandName: "OpenEventsCommand"),
     };
 
@@ -120,6 +118,57 @@ public static class MenuActionCatalogue
         new("calc.backstab", "Calculator: Backstab Calculator", Kind.Calculator, "Calculators", Parameter: "Backstab"),
         new("calc.manaregen", "Calculator: Mana Regen", Kind.Calculator, "Calculators", Parameter: "ManaRegen"),
         new("calc.realmrankings", "Calculator: Realm Rankings", Kind.Calculator, "Calculators", Parameter: "RealmRankings"),
+        new("calc.monsteraggro", "Calculator: Monster Aggro", Kind.Calculator, "Calculators", Parameter: "MonsterAggro"),
+    };
+
+    // ----- Settings-window tab deep-links -----
+    // Parameter = the SettingsSectionViewModel.Id (SettingsWindowViewModel). Opens
+    // Settings straight to that tab (the base "Settings…" entry above just opens
+    // the window on whatever tab was last shown).
+    private static readonly Entry[] _settingsTabs =
+    {
+        new("settings.general", "Settings: General", Kind.SettingsTab, "Settings tabs", Parameter: "general"),
+        new("settings.toolbar", "Settings: Toolbar + Shortcuts", Kind.SettingsTab, "Settings tabs", Parameter: "toolbar"),
+        new("settings.bbs", "Settings: BBS + Display", Kind.SettingsTab, "Settings tabs", Parameter: "bbs"),
+        new("settings.health", "Settings: Health", Kind.SettingsTab, "Settings tabs", Parameter: "health"),
+        new("settings.spells", "Settings: Spells + Ailments", Kind.SettingsTab, "Settings tabs", Parameter: "spells"),
+        new("settings.combat", "Settings: Combat", Kind.SettingsTab, "Settings tabs", Parameter: "combat"),
+        new("settings.party", "Settings: Party", Kind.SettingsTab, "Settings tabs", Parameter: "party"),
+        new("settings.cash", "Settings: Cash + Items", Kind.SettingsTab, "Settings tabs", Parameter: "cash"),
+        new("settings.statline", "Settings: Statline", Kind.SettingsTab, "Settings tabs", Parameter: "statline"),
+        new("settings.talk", "Settings: Talk", Kind.SettingsTab, "Settings tabs", Parameter: "talk"),
+        new("settings.autolight", "Settings: Auto-Light", Kind.SettingsTab, "Settings tabs", Parameter: "autolight"),
+        new("settings.autolair", "Settings: Auto-Lair", Kind.SettingsTab, "Settings tabs", Parameter: "auto-lair"),
+        new("settings.autotrainer", "Settings: Auto-Trainer", Kind.SettingsTab, "Settings tabs", Parameter: "autotrainer"),
+        new("settings.other", "Settings: Other", Kind.SettingsTab, "Settings tabs", Parameter: "other"),
+        new("settings.events", "Settings: Events", Kind.SettingsTab, "Settings tabs", Parameter: "events"),
+        new("settings.sounds", "Settings: Sounds", Kind.SettingsTab, "Settings tabs", Parameter: "sounds"),
+    };
+
+    // ----- Game Data Browser section deep-links -----
+    // Parameter = the GameDataBrowserViewModel section id. The first four keep their
+    // original ids (they were View-menu Command entries before) so a user's saved
+    // menu doesn't lose them; the rest expose the remaining browser tables.
+    private static readonly Entry[] _gameData =
+    {
+        new("view.gdplayers", "Players", Kind.GameDataSection, "Game Data", Parameter: "players"),
+        new("view.gdmacros", "Macros", Kind.GameDataSection, "Game Data", Parameter: "macros"),
+        new("view.gdtriggers", "Triggers", Kind.GameDataSection, "Game Data", Parameter: "triggers"),
+        new("view.gdaliases", "Aliases", Kind.GameDataSection, "Game Data", Parameter: "aliases"),
+        new("gamedata.monsters", "Monsters", Kind.GameDataSection, "Game Data", Parameter: "monsters"),
+        new("gamedata.items", "Items", Kind.GameDataSection, "Game Data", Parameter: "items"),
+        new("gamedata.spells", "Spells", Kind.GameDataSection, "Game Data", Parameter: "spells"),
+        new("gamedata.rooms", "Rooms", Kind.GameDataSection, "Game Data", Parameter: "rooms"),
+        new("gamedata.lairs", "Lairs", Kind.GameDataSection, "Game Data", Parameter: "lairs"),
+        new("gamedata.shops", "Shops", Kind.GameDataSection, "Game Data", Parameter: "shops"),
+        new("gamedata.races", "Races", Kind.GameDataSection, "Game Data", Parameter: "races"),
+        new("gamedata.classes", "Classes", Kind.GameDataSection, "Game Data", Parameter: "classes"),
+        new("gamedata.messages", "Messages", Kind.GameDataSection, "Game Data", Parameter: "messages"),
+        new("gamedata.textblocks", "TextBlocks", Kind.GameDataSection, "Game Data", Parameter: "textblocks"),
+        new("gamedata.info", "Info", Kind.GameDataSection, "Game Data", Parameter: "info"),
+        new("gamedata.unobtainable", "Unobtainable", Kind.GameDataSection, "Game Data", Parameter: "unobtainable"),
+        new("gamedata.questflags", "Quest Flags", Kind.GameDataSection, "Game Data", Parameter: "questflags"),
+        new("gamedata.flavorprefixes", "Flavor Prefixes", Kind.GameDataSection, "Game Data", Parameter: "flavor-prefixes"),
     };
 
     // ----- Walk-destination fly-outs (the same GOTO submenus that used to be
@@ -136,7 +185,7 @@ public static class MenuActionCatalogue
     private static readonly Entry[] _all =
         _walk
         .Concat(_file).Concat(_view).Concat(_action).Concat(_tools)
-        .Concat(_tabs).Concat(_calcs)
+        .Concat(_tabs).Concat(_calcs).Concat(_settingsTabs).Concat(_gameData)
         .ToArray();
 
     private static readonly FrozenDictionary<string, Entry> _byId =

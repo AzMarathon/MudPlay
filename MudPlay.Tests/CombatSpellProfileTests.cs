@@ -76,6 +76,30 @@ public sealed class CombatSpellProfileTests
     }
 
     [Fact]
+    public void Roster_ListsCurrentThenStandby()
+    {
+        var p = Named("Fire", "Cold", "Lightning");
+        Assert.Equal("{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}",
+            CombatSpellProfileReport.DescribeRoster(p, 0));
+        Assert.Equal("{Current: 2)Cold, On Standby: 1)Fire, 3)Lightning}",
+            CombatSpellProfileReport.DescribeRoster(p, 1));
+    }
+
+    [Fact]
+    public void Roster_LoneProfile_OmitsStandby()
+    {
+        Assert.Equal("{Current: 1)Fire}",
+            CombatSpellProfileReport.DescribeRoster(Named("Fire"), 0));
+    }
+
+    [Fact]
+    public void Roster_UnnamedShowsPlaceholder()
+    {
+        Assert.Equal("{Current: 1)unnamed, On Standby: 2)Cold}",
+            CombatSpellProfileReport.DescribeRoster(Named("", "Cold"), 0));
+    }
+
+    [Fact]
     public void DescribeConfig_ShowsAllSlots_Gates_AndKnobs()
     {
         var p = new CombatSpellProfile { Name = "Fire", DrainHpTrigger = 40, DrainsOverrideAoe = true };

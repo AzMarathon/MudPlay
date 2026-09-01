@@ -112,15 +112,52 @@ public sealed class ManaRegenRerollerTests
     }
 
     [Fact]
-    public void StopsWhenTheNextCastWouldBreachTheManaFloor()
+    public void PausesAtManaFloorInsteadOfGivingUp()
+    {
+        Harness h = new() { CanAfford = false };   // threshold 5, cap 3
+
+        h.Reroller.OnRollSpellLanded("ntap");
+        h.FeedRoll(1);                   // below threshold but can't pay to reroll now
+
+        Assert.Empty(h.Recasts);                   // didn't recast — out of mana
+        Assert.True(h.Reroller.CycleActive);       // cycle SUSPENDED, not ended
+        Assert.True(h.Reroller.WaitingForMana);
+        Assert.Equal(0, h.Reroller.RerollsUsed);   // the floored attempt wasn't spent
+    }
+
+    [Fact]
+    public void ResumesRerollingOnceManaRecovers()
     {
         Harness h = new() { CanAfford = false };
 
         h.Reroller.OnRollSpellLanded("ntap");
-        h.FeedRoll(1);                   // below threshold but can't pay to reroll
+        h.FeedRoll(1);                   // paused at the floor
+        Assert.True(h.Reroller.WaitingForMana);
 
+        h.Reroller.OnRecoveryTick();     // still can't afford — stays paused
         Assert.Empty(h.Recasts);
-        Assert.False(h.Reroller.CycleActive);
+        Assert.True(h.Reroller.WaitingForMana);
+
+        h.CanAfford = true;              // meditation refilled the pool
+        h.Reroller.OnRecoveryTick();     // now it resumes the next reroll
+
+        Assert.Equal(new[] { "ntap" }, h.Recasts);
+        Assert.Equal(1, h.Reroller.RerollsUsed);
+        Assert.False(h.Reroller.WaitingForMana);
+        Assert.True(h.Reroller.CycleActive);
+    }
+
+    [Fact]
+    public void RecoveryTickNoOpsWhenNotWaitingForMana()
+    {
+        Harness h = new();
+
+        h.Reroller.OnRecoveryTick();                 // idle cycle
+        Assert.Empty(h.Recasts);
+
+        h.Reroller.OnRollSpellLanded("ntap");        // awaiting abil, not mana
+        h.Reroller.OnRecoveryTick();
+        Assert.Empty(h.Recasts);
     }
 
     [Fact]

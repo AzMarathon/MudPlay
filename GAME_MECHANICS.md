@@ -94,6 +94,7 @@ it isn't here and you're unsure, ask.
 - The **finger** and **wrist** families each hold **two** physical pieces (Finger1/Finger2,
   Wrist1/Wrist2), so long as the two are distinct names. Every other slot holds one.
 - **Eviction order when both slots are full** *([CONFIRMED] 2026-08-27, user — report `paradigm-20260827-082305`)*: with both paired slots occupied (e.g. bracelet1 + bracelet2), the **first** `wear` of a new piece evicts the **first-worn** member (the one listed first in `i`), and a **second** `wear` then evicts the **most-recently-worn** piece (the one you just put on). So to swap BOTH members (1,2 → 3,4) you can't just wear both — the second wear would knock off the third you just equipped. The minimal sequence is `wear 3` (evicts 1), `rem 2`, `wear 4` — **one** `rem`, not two. The client's swap builder (`EquipmentManager.ComposePairedSlotCommands`) emits exactly that for a both-members paired swap. Note the client only sees both worn pieces as `(Wrist)` / `(Finger)` in `i`, so it relies on `i`-list order to pick which one to `rem`.
+- **Slot-1 swaps ride the wear; only slot-2 swaps need a `rem`** *([CONFIRMED] 2026-09-01, user — report `paradigm-20260901-130100`, with in-game example)*: the `i`-list order **is** physical slot order — first-listed = slot 1, second-listed = slot 2. Because `wear`/`eq` into a full family auto-evicts the **slot-1** (first-listed) member, swapping slot 1 needs **only** the wear (e.g. worn `ring-A`(slot1)+`ring-B`(slot2), set wants `ring-C`(slot1)+`ring-B`(slot2) → just `eq ring-C`; the game evicts ring-A and keeps ring-B). Swapping **slot 2** while keeping slot 1 needs the `rem` first (`rem ring-B`, `eq ring-D`), else the wear would evict the slot-1 ring the set keeps. User's example: worn white gold(1)+adamantite(2) → `eq silver` (evicts white gold, no rem), then `rem ada`, `eq amethyst`. The old builder emitted a redundant `rem` for slot-1 swaps too.
 
 **Other**
 - **[CONFIRMED]** A weapon equip / swap prints a **single** line — `You are now holding <new>.`.
@@ -484,6 +485,14 @@ it isn't here and you're unsure, ask.
   when nothing higher-priority is queued does the debuff pre-empt the attack. *(2026-08-25, report
   `paradigm-20260825-103417`: an AoE debuff went out but the multi-attack spell followed a full round
   later — the attack had been deferred to the debuff's `*Combat Off*`; corrected to fire same-round.)*
+  - **A between-round debuff DOES collide with ANOTHER between-round cast that same round** *(2026-09-01,
+    reports `paradigm-20260901-123720` / `-140747`)*: the one-between-round-cast slot is shared, so if an
+    auto-buff (e.g. a mana-flux recast) or the user's OWN manual cast already spent the round's cast, the
+    debuff draws `You have already cast a spell this round!`. The debuff is sent optimistically (the client
+    marks the mob debuffed on wire-write, before the server answers), so the rejection has to un-mark it —
+    the client now recognizes the rejection and re-fires the debuff next round instead of leaving the mob
+    falsely marked debuffed (and the monster un-debuffed). The combat ATTACK that round self-corrects on
+    its own owed-and-retry path; only the debuff mark needed the rollback.
 - **[CONFIRMED]** *(2026-08-05, user)* **`MaxCasts` counts combat ROUNDS, not individual casts.** It is
   the maximum number of rounds the client will spend casting this spell at a target — one round counts
   as one regardless of how many times the spell fires that round (e.g. a spell that casts twice per
@@ -688,6 +697,38 @@ guardsman (#757). This is a **partial** list — other mobs aggro the evil-title
 `Align ∈ {1,2,5}` (always), or `Align == 6` and our title is Lawful / Good / Neutral, or the monster
 is a **guard** (casts `jail` 583, per above) **and** our title is Outlaw-or-worse. Our own title
 comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
+
+## Monster target selection — who it swings at once fighting
+
+Distinct from *whether* a monster opens on you (above): once a monster is in a fight it
+picks **one target per beat**, and the two realms use different engines. Surfaced in the
+**Monster Aggro** calculator (Workshop → Calculators), which shows the loaded set's model.
+
+**Stock** *([CONFIRMED] — stock DLL source, user-provided)*
+A stock monster attacks a single **locked target** at a time (not everyone it has aggroed).
+Each beat:
+1. **Locked target present** → hit it again (the lock clears if that player left / died).
+2. **No lock → spread pick** among the aggroed players in room / terminal order: each rolls
+   `genrdn(0,100) < 50 − 5 × (hits they're already taking this beat)`; **first to pass** is
+   hit; if none pass, the **last eligible** player is hit (fallback). The mob drifts toward
+   whoever *isn't* already piled on — a player taking ≥10 hits this beat hits a 0% threshold
+   and is skipped by fresh rolls.
+3. **After swinging it rolls `genrdn(1,100) < Follow%`** (Monsters `Follow%`): pass →
+   **lock** onto the just-hit player; fail on an **aggressive** align (∉ {0,3,4}) → **clear**
+   the lock and re-spread next beat; fail on a **passive** align ({0,3,4}) → **keep** the lock.
+   The mirror roll when a *player* hits the mob re-points the lock to that attacker — the
+   "attack last" behaviour. Follow% is the stickiness dial. Special types: summoned (type
+   `0x25`) never manage a lock this way; a type-5 monster only acquires a lock when currently
+   untargeted. Carve-out: an evil NPC won't spread onto a fellow-evil player (`EvilPoints > 39`).
+
+**Paradigm** *([CONFIRMED] — user writeup, Paradigm only)*
+Paradigm rewrote target selection into a **weighted lottery** with no locked-target mechanic.
+Each player scores from a base **150**: `+ (10 − Charm/5)` (higher Charm lowers the score),
+`+` party position (frontrank 60 / midrank 30 / backrank 0; **solo = frontrank 60**), `+`
+recent aggro (last hitter **+30 × players-in-fight**, everyone else **−5 × players-in-fight**),
+**floored at 50**. The monster rolls a weighted lottery over the summed scores — bigger score
+= bigger slice, never a guarantee, never impossible. **Charm and party position have no effect
+on stock target selection** — they are Paradigm-only.
 
 **Monster-kill message order** *([CONFIRMED] 2026-07-23, bug-report captures)*
 - A kill prints in a fixed order: the monster's **death line** (e.g. `The toad croaks in agony, and
@@ -941,7 +982,7 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 
 Only **roll spells** (nature tap / mana flux / `prfl`, and kin — code-145 with stored value 0) are candidates for rerolling: a bad roll drags `ManaRgn%` down, so re-cast to chase a better one. **`CHSU` (chaos surge) is NEVER rerolled** — it's a *constant* mana heal-over-time (the mana analogue of HP regen), not a rolled `ManaRgn%` modifier; maintain it like a normal buff. A fixed (non-zero) code-145 spell isn't rerolled either. (`RegenSpellClassifier` already splits roll / fixed / HoT.)
 
-Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again.
+Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again. **Running out of mana mid-cycle PAUSES, it does not surrender** *(2026-09-01, report `paradigm-20260901-114223`: the reroller quit at 3/20 when a recast would breach the mana floor, stranding the spell at a bad roll)*: each recast costs mana, so if the next one would drop under the buff mana floor the cycle SUSPENDS with its reroll counter intact and resumes the next attempt once meditation lifts mana back over the floor — so it spends its full reroll budget across rest instead of abandoning a bad roll at the floor.
 
 **How the roll is read differs by realm:**
 - **Paradigm** — send **`abil 145`**. The output is three lines for `ManaRegen(145)`:

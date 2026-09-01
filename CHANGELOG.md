@@ -1,12 +1,51 @@
 # Version history
 
-## 3.43.4
+## 3.44.4
 
-- Recognized the `convulsions` condition's own fumble line (`You convulse violently!`) as a movement refusal — a move sent while convulsing now reverts instantly instead of leaving a stale pending move that could poison recovery and strand a tier-3 backtrack indefinitely awaiting a landing that would never arrive
-- Fixed a loop-runner reentrancy bug: the walker's own arrival-confirm could hand off into the loop's next step before that same room-tracker event finished reaching the loop runner's own handler, which then misread the walker's already-consumed arrival as a bad landing of the step it had just sent and wrongly triggered a recovery cascade
+- Confusion fumbles no longer strand the walker: **both** fumble lines — the generic `You fumble in confusion!` and `convulsions`' own `You convulse violently!` — now revert a move sent while confused instead of leaving a stale pending move that could poison recovery and strand a tier-3 backtrack indefinitely awaiting a landing that would never arrive
+- Fixed a loop-runner reentrancy bug: the walker's own arrival-confirm could hand off into the loop's next step before that same room-tracker event finished reaching the loop runner's handler, which then misread the walker's already-consumed arrival as a bad landing and wrongly triggered a recovery cascade
 - Fixed the walker resending a just-refused move on every pause/resume cycle with no retry cap — a move refused while paused now forces a re-plan instead of blindly retrying the same doomed direction forever
 - Loop / walker recovery now leans on Paradigm's authoritative `rm` before trusting a "blocked at source" or mid-step-desync belief and rerouting from it — a name-ambiguous zone (many identically-named rooms) can leave that belief pointing at the wrong physical room, and `rm` corrects it instead of rerouting from the same wrong room until the retry budget burns out
 - bug reports addressed: paradigm-20260901-080223, paradigm-20260901-090044, paradigm-20260901-091527, paradigm-20260901-100523
+
+## 3.44.0
+
+- New **Monster Aggro** calculator (Workshop → Calculators): predicts which party member a monster attacks, for up to 6 members; shows the **Paradigm** or **Stock** model automatically from the loaded game-data set's realm
+- Paradigm: each member's score (150 base + Charm + party position + last-hitter) and their share of the monster's weighted target lottery
+- Stock: type a monster **record number** to auto-fill Align / Follow% / guard, then see who it opens on (by alignment), each aggroed member's per-beat **target %** (the 50−5×hits spread), and the Follow% stickiness
+- Openable from the terminal right-click menu or a toolbar button like any other calculator
+
+## 3.43.10
+
+- Mana-regen reroll (flux / nature tap): running out of mana mid-cycle now **pauses and resumes** after you meditate back up, spending the full reroll budget instead of quitting early at the mana floor
+- Combat: a pre-attack debuff the server rejects with "You have already cast a spell this round!" (it collided with a buff recast or your own manual cast) now re-fires next round instead of leaving the monster falsely marked debuffed
+- bug reports addressed: paradigm-20260901-114223, paradigm-20260901-123720, paradigm-20260901-140747
+
+## 3.43.7
+
+- Equipment sets: swapping the **first** ring/bracelet slot now sends only the `wear` (the game auto-evicts what's on slot 1) instead of a redundant `rem` + `wear`; only the **second** slot still rems first
+- bug reports addressed: paradigm-20260901-130100
+
+## 3.43.6
+
+- Buff Watchdog targeting: when **solo**, the row shows only the **Self** box (the per-member + All columns are hidden); in a party it shows Self, a box per member, then the **All/None** master (renamed from "All")
+- The **All/None** master is now **independent of Self** — unchecking it no longer unchecks Self (the reported bug); it selects/clears the party members only
+- A member who **joins** is auto-blessed only when **All/None** is checked; with it off, only the members you explicitly ticked are targeted
+- bug reports addressed: paradigm-20260901-103538
+
+## 3.43.5
+
+- Monster record: a summoner's **Between Rounds** summon spell now links to that spell's record, and each entry in the **Summons** list links to the summoned monster's record
+
+## 3.43.4
+
+- Terminal right-click menu: add direct links to any **Settings tab** — opens Settings straight to General / Combat / Health / Party / Statline / Auto-Lair / … instead of its last tab
+- Terminal right-click menu: add direct links to the rest of the **Game Data** tables (Monsters / Items / Spells / Rooms / Shops / Classes / Races / Messages / …), not just Players / Macros / Triggers / Aliases
+
+## 3.43.2
+
+- Fixed the **`@profile`** remote command crashing the receiving client — the swap's terminal echo re-entered the emulator mid-parse; it's now deferred like the other in-pump notices
+- `@profile` with **no argument** now reports the roster — the active profile plus the others on standby (e.g. `{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}`) — instead of just the active profile's spells
 
 ## 3.43.0
 
