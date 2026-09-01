@@ -1,37 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.42.6**
-> - Clicking a monster's **lair** (or a room chip) in its Game Data record — and double-clicking a **Rooms**-tab row — now opens the map on that room and selects it, showing its details in **Room info**, instead of a separate popup
-> - **Room info** now shows the room's **illumination** (`Room Illu: <value> - <phrase>`) under the map/room number, and its **obvious exits** (click one to re-root the map on that neighbour)
-> - Room info's illumination gained a **`Your Illu:`** line — shown when you carry light (worn +illu gear, readied light, or a Buff Watchdog light spell), folding your light into the room's; the visibility phrase (or **"You can see."** once fully lit) sits on the line that matches your real visibility
-> - Clicking a **shop room's name** in Room info opens its shop stock popup, not the bare Rooms record
-> - Blacklisting a room **from the map** now keeps it drawn (still selected) until you click a **different** room, so you can confirm you hid the right one before it disappears
-> - The shop/room detail popup drops its blacklist buttons (blacklisting lives on the map's right-click menu)
->
-> **Version 3.42.1**
-> - Fixed Monster Intel's **AC being inflated** — it added your configured buffs on top of the live `stat` Armour Class, which already includes any active buffs, double-counting them (a 57-AC character read as 79). It now uses the same worn-gear + buffs basis as the Equipment Manager's Projected AC, so the two agree
->
-> **Version 3.42.0**
-> - The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts): arrange the whole menu — the Favorites / Recent walk fly-outs, menu commands, direct links to a Player Workshop tab, or a calculator that opens **expanded and centered** — and build your own **fly-out folders**
-> - **Rename** any entry or folder while an entry still links to the same action; reorder, add separators, Reset to the built-in menu
-> - **Import** a menu from another character or a shared `.json` file, and **Export** yours to share with friends; saved per character
->
-> **Version 3.41.0**
-> - Monster Intel gains a **defense simulator**: AC is now editable (seeded to your worn gear + buffs), with a Shadow AC checkbox, a Prot Evil field, and a raw Vile Ward field + alignment picker (0% / 50% / 100%) — edit any of them and every monster's Hits You % recomputes live
-> - Monster Intel adds an **AC vs Selected Target** readout (effective AC vs the selected monster's alignment) and a **Hide regen timers** checkbox (drop timed/boss respawns)
-> - Fixed Monster Intel's **EXP** undercounting multiplier monsters (read raw base EXP, ignored ExpMulti — an aged earth dragon read 65,000 instead of 2,600,000)
-> - Monster Intel's rounds-to-kill cap now **filters** monsters over it out of the list (was: showing "&lt;cap&gt;+")
-> - Fixed swings per round being over-counted for every character — the energy formula added a phantom `level × 2` to the divisor (used `CombatLVL + 2` where the game uses `CombatLVL`), inflating every swings/DPS/rounds figure app-wide; a Paladin's bash read 4.5 where the game shows 3.572. Matched to MMUD-Explorer and confirmed against the live game
-> - Fixed physical swings per round capping at 5 on Paradigm (should be 6); verified the full swing/energy math against the MMUD-Explorer reference
-> - Fixed a loop wedging forever when a move's confirmation got swallowed by an unrelated line — the stall watchdog is now armed on every move sent
-> - Fixed a self-buff spamming a reject/retry loop out of combat (the cast-blocked latch now clears on the correct ~5.5s cadence, not a too-short 3s)
-> - Monster Intel **Edit Attacks** picker: choose which of your attacks (every usable melee type + your attack spells) show in Your Matchup, and which one drives the Est. Rounds to Kill column
-> - Your Matchup now lists your melee attacks (rounds/hit%/dmg vs the monster) alongside the ranked spells
-> - Monster Intel top bar shows plain **AC** (worn gear + configured buffs + Shadow) instead of "AC vs Evil" — evil-only wards no longer inflate it against neutral/good monsters
-> - Editing the rounds-to-kill cap now re-applies to the list immediately; the cap spinner moved inline to the right of the Hits-You-% checkboxes; filter box no longer resizes as the count changes
-> - Removed the in-window Close button (the title-bar X closes it); double-click a monster row to open its full Game Data record
-> - Hit Calculator: removed the redundant "Hits me %" picker and "Show me the Monsters" button
+> **Version 3.43.0**
+> - New **casting spell profiles** (Settings → Combat): save and quick-swap named sets of the spell-combat slots (the six spell rows + their gates + mana mode + drain trigger); non-spell combat settings stay shared
+> - Numbered profile **chips** (active one gold) + a **name box** + ＋/✕; the profile editor is fully **staged** — switch, add, remove, and edit boxes freely and nothing applies until **Save/OK** (**Cancel** discards). Once applied, the active profile goes live next combat round
+> - Swap from the **Action → Combat Profiles** fly-out, or the new **`@profile <number|name>`** remote command (best-match names, gated by the Alter-settings permission)
+> - Two optional **toolbar buttons**: a **cycle** button showing `P#` (left-click next, right-click previous) and a **menu** button with a fly-out picker
+> - Every swap reports the live profile + its slots **by cast code** to the terminal (and to the requester, for `@profile`)
+> - Combat profiles are captured in the **bug report** (count, active, every profile's full config) and the **program log** (switch + combat-engage lines) so a "wrong spells" report shows which profile fought and how it was set up
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

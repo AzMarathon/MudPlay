@@ -1,6 +1,8 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Views.Settings;
@@ -351,6 +353,120 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     [ObservableProperty] private bool _showCombatRoundTotals;
 
+    // ----- Casting spell profiles (staged quick-swap chip bar) ------
+
+    private Game.Combat.CombatProfileManager ProfilesMgr => AppServices.Current.CombatProfiles;
+
+    // The STAGED working copy of the profile list + which one is active. Every chip
+    // switch, add / remove, name + box edit happens here in memory — nothing is
+    // written to the character profile or used live until Apply / OK. Cancel
+    // (Discard) throws the working copy away and reloads the persisted one.
+    private List<CombatSpellProfile> _workingProfiles = new();
+    private int _workingActive;
+
+    // One numbered chip per working profile; the active one is highlighted gold.
+    // Clicking a chip STAGES a switch (folds the boxes into the outgoing profile,
+    // loads the selected one into the boxes) — no persistence.
+    public ObservableCollection<ViewModels.CombatProfileMenuItem> ProfileChips { get; } = new();
+
+    // The active profile's name — the textbox below the chips. Staged like the rest.
+    [ObservableProperty] private string _activeProfileName = string.Empty;
+
+    partial void OnActiveProfileNameChanged(string value) => MarkDirty();
+
+    // (Re)build the working copy from the persisted profiles — on load, on a
+    // character swap, after Apply, and on Discard. The boxes are loaded separately
+    // (LoadFromProfile) and mirror the persisted active profile's spells.
+    private void InitWorkingCopyFromPersisted()
+    {
+        _workingProfiles = ProfilesMgr.Profiles.Select(p => p.Clone(newIdentity: false)).ToList();
+        if (_workingProfiles.Count == 0)
+            _workingProfiles.Add(CombatSpellProfile.Capture(string.Empty, BuildDto()));
+        int active = ProfilesMgr.ActiveIndex;
+        _workingActive = Math.Clamp(active < 0 ? 0 : active, 0, _workingProfiles.Count - 1);
+        ActiveProfileName = _workingProfiles[_workingActive].Name;
+        RebuildProfileChips();
+    }
+
+    private void RebuildProfileChips()
+    {
+        ProfileChips.Clear();
+        for (int i = 0; i < _workingProfiles.Count; i++)
+        {
+            int index = i;
+            ProfileChips.Add(new ViewModels.CombatProfileMenuItem(
+                number: i + 1, name: _workingProfiles[i].Name, isActive: i == _workingActive,
+                switchCommand: new RelayCommand(() => SwitchChip(index))));
+        }
+    }
+
+    // Fold the current boxes + name into the active working profile (keeping its
+    // Id) — done before switching away, adding, removing, or applying.
+    private void CaptureBoxesToWorking()
+    {
+        if (_workingActive < 0 || _workingActive >= _workingProfiles.Count) return;
+        string id = _workingProfiles[_workingActive].Id;
+        CombatSpellProfile snap = CombatSpellProfile.Capture(ActiveProfileName, BuildDto());
+        snap.Id = id;
+        _workingProfiles[_workingActive] = snap;
+    }
+
+    // Load a profile's spell fields into the boxes, leaving the current non-spell
+    // fields alone (a profile only carries the spell config).
+    private void LoadSpellSlotBoxesFrom(CombatSpellProfile p)
+    {
+        CombatSettings scratch = BuildDto();
+        p.ApplyTo(scratch);
+        _suppressDirty = true;
+        LoadBoxesFrom(scratch);
+        _suppressDirty = false;
+    }
+
+    private void SwitchChip(int index)
+    {
+        if (index < 0 || index >= _workingProfiles.Count || index == _workingActive) return;
+        CaptureBoxesToWorking();
+        _workingActive = index;
+        LoadSpellSlotBoxesFrom(_workingProfiles[index]);
+        _suppressDirty = true;
+        ActiveProfileName = _workingProfiles[index].Name;
+        _suppressDirty = false;
+        RebuildProfileChips();
+        MarkDirty();
+    }
+
+    // Stage a new EMPTY profile and switch to it (its blank spells clear the boxes,
+    // ready to configure). Nothing persists until Apply.
+    [RelayCommand]
+    private void AddProfile()
+    {
+        CaptureBoxesToWorking();
+        CombatSpellProfile np = new();
+        _workingProfiles.Add(np);
+        _workingActive = _workingProfiles.Count - 1;
+        LoadSpellSlotBoxesFrom(np);
+        _suppressDirty = true;
+        ActiveProfileName = string.Empty;
+        _suppressDirty = false;
+        RebuildProfileChips();
+        MarkDirty();
+    }
+
+    // Stage removal of the active profile (kept ≥1); switch to a neighbour.
+    [RelayCommand]
+    private void RemoveActiveProfile()
+    {
+        if (_workingProfiles.Count <= 1) return;
+        _workingProfiles.RemoveAt(_workingActive);
+        if (_workingActive >= _workingProfiles.Count) _workingActive = _workingProfiles.Count - 1;
+        LoadSpellSlotBoxesFrom(_workingProfiles[_workingActive]);
+        _suppressDirty = true;
+        ActiveProfileName = _workingProfiles[_workingActive].Name;
+        _suppressDirty = false;
+        RebuildProfileChips();
+        MarkDirty();
+    }
+
     public CombatSectionViewModel()
         : this(AppServices.Current.Profile) { }
 
@@ -373,15 +489,14 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         });
         _suppressDirty = true;
         LoadFromProfile();
+        InitWorkingCopyFromPersisted();
         _suppressDirty = false;
     }
 
-    public override void Apply()
+    // Build the full CombatSettings DTO from the current boxes (spell + non-spell).
+    // Shared by Apply and the staged profile-switch capture.
+    private CombatSettings BuildDto() => new()
     {
-        if (_profile.Current is not { } profile) return;
-
-        CombatSettings dto = new()
-        {
             NormalAttackCommand        = NormalAttackCommand ?? "a",
             AlternateAttackCommand     = AlternateAttackCommand ?? "a",
 
@@ -466,19 +581,37 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             DrainsOverrideAoe = DrainsOverrideAoe,
 
             ShowCombatRoundTotals = ShowCombatRoundTotals,
-        };
+    };
+
+    // Commit the staged edits. Fold the current boxes + name into the active
+    // WORKING profile, then persist the whole staged profile list + the active
+    // profile's spells to the character profile. Until this runs, every chip
+    // switch / add / remove / box edit was in-memory only; Cancel throws them away.
+    public override void Apply()
+    {
+        if (_profile.Current is not { } profile) return;
+        CaptureBoxesToWorking();
+        CombatSettings dto = BuildDto();
 
         profile.Settings ??= new();
         profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.CombatProfiles = new CombatProfileSettings
+        {
+            Profiles = _workingProfiles.Select(p => p.Clone(newIdentity: false)).ToList(),
+            ActiveId = _workingProfiles[_workingActive].Id,
+        };
         _profile.Save();
 
         ClearDirty();
+        ProfilesMgr.RaiseChanged();       // refresh Action-menu / toolbar from the committed state
+        InitWorkingCopyFromPersisted();   // re-baseline the working copy to what we just saved
     }
 
     public override void Discard()
     {
         _suppressDirty = true;
         LoadFromProfile();
+        InitWorkingCopyFromPersisted();
         _suppressDirty = false;
         ClearDirty();
     }
@@ -520,15 +653,19 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     {
         _suppressDirty = true;
         LoadFromProfile();
+        InitWorkingCopyFromPersisted();
         _suppressDirty = false;
         ClearDirty();
         OnPropertyChanged(nameof(HasProfile));
     }
 
-    private void LoadFromProfile()
-    {
-        CombatSettings dto = ReadOrDefault();
+    private void LoadFromProfile() => LoadBoxesFrom(ReadOrDefault());
 
+    // Set every box from a CombatSettings (spell + non-spell). Used to load the
+    // persisted settings and to reload the boxes when a staged profile switch
+    // swaps in another profile's spells.
+    private void LoadBoxesFrom(CombatSettings dto)
+    {
         NormalAttackCommand     = dto.NormalAttackCommand ?? "a";
         AlternateAttackCommand  = dto.AlternateAttackCommand ?? "a";
 

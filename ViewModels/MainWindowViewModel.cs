@@ -761,6 +761,14 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildRecentDestinationsMenu();
         AppServices.Current.GotoHistory.Changed += RebuildRecentDestinationsMenu;
 
+        // Casting spell profiles (Settings → Combat): the Action → Profiles fly-out
+        // and the toolbar profile-menu button share one item list, rebuilt on any
+        // profile change; every swap echoes its report to the terminal.
+        AppServices.Current.CombatProfiles.Announce =
+            report => WriteTerminalStatus($"[{report}]", TerminalStatusKind.Notice);
+        RebuildCombatProfilesMenu();
+        AppServices.Current.CombatProfiles.Changed += RebuildCombatProfilesMenu;
+
         // Apply the loaded profile's persisted scrollback size now — the
         // buffer was constructed with the default; AppServices already
         // populated DisplayConfig from the profile by the time we got here.
@@ -1296,6 +1304,11 @@ public partial class MainWindowViewModel : ObservableObject
         PropertyChanged += SyncToolbarStateFlags;
     }
 
+    // Enabler for view-handled toolbar buttons (no CommandName) — a command-less
+    // Button renders disabled, so these carry an always-executable no-op while
+    // their real action runs in MainWindow's Click / PointerReleased handlers.
+    private static readonly ICommand ToolbarNoOpCommand = new RelayCommand(() => { });
+
     // Walks ToolbarConfig.Layout and rebuilds ToolbarItems. Each Button
     // row is resolved through ToolbarItemCatalogue; the command property
     // is fetched by reflection from the catalogue's CommandName so adding
@@ -1320,7 +1333,13 @@ public partial class MainWindowViewModel : ObservableObject
             ToolbarItemCatalogue.Entry? entry = ToolbarItemCatalogue.Find(item.ActionId);
             if (entry is null) continue;
 
-            ICommand? command = GetType().GetProperty(entry.CommandName)?.GetValue(this) as ICommand;
+            // A catalogue entry with no CommandName is a VIEW-handled button — its
+            // action lives in MainWindow's Click / PointerReleased handlers (the
+            // Combat-Profile menu fly-out). Give it an always-executable no-op so
+            // Avalonia doesn't render the command-less button as disabled.
+            ICommand? command = string.IsNullOrEmpty(entry.CommandName)
+                ? ToolbarNoOpCommand
+                : GetType().GetProperty(entry.CommandName)?.GetValue(this) as ICommand;
 
             // Live shortcut hint: if the action id parses as a BuiltInAction,
             // pull the current binding from KeybindingStore so a user rebind
@@ -1372,6 +1391,7 @@ public partial class MainWindowViewModel : ObservableObject
          && e.PropertyName != nameof(IsAutoSearchActive)
          && e.PropertyName != nameof(IsDisableHangupsActive)
          && e.PropertyName != nameof(IsSprintModeActive)
+         && e.PropertyName != nameof(CombatProfileCycleLabel)
          && e.PropertyName != nameof(IsAllAutoOff)) return;
 
         foreach (ToolbarButtonItem row in ToolbarItems)
@@ -1384,6 +1404,10 @@ public partial class MainWindowViewModel : ObservableObject
     {
         switch (row.ActionId)
         {
+            // Cycle button shows the active profile number ("P1") as its label.
+            case "CycleCombatProfile":
+                row.BadgeText = CombatProfileCycleLabel;
+                break;
             case "ToggleConnection":
                 row.IsActive = IsConnecting;
                 row.IsDanger = IsConnected;
@@ -3950,6 +3974,50 @@ public partial class MainWindowViewModel : ObservableObject
                 switchCommand: new RelayCommand(() => SwitchActiveGameDataSet(set))));
         }
     }
+
+    // ----- Casting spell profiles (Settings → Combat quick-swap) -----
+
+    // Shared item list for the Action → Profiles fly-out and the toolbar's
+    // profile-menu button — one "N) name" row per configured profile, the active
+    // one checked. Rebuilt on any CombatProfileManager.Changed.
+    public ObservableCollection<CombatProfileMenuItem> CombatProfileItems { get; } = new();
+
+    // Drives the Profiles menu / flyout visibility (always ≥1 once a profile is
+    // loaded).
+    [ObservableProperty] private bool _hasCombatProfiles;
+
+    // The toolbar cycle button's label — "P<active#>". ApplyToolbarRowState copies
+    // it onto the CycleCombatProfile row's badge; SyncToolbarStateFlags re-runs it.
+    [ObservableProperty] private string _combatProfileCycleLabel = "P1";
+
+    private void RebuildCombatProfilesMenu()
+    {
+        Game.Combat.CombatProfileManager mgr = AppServices.Current.CombatProfiles;
+        CombatProfileItems.Clear();
+        IReadOnlyList<Models.Profile.CombatSpellProfile> profiles = mgr.Profiles;
+        int active = mgr.ActiveIndex;
+        for (int i = 0; i < profiles.Count; i++)
+        {
+            int index = i;
+            CombatProfileItems.Add(new CombatProfileMenuItem(
+                number: i + 1,
+                name: profiles[i].Name,
+                isActive: i == active,
+                switchCommand: new RelayCommand(() => AppServices.Current.CombatProfiles.SwitchToIndex(index))));
+        }
+        HasCombatProfiles = profiles.Count > 0;
+        CombatProfileCycleLabel = "P" + (active >= 0 ? active + 1 : 1);
+    }
+
+    // Toolbar cycle button — left-click advances to the next profile (wraps). A
+    // live quick-swap of the saved profiles (independent of the staged Settings
+    // editor).
+    [RelayCommand]
+    private void CycleCombatProfile() => AppServices.Current.CombatProfiles.Cycle();
+
+    // Right-click twin of the cycle button (invoked from the toolbar code-behind) —
+    // steps back to the previous profile (wraps).
+    public void CycleCombatProfileBack() => AppServices.Current.CombatProfiles.CycleBack();
 
     // The terminal right-click Favorites flyout — always MaxStarred numbered
     // slots when any favourite is starred: filled slots first, then "(empty)"

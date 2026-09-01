@@ -163,6 +163,14 @@
                           ToolTip.Tip="Clear my own stuck ailments, waits, and movement holds — return to idle"/>
                 <Separator/>
 
+                <!-- Casting spell profiles: a fly-out of every configured combat-spell
+                     profile ("N) name"), the active one checked. Populated in
+                     code-behind from CombatProfileItems (a bound ItemsSource can't
+                     coexist with future static items), rebuilt on any change. -->
+                <MenuItem x:Name="ProfilesMenu" Header="Combat Profiles"
+                          ToolTip.Tip="Switch the active casting spell profile"/>
+                <Separator/>
+
                 <!-- Bulk one-shot commands. Local twins of the @get-all /
                      @drop-all / @deposit-all remote commands and the Default
                      gear set; the toolbar Get/Drop/Equip/Deposit buttons drive
@@ -273,18 +281,26 @@
                                         Classes.Danger="{Binding IsDanger}"
                                         IsVisible="{Binding IsButton}" IsEnabled="{Binding IsActionEnabled}"
                                         Command="{Binding Command}"
-                                        ToolTip.Tip="{Binding Tooltip}">
+                                        ToolTip.Tip="{Binding Tooltip}"
+                                        Click="OnToolbarButtonClick"
+                                        PointerReleased="OnToolbarButtonPointerReleased">
                                     <Panel>
-                                        <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
-                                              IsVisible="{Binding !ShowAlternate}"
-                                              Stroke="{Binding $parent[Button].Foreground}"
-                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
-                                              Width="16" Height="16" Stretch="Uniform"/>
-                                        <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
-                                              IsVisible="{Binding ShowAlternate}"
-                                              Stroke="{Binding $parent[Button].Foreground}"
-                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
-                                              Width="16" Height="16" Stretch="Uniform"/>
+                                        <TextBlock Text="{Binding BadgeText}" IsVisible="{Binding HasBadgeText}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{Binding $parent[Button].Foreground}"/>
+                                        <Panel IsVisible="{Binding !HasBadgeText}">
+                                            <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                                  IsVisible="{Binding !ShowAlternate}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                                  Width="16" Height="16" Stretch="Uniform"/>
+                                            <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                                  IsVisible="{Binding ShowAlternate}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                                  Width="16" Height="16" Stretch="Uniform"/>
+                                        </Panel>
                                     </Panel>
                                 </Button>
                             </Panel>
@@ -314,18 +330,26 @@
                                     Classes.Danger="{Binding IsDanger}"
                                     IsVisible="{Binding IsButton}" IsEnabled="{Binding IsActionEnabled}"
                                     Command="{Binding Command}"
-                                    ToolTip.Tip="{Binding Tooltip}">
+                                    ToolTip.Tip="{Binding Tooltip}"
+                                    Click="OnToolbarButtonClick"
+                                    PointerReleased="OnToolbarButtonPointerReleased">
                                 <Panel>
-                                    <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
-                                          IsVisible="{Binding !ShowAlternate}"
-                                          Stroke="{Binding $parent[Button].Foreground}"
-                                          StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
-                                          Width="16" Height="16" Stretch="Uniform"/>
-                                    <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
-                                          IsVisible="{Binding ShowAlternate}"
-                                          Stroke="{Binding $parent[Button].Foreground}"
-                                          StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
-                                          Width="16" Height="16" Stretch="Uniform"/>
+                                    <TextBlock Text="{Binding BadgeText}" IsVisible="{Binding HasBadgeText}"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{Binding $parent[Button].Foreground}"/>
+                                    <Panel IsVisible="{Binding !HasBadgeText}">
+                                        <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                              IsVisible="{Binding !ShowAlternate}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                              Width="16" Height="16" Stretch="Uniform"/>
+                                        <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                              IsVisible="{Binding ShowAlternate}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                              Width="16" Height="16" Stretch="Uniform"/>
+                                    </Panel>
                                 </Panel>
                             </Button>
                         </Panel>
@@ -354,18 +378,26 @@
                                     Classes.Danger="{Binding IsDanger}"
                                     IsVisible="{Binding IsButton}" IsEnabled="{Binding IsActionEnabled}"
                                     Command="{Binding Command}"
-                                    ToolTip.Tip="{Binding Tooltip}">
+                                    ToolTip.Tip="{Binding Tooltip}"
+                                    Click="OnToolbarButtonClick"
+                                    PointerReleased="OnToolbarButtonPointerReleased">
                                 <Panel>
-                                    <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
-                                          IsVisible="{Binding !ShowAlternate}"
-                                          Stroke="{Binding $parent[Button].Foreground}"
-                                          StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
-                                          Width="16" Height="16" Stretch="Uniform"/>
-                                    <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
-                                          IsVisible="{Binding ShowAlternate}"
-                                          Stroke="{Binding $parent[Button].Foreground}"
-                                          StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
-                                          Width="16" Height="16" Stretch="Uniform"/>
+                                    <TextBlock Text="{Binding BadgeText}" IsVisible="{Binding HasBadgeText}"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{Binding $parent[Button].Foreground}"/>
+                                    <Panel IsVisible="{Binding !HasBadgeText}">
+                                        <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                              IsVisible="{Binding !ShowAlternate}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                              Width="16" Height="16" Stretch="Uniform"/>
+                                        <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                              IsVisible="{Binding ShowAlternate}"
+                                              Stroke="{Binding $parent[Button].Foreground}"
+                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                              Width="16" Height="16" Stretch="Uniform"/>
+                                    </Panel>
                                 </Panel>
                             </Button>
                         </Panel>
@@ -485,18 +517,26 @@
                                         Classes.Danger="{Binding IsDanger}"
                                         IsVisible="{Binding IsButton}" IsEnabled="{Binding IsActionEnabled}"
                                         Command="{Binding Command}"
-                                        ToolTip.Tip="{Binding Tooltip}">
+                                        ToolTip.Tip="{Binding Tooltip}"
+                                        Click="OnToolbarButtonClick"
+                                        PointerReleased="OnToolbarButtonPointerReleased">
                                     <Panel>
-                                        <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
-                                              IsVisible="{Binding !ShowAlternate}"
-                                              Stroke="{Binding $parent[Button].Foreground}"
-                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
-                                              Width="16" Height="16" Stretch="Uniform"/>
-                                        <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
-                                              IsVisible="{Binding ShowAlternate}"
-                                              Stroke="{Binding $parent[Button].Foreground}"
-                                              StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
-                                              Width="16" Height="16" Stretch="Uniform"/>
+                                        <TextBlock Text="{Binding BadgeText}" IsVisible="{Binding HasBadgeText}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{Binding $parent[Button].Foreground}"/>
+                                        <Panel IsVisible="{Binding !HasBadgeText}">
+                                            <Path Data="{Binding IconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                                  IsVisible="{Binding !ShowAlternate}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                                  Width="16" Height="16" Stretch="Uniform"/>
+                                            <Path Data="{Binding AlternateIconResourceKey, Converter={x:Static svc:IconResourceConverter.Instance}}"
+                                                  IsVisible="{Binding ShowAlternate}"
+                                                  Stroke="{Binding $parent[Button].Foreground}"
+                                                  StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"
+                                                  Width="16" Height="16" Stretch="Uniform"/>
+                                        </Panel>
                                     </Panel>
                                 </Button>
                             </Panel>
