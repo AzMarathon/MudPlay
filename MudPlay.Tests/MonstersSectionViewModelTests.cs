@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using MudPlay.ViewModels.GameData.Edit;
 using MudPlay.ViewModels.GameData.Tables;
@@ -233,7 +234,23 @@ public sealed class MonstersSectionViewModelTests
             Parse(monsterJson),
             // spell 481 -> bandit(#700); 363 -> silvery skull(#239); else nothing
             spellId => spellId switch { 481 => new[] { 700 }, 363 => new[] { 239 }, _ => System.Array.Empty<int>() },
-            num => num switch { 700 => "bandit", 239 => "silvery skull", _ => $"#{num}" });
+            num => num switch { 700 => "bandit", 239 => "silvery skull", _ => $"#{num}" })
+           .Select(s => s.Label).ToList();
+
+    [Fact]
+    public void Outgoing_CarriesSummonedMonsterNumber()
+    {
+        // The number is what the Summons link opens — it must survive alongside the label.
+        List<OutgoingSummon> result = MonsterMdbInfoBuilder.BuildOutgoingSummonLabels(
+            Parse("""{ "CreateSpell": 481 }"""),
+            spellId => spellId == 481 ? new[] { 700 } : System.Array.Empty<int>(),
+            num => num == 700 ? "bandit" : $"#{num}");
+        OutgoingSummon s = Assert.Single(result);
+        Assert.Equal(700, s.MonsterNumber);
+        Assert.Equal("bandit", s.Name);
+        Assert.Equal("on spawn", s.Context);
+        Assert.Equal("bandit (on spawn)", s.Label);
+    }
 
     [Fact]
     public void Outgoing_CreateSpell_IsOnSpawn_NoChance()
