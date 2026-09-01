@@ -37,8 +37,10 @@ public sealed class TerminalControl : Control
             nameof(FontFamily),
             new FontFamily("avares://MudPlay/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16"));
 
+    // Fallback default kept in sync with DisplayConfig.DefaultFontSize; the live
+    // binding from the char-tier setting drives this in practice.
     public static readonly StyledProperty<double> FontSizeProperty =
-        AvaloniaProperty.Register<TerminalControl, double>(nameof(FontSize), 16.0);
+        AvaloniaProperty.Register<TerminalControl, double>(nameof(FontSize), 12.0);
 
     // When true, scale the glyphs up to fill ViewportSize while keeping the
     // fixed cell grid (cols/rows unchanged — a purely visual zoom). Bound from
