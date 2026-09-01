@@ -2972,6 +2972,16 @@ glass jug               5               2 gold crowns
   shriek that wore off left the co-latched `fumble` still holding `Confused`, keeping the nav
   ConfusionGate stuck. **Client encoding:** `ConditionTracker` clears every active `Confused` record when
   a `Confused`-carrying record's wear-off matches.
+- **[CONFIRMED] 2026-09-01, report `paradigm-20260901-080223`: the `convulsions` condition fumbles with
+  its own wording, `You convulse violently!`, distinct from the generic `You fumble in confusion!`.**
+  Same mechanic as above (the just-sent command is consumed and never executes) — only the surfaced text
+  differs, because `convulsions` is its own confusion source with its own onset (`You are in
+  convulsions!`) and fumble line, alongside the shared generic fumble other sources use. Always appears
+  as the direct reply to the command it swallowed, never as unprompted ambient text. A movement command
+  that fumbles this way left the tracker's pending move unreverted, which then got wrongly matched
+  against unrelated text and stranded a tier-3 recovery backtrack indefinitely (no timeout was watching
+  its landing). **Client encoding:** `MovementRefusalDetector` recognizes `You convulse violently!` as a
+  movement refusal, reverting the pending move immediately like any other bonk.
 
 ## One BETWEEN-ROUND spell per combat round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
 

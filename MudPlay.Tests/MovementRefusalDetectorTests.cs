@@ -86,6 +86,9 @@ public sealed class MovementRefusalDetectorTests : IDisposable
     // exit our alignment can't use bonks here; revert cleanly, don't strand.
     [InlineData("Your current alignment prevents you from entering this exit.")]
     [InlineData("Your current alignment prevents you from entering this exit!")]
+    // The `convulsions` condition's own action-fumble line (report -080223) — a
+    // move sent while convulsing bonks here instead of executing.
+    [InlineData("You convulse violently!")]
     public void RefusalLines_RevertPendingToLocated(string line)
     {
         (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
@@ -104,6 +107,20 @@ public sealed class MovementRefusalDetectorTests : IDisposable
         SetupPending(tracker);
 
         detector.FeedTestLine("The goblin growls at you.");
+
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+    }
+
+    // "You are in convulsions!" is the condition's ambient onset/round-tick line,
+    // distinct from "You convulse violently!" (its action-fumble reply) — must
+    // not be mistaken for a refusal, or a genuinely-landed move would revert.
+    [Fact]
+    public void ConvulsionsOnsetLine_DoesNotTrigger()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        SetupPending(tracker);
+
+        detector.FeedTestLine("You are in convulsions!");
 
         Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
     }

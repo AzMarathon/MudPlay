@@ -81,6 +81,7 @@ public sealed partial class MovementRefusalDetector : IDisposable
         TooEncumberedToMove(),
         FlatOnYourBack(),
         AlignmentBlocksExit(),
+        ConvulseViolently(),
     };
 
     [GeneratedRegex(
@@ -154,4 +155,17 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*Your current alignment prevents you from entering this exit[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AlignmentBlocksExit();
+
+    // The `convulsions` condition's own action-fumble line — distinct from the
+    // generic "You fumble in confusion!" other confusion sources use. Same
+    // mechanic (the command is consumed and never executes), different wording,
+    // so a move sent while convulsing bonked here instead of reverting: the
+    // stale pending move then got wrongly matched against the NEXT unrelated
+    // room text (a recovery look-sweep's own peek reply), poisoning tracker
+    // state and eventually stranding a tier-3 backtrack awaiting a landing that
+    // could never arrive (report paradigm-20260901-080223).
+    [GeneratedRegex(
+        @"^\s*You convulse violently[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ConvulseViolently();
 }

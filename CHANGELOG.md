@@ -1,5 +1,10 @@
 # Version history
 
+## 3.43.1
+
+- Recognized the `convulsions` condition's own fumble line (`You convulse violently!`) as a movement refusal — a move sent while convulsing now reverts instantly instead of leaving a stale pending move that could poison recovery and strand a tier-3 backtrack indefinitely awaiting a landing that would never arrive
+- bug reports addressed: paradigm-20260901-080223
+
 ## 3.43.0
 
 - New **casting spell profiles** (Settings → Combat): save and quick-swap named sets of the spell-combat slots (the six spell rows + their gates + mana mode + drain trigger); non-spell combat settings stay shared
