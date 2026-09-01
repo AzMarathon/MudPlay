@@ -1,5 +1,10 @@
 # Version history
 
+## 3.43.7
+
+- Equipment sets: swapping the **first** ring/bracelet slot now sends only the `wear` (the game auto-evicts what's on slot 1) instead of a redundant `rem` + `wear`; only the **second** slot still rems first
+- bug reports addressed: paradigm-20260901-130100
+
 ## 3.43.6
 
 - Buff Watchdog targeting: when **solo**, the row shows only the **Self** box (the per-member + All columns are hidden); in a party it shows Self, a box per member, then the **All/None** master (renamed from "All")
