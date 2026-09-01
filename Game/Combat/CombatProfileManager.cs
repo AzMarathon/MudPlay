@@ -120,57 +120,9 @@ public sealed class CombatProfileManager
         return CombatSpellProfileMatcher.Resolve(s.Profiles, arg) is { } i ? SwitchToIndex(i) : null;
     }
 
-    // Append a new EMPTY profile (does not switch — the active/live spells are
-    // undisturbed until the user selects it). Returns the new profile.
-    public CombatSpellProfile? Add()
-    {
-        CombatProfileSettings? s = Store();
-        if (s is null) return null;
-        CombatSpellProfile np = new();
-        s.Profiles.Add(np);
-        _save();
-        Changed?.Invoke();
-        return np;
-    }
-
-    // Remove the profile at index. Refuses to remove the last one (there is always
-    // at least one). Removing the active profile switches to a neighbour (applying
-    // its spells live). Returns false when the index is invalid or it's the last.
-    public bool Remove(int index)
-    {
-        CombatProfileSettings? s = Store();
-        if (s is null || index < 0 || index >= s.Profiles.Count) return false;
-        if (s.Profiles.Count <= 1) return false;
-        bool removingActive = s.Profiles[index].Id == s.ActiveId;
-        s.Profiles.RemoveAt(index);
-        if (removingActive)
-        {
-            SwitchToIndex(Math.Min(index, s.Profiles.Count - 1));   // applies + saves + fires
-            return true;
-        }
-        _save();
-        Changed?.Invoke();
-        return true;
-    }
-
-    // Capture the just-saved combat spell fields (and the edited name) into the
-    // active profile so editing the Combat tab's boxes edits the active profile.
-    // Does NOT save — the caller (the Combat tab's Apply) persists in the same
-    // Save. Keeps the profile's Id.
-    public void CaptureActiveFrom(CombatSettings combat, string? name)
-    {
-        CombatProfileSettings? s = Store();
-        if (s is null) return;
-        int i = IndexOfActive(s);
-        if (i < 0) return;
-        CombatSpellProfile active = s.Profiles[i];
-        CombatSpellProfile snap = CombatSpellProfile.Capture((name ?? active.Name).Trim(), combat);
-        snap.Id = active.Id;
-        s.Profiles[i] = snap;
-    }
-
-    // Fire Changed without a state change — the Combat tab calls this after Save so
-    // the chips and menus pick up an edited name.
+    // Fire Changed without a state change — the Combat tab calls this after Apply
+    // commits its staged profile list, so the Action-menu / toolbar pick up the
+    // new set + active profile.
     public void RaiseChanged() => Changed?.Invoke();
 
     // The active profile's swap-report line (no switch) — for @profile with no
