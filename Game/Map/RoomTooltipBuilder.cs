@@ -296,33 +296,48 @@ public static class RoomTooltipBuilder
         => LightModel.Describe(LightModel.Classify(charIllu, roomLight: light));
 
     // Room-illumination summary for the Navigation ROOM INFO panel — the room's
-    // OWN light with no player light: "Room Illu: <signed value> - <phrase>".
-    // Empty for a fully-lit room (Light 0). The player-adjusted counterpart is
-    // BuildPlayerLightSummary; the panel trims each line to its width so the
-    // phrase can run long.
-    public static string BuildRoomLightSummary(Room room)
+    // OWN light: "Room Illu: <signed value>", optionally with the room-alone
+    // visibility phrase (" - <phrase>"). The phrase is dropped when the player
+    // carries light, so it lands on the Your Illu line instead. Empty for a
+    // fully-lit room (Light 0). The panel trims the line to its width.
+    public static string BuildRoomLightSummary(Room room, bool includePhrase = true)
     {
         ArgumentNullException.ThrowIfNull(room);
         if (room.Light == 0) return string.Empty;
         string offset = (room.Light > 0 ? "+" : "") + room.Light;
-        string desc = BuildLightDescription(room.Light, charIllu: 0);
-        return desc.Length > 0 ? $"Room Illu: {offset} - {desc}" : $"Room Illu: {offset}";
+        return includePhrase
+            ? $"Room Illu: {offset} - {PanelVisibilityPhrase(charIllu: 0, room.Light)}"
+            : $"Room Illu: {offset}";
     }
 
     // Player-adjusted illumination for the ROOM INFO panel — the room's light plus
     // the player's carried illumination (playerIllu: worn +illu gear + readied
-    // light + any configured light-spell illu) folded into one effective value:
-    // "Your Illu: <signed room.Light + playerIllu> - <phrase>". Empty for a
-    // fully-lit room, matching BuildRoomLightSummary's gate.
+    // light + any configured light-spell illu) folded into one effective value,
+    // with the visibility phrase: "Your Illu: <signed room.Light + playerIllu> -
+    // <phrase>". Empty for a fully-lit room. Shown only when the player actually
+    // carries light (the caller gates on playerIllu > 0).
     public static string BuildPlayerLightSummary(Room room, int playerIllu)
     {
         ArgumentNullException.ThrowIfNull(room);
         if (room.Light == 0) return string.Empty;
         int v = room.Light + playerIllu;
         string value = (v > 0 ? "+" : "") + v;
-        string desc = BuildLightDescription(room.Light, playerIllu);
-        return desc.Length > 0 ? $"Your Illu: {value} - {desc}" : $"Your Illu: {value}";
+        return $"Your Illu: {value} - {PanelVisibilityPhrase(playerIllu, room.Light)}";
     }
+
+    // The ROOM INFO panel's visibility phrase for V = charIllu + roomLight. Keeps
+    // the game's two can't-see lines (pitch black / very dark) and the dimly-lit
+    // line; any brighter state (barely visible or normal) collapses to "You can
+    // see." — distinct from LightModel.Describe, which stays game-accurate for the
+    // map tooltip.
+    private static string PanelVisibilityPhrase(int charIllu, int roomLight)
+        => LightModel.Classify(charIllu, roomLight) switch
+        {
+            LightVisibility.PitchBlack => "The room is pitch black",
+            LightVisibility.VeryDark   => "The room is very dark — you can't see anything",
+            LightVisibility.DimlyLit   => "The room is dimly lit",
+            _                          => "You can see.",
+        };
 
     // Renders the non-interactive tail of the room-detail popup — shop, room
     // spell, room commands (teleports), room light + descriptive phrase, and

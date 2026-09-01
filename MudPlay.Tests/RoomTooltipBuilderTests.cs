@@ -226,6 +226,34 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
+    public void RoomLightSummary_OmitsPhrase_WhenRequested()
+    {
+        var (graph, _) = NewGraph();
+        Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
+
+        // With the player carrying light the phrase moves to Your Illu, so Room
+        // Illu shows just its value.
+        string summary = RoomTooltipBuilder.BuildRoomLightSummary(dark, includePhrase: false);
+
+        Assert.Equal("Room Illu: -180", summary);
+    }
+
+    [Fact]
+    public void PlayerLightSummary_CollapsesToYouCanSee_AboveDark()
+    {
+        var (graph, _) = NewGraph();
+        Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
+
+        // -180 + 200 = +20 (normal) and -180 + 40 = -140 (barely visible) both
+        // collapse to "You can see."; only pitch black / very dark / dimly lit
+        // keep a specific phrase.
+        Assert.Contains("You can see.", RoomTooltipBuilder.BuildPlayerLightSummary(dark, playerIllu: 200));
+        string barely = RoomTooltipBuilder.BuildPlayerLightSummary(dark, playerIllu: 40);
+        Assert.StartsWith("Your Illu: -140", barely);
+        Assert.Contains("You can see.", barely);
+    }
+
+    [Fact]
     public void Build_ExitsList_ListsAllDirections_WithDestinationNames()
     {
         var (graph, cache) = NewGraph();

@@ -4,7 +4,7 @@
 
 - Clicking a monster's **lair** (or a room chip) in its Game Data record — and double-clicking a **Rooms**-tab row — now opens the map on that room and selects it, showing its details in **Room info**, instead of a separate popup
 - **Room info** now shows the room's **illumination** (`Room Illu: <value> - <phrase>`) under the map/room number, and its **obvious exits** (click one to re-root the map on that neighbour)
-- Room info adds a **`Your Illu:`** line — the room's light plus your worn light gear, readied light, and any light spells configured in the Buff Watchdog, re-banded to what you'd actually see there
+- Room info's illumination gained a **`Your Illu:`** line — shown when you carry light (worn +illu gear, readied light, or a Buff Watchdog light spell), folding your light into the room's; the darkness phrase (or **"You can see."** when bright enough) sits on the line that matches your real visibility
 - Clicking a **shop room's name** in Room info opens its shop stock popup, not the bare Rooms record
 - Blacklisting a room **from the map** now keeps it drawn (still selected) until you click a **different** room, so you can confirm you hid the right one before it disappears
 - The shop/room detail popup drops its blacklist buttons (blacklisting lives on the map's right-click menu)

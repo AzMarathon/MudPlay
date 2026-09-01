@@ -128,11 +128,16 @@ public sealed partial class RoomInfoViewModel : ObservableObject
 
         RoomName = room.DisplayName;
         RoomKeyLabel = $"Map {key.Map} · Room {key.Room}";
-        RoomLight = RoomTooltipBuilder.BuildRoomLightSummary(room);
-        // Your Illu folds the player's carried illumination (worn gear + readied
-        // light) and any configured light-spell illu into the room's light.
+        // With no carried light, Room Illu carries the phrase and there's no Your
+        // Illu line. When the player has light (worn gear + readied light + any
+        // configured light-spell illu), Your Illu appears with the effective value
+        // and the phrase, and Room Illu drops its phrase (shows just its value).
         int playerIllu = _services.PlayerIllumination.Current + _services.ConfiguredLightSpellIllu();
-        PlayerLight = RoomTooltipBuilder.BuildPlayerLightSummary(room, playerIllu);
+        bool hasPlayerIllu = playerIllu > 0;
+        RoomLight = RoomTooltipBuilder.BuildRoomLightSummary(room, includePhrase: !hasPlayerIllu);
+        PlayerLight = hasPlayerIllu
+            ? RoomTooltipBuilder.BuildPlayerLightSummary(room, playerIllu)
+            : string.Empty;
 
         // Monsters — split into Placed (the room's NPC fixture / a boss),
         // Assigned (roam / rare-random spawns), and Lair (consistent lair
