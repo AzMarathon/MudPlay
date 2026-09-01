@@ -838,9 +838,32 @@ public sealed class LoopRunner : IRecoverableEngine
                     break;
                 }
                 // Walker arrived at the chosen waypoint. Rotation already happened
-                // in Start — just hand off into the circle.
+                // in Start — hand off into the circle. Marshalled past the current
+                // dispatch instead of called directly: OnWalkerEvent runs
+                // synchronously from inside RoomTracker.StateChanged (the walker's
+                // own subscription fires first — it's constructed before us in
+                // AppServices), so calling BeginCircle here would race the REST of
+                // that same dispatch. BeginCircle's own SendNextStep flips us to
+                // Running/step-in-flight immediately; by the time the tracker's
+                // later subscribers — including our own OnTrackerStateChanged —
+                // get their turn at the ORIGINAL arrival transition, our guard
+                // (State==Running && step in flight) no longer filters it out, and
+                // we misread the walker's own already-consumed arrival as a bad
+                // landing of the step we hadn't even sent when the dispatch began
+                // (report paradigm-20260901-090044). A pause that lands in the same
+                // window before this runs falls back to the same deferred-resume
+                // handoff the pausedMidApproach branch above uses.
                 _log?.Info("LoopRunner", "approach finished; entering circle");
-                BeginCircle();
+                _postToUi(() =>
+                {
+                    if (State == LoopState.Paused && _pausedFromApproach)
+                    {
+                        _approachFinishedWhilePaused = true;
+                        return;
+                    }
+                    if (State != LoopState.Approaching) return;
+                    BeginCircle();
+                });
                 break;
             case WalkEventKind.Failed:
                 // Walker gave up (tier-3 abort, blocked, no path, etc.).

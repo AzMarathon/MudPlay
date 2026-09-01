@@ -66,6 +66,8 @@ public sealed class LoopRunnerTests : IDisposable
         // (postToUi captures instead of running). Drain() runs them in order to
         // simulate the next UI tick. Empty/unused in the default synchronous mode.
         public required List<Action> Posted { get; init; }
+        // Present only when NewHarness(withWalker: true).
+        public AutoWalkManager? Walker { get; init; }
         public void Drain()
         {
             // Copy-then-clear so a posted action that re-posts (a chained resume)
@@ -82,7 +84,7 @@ public sealed class LoopRunnerTests : IDisposable
     // to capture them in Harness.Posted for manual Drain() — needed to interleave
     // a same-burst gate assert between a resume and its deferred send.
     private Harness NewHarness(string json = GraphJson, bool deferResume = false,
-        bool wireRecovery = false)
+        bool wireRecovery = false, bool withWalker = false)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
@@ -109,15 +111,21 @@ public sealed class LoopRunnerTests : IDisposable
             gate.TryResync = reason => { resyncReasons.Add(reason); return true; };
         }
         TestAvoidFilter filter = new();
+        // Constructed BEFORE the runner (when requested) so its RoomTracker.StateChanged
+        // subscription registers first — matching AppServices' real construction order
+        // (Walker before LoopRunner) and reproducing the same-burst reentrancy that order
+        // depends on.
+        AutoWalkManager? walker = withWalker ? new AutoWalkManager(graph, bfs, tracker, coord) : null;
         LoopRunner runner = new(tracker, coord, graph: graph, recovery: gate, bfs: bfs,
-            filter: filter, postToUi: deferResume ? posted.Add : a => a());
+            walker: walker, filter: filter, postToUi: deferResume ? posted.Add : a => a());
         Harness h = new()
         {
             Tracker = tracker, Coordinator = coord, Runner = runner, Posted = posted,
-            Gate = gate, ResyncReasons = resyncReasons, Filter = filter,
+            Gate = gate, ResyncReasons = resyncReasons, Filter = filter, Walker = walker,
         };
         runner.SetWireSender(b => h.Sent.Add(b));
         runner.Event += e => h.Events.Add(e);
+        walker?.SetWireSender(b => h.Sent.Add(b));
         return h;
     }
 
@@ -1064,6 +1072,50 @@ public sealed class LoopRunnerTests : IDisposable
 
         Assert.Equal(1, h.Events.Count(e => e.Kind == LoopEventKind.Started));
         Assert.Equal(1, h.Events.Count(e => e.Kind == LoopEventKind.ReachedFirstWaypoint));
+    }
+
+    // A real walker's arrival-confirming observation fires RoomTracker.StateChanged
+    // once — but the walker's own subscription (registered first, mirroring
+    // AppServices' construction order) synchronously hands off into
+    // LoopRunner.BeginCircle/SendNextStep before the SAME dispatch reaches the
+    // runner's own StateChanged subscription. Without deferring that hand-off, the
+    // runner would process the walker's already-consumed arrival transition against
+    // its own freshly-advanced Running/step-in-flight state and misread it as a bad
+    // landing of the step it had just sent (report paradigm-20260901-090044).
+    [Fact]
+    public void ApproachArrival_DoesNotLeakStaleTransitionAsCircleStepMismatch()
+    {
+        Harness h = NewHarness(deferResume: true, wireRecovery: true, withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        // 1/1 isn't a waypoint of this loop, so Start takes the walker-approach
+        // branch: closest waypoint is 1/2, one hop north.
+        Loop loop = new("bc", new[] { new RoomKey(1, 2), new RoomKey(1, 3) });
+        Assert.True(h.Runner.Start(loop));
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Single(h.Sent);   // the approach's "n"
+
+        // Confirm the approach's arrival at 1/2 — the walker's single-hop path
+        // completes on this one observation, synchronously firing Finished into
+        // the runner before this same dispatch reaches the runner's own
+        // subscription for it.
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        // The fix defers BeginCircle past the current dispatch, so the circle
+        // hasn't started yet — and, critically, nothing wrongly escalated to
+        // recovery off the walker's own already-consumed transition.
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Single(h.Sent);
+        Assert.Empty(h.ResyncReasons);
+
+        h.Drain();
+
+        // The deferred hand-off now runs cleanly: circle begins, step 1 sent.
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.Empty(h.ResyncReasons);
     }
 
     [Fact]
