@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.43.4**
-> - Terminal right-click menu: add direct links to any **Settings tab** — opens Settings straight to General / Combat / Health / Party / Statline / Auto-Lair / … instead of its last tab
-> - Terminal right-click menu: add direct links to the rest of the **Game Data** tables (Monsters / Items / Spells / Rooms / Shops / Classes / Races / Messages / …), not just Players / Macros / Triggers / Aliases
+> **Version 3.43.5**
+> - Monster record: a summoner's **Between Rounds** summon spell now links to that spell's record, and each entry in the **Summons** list links to the summoned monster's record
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
