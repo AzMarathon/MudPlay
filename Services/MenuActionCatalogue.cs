@@ -118,6 +118,7 @@ public static class MenuActionCatalogue
         new("calc.backstab", "Calculator: Backstab Calculator", Kind.Calculator, "Calculators", Parameter: "Backstab"),
         new("calc.manaregen", "Calculator: Mana Regen", Kind.Calculator, "Calculators", Parameter: "ManaRegen"),
         new("calc.realmrankings", "Calculator: Realm Rankings", Kind.Calculator, "Calculators", Parameter: "RealmRankings"),
+        new("calc.monsteraggro", "Calculator: Monster Aggro", Kind.Calculator, "Calculators", Parameter: "MonsterAggro"),
     };
 
     // ----- Settings-window tab deep-links -----

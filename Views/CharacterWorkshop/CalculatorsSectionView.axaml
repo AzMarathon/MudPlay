@@ -290,6 +290,168 @@
                     </StackPanel>
                 </Expander>
 
+                <!-- ===== Monster Aggro ===== -->
+                <!-- MinWidth (not a fixed Width) so it collapses to the shared 560 like
+                     the others, but expands wider to fit the Stock table's extra columns
+                     (same opt-out as Realm Rankings). -->
+                <Expander x:Name="MonsterAggroCalc" MinWidth="560" HorizontalAlignment="Left"
+                          IsExpanded="{Binding MonsterAggroExpanded, Mode=TwoWay}">
+                    <Expander.Header>
+                        <TextBlock Classes="BoxTitle" Text="Monster Aggro"/>
+                    </Expander.Header>
+
+                    <StackPanel>
+
+                    <!-- Paradigm realms: the 150-base weighted-lottery model. -->
+                    <Border Classes="SubBox" Margin="0,8,0,0" IsVisible="{Binding AggroIsParadigm}">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Classes="Section" Text="Paradigm — who the monster targets" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Content="Reset" Command="{Binding ResetAggroCommand}"
+                                        ToolTip.Tip="Clear the party back to two default members."/>
+                            </Grid>
+                            <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                       Text="Each member starts at 150, nudged by Charm, party position, and who hit last; the monster rolls a weighted lottery over the scores. No monster stats needed — the odds are the same for any mob."/>
+
+                            <Grid ColumnDefinitions="120,116,110,70,54,70,Auto" Margin="0,4,0,0">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Member"/>
+                                <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Charm"/>
+                                <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Position"/>
+                                <TextBlock Grid.Column="3" Classes="FieldLabel" Text="Last hit"/>
+                                <TextBlock Grid.Column="4" Classes="FieldLabel" Text="Score"/>
+                                <TextBlock Grid.Column="5" Classes="FieldLabel" Text="Odds"/>
+                            </Grid>
+
+                            <ItemsControl ItemsSource="{Binding AggroMembers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AggroMemberRowViewModel">
+                                        <Grid ColumnDefinitions="120,116,110,70,54,70,Auto" Margin="0,2">
+                                            <TextBlock Grid.Column="0" Classes="FieldValue" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                            <NumericUpDown Grid.Column="1" Width="108" FormatString="0" Increment="1" Minimum="0" Maximum="999"
+                                                           Value="{Binding Charm, Mode=TwoWay}"/>
+                                            <ComboBox Grid.Column="2" Width="104" ItemsSource="{Binding PositionOptions}"
+                                                      SelectedItem="{Binding Position, Mode=TwoWay}"
+                                                      IsVisible="{Binding PositionEditable}"/>
+                                            <TextBlock Grid.Column="2" Classes="FieldValue" Text="{Binding Position}"
+                                                       VerticalAlignment="Center" IsVisible="{Binding !PositionEditable}"/>
+                                            <CheckBox Grid.Column="3" IsChecked="{Binding IsLastAttacker, Mode=TwoWay}"
+                                                      ToolTip.Tip="The most recent player to hit the monster (only one)."/>
+                                            <TextBlock Grid.Column="4" Classes="FieldValue" Text="{Binding Score}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="5" Classes="FieldValue" Text="{Binding SharePercentText}"
+                                                       Foreground="{StaticResource AccentAmberBrush}" VerticalAlignment="Center"/>
+                                            <Button Grid.Column="6" Content="✕" Padding="8,2" VerticalAlignment="Center"
+                                                    Command="{Binding RemoveCommand}" ToolTip.Tip="Remove this member"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Button Content="＋ Add member" HorizontalAlignment="Left"
+                                    Command="{Binding AddAggroMemberCommand}"
+                                    ToolTip.Tip="Add a party member (up to 6)."/>
+                            <TextBlock Classes="FieldLabel" Text="{Binding AggroParadigmSummary}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Stock realms: acquisition + the 50-5xhits spread + Follow% stickiness. -->
+                    <Border Classes="SubBox" Margin="0,8,0,0" IsVisible="{Binding AggroIsStock}">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Classes="Section" Text="Stock — who the monster targets" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Content="Reset" Command="{Binding ResetAggroCommand}"
+                                        ToolTip.Tip="Clear the monster + party back to defaults."/>
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" Spacing="14">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="FieldLabel" Text="Monster (# or name)"/>
+                                    <TextBox Width="200" PlaceholderText="e.g. 268 or water elemental"
+                                             Text="{Binding AggroMonsterQuery, Mode=TwoWay}"
+                                             ToolTip.Tip="Type a monster record number OR a name (best match) to auto-fill its number, name, Align, Follow% and guard flag."/>
+                                </StackPanel>
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="FieldLabel" Text="Matched"/>
+                                    <TextBlock Classes="FieldValue" Text="{Binding AggroMonsterLabel}" MinWidth="170" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="14">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="FieldLabel" Text="Alignment"/>
+                                    <TextBlock Classes="FieldValue" Text="{Binding AggroMonsterAlignName}"
+                                               MinWidth="96" VerticalAlignment="Center"
+                                               ToolTip.Tip="The matched monster's alignment (from its record) — this drives who it opens on."/>
+                                </StackPanel>
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="FieldLabel" Text="Follow%"/>
+                                    <NumericUpDown Width="110" FormatString="0" Increment="1" Minimum="0" Maximum="100"
+                                                   Value="{Binding AggroMonsterFollowPercent, Mode=TwoWay}"/>
+                                </StackPanel>
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="FieldLabel" Text="Guard"/>
+                                    <CheckBox IsChecked="{Binding AggroMonsterIsGuard, Mode=TwoWay}"
+                                              ToolTip.Tip="Law-enforcing NPC (guard, Templar, Sheriff) — opens on Outlaw-or-worse titles. Auto-ticked for jail casters."/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,2"/>
+
+                            <Grid ColumnDefinitions="88,100,66,66,110,72,60,Auto">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Member"/>
+                                <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Alignment"/>
+                                <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Provoked" HorizontalAlignment="Center"
+                                           ToolTip.Tip="This member has already hit the monster — that forces it to open on them (acquisition)."/>
+                                <TextBlock Grid.Column="3" Classes="FieldLabel" Text="Last hit" HorizontalAlignment="Center"
+                                           ToolTip.Tip="This member hit the monster most recently. On a player's hit the mob re-locks onto that attacker with its Follow% chance (the 'attack last' mechanic), so it targets them Follow% of the time and re-spreads the rest."/>
+                                <TextBlock Grid.Column="4" Classes="FieldLabel" Text="Hits taken"
+                                           ToolTip.Tip="How many times the monster has already hit THIS member this fight. Each beat, an aggroed member's chance to be the target is 50 − 5×hits, so a member who's taken a lot of hits draws less fresh aggro (the monster spreads its damage around)."/>
+                                <TextBlock Grid.Column="5" Classes="FieldLabel" Text="Opens?"/>
+                                <TextBlock Grid.Column="6" Classes="FieldLabel" Text="Target%"/>
+                            </Grid>
+
+                            <ItemsControl ItemsSource="{Binding AggroMembers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AggroMemberRowViewModel">
+                                        <Grid ColumnDefinitions="88,100,66,66,110,72,60,Auto" Margin="0,2">
+                                            <TextBlock Grid.Column="0" Classes="FieldValue" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                            <ComboBox Grid.Column="1" Width="98" ItemsSource="{Binding AlignmentOptions}"
+                                                      SelectedItem="{Binding AlignmentTitle, Mode=TwoWay}"/>
+                                            <CheckBox Grid.Column="2" IsChecked="{Binding HasProvoked, Mode=TwoWay}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      ToolTip.Tip="Already hit the monster (forces it to aggro this member)."/>
+                                            <CheckBox Grid.Column="3" IsChecked="{Binding IsLastAttacker, Mode=TwoWay}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      ToolTip.Tip="This member hit the monster most recently — the mob re-locks onto them with its Follow% chance (attack last)."/>
+                                            <NumericUpDown Grid.Column="4" Width="102" FormatString="0" Increment="1" Minimum="0" Maximum="99"
+                                                           Value="{Binding IncomingHits, Mode=TwoWay}"
+                                                           ToolTip.Tip="Hits the monster has already landed on this member this fight — its per-beat target chance is 50 − 5×hits."/>
+                                            <Panel Grid.Column="5" VerticalAlignment="Center" ToolTip.Tip="{Binding AcquireReason}">
+                                                <TextBlock Classes="FieldValue" Text="opens" IsVisible="{Binding IsAggroed}"
+                                                           Foreground="{StaticResource AccentAmberBrush}"/>
+                                                <TextBlock Classes="FieldValue" Text="ignores" IsVisible="{Binding !IsAggroed}"
+                                                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+                                            </Panel>
+                                            <TextBlock Grid.Column="6" Classes="FieldValue" Text="{Binding SpreadPercentText}" VerticalAlignment="Center"/>
+                                            <Button Grid.Column="7" Content="✕" Padding="8,2" VerticalAlignment="Center"
+                                                    Command="{Binding RemoveCommand}" ToolTip.Tip="Remove this member"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Button Content="＋ Add member" HorizontalAlignment="Left"
+                                    Command="{Binding AddAggroMemberCommand}"
+                                    ToolTip.Tip="Add a party member (up to 6)."/>
+
+                            <Border Height="1" Background="{StaticResource ChromeBorderBrush}" Margin="0,2"/>
+                            <TextBlock Classes="FieldValue" Text="{Binding AggroAcquisitionSummary}" TextWrapping="Wrap"/>
+                            <TextBlock Classes="FieldLabel" Text="{Binding AggroStickinessText}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    </StackPanel>
+                </Expander>
+
                 <!-- ===== Swing Calculator ===== -->
                 <Expander x:Name="SwingCalc" Width="560" HorizontalAlignment="Left"
                           IsExpanded="{Binding SwingExpanded, Mode=TwoWay}">
