@@ -298,12 +298,12 @@ public static class RoomTooltipBuilder
     // Room-illumination summary for the Navigation ROOM INFO panel — the room's
     // OWN light: "Room Illu: <signed value>", optionally with the room-alone
     // visibility phrase (" - <phrase>"). The phrase is dropped when the player
-    // carries light, so it lands on the Your Illu line instead. Empty for a
-    // fully-lit room (Light 0). The panel trims the line to its width.
+    // carries light, so it lands on the Your Illu line instead. A fully-lit room
+    // (Light 0) still shows a line — "Room Illu: 0 - You can see." The panel trims
+    // the line to its width.
     public static string BuildRoomLightSummary(Room room, bool includePhrase = true)
     {
         ArgumentNullException.ThrowIfNull(room);
-        if (room.Light == 0) return string.Empty;
         string offset = (room.Light > 0 ? "+" : "") + room.Light;
         return includePhrase
             ? $"Room Illu: {offset} - {PanelVisibilityPhrase(charIllu: 0, room.Light)}"
@@ -314,12 +314,11 @@ public static class RoomTooltipBuilder
     // the player's carried illumination (playerIllu: worn +illu gear + readied
     // light + any configured light-spell illu) folded into one effective value,
     // with the visibility phrase: "Your Illu: <signed room.Light + playerIllu> -
-    // <phrase>". Empty for a fully-lit room. Shown only when the player actually
-    // carries light (the caller gates on playerIllu > 0).
+    // <phrase>". Shown only when the player actually carries light (the caller
+    // gates on playerIllu > 0).
     public static string BuildPlayerLightSummary(Room room, int playerIllu)
     {
         ArgumentNullException.ThrowIfNull(room);
-        if (room.Light == 0) return string.Empty;
         int v = room.Light + playerIllu;
         string value = (v > 0 ? "+" : "") + v;
         return $"Your Illu: {value} - {PanelVisibilityPhrase(playerIllu, room.Light)}";

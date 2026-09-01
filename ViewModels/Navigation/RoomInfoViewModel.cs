@@ -38,7 +38,9 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     [ObservableProperty] private string _roomKeyLabel = string.Empty;
 
     // Room-illumination summary shown below the map/room number ("Room Illu:
-    // <value> - <phrase>", the room alone). Empty for a fully-lit room.
+    // <value> - <phrase>", the room alone). Shown for every room — a fully-lit
+    // room is the base value 0 ("Room Illu: 0 - You can see."), not "no illu";
+    // empty only when no room record is shown.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRoomLight))]
     private string _roomLight = string.Empty;
@@ -46,8 +48,8 @@ public sealed partial class RoomInfoViewModel : ObservableObject
 
     // Player-adjusted illumination shown below Room Illu ("Your Illu: <value> -
     // <phrase>") — the room's light plus the player's carried illu (worn +illu
-    // gear + readied light) and any configured light-spell illu. Empty for a
-    // fully-lit room, matching Room Illu's gate.
+    // gear + readied light) and any configured light-spell illu. Empty when the
+    // player carries no light (or no room is shown).
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPlayerLight))]
     private string _playerLight = string.Empty;

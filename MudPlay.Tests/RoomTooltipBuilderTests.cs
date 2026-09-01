@@ -201,14 +201,20 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
-    public void RoomLightSummary_Empty_ForFullyLitRoom()
+    public void LightSummary_ShowsBaseValue_ForFullyLitRoom()
     {
         var (graph, _) = NewGraph();
         Room lit = graph.GetRoom(new RoomKey(1, 1))!;       // Light = 0
 
-        // A fully-lit room needs no indicator, so the panel gets an empty string.
-        Assert.Equal(string.Empty, RoomTooltipBuilder.BuildRoomLightSummary(lit));
-        Assert.Equal(string.Empty, RoomTooltipBuilder.BuildPlayerLightSummary(lit, playerIllu: 200));
+        // Light 0 isn't "no illu" — it's the base value 0, which still shows a line
+        // reading "You can see."
+        string room = RoomTooltipBuilder.BuildRoomLightSummary(lit);
+        Assert.StartsWith("Room Illu: 0", room);
+        Assert.Contains("You can see.", room);
+
+        string player = RoomTooltipBuilder.BuildPlayerLightSummary(lit, playerIllu: 200);
+        Assert.StartsWith("Your Illu: +200", player);
+        Assert.Contains("You can see.", player);
     }
 
     [Fact]
