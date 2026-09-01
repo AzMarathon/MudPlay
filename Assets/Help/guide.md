@@ -642,7 +642,7 @@ Press **Alt+L** to open **Backscroll** — the full terminal history, including 
 - **Export…** — save the whole transcript to a text file, each line prefixed with its timestamp.
 - Drag to select a region, then **Ctrl+C** or **right-click → Copy** to put it on the clipboard as plain text. Right-click → **Select all** grabs the whole transcript to copy at once.
 
-Backscroll is a **snapshot taken when you open it**, not a live tail — to pick up newer output, close and reopen it (nothing is lost in the meantime).
+Backscroll is a **snapshot taken when you open it**, not a live tail — to pick up newer output, close and reopen it (nothing is lost in the meantime). The transcript renders in your **terminal font** (family and size), so history looks exactly like the live screen; that font is captured when the window opens, so changing it takes effect the next time you open Backscroll.
 
 ## Session Stats
 
@@ -746,11 +746,11 @@ Settings → General. Everything here is character-tier (follows the loaded char
 
 ### Terminal font (family + size)
 
-**Default:** Family = bundled MX437 IBM VGA 8×16 CP437 bitmap font; Size = 16 pt.
+**Default:** Family = bundled MX437 IBM VGA 8×16 CP437 bitmap font; Size = 12 pt.
 **Available options:** MX437 (bundled), JetBrains Mono (bundled), plus every monospace font installed on your system. Sizes: 8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32.
 **What it does:** Controls the font the main terminal canvas renders with. MX437 reproduces classic BBS CP437 output (box-drawing characters, line art); JetBrains Mono is a clean modern monospace alternative if you don't care about retro accuracy.
 **When you might change it:** Switch to JetBrains Mono (or any installed system monospace font) if the block-drawing glyphs in MX437 look odd on your display, or if you want smoother, more modern-looking text — especially combined with "Scale terminal output to fill the window": a real font like JetBrains Mono renders crisp and antialiased at any zoom level, unlike MX437's bitmap glyphs, which upscale as blocky pixels to preserve their authentic retro look.
-**Important notes:** Live-previews on the terminal canvas the moment you change the picker — no need to click Save first to see it. Clicking Cancel (or the title-bar X) reverts the canvas back to your saved font; only Save keeps the change.
+**Important notes:** The size is a true **point size** — the same unit MegaMUD and every Windows font dialog use, so picking "16" here matches MegaMUD's "16" glyph-for-glyph. Live-previews on the terminal canvas the moment you change the picker — no need to click Save first to see it. Clicking Cancel (or the title-bar X) reverts the canvas back to your saved font; only Save keeps the change.
 
 ### Navigation tooltip font (family + size)
 
@@ -2017,7 +2017,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Setting | Default | Allowed Values | Config Key | Location |
 |---|---|---|---|---|
 | Terminal font family | `null` (MX437) | avares:// URI / system family name | `TerminalFontFamily` | Models/Profile/GeneralSettings.cs |
-| Terminal font size | `null` (16) | 8–32 pt (fixed list) | `TerminalFontSize` | Models/Profile/GeneralSettings.cs |
+| Terminal font size | `null` (12) | 8–32 pt (fixed list) | `TerminalFontSize` | Models/Profile/GeneralSettings.cs |
 | Nav tooltip font family | `null` (MX437) | avares:// URI / system family name | `NavTooltipFontFamily` | Models/Profile/GeneralSettings.cs |
 | Nav tooltip font size | `null` (13) | 8–32 pt (fixed list) | `NavTooltipFontSize` | Models/Profile/GeneralSettings.cs |
 | Scale terminal to window | `false` | bool | `ScaleTerminalToWindow` | Models/Profile/GeneralSettings.cs |

@@ -139,7 +139,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // classic BBS output) and JetBrains Mono — then lists every monospace font
     // installed on the system. Proportional faces are filtered out by
     // MonospaceFontCatalog since they'd mangle the fixed cell grid. The default
-    // font and size 16 carry a "{default}" tag in the picker labels; a bundled
+    // font and DisplayConfig.DefaultFontSize carry a "{default}" tag in the
+    // picker labels; a bundled
     // face persists as its avares:// URI while a system font persists as its
     // bare family name (both are valid FontFamily inputs).
     public IReadOnlyList<FontFamilyOption> FontFamilyOptions { get; } = BuildFontFamilyOptions();
@@ -665,5 +666,6 @@ public sealed record BuffLayoutOption(string Label, BuffWatchdogLayout Value);
 public sealed record FontFamilyOption(string Label, string Uri);
 
 // Font-size picker row: the label shown in the dropdown (with a "{default}" tag
-// on 16) and the point size persisted into GeneralSettings.TerminalFontSize.
+// on the DisplayConfig.DefaultFontSize entry) and the point size persisted into
+// GeneralSettings.TerminalFontSize.
 public sealed record FontSizeOption(string Label, double Value);

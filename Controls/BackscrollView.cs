@@ -41,8 +41,11 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     public static readonly StyledProperty<FontFamily> FontFamilyProperty =
         AvaloniaProperty.Register<BackscrollView, FontFamily>(nameof(FontFamily), new FontFamily("monospace"));
 
+    // Fallback default kept in sync with DisplayConfig.DefaultFontSize; the
+    // Backscroll window binds this to the terminal's live size so history matches
+    // the live screen.
     public static readonly StyledProperty<double> FontSizeProperty =
-        AvaloniaProperty.Register<BackscrollView, double>(nameof(FontSize), 16);
+        AvaloniaProperty.Register<BackscrollView, double>(nameof(FontSize), 12);
 
     // Rows advanced per mouse-wheel notch (the host ScrollViewer scrolls by
     // ScrollSize.Height). One row is exhaustingly slow through a deep buffer;
@@ -67,6 +70,13 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         get => GetValue(WheelLinesProperty);
         set => SetValue(WheelLinesProperty, value);
     }
+
+    // FontSize is a POINT size (matches the terminal setting); Avalonia draws in
+    // device-independent PIXELS, so convert points → DIP (× 96/72) before any
+    // FormattedText — same as TerminalControl, so history renders at the identical
+    // scale to the live screen instead of ~25% small.
+    private const double PointToPixel = 96.0 / 72.0;
+    private double RenderFontSize => FontSize * PointToPixel;
 
     private IReadOnlyList<ScrollbackBuffer.Row> _rows = [];
     private Typeface _typeface;
@@ -167,7 +177,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         // Snap the cell box to whole pixels so adjacent cell fills meet exactly
         // and glyph advances stay grid-aligned (matches TerminalControl).
         FormattedText probe = new("M", CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            _typeface, FontSize, Brushes.White);
+            _typeface, RenderFontSize, Brushes.White);
         _cellW = Math.Max(1, Math.Round(probe.WidthIncludingTrailingWhitespace));
         _cellH = Math.Max(1, Math.Round(probe.Height));
         _gutterWidth = TimestampChars * _cellW + GutterGap;
@@ -243,7 +253,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
             // Gutter timestamp — fixed at the left edge, never scrolls sideways.
             string ts = row.Timestamp.ToLocalTime().ToString("HH:mm:ss");
             context.DrawText(
-                new FormattedText(ts, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, FontSize, GutterBrush),
+                new FormattedText(ts, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, RenderFontSize, GutterBrush),
                 new Point(0, y));
 
             // Transcript region clipped so a long row / horizontal scroll can't
@@ -304,7 +314,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
             char ch = cells[i].Char;
             if (ch == ' ') continue;
             context.DrawText(
-                new FormattedText(ch.ToString(), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, FontSize, fg),
+                new FormattedText(ch.ToString(), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, RenderFontSize, fg),
                 new Point(originX + i * _cellW, y));
         }
 
