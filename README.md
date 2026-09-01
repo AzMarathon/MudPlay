@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.43.2**
+> **Version 3.43.3**
 > - Recognized the `convulsions` condition's own fumble line (`You convulse violently!`) as a movement refusal — a move sent while convulsing now reverts instantly instead of leaving a stale pending move that could poison recovery and strand a tier-3 backtrack indefinitely awaiting a landing that would never arrive
 > - Fixed a loop-runner reentrancy bug: the walker's own arrival-confirm could hand off into the loop's next step before that same room-tracker event finished reaching the loop runner's own handler, which then misread the walker's already-consumed arrival as a bad landing of the step it had just sent and wrongly triggered a recovery cascade
+> - Fixed the walker resending a just-refused move on every pause/resume cycle with no retry cap — a move refused while paused now forces a re-plan instead of blindly retrying the same doomed direction forever
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

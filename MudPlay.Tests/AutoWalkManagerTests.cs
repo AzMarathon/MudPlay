@@ -583,6 +583,40 @@ public sealed class AutoWalkManagerTests : IDisposable
     }
 
     [Fact]
+    public void Resume_AfterRefusalDuringPause_RePlansInsteadOfBlindlyResending()
+    {
+        // Live bug: a move refused while paused (a wall the graph THINKS
+        // exists but the live server just refused) reverts the tracker to
+        // the step's SOURCE room — same as before the move was ever sent.
+        // OnTrackerStateChanged bails on that reverting transition (it gates
+        // on State == Walking), so the walker never sees it happen. On
+        // resume, the old code's only defense — "does the graph list this
+        // exit?" — can't tell a genuinely-refused direction from a
+        // never-attempted one, so it blindly resent the exact same doomed
+        // move with no retry cap, once per pause/resume cycle, forever
+        // (report paradigm-20260901-091527: five minutes of "There is no
+        // exit in that direction!" on repeat). Re-planning instead routes
+        // through TryReplanOrFail, which is bounded and raises Retrying —
+        // that's the observable signal the fix took the safe path.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));      // 2-step path: N, N
+        Assert.Single(h.Sent);                   // step 1 ("n") sent
+
+        h.Coordinator.AssertGate("Combat");      // pause mid-step
+
+        // The server refused the in-flight move while paused — same effect
+        // MovementRefusalDetector produces on "There is no exit in that
+        // direction!": the pending move drops and confidence reverts to
+        // Confirmed at the room the move was sent FROM.
+        h.Tracker.NoteMoveBlocked();
+
+        h.Coordinator.ClearGate("Combat");       // resume
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Retrying);
+    }
+
+    [Fact]
     public void RemainingRoomKeys_TrimsToCurrentRoom_WhilePausedMidStep()
     {
         // Report 203928: stepping into a room that starts combat pauses the

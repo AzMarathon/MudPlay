@@ -2335,6 +2335,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return;
             }
 
+            bool hadStepInFlight = _stepInFlight;
             _stepInFlight = false;
             _awaitingPromptForCommand = false;
 
@@ -2349,7 +2350,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // pause mid-walk → 2 pipelined moves resolve → resume → old
             // SendNextStep re-sent the just-completed step's direction
             // and the walker drifted off the path it had drawn.
-            if (!TryReconcileIndexAfterResume())
+            if (!TryReconcileIndexAfterResume(hadStepInFlight))
             {
                 TryReplanOrFail(RoomConfidence.Suspect);
                 return;
@@ -2367,7 +2368,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // ended up at a room that isn't on the remaining path AND can't
     // legally take the next planned step — the caller should re-plan
     // rather than blindly re-sending a stale step direction.
-    private bool TryReconcileIndexAfterResume()
+    //
+    // hadStepInFlight: was a move already on the wire when the pause hit
+    // (captured by the caller before clearing _stepInFlight). See its use
+    // below.
+    private bool TryReconcileIndexAfterResume(bool hadStepInFlight)
     {
         if (_path is null) return true;
         if (_tracker.State.CurrentRoom is not { } here) return true;
@@ -2397,12 +2402,28 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
         }
 
-        // No forward match. If the next planned step's direction
-        // doesn't even exist as an exit from the player's current room,
-        // they're off the path — re-plan. The "exit exists" check is a
-        // cheap proxy for "the planned route still works from here";
-        // imperfect cases (exit exists but leads somewhere unrelated)
-        // fall through to the normal mid-step desync handling in
+        // No forward match — the player isn't further along the path than
+        // before the pause. If a move was in flight when the pause hit, its
+        // absence from the forward scan above means it never landed:
+        // MovementRefusalDetector still reverts it (NoteMoveBlocked fires even
+        // while paused), OnTrackerStateChanged just doesn't react to that
+        // transition (it gates on State == Walking) — so the tracker is back
+        // at the step's SOURCE room, not somewhere the exit-existence check
+        // below can distinguish from "never attempted yet". Trusting that
+        // cheap graph-cached check here would resend the exact direction the
+        // server just refused, and nothing remembers the refusal across the
+        // next pause/resume cycle — a doomed retry loop that only ends by
+        // luck (walker-side twin of the LoopRunner "refused while paused"
+        // resume guard; report paradigm-20260901-091527, five minutes of
+        // bonking the same wall). Force a re-plan instead.
+        if (hadStepInFlight) return false;
+
+        // No move was in flight (pause landed cleanly between steps). If the
+        // next planned step's direction doesn't even exist as an exit from
+        // the player's current room, they're off the path — re-plan. The
+        // "exit exists" check is a cheap proxy for "the planned route still
+        // works from here"; imperfect cases (exit exists but leads somewhere
+        // unrelated) fall through to the normal mid-step desync handling in
         // OnTrackerStateChanged after the next send.
         if (_index >= _path.Count) return true;
         if (_path[_index] is not MoveStep nextMove) return true;
