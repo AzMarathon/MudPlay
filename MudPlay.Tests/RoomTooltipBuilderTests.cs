@@ -192,11 +192,11 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         var (graph, _) = NewGraph();
         Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
 
-        // The Navigation ROOM INFO panel's compact one-liner: signed offset first,
-        // then the visibility phrase for the player's illumination.
+        // The Navigation ROOM INFO panel's one-liner: "Room Illu: <signed value> -
+        // <phrase>" for the player's illumination.
         string summary = RoomTooltipBuilder.BuildRoomLightSummary(dark, charIllu: 0);
 
-        Assert.StartsWith("-180", summary);
+        Assert.StartsWith("Room Illu: -180", summary);
         Assert.Contains("very dark", summary);
     }
 

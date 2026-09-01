@@ -37,8 +37,8 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     [ObservableProperty] private string _roomName = string.Empty;
     [ObservableProperty] private string _roomKeyLabel = string.Empty;
 
-    // Compact room-light summary shown to the right of the room name (signed
-    // offset + visibility phrase). Empty for a fully-lit room, which needs none.
+    // Room-illumination summary shown below the map/room number ("Room Illu:
+    // <value> - <phrase>"). Empty for a fully-lit room, which needs none.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRoomLight))]
     private string _roomLight = string.Empty;

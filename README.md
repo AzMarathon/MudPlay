@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.42.5**
 > - Clicking a monster's **lair** (or a room chip) in its Game Data record — and double-clicking a **Rooms**-tab row — now opens the map on that room and selects it, showing its details in **Room info**, instead of a separate popup
-> - **Room info** now shows the room's **light** level beside the name, and its **obvious exits** (click one to re-root the map on that neighbour)
+> - **Room info** now shows the room's **illumination** (`Room Illu: <value> - <phrase>`) under the map/room number, and its **obvious exits** (click one to re-root the map on that neighbour)
 > - Clicking a **shop room's name** in Room info opens its shop stock popup, not the bare Rooms record
 > - Blacklisting a room **from the map** now keeps it drawn (still selected) until you click a **different** room, so you can confirm you hid the right one before it disappears
 > - The shop/room detail popup drops its blacklist buttons (blacklisting lives on the map's right-click menu)

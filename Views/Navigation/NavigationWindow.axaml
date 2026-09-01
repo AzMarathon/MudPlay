@@ -989,20 +989,21 @@
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
                                     <StackPanel IsVisible="{Binding RoomInfo.HasRoom}" Spacing="2">
-                                        <!-- Room name (opens the room record, or a shop room's stock
-                                             popup) with the room-light summary to its right. -->
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <Button Classes="RoomTitleLink"
-                                                    Content="{Binding RoomInfo.RoomName}"
-                                                    Command="{Binding RoomInfo.OpenRoomRecordCommand}"
-                                                    ToolTip.Tip="{Binding RoomInfo.RoomTitleTip}"/>
-                                            <TextBlock Text="{Binding RoomInfo.RoomLight}"
-                                                       IsVisible="{Binding RoomInfo.HasRoomLight}"
-                                                       VerticalAlignment="Center"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                        </StackPanel>
+                                        <!-- Room name (opens the room record, or a shop room's stock popup). -->
+                                        <Button Classes="RoomTitleLink"
+                                                Content="{Binding RoomInfo.RoomName}"
+                                                Command="{Binding RoomInfo.OpenRoomRecordCommand}"
+                                                ToolTip.Tip="{Binding RoomInfo.RoomTitleTip}"/>
+                                        <!-- Map/room number below the name. -->
                                         <TextBlock Text="{Binding RoomInfo.RoomKeyLabel}"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                        <!-- Room illumination below that; a single line trimmed to the
+                                             panel width, full phrase on hover. -->
+                                        <TextBlock Text="{Binding RoomInfo.RoomLight}"
+                                                   IsVisible="{Binding RoomInfo.HasRoomLight}"
+                                                   ToolTip.Tip="{Binding RoomInfo.RoomLight}"
+                                                   TextTrimming="CharacterEllipsis"
                                                    FontSize="11"
                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
 

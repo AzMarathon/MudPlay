@@ -295,16 +295,17 @@ public static class RoomTooltipBuilder
         // predictor never drift.
         => LightModel.Describe(LightModel.Classify(charIllu, roomLight: light));
 
-    // Compact one-line room-light summary for the Navigation ROOM INFO panel: the
-    // signed light offset plus the visibility phrase for the player's current
+    // One-line room-illumination summary for the Navigation ROOM INFO panel:
+    // "Room Illu: <signed value> - <visibility phrase>" for the player's current
     // illumination. Empty for a fully-lit room (Light 0), which needs no marker.
+    // The panel trims the line to its width, so the phrase can run long.
     public static string BuildRoomLightSummary(Room room, int charIllu)
     {
         ArgumentNullException.ThrowIfNull(room);
         if (room.Light == 0) return string.Empty;
         string offset = (room.Light > 0 ? "+" : "") + room.Light;
         string desc = BuildLightDescription(room.Light, charIllu);
-        return desc.Length > 0 ? $"{offset} · {desc}" : offset;
+        return desc.Length > 0 ? $"Room Illu: {offset} - {desc}" : $"Room Illu: {offset}";
     }
 
     // Renders the non-interactive tail of the room-detail popup — shop, room
