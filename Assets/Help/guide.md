@@ -654,9 +654,9 @@ Click **＋ Add buff** to open the Add-buff dialog:
 
 Each slot is a **row** with an **✎** (edit — reopens the dialog) and an **⨯** (remove) at the left, then the buff's `name - recast` label, then the targeting checkboxes. **You choose who it's cast on right in the row:**
 
-- A **Self** box casts it on you.
-- An **All** box is a **select-all** — ticking it casts on you *and* every party member, auto-adapting to whoever's in the party. Unticking any individual box (Self or a member) clears **All** automatically.
-- A **checkbox per party member** — member names run along the top as column headers, so every row's checkboxes line up under them — lets you pick exactly who gets it.
+- A **Self** box casts it on you — and when you're **solo, that's the only box shown**, so there are no empty party columns to puzzle over.
+- Once you're in a **party**, the row surfaces a **checkbox per member** (member names run along the top as column headers, so every row's boxes line up under them), followed by an **All/None** master on the right.
+- **All/None** ticks or clears every party member at once — and it's **independent of your Self box** (toggling it never changes Self). Ticked, it blesses **every member, auto-adapting**, so anyone who joins later is blessed too; unticked, it blesses **no** members — a joiner is **not** auto-assigned, only the members you've explicitly ticked keep getting it. Unticking one member drops out of All/None but leaves the rest ticked.
 - A **whole-party** spell shows a single on/off toggle and reads **Party Wide** across the member columns (one cast covers everyone). A **self-only** spell shows just the **Self** box.
 
 A given spell is **one slot** — once it's slotted it drops out of the Add dialog, so you can't double up. Everything saves as you edit it; there's no Save button. Existing setups from before the unification are migrated into this list automatically.

@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.43.5**
-> - Monster record: a summoner's **Between Rounds** summon spell now links to that spell's record, and each entry in the **Summons** list links to the summoned monster's record
+> **Version 3.43.6**
+> - Buff Watchdog targeting: when **solo**, the row shows only the **Self** box; in a party it shows Self, a box per member, then the **All/None** master (renamed from "All")
+> - The **All/None** master is now **independent of Self** — unchecking it no longer unchecks Self; it selects/clears the party members only
+> - A member who **joins** is auto-blessed only when **All/None** is checked; with it off, only the members you explicitly ticked are targeted
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
