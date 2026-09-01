@@ -326,18 +326,14 @@ public static class RoomTooltipBuilder
     }
 
     // The ROOM INFO panel's visibility phrase for V = charIllu + roomLight. Keeps
-    // the game's two can't-see lines (pitch black / very dark) and the dimly-lit
-    // line; any brighter state (barely visible or normal) collapses to "You can
-    // see." — distinct from LightModel.Describe, which stays game-accurate for the
-    // map tooltip.
+    // every game darkness line (pitch black / very dark / barely visible / dimly
+    // lit); only fully-lit (LightModel.Describe returns empty) reads "You can
+    // see." — LightModel.Describe itself stays game-accurate for the map tooltip.
     private static string PanelVisibilityPhrase(int charIllu, int roomLight)
-        => LightModel.Classify(charIllu, roomLight) switch
-        {
-            LightVisibility.PitchBlack => "The room is pitch black",
-            LightVisibility.VeryDark   => "The room is very dark — you can't see anything",
-            LightVisibility.DimlyLit   => "The room is dimly lit",
-            _                          => "You can see.",
-        };
+    {
+        string desc = BuildLightDescription(light: roomLight, charIllu: charIllu);
+        return desc.Length > 0 ? desc : "You can see.";
+    }
 
     // Renders the non-interactive tail of the room-detail popup — shop, room
     // spell, room commands (teleports), room light + descriptive phrase, and

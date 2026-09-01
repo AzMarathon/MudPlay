@@ -239,18 +239,19 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
-    public void PlayerLightSummary_CollapsesToYouCanSee_AboveDark()
+    public void PlayerLightSummary_YouCanSee_OnlyWhenFullyLit()
     {
         var (graph, _) = NewGraph();
         Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
 
-        // -180 + 200 = +20 (normal) and -180 + 40 = -140 (barely visible) both
-        // collapse to "You can see."; only pitch black / very dark / dimly lit
-        // keep a specific phrase.
+        // Only fully-lit (V >= 0) reads "You can see."; the darker bands keep their
+        // game phrase. -180 + 200 = +20 (fully lit) → "You can see."; -180 + 40 =
+        // -140 (barely visible) keeps its line.
         Assert.Contains("You can see.", RoomTooltipBuilder.BuildPlayerLightSummary(dark, playerIllu: 200));
         string barely = RoomTooltipBuilder.BuildPlayerLightSummary(dark, playerIllu: 40);
         Assert.StartsWith("Your Illu: -140", barely);
-        Assert.Contains("You can see.", barely);
+        Assert.Contains("barely visible", barely);
+        Assert.DoesNotContain("You can see.", barely);
     }
 
     [Fact]
