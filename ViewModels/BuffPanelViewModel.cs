@@ -31,6 +31,12 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // names line up over the per-row checkbox columns in the grid.
     public ObservableCollection<string> Members { get; } = new();
 
+    // True when there's at least one non-self party member — gates the row targeting
+    // column HEADERS (the member names + the "All/None" label). Solo hides them so a
+    // solo player sees only the Self column and isn't confused by an empty All/None.
+    [ObservableProperty]
+    private bool _showPartyColumns;
+
     // Picker source: LEARNED buffs (zero energy — self / single-target / whole-party
     // scopes, plus whole-party cast-on-use items) NOT already slotted. A given buff is
     // one slot: two slots of the same spell would double-track its recast timer, so a
@@ -168,6 +174,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         var members = CurrentMembers();
         Members.Clear();
         foreach ((string _, string given) in members) Members.Add(Capitalise(given));
+        ShowPartyColumns = members.Count > 0;
         foreach (BuffSlotRowViewModel row in Slots)
             row.RebuildMemberTargets(members);
     }

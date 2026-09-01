@@ -110,24 +110,27 @@
                                    Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap"/>
 
-                        <!-- Buff rows. Shared columns (buff | self | all/on | per-member) line
+                        <!-- Buff rows. Shared columns (buff | self | all-none | per-member) line
                              up under the header; a whole-party buff spans the member columns
-                             with "Party Wide". Horizontal scroll for a full party. -->
+                             with "Party Wide". Solo hides the all-none + member columns.
+                             Horizontal scroll for a full party. -->
                         <ScrollViewer IsVisible="{Binding HasSlots}"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Disabled">
                             <StackPanel>
-                                <Grid ColumnDefinitions="220,40,44,*" Margin="6,0,6,2">
+                                <Grid ColumnDefinitions="220,40,56,*" Margin="6,0,6,2">
                                     <TextBlock Grid.Column="0" Text="Buff" FontSize="10"
                                                VerticalAlignment="Bottom"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
                                     <TextBlock Grid.Column="1" Text="Self" FontSize="10"
                                                HorizontalAlignment="Center" VerticalAlignment="Bottom"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                    <TextBlock Grid.Column="2" Text="All" FontSize="10"
+                                    <TextBlock Grid.Column="2" Text="All/None" FontSize="10"
                                                HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                               IsVisible="{Binding ShowPartyColumns}"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                    <ItemsControl Grid.Column="3" ItemsSource="{Binding Members}">
+                                    <ItemsControl Grid.Column="3" ItemsSource="{Binding Members}"
+                                                  IsVisible="{Binding ShowPartyColumns}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
@@ -147,7 +150,7 @@
                                         <DataTemplate x:DataType="vm:BuffSlotRowViewModel">
                                             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                                                     BorderThickness="0,0,0,1" Padding="6,3">
-                                                <Grid ColumnDefinitions="220,40,44,*">
+                                                <Grid ColumnDefinitions="220,40,56,*">
                                                     <StackPanel Grid.Column="0" Orientation="Horizontal"
                                                                 VerticalAlignment="Center" Spacing="2" Margin="0,0,10,0">
                                                         <Button Content="✎" Width="20" Height="20" Padding="0" FontSize="11"
@@ -168,19 +171,20 @@
                                                               IsChecked="{Binding CastOnSelf, Mode=TwoWay}"
                                                               ToolTip.Tip="Cast this buff on yourself."/>
 
-                                                    <!-- "All" is a select-all: ticks self + every member; unticking any
-                                                         individual box (self or a member) clears it automatically. -->
+                                                    <!-- "All/None" master over the party MEMBERS only (independent of Self):
+                                                         ticked blesses every member incl. joiners; unticked blesses none.
+                                                         Hidden when solo (no party to target). -->
                                                     <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
-                                                              IsVisible="{Binding IsSingleTarget}"
+                                                              IsVisible="{Binding ShowMemberTargets}"
                                                               IsChecked="{Binding AllTargets, Mode=TwoWay}"
-                                                              ToolTip.Tip="Cast on yourself and every party member (auto-adapts to whoever's in the party). Unticking any box clears this."/>
+                                                              ToolTip.Tip="Cast on every party member, auto-adapting as members join or leave. Untick for none. (Self is separate.)"/>
                                                     <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
                                                               IsVisible="{Binding IsWholeParty}"
                                                               IsChecked="{Binding WholePartyOn, Mode=TwoWay}"
                                                               ToolTip.Tip="Cast on the whole party in one go."/>
 
                                                     <ItemsControl Grid.Column="3" ItemsSource="{Binding MemberTargets}"
-                                                                  IsVisible="{Binding IsSingleTarget}">
+                                                                  IsVisible="{Binding ShowMemberTargets}">
                                                         <ItemsControl.ItemsPanel>
                                                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                                                         </ItemsControl.ItemsPanel>

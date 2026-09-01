@@ -29,24 +29,27 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     private bool _suppress;
 
     // Editable targeting only — spell + recast are fixed at add time.
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AllTargets))]
-    private bool _castOnSelf;
+    [ObservableProperty] private bool _castOnSelf;
     [ObservableProperty] private bool _wholePartyOn;
 
-    // The "All" master checkbox: ticked when self AND every party member are
-    // targeted. Setting it selects / deselects everyone (self + members) at once;
-    // unticking any individual box drops it automatically (the getter recomputes).
-    // Backed by the DTO's AllMembers (auto-adapt: blesses whoever is in the party)
-    // + CastOnSelf, so "All" stays a live whole-party choice, not a frozen snapshot.
+    // True once the party has at least one non-self member, so the per-member and
+    // All/None targeting columns are worth showing. Solo → only the Self box shows.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowMemberTargets))]
+    private bool _hasPartyMembers;
+
+    // The "All/None" master over the party MEMBERS only — INDEPENDENT of the Self
+    // box (unticking it must never touch Self; that conflation was the reported
+    // bug). Backed by the DTO's AllMembers auto-adapt flag: ticked = bless every
+    // member, including anyone who later joins; unticked = bless no members (a
+    // joiner is NOT auto-assigned). Unticking any single member box drops out of
+    // All/None automatically (OnMemberToggled freezes the roster into Targets).
     public bool AllTargets
     {
-        get => CastOnSelf && EveryMemberChecked;
+        get => _dto.AllMembers;
         set
         {
             _suppress = true;
-            CastOnSelf = value;
-            _dto.CastOnSelf = value;
             _dto.AllMembers = value;
             _dto.Targets.Clear();
             foreach (BuffMemberToggle t in MemberTargets) t.SetCheckedSilently(value);
@@ -56,8 +59,8 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         }
     }
 
-    // Every party-member box is ticked (vacuously true with no members — a solo
-    // single-target slot's "All" is then just its self box).
+    // Every party-member box is ticked (vacuously true with no members). Used to
+    // re-enter auto-adapt "all members" once the whole roster is re-ticked.
     private bool EveryMemberChecked
     {
         get
@@ -95,6 +98,10 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // (its only target) or a single-target buff (self is one option among members).
     public bool ShowSelf => IsSelfOnly || IsSingleTarget;
 
+    // The per-member checkboxes and the All/None master show only for a single-
+    // target buff AND when there's actually a party to target — solo shows just Self.
+    public bool ShowMemberTargets => IsSingleTarget && HasPartyMembers;
+
     public BuffSlotRowViewModel(
         BuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
         Func<string?, string> resolveName, Action persist)
@@ -123,6 +130,7 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsSingleTarget));
         OnPropertyChanged(nameof(IsSelfOnly));
         OnPropertyChanged(nameof(ShowSelf));
+        OnPropertyChanged(nameof(ShowMemberTargets));
     }
 
     partial void OnCastOnSelfChanged(bool value)
@@ -130,7 +138,6 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         if (_suppress) return;
         _dto.CastOnSelf = value;
         _persist();
-        OnPropertyChanged(nameof(AllTargets));
     }
 
     partial void OnWholePartyOnChanged(bool value)
@@ -150,6 +157,7 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         foreach ((string display, string given) in members)
             MemberTargets.Add(new BuffMemberToggle(
                 display, given, _dto.AllMembers || _dto.Targets.Contains(given), OnMemberToggled));
+        HasPartyMembers = members.Count > 0;
         OnPropertyChanged(nameof(AllTargets));
     }
 
