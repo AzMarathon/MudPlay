@@ -2131,25 +2131,50 @@ public sealed class AutoWalkManager : IRecoverableEngine
         Raise(new WalkEvent(WalkEventKind.Retrying,
             $"tracker entered {newConfidence} mid-step; re-planning from {here.Key} (attempt {_replanCount}/{MaxReplansPerWalk})",
             _destination));
-        // Re-source the path from the tracker's best-guess current
-        // room. WalkTo handles the existing Walking state by clearing
-        // it — silently, since _replanningInPlace suppresses the
-        // supersede Stopped that would otherwise abort a driving reroute.
-        _replanningInPlace = true;
-        try
+
+        // Lean on Paradigm's authoritative rm before trusting the tracker's belief
+        // and replanning from it — a mid-step desync is exactly what a name-
+        // ambiguous zone (many identically-named rooms sharing an exit pattern)
+        // can produce, and rm hard-locates the tracker independent of that name+
+        // exit matching instead of replanning from the same wrong room repeatedly
+        // (LoopRunner.EnterRecovery carries the identical rationale; report
+        // paradigm-20260901-100523). _stepInFlight is already false above, so
+        // rm's own reentrant tracker relocate can't be mistaken for an in-flight
+        // step's arrival by OnTrackerStateChanged — it's a clean no-op there,
+        // leaving DoReplan as the only thing that actually replans. Stock realms /
+        // no rm reply fall through to exactly the prior behavior.
+        if (_recovery?.TryResyncOnce?.Invoke(
+                $"walker desync mid-step (tracker {newConfidence})",
+                _ => DoReplan(),
+                DoReplan) == true)
         {
-            // Preserve the walk's planning flags — a bare WalkTo(dest) reverts to
-            // defaults, so a no-teleport walk would replan through a teleport.
-            // (Args evaluate before WalkTo's internal Reset clears the fields.)
-            WalkTo(dest,
-                planThroughAcquirableGates: _activeThroughGates,
-                armItemAcquisition: _activeArmAcquisition,
-                avoidTeleports: _activeAvoidTeleports,
-                avoidTraps: _activeAvoidTraps);
+            return;
         }
-        finally
+
+        DoReplan();
+
+        void DoReplan()
         {
-            _replanningInPlace = false;
+            // Re-source the path from the tracker's best-guess current
+            // room. WalkTo handles the existing Walking state by clearing
+            // it — silently, since _replanningInPlace suppresses the
+            // supersede Stopped that would otherwise abort a driving reroute.
+            _replanningInPlace = true;
+            try
+            {
+                // Preserve the walk's planning flags — a bare WalkTo(dest) reverts to
+                // defaults, so a no-teleport walk would replan through a teleport.
+                // (Args evaluate before WalkTo's internal Reset clears the fields.)
+                WalkTo(dest,
+                    planThroughAcquirableGates: _activeThroughGates,
+                    armItemAcquisition: _activeArmAcquisition,
+                    avoidTeleports: _activeAvoidTeleports,
+                    avoidTraps: _activeAvoidTraps);
+            }
+            finally
+            {
+                _replanningInPlace = false;
+            }
         }
     }
 
@@ -2335,6 +2360,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return;
             }
 
+            bool hadStepInFlight = _stepInFlight;
             _stepInFlight = false;
             _awaitingPromptForCommand = false;
 
@@ -2349,7 +2375,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // pause mid-walk → 2 pipelined moves resolve → resume → old
             // SendNextStep re-sent the just-completed step's direction
             // and the walker drifted off the path it had drawn.
-            if (!TryReconcileIndexAfterResume())
+            if (!TryReconcileIndexAfterResume(hadStepInFlight))
             {
                 TryReplanOrFail(RoomConfidence.Suspect);
                 return;
@@ -2367,7 +2393,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // ended up at a room that isn't on the remaining path AND can't
     // legally take the next planned step — the caller should re-plan
     // rather than blindly re-sending a stale step direction.
-    private bool TryReconcileIndexAfterResume()
+    //
+    // hadStepInFlight: was a move already on the wire when the pause hit
+    // (captured by the caller before clearing _stepInFlight). See its use
+    // below.
+    private bool TryReconcileIndexAfterResume(bool hadStepInFlight)
     {
         if (_path is null) return true;
         if (_tracker.State.CurrentRoom is not { } here) return true;
@@ -2397,12 +2427,28 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
         }
 
-        // No forward match. If the next planned step's direction
-        // doesn't even exist as an exit from the player's current room,
-        // they're off the path — re-plan. The "exit exists" check is a
-        // cheap proxy for "the planned route still works from here";
-        // imperfect cases (exit exists but leads somewhere unrelated)
-        // fall through to the normal mid-step desync handling in
+        // No forward match — the player isn't further along the path than
+        // before the pause. If a move was in flight when the pause hit, its
+        // absence from the forward scan above means it never landed:
+        // MovementRefusalDetector still reverts it (NoteMoveBlocked fires even
+        // while paused), OnTrackerStateChanged just doesn't react to that
+        // transition (it gates on State == Walking) — so the tracker is back
+        // at the step's SOURCE room, not somewhere the exit-existence check
+        // below can distinguish from "never attempted yet". Trusting that
+        // cheap graph-cached check here would resend the exact direction the
+        // server just refused, and nothing remembers the refusal across the
+        // next pause/resume cycle — a doomed retry loop that only ends by
+        // luck (walker-side twin of the LoopRunner "refused while paused"
+        // resume guard; report paradigm-20260901-091527, five minutes of
+        // bonking the same wall). Force a re-plan instead.
+        if (hadStepInFlight) return false;
+
+        // No move was in flight (pause landed cleanly between steps). If the
+        // next planned step's direction doesn't even exist as an exit from
+        // the player's current room, they're off the path — re-plan. The
+        // "exit exists" check is a cheap proxy for "the planned route still
+        // works from here"; imperfect cases (exit exists but leads somewhere
+        // unrelated) fall through to the normal mid-step desync handling in
         // OnTrackerStateChanged after the next send.
         if (_index >= _path.Count) return true;
         if (_path[_index] is not MoveStep nextMove) return true;

@@ -81,6 +81,8 @@ public sealed partial class MovementRefusalDetector : IDisposable
         TooEncumberedToMove(),
         FlatOnYourBack(),
         AlignmentBlocksExit(),
+        FumbleInConfusion(),
+        ConvulseViolently(),
     };
 
     [GeneratedRegex(
@@ -154,4 +156,23 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*Your current alignment prevents you from entering this exit[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AlignmentBlocksExit();
+
+    // Confusion fumbles the just-sent command — it's consumed and never executes —
+    // which for a MOVE means the pending step never lands and the tracker strands
+    // (it wrongly matches the stale move against later unrelated text, poisoning
+    // recovery). A fumble can hit ANY action, not just combat: combat re-sends its
+    // swing on ConditionTracker.ActionFailed, but a fumbled MOVE has to revert here.
+    // Confusion surfaces two lines — the generic fumble every source shares, and
+    // `convulsions`' own wording — so both are recognized (report
+    // paradigm-20260901-080223 was the convulsion case; the generic has the same
+    // failure mode).
+    [GeneratedRegex(
+        @"^\s*You fumble in confusion[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex FumbleInConfusion();
+
+    [GeneratedRegex(
+        @"^\s*You convulse violently[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ConvulseViolently();
 }

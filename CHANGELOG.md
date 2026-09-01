@@ -1,5 +1,13 @@
 # Version history
 
+## 3.44.4
+
+- Confusion fumbles no longer strand the walker: **both** fumble lines — the generic `You fumble in confusion!` and `convulsions`' own `You convulse violently!` — now revert a move sent while confused instead of leaving a stale pending move that could poison recovery and strand a tier-3 backtrack indefinitely awaiting a landing that would never arrive
+- Fixed a loop-runner reentrancy bug: the walker's own arrival-confirm could hand off into the loop's next step before that same room-tracker event finished reaching the loop runner's handler, which then misread the walker's already-consumed arrival as a bad landing and wrongly triggered a recovery cascade
+- Fixed the walker resending a just-refused move on every pause/resume cycle with no retry cap — a move refused while paused now forces a re-plan instead of blindly retrying the same doomed direction forever
+- Loop / walker recovery now leans on Paradigm's authoritative `rm` before trusting a "blocked at source" or mid-step-desync belief and rerouting from it — a name-ambiguous zone (many identically-named rooms) can leave that belief pointing at the wrong physical room, and `rm` corrects it instead of rerouting from the same wrong room until the retry budget burns out
+- bug reports addressed: paradigm-20260901-080223, paradigm-20260901-090044, paradigm-20260901-091527, paradigm-20260901-100523
+
 ## 3.44.0
 
 - New **Monster Aggro** calculator (Workshop → Calculators): predicts which party member a monster attacks, for up to 6 members; shows the **Paradigm** or **Stock** model automatically from the loaded game-data set's realm

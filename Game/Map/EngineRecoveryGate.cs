@@ -89,6 +89,18 @@ public sealed class EngineRecoveryGate
     // keeps the pure heuristic path — the only behaviour on stock realms.
     public Func<string, bool>? TryResync { get; set; }
 
+    // Optional Paradigm one-shot re-fix hook (ParadigmPositionResolver.RequestResyncOnce).
+    // Unlike TryResync, this bypasses the gate's own tier/awaiting bookkeeping
+    // entirely — for a caller (LoopRunner's bounded "blocked at source" local
+    // recovery, AutoWalkManager's replan-on-desync) that already owns its own
+    // pause/retry loop and just wants a direct "ask rm, get the authoritative
+    // room (or a failure signal)" answer before trusting a tracker belief that
+    // LOOKS Confirmed but came from a name-ambiguous zone's fragile name+exit
+    // match. True means a request was sent (or is already in flight) and
+    // exactly one of the two callbacks will fire; false (stock realm, no wire,
+    // throttled) means the caller falls back to its existing heuristic path.
+    public Func<string, Action<RoomKey>, Action, bool>? TryResyncOnce { get; set; }
+
     // Currently active engine, or null when nothing is attached.
     public IRecoverableEngine? AttachedEngine => _engine;
 

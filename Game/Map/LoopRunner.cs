@@ -838,9 +838,32 @@ public sealed class LoopRunner : IRecoverableEngine
                     break;
                 }
                 // Walker arrived at the chosen waypoint. Rotation already happened
-                // in Start — just hand off into the circle.
+                // in Start — hand off into the circle. Marshalled past the current
+                // dispatch instead of called directly: OnWalkerEvent runs
+                // synchronously from inside RoomTracker.StateChanged (the walker's
+                // own subscription fires first — it's constructed before us in
+                // AppServices), so calling BeginCircle here would race the REST of
+                // that same dispatch. BeginCircle's own SendNextStep flips us to
+                // Running/step-in-flight immediately; by the time the tracker's
+                // later subscribers — including our own OnTrackerStateChanged —
+                // get their turn at the ORIGINAL arrival transition, our guard
+                // (State==Running && step in flight) no longer filters it out, and
+                // we misread the walker's own already-consumed arrival as a bad
+                // landing of the step we hadn't even sent when the dispatch began
+                // (report paradigm-20260901-090044). A pause that lands in the same
+                // window before this runs falls back to the same deferred-resume
+                // handoff the pausedMidApproach branch above uses.
                 _log?.Info("LoopRunner", "approach finished; entering circle");
-                BeginCircle();
+                _postToUi(() =>
+                {
+                    if (State == LoopState.Paused && _pausedFromApproach)
+                    {
+                        _approachFinishedWhilePaused = true;
+                        return;
+                    }
+                    if (State != LoopState.Approaching) return;
+                    BeginCircle();
+                });
                 break;
             case WalkEventKind.Failed:
                 // Walker gave up (tier-3 abort, blocked, no path, etc.).
@@ -1523,6 +1546,26 @@ public sealed class LoopRunner : IRecoverableEngine
         State = LoopState.Recovering;
         Raise(new LoopEvent(LoopEventKind.Paused, $"recovering: {reason}"));
 
+        // Lean on Paradigm's authoritative `rm` before trusting ANY belief about
+        // where we are. "Blocked at source" / a mid-step mismatch is exactly the
+        // shape a name-ambiguous zone (many identically-named rooms sharing an
+        // exit pattern) produces: the tracker's belief LOOKS Confirmed, but the
+        // room that just refused a move disagrees — and a bare `look` below would
+        // just re-run the same name+exit matching that produced the wrong belief
+        // in the first place. `rm` hard-locates the tracker independent of that
+        // matching, so it corrects a mis-anchor instead of rerouting from the same
+        // wrong room cycle after cycle until the retry budget burns out (report
+        // paradigm-20260901-100523). Both callbacks reroute — RerouteFromCurrentRoom
+        // reads whatever room the tracker holds at that moment, corrected or not —
+        // so a failed/unavailable resync (stock realm, no wire, throttled) falls
+        // through to exactly the prior behavior.
+        if (_recovery?.TryResyncOnce?.Invoke(reason, _ => RerouteFromCurrentRoom(), RerouteFromCurrentRoom) == true)
+        {
+            _log?.Warn("LoopRunner",
+                $"recovery {_recoverAttempts}/{MaxRecoverAttempts}: {reason}; confirming via rm before rerouting");
+            return;
+        }
+
         // Tracker already sure of the room → reroute now. Issuing a `look` here
         // would race the reroute's first move: the echo re-prints the current room
         // and would trip the tracker into Suspect right after we send that move.
@@ -1546,9 +1589,15 @@ public sealed class LoopRunner : IRecoverableEngine
     // Reroute the active loop from wherever the tracker now says we are — picks the
     // closest waypoint, re-approaches if needed, and continues the circle. Reuses
     // Start's planning; isRecovery keeps the bounded budget + lap continuity.
+    //
+    // Guarded on State == Recovering so a TryResyncOnce success can't double-fire
+    // this: SetLocated's own reentrant tracker transition already reroutes us via
+    // OnRecoveringTransition below before our callback gets its turn, which leaves
+    // State no longer Recovering by the time the callback runs.
     private void RerouteFromCurrentRoom()
     {
         if (_loop is null) return;
+        if (State != LoopState.Recovering) return;
         StartInternal(_loop, isRecovery: true);
     }
 

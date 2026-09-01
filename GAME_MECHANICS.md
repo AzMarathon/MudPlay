@@ -3013,6 +3013,17 @@ glass jug               5               2 gold crowns
   shriek that wore off left the co-latched `fumble` still holding `Confused`, keeping the nav
   ConfusionGate stuck. **Client encoding:** `ConditionTracker` clears every active `Confused` record when
   a `Confused`-carrying record's wear-off matches.
+- **[CONFIRMED] 2026-09-01, user + report `paradigm-20260901-080223`: a confusion fumble can prevent ANY
+  action, not just combat — and the fumble line can be customized per confuse source.** Most confusion
+  sources surface the generic `You fumble in confusion!`; `convulsions` customizes it to `You convulse
+  violently!` (with its own onset `You are in convulsions!`). Either way the just-sent command is consumed
+  and never executes. The client already re-sends a fumbled combat swing (ConditionTracker's
+  `LastActionFailed` → `CombatManager.OnActionFailed`), but a fumbled **move** has to REVERT its pending
+  step or the tracker strands — the unreverted move got wrongly matched against later unrelated text and
+  stranded a tier-3 recovery backtrack indefinitely (no timeout watched its landing). The fumble line
+  always appears as the direct reply to the command it swallowed, never as unprompted ambient text.
+  **Client encoding:** `MovementRefusalDetector` recognizes BOTH `You fumble in confusion!` and `You
+  convulse violently!` as movement refusals, reverting the pending move immediately.
 
 ## One BETWEEN-ROUND spell per combat round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
 
