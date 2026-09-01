@@ -423,6 +423,32 @@ public sealed class CombatSpellChooser
         }
     }
 
+    // Roll back a debuff MarkCast whose cast the server REJECTED after the optimistic
+    // send (the pre-attack / in-between debuff returns TryCast=true on wire-write, then
+    // "You have already cast a spell this round!" arrives async). The optimistic mark
+    // tagged the mob(s) debuffed and spent the per-room count; undo both so the debuff
+    // re-fires next round instead of being treated as landed (reports
+    // paradigm-20260901-123720 / -140747). Only the debuff actions have a mark to undo.
+    public void UnmarkCast(in CombatSpellDecision decision, string targetRawName,
+                           IReadOnlyList<string>? roomMobKeys = null)
+    {
+        switch (decision.Action)
+        {
+            case CombatSpellAction.AreaDebuff:
+                if (_areaDebuffCasts > 0) _areaDebuffCasts--;
+                if (roomMobKeys is not null)
+                    foreach (string key in roomMobKeys) _areaDebuffedMobs.Remove(key);
+                break;
+            case CombatSpellAction.SingleDebuff:
+                if (!string.IsNullOrEmpty(targetRawName))
+                    _singleDebuffedTargets.Remove(targetRawName);
+                if (_singleDebuffCasts > 0) _singleDebuffCasts--;
+                break;
+            default:
+                break;   // attack / drain marks aren't rolled back this way
+        }
+    }
+
     private static bool IsConfigured(CombatSpellSlot slot) =>
         !string.IsNullOrWhiteSpace(slot.SpellName);
 

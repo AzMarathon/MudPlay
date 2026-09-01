@@ -485,6 +485,14 @@ it isn't here and you're unsure, ask.
   when nothing higher-priority is queued does the debuff pre-empt the attack. *(2026-08-25, report
   `paradigm-20260825-103417`: an AoE debuff went out but the multi-attack spell followed a full round
   later — the attack had been deferred to the debuff's `*Combat Off*`; corrected to fire same-round.)*
+  - **A between-round debuff DOES collide with ANOTHER between-round cast that same round** *(2026-09-01,
+    reports `paradigm-20260901-123720` / `-140747`)*: the one-between-round-cast slot is shared, so if an
+    auto-buff (e.g. a mana-flux recast) or the user's OWN manual cast already spent the round's cast, the
+    debuff draws `You have already cast a spell this round!`. The debuff is sent optimistically (the client
+    marks the mob debuffed on wire-write, before the server answers), so the rejection has to un-mark it —
+    the client now recognizes the rejection and re-fires the debuff next round instead of leaving the mob
+    falsely marked debuffed (and the monster un-debuffed). The combat ATTACK that round self-corrects on
+    its own owed-and-retry path; only the debuff mark needed the rollback.
 - **[CONFIRMED]** *(2026-08-05, user)* **`MaxCasts` counts combat ROUNDS, not individual casts.** It is
   the maximum number of rounds the client will spend casting this spell at a target — one round counts
   as one regardless of how many times the spell fires that round (e.g. a spell that casts twice per
@@ -942,7 +950,7 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 
 Only **roll spells** (nature tap / mana flux / `prfl`, and kin — code-145 with stored value 0) are candidates for rerolling: a bad roll drags `ManaRgn%` down, so re-cast to chase a better one. **`CHSU` (chaos surge) is NEVER rerolled** — it's a *constant* mana heal-over-time (the mana analogue of HP regen), not a rolled `ManaRgn%` modifier; maintain it like a normal buff. A fixed (non-zero) code-145 spell isn't rerolled either. (`RegenSpellClassifier` already splits roll / fixed / HoT.)
 
-Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again.
+Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again. **Running out of mana mid-cycle PAUSES, it does not surrender** *(2026-09-01, report `paradigm-20260901-114223`: the reroller quit at 3/20 when a recast would breach the mana floor, stranding the spell at a bad roll)*: each recast costs mana, so if the next one would drop under the buff mana floor the cycle SUSPENDS with its reroll counter intact and resumes the next attempt once meditation lifts mana back over the floor — so it spends its full reroll budget across rest instead of abandoning a bad roll at the floor.
 
 **How the roll is read differs by realm:**
 - **Paradigm** — send **`abil 145`**. The output is three lines for `ManaRegen(145)`:
