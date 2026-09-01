@@ -4,7 +4,6 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Services;
-using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
@@ -16,9 +15,9 @@ namespace MudPlay.ViewModels.GameData.Tables;
 // so each direction is a column carrying the destination room number (or 0 / blank for a
 // wall). The listing surfaces the most diagnostic fields plus the four cardinal exits.
 //
-// Double-click a row → open the read-only room-detail popup (the same
-// everything-attached-to-this-room text the Navigation map hover shows: exits +
-// requirements, illumination, shop, room spell, placed/spawned monsters, room commands).
+// Double-click a row → open the Navigation map on that room and select it, so its
+// details (exits, illumination, shop, room spell, placed/spawned monsters) show in
+// the map's ROOM INFO panel.
 public sealed class RoomsSectionViewModel : JsonTableSectionViewModel, IEditableTableSectionViewModel
 {
     private readonly DialogService? _dialogs;
@@ -55,7 +54,7 @@ public sealed class RoomsSectionViewModel : JsonTableSectionViewModel, IEditable
         : base(cache, resolver)
     {
         _dialogs = dialogs;
-        OpenDetailCommand = new RelayCommand<GameDataRow?>(ShowRoomDetail);
+        OpenDetailCommand = new RelayCommand<GameDataRow?>(OpenRoomInNavigation);
     }
 
     // A "map,room" coordinate query (e.g. "1,1", "1/1", "1 1") matches the single row
@@ -84,15 +83,16 @@ public sealed class RoomsSectionViewModel : JsonTableSectionViewModel, IEditable
     private static bool IntEquals(string? cell, int value)
         => int.TryParse(cell, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n == value;
 
-    // Resolve the row's (Map Number, Room Number) and pop the room-detail popup.
-    // No-op when the DialogService is absent (design-time) or the pair can't be parsed.
-    private void ShowRoomDetail(GameDataRow? row)
+    // Resolve the row's (Map Number, Room Number) and open the Navigation map on
+    // it, selecting the room so its details show in the ROOM INFO panel. No-op in
+    // design-time (no DialogService → no live app) or when the pair can't be parsed.
+    private void OpenRoomInNavigation(GameDataRow? row)
     {
         if (row is null || _dialogs is null) return;
         if (!int.TryParse(row.Get("Map Number"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int map))
             return;
         if (!int.TryParse(row.Get("Room Number"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int room))
             return;
-        RoomDetailPopup.Show(_dialogs, new RoomKey(map, room));
+        AppServices.Current.NavigateToRoom(new RoomKey(map, room));
     }
 }

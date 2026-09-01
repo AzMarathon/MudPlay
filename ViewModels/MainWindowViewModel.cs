@@ -4278,11 +4278,12 @@ public partial class MainWindowViewModel : ObservableObject
         return vm;
     }
 
-    // Registered on AppServices — the room-detail popup's clickable room title
-    // and exit destinations route here to open/focus the map and re-root it on
-    // the chosen room.
+    // Registered on AppServices — the Game Data room chips (a monster's lair /
+    // placed / summoned rooms, the Rooms-tab double-click) and the shop popup's
+    // clickable room title route here to open/focus the map, re-root it on the
+    // chosen room, select it, and show its details in the ROOM INFO panel.
     private void FocusNavigationOnRoom(Game.Map.RoomKey key)
-        => EnsureNavigationWindow()?.OnFloorChangeRequested(key);
+        => EnsureNavigationWindow()?.SelectAndInspect(key);
 
     // Registered on AppServices — the item record's "Queue Walking here" shop
     // links route here to open/focus the map and ARM the walk (QueuedDestination),

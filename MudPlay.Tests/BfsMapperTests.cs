@@ -1158,6 +1158,27 @@ public sealed class BfsMapperTests : IDisposable
     }
 
     [Fact]
+    public void Blacklist_KeepVisible_ExemptsSelectedRoom_AndBypassesCache()
+    {
+        var (bfs, _) = NewMapper();
+        HashSet<RoomKey> banned = new() { new RoomKey(1, 2) };  // Plaza
+        bfs.ConfigureBlacklist(k => banned.Contains(k));
+
+        // Deferred-hide: naming Plaza as the kept-visible (live-selected) room
+        // keeps it placed even though it's blacklisted, and BFS traverses through
+        // it — so North Square (1/3, reachable only via Plaza) reappears too.
+        RoomLayout kept = bfs.BuildLayout(new RoomKey(1, 1), keepVisible: new RoomKey(1, 2));
+        Assert.Contains(new RoomKey(1, 2), kept.Positions.Keys);
+        Assert.Contains(new RoomKey(1, 3), kept.Positions.Keys);
+
+        // A keepVisible build must NOT pollute the shared layout cache: a plain
+        // build afterwards still hides Plaza (and North Square behind it).
+        RoomLayout hidden = bfs.BuildLayout(new RoomKey(1, 1));
+        Assert.DoesNotContain(new RoomKey(1, 2), hidden.Positions.Keys);
+        Assert.DoesNotContain(new RoomKey(1, 3), hidden.Positions.Keys);
+    }
+
+    [Fact]
     public void Blacklist_TrapEdgePreserved_OnDanglingStub()
     {
         const string Json = """

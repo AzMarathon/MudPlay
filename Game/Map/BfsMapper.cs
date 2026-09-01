@@ -502,15 +502,27 @@ public sealed class BfsMapper
     // maxRadius: cap on hop distance from origin. int.MaxValue means
     //   "until queue drains". Map UIs typically pass a small number (e.g.
     //   25) to bound layout work on huge realms.
-    public RoomLayout BuildLayout(RoomKey origin, int maxRadius = int.MaxValue)
+    //
+    // keepVisible: a single blacklisted room to draw anyway (in addition to the
+    //   origin's own exemption). The map passes the currently-selected room here
+    //   so a room the user just blacklisted stays on screen until the selection
+    //   moves off it — a deferred hide that lets the blacklist be used to prune
+    //   rooms the user is still looking at. A keepVisible build is transient and
+    //   depends on live selection, so it bypasses the layout cache entirely.
+    public RoomLayout BuildLayout(RoomKey origin, int maxRadius = int.MaxValue,
+        RoomKey? keepVisible = null)
     {
         (RoomKey Origin, int Radius) cacheKey = (origin, maxRadius);
-        lock (_cacheLock)
+        bool cacheable = keepVisible is null;
+        if (cacheable)
         {
-            if (_layoutCache.TryGetValue(cacheKey, out RoomLayout? cached))
+            lock (_cacheLock)
             {
-                TouchLru(cacheKey);
-                return cached;
+                if (_layoutCache.TryGetValue(cacheKey, out RoomLayout? cached))
+                {
+                    TouchLru(cacheKey);
+                    return cached;
+                }
             }
         }
 
@@ -526,12 +538,12 @@ public sealed class BfsMapper
                 TrapEdgesFromCoord: new Dictionary<(int X, int Y), IReadOnlySet<Direction>>(),
                 SpellEdgesFromCoord: new Dictionary<(int X, int Y), IReadOnlySet<Direction>>())
             { LayoutRoot = origin };
-            lock (_cacheLock) StoreLayout(cacheKey, empty);
+            if (cacheable) lock (_cacheLock) StoreLayout(cacheKey, empty);
             return empty;
         }
 
         // First attempt — BFS + refinement from the requested origin.
-        RoomLayout primary = BuildLayoutCore(origin, maxRadius);
+        RoomLayout primary = BuildLayoutCore(origin, maxRadius, keepVisible);
 
         // Score-and-retry pass. If the primary layout carries any
         // non-Euclidean stubs (cluster, typically caused by reaching a
@@ -582,7 +594,7 @@ public sealed class BfsMapper
                 {
                     if (retryOrigin.Equals(origin)) continue;
                     triedCount++;
-                    RoomLayout secondary = BuildLayoutCore(retryOrigin, maxRadius);
+                    RoomLayout secondary = BuildLayoutCore(retryOrigin, maxRadius, keepVisible);
                     if (!secondary.Positions.ContainsKey(origin))
                     {
                         _log?.Log(Services.LogSeverity.Debug, "BfsMapper",
@@ -620,6 +632,7 @@ public sealed class BfsMapper
         }
         primary = primary with { StubCount = finalStubs };
 
+        if (!cacheable) return primary;
         lock (_cacheLock)
         {
             if (_layoutCache.TryGetValue(cacheKey, out RoomLayout? existing))
@@ -683,7 +696,7 @@ public sealed class BfsMapper
     // tunnels here can still draw a bridge connector.
     private const int TunnelMaxCells = 4;
 
-    private RoomLayout BuildLayoutCore(RoomKey origin, int maxRadius)
+    private RoomLayout BuildLayoutCore(RoomKey origin, int maxRadius, RoomKey? keepVisible = null)
     {
         var positions = new Dictionary<RoomKey, (int X, int Y)>
         {
@@ -843,8 +856,9 @@ public sealed class BfsMapper
                     // source-side stub, so neither the tunnel path nor a
                     // BFS continuation through it can resurrect a hidden room
                     // or drag the rooms behind it onto the map. (Mirrors the
-                    // in-grid blacklist branch below.)
-                    if (_isBlacklisted?.Invoke(next) == true)
+                    // in-grid blacklist branch below.) keepVisible exempts one
+                    // room (the live selection) from the hide.
+                    if (_isBlacklisted?.Invoke(next) == true && next != keepVisible)
                     {
                         AddEdge(edgesFromCoord, hereXY, dir);
                         if (exit.Hint == RoomExitHint.Trap)
@@ -872,8 +886,10 @@ public sealed class BfsMapper
                 // enqueue it. Blacklisted rooms don't claim planar
                 // coords (declutters dense areas) and BFS doesn't
                 // traverse through them. The origin is exempt — it
-                // was placed before this loop started.
-                if (_isBlacklisted?.Invoke(next) == true)
+                // was placed before this loop started; keepVisible
+                // exempts one more (the live selection) so a just-
+                // blacklisted room stays drawn until the cursor leaves.
+                if (_isBlacklisted?.Invoke(next) == true && next != keepVisible)
                 {
                     AddEdge(edgesFromCoord, hereXY, dir);
                     if (exit.Hint == RoomExitHint.Trap)

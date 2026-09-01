@@ -295,6 +295,18 @@ public static class RoomTooltipBuilder
         // predictor never drift.
         => LightModel.Describe(LightModel.Classify(charIllu, roomLight: light));
 
+    // Compact one-line room-light summary for the Navigation ROOM INFO panel: the
+    // signed light offset plus the visibility phrase for the player's current
+    // illumination. Empty for a fully-lit room (Light 0), which needs no marker.
+    public static string BuildRoomLightSummary(Room room, int charIllu)
+    {
+        ArgumentNullException.ThrowIfNull(room);
+        if (room.Light == 0) return string.Empty;
+        string offset = (room.Light > 0 ? "+" : "") + room.Light;
+        string desc = BuildLightDescription(room.Light, charIllu);
+        return desc.Length > 0 ? $"{offset} · {desc}" : offset;
+    }
+
     // Renders the non-interactive tail of the room-detail popup — shop, room
     // spell, room commands (teleports), room light + descriptive phrase, and
     // max regen. Name / Also-Here / exits are rendered as clickable controls in

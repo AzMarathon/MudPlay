@@ -187,6 +187,30 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
+    public void RoomLightSummary_SignedOffset_WithPhrase_ForDarkRoom()
+    {
+        var (graph, _) = NewGraph();
+        Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
+
+        // The Navigation ROOM INFO panel's compact one-liner: signed offset first,
+        // then the visibility phrase for the player's illumination.
+        string summary = RoomTooltipBuilder.BuildRoomLightSummary(dark, charIllu: 0);
+
+        Assert.StartsWith("-180", summary);
+        Assert.Contains("very dark", summary);
+    }
+
+    [Fact]
+    public void RoomLightSummary_Empty_ForFullyLitRoom()
+    {
+        var (graph, _) = NewGraph();
+        Room lit = graph.GetRoom(new RoomKey(1, 1))!;       // Light = 0
+
+        // A fully-lit room needs no indicator, so the panel gets an empty string.
+        Assert.Equal(string.Empty, RoomTooltipBuilder.BuildRoomLightSummary(lit, charIllu: 0));
+    }
+
+    [Fact]
     public void Build_ExitsList_ListsAllDirections_WithDestinationNames()
     {
         var (graph, cache) = NewGraph();

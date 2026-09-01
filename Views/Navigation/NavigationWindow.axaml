@@ -989,11 +989,19 @@
                                                Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
                                     <StackPanel IsVisible="{Binding RoomInfo.HasRoom}" Spacing="2">
-                                        <!-- The room name itself opens the room's game-data record. -->
-                                        <Button Classes="RoomTitleLink"
-                                                Content="{Binding RoomInfo.RoomName}"
-                                                Command="{Binding RoomInfo.OpenRoomRecordCommand}"
-                                                ToolTip.Tip="Open this room's Game Data record"/>
+                                        <!-- Room name (opens the room record, or a shop room's stock
+                                             popup) with the room-light summary to its right. -->
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Button Classes="RoomTitleLink"
+                                                    Content="{Binding RoomInfo.RoomName}"
+                                                    Command="{Binding RoomInfo.OpenRoomRecordCommand}"
+                                                    ToolTip.Tip="{Binding RoomInfo.RoomTitleTip}"/>
+                                            <TextBlock Text="{Binding RoomInfo.RoomLight}"
+                                                       IsVisible="{Binding RoomInfo.HasRoomLight}"
+                                                       VerticalAlignment="Center"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                        </StackPanel>
                                         <TextBlock Text="{Binding RoomInfo.RoomKeyLabel}"
                                                    FontSize="11"
                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
@@ -1038,6 +1046,19 @@
                                                        IsVisible="{Binding RoomInfo.HasLairRegen}"
                                                        FontSize="11"
                                                        Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                        </StackPanel>
+
+                                        <!-- Obvious exits — click to re-root the map on the neighbour -->
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasExits}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Obvious exits"/>
+                                            <ItemsControl ItemsSource="{Binding RoomInfo.Exits}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="gd:RoomDetailLink">
+                                                        <Button Classes="RecordLink"
+                                                                Content="{Binding Text}" Command="{Binding Open}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                         </StackPanel>
 
                                         <!-- Floor items -->
