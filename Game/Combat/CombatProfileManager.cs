@@ -120,6 +120,24 @@ public sealed class CombatProfileManager
         return CombatSpellProfileMatcher.Resolve(s.Profiles, arg) is { } i ? SwitchToIndex(i) : null;
     }
 
+    // Advance to the next profile in order (wraps) — the toolbar cycle button's
+    // left-click. Returns the swap report.
+    public string? Cycle()
+    {
+        CombatProfileSettings? s = Store();
+        if (s is null || s.Profiles.Count == 0) return null;
+        return SwitchToIndex((Math.Max(0, IndexOfActive(s)) + 1) % s.Profiles.Count);
+    }
+
+    // Step back to the previous profile (wraps) — the cycle button's right-click.
+    public string? CycleBack()
+    {
+        CombatProfileSettings? s = Store();
+        if (s is null || s.Profiles.Count == 0) return null;
+        int count = s.Profiles.Count;
+        return SwitchToIndex((Math.Max(0, IndexOfActive(s)) - 1 + count) % count);
+    }
+
     // Fire Changed without a state change — the Combat tab calls this after Apply
     // commits its staged profile list, so the Action-menu / toolbar pick up the
     // new set + active profile.

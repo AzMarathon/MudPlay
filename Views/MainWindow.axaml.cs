@@ -477,4 +477,39 @@ public partial class MainWindow : Window
         }
         ProfilesMenu.IsVisible = vm.HasCombatProfiles;
     }
+
+    // Toolbar left-click: the Combat-Profile MENU button opens a fly-out of the
+    // profiles ("N) name", active checked). The CYCLE button's left-click runs its
+    // Command (next profile); every other button is unaffected.
+    private void OnToolbarButtonClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is not Button button
+            || button.DataContext is not Services.ToolbarButtonItem item
+            || DataContext is not MainWindowViewModel vm
+            || item.ActionId != "CombatProfileMenu") return;
+
+        MenuFlyout flyout = new();
+        foreach (CombatProfileMenuItem p in vm.CombatProfileItems)
+        {
+            flyout.Items.Add(new MenuItem
+            {
+                Header     = p.Display,
+                ToggleType = MenuItemToggleType.CheckBox,
+                IsChecked  = p.IsActive,
+                Command    = p.SwitchCommand,
+            });
+        }
+        flyout.ShowAt(button);
+    }
+
+    // Toolbar right-click: the Combat-Profile CYCLE button steps to the PREVIOUS
+    // profile (its left-click / Command steps to the next).
+    private void OnToolbarButtonPointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Right) return;
+        if (sender is Button button
+            && button.DataContext is Services.ToolbarButtonItem { ActionId: "CycleCombatProfile" }
+            && DataContext is MainWindowViewModel vm)
+            vm.CycleCombatProfileBack();
+    }
 }

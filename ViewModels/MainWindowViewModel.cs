@@ -1380,6 +1380,7 @@ public partial class MainWindowViewModel : ObservableObject
          && e.PropertyName != nameof(IsAutoSearchActive)
          && e.PropertyName != nameof(IsDisableHangupsActive)
          && e.PropertyName != nameof(IsSprintModeActive)
+         && e.PropertyName != nameof(CombatProfileCycleLabel)
          && e.PropertyName != nameof(IsAllAutoOff)) return;
 
         foreach (ToolbarButtonItem row in ToolbarItems)
@@ -1392,6 +1393,10 @@ public partial class MainWindowViewModel : ObservableObject
     {
         switch (row.ActionId)
         {
+            // Cycle button shows the active profile number ("P1") as its label.
+            case "CycleCombatProfile":
+                row.BadgeText = CombatProfileCycleLabel;
+                break;
             case "ToggleConnection":
                 row.IsActive = IsConnecting;
                 row.IsDanger = IsConnected;
@@ -3970,6 +3975,10 @@ public partial class MainWindowViewModel : ObservableObject
     // loaded).
     [ObservableProperty] private bool _hasCombatProfiles;
 
+    // The toolbar cycle button's label — "P<active#>". ApplyToolbarRowState copies
+    // it onto the CycleCombatProfile row's badge; SyncToolbarStateFlags re-runs it.
+    [ObservableProperty] private string _combatProfileCycleLabel = "P1";
+
     private void RebuildCombatProfilesMenu()
     {
         Game.Combat.CombatProfileManager mgr = AppServices.Current.CombatProfiles;
@@ -3986,7 +3995,18 @@ public partial class MainWindowViewModel : ObservableObject
                 switchCommand: new RelayCommand(() => AppServices.Current.CombatProfiles.SwitchToIndex(index))));
         }
         HasCombatProfiles = profiles.Count > 0;
+        CombatProfileCycleLabel = "P" + (active >= 0 ? active + 1 : 1);
     }
+
+    // Toolbar cycle button — left-click advances to the next profile (wraps). A
+    // live quick-swap of the saved profiles (independent of the staged Settings
+    // editor).
+    [RelayCommand]
+    private void CycleCombatProfile() => AppServices.Current.CombatProfiles.Cycle();
+
+    // Right-click twin of the cycle button (invoked from the toolbar code-behind) —
+    // steps back to the previous profile (wraps).
+    public void CycleCombatProfileBack() => AppServices.Current.CombatProfiles.CycleBack();
 
     // The terminal right-click Favorites flyout — always MaxStarred numbered
     // slots when any favourite is starred: filled slots first, then "(empty)"

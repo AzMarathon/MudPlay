@@ -110,4 +110,9 @@
          glyph; the letters ARE the icon). -->
     <StreamGeometry x:Key="IconExp">M3 8 V16 M3 8 H7 M3 12 H6.5 M3 16 H7 M9.5 8 L14.5 16 M14.5 8 L9.5 16 M17 8 V16 M17 8 H20.5 V12 H17</StreamGeometry>
 
+    <!-- Combat-profile cycle (circular arrow) — usually hidden behind the "P#" badge. -->
+    <StreamGeometry x:Key="IconCombatProfile">M18.5 8 A7 7 0 1 0 19 13 M18.5 8 H15.5 M18.5 8 V11</StreamGeometry>
+    <!-- Combat-profile menu (list + expand chevron). -->
+    <StreamGeometry x:Key="IconCombatProfileMenu">M4 7 H16 M4 12 H16 M4 17 H16 M19 10 L21 12 L19 14</StreamGeometry>
+
 </ResourceDictionary>
