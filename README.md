@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.43.10**
-> - Mana-regen reroll (flux / nature tap): running out of mana mid-cycle now **pauses and resumes** after you meditate back up, spending the full reroll budget instead of quitting early at the mana floor
-> - Combat: a pre-attack debuff the server rejects with "You have already cast a spell this round!" now re-fires next round instead of leaving the monster falsely marked debuffed
+> **Version 3.44.0**
+> - New **Monster Aggro** calculator (Workshop → Calculators): predicts which party member a monster attacks, for up to 6 members; shows the **Paradigm** or **Stock** model automatically from the loaded game-data set's realm
+> - Paradigm: each member's score (150 base + Charm + party position + last-hitter) and their share of the monster's weighted target lottery
+> - Stock: type a monster **record number** to auto-fill Align / Follow% / guard, then see who it opens on (by alignment), each aggroed member's per-beat **target %** (the 50−5×hits spread), and the Follow% stickiness
+> - Openable from the terminal right-click menu or a toolbar button like any other calculator
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

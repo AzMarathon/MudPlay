@@ -104,6 +104,7 @@ public partial class CalculatorsSectionView : UserControl
         CalculatorsSectionViewModel.CalculatorId.Backstab => BackstabCalc ?? this.FindControl<Expander>("BackstabCalc"),
         CalculatorsSectionViewModel.CalculatorId.ManaRegen => ManaRegenCalc ?? this.FindControl<Expander>("ManaRegenCalc"),
         CalculatorsSectionViewModel.CalculatorId.RealmRankings => RealmRankingsCalc ?? this.FindControl<Expander>("RealmRankingsCalc"),
+        CalculatorsSectionViewModel.CalculatorId.MonsterAggro => MonsterAggroCalc ?? this.FindControl<Expander>("MonsterAggroCalc"),
         _ => null,
     };
 

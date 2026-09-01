@@ -67,7 +67,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // sets the flag and raises ScrollToCalculatorRequested. PendingScrollTarget
     // covers the lazy-tab case: a deep-link can fire before the view is built, so
     // the view centers the pending target on first load.
-    public enum CalculatorId { Hit, Movement, Swing, Backstab, ManaRegen, RealmRankings }
+    public enum CalculatorId { Hit, Movement, Swing, Backstab, ManaRegen, RealmRankings, MonsterAggro }
 
     [ObservableProperty] private bool _hitExpanded;
     [ObservableProperty] private bool _movementExpanded;
@@ -75,6 +75,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     [ObservableProperty] private bool _backstabExpanded;
     [ObservableProperty] private bool _manaRegenExpanded;
     [ObservableProperty] private bool _realmRankingsExpanded;
+    [ObservableProperty] private bool _monsterAggroExpanded;
 
     public event Action<CalculatorId>? ScrollToCalculatorRequested;
     public CalculatorId? PendingScrollTarget { get; private set; }
@@ -92,6 +93,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             case CalculatorId.Backstab: BackstabExpanded = true; break;
             case CalculatorId.ManaRegen: ManaRegenExpanded = true; break;
             case CalculatorId.RealmRankings: RealmRankingsExpanded = true; break;
+            case CalculatorId.MonsterAggro: MonsterAggroExpanded = true; break;
         }
         PendingScrollTarget = id;
         ScrollToCalculatorRequested?.Invoke(id);
@@ -180,6 +182,50 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // band; Heavy / Encumbered share the slow band.
     public string StockMoveFastBandText { get; }
     public string StockMoveSlowBandText { get; }
+
+    // ----- Monster Aggro calculator --------------------------------------
+    // One "Monster Aggro" calculator that shows the loaded set's model: Paradigm
+    // (150-base weighted lottery over Charm / party position / recent aggro) or
+    // Stock (acquisition by Align + guard, the 50−5×hits spread, Follow%
+    // stickiness). AggroIsParadigm follows GameDataCache.ActiveRealm and flips on a
+    // set change; each party row carries both models' inputs and the view shows
+    // only the active realm's fields.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AggroIsStock))]
+    private bool _aggroIsParadigm;
+    public bool AggroIsStock => !AggroIsParadigm;
+
+    // Up to 6 configurable party members (both models' inputs per row).
+    public ObservableCollection<AggroMemberRowViewModel> AggroMembers { get; } = new();
+    public const int MaxAggroMembers = 6;
+
+    // Stock monster inputs — type a record number to auto-fill name + Align +
+    // Follow% + guard; Align / Follow% / guard stay editable after seeding.
+    [ObservableProperty] private int _aggroMonsterNumber;
+    [ObservableProperty] private string _aggroMonsterName = "—";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AggroMonsterAlignName))]
+    private int _aggroMonsterAlign;
+    [ObservableProperty] private int _aggroMonsterFollowPercent;
+    [ObservableProperty] private bool _aggroMonsterIsGuard;
+
+    // Friendly Align label for the resolved monster (0-6).
+    public string AggroMonsterAlignName => AggroMonsterAlign switch
+    {
+        0 => "Good",
+        1 => "Evil",
+        2 => "Chaotic Evil",
+        3 => "Neutral",
+        4 => "Lawful Good",
+        5 => "Neutral Evil",
+        6 => "Lawful Evil",
+        _ => "—",
+    };
+
+    // Summary lines filled by the recompute.
+    [ObservableProperty] private string _aggroAcquisitionSummary = "—";   // stock
+    [ObservableProperty] private string _aggroStickinessText = "—";        // stock
+    [ObservableProperty] private string _aggroParadigmSummary = "—";       // paradigm
 
     // ----- Swing calculator ----------------------------------------------
     // Selected swing weapon — null / unmatched means the equipped weapon.
@@ -784,6 +830,10 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         EnsureClassFilterOptions();
         SeedAll();
         RebuildLeaderboard();
+
+        _gameData.ActiveSetChanged += OnAggroActiveSetChanged;
+        SeedDefaultAggroParty();
+        RecomputeAggro();
     }
 
     // Full (re)seed: refresh the actual snapshot, push it into the editable
@@ -1717,6 +1767,163 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         LeaderboardRebuilt?.Invoke();
     }
 
+    // ----- Monster Aggro: inputs, party management, recompute -------------
+    private bool _suppressAggroRecompute;
+    private const int JailSpellId = 583;   // the guard "jail" spell — the guard proxy
+
+    partial void OnAggroMonsterNumberChanged(int value) => ResolveAggroMonster();
+    partial void OnAggroMonsterAlignChanged(int value) => RecomputeAggro();
+    partial void OnAggroMonsterFollowPercentChanged(int value) => RecomputeAggro();
+    partial void OnAggroMonsterIsGuardChanged(bool value) => RecomputeAggro();
+
+    private AggroMemberRowViewModel NewAggroRow(string name)
+        => new(name, _ => RecomputeAggro(), RemoveAggroMember, OnAggroLastAttacker);
+
+    private void SeedDefaultAggroParty()
+    {
+        AggroMembers.Clear();
+        AggroMembers.Add(NewAggroRow("Member 1"));
+        AggroMembers.Add(NewAggroRow("Member 2"));
+    }
+
+    [RelayCommand]
+    private void AddAggroMember()
+    {
+        if (AggroMembers.Count >= MaxAggroMembers) return;
+        AggroMembers.Add(NewAggroRow(
+            string.Create(CultureInfo.InvariantCulture, $"Member {AggroMembers.Count + 1}")));
+        RecomputeAggro();
+    }
+
+    private void RemoveAggroMember(AggroMemberRowViewModel row)
+    {
+        if (AggroMembers.Count <= 1) return;   // always keep one member
+        AggroMembers.Remove(row);
+        RecomputeAggro();
+    }
+
+    [RelayCommand]
+    private void ResetAggro()
+    {
+        _suppressAggroRecompute = true;
+        AggroMonsterNumber = 0;
+        SeedDefaultAggroParty();
+        _suppressAggroRecompute = false;
+        RecomputeAggro();
+    }
+
+    // Radio behaviour — only one member is the "last attacker"; clear the others.
+    private void OnAggroLastAttacker(AggroMemberRowViewModel picked)
+    {
+        foreach (AggroMemberRowViewModel r in AggroMembers)
+            if (!ReferenceEquals(r, picked) && r.IsLastAttacker)
+                r.SetLastAttackerSilently(false);
+    }
+
+    // Resolve the typed record number → name + Align + Follow% + guard. Guard is
+    // auto-seeded from a jail-583 scan (still user-editable). Save/restore the
+    // suppress flag so a call from an already-suppressed context (reset / set
+    // change) stays suppressed and recomputes once at the outer level.
+    private void ResolveAggroMonster()
+    {
+        bool prev = _suppressAggroRecompute;
+        _suppressAggroRecompute = true;
+        if (AggroMonsterNumber > 0 && FindMonsterRowByNumber(AggroMonsterNumber) is JsonElement row)
+        {
+            AggroMonsterName = row.TryGetProperty("Name", out JsonElement ne)
+                               && ne.ValueKind == JsonValueKind.String && ne.GetString() is { Length: > 0 } nm
+                ? nm : "—";
+            AggroMonsterAlign = GetInt(row, "Align");
+            AggroMonsterFollowPercent = GetInt(row, "Follow%");
+            AggroMonsterIsGuard = MonsterReferencesSpell(row, JailSpellId);
+        }
+        else
+        {
+            AggroMonsterName = "—";
+        }
+        _suppressAggroRecompute = prev;
+        RecomputeAggro();
+    }
+
+    // Guard proxy: a monster that casts jail (583) is a guard. Name-agnostic —
+    // scans every numeric property whose name mentions "Spell" for the id.
+    private static bool MonsterReferencesSpell(JsonElement row, int spellId)
+    {
+        foreach (JsonProperty p in row.EnumerateObject())
+        {
+            if (p.Name.IndexOf("Spell", StringComparison.OrdinalIgnoreCase) < 0) continue;
+            if (p.Value.ValueKind == JsonValueKind.Number && p.Value.TryGetInt32(out int v) && v == spellId)
+                return true;
+        }
+        return false;
+    }
+
+    private void OnAggroActiveSetChanged(string? setName) => ResolveAggroMonster();
+
+    private void RecomputeAggro()
+    {
+        if (_suppressAggroRecompute) return;
+        AggroIsParadigm = _gameData.ActiveRealm == RealmType.ParaMud;
+        if (AggroIsParadigm) RecomputeParadigmAggro();
+        else RecomputeStockAggro();
+    }
+
+    private void RecomputeParadigmAggro()
+    {
+        var members = new List<ParadigmAggroMember>(AggroMembers.Count);
+        foreach (AggroMemberRowViewModel r in AggroMembers)
+            members.Add(new ParadigmAggroMember(r.Name, r.Charm, ParsePosition(r.Position), r.IsLastAttacker));
+
+        ParadigmAggroResult res = ParadigmAggroCalculator.Compute(members);
+        for (int i = 0; i < res.Members.Count && i < AggroMembers.Count; i++)
+        {
+            ParadigmAggroMemberResult m = res.Members[i];
+            AggroMemberRowViewModel row = AggroMembers[i];
+            row.Score = m.Score;
+            row.SharePercentText = string.Create(CultureInfo.InvariantCulture, $"{m.Percent:0.0}%");
+            row.BreakdownText = string.Create(CultureInfo.InvariantCulture,
+                $"150 {Signed(m.CharmDelta)} chr {Signed(m.PositionBonus)} pos {Signed(m.AggroDelta)} aggro = {m.RawScore}");
+        }
+        AggroParadigmSummary = string.Create(CultureInfo.InvariantCulture,
+            $"Total {res.TotalScore} — the monster rolls a weighted lottery; a bigger share = better odds.");
+    }
+
+    private void RecomputeStockAggro()
+    {
+        var members = new List<StockAggroMember>(AggroMembers.Count);
+        foreach (AggroMemberRowViewModel r in AggroMembers)
+            members.Add(new StockAggroMember(r.Name, r.AlignmentTitle, r.HasProvoked, r.IncomingHits));
+
+        StockAggroResult res = StockAggroCalculator.Compute(
+            AggroMonsterAlign, AggroMonsterIsGuard, AggroMonsterFollowPercent, members);
+        for (int i = 0; i < res.Members.Count && i < AggroMembers.Count; i++)
+        {
+            StockAggroMemberResult m = res.Members[i];
+            AggroMemberRowViewModel row = AggroMembers[i];
+            row.IsAggroed = m.Aggroed;
+            row.AcquireReason = m.Reason;
+            row.SpreadPercentText = m.Aggroed
+                ? string.Create(CultureInfo.InvariantCulture, $"{m.SpreadPercent:0.0}%")
+                : "—";
+        }
+        AggroAcquisitionSummary = string.Create(CultureInfo.InvariantCulture,
+            $"Opens on {res.AggroedCount} of {AggroMembers.Count} member(s).");
+        AggroStickinessText = res.Stickiness;
+    }
+
+    private static PartyPosition ParsePosition(string s) => s switch
+    {
+        "Frontrank" => PartyPosition.Frontrank,
+        "Midrank" => PartyPosition.Midrank,
+        "Backrank" => PartyPosition.Backrank,
+        "Solo" => PartyPosition.Solo,
+        _ => PartyPosition.Midrank,
+    };
+
+    private static string Signed(int v)
+        => v >= 0 ? string.Create(CultureInfo.InvariantCulture, $"+{v}")
+                  : v.ToString(CultureInfo.InvariantCulture);
+
     public override void Dispose()
     {
         _stats.PropertyChanged -= OnStatsChanged;
@@ -1724,5 +1931,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         _questBonuses.Changed -= OnQuestBonusesChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
         _leaderboards.Changed -= OnLeaderboardChanged;
+        _gameData.ActiveSetChanged -= OnAggroActiveSetChanged;
     }
 }

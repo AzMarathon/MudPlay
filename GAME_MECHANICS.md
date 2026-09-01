@@ -698,6 +698,38 @@ guardsman (#757). This is a **partial** list — other mobs aggro the evil-title
 is a **guard** (casts `jail` 583, per above) **and** our title is Outlaw-or-worse. Our own title
 comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
 
+## Monster target selection — who it swings at once fighting
+
+Distinct from *whether* a monster opens on you (above): once a monster is in a fight it
+picks **one target per beat**, and the two realms use different engines. Surfaced in the
+**Monster Aggro** calculator (Workshop → Calculators), which shows the loaded set's model.
+
+**Stock** *([CONFIRMED] — stock DLL source, user-provided)*
+A stock monster attacks a single **locked target** at a time (not everyone it has aggroed).
+Each beat:
+1. **Locked target present** → hit it again (the lock clears if that player left / died).
+2. **No lock → spread pick** among the aggroed players in room / terminal order: each rolls
+   `genrdn(0,100) < 50 − 5 × (hits they're already taking this beat)`; **first to pass** is
+   hit; if none pass, the **last eligible** player is hit (fallback). The mob drifts toward
+   whoever *isn't* already piled on — a player taking ≥10 hits this beat hits a 0% threshold
+   and is skipped by fresh rolls.
+3. **After swinging it rolls `genrdn(1,100) < Follow%`** (Monsters `Follow%`): pass →
+   **lock** onto the just-hit player; fail on an **aggressive** align (∉ {0,3,4}) → **clear**
+   the lock and re-spread next beat; fail on a **passive** align ({0,3,4}) → **keep** the lock.
+   The mirror roll when a *player* hits the mob re-points the lock to that attacker — the
+   "attack last" behaviour. Follow% is the stickiness dial. Special types: summoned (type
+   `0x25`) never manage a lock this way; a type-5 monster only acquires a lock when currently
+   untargeted. Carve-out: an evil NPC won't spread onto a fellow-evil player (`EvilPoints > 39`).
+
+**Paradigm** *([CONFIRMED] — user writeup, Paradigm only)*
+Paradigm rewrote target selection into a **weighted lottery** with no locked-target mechanic.
+Each player scores from a base **150**: `+ (10 − Charm/5)` (higher Charm lowers the score),
+`+` party position (frontrank 60 / midrank 30 / backrank 0; **solo = frontrank 60**), `+`
+recent aggro (last hitter **+30 × players-in-fight**, everyone else **−5 × players-in-fight**),
+**floored at 50**. The monster rolls a weighted lottery over the summed scores — bigger score
+= bigger slice, never a guarantee, never impossible. **Charm and party position have no effect
+on stock target selection** — they are Paradigm-only.
+
 **Monster-kill message order** *([CONFIRMED] 2026-07-23, bug-report captures)*
 - A kill prints in a fixed order: the monster's **death line** (e.g. `The toad croaks in agony, and
   collapses wetly.`) → `You gain N experience.` → `*Combat Off*`, all in the same server flush.
