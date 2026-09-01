@@ -1645,7 +1645,13 @@ public sealed partial class CombatManager : IDisposable
     // displays — lands ahead of the next room's opener, so each room fires its AoE
     // debuff exactly once with no double-fire. Fires for every mover (backstab or
     // not), so unlike PrepBackstabForMove it is not gated on DoBackstab.
-    public void NotePreMove() => _spellChooser.ResetForNewRoom();
+    public void NotePreMove()
+    {
+        _spellChooser.ResetForNewRoom();
+        // Leaving the room drops any debuff still awaiting a rejection — its mark is
+        // gone with the room reset, so there's nothing left to roll back.
+        _debuffAwaitingConfirm = null;
+    }
 
     // Re-arm the surprise round for a fresh hide established in the current room —
     // the stationary hidden opener (a monster walks into a room the character is
@@ -3336,6 +3342,7 @@ public sealed partial class CombatManager : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        if (_cast is not null) _cast.CastFailed -= OnCombatCastFailed;
         _classifier.EntitiesObserved -= OnEntitiesObserved;
         _announceSub.Dispose();
         _castAnnounceSub.Dispose();

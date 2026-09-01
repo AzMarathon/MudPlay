@@ -1,5 +1,11 @@
 # Version history
 
+## 3.43.10
+
+- Mana-regen reroll (flux / nature tap): running out of mana mid-cycle now **pauses and resumes** after you meditate back up, spending the full reroll budget instead of quitting early at the mana floor
+- Combat: a pre-attack debuff the server rejects with "You have already cast a spell this round!" (it collided with a buff recast or your own manual cast) now re-fires next round instead of leaving the monster falsely marked debuffed
+- bug reports addressed: paradigm-20260901-114223, paradigm-20260901-123720, paradigm-20260901-140747
+
 ## 3.43.7
 
 - Equipment sets: swapping the **first** ring/bracelet slot now sends only the `wear` (the game auto-evicts what's on slot 1) instead of a redundant `rem` + `wear`; only the **second** slot still rems first

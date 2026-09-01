@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.43.7**
-> - Equipment sets: swapping the **first** ring/bracelet slot now sends only the `wear` (the game auto-evicts what's on slot 1) instead of a redundant `rem` + `wear`; only the **second** slot still rems first
+> **Version 3.43.10**
+> - Mana-regen reroll (flux / nature tap): running out of mana mid-cycle now **pauses and resumes** after you meditate back up, spending the full reroll budget instead of quitting early at the mana floor
+> - Combat: a pre-attack debuff the server rejects with "You have already cast a spell this round!" now re-fires next round instead of leaving the monster falsely marked debuffed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

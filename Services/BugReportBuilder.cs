@@ -565,6 +565,7 @@ public static class BugReportBuilder
         sb.Append("**Mana-regen reroll**\n\n");
         sb.Append($"- Roll signal: {rerollSignal}\n");
         sb.Append($"- Cycle active: {reroll.CycleActive}; rerolls used this cycle: {reroll.RerollsUsed}\n");
+        sb.Append($"- Waiting for mana to resume: {reroll.WaitingForMana}\n");
         sb.Append($"- Last observed roll value: {(reroll.LastObservedValue is { } v ? v.ToString() : "(none judged yet)")}\n");
         sb.Append('\n');
 

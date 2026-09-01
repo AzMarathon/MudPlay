@@ -3542,6 +3542,10 @@ public sealed class AppServices
             useTickMonitor: () => GameData.ActiveRealm != Game.RealmType.ParaMud,
             log: Log);
         CastDirector.SetSelfBuffCastSink(OnSelfBuffCastForReroll);
+        // Resume a reroll cycle suspended at the mana floor once meditation refills the
+        // pool — the 1s heartbeat re-checks affordability and fires the next reroll,
+        // so it spends the full cap instead of quitting when it ran out mid-cycle.
+        Tick.HeartbeatElapsed += ManaRegen.OnRecoveryTick;
         // Feed the reroller clean NATURAL mana ticks (Stock's roll-quality signal).
         // Meditate ticks are unaffected by spell regen and can stack on a natural tick,
         // so a tick observed while meditating is skipped; resting doesn't touch mana.
