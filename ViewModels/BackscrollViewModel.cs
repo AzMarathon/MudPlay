@@ -3,9 +3,11 @@ using System.IO;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Services;
 using MudPlay.Terminal;
 
 namespace MudPlay.ViewModels;
@@ -50,12 +52,24 @@ public sealed partial class BackscrollViewModel : ObservableObject
     // Rows the transcript advances per mouse-wheel notch (bound to the control's
     // WheelLines). Read once at open from the BBS-tier BackscrollWheelLines
     // setting — the window is a frozen snapshot, so reopening picks up a changed
-    // value, the same way it doesn't track live font settings either.
+    // value, the same way the font below is snapshotted at open.
     public int WheelLines { get; }
 
-    public BackscrollViewModel(TerminalEmulator emulator, int wheelLines = 5)
+    // Terminal font family + point size, snapshotted at open so history renders
+    // exactly like the live screen. Like WheelLines, this is a frozen value —
+    // changing the terminal font and reopening the window picks up the new one.
+    public FontFamily FontFamily { get; }
+    public double FontSize { get; }
+
+    public BackscrollViewModel(
+        TerminalEmulator emulator,
+        int wheelLines = 5,
+        string fontFamily = DisplayConfig.DefaultFontFamily,
+        double fontSize = DisplayConfig.DefaultFontSize)
     {
         WheelLines = Math.Max(1, wheelLines);
+        FontFamily = new FontFamily(fontFamily);
+        FontSize = fontSize;
         ScrollbackBuffer buffer = emulator.Screen.Scrollback;
         foreach (ScrollbackBuffer.Row row in buffer.Enumerate())
         {

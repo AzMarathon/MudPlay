@@ -642,7 +642,7 @@ Press **Alt+L** to open **Backscroll** — the full terminal history, including 
 - **Export…** — save the whole transcript to a text file, each line prefixed with its timestamp.
 - Drag to select a region, then **Ctrl+C** or **right-click → Copy** to put it on the clipboard as plain text. Right-click → **Select all** grabs the whole transcript to copy at once.
 
-Backscroll is a **snapshot taken when you open it**, not a live tail — to pick up newer output, close and reopen it (nothing is lost in the meantime).
+Backscroll is a **snapshot taken when you open it**, not a live tail — to pick up newer output, close and reopen it (nothing is lost in the meantime). The transcript renders in your **terminal font** (family and size), so history looks exactly like the live screen; that font is captured when the window opens, so changing it takes effect the next time you open Backscroll.
 
 ## Session Stats
 

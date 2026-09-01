@@ -1,9 +1,10 @@
 # Version history
 
-## 3.44.7
+## 3.44.8
 
 - Terminal font size is now a true **point** size — picking "16" matches MegaMUD's "16" glyph-for-glyph instead of rendering ~25% smaller ("zoomed out"); the setting was already labelled "in points" but never converted point → pixel before drawing
 - Default terminal font size changed from 16 pt to **12 pt** (only affects characters that haven't picked a size of their own)
+- Backscroll window now renders in your **terminal font** (family + size) instead of a fixed font, so history looks exactly like the live screen
 
 ## 3.44.5
 

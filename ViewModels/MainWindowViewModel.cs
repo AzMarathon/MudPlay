@@ -3279,7 +3279,9 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        BackscrollViewModel vm = new(Emulator, AppServices.Current.Display.BackscrollWheelLines);
+        Services.DisplayConfig display = AppServices.Current.Display;
+        BackscrollViewModel vm = new(
+            Emulator, display.BackscrollWheelLines, display.FontFamily, display.FontSize);
         BackscrollWindow window = new() { DataContext = vm };
         window.Closed += (_, _) => _backscroll = null;
         _backscroll = window;
