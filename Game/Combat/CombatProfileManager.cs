@@ -57,11 +57,14 @@ public sealed class CombatProfileManager
             store.Profiles.Add(CombatSpellProfile.Capture(string.Empty, _readCombat()));
             store.ActiveId = store.Profiles[0].Id;
             changed = true;
+            _log?.Log(LogSeverity.Info, "CombatProfiles", "Seeded first combat profile from live combat settings");
         }
         else if (IndexOfActive(store) < 0)
         {
             store.ActiveId = store.Profiles[0].Id;
             changed = true;
+            _log?.Log(LogSeverity.Info, "CombatProfiles",
+                $"Active combat profile pointer was stale; reset to profile 1 of {store.Profiles.Count}");
         }
         if (changed) _save();
         Changed?.Invoke();
@@ -106,6 +109,7 @@ public sealed class CombatProfileManager
         _writeCombat(combat);   // one Save persists Settings["Combat"] + the active pointer
         string report = CombatSpellProfileReport.Describe(target, index + 1);
         _log?.Log(LogSeverity.Info, "CombatProfiles", "Switched to " + report);
+        _log?.Debug("CombatProfiles", CombatSpellProfileReport.DescribeConfig(target, index + 1));
         Announce?.Invoke(report);
         Changed?.Invoke();
         return report;
@@ -150,6 +154,15 @@ public sealed class CombatProfileManager
         int i = ActiveIndex;
         CombatSpellProfile? a = Active;
         return a is not null && i >= 0 ? CombatSpellProfileReport.Describe(a, i + 1) : null;
+    }
+
+    // The active profile's full-config line (slots + gates + knobs) — for the
+    // combat-engage log anchor. Null when none is loaded.
+    public string? CurrentConfigLine()
+    {
+        int i = ActiveIndex;
+        CombatSpellProfile? a = Active;
+        return a is not null && i >= 0 ? CombatSpellProfileReport.DescribeConfig(a, i + 1) : null;
     }
 
     private CombatProfileSettings? Store() => _profile()?.CombatProfiles;

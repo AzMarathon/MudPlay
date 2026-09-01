@@ -1211,19 +1211,30 @@ public static class BugReportBuilder
     // Resolve one tab-keyed section across the tier hierarchy and emit it as a
     // labelled JSON block. Isolated per-section so one section failing to
     // resolve leaves the rest intact.
-    // Casting spell profiles: every configured profile listed by number + name
-    // with its slots by cast code, the active one flagged — so a "wrong spells
-    // firing" report shows which profile was live and what the others hold.
+    // Casting spell profiles: how many exist, which is active, and every profile's
+    // FULL held config — each slot (empty shown as —) with its gates, plus the
+    // mana-mode / drain-trigger / drains-override knobs, the active one flagged. So
+    // a "wrong spells firing" report shows which profile was live, what it held, and
+    // what the others hold. Spells by cast code, never full name.
     private static string BuildCombatProfiles(AppServices svc)
     {
         System.Collections.Generic.IReadOnlyList<Models.Profile.CombatSpellProfile> profiles =
             svc.CombatProfiles.Profiles;
         if (profiles.Count == 0) return "No combat spell profiles.";
         int active = svc.CombatProfiles.ActiveIndex;
+
         StringBuilder sb = new();
+        string activeLabel = active >= 0 && active < profiles.Count
+            ? (string.IsNullOrWhiteSpace(profiles[active].Name)
+                ? $"profile {active + 1}"
+                : $"profile {active + 1} ({profiles[active].Name.Trim()})")
+            : "(none)";
+        sb.Append(profiles.Count).Append(profiles.Count == 1 ? " profile" : " profiles")
+          .Append(". Active: ").Append(activeLabel).Append(".\n\n");
+
         for (int i = 0; i < profiles.Count; i++)
         {
-            sb.Append(Game.Combat.CombatSpellProfileReport.Describe(profiles[i], i + 1));
+            sb.Append(Game.Combat.CombatSpellProfileReport.DescribeConfig(profiles[i], i + 1));
             if (i == active) sb.Append("  (ACTIVE)");
             sb.Append('\n');
         }

@@ -34,4 +34,48 @@ public static class CombatSpellProfileReport
         string? code = slot?.SpellName?.Trim();
         if (!string.IsNullOrEmpty(code)) parts.Add($"{label}: {code}");
     }
+
+    // Full-config one-liner: every slot (empty shown as —) with its gates, plus
+    // the profile-level knobs. Feeds the program log (switch Debug line, combat-
+    // engage Combat line) and the bug report, so "how it's configured" is captured
+    // without opening Settings. Cast codes only, never full spell names — same rule
+    // as Describe.
+    public static string DescribeConfig(CombatSpellProfile profile, int number)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        string label = string.IsNullOrWhiteSpace(profile.Name)
+            ? $"Combat profile {number}"
+            : $"Combat profile {number} ({profile.Name.Trim()})";
+
+        // MinEnemies is honoured only on the two room-wide rows; the engine ignores
+        // it on the four single-target rows, so don't report it there.
+        string slots = string.Join(" · ", new[]
+        {
+            SlotDetail("multi", profile.MultiAttackSpell, roomWide: true),
+            SlotDetail("AoE-debuff", profile.AreaDebuffSpell, roomWide: true),
+            SlotDetail("debuff", profile.SingleTargetDebuffSpell, roomWide: false),
+            SlotDetail("normal", profile.NormalAttackSpell, roomWide: false),
+            SlotDetail("alt", profile.AlternateAttackSpell, roomWide: false),
+            SlotDetail("drain", profile.DrainSpell, roomWide: false),
+        });
+
+        string knobs = $"mana-mode={profile.SpellManaThresholdMode}" +
+                       $" · drain-HP-trigger={profile.DrainHpTrigger}" +
+                       $" · drains-override-AoE={(profile.DrainsOverrideAoe ? "on" : "off")}";
+
+        return $"{label}: {slots} · {knobs}";
+    }
+
+    private static string SlotDetail(string label, CombatSpellSlot slot, bool roomWide)
+    {
+        string? code = slot?.SpellName?.Trim();
+        if (string.IsNullOrEmpty(code)) return $"{label} —";
+
+        var gates = new List<string>();
+        if (roomWide && slot!.MinEnemies > 0) gates.Add($"≥{slot.MinEnemies}");
+        if (slot!.MaxCastsPerRoom is { } max) gates.Add(max == 0 ? "×0" : $"×{max}");
+        if (slot.MinManaPerCast > 0) gates.Add($"m{slot.MinManaPerCast}");
+
+        return gates.Count > 0 ? $"{label} {code}({string.Join(", ", gates)})" : $"{label} {code}";
+    }
 }

@@ -76,6 +76,42 @@ public sealed class CombatSpellProfileTests
     }
 
     [Fact]
+    public void DescribeConfig_ShowsAllSlots_Gates_AndKnobs()
+    {
+        var p = new CombatSpellProfile { Name = "Fire", DrainHpTrigger = 40, DrainsOverrideAoe = true };
+        p.MultiAttackSpell.SpellName = "fbl";
+        p.MultiAttackSpell.MinEnemies = 2;
+        p.MultiAttackSpell.MinManaPerCast = 10;
+        p.NormalAttackSpell.SpellName = "fbl";
+        p.AlternateAttackSpell.SpellName = "fs";
+        p.AlternateAttackSpell.MaxCastsPerRoom = 2;
+        // AoE-debuff / single-target debuff / drain left empty
+
+        string r = CombatSpellProfileReport.DescribeConfig(p, 2);
+
+        Assert.Contains("Combat profile 2 (Fire)", r);
+        Assert.Contains("multi fbl(≥2, m10)", r);        // room-wide min-enemies + mana gate
+        Assert.Contains("AoE-debuff —", r);              // empty slots shown, never omitted
+        Assert.Contains("drain —", r);
+        Assert.Contains("normal fbl", r);
+        Assert.Contains("alt fs(×2)", r);                // max-casts gate
+        Assert.Contains("mana-mode=Percentage", r);
+        Assert.Contains("drain-HP-trigger=40", r);
+        Assert.Contains("drains-override-AoE=on", r);
+    }
+
+    [Fact]
+    public void DescribeConfig_MinEnemies_OnlyReportedOnRoomWideRows()
+    {
+        var p = new CombatSpellProfile();
+        p.SingleTargetDebuffSpell.SpellName = "curse";
+        p.SingleTargetDebuffSpell.MinEnemies = 3;   // engine ignores it on single-target rows
+        string r = CombatSpellProfileReport.DescribeConfig(p, 1);
+        Assert.Contains("debuff curse", r);
+        Assert.DoesNotContain("≥3", r);
+    }
+
+    [Fact]
     public void CaptureThenApply_RoundTrips_AndDeepCopies()
     {
         var src = new CombatSettings();
