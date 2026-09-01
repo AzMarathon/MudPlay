@@ -79,6 +79,11 @@ public sealed class HealthManager : IDisposable
     private readonly Func<Models.Profile.GeneralSettings>? _readGeneralSettings;
     private readonly Func<bool>? _hasEngageableHostiles;
     private readonly Func<bool>? _hasHostileInRoom;
+    // Live Auto-Combat toggle + a poke into CombatManager. The engage-to-clear
+    // override (see Evaluate's rest section) only fires when Auto-Combat is OFF —
+    // with it ON the engine already fights the blocker, so there's nothing to force.
+    private Func<bool>? _isAutoCombatEnabled;
+    private Action? _requestRestClearEngage;
     // Defers the flee firing one dispatch tick so the round's death line (parsed
     // AFTER the end-of-round prompt in the same wire read) can settle before we
     // commit — see the flee branch in Evaluate. Synchronous (a => a()) when
@@ -140,6 +145,13 @@ public sealed class HealthManager : IDisposable
     // genuine observation / room change (which re-derives presence for real).
     private bool _restHostilesBypassArmed;
     private readonly Func<DateTimeOffset> _now;
+    // A hostile is blocking a needed rest while Auto-Combat is OFF and HP is still
+    // above the run (flee) trigger — CombatManager reads this to engage-to-clear the
+    // room despite being disabled. Re-poke throttle so one engage carries the fight
+    // (the server auto-repeats the swing) but a stalled auto-repeat is re-kicked.
+    private bool _forceClearForRest;
+    private DateTimeOffset _restClearLastEngageAt;
+    private static readonly TimeSpan RestClearReEngageInterval = TimeSpan.FromSeconds(5);
     private bool _fledThisCombat;        // reacted to run-trigger (flee OR @heal), awaiting combat end
     private bool _hangFired;             // emergency-hangup latch; re-arms when danger passes
     private Map.IRecoverableEngine? _fleeEngine;     // engine we paused mid-flee
@@ -411,6 +423,23 @@ public sealed class HealthManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(onRecoveryComplete);
         _onRecoveryComplete = onRecoveryComplete;
+    }
+
+    // True when a room hostile is blocking a needed rest, Auto-Combat is OFF, and HP
+    // is still above the run (flee) trigger — the deadlock where we can neither rest,
+    // fight, nor flee. CombatManager reads this to engage-to-clear the room despite
+    // being disabled; released the moment the blocker's gone (or we drop into flee).
+    public bool ForceClearForRest => _forceClearForRest;
+
+    // Wire the engage-to-clear override: isAutoCombatEnabled reports the live
+    // Auto-Combat toggle (the override only fires when it's off), requestEngage pokes
+    // CombatManager to attack the room's hostile. Left unwired, the deadlock stands.
+    public void SetRestClearEngage(Func<bool> isAutoCombatEnabled, Action requestEngage)
+    {
+        ArgumentNullException.ThrowIfNull(isAutoCombatEnabled);
+        ArgumentNullException.ThrowIfNull(requestEngage);
+        _isAutoCombatEnabled = isAutoCombatEnabled;
+        _requestRestClearEngage = requestEngage;
     }
 
     // True when every ShadowRest precondition holds: the user opted in, the class
@@ -854,6 +883,44 @@ public sealed class HealthManager : IDisposable
         bool shadowRest = ShadowRestActive();
         if (shadowRest && hostilesPresent && shouldRest && !_state.InCombat && !_restInFlight)
             _log?.Combat(LogCategory, "shadowrest — resting with hostile in room (staying stealthed)");
+
+        // Engage-to-clear a rest-blocker with Auto-Combat OFF. The deadlock (report
+        // paradigm-20260901-093301): a room hostile keeps InCombat / hostiles-present
+        // true so we can't rest, Auto-Combat OFF means CombatManager won't fight it,
+        // and HP is still above the run (flee) trigger so we won't flee either — the
+        // character sits taking damage. When a rest is DUE (HP or MA gate) and a
+        // hostile blocks it, drive the combat engine to clear the room; once it's dead
+        // InCombat drops and this same Evaluate rests. If HP falls to the run trigger
+        // while fighting, the flee block above takes over instead. Auto-Combat ON needs
+        // nothing (the engine already engages); ShadowRest rests through it stealthed.
+        bool autoCombatOn = _isAutoCombatEnabled?.Invoke() ?? true;
+        int restClearRunTrigger = PoolThreshold.Resolve(s.HpThresholdMode, s.RunIfBelowHp, _state.MaxHp);
+        bool hpFleeWorthy = s.RunIfBelowHp > 0 && _state.Hp > 0 && _state.Hp <= restClearRunTrigger;
+        bool wantRestClear = !autoCombatOn && hostilesPresent && shouldRest
+            && !hpFleeWorthy && !_fledThisCombat && !shadowRest;
+        if (wantRestClear)
+        {
+            if (!_forceClearForRest)
+                _log?.Combat(LogCategory,
+                    $"engage-to-clear — a hostile blocks rest with auto-combat off " +
+                    $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}); clearing the room to recover");
+            // Kick the first attack (deferred past this Evaluate, like the flee post).
+            // The server auto-repeats the swing so one engage carries the fight; a
+            // stalled auto-repeat (interrupt / no-effect) is re-kicked once a round.
+            if (!_forceClearForRest || _now() - _restClearLastEngageAt >= RestClearReEngageInterval)
+            {
+                _restClearLastEngageAt = _now();
+                _post(() => _requestRestClearEngage?.Invoke());
+            }
+            _forceClearForRest = true;
+        }
+        else
+        {
+            if (_forceClearForRest)
+                _log?.Combat(LogCategory,
+                    "engage-to-clear released — blocker cleared / fleeing / auto-combat back on");
+            _forceClearForRest = false;
+        }
 
         // Reconfirm-hold backstop: an empty, static room never emits the "Also here:"
         // line NoteRoomEntitiesReconfirmed waits on, and a stationary character never

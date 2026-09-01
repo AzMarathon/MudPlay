@@ -138,6 +138,11 @@ public sealed partial class CombatManager : IDisposable
     private Func<bool>? _isStealthed;
     private Func<int, bool>? _hasSeeHidden;
     private Func<bool>? _seeHiddenClearActive;
+    // HealthManager's engage-to-clear signal: a room hostile is blocking a needed
+    // rest while Auto-Combat is OFF (and HP still above the flee trigger). Like the
+    // see-hidden latch, when true it makes us engage despite being disabled and
+    // bypass the Min/Max gate — to kill the rest-blocker so recovery can proceed.
+    private Func<bool>? _restClearActive;
     private Func<bool>? _shadowRestHolding;
 
     // Passive-neutral recovery hold: engage a KillOnSight neutral only when we're not
@@ -847,6 +852,24 @@ public sealed partial class CombatManager : IDisposable
         _seeHiddenClearActive = seeHiddenClearActive;
     }
 
+    // Wire HealthManager's engage-to-clear-a-rest-blocker signal (see _restClearActive).
+    public void SetRestClearGate(Func<bool> restClearActive)
+    {
+        ArgumentNullException.ThrowIfNull(restClearActive);
+        _restClearActive = restClearActive;
+    }
+
+    // Re-run the room engage while the rest-clear override is active — HealthManager
+    // pokes this when a hostile is blocking a needed rest with Auto-Combat OFF, to
+    // fire the first attack (the server then auto-repeats it). No-op unless the
+    // override is still asserted, so a stale poke can't engage after recovery.
+    public void RequestRestClearEngage()
+    {
+        if (_disposed) return;
+        if (_restClearActive?.Invoke() != true) return;
+        if (_classifier.Current is { } obs) OnEntitiesObserved(obs);
+    }
+
     // Wire the ShadowRest combat hold: shadowRestHolding reports whether
     // HealthManager is mid-ShadowRest-recovery (a solo, stealthed ShadowRest
     // character resting toward rest-max — see GAME_MECHANICS "ShadowRest"). While
@@ -1103,8 +1126,13 @@ public sealed partial class CombatManager : IDisposable
         // With combat OFF the latch additionally makes us engage despite being
         // disabled; with combat ON we'd engage anyway, and the latch's job is only
         // the Min/Max bypass.
-        bool seeHiddenOverride = _seeHiddenClearActive?.Invoke() == true;
-        if (!_isEnabled() && !seeHiddenOverride)
+        // Rest-blocker force-clear (report paradigm-20260901-093301): a hostile
+        // blocking a needed rest with Auto-Combat OFF makes us engage-to-clear it
+        // anyway, on the same footing as the see-hidden override — both bypass the
+        // disabled gate here and the Min/Max gate below.
+        bool forceClearOverride = _seeHiddenClearActive?.Invoke() == true
+                                  || _restClearActive?.Invoke() == true;
+        if (!_isEnabled() && !forceClearOverride)
         {
             _currentTarget = null;
             // AutoCombat going off mid-fight must drop the attack-spell cascade
@@ -1230,7 +1258,9 @@ public sealed partial class CombatManager : IDisposable
         // treated as "no gate" with a single log-once warning rather
         // than silently never engaging. The SeeHidden clear-override
         // bypasses the gate entirely — its whole point is clearing the
-        // WHOLE room regardless of count so re-sneak is possible.
+        // WHOLE room regardless of count so re-sneak is possible. The rest-blocker
+        // force-clear (folded into forceClearOverride) bypasses it for the same
+        // reason: kill whatever is blocking rest, regardless of room population.
         //
         // The whole point of this gate is "don't STOP here while passing
         // through" — it only makes sense while something is actually trying
@@ -1244,7 +1274,7 @@ public sealed partial class CombatManager : IDisposable
         // walker running to begin with). Unwired _isMovementActive fails open
         // to the gate always applying, matching this check's original,
         // unconditional behavior.
-        if (!seeHiddenOverride && (_isMovementActive?.Invoke() ?? true))
+        if (!forceClearOverride && (_isMovementActive?.Invoke() ?? true))
         {
             int min = Math.Max(0, settings.MinMonstersInRoom);
             int max = settings.MaxMonstersInRoom > 0 ? settings.MaxMonstersInRoom : int.MaxValue;

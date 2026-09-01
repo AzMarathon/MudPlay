@@ -3788,6 +3788,17 @@ public sealed class AppServices
             hasSeeHidden:        n => SeeHidden.Has(n));
         Combat.SetSeeHiddenClearGate(() => CombatTracker.SeeHiddenClearActive);
 
+        // Engage-to-clear a rest-blocker with Auto-Combat OFF (report
+        // paradigm-20260901-093301): HealthManager owns the decision (it has the
+        // rest/flee thresholds + hostile-present), CombatManager engages when it
+        // signals — the deadlock where a mob keeps us InCombat so we can't rest, but
+        // combat's off so we won't fight, and HP's above the flee trigger so we won't
+        // run. HealthManager pokes RequestRestClearEngage to fire the first attack.
+        Health.SetRestClearEngage(
+            isAutoCombatEnabled: () => ReadAutoModeFlag(d => d.AutoCombat),
+            requestEngage: Combat.RequestRestClearEngage);
+        Combat.SetRestClearGate(() => Health.ForceClearForRest);
+
         // Break-before-run: turning auto-attack OFF mid-fight releases the Combat
         // gate so the walker resumes — send `break` first when the user has
         // CombatSettings.BreakBeforeFleeing on, mirroring the flee path's disengage.

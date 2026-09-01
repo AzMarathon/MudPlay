@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.4**
-> - Confusion fumbles no longer strand the walker: both the generic `You fumble in confusion!` and `convulsions`' own `You convulse violently!` now revert a move sent while confused instead of leaving a stale pending move that poisons recovery
-> - Fixed a loop-runner reentrancy bug where the walker's own arrival-confirm was misread as a bad landing and wrongly triggered a recovery cascade
-> - The walker no longer blindly resends a just-refused move every pause/resume cycle — a refusal now forces a re-plan
-> - Loop / walker recovery leans on Paradigm's authoritative `rm` before rerouting from a possibly-wrong "blocked at source" belief in a name-ambiguous zone
+> **Version 3.44.5**
+> - With **Auto-Combat off**, a monster blocking a needed rest (HP or mana below its *rest if below*, HP still above *run if below*) is now fought to clear the room so you can recover — then it flees (break + run) if HP drops to *run if below* during the fight. Ends the "sit there and take damage" deadlock where the client would neither fight, rest, nor run
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

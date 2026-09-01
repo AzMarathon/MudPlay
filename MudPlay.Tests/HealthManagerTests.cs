@@ -47,6 +47,15 @@ public sealed class HealthManagerTests
         /// Mirrors EquipmentManager.IsApplyingSet. Defaults false.</summary>
         public bool EquipmentApplying { get; set; }
 
+        /// <summary>Live Auto-Combat toggle for the engage-to-clear-a-rest-blocker
+        /// override. Defaults TRUE (combat on) so existing tests never trigger the
+        /// force-clear — it only fires with Auto-Combat OFF.</summary>
+        public bool AutoCombatEnabled { get; set; } = true;
+
+        /// <summary>Increments each time HealthManager pokes CombatManager to engage a
+        /// rest-blocker. AppServices wires this to CombatManager.RequestRestClearEngage.</summary>
+        public int RestClearEngageCount { get; private set; }
+
         /// <summary>Hostile-in-room signal gating the emergency hangup —
         /// mirrors CombatStateTracker.HasHostileMonster (auto-attack
         /// independent). Defaults true so the existing hangup tests, which
@@ -127,6 +136,9 @@ public sealed class HealthManagerTests
                 requestPartyWait: () => { },
                 requestPartyOk: () => { },
                 isSelfPoisoned: () => Poisoned);
+            Health.SetRestClearEngage(
+                isAutoCombatEnabled: () => AutoCombatEnabled,
+                requestEngage: () => RestClearEngageCount++);
         }
 
         /// <summary>
@@ -966,6 +978,90 @@ public sealed class HealthManagerTests
         // Drop further → still no spam.
         h.State.Hp = 25;
         Assert.DoesNotContain("flee", h.SentLines);
+    }
+
+    // ----- engage-to-clear a rest-blocker (Auto-Combat OFF) ----------
+    // report paradigm-20260901-093301: a hostile blocking a needed rest with
+    // Auto-Combat off deadlocks (can't rest, won't fight, HP above the flee
+    // trigger so won't run). Defaults: RestIfBelowHp=60, RunIfBelowHp=20,
+    // RestIfBelowMa=30. MaxHp/MaxMa=200.
+
+    [Fact]
+    public void ForceClearForRest_ArmsAndPokes_WhenHostileBlocksHpRest_CombatOff()
+    {
+        using Harness h = new();
+        h.AutoCombatEnabled = false;   // combat off
+        h.HostilesPresent = true;      // an enemy blocks rest
+        h.SetPrompt(hp: 80, maxHp: 200);   // 40% — below rest(60), above run(20)
+        h.Health.Evaluate();
+
+        Assert.True(h.Health.ForceClearForRest);
+        Assert.Equal(1, h.RestClearEngageCount);   // poked CombatManager to engage
+    }
+
+    [Fact]
+    public void ForceClearForRest_ArmsForBlockedManaRest_CombatOff()
+    {
+        using Harness h = new();
+        h.AutoCombatEnabled = false;
+        h.HostilesPresent = true;
+        // HP healthy (90%), but mana below its rest trigger (20% < 30%) — a mana
+        // rest is due and the hostile blocks it, so still engage-to-clear.
+        h.SetPrompt(hp: 180, maxHp: 200, ma: 40, maxMa: 200);
+        h.Health.Evaluate();
+
+        Assert.True(h.Health.ForceClearForRest);
+    }
+
+    [Fact]
+    public void ForceClearForRest_DoesNotArm_WhenAutoCombatOn()
+    {
+        using Harness h = new();
+        h.AutoCombatEnabled = true;    // engine already fights it
+        h.HostilesPresent = true;
+        h.SetPrompt(hp: 80, maxHp: 200);
+        h.Health.Evaluate();
+
+        Assert.False(h.Health.ForceClearForRest);
+        Assert.Equal(0, h.RestClearEngageCount);
+    }
+
+    [Fact]
+    public void ForceClearForRest_DoesNotArm_InFleeZone()
+    {
+        using Harness h = new();
+        h.AutoCombatEnabled = false;
+        h.HostilesPresent = true;
+        h.State.InCombat = true;
+        h.SetPrompt(hp: 30, maxHp: 200);   // 15% — below run(20): flee, don't engage
+        h.Health.Evaluate();
+
+        Assert.False(h.Health.ForceClearForRest);
+        Assert.True(h.Health.FledThisCombat);   // the flee path took over instead
+    }
+
+    [Fact]
+    public void ForceClearForRest_DoesNotArm_WithNoHostile()
+    {
+        using Harness h = new();
+        h.AutoCombatEnabled = false;
+        h.HostilesPresent = false;     // room clear — just rest
+        h.SetPrompt(hp: 80, maxHp: 200);
+        h.Health.Evaluate();
+
+        Assert.False(h.Health.ForceClearForRest);
+    }
+
+    [Fact]
+    public void ForceClearForRest_DoesNotArm_WhenHealthy()
+    {
+        using Harness h = new();
+        h.AutoCombatEnabled = false;
+        h.HostilesPresent = true;
+        h.SetPrompt(hp: 180, maxHp: 200);   // 90% — no rest due; walk past
+        h.Health.Evaluate();
+
+        Assert.False(h.Health.ForceClearForRest);
     }
 
     [Fact]

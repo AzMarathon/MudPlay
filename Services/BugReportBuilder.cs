@@ -374,6 +374,10 @@ public static class BugReportBuilder
         // recast-interval block left this stuck, and the character never attacked
         // again for the rest of the fight).
         Kv(sb, "Combat off (stuck?)", svc.Combat.CombatOff.ToString());
+        // True when Auto-Combat is off but a room hostile is blocking a needed rest
+        // (HP still above the flee trigger) — the engine is force-engaging to clear it
+        // so recovery can proceed (report paradigm-20260901-093301).
+        Kv(sb, "Engaging to clear a rest-blocker", svc.Health.ForceClearForRest.ToString());
         // Alternating action-order phase — pairs with the resolved Combat "ActionOrder"
         // setting below to explain why an alternate-order character is casting or
         // swinging this round (even rounds open on the mode's first phase).

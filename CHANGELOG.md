@@ -1,5 +1,10 @@
 # Version history
 
+## 3.44.5
+
+- With **Auto-Combat off**, a monster blocking a needed rest (HP **or** mana below its *rest if below*, with HP still above *run if below*) is now fought to clear the room so you can recover — then it flees (break + run) if HP drops to *run if below* during the fight. Ends the "sit there and take damage" deadlock where the client would neither fight, rest, nor run
+- bug reports addressed: paradigm-20260901-093301
+
 ## 3.44.4
 
 - Confusion fumbles no longer strand the walker: **both** fumble lines — the generic `You fumble in confusion!` and `convulsions`' own `You convulse violently!` — now revert a move sent while confused instead of leaving a stale pending move that could poison recovery and strand a tier-3 backtrack indefinitely awaiting a landing that would never arrive
