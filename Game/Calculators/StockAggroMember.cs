@@ -8,5 +8,9 @@ namespace MudPlay.Game.Calculators;
 //   IncomingHits   — how many hits they're already taking this beat; feeds the
 //                    50 − 5×hits spread (the more they're piled on, the less a
 //                    fresh spread pick lands on them again).
+//   IsLastAttacker — this member hit the monster most recently. On a player's hit
+//                    the mob re-points its lock to that attacker with a Follow%
+//                    roll (the DLL "attack last" mechanic), so the lock lands on
+//                    them Follow% of the time and the rest re-spreads.
 public sealed record StockAggroMember(
-    string Name, string AlignmentTitle, bool HasProvoked, int IncomingHits);
+    string Name, string AlignmentTitle, bool HasProvoked, int IncomingHits, bool IsLastAttacker = false);

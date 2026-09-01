@@ -199,15 +199,25 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     public ObservableCollection<AggroMemberRowViewModel> AggroMembers { get; } = new();
     public const int MaxAggroMembers = 6;
 
-    // Stock monster inputs — type a record number to auto-fill name + Align +
-    // Follow% + guard; Align / Follow% / guard stay editable after seeding.
-    [ObservableProperty] private int _aggroMonsterNumber;
-    [ObservableProperty] private string _aggroMonsterName = "—";
+    // Stock monster inputs — type a record NUMBER or a NAME (best match) to auto-fill
+    // number + name + Align + Follow% + guard. Number + name + Align are the looked-up
+    // monster's (read-only); Follow% + guard stay editable after seeding.
+    [ObservableProperty] private string _aggroMonsterQuery = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AggroMonsterLabel))]
+    private int _aggroMonsterNumber;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AggroMonsterLabel))]
+    private string _aggroMonsterName = "—";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AggroMonsterAlignName))]
     private int _aggroMonsterAlign;
     [ObservableProperty] private int _aggroMonsterFollowPercent;
     [ObservableProperty] private bool _aggroMonsterIsGuard;
+
+    // The matched monster shown beside the query box: "#268 water elemental".
+    public string AggroMonsterLabel =>
+        AggroMonsterNumber > 0 ? $"#{AggroMonsterNumber} {AggroMonsterName}" : "—";
 
     // Friendly Align label for the resolved monster (0-6).
     public string AggroMonsterAlignName => AggroMonsterAlign switch
@@ -1771,8 +1781,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private bool _suppressAggroRecompute;
     private const int JailSpellId = 583;   // the guard "jail" spell — the guard proxy
 
-    partial void OnAggroMonsterNumberChanged(int value) => ResolveAggroMonster();
-    partial void OnAggroMonsterAlignChanged(int value) => RecomputeAggro();
+    partial void OnAggroMonsterQueryChanged(string value) => ResolveAggroMonster();
     partial void OnAggroMonsterFollowPercentChanged(int value) => RecomputeAggro();
     partial void OnAggroMonsterIsGuardChanged(bool value) => RecomputeAggro();
 
@@ -1784,6 +1793,29 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         AggroMembers.Clear();
         AggroMembers.Add(NewAggroRow("Member 1"));
         AggroMembers.Add(NewAggroRow("Member 2"));
+        ReconcileAggroPositions();
+    }
+
+    // The first member is the party's point man: forced to Frontrank in a party, or to
+    // Solo when they're the only member (a lone player is just as exposed as a
+    // frontliner — same aggro weight). Their rank isn't a choice, so the view shows it
+    // read-only. Every other member keeps its own rank; a freshly-added one defaults to
+    // Midrank (the row VM's default). Silent sets — the caller recomputes once.
+    private void ReconcileAggroPositions()
+    {
+        for (int i = 0; i < AggroMembers.Count; i++)
+        {
+            AggroMemberRowViewModel row = AggroMembers[i];
+            if (i == 0)
+            {
+                row.PositionEditable = false;
+                row.SetPositionSilently(AggroMembers.Count == 1 ? "Solo" : "Frontrank");
+            }
+            else
+            {
+                row.PositionEditable = true;
+            }
+        }
     }
 
     [RelayCommand]
@@ -1792,6 +1824,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         if (AggroMembers.Count >= MaxAggroMembers) return;
         AggroMembers.Add(NewAggroRow(
             string.Create(CultureInfo.InvariantCulture, $"Member {AggroMembers.Count + 1}")));
+        ReconcileAggroPositions();
         RecomputeAggro();
     }
 
@@ -1799,6 +1832,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     {
         if (AggroMembers.Count <= 1) return;   // always keep one member
         AggroMembers.Remove(row);
+        ReconcileAggroPositions();
         RecomputeAggro();
     }
 
@@ -1806,7 +1840,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private void ResetAggro()
     {
         _suppressAggroRecompute = true;
-        AggroMonsterNumber = 0;
+        AggroMonsterQuery = string.Empty;   // clears the matched monster via resolve
         SeedDefaultAggroParty();
         _suppressAggroRecompute = false;
         RecomputeAggro();
@@ -1820,16 +1854,23 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
                 r.SetLastAttackerSilently(false);
     }
 
-    // Resolve the typed record number → name + Align + Follow% + guard. Guard is
-    // auto-seeded from a jail-583 scan (still user-editable). Save/restore the
-    // suppress flag so a call from an already-suppressed context (reset / set
-    // change) stays suppressed and recomputes once at the outer level.
+    // Resolve the typed query — a record NUMBER or a NAME (best match) → number + name
+    // + Align + Follow% + guard. Guard is auto-seeded from a jail-583 scan (still
+    // user-editable). Save/restore the suppress flag so a call from an already-
+    // suppressed context (reset / set change) stays suppressed and recomputes once at
+    // the outer level.
     private void ResolveAggroMonster()
     {
         bool prev = _suppressAggroRecompute;
         _suppressAggroRecompute = true;
-        if (AggroMonsterNumber > 0 && FindMonsterRowByNumber(AggroMonsterNumber) is JsonElement row)
+        string query = (AggroMonsterQuery ?? string.Empty).Trim();
+        JsonElement? found = query.Length == 0 ? null
+            : int.TryParse(query, NumberStyles.Integer, CultureInfo.InvariantCulture, out int num) && num > 0
+                ? FindMonsterRowByNumber(num)
+                : FindMonsterRowByName(query);
+        if (found is JsonElement row)
         {
+            AggroMonsterNumber = GetInt(row, "Number");
             AggroMonsterName = row.TryGetProperty("Name", out JsonElement ne)
                                && ne.ValueKind == JsonValueKind.String && ne.GetString() is { Length: > 0 } nm
                 ? nm : "—";
@@ -1839,10 +1880,34 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         }
         else
         {
+            AggroMonsterNumber = 0;
             AggroMonsterName = "—";
         }
         _suppressAggroRecompute = prev;
         RecomputeAggro();
+    }
+
+    // Best-match monster lookup by name for the aggro query box: an exact
+    // (case-insensitive) name wins; else the first name that STARTS WITH the query;
+    // else the first that CONTAINS it. Null when nothing matches / no table loaded.
+    private JsonElement? FindMonsterRowByName(string query)
+    {
+        JsonDocument? doc = _gameData.GetRawTable("Monsters");
+        if (doc is null) return null;
+        JsonElement? startsWith = null, contains = null;
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            if (!row.TryGetProperty("Name", out JsonElement ne)
+                || ne.ValueKind != JsonValueKind.String
+                || ne.GetString() is not { Length: > 0 } name)
+                continue;
+            if (string.Equals(name, query, StringComparison.OrdinalIgnoreCase)) return row;
+            if (startsWith is null && name.StartsWith(query, StringComparison.OrdinalIgnoreCase))
+                startsWith = row;
+            else if (contains is null && name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                contains = row;
+        }
+        return startsWith ?? contains;
     }
 
     // Guard proxy: a monster that casts jail (583) is a guard. Name-agnostic —
@@ -1892,7 +1957,8 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     {
         var members = new List<StockAggroMember>(AggroMembers.Count);
         foreach (AggroMemberRowViewModel r in AggroMembers)
-            members.Add(new StockAggroMember(r.Name, r.AlignmentTitle, r.HasProvoked, r.IncomingHits));
+            members.Add(new StockAggroMember(
+                r.Name, r.AlignmentTitle, r.HasProvoked, r.IncomingHits, r.IsLastAttacker));
 
         StockAggroResult res = StockAggroCalculator.Compute(
             AggroMonsterAlign, AggroMonsterIsGuard, AggroMonsterFollowPercent, members);

@@ -32,12 +32,18 @@ public static class StockAggroCalculator
         if (members is null || members.Count == 0)
             return new StockAggroResult(rows, 0, Stickiness(align, followPercent));
 
-        // Stage 1 — acquisition.
+        // Stage 1 — acquisition. A member who hit the monster most recently
+        // (IsLastAttacker) has by definition attacked it, so it's provoked onto them
+        // regardless of alignment — same as HasProvoked.
         int n = members.Count;
         var aggroed = new bool[n];
         var reason = new string[n];
         for (int i = 0; i < n; i++)
+        {
             (aggroed[i], reason[i]) = Acquire(align, isGuard, members[i]);
+            if (!aggroed[i] && members[i].IsLastAttacker)
+                (aggroed[i], reason[i]) = (true, "attacked last (provoked)");
+        }
 
         // Stage 2 — spread pick among the aggroed members, in order.
         //   p_i    = clamp(50 − 5×hits_i, 0, 100)/100     chance to pass its own roll
@@ -55,6 +61,24 @@ public static class StockAggroCalculator
             lastAggroed = i;
         }
         if (lastAggroed >= 0) pick[lastAggroed] += carry;
+
+        // Stage 2.5 — the "attack last" lock. When a player hit the monster most
+        // recently, the mob re-points its lock onto that attacker on a Follow% roll
+        // (DLL attack_user_monster). So this beat the target is that member with
+        // probability f = Follow%/100 (the lock held), and the fresh spread otherwise:
+        //   pick_L  = f + (1 − f) × spread_L      pick_other = (1 − f) × spread_other
+        // (the passive/aggressive split only governs multi-beat lock persistence, not
+        // this single-beat re-point). Redistribution preserves the total of 1.
+        int lockIdx = -1;
+        for (int i = 0; i < n; i++)
+            if (aggroed[i] && members[i].IsLastAttacker) { lockIdx = i; break; }
+        if (lockIdx >= 0)
+        {
+            double f = Math.Clamp(followPercent, 0, 100) / 100.0;
+            for (int i = 0; i < n; i++)
+                if (aggroed[i]) pick[i] *= 1 - f;
+            pick[lockIdx] += f;
+        }
 
         int aggroedCount = 0;
         for (int i = 0; i < n; i++)

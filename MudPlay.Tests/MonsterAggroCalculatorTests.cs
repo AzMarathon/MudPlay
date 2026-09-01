@@ -182,6 +182,35 @@ public sealed class MonsterAggroCalculatorTests
         Near(100.0, res.Members[1].SpreadPercent);   // gets its own pass + the fallback
     }
 
+    // ---- Stock: attack-last lock -----------------------------------------
+
+    [Fact]
+    public void Stock_AttackLast_LocksOntoTheLastHitterByFollowPercent()
+    {
+        var res = StockAggroCalculator.Compute(align: 2, isGuard: false, followPercent: 60, new[]
+        {
+            new StockAggroMember("a", "Neutral", false, 0, IsLastAttacker: true),
+            new StockAggroMember("b", "Neutral", false, 0),
+        });
+        // f=0.6 re-locks onto the last hitter, else the 50/50 fresh spread:
+        //   a = .6 + .4×.5 = .8 ; b = .4×.5 = .2
+        Near(80.0, res.Members[0].SpreadPercent);
+        Near(20.0, res.Members[1].SpreadPercent);
+    }
+
+    [Fact]
+    public void Stock_AttackLast_ProvokesEvenAPassiveMob()
+    {
+        // A Good (passive) mob opens on nobody by alignment — but hitting it (last
+        // attacker) provokes it, so the lone attacker is the target.
+        var res = StockAggroCalculator.Compute(align: 0, isGuard: false, followPercent: 50, new[]
+        {
+            new StockAggroMember("a", "Saint", false, 0, IsLastAttacker: true),
+        });
+        Assert.True(res.Members[0].Aggroed);
+        Near(100.0, res.Members[0].SpreadPercent);
+    }
+
     // ---- Stock: stickiness -----------------------------------------------
 
     [Fact]
