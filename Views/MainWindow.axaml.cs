@@ -238,6 +238,9 @@ public partial class MainWindow : Window
     // reusing the same reflection bridge the toolbar/keybinds use for commands.
     private const int ContextMenuFixedLeadingItems = 0;
     private bool _ctxRebuildQueued;
+    // Walk-flyout (Favorites / Recent) collection subscriptions from the current
+    // build, dropped and re-made on each rebuild so they don't accumulate.
+    private readonly List<(INotifyCollectionChanged Src, NotifyCollectionChangedEventHandler Handler)> _walkFlyoutSubs = new();
 
     private void OnContextMenuLayoutChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -255,6 +258,10 @@ public partial class MainWindow : Window
     private void RebuildTerminalContextMenu(MainWindowViewModel vm)
     {
         if (TerminalContextMenu is null) return;
+        // Detach the previous build's walk-flyout subscriptions before rebuilding.
+        foreach ((INotifyCollectionChanged src, NotifyCollectionChangedEventHandler handler) in _walkFlyoutSubs)
+            src.CollectionChanged -= handler;
+        _walkFlyoutSubs.Clear();
         ItemCollection items = TerminalContextMenu.Items;
         // Drop everything a previous build appended; keep the fixed leaders.
         while (items.Count > ContextMenuFixedLeadingItems)
@@ -311,19 +318,34 @@ public partial class MainWindow : Window
         {
             case MenuActionCatalogue.Kind.WalkFlyout:
             {
-                // The GOTO Favorites / Recent-destinations fly-out: a submenu whose
-                // items come from a live ObservableCollection, rendered by the same
-                // WalkFlyoutItemTheme the menu declares. Hidden when its list is empty.
+                // The GOTO Favorites / Recent-destinations fly-out: a submenu of a
+                // live ObservableCollection, rendered by the WalkFlyoutItemTheme the
+                // menu declares. Since the user deliberately placed it, it ALWAYS
+                // shows — a new/default profile with an empty list surfaces a
+                // disabled "(none yet)" slot instead of vanishing. Items rebuild on
+                // every collection change (subscriptions are dropped on the next
+                // menu rebuild — see RebuildTerminalContextMenu).
                 bool isFav = string.Equals(def.Parameter, "favorites", System.StringComparison.Ordinal);
+                System.Collections.ObjectModel.ObservableCollection<FavoriteMenuItem> source =
+                    isFav ? vm.Favorites : vm.RecentDestinations;
                 MenuItem item = new() { Header = header };
                 if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
                 if (TerminalContextMenu?.TryFindResource("WalkFlyoutItemTheme", out object? themeObj) == true
                     && themeObj is Avalonia.Styling.ControlTheme theme)
                     item.ItemContainerTheme = theme;
-                item.Bind(ItemsControl.ItemsSourceProperty, new Binding(
-                    isFav ? nameof(MainWindowViewModel.Favorites) : nameof(MainWindowViewModel.RecentDestinations)) { Source = vm });
-                item.Bind(MenuItem.IsVisibleProperty, new Binding(
-                    isFav ? nameof(MainWindowViewModel.HasFavorites) : nameof(MainWindowViewModel.HasRecentDestinations)) { Source = vm });
+
+                void Populate()
+                {
+                    item.Items.Clear();
+                    if (source.Count == 0)
+                        item.Items.Add(new MenuItem { Header = "(none yet)", IsEnabled = false });
+                    else
+                        foreach (FavoriteMenuItem f in source) item.Items.Add(f);
+                }
+                Populate();
+                NotifyCollectionChangedEventHandler handler = (_, _) => Populate();
+                source.CollectionChanged += handler;
+                _walkFlyoutSubs.Add((source, handler));
                 return item;
             }
             case MenuActionCatalogue.Kind.Toggle:

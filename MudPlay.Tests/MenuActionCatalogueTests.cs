@@ -82,14 +82,14 @@ public class MenuActionCatalogueTests
     }
 
     // The Favorites / Recent walk fly-outs are catalogue entries now (placeable
-    // like anything else); the builder binds each to a live VM collection + a
-    // HasX visibility flag, so those must exist on MainWindowViewModel.
+    // like anything else); the builder renders each from a live VM collection, so
+    // those collections must exist on MainWindowViewModel.
     [Fact]
     public void WalkFlyoutEntries_ExistAndBindToRealVmMembers()
     {
         Assert.NotNull(MenuActionCatalogue.Find("walk.favorites"));
         Assert.NotNull(MenuActionCatalogue.Find("walk.recent"));
-        foreach (string name in new[] { "Favorites", "RecentDestinations", "HasFavorites", "HasRecentDestinations" })
+        foreach (string name in new[] { "Favorites", "RecentDestinations" })
             Assert.True(Prop(name) is not null, $"missing '{name}' on MainWindowViewModel");
     }
 
