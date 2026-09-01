@@ -327,6 +327,96 @@
             </StackPanel>
         </Grid>
 
+        <!-- ===== Terminal right-click menu customizer (Char tier) ===== -->
+        <!-- Build the whole terminal right-click menu: the Favorites / Recent
+             walk fly-outs, individual commands, direct links to a Player
+             Workshop tab or a calculator, and your own fly-out folders; rename
+             any of them; reorder (Move up/down steps items into / out of
+             folders); import from another character or a shared file; export to
+             share. Persisted on Apply, per character. -->
+        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasProfile}" Margin="0,12,0,2">
+            <TextBlock Grid.Column="0" Classes="SectionHeader" Margin="0" VerticalAlignment="Center"
+                       Text="Terminal right click menu customizer"/>
+            <Button Grid.Column="1" Content="Reset to default" Command="{Binding ResetContextMenuCommand}"
+                    ToolTip.Tip="Restore the built-in right-click menu."/>
+        </Grid>
+        <StackPanel IsVisible="{Binding HasProfile}" Spacing="8">
+            <Grid ColumnDefinitions="*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Classes="SectionHeader" Margin="0,0,0,4" Text="IN THE MENU (TOP TO BOTTOM)"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Classes="SectionHeader" Margin="0,0,0,4" Text="ADD AN ITEM"/>
+
+                <Border Grid.Row="1" Grid.Column="0" Height="234" VerticalAlignment="Top"
+                        BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1"
+                        Background="{StaticResource ChromeBgSunkenBrush}">
+                    <ListBox Classes="RowList" Background="Transparent" BorderThickness="0"
+                             ItemsSource="{Binding ContextMenuRows}"
+                             SelectedItem="{Binding SelectedContextMenuRow, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ContextMenuRowViewModel">
+                                <TextBlock Text="{Binding DisplayLabel}" VerticalAlignment="Center"
+                                           Margin="{Binding Indent}"
+                                           Classes.SeparatorRow="{Binding IsSeparator}"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <!-- Rail order: Move up / Move down / Add to menu / Remove /
+                     Add folder / Add separator. Move up/down steps items into
+                     and out of folders automatically. -->
+                <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,0" Spacing="6" VerticalAlignment="Top">
+                    <Button Content="Move up"     Command="{Binding MoveContextMenuUpCommand}"     HorizontalAlignment="Stretch"/>
+                    <Button Content="Move down"   Command="{Binding MoveContextMenuDownCommand}"   HorizontalAlignment="Stretch"/>
+                    <Button Content="{Binding AddContextMenuButtonText}" Command="{Binding AddContextMenuEntryCommand}" HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Add the item selected on the right. With a folder (or one of its items) selected on the left, it goes inside that folder."/>
+                    <Button Content="Remove"      Command="{Binding RemoveContextMenuEntryCommand}" HorizontalAlignment="Stretch"/>
+                    <Button Content="Add folder"  Command="{Binding AddContextMenuFolderCommand}"  HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Add a named folder (a fly-out submenu). Select it, then add items to put them inside."/>
+                    <Button Content="Add separator" Command="{Binding AddContextMenuSeparatorCommand}" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+
+                <Border Grid.Row="1" Grid.Column="2" Height="234" VerticalAlignment="Top"
+                        BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1"
+                        Background="{StaticResource ChromeBgSunkenBrush}">
+                    <ListBox Classes="RowList" Background="Transparent" BorderThickness="0"
+                             ItemsSource="{Binding ContextMenuPool}"
+                             SelectedItem="{Binding SelectedContextMenuPoolRow, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ContextMenuRowViewModel">
+                                <TextBlock Text="{Binding PoolDisplay}" VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <!-- Rename the selected placed entry / folder (not separators). -->
+                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
+                            IsVisible="{Binding SelectedContextMenuRow.CanRename, FallbackValue=False}">
+                    <TextBlock Text="Name" VerticalAlignment="Center"
+                               Foreground="{StaticResource ChromeFgSecBrush}" FontSize="{StaticResource FontSizeSm}"/>
+                    <TextBox Width="200" Text="{Binding SelectedContextMenuRow.CustomLabel, Mode=TwoWay}"
+                             PlaceholderText="{Binding SelectedContextMenuRow.DefaultLabel}"
+                             ToolTip.Tip="Custom name for this entry — leave blank to use the default. The entry still links to the same action."/>
+                    <TextBlock VerticalAlignment="Center" FontSize="{StaticResource FontSizeSm}"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               Text="{Binding SelectedContextMenuRow.DefaultLabel, StringFormat='→ {0}'}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal"
+                            Spacing="8" Margin="0,12,0,0">
+                    <Button Content="Import from profile…" Command="{Binding ImportContextMenuFromProfileCommand}"
+                            ToolTip.Tip="Copy the right-click menu from another character."/>
+                    <Button Content="Import from file…"    Command="{Binding ImportContextMenuFileCommand}"
+                            ToolTip.Tip="Load a shared right-click menu (.json)."/>
+                    <Button Content="Export to file…"      Command="{Binding ExportContextMenuFileCommand}"
+                            ToolTip.Tip="Save the current right-click menu to a .json file to share."/>
+                    <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="240"
+                               Foreground="{StaticResource ChromeFgSecBrush}" FontSize="{StaticResource FontSizeSm}"
+                               Text="{Binding ContextMenuStatus}"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+
     </StackPanel>
     </ScrollViewer>
 </UserControl>

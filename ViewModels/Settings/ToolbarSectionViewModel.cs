@@ -1,6 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.Profile;
@@ -48,6 +52,40 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
 
     // Editable per-row view-models for the layout.
     public ObservableCollection<ToolbarRowViewModel> Rows { get; } = new();
+
+    // ----- Terminal right-click menu editor (Char tier) -------------------
+    // The customizable entries below the pinned Favorites / Recent walk flyouts.
+    // ContextMenuRows is the placed layout; ContextMenuPool is the fixed pool of
+    // everything addable (MenuActionCatalogue). Persisted to
+    // CharacterProfile.Settings["ContextMenu"] on Apply; the main window rebuilds
+    // its ContextMenu from the re-hydrated AppServices.ContextMenu.
+    private const string ContextMenuKey = "ContextMenu";
+
+    public ObservableCollection<ContextMenuRowViewModel> ContextMenuRows { get; } = new();
+    public ObservableCollection<ContextMenuRowViewModel> ContextMenuPool { get; } =
+        new(MenuActionCatalogue.AllEntries.Select(e => new ContextMenuRowViewModel(e)));
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RemoveContextMenuEntryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(MoveContextMenuUpCommand))]
+    [NotifyCanExecuteChangedFor(nameof(MoveContextMenuDownCommand))]
+    [NotifyPropertyChangedFor(nameof(AddContextMenuButtonText))]
+    private ContextMenuRowViewModel? _selectedContextMenuRow;
+
+    // The "Add" button relabels to make the folder flow clear: with a folder (or
+    // one of its children) selected in the placed list, a new item lands INSIDE
+    // that folder.
+    public string AddContextMenuButtonText =>
+        SelectedContextMenuRow is { } r && (r.IsFolder || r.Depth == 1)
+            ? "Add into folder"
+            : "Add to menu";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AddContextMenuEntryCommand))]
+    private ContextMenuRowViewModel? _selectedContextMenuPoolRow;
+
+    // Inline feedback for import / export (mirrors CopyStatus).
+    [ObservableProperty] private string? _contextMenuStatus;
 
     // ----- Help-menu website list (Global tier) ---------------------------
     // The reference links shown under Help. Global scope — shared across every
@@ -230,6 +268,10 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
 
             profile.Settings ??= new();
             profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+
+            ContextMenuSettings menuDto = new() { Layout = BuildContextMenuLayout() };
+            profile.Settings[ContextMenuKey] = JsonSerializer.SerializeToElement(menuDto);
+
             _profile.Save();
             _profile.NotifyMutated();
         }
@@ -278,6 +320,109 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
         ShowToolbar = dto.Visible;
         Position    = dto.Position;
         RefreshShortcutRows();
+        LoadContextMenuFromProfile();
+    }
+
+    // ----- Terminal right-click menu: load / apply / edit -----------------
+    private void LoadContextMenuFromProfile()
+    {
+        ContextMenuSettings dto = ReadContextMenuDtoOrDefault();
+        PopulateContextMenuRows(dto.Layout is { Count: > 0 } layout ? layout : ContextMenuDefaults.Build());
+        SelectedContextMenuRow = null;
+    }
+
+    // Replace the placed rows from a set of entries — FLATTENING folders (a
+    // folder row followed by its children at Depth 1). Unknown ids are dropped so
+    // the editor never shows a dead row. Shared by profile-load, reset, imports.
+    private void PopulateContextMenuRows(IEnumerable<ContextMenuEntry> items)
+    {
+        foreach (ContextMenuRowViewModel row in ContextMenuRows) row.PropertyChanged -= OnContextMenuRowChanged;
+        ContextMenuRows.Clear();
+        foreach (ContextMenuEntry item in items)
+        {
+            if (item.Kind == ContextMenuEntryKind.Folder)
+            {
+                ContextMenuRows.Add(HookContextMenuRow(ContextMenuRowViewModel.Folder(item.Label)));
+                if (item.Children is { } children)
+                    foreach (ContextMenuEntry child in children)
+                        if (FromModelOrNull(child, depth: 1) is { } crow) ContextMenuRows.Add(crow);
+            }
+            else if (FromModelOrNull(item) is { } row) ContextMenuRows.Add(row);
+        }
+        RefreshContextMenuPool();
+    }
+
+    // Rebuild the "Add an item" pool. Single-instance entries (the Favorites /
+    // Recent walk fly-outs — you'd never want two) drop out once they're placed,
+    // and come back if removed; everything else can be added any number of times.
+    private void RefreshContextMenuPool()
+    {
+        var placed = new HashSet<string>(
+            ContextMenuRows.Where(r => !r.IsSeparator && !r.IsFolder && r.Id is not null).Select(r => r.Id!),
+            StringComparer.OrdinalIgnoreCase);
+        string? selectedId = SelectedContextMenuPoolRow?.Id;
+        ContextMenuPool.Clear();
+        foreach (MenuActionCatalogue.Entry e in MenuActionCatalogue.AllEntries)
+        {
+            if (e.EntryKind == MenuActionCatalogue.Kind.WalkFlyout && placed.Contains(e.Id)) continue;
+            ContextMenuPool.Add(new ContextMenuRowViewModel(e));
+        }
+        SelectedContextMenuPoolRow = selectedId is null
+            ? null
+            : ContextMenuPool.FirstOrDefault(r => string.Equals(r.Id, selectedId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // A placed row from a leaf entry (separator or catalogue entry + its optional
+    // custom label). Folders are handled by the caller; unknown ids are dropped.
+    private ContextMenuRowViewModel? FromModelOrNull(ContextMenuEntry item, int depth = 0)
+    {
+        if (item.Kind == ContextMenuEntryKind.Separator)
+            return HookContextMenuRow(ContextMenuRowViewModel.Separator(depth));
+        if (item.Kind == ContextMenuEntryKind.Folder) return null;   // caller handles folders
+        if (MenuActionCatalogue.Find(item.Id) is not { } def) return null;
+        return HookContextMenuRow(new ContextMenuRowViewModel(def, item.Label, depth));
+    }
+
+    // The flat editor rows → the nested persisted layout: a Depth-0 folder row
+    // adopts the Depth-1 rows that follow it as its Children.
+    private List<ContextMenuEntry> BuildContextMenuLayout()
+    {
+        List<ContextMenuEntry> result = new();
+        ContextMenuEntry? currentFolder = null;
+        foreach (ContextMenuRowViewModel row in ContextMenuRows)
+        {
+            ContextMenuEntry entry = row.ToModel();
+            if (row.Depth == 0)
+            {
+                result.Add(entry);
+                currentFolder = row.IsFolder ? entry : null;
+            }
+            else if (currentFolder?.Children is { } kids) kids.Add(entry);
+            else result.Add(entry);   // orphaned child (shouldn't happen) — demote to top
+        }
+        return result;
+    }
+
+    private ContextMenuRowViewModel HookContextMenuRow(ContextMenuRowViewModel row)
+    {
+        row.PropertyChanged += OnContextMenuRowChanged;
+        return row;
+    }
+
+    private void OnContextMenuRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ContextMenuRowViewModel.CustomLabel)) Dirty();
+    }
+
+    private ContextMenuSettings ReadContextMenuDtoOrDefault()
+        => _profile.Current is { } profile ? ReadContextMenuDtoFrom(profile) : new ContextMenuSettings();
+
+    private static ContextMenuSettings ReadContextMenuDtoFrom(CharacterProfile profile)
+    {
+        if (profile.Settings is null) return new ContextMenuSettings();
+        if (!profile.Settings.TryGetValue(ContextMenuKey, out JsonElement json)) return new ContextMenuSettings();
+        try { return JsonSerializer.Deserialize<ContextMenuSettings>(json.GetRawText()) ?? new ContextMenuSettings(); }
+        catch { return new ContextMenuSettings(); }
     }
 
     private ToolbarSettings ReadDtoOrDefault()
@@ -692,6 +837,284 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
 
             _keybindings.Rebind(action, target);
         }
+    }
+
+    // ----- Terminal right-click menu: rail commands + import / export -----
+    private static Window? HostWindow =>
+        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } m } ? m : null;
+
+    // Where a new leaf lands relative to the selection, and at what depth: as the
+    // first child of a selected folder, a sibling inside the folder a selected
+    // child belongs to, else after a selected top-level row (or the end).
+    private int LeafInsertIndex(out int depth)
+    {
+        if (SelectedContextMenuRow is not { } sel) { depth = 0; return ContextMenuRows.Count; }
+        int i = ContextMenuRows.IndexOf(sel);
+        depth = sel.IsFolder || sel.Depth == 1 ? 1 : 0;
+        return i + 1;
+    }
+
+    // Index just past the selected row's whole top-level block (a folder + its
+    // children), for inserting another top-level row (folder / after a block).
+    private int TopLevelInsertIndex()
+    {
+        if (SelectedContextMenuRow is not { } sel) return ContextMenuRows.Count;
+        int i = ContextMenuRows.IndexOf(sel);
+        while (i > 0 && ContextMenuRows[i].Depth == 1) i--;   // back to the block's top row
+        int j = i + 1;
+        while (j < ContextMenuRows.Count && ContextMenuRows[j].Depth == 1) j++;  // skip its children
+        return j;
+    }
+
+    private bool CanAddContextMenuEntry() => SelectedContextMenuPoolRow is not null;
+    [RelayCommand(CanExecute = nameof(CanAddContextMenuEntry))]
+    private void AddContextMenuEntry()
+    {
+        if (SelectedContextMenuPoolRow is not { Id: { } id } || MenuActionCatalogue.Find(id) is not { } def) return;
+        int at = LeafInsertIndex(out int depth);
+        ContextMenuRowViewModel row = HookContextMenuRow(new ContextMenuRowViewModel(def, null, depth));
+        ContextMenuRows.Insert(at, row);
+        SelectedContextMenuRow = row;
+        RefreshContextMenuPool();   // a placed single-instance entry (walk fly-out) leaves the pool
+        Dirty();
+    }
+
+    [RelayCommand]
+    private void AddContextMenuSeparator()
+    {
+        int at = LeafInsertIndex(out int depth);
+        ContextMenuRowViewModel row = HookContextMenuRow(ContextMenuRowViewModel.Separator(depth));
+        ContextMenuRows.Insert(at, row);
+        SelectedContextMenuRow = row;
+        Dirty();
+    }
+
+    // A user-defined folder (top level only) — a named fly-out submenu. Add items
+    // to it by selecting it and adding from the pool.
+    [RelayCommand]
+    private void AddContextMenuFolder()
+    {
+        int at = TopLevelInsertIndex();
+        ContextMenuRowViewModel row = HookContextMenuRow(ContextMenuRowViewModel.Folder("New folder"));
+        ContextMenuRows.Insert(at, row);
+        SelectedContextMenuRow = row;
+        Dirty();
+    }
+
+    private bool CanRemoveContextMenuEntry() => SelectedContextMenuRow is not null;
+    [RelayCommand(CanExecute = nameof(CanRemoveContextMenuEntry))]
+    private void RemoveContextMenuEntry()
+    {
+        if (SelectedContextMenuRow is not { } row) return;
+        int idx = ContextMenuRows.IndexOf(row);
+        // Removing a folder takes its contiguous Depth-1 children with it.
+        int end = idx + 1;
+        if (row.IsFolder)
+            while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
+        for (int k = end - 1; k >= idx; k--)
+        {
+            ContextMenuRows[k].PropertyChanged -= OnContextMenuRowChanged;
+            ContextMenuRows.RemoveAt(k);
+        }
+        SelectedContextMenuRow = ContextMenuRows.Count == 0
+            ? null
+            : ContextMenuRows[System.Math.Min(idx, ContextMenuRows.Count - 1)];
+        RefreshContextMenuPool();   // a removed single-instance entry returns to the pool
+        Dirty();
+    }
+
+    // Move rows [start..end) so they begin at dest (an index in the pre-removal
+    // list). Used for block-aware folder moves.
+    private void MoveContextMenuBlock(int start, int end, int dest)
+    {
+        List<ContextMenuRowViewModel> block = new();
+        for (int k = start; k < end; k++) block.Add(ContextMenuRows[k]);
+        for (int k = end - 1; k >= start; k--) ContextMenuRows.RemoveAt(k);
+        int insertAt = dest > start ? dest - block.Count : dest;
+        for (int k = 0; k < block.Count; k++) ContextMenuRows.Insert(insertAt + k, block[k]);
+    }
+
+    // Remove `row` and re-insert it at `insertAt` (an index in the list AFTER the
+    // removal) with `depth`, keeping it selected. Used when a Move up/down steps
+    // an item into or out of a folder (its depth changes).
+    private void ReinsertContextMenuRow(ContextMenuRowViewModel row, int insertAt, int depth)
+    {
+        ContextMenuRows.Remove(row);
+        row.Depth = depth;
+        ContextMenuRows.Insert(insertAt, row);
+        SelectedContextMenuRow = row;
+        // Depth changed under the same selection, so the Add-button label
+        // (which reads the selected row's depth) must re-evaluate.
+        OnPropertyChanged(nameof(AddContextMenuButtonText));
+        Dirty();
+    }
+
+    private void SwapContextMenuRows(int a, int b, ContextMenuRowViewModel keepSelected)
+    {
+        ContextMenuRows.Move(a, b);
+        SelectedContextMenuRow = keepSelected;
+        Dirty();
+    }
+
+    private bool CanMoveContextMenuUp() => SelectedContextMenuRow is not null;
+    [RelayCommand(CanExecute = nameof(CanMoveContextMenuUp))]
+    private void MoveContextMenuUp()
+    {
+        if (SelectedContextMenuRow is not { } row) return;
+        int i = ContextMenuRows.IndexOf(row);
+        if (i <= 0) return;
+
+        // A folder moves as a whole block, swapping with the previous top-level block.
+        if (row.IsFolder)
+        {
+            int end = i + 1;
+            while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
+            int p = i - 1;
+            while (p > 0 && ContextMenuRows[p].Depth == 1) p--;
+            MoveContextMenuBlock(i, end, p);
+            SelectedContextMenuRow = row;
+            Dirty();
+            return;
+        }
+
+        ContextMenuRowViewModel above = ContextMenuRows[i - 1];
+        if (row.Depth == 1)
+        {
+            // Inside a folder: reorder among siblings, or if it's the first child,
+            // pop it OUT above the folder.
+            if (above.Depth == 1) SwapContextMenuRows(i, i - 1, row);
+            else ReinsertContextMenuRow(row, i - 1, 0);   // above the folder header
+            return;
+        }
+
+        // Top-level item: swapping with a folder (its header or last child) steps
+        // it INTO that folder as the last child; otherwise a plain swap up.
+        if (above.IsFolder || above.Depth == 1) ReinsertContextMenuRow(row, i, 1);
+        else SwapContextMenuRows(i, i - 1, row);
+    }
+
+    private bool CanMoveContextMenuDown() => SelectedContextMenuRow is not null;
+    [RelayCommand(CanExecute = nameof(CanMoveContextMenuDown))]
+    private void MoveContextMenuDown()
+    {
+        if (SelectedContextMenuRow is not { } row) return;
+        int i = ContextMenuRows.IndexOf(row);
+        if (i < 0) return;
+
+        if (row.IsFolder)
+        {
+            int end = i + 1;
+            while (end < ContextMenuRows.Count && ContextMenuRows[end].Depth == 1) end++;
+            if (end >= ContextMenuRows.Count) return;
+            int next = end + 1;
+            while (next < ContextMenuRows.Count && ContextMenuRows[next].Depth == 1) next++;
+            MoveContextMenuBlock(end, next, i);
+            SelectedContextMenuRow = row;
+            Dirty();
+            return;
+        }
+
+        int j = i + 1;
+        if (row.Depth == 1)
+        {
+            // Inside a folder: reorder among siblings, or if it's the last child,
+            // pop it OUT below the folder.
+            if (j < ContextMenuRows.Count && ContextMenuRows[j].Depth == 1) SwapContextMenuRows(i, j, row);
+            else ReinsertContextMenuRow(row, i, 0);   // below the folder block
+            return;
+        }
+
+        // Top-level item: swapping with a folder header steps it INTO that folder
+        // as the first child; otherwise a plain swap down.
+        if (j >= ContextMenuRows.Count) return;
+        if (ContextMenuRows[j].IsFolder) ReinsertContextMenuRow(row, i + 1, 1);
+        else SwapContextMenuRows(i, j, row);
+    }
+
+    [RelayCommand]
+    private void ResetContextMenu()
+    {
+        PopulateContextMenuRows(ContextMenuDefaults.Build());
+        SelectedContextMenuRow = null;
+        ContextMenuStatus = null;
+        Dirty();
+    }
+
+    // Import the terminal right-click menu from another character profile (staged
+    // into the rows, committed on Apply). Reuses the profile picker.
+    [RelayCommand(CanExecute = nameof(HasProfile))]
+    private async Task ImportContextMenuFromProfileAsync()
+    {
+        if (_profile.Current is null) return;
+        List<ProfileRef> candidates = _profile.ListAll()
+            .Where(r => !(string.Equals(r.Bbs, _profile.CurrentBbsName, StringComparison.OrdinalIgnoreCase)
+                       && string.Equals(r.Name, _profile.CurrentProfileName, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (candidates.Count == 0) { ContextMenuStatus = "No other saved profiles to import from."; return; }
+
+        ViewModels.Profile.ProfilePickerDialogViewModel picker = new(
+            candidates,
+            windowTitle: "Import right-click menu",
+            prompt: "Copy the terminal right-click menu from another character. This replaces the current menu — Apply to keep it.",
+            confirmLabel: "Import");
+        ProfileRef? picked = await _dialogs
+            .OpenWindowAsync<ViewModels.Profile.ProfilePickerDialogViewModel, ProfileRef>(picker);
+        if (picked is null) return;
+
+        CharacterProfile? source;
+        try { source = JsonStore.Load<CharacterProfile>(AppPaths.CharacterProfileFile(picked.Bbs, picked.Name)); }
+        catch (Exception ex) { ContextMenuStatus = $"Couldn't read '{picked.Name}': {ex.Message}"; return; }
+        if (source is null) { ContextMenuStatus = $"Couldn't read '{picked.Name}'."; return; }
+
+        PopulateContextMenuRows(ReadContextMenuDtoFrom(source).Layout is { Count: > 0 } l ? l : ContextMenuDefaults.Build());
+        SelectedContextMenuRow = null;
+        Dirty();
+        ContextMenuStatus = $"Imported the right-click menu from {picked.Name}. Apply to keep it.";
+    }
+
+    // Export the current (staged) menu to a JSON file for sharing with friends.
+    [RelayCommand]
+    private async Task ExportContextMenuFileAsync()
+    {
+        if (HostWindow is not { } main) return;
+        IStorageFile? file = await main.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export right-click menu",
+            SuggestedFileName = "terminal-menu.json",
+            DefaultExtension = "json",
+            FileTypeChoices = new[] { new FilePickerFileType("Right-click menu (JSON)") { Patterns = new[] { "*.json" } } },
+        });
+        if (file is null) return;
+        ContextMenuSettings dto = new() { Layout = BuildContextMenuLayout() };
+        JsonStore.Save(file.Path.LocalPath, dto);
+        ContextMenuStatus = "Exported the current right-click menu.";
+    }
+
+    // Import a shared menu file into the staged rows (committed on Apply).
+    [RelayCommand]
+    private async Task ImportContextMenuFileAsync()
+    {
+        if (HostWindow is not { } main) return;
+        IReadOnlyList<IStorageFile> picked = await main.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import right-click menu",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Right-click menu (JSON)") { Patterns = new[] { "*.json" } },
+                FilePickerFileTypes.All,
+            },
+        });
+        if (picked.Count == 0) return;
+        ContextMenuSettings? dto;
+        try { dto = JsonStore.Load<ContextMenuSettings>(picked[0].Path.LocalPath); }
+        catch (Exception ex) { ContextMenuStatus = $"Couldn't read that file: {ex.Message}"; return; }
+        if (dto is null) { ContextMenuStatus = "That file didn't contain a right-click menu."; return; }
+
+        PopulateContextMenuRows(dto.Layout is { Count: > 0 } l ? l : ContextMenuDefaults.Build());
+        SelectedContextMenuRow = null;
+        Dirty();
+        ContextMenuStatus = "Imported a right-click menu from file. Apply to keep it.";
     }
 
     // Auto-generated PropertyChanged hooks for the visibility / position

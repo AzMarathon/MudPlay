@@ -1,11 +1,13 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Reactive;
 using Avalonia.Threading;
+using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
 using MudPlay.ViewModels;
@@ -65,6 +67,8 @@ public partial class MainWindow : Window
                 RebuildGameDataMenu(vm);
                 vm.HelpLinks.CollectionChanged += OnHelpLinksChanged;
                 RebuildHelpMenu(vm);
+                vm.ContextMenu.Layout.CollectionChanged += OnContextMenuLayoutChanged;
+                RebuildTerminalContextMenu(vm);
             }
         };
 
@@ -223,6 +227,170 @@ public partial class MainWindow : Window
             Header  = "About MudPlay",
             Command = vm.OpenAboutCommand,
         });
+    }
+
+    // ----- Customizable terminal right-click menu -----------------------------
+    // The ContextMenu's first three items (Favorites submenu, Recent submenu, and
+    // their trailing separator) are fixed in XAML so their live bindings keep
+    // working; everything after is rebuilt from AppServices.ContextMenu.Layout.
+    // Each entry resolves through MenuActionCatalogue into a MenuItem — a command,
+    // a toggle, a whole-menu submenu, a Workshop-tab link, or a calculator link —
+    // reusing the same reflection bridge the toolbar/keybinds use for commands.
+    private const int ContextMenuFixedLeadingItems = 0;
+    private bool _ctxRebuildQueued;
+    // Walk-flyout (Favorites / Recent) collection subscriptions from the current
+    // build, dropped and re-made on each rebuild so they don't accumulate.
+    private readonly List<(INotifyCollectionChanged Src, NotifyCollectionChangedEventHandler Handler)> _walkFlyoutSubs = new();
+
+    private void OnContextMenuLayoutChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // ApplyFrom clears + re-adds item-by-item, so coalesce the burst into a
+        // single rebuild on the next dispatcher turn.
+        if (_ctxRebuildQueued) return;
+        _ctxRebuildQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _ctxRebuildQueued = false;
+            if (DataContext is MainWindowViewModel vm) RebuildTerminalContextMenu(vm);
+        });
+    }
+
+    private void RebuildTerminalContextMenu(MainWindowViewModel vm)
+    {
+        if (TerminalContextMenu is null) return;
+        // Detach the previous build's walk-flyout subscriptions before rebuilding.
+        foreach ((INotifyCollectionChanged src, NotifyCollectionChangedEventHandler handler) in _walkFlyoutSubs)
+            src.CollectionChanged -= handler;
+        _walkFlyoutSubs.Clear();
+        ItemCollection items = TerminalContextMenu.Items;
+        // Drop everything a previous build appended; keep the fixed leaders.
+        while (items.Count > ContextMenuFixedLeadingItems)
+            items.RemoveAt(items.Count - 1);
+
+        foreach (ContextMenuEntry entry in vm.ContextMenu.Layout)
+            if (BuildLayoutItem(entry, vm) is { } built) items.Add(built);
+    }
+
+    // One top-level layout entry → a menu control: a separator, a user-defined
+    // folder (a named fly-out submenu of its Children), or a catalogue-backed
+    // entry. Unknown ids and empty folders are dropped so nothing dead renders.
+    private Control? BuildLayoutItem(ContextMenuEntry entry, MainWindowViewModel vm)
+    {
+        switch (entry.Kind)
+        {
+            case ContextMenuEntryKind.Separator:
+                return new Separator();
+            case ContextMenuEntryKind.Folder:
+            {
+                MenuItem folder = new() { Header = string.IsNullOrWhiteSpace(entry.Label) ? "Folder" : entry.Label! };
+                if (entry.Children is { } children)
+                    foreach (ContextMenuEntry child in children)
+                        if (BuildFolderChild(child, vm) is { } c) folder.Items.Add(c);
+                // Show even an empty folder (as a submenu with a disabled hint) so a
+                // just-created folder doesn't silently vanish from the menu.
+                if (folder.Items.Count == 0)
+                    folder.Items.Add(new MenuItem { Header = "(empty)", IsEnabled = false });
+                return folder;
+            }
+            default:   // Entry
+                return MenuActionCatalogue.Find(entry.Id) is { } def
+                    ? BuildContextMenuEntry(def, vm, entry.Label)
+                    : null;
+        }
+    }
+
+    // A folder's child — an Entry or Separator only (folders are one level deep).
+    private Control? BuildFolderChild(ContextMenuEntry child, MainWindowViewModel vm)
+    {
+        if (child.Kind == ContextMenuEntryKind.Separator) return new Separator();
+        return MenuActionCatalogue.Find(child.Id) is { } def
+            ? BuildContextMenuEntry(def, vm, child.Label)
+            : null;
+    }
+
+    // Resolve one catalogue entry into a MenuItem, or null when it can't be built
+    // (an unresolvable command). customLabel (the user's chosen name) overrides
+    // the catalogue label when set.
+    private Control? BuildContextMenuEntry(MenuActionCatalogue.Entry def, MainWindowViewModel vm, string? customLabel = null)
+    {
+        string header = string.IsNullOrWhiteSpace(customLabel) ? def.Label : customLabel!;
+        switch (def.EntryKind)
+        {
+            case MenuActionCatalogue.Kind.WalkFlyout:
+            {
+                // The GOTO Favorites / Recent-destinations fly-out: a submenu of a
+                // live ObservableCollection, rendered by the WalkFlyoutItemTheme the
+                // menu declares. Since the user deliberately placed it, it ALWAYS
+                // shows — a new/default profile with an empty list surfaces a
+                // disabled "(none yet)" slot instead of vanishing. Items rebuild on
+                // every collection change (subscriptions are dropped on the next
+                // menu rebuild — see RebuildTerminalContextMenu).
+                bool isFav = string.Equals(def.Parameter, "favorites", System.StringComparison.Ordinal);
+                System.Collections.ObjectModel.ObservableCollection<FavoriteMenuItem> source =
+                    isFav ? vm.Favorites : vm.RecentDestinations;
+                MenuItem item = new() { Header = header };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                if (TerminalContextMenu?.TryFindResource("WalkFlyoutItemTheme", out object? themeObj) == true
+                    && themeObj is Avalonia.Styling.ControlTheme theme)
+                    item.ItemContainerTheme = theme;
+
+                void Populate()
+                {
+                    item.Items.Clear();
+                    if (source.Count == 0)
+                        item.Items.Add(new MenuItem { Header = "(none yet)", IsEnabled = false });
+                    else
+                        foreach (FavoriteMenuItem f in source) item.Items.Add(f);
+                }
+                Populate();
+                NotifyCollectionChangedEventHandler handler = (_, _) => Populate();
+                source.CollectionChanged += handler;
+                _walkFlyoutSubs.Add((source, handler));
+                return item;
+            }
+            case MenuActionCatalogue.Kind.Toggle:
+            {
+                MenuItem item = new() { Header = header, ToggleType = MenuItemToggleType.CheckBox };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                item.Bind(MenuItem.IsCheckedProperty,
+                    new Binding(def.ToggleProperty!) { Source = vm, Mode = BindingMode.TwoWay });
+                return item;
+            }
+            case MenuActionCatalogue.Kind.WorkshopTab:
+            {
+                MenuItem item = new()
+                {
+                    Header = header,
+                    Command = vm.OpenWorkshopTabCommand,
+                    CommandParameter = def.Parameter,
+                };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                return item;
+            }
+            case MenuActionCatalogue.Kind.Calculator:
+            {
+                MenuItem item = new()
+                {
+                    Header = header,
+                    Command = vm.OpenWorkshopCalculatorCommand,
+                    CommandParameter = def.Parameter,
+                };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                return item;
+            }
+            default: // Command — reflection-resolve CommandName → ICommand, like the toolbar.
+            {
+                ICommand? cmd = def.CommandName is null
+                    ? null
+                    : vm.GetType().GetProperty(def.CommandName)?.GetValue(vm) as ICommand;
+                if (cmd is null) return null;
+                MenuItem item = new() { Header = header, Command = cmd };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                if (def.GestureProperty is not null)
+                    item.Bind(MenuItem.InputGestureProperty, new Binding(def.GestureProperty) { Source = vm });
+                return item;
+            }
+        }
     }
 
     // Compose the Game Data menu's items: every imported set on top

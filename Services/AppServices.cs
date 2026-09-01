@@ -649,6 +649,12 @@ public sealed class AppServices
     // tick.
     public ToolbarConfig Toolbar { get; } = new();
 
+    // Char-tier live mirror of the customizable terminal right-click menu. The
+    // MainWindow code-behind rebuilds the ContextMenu from ContextMenu.Layout;
+    // hydrated on every profile load / mutate and reset on close, mirroring
+    // Toolbar above.
+    public ContextMenuConfig ContextMenu { get; } = new();
+
     // AES-GCM encrypt / decrypt for short secrets (BBS passwords).
     // Ciphertext is stored inline on the owning record (e.g.
     // Models.Profile.BbsCredentials.EncryptedPassword),
@@ -2448,6 +2454,11 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => ApplyToolbarFromActiveProfile();
         Profile.ProfileClosed += ResetToolbarToDefaults;
         Profile.ProfileMutated += _ => ApplyToolbarFromActiveProfile();
+
+        // Same bridge for the customizable terminal right-click menu (Char-tier).
+        Profile.ProfileLoaded += _ => ApplyContextMenuFromActiveProfile();
+        Profile.ProfileClosed += ResetContextMenuToDefaults;
+        Profile.ProfileMutated += _ => ApplyContextMenuFromActiveProfile();
 
         // Bridge: per-character log-diagnostic toggles (Char-tier). Apply the
         // persisted state on load, reset to off on close, and persist back
@@ -5628,6 +5639,17 @@ public sealed class AppServices
     private void ResetToolbarToDefaults()
     {
         Toolbar.ApplyFrom(new Models.Profile.ToolbarSettings());
+    }
+
+    private void ApplyContextMenuFromActiveProfile()
+    {
+        Models.Profile.ContextMenuSettings dto = ReadSection<Models.Profile.ContextMenuSettings>(Profile.Current, "ContextMenu");
+        ContextMenu.ApplyFrom(dto);
+    }
+
+    private void ResetContextMenuToDefaults()
+    {
+        ContextMenu.ApplyFrom(new Models.Profile.ContextMenuSettings());
     }
 
     // Guards the persist-on-Changed handler while we're pushing values INTO

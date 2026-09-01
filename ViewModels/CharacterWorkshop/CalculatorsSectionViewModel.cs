@@ -60,6 +60,45 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     public override string Title => "Calculators";
     public override Control View => _view ??= new CalculatorsSectionView { DataContext = this };
 
+    // ----- Calculator deep-link (from the customizable terminal right-click menu)
+    // A "Calculator: X" entry opens the Workshop on this tab, expands that one
+    // calculator, and centers it. Each Expander two-way-binds IsExpanded to the
+    // matching flag (so a user toggle also updates the flag); NavigateToCalculator
+    // sets the flag and raises ScrollToCalculatorRequested. PendingScrollTarget
+    // covers the lazy-tab case: a deep-link can fire before the view is built, so
+    // the view centers the pending target on first load.
+    public enum CalculatorId { Hit, Movement, Swing, Backstab, ManaRegen, RealmRankings }
+
+    [ObservableProperty] private bool _hitExpanded;
+    [ObservableProperty] private bool _movementExpanded;
+    [ObservableProperty] private bool _swingExpanded;
+    [ObservableProperty] private bool _backstabExpanded;
+    [ObservableProperty] private bool _manaRegenExpanded;
+    [ObservableProperty] private bool _realmRankingsExpanded;
+
+    public event Action<CalculatorId>? ScrollToCalculatorRequested;
+    public CalculatorId? PendingScrollTarget { get; private set; }
+
+    // Expand + reveal one calculator by its CalculatorId name (leaves the others
+    // as the user left them; the view centers it once laid out).
+    public void NavigateToCalculator(string? calculatorId)
+    {
+        if (!Enum.TryParse(calculatorId, ignoreCase: true, out CalculatorId id)) return;
+        switch (id)
+        {
+            case CalculatorId.Hit: HitExpanded = true; break;
+            case CalculatorId.Movement: MovementExpanded = true; break;
+            case CalculatorId.Swing: SwingExpanded = true; break;
+            case CalculatorId.Backstab: BackstabExpanded = true; break;
+            case CalculatorId.ManaRegen: ManaRegenExpanded = true; break;
+            case CalculatorId.RealmRankings: RealmRankingsExpanded = true; break;
+        }
+        PendingScrollTarget = id;
+        ScrollToCalculatorRequested?.Invoke(id);
+    }
+
+    public void ClearPendingScrollTarget() => PendingScrollTarget = null;
+
     // ----- Monster typeahead ---------------------------------------------
     // Typeahead source: "<name> (#<number>)" per monster.
     public ObservableCollection<string> MonsterNames { get; } = new();

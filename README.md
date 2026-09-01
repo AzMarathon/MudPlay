@@ -1,6 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
+> **Version 3.42.0**
+> - The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts): arrange the whole menu — the Favorites / Recent walk fly-outs, menu commands, direct links to a Player Workshop tab, or a calculator that opens **expanded and centered** — and build your own **fly-out folders**
+> - **Rename** any entry or folder while an entry still links to the same action; reorder, add separators, Reset to the built-in menu
+> - **Import** a menu from another character or a shared `.json` file, and **Export** yours to share with friends; saved per character
+>
 > **Version 3.41.0**
 > - Monster Intel gains a **defense simulator**: AC is now editable (seeded to your worn gear + buffs), with a Shadow AC checkbox, a Prot Evil field, and a raw Vile Ward field + alignment picker (0% / 50% / 100%) — edit any of them and every monster's Hits You % recomputes live
 > - Monster Intel adds an **AC vs Selected Target** readout (effective AC vs the selected monster's alignment) and a **Hide regen timers** checkbox (drop timed/boss respawns)
@@ -38,7 +43,7 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser — whose **Monsters tab** curates the full roster with grouped min/max filters (combat stats, per-element resists signed to find vulnerabilities, spell immunity, magic-weapon requirement, type, and loot). Every engine reads from this data. A dedicated **Monster Intel** window answers "can I safely fight this thing right now" — Hits-You-% threshold checkboxes against your live AC/Dodge, an estimated rounds-to-kill per monster with your current weapon, plus its attacks and your own combat history against it — without digging into the Browser.
 - **Conversation & chat** — a dedicated conversation pane with per-channel filtering, search, logging, and history.
 - **Tools & diagnostics** — a timestamped full-ANSI scrollback with search/filter, a **Program Log**, **Session Stats**, a **Wire Inspector** for raw/classified stream inspection, and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES — IT CAPTURES FAR MORE THAN YOU CAN DESCRIBE OR SHOW IN A SCREENSHOT)***.
-- **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.
+- **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, a customizable terminal right-click menu (add commands, direct links to a Workshop tab or calculator, and your own fly-out folders — rename, reorder, and import/export to share), edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.
 
 ## Getting started
 
