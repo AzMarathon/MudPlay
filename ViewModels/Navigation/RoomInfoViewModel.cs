@@ -38,11 +38,20 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     [ObservableProperty] private string _roomKeyLabel = string.Empty;
 
     // Room-illumination summary shown below the map/room number ("Room Illu:
-    // <value> - <phrase>"). Empty for a fully-lit room, which needs none.
+    // <value> - <phrase>", the room alone). Empty for a fully-lit room.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRoomLight))]
     private string _roomLight = string.Empty;
     public bool HasRoomLight => RoomLight.Length > 0;
+
+    // Player-adjusted illumination shown below Room Illu ("Your Illu: <value> -
+    // <phrase>") — the room's light plus the player's carried illu (worn +illu
+    // gear + readied light) and any configured light-spell illu. Empty for a
+    // fully-lit room, matching Room Illu's gate.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPlayerLight))]
+    private string _playerLight = string.Empty;
+    public bool HasPlayerLight => PlayerLight.Length > 0;
 
     // The shop as a whole (when the room hosts one) — one link to its stock popup.
     [ObservableProperty]
@@ -99,6 +108,7 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         LairMonsters.Clear();
         LairRegen = string.Empty;
         RoomLight = string.Empty;
+        PlayerLight = string.Empty;
         Exits.Clear();
         FloorItems.Clear();
         ShopLink = null;
@@ -118,7 +128,11 @@ public sealed partial class RoomInfoViewModel : ObservableObject
 
         RoomName = room.DisplayName;
         RoomKeyLabel = $"Map {key.Map} · Room {key.Room}";
-        RoomLight = RoomTooltipBuilder.BuildRoomLightSummary(room, _services.PlayerIllumination.Current);
+        RoomLight = RoomTooltipBuilder.BuildRoomLightSummary(room);
+        // Your Illu folds the player's carried illumination (worn gear + readied
+        // light) and any configured light-spell illu into the room's light.
+        int playerIllu = _services.PlayerIllumination.Current + _services.ConfiguredLightSpellIllu();
+        PlayerLight = RoomTooltipBuilder.BuildPlayerLightSummary(room, playerIllu);
 
         // Monsters — split into Placed (the room's NPC fixture / a boss),
         // Assigned (roam / rare-random spawns), and Lair (consistent lair

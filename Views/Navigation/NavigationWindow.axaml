@@ -1006,6 +1006,14 @@
                                                    TextTrimming="CharacterEllipsis"
                                                    FontSize="11"
                                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                        <!-- Your illumination (room light + your gear + configured light
+                                             spells) just below Room Illu; same single-line trim. -->
+                                        <TextBlock Text="{Binding RoomInfo.PlayerLight}"
+                                                   IsVisible="{Binding RoomInfo.HasPlayerLight}"
+                                                   ToolTip.Tip="{Binding RoomInfo.PlayerLight}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
                                         <!-- Monsters — Placed / Assigned / Lair, mirroring the map tooltip -->
                                         <StackPanel IsVisible="{Binding RoomInfo.HasPlaced}" Spacing="1">

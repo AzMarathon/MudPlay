@@ -192,9 +192,9 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         var (graph, _) = NewGraph();
         Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
 
-        // The Navigation ROOM INFO panel's one-liner: "Room Illu: <signed value> -
-        // <phrase>" for the player's illumination.
-        string summary = RoomTooltipBuilder.BuildRoomLightSummary(dark, charIllu: 0);
+        // The ROOM INFO panel's "Room Illu" line: the room alone (no player light),
+        // "Room Illu: <signed value> - <phrase>".
+        string summary = RoomTooltipBuilder.BuildRoomLightSummary(dark);
 
         Assert.StartsWith("Room Illu: -180", summary);
         Assert.Contains("very dark", summary);
@@ -207,7 +207,22 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Room lit = graph.GetRoom(new RoomKey(1, 1))!;       // Light = 0
 
         // A fully-lit room needs no indicator, so the panel gets an empty string.
-        Assert.Equal(string.Empty, RoomTooltipBuilder.BuildRoomLightSummary(lit, charIllu: 0));
+        Assert.Equal(string.Empty, RoomTooltipBuilder.BuildRoomLightSummary(lit));
+        Assert.Equal(string.Empty, RoomTooltipBuilder.BuildPlayerLightSummary(lit, playerIllu: 200));
+    }
+
+    [Fact]
+    public void PlayerLightSummary_FoldsPlayerIllu_IntoEffectiveValue()
+    {
+        var (graph, _) = NewGraph();
+        Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
+
+        // "Your Illu" folds carried illumination into the room's light: -180 + 100
+        // = -80, which lands in the dimly-lit band.
+        string summary = RoomTooltipBuilder.BuildPlayerLightSummary(dark, playerIllu: 100);
+
+        Assert.StartsWith("Your Illu: -80", summary);
+        Assert.Contains("dimly lit", summary);
     }
 
     [Fact]
