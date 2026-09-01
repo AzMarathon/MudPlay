@@ -385,6 +385,28 @@ public partial class MainWindow : Window
                 if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
                 return item;
             }
+            case MenuActionCatalogue.Kind.SettingsTab:
+            {
+                MenuItem item = new()
+                {
+                    Header = header,
+                    Command = vm.OpenSettingsTabCommand,
+                    CommandParameter = def.Parameter,
+                };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                return item;
+            }
+            case MenuActionCatalogue.Kind.GameDataSection:
+            {
+                MenuItem item = new()
+                {
+                    Header = header,
+                    Command = vm.OpenGameDataSectionCommand,
+                    CommandParameter = def.Parameter,
+                };
+                if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
+                return item;
+            }
             default: // Command — reflection-resolve CommandName → ICommand, like the toolbar.
             {
                 ICommand? cmd = def.CommandName is null
