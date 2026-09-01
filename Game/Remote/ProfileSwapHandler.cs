@@ -4,7 +4,8 @@ using MudPlay.Models.GameData;
 namespace MudPlay.Game.Remote;
 
 // Handler for @profile — swap the receiver's active casting spell profile.
-//   @profile          — reports the current profile (query, no switch).
+//   @profile          — reports the roster: the current profile + the others on
+//                       standby (query, no switch).
 //   @profile <number> — switch to that 1-based profile slot.
 //   @profile <name>   — switch to the best-matching profile by name.
 // The reply names the profile and lists its slots by cast code (the swap report).
@@ -42,8 +43,8 @@ public sealed class ProfileSwapHandler : IDisposable
         string arg = string.Join(' ', ctx.Args).Trim();
         if (arg.Length == 0)
         {
-            string? current = _profiles.CurrentReport();
-            if (current is not null) ctx.Reply(current);
+            string? roster = _profiles.RosterReport();
+            if (roster is not null) ctx.Reply(roster);
             else if (_engine.WarnOnDenial) ctx.Reply("no combat profiles configured");
             return;
         }

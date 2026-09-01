@@ -78,4 +78,25 @@ public static class CombatSpellProfileReport
 
         return gates.Count > 0 ? $"{label} {code}({string.Join(", ", gates)})" : $"{label} {code}";
     }
+
+    // The @profile query roster: the active profile flagged Current, the rest On
+    // Standby, each as "<number>)<name>" — e.g.
+    // "{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}". An unnamed profile
+    // shows "unnamed"; a lone profile omits the On-Standby clause.
+    public static string DescribeRoster(IReadOnlyList<CombatSpellProfile> profiles, int activeIndex)
+    {
+        if (profiles is null || profiles.Count == 0) return "{no combat profiles}";
+        int active = activeIndex >= 0 && activeIndex < profiles.Count ? activeIndex : 0;
+
+        var standby = new List<string>();
+        for (int i = 0; i < profiles.Count; i++)
+            if (i != active) standby.Add(Slot(i, profiles[i]));
+
+        string body = "Current: " + Slot(active, profiles[active]);
+        if (standby.Count > 0) body += ", On Standby: " + string.Join(", ", standby);
+        return "{" + body + "}";
+    }
+
+    private static string Slot(int index, CombatSpellProfile p)
+        => $"{index + 1}){(string.IsNullOrWhiteSpace(p.Name) ? "unnamed" : p.Name.Trim())}";
 }

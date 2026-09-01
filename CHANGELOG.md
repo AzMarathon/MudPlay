@@ -1,8 +1,9 @@
 # Version history
 
-## 3.43.1
+## 3.43.2
 
 - Fixed the **`@profile`** remote command crashing the receiving client — the swap's terminal echo re-entered the emulator mid-parse; it's now deferred like the other in-pump notices
+- `@profile` with **no argument** now reports the roster — the active profile plus the others on standby (e.g. `{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}`) — instead of just the active profile's spells
 
 ## 3.43.0
 

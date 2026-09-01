@@ -147,13 +147,14 @@ public sealed class CombatProfileManager
     // new set + active profile.
     public void RaiseChanged() => Changed?.Invoke();
 
-    // The active profile's swap-report line (no switch) — for @profile with no
-    // argument, which queries the current profile. Null when none is loaded.
-    public string? CurrentReport()
+    // The @profile query roster (no switch) — the active profile plus the others
+    // on standby, e.g. "{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}". Null
+    // when none is loaded.
+    public string? RosterReport()
     {
-        int i = ActiveIndex;
-        CombatSpellProfile? a = Active;
-        return a is not null && i >= 0 ? CombatSpellProfileReport.Describe(a, i + 1) : null;
+        CombatProfileSettings? s = Store();
+        if (s is null || s.Profiles.Count == 0) return null;
+        return CombatSpellProfileReport.DescribeRoster(s.Profiles, ActiveIndex);
     }
 
     // The active profile's full-config line (slots + gates + knobs) — for the
