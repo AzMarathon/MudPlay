@@ -1248,6 +1248,7 @@ This editor is **staged** — nothing is saved or used until you press **Apply**
 - **`@profile`** — lets a trusted party member switch your profile remotely from chat (needs the **Alter my settings** permission). It accepts either:
   - the profile's **number** — the same chip number you see in Settings, so `@profile 2` selects the second profile; or
   - any part of the **name you gave it** in the name box — if you named a profile "Fire", then `@profile fire` (or even `@profile fi`) selects it. When the text could fit more than one name, it picks the closest match.
+  - **no argument** — `@profile` on its own doesn't switch; it **reports the roster**: the active profile plus the others on standby, e.g. `{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}`.
 
 **Every switch prints a one-line summary** to your terminal (and to the requester, for `@profile`) naming the profile now active and the spell in each slot, shown by its short **cast code** — the same code you would type to cast that spell. For example:
 

@@ -764,8 +764,15 @@ public partial class MainWindowViewModel : ObservableObject
         // Casting spell profiles (Settings → Combat): the Action → Profiles fly-out
         // and the toolbar profile-menu button share one item list, rebuilt on any
         // profile change; every swap echoes its report to the terminal.
+        // POST the echo, don't call it inline: an @profile remote swap fires from
+        // INSIDE the emulator's message pump (mid-parse of the incoming telepath),
+        // and WriteTerminalStatus re-feeds the emulator — a synchronous echo there
+        // re-enters Emulator.Feed reentrantly and crashed the receiving client.
+        // Deferring lands it after the pump unwinds, like the other pump-fired
+        // notices (OnQuestAvailable / OnEquipSlotBlocked / OnGhSweepCompleted).
         AppServices.Current.CombatProfiles.Announce =
-            report => WriteTerminalStatus($"[{report}]", TerminalStatusKind.Notice);
+            report => Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => WriteTerminalStatus($"[{report}]", TerminalStatusKind.Notice));
         RebuildCombatProfilesMenu();
         AppServices.Current.CombatProfiles.Changed += RebuildCombatProfilesMenu;
 
@@ -2839,6 +2846,11 @@ public partial class MainWindowViewModel : ObservableObject
     // (in addition to LogService). Mirrors the classic-BBS-client cadence
     // the user expects: "[CONNECTING TO: …]" / "[DISCONNECTED FROM: …]" /
     // etc. Coloured via inline ANSI SGR so the emulator does the painting.
+    // Drops a coloured status line into the terminal scrollback by FEEDING it back
+    // through the emulator. Re-entrancy hazard: any caller firing from inside the
+    // emulator's message pump (a MessageRouter / ChatRouter / remote-command
+    // handler) must Dispatcher.UIThread.Post this — a synchronous call there
+    // re-enters Emulator.Feed while it's mid-parse and crashes the client.
     private void WriteTerminalStatus(string text, TerminalStatusKind kind)
     {
         string sgr = kind switch
