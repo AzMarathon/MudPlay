@@ -1,13 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.43.0**
-> - New **casting spell profiles** (Settings → Combat): save and quick-swap named sets of the spell-combat slots (the six spell rows + their gates + mana mode + drain trigger); non-spell combat settings stay shared
-> - Numbered profile **chips** (active one gold) + a **name box** + ＋/✕; the profile editor is fully **staged** — switch, add, remove, and edit boxes freely and nothing applies until **Save/OK** (**Cancel** discards). Once applied, the active profile goes live next combat round
-> - Swap from the **Action → Combat Profiles** fly-out, or the new **`@profile <number|name>`** remote command (best-match names, gated by the Alter-settings permission)
-> - Two optional **toolbar buttons**: a **cycle** button showing `P#` (left-click next, right-click previous) and a **menu** button with a fly-out picker
-> - Every swap reports the live profile + its slots **by cast code** to the terminal (and to the requester, for `@profile`)
-> - Combat profiles are captured in the **bug report** (count, active, every profile's full config) and the **program log** (switch + combat-engage lines) so a "wrong spells" report shows which profile fought and how it was set up
+> **Version 3.43.1**
+> - Fixed the **`@profile`** remote command crashing the receiving client — the swap's terminal echo re-entered the emulator mid-parse; it's now deferred like the other in-pump notices
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

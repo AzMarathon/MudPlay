@@ -1,5 +1,9 @@
 # Version history
 
+## 3.43.1
+
+- Fixed the **`@profile`** remote command crashing the receiving client — the swap's terminal echo re-entered the emulator mid-parse; it's now deferred like the other in-pump notices
+
 ## 3.43.0
 
 - New **casting spell profiles** (Settings → Combat): save and quick-swap named sets of the spell-combat slots (the six spell rows + their gates + mana mode + drain trigger); non-spell combat settings stay shared
