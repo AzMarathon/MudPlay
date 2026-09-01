@@ -1231,13 +1231,27 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 
 ### Casting spell profiles (quick-swap)
 
-**What it does:** The whole spell-combat setup below — the six spell slots, their per-slot gates, the mana-threshold mode, and the drain HP trigger — is a **profile** you can save several of and swap between in one click. Your existing setup is **Profile 1**; you always have at least one.
+**What it does:** Saves your spell setup under a name so you can keep **several** and switch between them in one click. This helps when different fights want different spells — for example a fire setup for most monsters and a cold setup for the fire-immune ones. Rather than re-typing your slots each time, you save each as a profile and flip between them.
 
-- At the top of the **Spell combat** section, numbered **chips** (`1 2 3 …`) show your profiles; the **active one is gold**. The whole profile editor is **staged**: clicking a chip fills the boxes with that profile, **＋** adds a new empty profile (and switches to it, ready to fill), **✕** removes the active one, and the **name box** (below the chips) names it — but **nothing is written or used until you hit Apply / OK**. Switch freely between profiles, edit their boxes, add and remove — it's all held in memory and committed at once on Save; **Cancel** (or the title-bar ✕) throws every staged change away. Once applied, the active profile's spells go live on the next combat round.
-- Everything a profile *doesn't* hold — attack verbs, targeting, backstab, room thresholds, action order — is **shared** across profiles, so switching only swaps the spells.
-- Swap from anywhere (these act on the **saved** profiles immediately, outside the staged editor): the **Action → Combat Profiles** fly-out lists every profile (`N) name`, active checked), and the **`@profile`** remote command lets a permitted party member swap yours — `@profile 2` by number, or `@profile fire` by name (best match: `@profile fire` picks *fire spells* over *lightning spells*). It's gated by the **Alter my settings** remote permission, same as the `@auto-*` commands.
-- Two optional **toolbar buttons** (add them in Settings → Toolbar + Shortcuts): a **Combat Profile (cycle)** button that shows the active number (`P1`) and swaps on click — **left-click = next, right-click = previous** — and a **Combat Profile (menu)** button that opens a fly-out to pick one directly.
-- Every swap reports to your terminal (and to the requester, for `@profile`) which profile is now live and its slots **by cast code** — e.g. `Combat profile 2 (Fire) — normal: fbl · alt: fs · drain: ll`.
+**What a profile remembers:** only the spell configuration below — the six spell slots, their per-slot gates, the mana-threshold mode, and the drain-HP trigger. Everything else on the Combat tab (attack verbs, targeting, backstab, room thresholds, action order) is **shared**, so switching a profile changes *only which spells you cast*.
+
+**Setting them up (here, in Settings → Combat):** your current setup is already **Profile 1** — you always have at least one. At the top of the Spell combat section:
+- Numbered **chips** (`1 2 3 …`) are your profiles; the **active one is gold**. Click a chip to load that profile into the boxes.
+- **＋** adds a new, empty profile and switches to it, ready to fill in; **✕** removes the one you're on (the last one can't be removed).
+- The **name box** just below the chips names the profile you're viewing.
+
+This editor is **staged** — nothing is saved or used until you press **Apply** or **OK**. Switch chips, edit boxes, add and remove freely; it's all held in memory and committed together on save. **Cancel** (or the title-bar ✕) throws every change away. Once applied, the active profile's spells take effect on the next combat round.
+
+**Switching during play** (these act on your *saved* profiles right away, without opening Settings):
+- **Action menu → Combat Profiles** — a fly-out listing every profile; click one to switch.
+- **Toolbar buttons** (add them under Settings → Toolbar + Shortcuts) — a **Combat Profile (cycle)** button that shows the active number (`P1`, `P2`, …) and steps through them (left-click = next, right-click = previous), or a **Combat Profile (menu)** button that pops the same fly-out.
+- **`@profile`** — lets a trusted party member switch your profile remotely (needs the **Alter my settings** permission). Give it a number (`@profile 2`) or part of a name (`@profile fire` finds your "Fire" profile); if the text partly matches more than one, it picks the closest.
+
+**Every switch prints a one-line summary** to your terminal (and to the requester, for `@profile`) naming the profile now active and the spell in each slot, shown by its short **cast code** — the same code you would type to cast that spell. For example:
+
+> `Combat profile 2 (Fire) — normal: fbl · alt: fs · drain: ll`
+
+means profile 2 ("Fire") is live, casting `fbl` as the normal attack, `fs` as the alternate, and `ll` on the drain slot.
 
 ### Combat spell slots (Multi-attack / Debuff AOE / Debuff single-target / Normal attack / Alternate attack)
 

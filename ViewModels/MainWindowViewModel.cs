@@ -1304,6 +1304,11 @@ public partial class MainWindowViewModel : ObservableObject
         PropertyChanged += SyncToolbarStateFlags;
     }
 
+    // Enabler for view-handled toolbar buttons (no CommandName) — a command-less
+    // Button renders disabled, so these carry an always-executable no-op while
+    // their real action runs in MainWindow's Click / PointerReleased handlers.
+    private static readonly ICommand ToolbarNoOpCommand = new RelayCommand(() => { });
+
     // Walks ToolbarConfig.Layout and rebuilds ToolbarItems. Each Button
     // row is resolved through ToolbarItemCatalogue; the command property
     // is fetched by reflection from the catalogue's CommandName so adding
@@ -1328,7 +1333,13 @@ public partial class MainWindowViewModel : ObservableObject
             ToolbarItemCatalogue.Entry? entry = ToolbarItemCatalogue.Find(item.ActionId);
             if (entry is null) continue;
 
-            ICommand? command = GetType().GetProperty(entry.CommandName)?.GetValue(this) as ICommand;
+            // A catalogue entry with no CommandName is a VIEW-handled button — its
+            // action lives in MainWindow's Click / PointerReleased handlers (the
+            // Combat-Profile menu fly-out). Give it an always-executable no-op so
+            // Avalonia doesn't render the command-less button as disabled.
+            ICommand? command = string.IsNullOrEmpty(entry.CommandName)
+                ? ToolbarNoOpCommand
+                : GetType().GetProperty(entry.CommandName)?.GetValue(this) as ICommand;
 
             // Live shortcut hint: if the action id parses as a BuiltInAction,
             // pull the current binding from KeybindingStore so a user rebind
