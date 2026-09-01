@@ -1,6 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
+> **Version 3.42.1**
+> - Fixed Monster Intel's **AC being inflated** — it added your configured buffs on top of the live `stat` Armour Class, which already includes any active buffs, double-counting them (a 57-AC character read as 79). It now uses the same worn-gear + buffs basis as the Equipment Manager's Projected AC, so the two agree
+>
 > **Version 3.42.0**
 > - The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts): arrange the whole menu — the Favorites / Recent walk fly-outs, menu commands, direct links to a Player Workshop tab, or a calculator that opens **expanded and centered** — and build your own **fly-out folders**
 > - **Rename** any entry or folder while an entry still links to the same action; reorder, add separators, Reset to the built-in menu

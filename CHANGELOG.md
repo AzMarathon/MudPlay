@@ -1,5 +1,11 @@
 # Version history
 
+## 3.42.1
+
+- Fixed Monster Intel's **AC being inflated** — the defense simulator seeded its AC from the live `stat` Armour Class *plus* your configured buffs, but the game's Armour Class already includes whatever buffs were up when it was captured, so the buffs were counted twice (a 57-AC character read as 79). It now bases AC on worn gear + buffs the same way the Equipment Manager's Projected AC does, so the two agree
+- bug reports addressed: paradigm-20260831-201306
+
+
 Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
 
 ## 3.42.0

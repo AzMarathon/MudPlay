@@ -310,18 +310,23 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         EquipmentStatBreakdown gear = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
         EquipmentStatSummary totals = gear.Totals;
         EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
-        // Assume the character's configured AC buffs are up — this is a "with my
-        // buffs" pre-fight read, so a configured bless that isn't applied this
-        // second still counts toward Hits You % / AC vs Evil.
-        int buffAc = Game.Spells.BuffDefenseCalculator.Compute(
-            _buffProvider?.Invoke(), _stats!.Level, _spellbook!.Available).Ac;
-        _playerAc = _stats!.ArmourClass + buffAc;
+        // Assume the character's configured AC buffs are up — a "with my buffs"
+        // pre-fight read. Base the AC on WORN gear + configured buffs, NOT the
+        // live `stat` ArmourClass: the game's ArmourClass already reflects any
+        // buffs active when it was captured, so adding the configured-buff AC on
+        // top double-counts them (report: game AC 57 read as 79). This matches
+        // how the Equipment Manager builds Projected AC (gear PlusAC + buff.Ac).
+        Game.Spells.BuffDefense buff = Game.Spells.BuffDefenseCalculator.Compute(
+            _buffProvider?.Invoke(), _stats!.Level, _spellbook!.Available);
+        _playerAc = (int)System.Math.Round(totals.PlusAC) + buff.Ac;
         _playerDodge = CombatCalculator.CalcDodge(
             _stats.Level, _stats.Agility, _stats.Charm, totals.PlusDodge,
             encum.CurrentWeight, encum.MaxWeight);
-        _playerProtEvil = totals.PlusProtEvil;
+        // Evil-only ward + Shadow also fold in the configured buffs, like the
+        // Equipment Manager, so the simulator seeds match that panel.
+        _playerProtEvil = totals.PlusProtEvil + buff.ProtEvil;
         _playerProtGood = totals.PlusProtGood;
-        _playerHasShadow = totals.PlusShadowResist > 0;
+        _playerHasShadow = totals.PlusShadowResist > 0 || buff.HasShadow;
 
         // Seed the editable defense simulator to the live loadout — but only when
         // the WORN set actually changed (first open + a real gear swap). Backpack
