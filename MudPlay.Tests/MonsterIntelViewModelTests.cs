@@ -45,7 +45,7 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         """);
         File.WriteAllText(Path.Combine(setDir, "Items.json"), """
         [
-          { "Name": "wraith ward", "Abil-0": 24, "AbilVal-0": 15, "Abil-1": 9, "AbilVal-1": 50 }
+          { "Name": "wraith ward", "ArmourClass": 200, "Abil-0": 24, "AbilVal-0": 15, "Abil-1": 9, "AbilVal-1": 50 }
         ]
         """);
     }
@@ -245,9 +245,12 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             cache, catalog, NewResolver(), stats, inventory, spellbook, itemMagic,
             observations: null, playerState: null);
 
-        // SimAc is the plain vs-all AC (30, no Shadow folded in); Shadow lands as
-        // its own toggle (Abil 9); Prot Evil seeds to 15 (Abil 24, evil-only).
-        Assert.Equal(30, vm.SimAc);
+        // SimAc is the WORN-GEAR + buff AC (20 = wraith ward's ArmourClass 200 ÷10,
+        // no buffs configured), NOT the live `stat` ArmourClass (30) — using the stat
+        // double-counts any buffs already active when it was captured (the reported
+        // 57→79 bug). Shadow lands as its own toggle (Abil 9); Prot Evil seeds to
+        // 15 (Abil 24, evil-only). None of those are folded into the plain AC.
+        Assert.Equal(20, vm.SimAc);
         Assert.True(vm.SimShadow);
         Assert.Equal(15, vm.SimProtEvil);
     }
