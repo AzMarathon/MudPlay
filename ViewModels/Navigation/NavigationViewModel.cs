@@ -2734,6 +2734,31 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         Layout = _services.Bfs.BuildLayout(newOrigin);
     }
 
+    // Open-and-inspect entry used by the Game Data room chips (a monster's
+    // lair / placed / summoned rooms and the Rooms-tab double-click): centre the
+    // map on the room, select it, and populate + expand ROOM INFO so its details
+    // show at once. OnFloorChangeRequested only centres + selects; this adds the
+    // ROOM INFO fill the plain focus path deliberately leaves to a live click.
+    public void SelectAndInspect(RoomKey key)
+    {
+        if (_services.RoomGraph.GetRoom(key) is null) return;
+        SelectedRoomKey = key;
+        Layout = _services.Bfs.BuildLayout(key);
+        RoomInfo.Show(key);
+        IsRoomInfoExpanded = true;
+    }
+
+    // A room blacklisted while it's the live selection stays drawn (RefreshLayout
+    // passes it as keepVisible) until the cursor leaves it. Rebuild once we move
+    // off a blacklisted room so that deferred hide finally lands — the rebuild no
+    // longer exempts the departed room, so it drops from the map.
+    partial void OnSelectedRoomKeyChanged(RoomKey? oldValue, RoomKey? newValue)
+    {
+        if (oldValue is { } prev && prev != newValue
+            && _services.RoomBlacklist.IsBlacklisted(prev))
+            RefreshLayout();
+    }
+
     // How long each green @where flash stays before it drops. Independent per room, so
     // several answered @where's fade out on their own schedules. The centre-hold is
     // MapControl's own auto-follow suppression (armed on each reply via
@@ -3235,7 +3260,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             if (key is null)
                 foreach (Room first in _services.RoomGraph.Rooms) { key = first.Key; break; }
         }
-        Layout = key is { } k ? _services.Bfs.BuildLayout(k) : null;
+        // Deferred blacklist hide: if the room the user is currently pointing at
+        // is itself blacklisted (they just added it), keep it drawn this build.
+        // OnSelectedRoomKeyChanged rebuilds — without the exemption — once the
+        // selection moves off it, so the room finally vanishes then.
+        RoomKey? keepVisible = SelectedRoomKey is { } sel
+            && _services.RoomBlacklist.IsBlacklisted(sel) ? sel : null;
+        Layout = key is { } k ? _services.Bfs.BuildLayout(k, keepVisible: keepVisible) : null;
     }
 
     private void RefreshFromWalker()

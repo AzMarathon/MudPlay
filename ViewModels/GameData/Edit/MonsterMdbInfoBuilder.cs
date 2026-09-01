@@ -548,17 +548,18 @@ public sealed class MonsterMdbInfoBuilder
         return targets;
     }
 
-    // Append a "label (N)" row listing every room as a clickable map/room chip that opens
-    // the room-detail popup. Not truncated — the pane scrolls. Falls back to a plain
-    // comma-joined string when no DialogService is available. No-op when rooms is empty.
+    // Append a "label (N)" row listing every room as a clickable map/room chip that
+    // opens the Navigation map on that room and selects it. Not truncated — the pane
+    // scrolls. Falls back to a plain comma-joined string in design-time (no live app
+    // services). No-op when rooms is empty.
     private void AddRoomList(List<MdbInfoRow> kv, string label, IReadOnlyList<RoomKey> rooms,
         Func<RoomKey, string>? labelFor = null)
     {
         if (rooms.Count == 0) return;
         labelFor ??= static k => $"{k.Map}/{k.Room}";
         string list = string.Join(", ", rooms.Select(labelFor));
-        IReadOnlyList<RoomLink>? links = _dialogs is { } dialogs
-            ? rooms.Select(k => new RoomLink(labelFor(k), k, dialogs)).ToList()
+        IReadOnlyList<RoomLink>? links = _dialogs is not null
+            ? rooms.Select(k => new RoomLink(labelFor(k), k)).ToList()
             : null;
         kv.Add(new MdbInfoRow($"{label} ({rooms.Count})", list, Rooms: links));
     }

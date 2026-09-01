@@ -6266,6 +6266,25 @@ public sealed class AppServices
         return null;
     }
 
+    // Total illumination the character's configured buffs would add if their light
+    // spells were up — every Buff Watchdog slot whose spell grants light (an
+    // Illu/RoomIllu buff or a light-ball), summed. Feeds the ROOM INFO "Your Illu"
+    // projection alongside worn-gear illumination. Buff slots store the 4-letter
+    // cast code, so resolve each to its spell name (what RoomLightSpellResolver
+    // matches on) before the illu lookup; non-light spells contribute 0.
+    public int ConfiguredLightSpellIllu()
+    {
+        if (Profile.Current?.PartyBuffs is not { } buffs) return 0;
+        int total = 0;
+        foreach (Models.Profile.BuffSlot s in buffs.Slots)
+        {
+            if (s.Spell?.Trim() is not { Length: > 0 } code) continue;
+            string name = Spellbook.FindByCastCode(code)?.Name ?? code;
+            total += RoomLightSpell.IlluForSpell(name);
+        }
+        return total;
+    }
+
     // True when the spell with cast code shortCode carries a
     // code-145 (mana-regen) ability whose AbilVal is 0 — the signature
     // of a rolled regen-rate modifier (nature tap / mana flux) whose

@@ -1,6 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
+> **Version 3.42.6**
+> - Clicking a monster's **lair** (or a room chip) in its Game Data record — and double-clicking a **Rooms**-tab row — now opens the map on that room and selects it, showing its details in **Room info**, instead of a separate popup
+> - **Room info** now shows the room's **illumination** (`Room Illu: <value> - <phrase>`) under the map/room number, and its **obvious exits** (click one to re-root the map on that neighbour)
+> - Room info's illumination gained a **`Your Illu:`** line — shown when you carry light (worn +illu gear, readied light, or a Buff Watchdog light spell), folding your light into the room's; the visibility phrase (or **"You can see."** once fully lit) sits on the line that matches your real visibility
+> - Clicking a **shop room's name** in Room info opens its shop stock popup, not the bare Rooms record
+> - Blacklisting a room **from the map** now keeps it drawn (still selected) until you click a **different** room, so you can confirm you hid the right one before it disappears
+> - The shop/room detail popup drops its blacklist buttons (blacklisting lives on the map's right-click menu)
+>
 > **Version 3.42.1**
 > - Fixed Monster Intel's **AC being inflated** — it added your configured buffs on top of the live `stat` Armour Class, which already includes any active buffs, double-counting them (a 57-AC character read as 79). It now uses the same worn-gear + buffs basis as the Equipment Manager's Projected AC, so the two agree
 >

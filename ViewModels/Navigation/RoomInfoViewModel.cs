@@ -10,12 +10,14 @@ using MudPlay.ViewModels.GameData.Edit;
 namespace MudPlay.ViewModels.Navigation;
 
 // Backs the Navigation window's ROOM INFO rail section. Left-clicking a room on
-// the map populates the panel with clickable links to every game-data record
-// attached to it — the room record itself, the monsters that lair / spawn / are
-// placed there, the items placed on its floor (roomitem), the shop as a whole,
-// and the cast-on-enter room spell. Each link opens the matching Game Data
-// Browser record. This is the enumeration RoomDetailDialogViewModel does for its
-// popup, restructured as an always-present inline panel populated live.
+// the map (or a Game Data room chip, via SelectAndInspect) populates the panel
+// with everything attached to it — the room name + light, the monsters that
+// lair / spawn / are placed there, the obvious exits, the items on its floor
+// (roomitem), the shop, and the cast-on-enter room spell. Monster / item / spell
+// links open the matching Game Data record; exits re-root the map on the
+// neighbour; the shop (and a shop room's title) open the shop stock popup. This
+// is the enumeration RoomDetailDialogViewModel does for its popup, restructured
+// as an always-present inline panel populated live.
 public sealed partial class RoomInfoViewModel : ObservableObject
 {
     private readonly AppServices _services;
@@ -35,11 +37,41 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     [ObservableProperty] private string _roomName = string.Empty;
     [ObservableProperty] private string _roomKeyLabel = string.Empty;
 
-    // The shop as a whole (when the room hosts one) — one link to its Shops record.
+    // Room-illumination summary shown below the map/room number ("Room Illu:
+    // <value> - <phrase>", the room alone). Shown for every room — a fully-lit
+    // room is the base value 0 ("Room Illu: 0 - You can see."), not "no illu";
+    // empty only when no room record is shown.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRoomLight))]
+    private string _roomLight = string.Empty;
+    public bool HasRoomLight => RoomLight.Length > 0;
+
+    // Player-adjusted illumination shown below Room Illu ("Your Illu: <value> -
+    // <phrase>") — the room's light plus the player's carried illu (worn +illu
+    // gear + readied light) and any configured light-spell illu. Empty when the
+    // player carries no light (or no room is shown).
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPlayerLight))]
+    private string _playerLight = string.Empty;
+    public bool HasPlayerLight => PlayerLight.Length > 0;
+
+    // The shop as a whole (when the room hosts one) — one link to its stock popup.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasShop))]
+    [NotifyPropertyChangedFor(nameof(RoomTitleTip))]
     private RoomDetailLink? _shopLink;
     public bool HasShop => ShopLink is not null;
+
+    // The room title's tooltip — a shop room's title jumps to its shop stock
+    // popup, a plain room's to the Rooms game-data record (see OpenRoomRecord).
+    public string RoomTitleTip => HasShop
+        ? "Open this room's shop"
+        : "Open this room's Game Data record";
+
+    // Obvious exits — one clickable row per exit; clicking re-roots the map on
+    // the neighbour (and refreshes this panel). Mirrors the map tooltip's order.
+    public ObservableCollection<RoomDetailLink> Exits { get; } = new();
+    public bool HasExits => Exits.Count > 0;
 
     // The cast-on-enter room spell (when set).
     [ObservableProperty]
@@ -77,6 +109,9 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         AssignedMonsters.Clear();
         LairMonsters.Clear();
         LairRegen = string.Empty;
+        RoomLight = string.Empty;
+        PlayerLight = string.Empty;
+        Exits.Clear();
         FloorItems.Clear();
         ShopLink = null;
         RoomSpellLink = null;
@@ -95,6 +130,16 @@ public sealed partial class RoomInfoViewModel : ObservableObject
 
         RoomName = room.DisplayName;
         RoomKeyLabel = $"Map {key.Map} · Room {key.Room}";
+        // With no carried light, Room Illu carries the phrase and there's no Your
+        // Illu line. When the player has light (worn gear + readied light + any
+        // configured light-spell illu), Your Illu appears with the effective value
+        // and the phrase, and Room Illu drops its phrase (shows just its value).
+        int playerIllu = _services.PlayerIllumination.Current + _services.ConfiguredLightSpellIllu();
+        bool hasPlayerIllu = playerIllu > 0;
+        RoomLight = RoomTooltipBuilder.BuildRoomLightSummary(room, includePhrase: !hasPlayerIllu);
+        PlayerLight = hasPlayerIllu
+            ? RoomTooltipBuilder.BuildPlayerLightSummary(room, playerIllu)
+            : string.Empty;
 
         // Monsters — split into Placed (the room's NPC fixture / a boss),
         // Assigned (roam / rare-random spawns), and Lair (consistent lair
@@ -111,6 +156,20 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Lair)
             LairMonsters.Add(MakeMonsterLink(m.Id, m.Name, note: null));
         LairRegen = RoomTooltipBuilder.FormatLairRegen(rm.LairMax, room.Delay);
+
+        // Obvious exits — one clickable row per exit, same ordering + hint as the
+        // map tooltip. Clicking re-roots the map on the neighbour and refreshes
+        // this panel (NavigateToRoom → SelectAndInspect on the live nav window).
+        foreach ((Direction dir, RoomExit exit) in RoomTooltipBuilder.OrderedExits(room))
+        {
+            RoomKey target = exit.Target;
+            Room? dest = _services.RoomGraph.GetRoom(target);
+            string destName = dest is not null ? dest.DisplayName : target.ToString();
+            string hint = RoomTooltipBuilder.FormatExitHint(exit, _services.GameData);
+            string label = $"{RoomTooltipBuilder.DirectionLabel(dir)} → {destName} ({target})";
+            if (hint.Length > 0) label += $" · {hint}";
+            Exits.Add(new RoomDetailLink(label, null, new RelayCommand(() => _services.NavigateToRoom(target))));
+        }
 
         // Floor items — TBInfo `roomitem` placements.
         foreach (int itemId in _services.RoomFloorItems.FloorItemsOf(key))
@@ -146,9 +205,19 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         RaiseSectionVisibility();
     }
 
-    // The room title itself is the link to the room's game-data record.
+    // The room title's click target. A shop room jumps to its shop stock popup
+    // (item · max · regen · buy · sell + charm picker) — the useful view for a
+    // merchant / bank / trainer — while a plain room opens the Rooms game-data
+    // record. (The shop link below opens the same popup; the title is a second
+    // path so a shop room's most prominent control lands on its stock.)
     [RelayCommand]
-    private void OpenRoomRecord() => _services.OpenRoomGameData(_key.Map, _key.Room);
+    private void OpenRoomRecord()
+    {
+        if (HasShop)
+            RoomDetailPopup.Show(_services.Dialogs, _key);
+        else
+            _services.OpenRoomGameData(_key.Map, _key.Room);
+    }
 
     // The label carries the monster's record number — "chest(#69)" — mirroring the
     // room-detail popup so the panel doubles as a quick lookup key. Clicking opens the
@@ -164,6 +233,7 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         OnPropertyChanged(nameof(HasPlaced));
         OnPropertyChanged(nameof(HasAssigned));
         OnPropertyChanged(nameof(HasLair));
+        OnPropertyChanged(nameof(HasExits));
         OnPropertyChanged(nameof(HasFloorItems));
     }
 }
