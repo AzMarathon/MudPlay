@@ -163,6 +163,14 @@
                           ToolTip.Tip="Clear my own stuck ailments, waits, and movement holds — return to idle"/>
                 <Separator/>
 
+                <!-- Casting spell profiles: a fly-out of every configured combat-spell
+                     profile ("N) name"), the active one checked. Populated in
+                     code-behind from CombatProfileItems (a bound ItemsSource can't
+                     coexist with future static items), rebuilt on any change. -->
+                <MenuItem x:Name="ProfilesMenu" Header="Combat Profiles"
+                          ToolTip.Tip="Switch the active casting spell profile"/>
+                <Separator/>
+
                 <!-- Bulk one-shot commands. Local twins of the @get-all /
                      @drop-all / @deposit-all remote commands and the Default
                      gear set; the toolbar Get/Drop/Equip/Deposit buttons drive

@@ -1,5 +1,12 @@
 # Version history
 
+## 3.43.0
+
+- New **casting spell profiles** (Settings → Combat): save and quick-swap named sets of the spell-combat slots (the six spell rows + their gates + mana mode + drain trigger); non-spell combat settings stay shared
+- Numbered profile **chips** (active one gold) + a **name box** + ＋/✕ to add an empty profile or remove the active one; switching a chip is a **live swap** (the engine re-reads next round)
+- Swap from the **Action → Combat Profiles** fly-out, or the new **`@profile <number|name>`** remote command (best-match names, gated by the Alter-settings permission)
+- Every swap reports the live profile + its slots **by cast code** to the terminal (and to the requester, for `@profile`)
+
 ## 3.42.6
 
 - Clicking a monster's **lair** (or a room chip) in its Game Data record — and double-clicking a **Rooms**-tab row — now opens the map on that room and selects it, showing its details in **Room info**, instead of a separate popup

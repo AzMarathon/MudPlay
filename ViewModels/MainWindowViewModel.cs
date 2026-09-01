@@ -761,6 +761,14 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildRecentDestinationsMenu();
         AppServices.Current.GotoHistory.Changed += RebuildRecentDestinationsMenu;
 
+        // Casting spell profiles (Settings → Combat): the Action → Profiles fly-out
+        // and the toolbar profile-menu button share one item list, rebuilt on any
+        // profile change; every swap echoes its report to the terminal.
+        AppServices.Current.CombatProfiles.Announce =
+            report => WriteTerminalStatus($"[{report}]", TerminalStatusKind.Notice);
+        RebuildCombatProfilesMenu();
+        AppServices.Current.CombatProfiles.Changed += RebuildCombatProfilesMenu;
+
         // Apply the loaded profile's persisted scrollback size now — the
         // buffer was constructed with the default; AppServices already
         // populated DisplayConfig from the profile by the time we got here.
@@ -3949,6 +3957,35 @@ public partial class MainWindowViewModel : ObservableObject
                 isActive: string.Equals(set, active, StringComparison.OrdinalIgnoreCase),
                 switchCommand: new RelayCommand(() => SwitchActiveGameDataSet(set))));
         }
+    }
+
+    // ----- Casting spell profiles (Settings → Combat quick-swap) -----
+
+    // Shared item list for the Action → Profiles fly-out and the toolbar's
+    // profile-menu button — one "N) name" row per configured profile, the active
+    // one checked. Rebuilt on any CombatProfileManager.Changed.
+    public ObservableCollection<CombatProfileMenuItem> CombatProfileItems { get; } = new();
+
+    // Drives the Profiles menu / flyout visibility (always ≥1 once a profile is
+    // loaded).
+    [ObservableProperty] private bool _hasCombatProfiles;
+
+    private void RebuildCombatProfilesMenu()
+    {
+        Game.Combat.CombatProfileManager mgr = AppServices.Current.CombatProfiles;
+        CombatProfileItems.Clear();
+        IReadOnlyList<Models.Profile.CombatSpellProfile> profiles = mgr.Profiles;
+        int active = mgr.ActiveIndex;
+        for (int i = 0; i < profiles.Count; i++)
+        {
+            int index = i;
+            CombatProfileItems.Add(new CombatProfileMenuItem(
+                number: i + 1,
+                name: profiles[i].Name,
+                isActive: i == active,
+                switchCommand: new RelayCommand(() => AppServices.Current.CombatProfiles.SwitchToIndex(index))));
+        }
+        HasCombatProfiles = profiles.Count > 0;
     }
 
     // The terminal right-click Favorites flyout — always MaxStarred numbered

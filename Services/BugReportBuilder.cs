@@ -67,6 +67,7 @@ public static class BugReportBuilder
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
+            new("Combat spell profiles", SafeSection(() => BuildCombatProfiles(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
             new("Monster observations (this character)", SafeSection(() => BuildMonsterObservations(svc))),
             new("Item overrides", SafeSection(() => BuildItemOverrides(svc))),
@@ -1210,6 +1211,25 @@ public static class BugReportBuilder
     // Resolve one tab-keyed section across the tier hierarchy and emit it as a
     // labelled JSON block. Isolated per-section so one section failing to
     // resolve leaves the rest intact.
+    // Casting spell profiles: every configured profile listed by number + name
+    // with its slots by cast code, the active one flagged — so a "wrong spells
+    // firing" report shows which profile was live and what the others hold.
+    private static string BuildCombatProfiles(AppServices svc)
+    {
+        System.Collections.Generic.IReadOnlyList<Models.Profile.CombatSpellProfile> profiles =
+            svc.CombatProfiles.Profiles;
+        if (profiles.Count == 0) return "No combat spell profiles.";
+        int active = svc.CombatProfiles.ActiveIndex;
+        StringBuilder sb = new();
+        for (int i = 0; i < profiles.Count; i++)
+        {
+            sb.Append(Game.Combat.CombatSpellProfileReport.Describe(profiles[i], i + 1));
+            if (i == active) sb.Append("  (ACTIVE)");
+            sb.Append('\n');
+        }
+        return sb.ToString();
+    }
+
     private static void AppendResolved<T>(StringBuilder sb, AppServices svc, string tabKey)
         where T : class, new()
     {

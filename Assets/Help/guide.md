@@ -1229,6 +1229,15 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 **Default:** `Percentage`
 **What it does:** Decides how every "Min mana per cast" field on the five spell slots below is read — as a 0–100% share of your maximum mana, or as a flat number.
 
+### Casting spell profiles (quick-swap)
+
+**What it does:** The whole spell-combat setup below — the six spell slots, their per-slot gates, the mana-threshold mode, and the drain HP trigger — is a **profile** you can save several of and swap between in one click. Your existing setup is **Profile 1**; you always have at least one.
+
+- At the top of the **Spell combat** section, numbered **chips** (`1 2 3 …`) show your profiles; the **active one is gold**. Click a chip to switch — the spell boxes fill with that profile and it goes **live immediately** (the engine re-reads on the next combat round). **＋** adds a new **empty** profile (your current spells aren't disturbed until you select it); **✕** removes the active one. The **name box** names the active profile (saved with the tab, used by the menus and `@profile`).
+- Everything a profile *doesn't* hold — attack verbs, targeting, backstab, room thresholds, action order — is **shared** across profiles, so switching only swaps the spells.
+- Swap from anywhere: the **Action → Combat Profiles** fly-out lists every profile (`N) name`, active checked), and the **`@profile`** remote command lets a permitted party member swap yours — `@profile 2` by number, or `@profile fire` by name (best match: `@profile fire` picks *fire spells* over *lightning spells*). It's gated by the **Alter my settings** remote permission, same as the `@auto-*` commands.
+- Every swap reports to your terminal (and to the requester, for `@profile`) which profile is now live and its slots **by cast code** — e.g. `Combat profile 2 (Fire) — normal: fbl · alt: fs · drain: ll`.
+
 ### Combat spell slots (Multi-attack / Debuff AOE / Debuff single-target / Normal attack / Alternate attack)
 
 **Default:** all unset

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:MudPlay.ViewModels.Settings"
+             xmlns:vmroot="using:MudPlay.ViewModels"
              xmlns:spells="using:MudPlay.Game.Spells"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -20,6 +21,17 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
+        <!-- Casting spell profile chips: a compact numbered button; the active
+             profile's chip fills gold (mirrors the toolbar's Active state). -->
+        <Style Selector="Button.ProfileChip">
+            <Setter Property="Padding" Value="9,2"/>
+            <Setter Property="MinWidth" Value="30"/>
+        </Style>
+        <Style Selector="Button.ProfileChip.Active">
+            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+        </Style>
+
         <!-- Unlearned dropdown row: struck through + dimmed. -->
         <Style Selector="TextBlock.unlearnedPick">
             <Setter Property="TextDecorations" Value="Strikethrough"/>
@@ -260,6 +272,39 @@
 
                 <!-- ============ Spell Combat ============ -->
                 <TextBlock Classes="SectionHeader" Text="Spell combat"/>
+
+                <!-- Casting spell profiles: numbered chips switch the whole spell
+                     setup below (the active one is gold); +/✕ add an empty profile
+                     or remove the active one; the name box renames the active
+                     profile. All spell fields below belong to the active profile;
+                     switching a chip is a live swap, the name saves with the tab. -->
+                <StackPanel Spacing="4" Margin="0,0,0,6">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Classes="FieldLabel" Text="Profile:" VerticalAlignment="Center"/>
+                        <ItemsControl ItemsSource="{Binding ProfileChips}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="3"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vmroot:CombatProfileMenuItem">
+                                    <Button Classes="ProfileChip" Classes.Active="{Binding IsActive}"
+                                            Content="{Binding Number}" Command="{Binding SwitchCommand}"
+                                            ToolTip.Tip="{Binding Display}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="+" Command="{Binding AddProfileCommand}"
+                                ToolTip.Tip="Add a new (empty) profile"/>
+                        <Button Content="✕" Command="{Binding RemoveActiveProfileCommand}"
+                                ToolTip.Tip="Remove the active profile (keeps at least one)"/>
+                    </StackPanel>
+                    <TextBox Text="{Binding ActiveProfileName, Mode=TwoWay}" Width="220"
+                             HorizontalAlignment="Left" PlaceholderText="Profile name"
+                             ToolTip.Tip="Name the active profile — used by @profile and the menus (saved with the tab)"/>
+                </StackPanel>
+
                 <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
                     <TextBlock Classes="FieldLabel" Text="Minimum mana per cast:"/>
                     <RadioButton GroupName="SpellManaUnit" Content="Percentage"

@@ -69,6 +69,8 @@ public partial class MainWindow : Window
                 RebuildHelpMenu(vm);
                 vm.ContextMenu.Layout.CollectionChanged += OnContextMenuLayoutChanged;
                 RebuildTerminalContextMenu(vm);
+                vm.CombatProfileItems.CollectionChanged += OnCombatProfileItemsChanged;
+                RebuildProfilesMenu(vm);
             }
         };
 
@@ -160,6 +162,11 @@ public partial class MainWindow : Window
     private void OnGameDataSetsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (DataContext is MainWindowViewModel vm) RebuildGameDataMenu(vm);
+    }
+
+    private void OnCombatProfileItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm) RebuildProfilesMenu(vm);
     }
 
     private void OnHelpLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -450,5 +457,24 @@ public partial class MainWindow : Window
             Header  = "Modify avoid/stash rooms…",
             Command = vm.OpenAvoidRoomsEditorCommand,
         });
+    }
+
+    // Rebuild the Action → Profiles fly-out from the shared CombatProfileItems —
+    // one checkable "N) name" row per profile, the active one checked. Hidden until
+    // a profile exists.
+    private void RebuildProfilesMenu(MainWindowViewModel vm)
+    {
+        ProfilesMenu.Items.Clear();
+        foreach (CombatProfileMenuItem p in vm.CombatProfileItems)
+        {
+            ProfilesMenu.Items.Add(new MenuItem
+            {
+                Header     = p.Display,
+                ToggleType = MenuItemToggleType.CheckBox,
+                IsChecked  = p.IsActive,
+                Command    = p.SwitchCommand,
+            });
+        }
+        ProfilesMenu.IsVisible = vm.HasCombatProfiles;
     }
 }

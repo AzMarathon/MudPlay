@@ -523,6 +523,9 @@ public sealed class AppServices
     // into Equipment.
     public Game.Remote.EquipHandler EquipRemote { get; private set; } = null!;
 
+    // @profile — swap the active casting spell profile (AlterSettings-gated).
+    public Game.Remote.ProfileSwapHandler ProfileSwap { get; private set; } = null!;
+
     // Consumer of RemoteCommands for @suicide.
     // Authorised callers (Elevated-Commands permission, lives above
     // the suicide threshold) trigger the suicide round-trip; on
@@ -1195,6 +1198,12 @@ public sealed class AppServices
     // (EquipRemote) and the auto-equip triggers
     // (AutoEquip).
     public Game.Inventory.EquipmentManager Equipment { get; private set; } = null!;
+
+    // Casting-spell profiles (Settings → Combat) — the named, quick-swap snapshots
+    // of the Combat tab's spell slots. Owns the list, the active pointer, CRUD, and
+    // the @profile / toolbar / chip swap, overlaying a profile's spells onto the
+    // live Combat section.
+    public Game.Combat.CombatProfileManager CombatProfiles { get; private set; } = null!;
 
     // Router subscriptions feeding the Equipment Manager's unwearable-slot blocks
     // (wear-confirmed / armor-refused / weapon-refused). Held for the app lifetime
@@ -4121,6 +4130,26 @@ public sealed class AppServices
             restrictsEquip: IsEquipRestricted,
             log: Log);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
+
+        // Casting-spell profiles: the same read/write-Combat pair the Equipment
+        // Manager uses, so a profile swap overlays its spells onto the live Combat
+        // section the engine re-reads each round. Seeded per character (first
+        // profile captured from the current combat settings) on every ProfileLoaded.
+        CombatProfiles = new Game.Combat.CombatProfileManager(
+            profile: () => Profile.Current,
+            readCombat: () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat"),
+            writeCombat: combat =>
+            {
+                if (Profile.Current is not { } p) return;
+                p.Settings ??= new();
+                p.Settings["Combat"] = System.Text.Json.JsonSerializer.SerializeToElement(combat);
+                Profile.Save();
+            },
+            save: () => Profile.Save(),
+            log: Log);
+        CombatProfiles.EnsureSeeded();
+        Profile.ProfileLoaded += _ => CombatProfiles.EnsureSeeded();
+        ProfileSwap = new Game.Remote.ProfileSwapHandler(RemoteCommands, CombatProfiles);
 
         // Unwearable-slot blocks: keep the Equipment tab's block set in sync with
         // the live character. A profile swap clears the in-memory blocks; a `who`

@@ -1,6 +1,8 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Views.Settings;
@@ -351,6 +353,62 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     [ObservableProperty] private bool _showCombatRoundTotals;
 
+    // ----- Casting spell profiles (quick-swap chip bar) -------------
+
+    private Game.Combat.CombatProfileManager ProfilesMgr => AppServices.Current.CombatProfiles;
+
+    // One numbered chip per profile; the active one is highlighted gold. Clicking a
+    // chip switches to that profile (fills the boxes, live immediately).
+    public ObservableCollection<ViewModels.CombatProfileMenuItem> ProfileChips { get; } = new();
+
+    // The active profile's name — the textbox above the spell slots. Committed on
+    // Save alongside the spell boxes.
+    [ObservableProperty] private string _activeProfileName = string.Empty;
+
+    // Active index last rendered into the boxes: an external switch (toolbar /
+    // @profile) while the tab is open reloads the boxes, but a same-profile change
+    // (add / rename) leaves in-progress edits alone.
+    private int _renderedActiveIndex = -1;
+
+    private void RebuildProfileChips()
+    {
+        ProfileChips.Clear();
+        System.Collections.Generic.IReadOnlyList<CombatSpellProfile> profiles = ProfilesMgr.Profiles;
+        int active = ProfilesMgr.ActiveIndex;
+        for (int i = 0; i < profiles.Count; i++)
+        {
+            int index = i;
+            ProfileChips.Add(new ViewModels.CombatProfileMenuItem(
+                number: i + 1, name: profiles[i].Name, isActive: i == active,
+                switchCommand: new RelayCommand(() => ProfilesMgr.SwitchToIndex(index))));
+        }
+    }
+
+    private void OnCombatProfilesChanged()
+    {
+        int nowActive = ProfilesMgr.ActiveIndex;
+        RebuildProfileChips();
+        if (nowActive != _renderedActiveIndex)
+        {
+            _renderedActiveIndex = nowActive;
+            _suppressDirty = true;
+            LoadFromProfile();
+            _suppressDirty = false;
+            ClearDirty();
+        }
+        ActiveProfileName = ProfilesMgr.Active?.Name ?? string.Empty;
+    }
+
+    // Append a new EMPTY profile (does not switch — your current live spells are
+    // undisturbed until you select the new chip).
+    [RelayCommand]
+    private void AddProfile() => ProfilesMgr.Add();
+
+    // Remove the active profile (refused when it's the last one; switches to a
+    // neighbour otherwise).
+    [RelayCommand]
+    private void RemoveActiveProfile() => ProfilesMgr.Remove(ProfilesMgr.ActiveIndex);
+
     public CombatSectionViewModel()
         : this(AppServices.Current.Profile) { }
 
@@ -364,16 +422,21 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         _profile.ProfileClosed += OnProfileClosedExternally;
         _spellbook.Changed += OnSpellbookChanged;
         if (_state is not null) _state.PropertyChanged += OnPlayerStateChanged;
+        ProfilesMgr.Changed += OnCombatProfilesChanged;
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
             _spellbook.Changed -= OnSpellbookChanged;
             if (_state is not null) _state.PropertyChanged -= OnPlayerStateChanged;
+            ProfilesMgr.Changed -= OnCombatProfilesChanged;
         });
         _suppressDirty = true;
         LoadFromProfile();
         _suppressDirty = false;
+        _renderedActiveIndex = ProfilesMgr.ActiveIndex;
+        RebuildProfileChips();
+        ActiveProfileName = ProfilesMgr.Active?.Name ?? string.Empty;
     }
 
     public override void Apply()
@@ -470,9 +533,15 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
         profile.Settings ??= new();
         profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        // Editing the spell boxes edits the ACTIVE profile — capture the saved
+        // spells + name into it so the profile and the live Combat section stay in
+        // sync (one Save persists both).
+        ProfilesMgr.CaptureActiveFrom(dto, ActiveProfileName);
         _profile.Save();
 
         ClearDirty();
+        _renderedActiveIndex = ProfilesMgr.ActiveIndex;
+        ProfilesMgr.RaiseChanged();   // refresh chips + Action-menu / toolbar labels for the edited name
     }
 
     public override void Discard()

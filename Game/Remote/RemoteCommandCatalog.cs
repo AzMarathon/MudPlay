@@ -162,6 +162,7 @@ public static class RemoteCommandCatalog
             ["@auto-search"]  = PlayerRemoteControls.AlterSettings,
             ["@settings"]     = PlayerRemoteControls.AlterSettings,
             ["@reset"]        = PlayerRemoteControls.AlterSettings,
+            ["@profile"]      = PlayerRemoteControls.AlterSettings,   // swap the active casting spell profile
             ["@divert"]       = PlayerRemoteControls.DivertConversations,
             ["@hangup"]       = PlayerRemoteControls.HangupDisconnect,
             ["@relog"]        = PlayerRemoteControls.HangupDisconnect,
