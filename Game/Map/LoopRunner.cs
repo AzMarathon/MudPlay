@@ -1546,6 +1546,26 @@ public sealed class LoopRunner : IRecoverableEngine
         State = LoopState.Recovering;
         Raise(new LoopEvent(LoopEventKind.Paused, $"recovering: {reason}"));
 
+        // Lean on Paradigm's authoritative `rm` before trusting ANY belief about
+        // where we are. "Blocked at source" / a mid-step mismatch is exactly the
+        // shape a name-ambiguous zone (many identically-named rooms sharing an
+        // exit pattern) produces: the tracker's belief LOOKS Confirmed, but the
+        // room that just refused a move disagrees — and a bare `look` below would
+        // just re-run the same name+exit matching that produced the wrong belief
+        // in the first place. `rm` hard-locates the tracker independent of that
+        // matching, so it corrects a mis-anchor instead of rerouting from the same
+        // wrong room cycle after cycle until the retry budget burns out (report
+        // paradigm-20260901-100523). Both callbacks reroute — RerouteFromCurrentRoom
+        // reads whatever room the tracker holds at that moment, corrected or not —
+        // so a failed/unavailable resync (stock realm, no wire, throttled) falls
+        // through to exactly the prior behavior.
+        if (_recovery?.TryResyncOnce?.Invoke(reason, _ => RerouteFromCurrentRoom(), RerouteFromCurrentRoom) == true)
+        {
+            _log?.Warn("LoopRunner",
+                $"recovery {_recoverAttempts}/{MaxRecoverAttempts}: {reason}; confirming via rm before rerouting");
+            return;
+        }
+
         // Tracker already sure of the room → reroute now. Issuing a `look` here
         // would race the reroute's first move: the echo re-prints the current room
         // and would trip the tracker into Suspect right after we send that move.
@@ -1569,9 +1589,15 @@ public sealed class LoopRunner : IRecoverableEngine
     // Reroute the active loop from wherever the tracker now says we are — picks the
     // closest waypoint, re-approaches if needed, and continues the circle. Reuses
     // Start's planning; isRecovery keeps the bounded budget + lap continuity.
+    //
+    // Guarded on State == Recovering so a TryResyncOnce success can't double-fire
+    // this: SetLocated's own reentrant tracker transition already reroutes us via
+    // OnRecoveringTransition below before our callback gets its turn, which leaves
+    // State no longer Recovering by the time the callback runs.
     private void RerouteFromCurrentRoom()
     {
         if (_loop is null) return;
+        if (State != LoopState.Recovering) return;
         StartInternal(_loop, isRecovery: true);
     }
 

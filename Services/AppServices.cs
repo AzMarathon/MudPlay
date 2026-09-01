@@ -4739,6 +4739,11 @@ public sealed class AppServices
         // the solver's. On stock (no `rm`) the solver uses the look-sweep and this
         // gate no-ops anyway.
         Recovery.TryResync = reason => !MazeSolver.Active && ParadigmResync.TryRequestResync(reason);
+        // Same maze-solver guard as TryResync above — a caller's one-shot re-fix
+        // (LoopRunner / AutoWalkManager leaning on rm before trusting a possibly
+        // mis-anchored belief) must not race the solver's own rm during a solve.
+        Recovery.TryResyncOnce = (reason, onResolved, onFailed) =>
+            !MazeSolver.Active && ParadigmResync.RequestResyncOnce(reason, onResolved, onFailed);
         // Engine-less resync gap: the recovery gate above asks for an `rm` on a
         // mid-walk mismatch, but no-ops with no engine attached. A manual boat ride
         // (no engine) that disembarks into a duplicated-name room strands the tracker

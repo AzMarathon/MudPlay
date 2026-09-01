@@ -2131,25 +2131,50 @@ public sealed class AutoWalkManager : IRecoverableEngine
         Raise(new WalkEvent(WalkEventKind.Retrying,
             $"tracker entered {newConfidence} mid-step; re-planning from {here.Key} (attempt {_replanCount}/{MaxReplansPerWalk})",
             _destination));
-        // Re-source the path from the tracker's best-guess current
-        // room. WalkTo handles the existing Walking state by clearing
-        // it — silently, since _replanningInPlace suppresses the
-        // supersede Stopped that would otherwise abort a driving reroute.
-        _replanningInPlace = true;
-        try
+
+        // Lean on Paradigm's authoritative rm before trusting the tracker's belief
+        // and replanning from it — a mid-step desync is exactly what a name-
+        // ambiguous zone (many identically-named rooms sharing an exit pattern)
+        // can produce, and rm hard-locates the tracker independent of that name+
+        // exit matching instead of replanning from the same wrong room repeatedly
+        // (LoopRunner.EnterRecovery carries the identical rationale; report
+        // paradigm-20260901-100523). _stepInFlight is already false above, so
+        // rm's own reentrant tracker relocate can't be mistaken for an in-flight
+        // step's arrival by OnTrackerStateChanged — it's a clean no-op there,
+        // leaving DoReplan as the only thing that actually replans. Stock realms /
+        // no rm reply fall through to exactly the prior behavior.
+        if (_recovery?.TryResyncOnce?.Invoke(
+                $"walker desync mid-step (tracker {newConfidence})",
+                _ => DoReplan(),
+                DoReplan) == true)
         {
-            // Preserve the walk's planning flags — a bare WalkTo(dest) reverts to
-            // defaults, so a no-teleport walk would replan through a teleport.
-            // (Args evaluate before WalkTo's internal Reset clears the fields.)
-            WalkTo(dest,
-                planThroughAcquirableGates: _activeThroughGates,
-                armItemAcquisition: _activeArmAcquisition,
-                avoidTeleports: _activeAvoidTeleports,
-                avoidTraps: _activeAvoidTraps);
+            return;
         }
-        finally
+
+        DoReplan();
+
+        void DoReplan()
         {
-            _replanningInPlace = false;
+            // Re-source the path from the tracker's best-guess current
+            // room. WalkTo handles the existing Walking state by clearing
+            // it — silently, since _replanningInPlace suppresses the
+            // supersede Stopped that would otherwise abort a driving reroute.
+            _replanningInPlace = true;
+            try
+            {
+                // Preserve the walk's planning flags — a bare WalkTo(dest) reverts to
+                // defaults, so a no-teleport walk would replan through a teleport.
+                // (Args evaluate before WalkTo's internal Reset clears the fields.)
+                WalkTo(dest,
+                    planThroughAcquirableGates: _activeThroughGates,
+                    armItemAcquisition: _activeArmAcquisition,
+                    avoidTeleports: _activeAvoidTeleports,
+                    avoidTraps: _activeAvoidTraps);
+            }
+            finally
+            {
+                _replanningInPlace = false;
+            }
         }
     }
 

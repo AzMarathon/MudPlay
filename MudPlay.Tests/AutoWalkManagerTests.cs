@@ -87,12 +87,14 @@ public sealed class AutoWalkManagerTests : IDisposable
         public required RoomTracker Tracker { get; init; }
         public required MovementCoordinator Coordinator { get; init; }
         public required AutoWalkManager Walker { get; init; }
+        // Present only when NewHarness(wireRecovery: true).
+        public EngineRecoveryGate? Gate { get; init; }
         public List<byte[]> Sent { get; } = new();
         public List<WalkEvent> Events { get; } = new();
         public void Dispose() { /* nothing to dispose */ }
     }
 
-    private Harness NewHarness(string json = LineGraphJson)
+    private Harness NewHarness(string json = LineGraphJson, bool wireRecovery = false)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
@@ -111,7 +113,8 @@ public sealed class AutoWalkManagerTests : IDisposable
         BfsMapper bfs = new(graph);
         RoomTracker tracker = new(graph);
         MovementCoordinator coord = new();
-        AutoWalkManager walker = new(graph, bfs, tracker, coord);
+        EngineRecoveryGate? gate = wireRecovery ? new EngineRecoveryGate(graph, tracker) : null;
+        AutoWalkManager walker = new(graph, bfs, tracker, coord, recovery: gate);
         Harness h = new()
         {
             Graph = graph,
@@ -119,6 +122,7 @@ public sealed class AutoWalkManagerTests : IDisposable
             Tracker = tracker,
             Coordinator = coord,
             Walker = walker,
+            Gate = gate,
         };
         walker.SetWireSender(b => h.Sent.Add(b));
         walker.Event += evt => h.Events.Add(evt);
@@ -614,6 +618,41 @@ public sealed class AutoWalkManagerTests : IDisposable
         h.Coordinator.ClearGate("Combat");       // resume
 
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Retrying);
+    }
+
+    [Fact]
+    public void Resume_AfterRefusalDuringPause_LeansOnRmBeforeReplanning()
+    {
+        // Same trigger as Resume_AfterRefusalDuringPause_RePlansInsteadOfBlindlyResending,
+        // but rm is available this time and resolves to a DIFFERENT room than the
+        // tracker's stale belief — mirroring a name-ambiguous mis-anchor (report
+        // paradigm-20260901-100523). The replan must use the corrected room, not
+        // the stale one.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));      // 2-step path: N, N
+        Assert.Single(h.Sent);
+
+        h.Coordinator.AssertGate("Combat");      // pause mid-step
+        h.Tracker.NoteMoveBlocked();             // refused while paused, reverts to 1/1
+
+        List<string> resyncCalls = new();
+        h.Gate!.TryResyncOnce = (reason, onResolved, _) =>
+        {
+            resyncCalls.Add(reason);
+            h.Tracker.SetLocated(new RoomKey(1, 2));   // rm's authoritative correction
+            onResolved(new RoomKey(1, 2));
+            return true;
+        };
+
+        h.Coordinator.ClearGate("Combat");       // resume
+
+        Assert.Single(resyncCalls);
+        // Replanned from the corrected room (1/2): a single hop (N, 1/2 → 1/3)
+        // suffices, not another full N,N from the stale 1/1 belief.
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", System.Text.Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
     }
 
     [Fact]

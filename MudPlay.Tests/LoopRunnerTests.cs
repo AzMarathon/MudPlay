@@ -400,6 +400,60 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void BlockedAtSource_LeansOnRmFirst_ReroutesFromCorrectedRoom()
+    {
+        // A "blocked at source" mismatch is exactly what a name-ambiguous zone
+        // (many identically-named rooms sharing an exit pattern) can produce: the
+        // tracker's Confirmed belief LOOKS right but is actually the wrong
+        // physical room, so rerouting from it just repeats the same failure
+        // (report paradigm-20260901-100523). Leaning on rm first — stubbed here
+        // to resolve to a DIFFERENT room than the tracker's stale belief, mirroring
+        // ParadigmPositionResolver hard-locating the tracker via SetLocated before
+        // invoking the callback — must reroute from the CORRECTED room, not the
+        // stale one.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+
+        List<string> resyncCalls = new();
+        h.Gate!.TryResyncOnce = (reason, onResolved, _) =>
+        {
+            resyncCalls.Add(reason);
+            h.Tracker.SetLocated(new RoomKey(1, 2));   // rm's authoritative correction
+            onResolved(new RoomKey(1, 2));
+            return true;
+        };
+
+        h.Tracker.NoteMoveBlocked();   // reverts to Confirmed at the stale belief (1/1)
+
+        Assert.Single(resyncCalls);
+        // Rerouted from the corrected room (1/2): the next step is S (1/2 → 1/1),
+        // not another N from the stale 1/1 belief.
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
+    [Fact]
+    public void BlockedAtSource_RmUnavailable_FallsBackToTrustingTracker()
+    {
+        // Stock realm / no rm reply: TryResyncOnce returns false, so the existing
+        // "trust the tracker, reroute immediately" behavior is unchanged.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Gate!.TryResyncOnce = (_, _, _) => false;
+
+        h.Tracker.NoteMoveBlocked();
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));   // re-sent from 1/1, unchanged
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
+    [Fact]
     public void RefusedWhilePaused_EntersRecoveryOnResume_InsteadOfResendingSameMove()
     {
         // Regression (paradigm-20260829-084558 / paradigm-20260829-104437): a
