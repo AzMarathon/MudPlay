@@ -1245,7 +1245,9 @@ This editor is **staged** — nothing is saved or used until you press **Apply**
 **Switching during play** (these act on your *saved* profiles right away, without opening Settings):
 - **Action menu → Combat Profiles** — a fly-out listing every profile; click one to switch.
 - **Toolbar buttons** (add them under Settings → Toolbar + Shortcuts) — a **Combat Profile (cycle)** button that shows the active number (`P1`, `P2`, …) and steps through them (left-click = next, right-click = previous), or a **Combat Profile (menu)** button that pops the same fly-out.
-- **`@profile`** — lets a trusted party member switch your profile remotely (needs the **Alter my settings** permission). Give it a number (`@profile 2`) or part of a name (`@profile fire` finds your "Fire" profile); if the text partly matches more than one, it picks the closest.
+- **`@profile`** — lets a trusted party member switch your profile remotely from chat (needs the **Alter my settings** permission). It accepts either:
+  - the profile's **number** — the same chip number you see in Settings, so `@profile 2` selects the second profile; or
+  - any part of the **name you gave it** in the name box — if you named a profile "Fire", then `@profile fire` (or even `@profile fi`) selects it. When the text could fit more than one name, it picks the closest match.
 
 **Every switch prints a one-line summary** to your terminal (and to the requester, for `@profile`) naming the profile now active and the spell in each slot, shown by its short **cast code** — the same code you would type to cast that spell. For example:
 
