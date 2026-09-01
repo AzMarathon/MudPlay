@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.43.2**
-> - Fixed the **`@profile`** remote command crashing the receiving client — the swap's terminal echo re-entered the emulator mid-parse; it's now deferred like the other in-pump notices
-> - `@profile` with **no argument** now reports the roster — the active profile plus the others on standby (e.g. `{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}`) — instead of just the active profile's spells
+> **Version 3.43.4**
+> - Terminal right-click menu: add direct links to any **Settings tab** — opens Settings straight to General / Combat / Health / Party / Statline / Auto-Lair / … instead of its last tab
+> - Terminal right-click menu: add direct links to the rest of the **Game Data** tables (Monsters / Items / Spells / Rooms / Shops / Classes / Races / Messages / …), not just Players / Macros / Triggers / Aliases
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

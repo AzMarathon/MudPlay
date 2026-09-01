@@ -70,6 +70,30 @@ public class MenuActionCatalogueTests
         }
     }
 
+    [Fact]
+    public void SettingsTabAndGameDataSectionCommands_ExistAndAreCommands()
+    {
+        foreach (string name in new[] { "OpenSettingsTabCommand", "OpenGameDataSectionCommand" })
+        {
+            PropertyInfo? p = Prop(name);
+            Assert.True(p is not null, $"missing '{name}' on MainWindowViewModel");
+            Assert.True(typeof(ICommand).IsAssignableFrom(p!.PropertyType));
+        }
+    }
+
+    // The parametrized deep-link kinds carry the target section id in Parameter —
+    // a null there is a dead menu item (opens nothing / the last tab).
+    [Fact]
+    public void EveryParametrizedDeepLink_HasAParameter()
+    {
+        foreach (MenuActionCatalogue.Entry e in MenuActionCatalogue.AllEntries
+                     .Where(e => e.EntryKind is MenuActionCatalogue.Kind.SettingsTab
+                                                 or MenuActionCatalogue.Kind.GameDataSection
+                                                 or MenuActionCatalogue.Kind.WorkshopTab
+                                                 or MenuActionCatalogue.Kind.Calculator))
+            Assert.False(string.IsNullOrWhiteSpace(e.Parameter), $"{e.Id}: missing Parameter");
+    }
+
     // No auto-engine toggles in the pool — they live on the toolbar / Action menu,
     // not the right-click menu (user's rule). Sanity-check they're absent.
     [Fact]

@@ -3641,6 +3641,16 @@ public partial class MainWindowViewModel : ObservableObject
     private void OpenWorkshopCalculator(string? calculatorId)
         => OpenWorkshopAt("calculators", calculatorId);
 
+    // Terminal right-click "Settings: <tab>" deep-link — opens the Settings window
+    // straight to a section (param = the SettingsSectionViewModel.Id).
+    [RelayCommand]
+    private void OpenSettingsTab(string? sectionId) => OpenSettingsAt(sectionId);
+
+    // Terminal right-click "Game Data: <table>" deep-link — opens the Game Data
+    // Browser on a section (param = the browser section id).
+    [RelayCommand]
+    private void OpenGameDataSection(string? sectionId) => ShowGameDataBrowser(sectionId);
+
     private void OpenWorkshopAt(string? sectionId, string? calculatorId = null)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
