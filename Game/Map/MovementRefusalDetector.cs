@@ -81,6 +81,7 @@ public sealed partial class MovementRefusalDetector : IDisposable
         TooEncumberedToMove(),
         FlatOnYourBack(),
         AlignmentBlocksExit(),
+        FumbleInConfusion(),
         ConvulseViolently(),
     };
 
@@ -156,14 +157,20 @@ public sealed partial class MovementRefusalDetector : IDisposable
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AlignmentBlocksExit();
 
-    // The `convulsions` condition's own action-fumble line — distinct from the
-    // generic "You fumble in confusion!" other confusion sources use. Same
-    // mechanic (the command is consumed and never executes), different wording,
-    // so a move sent while convulsing bonked here instead of reverting: the
-    // stale pending move then got wrongly matched against the NEXT unrelated
-    // room text (a recovery look-sweep's own peek reply), poisoning tracker
-    // state and eventually stranding a tier-3 backtrack awaiting a landing that
-    // could never arrive (report paradigm-20260901-080223).
+    // Confusion fumbles the just-sent command — it's consumed and never executes —
+    // which for a MOVE means the pending step never lands and the tracker strands
+    // (it wrongly matches the stale move against later unrelated text, poisoning
+    // recovery). A fumble can hit ANY action, not just combat: combat re-sends its
+    // swing on ConditionTracker.ActionFailed, but a fumbled MOVE has to revert here.
+    // Confusion surfaces two lines — the generic fumble every source shares, and
+    // `convulsions`' own wording — so both are recognized (report
+    // paradigm-20260901-080223 was the convulsion case; the generic has the same
+    // failure mode).
+    [GeneratedRegex(
+        @"^\s*You fumble in confusion[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex FumbleInConfusion();
+
     [GeneratedRegex(
         @"^\s*You convulse violently[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

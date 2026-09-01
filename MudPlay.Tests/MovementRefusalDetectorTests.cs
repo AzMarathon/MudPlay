@@ -86,8 +86,10 @@ public sealed class MovementRefusalDetectorTests : IDisposable
     // exit our alignment can't use bonks here; revert cleanly, don't strand.
     [InlineData("Your current alignment prevents you from entering this exit.")]
     [InlineData("Your current alignment prevents you from entering this exit!")]
-    // The `convulsions` condition's own action-fumble line (report -080223) — a
-    // move sent while convulsing bonks here instead of executing.
+    // Confusion fumbles the just-sent move — it never executes, so the pending step
+    // must revert or the tracker strands (report -080223). Both the generic fumble
+    // line and `convulsions`' own wording bonk here.
+    [InlineData("You fumble in confusion!")]
     [InlineData("You convulse violently!")]
     public void RefusalLines_RevertPendingToLocated(string line)
     {
