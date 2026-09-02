@@ -2090,9 +2090,21 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 SendNextStep();
                 return;
             }
-            Raise(new WalkEvent(WalkEventKind.Failed,
-                $"step {_index + 1} blocked after retries", _destination));
-            Reset();
+
+            // MaxRetriesPerStep's tight budget (1) exists to fail fast on a
+            // genuinely blocked exit, but it can't tell that apart from a run of
+            // bad luck — two confusion fumbles on the same direction in a row
+            // exhaust it just as fast as a real block, killing the whole walk
+            // over what was really just an unlucky streak (report
+            // paradigm-20260901-201514). Hand off to TryReplanOrFail instead of
+            // failing outright: it already leans on rm before trusting the
+            // tracker (the same fix applied to its other callers), so a fumble
+            // streak gets a freshly re-verified room to replan from — and it
+            // carries its own separate bounded budget (MaxReplansPerWalk), so a
+            // truly blocked exit still fails cleanly, just one hop later.
+            _log?.Info("Walker",
+                $"step {_index + 1} blocked after {_retryCount} retries; handing off to replan");
+            TryReplanOrFail(RoomConfidence.Confirmed);
             return;
         }
 
@@ -2159,6 +2171,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // room. WalkTo handles the existing Walking state by clearing
             // it — silently, since _replanningInPlace suppresses the
             // supersede Stopped that would otherwise abort a driving reroute.
+            //
+            // WalkTo's own Reset() zeroes _replanCount as part of that clear —
+            // it has no way to distinguish "a fresh user-initiated walk" from
+            // "this walk replanning itself", and the latter must NOT lose the
+            // count that makes MaxReplansPerWalk mean anything. Capture it now
+            // and restore it after the call, or the cap never actually
+            // accumulates: every replan attempt walks in seeing _replanCount
+            // back at 0, so a persistently blocked exit (not just an unlucky
+            // fumble streak) would retry through this path forever instead of
+            // failing once the budget is genuinely spent.
+            int replanCount = _replanCount;
             _replanningInPlace = true;
             try
             {
@@ -2173,6 +2196,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
             finally
             {
+                _replanCount = replanCount;
                 _replanningInPlace = false;
             }
         }

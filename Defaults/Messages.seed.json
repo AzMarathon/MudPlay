@@ -15301,8 +15301,8 @@
     "Id": "90686720c5606e05",
     "Name": "form of the monkey",
     "Action": "Ignore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
+    "Flags": "Confused",
+    "RawFlagsHex": 2,
     "Response": "",
     "CasterMessage": "You invoke the {s}.",
     "TargetMessage": "",
@@ -20347,20 +20347,6 @@
     "Links": []
   },
   {
-    "Id": "fd96308f2f00e997",
-    "Name": "breathes",
-    "Action": "Ignore",
-    "Flags": "Confused, LastActionFailed",
-    "RawFlagsHex": 8194,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You struggle for breath!",
-    "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
     "Id": "5e50d4fc5206d233",
     "Name": "form of the monkey",
     "Action": "Ignore",
@@ -20372,20 +20358,6 @@
     "WitnessMessage": "",
     "AppliedMessage": "You are distracted!",
     "AppliedEndsWith": "",
-    "Links": []
-  },
-  {
-    "Id": "ab680e71848c1f22",
-    "Name": "creature illusion",
-    "Action": "Ignore",
-    "Flags": "Confused",
-    "RawFlagsHex": 2,
-    "Response": "",
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "Without a sound: the illusionary attackers vanish",
     "Links": []
   },
   {

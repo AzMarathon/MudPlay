@@ -1283,6 +1283,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // header.
     public ObservableCollection<object> NavTree { get; } = new();
 
+    // Flat, uniform-height projection of NavTree that the rail actually renders (a
+    // virtualized ItemsControl over these rows). Kept in sync by RebuildNavTree and
+    // the expand/collapse splice in ToggleFolder — see NavFlatList for why flat.
+    private readonly NavFlatList _navFlat = new();
+    public ObservableCollection<NavFlatRow> NavRows => _navFlat.Rows;
+
     // True when the combined tree has any node (leaf or empty folder).
     public bool HasNavTree => NavTree.Count > 0;
 
@@ -1388,6 +1394,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         NavTreeBuilder.Sync<object>(NavTree, rows, folderOf, folders,
             defaultExpanded: false, _navExpandOverrides,
             harvest: !_navWasFiltering, forceExpandAll: false);
+        _navFlat.Rebuild(NavTree);
         _navWasFiltering = filtering;
         OnPropertyChanged(nameof(HasNavTree));
         OnPropertyChanged(nameof(HasNoLoopMatches));
@@ -1623,6 +1630,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // FavoriteRowViewModel), bound by the rail's TreeView.
     public ObservableCollection<object> FavoriteTree { get; } = new();
 
+    // Flat projection of FavoriteTree the GOTO rail renders — see _navFlat / NavFlatList.
+    private readonly NavFlatList _favoriteFlat = new();
+    public ObservableCollection<NavFlatRow> FavoriteRows => _favoriteFlat.Rows;
+
+    // Expand/collapse a folder in either rail flat list, splicing its rows in/out so
+    // the scroll position stays put (a flat list of same-height rows keeps the
+    // virtualized scrollbar stable, unlike a TreeView where an expanded folder is one
+    // giant item). Routed by which list holds the folder so one command serves both.
+    [RelayCommand]
+    private void ToggleFolder(NavFolderNodeViewModel? folder)
+    {
+        if (folder is null) return;
+        if (_favoriteFlat.Contains(folder)) _favoriteFlat.ToggleFolder(folder);
+        else if (_navFlat.Contains(folder)) _navFlat.ToggleFolder(folder);
+    }
+
     public bool HasFavorites => Favorites.Count > 0;
 
     // True when the GOTO tree has any node (favourite or empty folder) —
@@ -1719,6 +1742,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         NavTreeBuilder.Sync(FavoriteTree, rows, folderOf, folders,
             defaultExpanded: false, _gotoExpandOverrides,
             harvest: !_gotoWasFiltering, forceExpandAll: false);
+        _favoriteFlat.Rebuild(FavoriteTree);
         _gotoWasFiltering = filtering;
         OnPropertyChanged(nameof(HasFavoriteTree));
         OnPropertyChanged(nameof(HasNoFavoriteMatches));

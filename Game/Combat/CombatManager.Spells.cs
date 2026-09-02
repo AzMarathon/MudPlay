@@ -92,6 +92,11 @@ public sealed partial class CombatManager
     // debuff fires directly (bypassing Evaluate), so the director can't queue a
     // second between-round cast the same round. Optional — no-ops until set.
     private Action? _markBetweenRoundSlotUsed;
+    // Reads whether the director's one-between-round-cast slot is ALREADY spent this
+    // round, so the pre-attack debuff can stand down instead of firing a doomed cast
+    // into a spent slot (which draws "already cast this round" and latches the block
+    // that then delays the coupled attack). Optional — assumed free until wired.
+    private Func<bool>? _isBetweenRoundSlotUsed;
 
     // ----- Deterministic magic eligibility (game-data gated) ----------
     // Optional, like the spell caster. Until SetMagicEligibility runs, the
@@ -268,6 +273,15 @@ public sealed partial class CombatManager
     {
         ArgumentNullException.ThrowIfNull(marker);
         _markBetweenRoundSlotUsed = marker;
+    }
+
+    // Wire the read-side of the one-between-round-cast slot (CastingDirector's
+    // BetweenRoundSlotUsed). TryPreAttackInBetween consults it so it won't send a
+    // pre-attack debuff into a slot a survival/buff cast already spent this round.
+    public void SetBetweenRoundSlotQuery(Func<bool> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        _isBetweenRoundSlotUsed = query;
     }
 
     // True once SetCombatSpellCaster has wired both the coordinator and the mana
@@ -961,6 +975,22 @@ public sealed partial class CombatManager
                 $"pre-attack: in-between {survivalCast} preferred over debuff by priority — " +
                 "attack resumes after its *Combat Off*");
             return true;
+        }
+
+        // The evaluator can also return null because the round's ONE between-round
+        // slot is already spent (a survival / self-buff cast took it) — not because
+        // nothing was due. Firing the debuff now would only draw the server's
+        // "already cast a spell this round" rejection, whose failure latch then
+        // blocks the very attack we defer behind it (report paradigm-20260902-134633:
+        // a pre-attack isto right after a blur delayed the msto ~3s to the next tick).
+        // Stand the debuff down and let the caller dispatch the attack directly this
+        // round; the debuff re-offers next round once the slot frees.
+        if (_isBetweenRoundSlotUsed?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory,
+                $"pre-attack debuff {decision.Spell} held — between-round slot already spent this " +
+                "round; dispatching the attack directly (debuff re-offers next round)");
+            return false;
         }
 
         // Nothing higher-priority was queued — fire the debuff before the attack.

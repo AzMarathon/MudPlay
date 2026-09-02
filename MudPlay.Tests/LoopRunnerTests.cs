@@ -453,6 +453,116 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Running, h.Runner.State);
     }
 
+    // ----- disconnect / reconnect resume --------------------------------
+
+    [Fact]
+    public void NotifyDisconnected_WhileIdle_DoesNothing()
+    {
+        Harness h = NewHarness();
+
+        h.Runner.NotifyDisconnected();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Empty(h.Events);
+    }
+
+    [Fact]
+    public void NotifyDisconnected_WhileRunning_StopsCleanlyAndRemembersLoop()
+    {
+        // Live bug: nothing in the recovery ladder (the gate's Tier2/Tier3/
+        // awaiting-rm wait, or this runner's own local EnterRecovery) has any way
+        // to know the connection died mid-wait. It just sits there, and when the
+        // wire comes back the FIRST post-reconnect room render gets fed into that
+        // stale wait as if it were the landing/reply it was expecting — a false
+        // "Lost" (report paradigm-20260901-191945). NotifyDisconnected must stop
+        // cleanly (no Lost dialog) and remember the loop to resume.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        h.Runner.NotifyDisconnected();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeForTests!.Name);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Stopped && e.Detail.Contains("disconnected"));
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void FirstPromptAfterDisconnect_ResumesTheRememberedLoop()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);   // step 1 ("n") of the original run
+
+        h.Runner.NotifyDisconnected();
+        h.Events.Clear();
+
+        // First in-game prompt after reconnect — the same trigger
+        // DeferredCollectReconnectReleaser uses. Tracker is still located at 1/1
+        // (a real reconnect would have re-established it via the login sequence).
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);   // one-shot, consumed
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Started);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);   // fresh Start() sent step 1 again
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    [Fact]
+    public void PromptObserved_WithNoPendingReconnect_DoesNotReStartTheLoop()
+    {
+        // A prompt with nothing pending must fall through to the normal
+        // custom-command-step handling, unaffected by the reconnect path.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Events.Clear();
+
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Started);
+        Assert.Single(h.Sent);   // no extra send
+    }
+
+    [Fact]
+    public void ResumeAfterPause_LandedAtUnexpectedThirdRoom_ForwardsToRecoveryGate()
+    {
+        // Live bug: a step's confirmation lands somewhere that's neither its
+        // expected target (the overshoot guard) nor its source
+        // (refused-while-paused) while the loop is paused — the exit's real
+        // destination simply doesn't match what the graph said, or a name-
+        // ambiguous zone misattributed the landing to the wrong room
+        // entirely. None of the existing resume guards catch this shape, so
+        // it fell through to a blind resend of the stale step on resume.
+        // SendMove's fresh room-lookup can paper over that ONE hop by luck
+        // (it reads the real current room, not a stale target), but the rest
+        // of the 18-step plan was drawn for a route that no longer matches
+        // reality from here, and the very next step hard-fails with "no exit"
+        // one hop later (report paradigm-20260902-072545).
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());   // step 1: N, expects 1/1 -> 1/2
+        Assert.Single(h.Sent);
+
+        h.Coordinator.AssertGate("Combat");   // pause mid-step
+
+        // Landed at room C (1/3) — neither the expected target (1/2) nor the
+        // source (1/1) — while paused. A real move genuinely completed
+        // (unlike a refusal), just to somewhere the plan never expected.
+        h.Tracker.NoteRoomObserved(new RoomObservation("C",
+            new HashSet<Direction> { Direction.S }));
+
+        h.Coordinator.ClearGate("Combat");   // resume
+
+        Assert.Single(h.ResyncReasons);   // forwarded to the gate, not blindly resent
+    }
+
     [Fact]
     public void RefusedWhilePaused_EntersRecoveryOnResume_InsteadOfResendingSameMove()
     {
@@ -513,6 +623,62 @@ public sealed class LoopRunnerTests : IDisposable
             h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
             h.Tracker.NoteMoveBlocked();
             h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        }
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void BlockedAtSource_WhileConfused_DoesNotExhaustBudget()
+    {
+        // Report paradigm-20260902-113201: a confusion fumble ("You convulse
+        // violently!") can bonk several moves in a row on the same room, well
+        // inside MaxRecoverAttempts' window — charging those against the same
+        // budget a genuine desync uses starved it in seconds and permanently
+        // failed the loop while the character was otherwise fine, just waiting
+        // out the status effect. More blocks than MaxRecoverAttempts while
+        // confused must keep rerouting/resending, never fail.
+        Harness h = NewHarness();
+        h.Runner.SetConfusedCheck(() => true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 6; i++)
+        {
+            h.Tracker.NoteMoveBlocked();
+        }
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        // Initial send + one resend per block — every block rerouted, none skipped.
+        Assert.Equal(7, h.Sent.Count);
+        Assert.All(h.Sent, b => Assert.Equal("n\r", Encoding.Latin1.GetString(b)));
+    }
+
+    [Fact]
+    public void BlockedAtSource_ConfusionClearing_GenuineBlockAfterwardStillExhaustsBudget()
+    {
+        // Confusion exempting recovery attempts from the budget must not leak
+        // into a real problem once the status clears — a persistent block hit
+        // right after confusion wears off still fails after MaxRecoverAttempts
+        // genuine attempts, exactly like BlockedAtSource_PersistentBlock above.
+        Harness h = NewHarness();
+        bool confused = true;
+        h.Runner.SetConfusedCheck(() => confused);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 5; i++)
+        {
+            h.Tracker.NoteMoveBlocked();
+        }
+        Assert.Equal(LoopState.Running, h.Runner.State);   // unaffected while confused
+
+        confused = false;
+        for (int i = 0; i < 4; i++)
+        {
+            h.Tracker.NoteMoveBlocked();
         }
 
         Assert.Equal(LoopState.Idle, h.Runner.State);

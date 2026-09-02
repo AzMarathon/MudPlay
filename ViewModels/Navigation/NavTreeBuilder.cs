@@ -113,6 +113,36 @@ public static class NavTreeBuilder
         foreach (object node in built) target.Add(node);
     }
 
+    // Flatten a nested folder/leaf tree into the ordered flat row list the folder
+    // lists actually render: each node in display order, and — when a folder is
+    // expanded — its children spliced in right after it (recursively). Every row is
+    // one line, so the virtualized ItemsControl over them has a stable extent.
+    public static List<NavFlatRow> Flatten(IEnumerable<object> roots)
+    {
+        var flat = new List<NavFlatRow>();
+        AppendFlat(flat, roots, 0);
+        return flat;
+    }
+
+    // The rows to splice in immediately after a just-expanded folder: its children
+    // (and their own visible descendants), one deeper than the folder.
+    public static List<NavFlatRow> Descendants(NavFolderNodeViewModel folder, int folderDepth)
+    {
+        var flat = new List<NavFlatRow>();
+        AppendFlat(flat, folder.Children, folderDepth + 1);
+        return flat;
+    }
+
+    private static void AppendFlat(List<NavFlatRow> flat, IEnumerable<object> nodes, int depth)
+    {
+        foreach (object node in nodes)
+        {
+            flat.Add(new NavFlatRow(node, depth));
+            if (node is NavFolderNodeViewModel { IsExpanded: true } folder)
+                AppendFlat(flat, folder.Children, depth + 1);
+        }
+    }
+
     private static void SortNodes(IList<object> nodes)
     {
         var ordered = nodes

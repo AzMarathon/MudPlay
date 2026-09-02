@@ -88,6 +88,12 @@ public sealed class CastingDirector : IDisposable
     private readonly CastCoordinator _cast;
     private readonly Conditions.ConditionTracker? _conditions;
     private readonly PartyState? _party;
+    // Rest-target pool ceilings for the self-heal triggers — the DEFAULT gear set's
+    // max HP + the current gear's real (stat-screen) max — so a heal anchors to the
+    // loadout the user tuned (like the rest gates), not a Pre-rest set's altered pool.
+    // Null until wired → the heal falls back to the live _state.MaxHp.
+    private Func<int>? _restDefaultMaxHp;
+    private Func<int>? _restRealMaxHp;
     private Func<bool>? _isStealthedFunc;
     private Func<bool>? _inputCaptured;
     private Func<bool>? _buffStripRoom;
@@ -330,6 +336,19 @@ public sealed class CastingDirector : IDisposable
     // — when unset the buff slot fires regardless of stealth.
     public void SetStealthGate(Func<bool> isStealthed) =>
         _isStealthedFunc = isStealthed;
+
+    // Wire the self-heal rest-target ceilings (DEFAULT-set max HP + current gear's
+    // real max) so heal triggers anchor to the Default set like the rest gates.
+    public void SetRestPoolMaxHp(Func<int>? defaultMaxHp, Func<int>? realMaxHp)
+    {
+        _restDefaultMaxHp = defaultMaxHp;
+        _restRealMaxHp = realMaxHp;
+    }
+
+    // Resolve a self-heal HP trigger against the Default-set basis + real-max cap.
+    private int ResolveHealHpTrigger(ThresholdMode mode, int pct)
+        => RestThresholds.ResolveValue(mode, pct,
+            _restDefaultMaxHp?.Invoke() ?? 0, _restRealMaxHp?.Invoke() ?? 0, _state.MaxHp);
 
     // Wire a "the keyboard is captured by a full-screen menu" predicate. While
     // it returns true, Evaluate suppresses EVERY cast — not just buffs. When the
@@ -715,6 +734,12 @@ public sealed class CastingDirector : IDisposable
     {
         if (_state.InCombat) _betweenRoundSlotUsed = true;
     }
+
+    // True when this round's single between-round cast is already spent — the same
+    // predicate Evaluate gates on (so a null from Evaluate means "slot gone", not
+    // "nothing due"). The combat engine reads this before a pre-attack debuff so it
+    // won't fire a doomed cast into a spent slot.
+    public bool BetweenRoundSlotUsed => _state.InCombat && _betweenRoundSlotUsed;
 
     // The mana-regen roll-spell reroller staged a reroll (its last roll came in
     // below the configured threshold). Instead of firing it on the raw wire, stash
@@ -1347,8 +1372,7 @@ public sealed class CastingDirector : IDisposable
         if (!ManaClearsHealFloor(health)) return null;
         // Trigger read per HpThresholdMode — percentage of MaxHp, or an absolute
         // HP value — then compared against raw HP.
-        int majorTrigger = PoolThreshold.Resolve(
-            health.HpThresholdMode, health.MajorHealCombatTrigger, _state.MaxHp);
+        int majorTrigger = ResolveHealHpTrigger(health.HpThresholdMode, health.MajorHealCombatTrigger);
         if (_state.Hp > majorTrigger) return null;
         // Fall back to minor when the user hasn't configured a major
         // — better to fire something than skip the life-threat path.
@@ -1368,7 +1392,7 @@ public sealed class CastingDirector : IDisposable
         int triggerValue = _state.InCombat
             ? health.MinorHealCombatTrigger
             : health.HealRestTrigger;
-        int trigger = PoolThreshold.Resolve(health.HpThresholdMode, triggerValue, _state.MaxHp);
+        int trigger = ResolveHealHpTrigger(health.HpThresholdMode, triggerValue);
         if (_state.Hp > trigger) return null;
 
         // Out-of-combat heal-spell-during-rest only — don't cast
@@ -1385,8 +1409,7 @@ public sealed class CastingDirector : IDisposable
         //  • IsRecastDue is false once the HoT is confirmed active with
         //    remaining duration, so a running HoT falls through to the instant
         //    single-target heal for the immediate top-up while it ticks.
-        int majorTrigger = PoolThreshold.Resolve(
-            health.HpThresholdMode, health.MajorHealCombatTrigger, _state.MaxHp);
+        int majorTrigger = ResolveHealHpTrigger(health.HpThresholdMode, health.MajorHealCombatTrigger);
 
         // Two exclusive bands. Once HP falls into the major-heal band, yield to
         // MajorSelfHeal instead of firing minor again. Minor is walked BEFORE major

@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.9**
-> - Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, same as the other two — a move fumbled this way now reverts cleanly instead of risking a stranded tracker
-> - Fixed a typo in the death dog's shriek confusion record's wear-off text ("wear" → "wears") that meant it could never match real game output, potentially leaving the Confused flag stuck until an unrelated confusion source cleared it
-> - Added condition-tracking coverage for ~19 status effects cross-referenced from a messages.md export that previously had zero footprint: constriction, an alternate entangle wording, terror/madness, umbral chains, alternate wrathful curse and black curse (blindness) wordings, plague, an alternate runed cape aura, an alternate sleep wording, poison bolt/poison cloud/flay/venom-spit onset variants, two action-fumble notices (breathes, form of the monkey), a creature-illusion dispel line, and two combat-end trigger lines (Rakshasha, brain eater)
+> **Version 3.44.23**
+> - Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, so a move fumbled this way reverts cleanly instead of stranding the tracker
+> - Fixed the death dog's shriek confusion wear-off typo ("wear" → "wears") that stopped it matching real output, which could leave the Confused flag stuck until an unrelated confusion cleared it
+> - `form of the monkey` confusion now clears when the form wears off — the form buff itself carries the Confused state (set while in form, cleared when it drops), so it no longer relies on the per-action distraction fumble to keep it up
+> - Added condition-tracking coverage for status effects that previously had none: constriction, an alternate entangle wording, terror/madness, umbral chains, alternate wrathful-curse and black-curse (blindness) wordings, plague, an alternate runed-cape aura, an alternate sleep wording, poison bolt/cloud/flay/venom-spit onsets, and two combat-end trigger lines (Rakshasha, brain eater)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

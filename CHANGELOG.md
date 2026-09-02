@@ -1,10 +1,39 @@
 # Version history
 
+## 3.44.23
+
+- Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, so a move fumbled this way reverts cleanly instead of stranding the tracker
+- Fixed the death dog's shriek confusion wear-off typo ("wear" → "wears") that stopped it matching real output, which could leave the Confused flag stuck until an unrelated confusion cleared it
+- `form of the monkey` confusion now clears when the form wears off — the form buff itself carries the Confused state (set while in form, cleared when it drops), so it no longer relies on the per-action distraction fumble to keep it up
+- Added condition-tracking coverage for status effects that previously had none: constriction, an alternate entangle wording, terror/madness, umbral chains, alternate wrathful-curse and black-curse (blindness) wordings, plague, an alternate runed-cape aura, an alternate sleep wording, poison bolt/cloud/flay/venom-spit onsets, and two combat-end trigger lines (Rakshasha, brain eater)
+
+## 3.44.22
+
+- Fixed a running loop stalling forever (then popping a false "Lost") when the connection drops mid-recovery — nothing previously told the loop or the recovery gate that a disconnect had happened, so a stuck backtrack/rm wait sat there until reconnect fed it an unrelated room render and misread it as the answer it was waiting for. A disconnect now stops the loop cleanly (no Lost dialog) and automatically resumes it on the first in-game prompt after reconnect
+- Fixed the walker giving up a whole approach/walk after just one blocked-move retry — a tight single-retry budget couldn't tell a genuinely blocked exit from an unlucky run of confusion fumbles on the same direction, so it now hands off to the same rm-backed re-plan already used elsewhere instead of failing immediately
+- Fixed that re-plan's own retry budget never actually accumulating — re-planning calls back into the walk-start path, which unconditionally zeroed the counter that was supposed to bound it, so a persistently blocked exit could have retried indefinitely instead of eventually failing cleanly
+- Fixed a loop step confirming, mid-pause, to a room that's neither where it started nor where it was headed (a graph exit leading somewhere unexpected, or a name-ambiguous zone) — every existing resume guard checked "at target" or "at source" but none covered "at neither," so it silently fell through to blindly resending the stale step. Now forwarded to the recovery gate like the same shape already is in real time
+- Fixed a loop permanently failing when convulsions/confusion fumbled several moves in a row on the same room — those bonks were charged against the same 3-attempt recovery budget a genuine desync uses, so a short unlucky run of fumbles (well under 10 seconds) burned it and stopped the loop for good. Repeated fumbles no longer count against the budget; a real block hit right after confusion clears still fails normally
+- bug reports addressed: paradigm-20260901-191945, paradigm-20260901-201514, paradigm-20260902-072545, paradigm-20260902-113201
+
+## 3.44.18
+
+- **Reset States** now also re-equips your Default gear set and re-polls `stat` — so a stuck rest set is undone and a drifted max HP/mana re-latches to the real value
+- Heal, flee (run) and emergency-hangup HP triggers now anchor to your **Default set's** max HP too (like rest), so a Pre-rest set that alters your pool doesn't shift them
+- Area-debuff (e.g. ice storm) no longer fires twice in one fight: an AoE wave-kill that empties a pack no longer resets the once-per-room cap, so the debuff isn't re-cast at the same room's survivors
+- A pre-attack debuff no longer stalls your attack ~3s when the round's spell slot is already spent by a self-buff — it now stands down and the attack fires immediately (the debuff re-offers next round)
+- Area-debuff no longer fires at a monster you've just walked away from: a force-cleared fight now drops its stale combat target
+- Chest Offload: the per-item **Drop** button now drops that item's whole held stack (matching Drop All) instead of doing nothing
+- Rest no longer gets stuck forever after a max-HP/mana change: rest targets now anchor to your **Default gear set's** max and cap at your current gear's real max, so a Pre-rest set that alters your pool can't strand the rest. The Health-settings previews ratchet off the Default set too
+- Conversation window font size now renders at its true point size (was ~25% small; same point→DIP fix as the terminal)
+- Monster Intel's defense AC now includes your permanent race/class innate and completed-quest bonuses (a completed +1-AC quest no longer leaves the sim 1 AC short)
+- bug reports addressed: paradigm-20260902-160110, paradigm-20260902-134633, paradigm-20260902-053911, paradigm-20260902-135211, paradigm-20260902-052036, paradigm-20260902-100509
+
 ## 3.44.9
 
-- Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, same as the other two — a move fumbled this way now reverts cleanly instead of risking a stranded tracker
-- Fixed a typo in the death dog's shriek confusion record's wear-off text ("wear" → "wears") that meant it could never match real game output, potentially leaving the Confused flag stuck until an unrelated confusion source cleared it
-- Added condition-tracking coverage for ~19 status effects cross-referenced from a messages.md export that previously had zero footprint: constriction, an alternate entangle wording, terror/madness, umbral chains, alternate wrathful curse and black curse (blindness) wordings, plague, an alternate runed cape aura, an alternate sleep wording, poison bolt/poison cloud/flay/venom-spit onset variants, two action-fumble notices (breathes, form of the monkey), a creature-illusion dispel line, and two combat-end trigger lines (Rakshasha, brain eater)
+- Navigation GOTO and Loops + Lairs folder lists no longer jump or drift when you expand a folder — the folder now opens in place with its contents right below it
+- Fixes the erratic scrollbar on large lists (the thumb lurching tiny/huge as an expanded folder scrolled past): the lists now render as a flat, uniform-height virtualized list instead of a nested tree where an expanded folder became one giant item that wrecked the scroll estimate
+- Applies to all four lists — the map rail's GOTO and Loops + Lairs, and both lists in the Navigation Management window
 
 ## 3.44.8
 

@@ -307,15 +307,41 @@ public sealed class AutoWalkManagerTests : IDisposable
     }
 
     [Fact]
-    public void BlockedTwice_AbortsWithFailed()
+    public void BlockedTwice_HandsOffToReplan_NotImmediateFailure()
     {
+        // Live bug: MaxRetriesPerStep's tight budget (1) can't tell a
+        // genuinely blocked exit from a run of bad luck — two confusion
+        // fumbles on the same direction in a row exhaust it just as fast as
+        // a real block, and failing the WHOLE walk right there was too eager
+        // (report paradigm-20260901-201514). Exhausting the per-step retry
+        // now hands off to TryReplanOrFail instead of failing immediately.
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Walker.WalkTo(new RoomKey(1, 3));
 
-        h.Tracker.NoteMoveBlocked();
-        // The retry above sent step #2. Block again.
-        h.Tracker.NoteMoveBlocked();
+        h.Tracker.NoteMoveBlocked();   // retry #1 (per-step budget)
+        h.Tracker.NoteMoveBlocked();   // per-step budget exhausted -> hand off
+
+        Assert.Equal(WalkState.Walking, h.Walker.State);   // still trying, not Idle
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Retrying);
+    }
+
+    [Fact]
+    public void PersistentBlock_StillFailsCleanly_OnceReplanBudgetAlsoExhausts()
+    {
+        // The hand-off is still bounded: an exit that's genuinely,
+        // persistently blocked (not just an unlucky fumble streak) eventually
+        // fails cleanly rather than retrying forever.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+
+        for (int i = 0; i < 20; i++)
+        {
+            if (h.Walker.State == WalkState.Idle) break;
+            h.Tracker.NoteMoveBlocked();
+        }
 
         Assert.Equal(WalkState.Idle, h.Walker.State);
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);

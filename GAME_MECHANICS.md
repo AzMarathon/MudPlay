@@ -3024,6 +3024,15 @@ glass jug               5               2 gold crowns
   always appears as the direct reply to the command it swallowed, never as unprompted ambient text.
   **Client encoding:** `MovementRefusalDetector` recognizes BOTH `You fumble in confusion!` and `You
   convulse violently!` as movement refusals, reverting the pending move immediately.
+- **[CONFIRMED] 2026-09-02, report `paradigm-20260902-113201`: convulsions can fumble several consecutive
+  moves in a row, well inside a handful of seconds.** The revert above is correct per-move, but
+  `LoopRunner`'s bounded recovery budget (3 attempts) was shared between genuine desyncs and these
+  fumbles — three convulsion bonks on the same room burned the whole budget in under 10 seconds and
+  permanently failed the loop, leaving the character standing there Confused with nothing left running.
+  **Client encoding:** `LoopRunner.EnterRecovery` reads `ConditionTracker.IsConfused` (wired via
+  `SetConfusedCheck`) and doesn't charge an attempt against `MaxRecoverAttempts` while it's true — the
+  reroute/resend still happens every time, it just isn't bounded by the same budget a real mapping
+  problem is.
 - **[UNVERIFIED] 2026-09-02, cross-referenced from a messages.md export, not a live bug report:**
   `convulsions` may have a THIRD fumble wording alongside the generic fumble and its own `You convulse
   violently!` — `You look around stupidly and do nothing!`, flagged `LastActionFailed` in the source data.
@@ -3031,6 +3040,22 @@ glass jug               5               2 gold crowns
   encoding:** `MovementRefusalDetector` now also recognizes this line as a movement refusal (same revert
   mechanic as the other two), so if it does turn out to be real, a move fumbled this way won't strand the
   tracker.
+- **[CONFIRMED] 2026-09-02, user: a confuse spell surfaces up to FIVE distinct message forms.** From the
+  target's point of view: (1) a caster→you cast line, (2) a third-party witness line, (3) an **applied**
+  onset, (4) a **wear-off**, and (5) a per-action **fumble**. The applied/wear-off pair sets and clears the
+  `Confused` state; the fumble line (carrying `LastActionFailed`) fires on each swallowed command and has
+  no wear-off of its own — it clears with the effect via the single-state confusion clear above. (The
+  parked game-data remodel plans to fold the fumble wordings into a shared table, like monster prefixes,
+  plus an "is a confuse spell" checkbox on the message record — so a confuse record then needs only the
+  standard spell lines, not a hand-built fumble entry.)
+- **[CONFIRMED] 2026-09-02, user: `form of the monkey` inherently confuses the caster for the buff's whole
+  duration.** While the `form of the monkey` self-buff is up (onset `The spirit of the monkey inhabits your
+  body!`), each action has a chance to fumble as `You are distracted!`. There is **no separate wear-off for
+  the confusion** — it ends when the **form itself** wears off (`The spirit of the monkey has left your
+  body!`). **Client encoding:** the `form of the monkey` message record carries `Confused` (set on the
+  form's onset, cleared on the form's wear-off, which triggers the single-state confusion clear); the
+  separate `You are distracted!` record carries `LastActionFailed` (+ `Confused` as the missed-onset
+  fallback) to drive the per-action re-send.
 
 ## One BETWEEN-ROUND spell per combat round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
 
