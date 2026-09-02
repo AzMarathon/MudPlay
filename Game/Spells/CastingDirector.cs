@@ -716,6 +716,12 @@ public sealed class CastingDirector : IDisposable
         if (_state.InCombat) _betweenRoundSlotUsed = true;
     }
 
+    // True when this round's single between-round cast is already spent — the same
+    // predicate Evaluate gates on (so a null from Evaluate means "slot gone", not
+    // "nothing due"). The combat engine reads this before a pre-attack debuff so it
+    // won't fire a doomed cast into a spent slot.
+    public bool BetweenRoundSlotUsed => _state.InCombat && _betweenRoundSlotUsed;
+
     // The mana-regen roll-spell reroller staged a reroll (its last roll came in
     // below the configured threshold). Instead of firing it on the raw wire, stash
     // it and run the between-round pass now: PickSelfBuff offers it at

@@ -4543,7 +4543,8 @@ public partial class MainWindowViewModel : ObservableObject
                 svc.GameData, svc.MonsterCatalog, svc.Resolver,
                 svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic,
                 svc.MonsterObservations, svc.PlayerState,
-                buffProvider: () => svc.Profile.Current?.PartyBuffs),
+                buffProvider: () => svc.Profile.Current?.PartyBuffs,
+                profile: svc.Profile),
         };
         window.Closed += (_, _) => _monsterIntel = null;
         _monsterIntel = window;

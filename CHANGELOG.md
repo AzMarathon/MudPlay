@@ -1,5 +1,16 @@
 # Version history
 
+## 3.44.16
+
+- Area-debuff (e.g. ice storm) no longer fires twice in one fight: an AoE wave-kill that empties a pack no longer resets the once-per-room cap, so the debuff isn't re-cast at the same room's survivors
+- A pre-attack debuff no longer stalls your attack ~3s when the round's spell slot is already spent by a self-buff — it now stands down and the attack fires immediately (the debuff re-offers next round)
+- Area-debuff no longer fires at a monster you've just walked away from: a force-cleared fight now drops its stale combat target
+- Chest Offload: the per-item **Drop** button now drops that item's whole held stack (matching Drop All) instead of doing nothing
+- Rest no longer gets stuck forever after a max-HP/mana change: rest targets now anchor to your **Default gear set's** max and cap at your current gear's real max, so a Pre-rest set that alters your pool can't strand the rest. The Health-settings previews ratchet off the Default set too
+- Conversation window font size now renders at its true point size (was ~25% small; same point→DIP fix as the terminal)
+- Monster Intel's defense AC now includes your permanent race/class innate and completed-quest bonuses (a completed +1-AC quest no longer leaves the sim 1 AC short)
+- bug reports addressed: paradigm-20260902-160110, paradigm-20260902-134633, paradigm-20260902-053911, paradigm-20260902-135211, paradigm-20260902-052036, paradigm-20260902-100509
+
 ## 3.44.9
 
 - Navigation GOTO and Loops + Lairs folder lists no longer jump or drift when you expand a folder — the folder now opens in place with its contents right below it

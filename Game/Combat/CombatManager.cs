@@ -1593,7 +1593,12 @@ public sealed partial class CombatManager : IDisposable
         // re-stamps _betweenRoundCastAt — but cheap insurance).
         _suppressResumeForBetweenRoundStamp = DateTimeOffset.MinValue;
         _attackSpellImmuneSpecies.Clear();
-        _spellChooser.ResetForNewRoom();
+        // Roster-clear reset, NOT a full new-room reset: this path also fires on the
+        // AoE multi-kill's synthetic room-clear (same physical room), so it must keep
+        // the area-debuff per-room cap so the debuff doesn't re-fire at the same
+        // room's survivors. The genuine physical-room-change reset (which clears that
+        // cap) lives in NotePreMove.
+        _spellChooser.ResetForRosterClear();
     }
 
     // Player death: the corpse room and whatever comes after (recovery walk,
@@ -1633,6 +1638,26 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory,
                 $"disconnect cleared stale combat state — target={_currentTarget ?? "(none)"}, "
                 + $"spellTarget={_castingSpellTarget ?? "(none)"}, spellAttackOwed={_spellAttackOwed}");
+        _currentTarget = null;
+        ClearAttackSpellCascadeState();
+    }
+
+    // The idle-stall watchdog force-clears combat when a room falls quiet (empty,
+    // no combat activity) — CombatStateTracker raises CombatForceCleared. Unlike a
+    // clean room-clear, that path emits no fresh observation, so _currentTarget and
+    // the attack-spell cascade would otherwise SURVIVE the clear. The between-round
+    // director keys its debuff purely off _currentTarget + the last observation
+    // (it has no InCombat/movement gate), so a stale target left here lets an AoE
+    // debuff fire into the room the character has since walked out of — an `isto`
+    // went out the instant the walker stepped away, still aimed at the prior
+    // fight's mob (report paradigm-20260902-053911). Drop the target the same way
+    // OnPlayerDeath / OnDisconnected do so the next genuine engage starts clean.
+    public void OnCombatForceCleared()
+    {
+        if (_currentTarget is null && !_spellAttackOwed) return;
+        _log?.Combat(LogCategory,
+            $"combat force-clear dropped stale target — target={_currentTarget ?? "(none)"}, "
+            + $"spellTarget={_castingSpellTarget ?? "(none)"}");
         _currentTarget = null;
         ClearAttackSpellCascadeState();
     }

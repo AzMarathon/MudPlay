@@ -112,6 +112,16 @@ public sealed class HealthManager : IDisposable
     private bool _wasRecovering;                // falling-edge latch for _onRecoveryComplete
     private Func<bool>? _shouldSkipRestHere;    // running loop's current room is a "do not rest" waypoint
     private Func<bool>? _equipmentApplying;     // a gear-set swap is streaming wear/rem — hold rest so we don't thrash it
+    // Rest-target pool ceilings. _defaultSetMax* = the DEFAULT gear set's max HP/mana
+    // — the loadout the user's rest %s are tuned against, so a Pre-rest set that swaps
+    // a +MaxHP/+MaxMana item doesn't move the target. _realMax* = the CURRENT gear's
+    // authoritative max (stat-screen MaxHits/MaxMana) — a hard cap so a rest set that
+    // LOWERS the pool can never push a rest target out of reach and strand the rest
+    // (report paradigm-20260902-052036). Null until wired → fall back to live _state.MaxHp/MaxMa.
+    private Func<int>? _defaultSetMaxHp;
+    private Func<int>? _defaultSetMaxMa;
+    private Func<int>? _realMaxHp;
+    private Func<int>? _realMaxMa;
     private bool _skipRestDeferredRecovery;     // a do-not-rest room made us skip a needed rest; re-arm on the next room change
     private bool _partyWaitSignaled;            // @wait sent, awaiting @ok
     private bool _hpGateAsserted;
@@ -388,6 +398,27 @@ public sealed class HealthManager : IDisposable
         _equipmentApplying = equipmentApplying;
     }
 
+    // Wire the rest-target pool ceilings (see the _defaultSetMax* / _realMax* fields).
+    // Both providers are optional — unset leaves the pre-existing live-max behaviour.
+    public void SetRestPoolMaxProviders(
+        Func<int>? defaultSetMaxHp, Func<int>? defaultSetMaxMa,
+        Func<int>? realMaxHp, Func<int>? realMaxMa)
+    {
+        _defaultSetMaxHp = defaultSetMaxHp;
+        _defaultSetMaxMa = defaultSetMaxMa;
+        _realMaxHp = realMaxHp;
+        _realMaxMa = realMaxMa;
+    }
+
+    // Resolve a rest trigger + rest-max for a pool, anchored to the DEFAULT gear set's
+    // max and capped at the current gear's real max (see RestThresholds for the why).
+    // Invokes the wired providers, then delegates to the pure resolver.
+    private (int Trigger, int Max) ResolveRestThresholds(
+        ThresholdMode mode, int triggerPct, int maxPct,
+        Func<int>? defaultMax, Func<int>? realMax, int liveMax)
+        => RestThresholds.Resolve(mode, triggerPct, maxPct,
+            defaultMax?.Invoke() ?? 0, realMax?.Invoke() ?? 0, liveMax);
+
     // Wire ShadowRest (Paradigm): classes with the ability can rest while
     // hidden/sneaking in a room with monsters without being attacked (see
     // GAME_MECHANICS "ShadowRest"). All three predicates plus the
@@ -628,10 +659,11 @@ public sealed class HealthManager : IDisposable
         bool skipRest = _shouldSkipRestHere?.Invoke() ?? false;
 
         // ----- HP gate transitions ---------------------------------
-        int hpRestTrigger = PoolThreshold.Resolve(s.HpThresholdMode, s.RestIfBelowHp, _state.MaxHp);
-        int hpRestMax     = PoolThreshold.Resolve(s.HpThresholdMode, s.RestMaxHp, _state.MaxHp);
+        (int hpRestTrigger, int hpRestMax) = ResolveRestThresholds(
+            s.HpThresholdMode, s.RestIfBelowHp, s.RestMaxHp,
+            _defaultSetMaxHp, _realMaxHp, _state.MaxHp);
         int hpRestTarget  = follower
-            ? Math.Min(hpRestTrigger + 1, _state.MaxHp)
+            ? Math.Min(hpRestTrigger + 1, hpRestMax)
             : hpRestMax;
 
         // Strictly below — "rest if below N" rests only when the pool is
@@ -656,10 +688,11 @@ public sealed class HealthManager : IDisposable
         }
 
         // ----- MA gate transitions ---------------------------------
-        int maRestTrigger = PoolThreshold.Resolve(s.MaThresholdMode, s.RestIfBelowMa, _state.MaxMa);
-        int maRestMax     = PoolThreshold.Resolve(s.MaThresholdMode, s.RestMaxMa, _state.MaxMa);
+        (int maRestTrigger, int maRestMax) = ResolveRestThresholds(
+            s.MaThresholdMode, s.RestIfBelowMa, s.RestMaxMa,
+            _defaultSetMaxMa, _realMaxMa, _state.MaxMa);
         int maRestTarget  = follower
-            ? Math.Min(maRestTrigger + 1, _state.MaxMa)
+            ? Math.Min(maRestTrigger + 1, maRestMax)
             : maRestMax;
 
         // Strictly below (see HP gate above) — the mystic-at-level-2 case.
@@ -1288,8 +1321,10 @@ public sealed class HealthManager : IDisposable
     // pool never reports a phantom MA deficit before prompt data loads.
     private bool NeedsOpportunisticTopOff(HealthSettings s)
     {
-        int hpTarget = PoolThreshold.Resolve(s.HpThresholdMode, s.RestMaxHp, _state.MaxHp);
-        int maTarget = PoolThreshold.Resolve(s.MaThresholdMode, s.RestMaxMa, _state.MaxMa);
+        int hpTarget = ResolveRestThresholds(s.HpThresholdMode, s.RestMaxHp, s.RestMaxHp,
+            _defaultSetMaxHp, _realMaxHp, _state.MaxHp).Max;
+        int maTarget = ResolveRestThresholds(s.MaThresholdMode, s.RestMaxMa, s.RestMaxMa,
+            _defaultSetMaxMa, _realMaxMa, _state.MaxMa).Max;
         bool needHp = _state.MaxHp > 0 && _state.Hp < hpTarget;
         bool needMa = _state.MaxMa > 0 && _state.Ma < maTarget;
         return needHp || needMa;
@@ -1302,8 +1337,17 @@ public sealed class HealthManager : IDisposable
     // only decides "is there anything left to recover". Each pool guards on Max > 0
     // so a class with no mana pool never reports a phantom MA deficit.
     private bool NeedsWaitDowntimeTopOff()
-        => (_state.MaxHp > 0 && _state.Hp < _state.MaxHp)
-        || (_state.MaxMa > 0 && _state.Ma < _state.MaxMa);
+    {
+        // "Full" here means the CURRENT gear's real ceiling — cap at it so a
+        // stale-high live max (an expired +MaxHP buff / a rest-set swap the prompt
+        // high-water never walked back down) can't leave a pool eternally "not full"
+        // and hold the wait open forever (same stale-max trap as report
+        // paradigm-20260902-052036).
+        int hpMax = _realMaxHp?.Invoke() is int rh and > 0 ? Math.Min(_state.MaxHp, rh) : _state.MaxHp;
+        int maMax = _realMaxMa?.Invoke() is int rm and > 0 ? Math.Min(_state.MaxMa, rm) : _state.MaxMa;
+        return (hpMax > 0 && _state.Hp < hpMax)
+            || (maMax > 0 && _state.Ma < maMax);
+    }
 
     // Rest-vs-meditate pick for the opportunistic (leader-resting) path: with no
     // meditate ability it's always rest; otherwise meditate when "meditate before

@@ -478,14 +478,15 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private ChestOffloadShopGroup? GroupOf(ChestOffloadItemRow item)
         => ShopGroups.FirstOrDefault(g => g.Items.Contains(item));
 
-    // Drop the LEFTOVER you're not selling (held − picked). The row is NOT removed
-    // here — it reconciles when the game's "You dropped …" lands (ReconcileConfirmed),
-    // so a blocked drop leaves the plan intact.
+    // Drop this one item's whole held stack (the per-item counterpart to a shop's
+    // Drop All, which drops every item's stack). The row is NOT removed here — it
+    // reconciles when the game's "You dropped …" lands (ReconcileConfirmed), so a
+    // blocked drop leaves the plan intact.
     private void DropItem(ChestOffloadItemRow item)
     {
-        if (item.DropQty <= 0) return;
-        _log?.Info(LogCategory, $"drop {item.DropQty} {item.Name} (leftover; {item.SellQty} of {item.Gained} kept to sell)");
-        CountedCommand.Emit(_send, "drop", item.DropQty, item.Name, _gameData.ActiveRealm == RealmType.ParaMud);
+        if (item.Gained <= 0) return;
+        _log?.Info(LogCategory, $"drop {item.Gained} {item.Name} (whole stack)");
+        CountedCommand.Emit(_send, "drop", item.Gained, item.Name, _gameData.ActiveRealm == RealmType.ParaMud);
     }
 
     // Alternate shops that also buy this item, nearest first, minus the one it's in.
