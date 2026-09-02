@@ -531,6 +531,39 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void ResumeAfterPause_LandedAtUnexpectedThirdRoom_ForwardsToRecoveryGate()
+    {
+        // Live bug: a step's confirmation lands somewhere that's neither its
+        // expected target (the overshoot guard) nor its source
+        // (refused-while-paused) while the loop is paused — the exit's real
+        // destination simply doesn't match what the graph said, or a name-
+        // ambiguous zone misattributed the landing to the wrong room
+        // entirely. None of the existing resume guards catch this shape, so
+        // it fell through to a blind resend of the stale step on resume.
+        // SendMove's fresh room-lookup can paper over that ONE hop by luck
+        // (it reads the real current room, not a stale target), but the rest
+        // of the 18-step plan was drawn for a route that no longer matches
+        // reality from here, and the very next step hard-fails with "no exit"
+        // one hop later (report paradigm-20260902-072545).
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());   // step 1: N, expects 1/1 -> 1/2
+        Assert.Single(h.Sent);
+
+        h.Coordinator.AssertGate("Combat");   // pause mid-step
+
+        // Landed at room C (1/3) — neither the expected target (1/2) nor the
+        // source (1/1) — while paused. A real move genuinely completed
+        // (unlike a refusal), just to somewhere the plan never expected.
+        h.Tracker.NoteRoomObserved(new RoomObservation("C",
+            new HashSet<Direction> { Direction.S }));
+
+        h.Coordinator.ClearGate("Combat");   // resume
+
+        Assert.Single(h.ResyncReasons);   // forwarded to the gate, not blindly resent
+    }
+
+    [Fact]
     public void RefusedWhilePaused_EntersRecoveryOnResume_InsteadOfResendingSameMove()
     {
         // Regression (paradigm-20260829-084558 / paradigm-20260829-104437): a

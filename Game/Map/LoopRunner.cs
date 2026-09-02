@@ -1836,6 +1836,35 @@ public sealed class LoopRunner : IRecoverableEngine
                 EnterRecovery($"step {_index + 1} refused while paused at {source}");
                 return;
             }
+            // Landed somewhere that's neither the step's expected target
+            // (overshoot guard above) NOR its source (refused-while-paused
+            // above) — a genuine desync: the exit's real destination doesn't
+            // match what the graph says, or a name-ambiguous zone attributed
+            // the landing to the wrong room entirely. OnTrackerStateChanged's
+            // real-time "Confirmed elsewhere" branch handles the identical
+            // shape by flagging the mismatch to the recovery gate instead of
+            // trusting the stale plan; this resume path had no equivalent, so
+            // it fell all the way through to the blind resend at the bottom.
+            // That resend's fresh SendMove room-lookup can paper over ONE hop
+            // by luck (it reads the real current room, not the stale target),
+            // but _expandedSteps was drawn for a route that no longer matches
+            // reality from here, and the very next step hard-fails with
+            // "no exit" (report paradigm-20260902-072545: a combat pause
+            // absorbed a step landing three rooms off-plan with no mismatch
+            // ever raised, and the loop only noticed one hop later, too late
+            // to recover from).
+            if (_stepInFlight
+                && _expectedMoveTarget is { } stillExpectedTarget
+                && _tracker.State.Confidence == RoomConfidence.Confirmed
+                && _tracker.State.CurrentRoom is { } landedRoom
+                && !landedRoom.Key.Equals(stillExpectedTarget))
+            {
+                _log?.Warn("LoopRunner",
+                    $"resume: step {_index + 1} landed at {landedRoom.Key} (expected {stillExpectedTarget}, source {_expectedMoveSource}); forwarding to recovery gate");
+                _recovery?.NoteSuspectedMismatch(
+                    $"step {_index + 1} landed at {landedRoom.Key} on resume (expected {stillExpectedTarget})");
+                return;
+            }
             // The tracker landed in Suspect/Lost/Unknown WHILE paused — an
             // ambiguous room observation it couldn't reconcile against the
             // pending queue (a combat redisplay, another player's arrival,
