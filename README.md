@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.8**
-> - Terminal font size is now a true **point** size — picking "16" matches MegaMUD's "16" glyph-for-glyph instead of rendering ~25% smaller ("zoomed out"); the setting was already labelled "in points" but never converted point → pixel before drawing
-> - Default terminal font size changed from 16 pt to **12 pt** (only affects characters that haven't picked a size of their own)
-> - Backscroll window now renders in your **terminal font** (family + size) instead of a fixed font, so history looks exactly like the live screen
+> **Version 3.44.9**
+> - Navigation GOTO and Loops + Lairs folder lists no longer jump or drift when you expand a folder — the folder now opens in place with its contents right below it
+> - Fixes the erratic scrollbar on large lists (the thumb lurching tiny/huge as an expanded folder scrolled past): the lists now render as a flat, uniform-height virtualized list instead of a nested tree where an expanded folder became one giant item that wrecked the scroll estimate
+> - Applies to all four lists — the map rail's GOTO and Loops + Lairs, and both lists in the Navigation Management window
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

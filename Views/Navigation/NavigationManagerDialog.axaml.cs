@@ -57,7 +57,7 @@ public partial class NavigationManagerDialog : Window
         }
     }
 
-    private void WireDragDrop(TreeView tree)
+    private void WireDragDrop(Control tree)
     {
         // Tunnel so we record the pressed row before inner controls
         // (the Edit / ✕ buttons) get a chance to handle the event.
@@ -143,12 +143,15 @@ public partial class NavigationManagerDialog : Window
     {
         for (StyledElement? e = src; e is not null; e = e.Parent)
         {
-            switch (e.DataContext)
+            // A flat row wraps the leaf/folder VM; unwrap it so a press on the row
+            // chrome (indent / chevron) resolves the same as one on the content.
+            object? dc = e.DataContext is NavFlatRow flat ? flat.Item : e.DataContext;
+            switch (dc)
             {
                 case ManagerLoopRow:
                 case ManagerLairSetupRow:
                 case FavoriteRowViewModel:
-                    return e.DataContext;
+                    return dc;
                 case NavFolderNodeViewModel:
                     return null;
             }
@@ -163,7 +166,8 @@ public partial class NavigationManagerDialog : Window
     {
         for (StyledElement? e = src; e is not null; e = e.Parent)
         {
-            switch (e.DataContext)
+            object? dc = e.DataContext is NavFlatRow flat ? flat.Item : e.DataContext;
+            switch (dc)
             {
                 case NavFolderNodeViewModel folder: return folder.Path;
                 case ManagerLoopRow loop:           return loop.Source.Folder;
