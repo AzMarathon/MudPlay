@@ -1,16 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.18**
-> - **Reset States** now also re-equips your Default gear set and re-polls `stat` — so a stuck rest set is undone and a drifted max HP/mana re-latches to the real value
-> - Heal, flee (run) and emergency-hangup HP triggers now anchor to your **Default set's** max HP too (like rest), so a Pre-rest set that alters your pool doesn't shift them
-> - Area-debuff (e.g. ice storm) no longer fires twice in one fight: an AoE wave-kill that empties a pack no longer resets the once-per-room cap, so the debuff isn't re-cast at the same room's survivors
-> - A pre-attack debuff no longer stalls your attack ~3s when the round's spell slot is already spent by a self-buff — it now stands down and the attack fires immediately
-> - Area-debuff no longer fires at a monster you've just walked away from: a force-cleared fight now drops its stale combat target
-> - Chest Offload: the per-item **Drop** button now drops that item's whole held stack (matching Drop All) instead of doing nothing
-> - Rest no longer gets stuck forever after a max-HP/mana change: rest targets now anchor to your **Default gear set's** max and cap at your current gear's real max, so a Pre-rest set that alters your pool can't strand the rest. The Health-settings previews ratchet off the Default set too
-> - Conversation window font size now renders at its true point size (was ~25% small; same point→DIP fix as the terminal)
-> - Monster Intel's defense AC now includes your permanent race/class innate and completed-quest bonuses (a completed +1-AC quest no longer leaves the sim 1 AC short)
+> **Version 3.44.22**
+> - Fixed a running loop stalling forever (then popping a false "Lost") when the connection drops mid-recovery — a disconnect now stops the loop cleanly (no Lost dialog) and automatically resumes it on the first in-game prompt after reconnect
+> - Fixed the walker giving up a whole approach/walk after just one blocked-move retry — it now hands off to the same rm-backed re-plan already used elsewhere instead of failing immediately (and fixed that re-plan's own retry budget never actually accumulating)
+> - Fixed a loop step confirming, mid-pause, to a room that's neither where it started nor where it was headed — it silently resent the stale step; now forwarded to the recovery gate like the same shape already is in real time
+> - Fixed a loop permanently failing when confusion/convulsion fumbled several moves in a row on the same room — those bonks were charged against the same 3-attempt recovery budget a genuine desync uses; repeated fumbles no longer count against it, and a real block after confusion clears still fails normally
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

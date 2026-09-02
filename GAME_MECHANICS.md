@@ -3024,6 +3024,15 @@ glass jug               5               2 gold crowns
   always appears as the direct reply to the command it swallowed, never as unprompted ambient text.
   **Client encoding:** `MovementRefusalDetector` recognizes BOTH `You fumble in confusion!` and `You
   convulse violently!` as movement refusals, reverting the pending move immediately.
+- **[CONFIRMED] 2026-09-02, report `paradigm-20260902-113201`: convulsions can fumble several consecutive
+  moves in a row, well inside a handful of seconds.** The revert above is correct per-move, but
+  `LoopRunner`'s bounded recovery budget (3 attempts) was shared between genuine desyncs and these
+  fumbles — three convulsion bonks on the same room burned the whole budget in under 10 seconds and
+  permanently failed the loop, leaving the character standing there Confused with nothing left running.
+  **Client encoding:** `LoopRunner.EnterRecovery` reads `ConditionTracker.IsConfused` (wired via
+  `SetConfusedCheck`) and doesn't charge an attempt against `MaxRecoverAttempts` while it's true — the
+  reroute/resend still happens every time, it just isn't bounded by the same budget a real mapping
+  problem is.
 
 ## One BETWEEN-ROUND spell per combat round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
 
