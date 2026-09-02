@@ -42,16 +42,20 @@ public static class TreeViewItemExpandScroll
 
     private static void ScrollHeaderToTop(TreeViewItem item)
     {
-        // The nearest ScrollViewer ancestor is the folder tree's own (MaxHeight-
-        // bounded) viewport — the one whose offset jumps on expand.
-        if (item.FindAncestorOfType<ScrollViewer>() is not { } scroll) return;
-
-        // Header top relative to the viewport frame; add the current scroll offset
-        // to get its content-space Y, then park the viewport there so the header
-        // sits at the top. ScrollViewer clamps to its valid range, so a folder near
-        // the end scrolls only as far as it can (header as near the top as possible,
-        // every child still shown).
-        if (item.TranslatePoint(default, scroll) is not { } headerTop) return;
-        scroll.Offset = scroll.Offset.WithY(scroll.Offset.Y + headerTop.Y);
+        // Request a rectangle one viewport tall, starting at the item's top, be
+        // brought into view. A rectangle as tall as the viewport can only be shown
+        // by putting its top at the viewport top, so this TOP-aligns the folder
+        // header — and it propagates through both the tree's own MaxHeight scroll
+        // and the outer rail scroll. A folder near the end simply scrolls as far as
+        // it can (header as near the top as possible, every child still shown).
+        //
+        // Why not compute the offset by hand: these trees use a VirtualizingStackPanel,
+        // whose row positions/extent are estimates mid-realisation. Reading them right
+        // after an expand (even at Loaded priority) gave a stale offset that snapped
+        // the list toward the top instead of onto the folder. Handing the request to
+        // BringIntoView lets the framework realise the row and scroll it correctly.
+        double viewportHeight = item.FindAncestorOfType<ScrollViewer>()?.Viewport.Height ?? 0;
+        if (viewportHeight <= 0) return;
+        item.BringIntoView(new Rect(0, 0, 1, viewportHeight));
     }
 }
