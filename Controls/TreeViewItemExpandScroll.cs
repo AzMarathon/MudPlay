@@ -66,15 +66,25 @@ public static class TreeViewItemExpandScroll
             return false;
         }
 
-        double headerY = item.TranslatePoint(default, scroll)?.Y ?? double.NaN;
-        if (headerY is > -1 and < 2)
+        // BringIntoView is a no-op once the header is even partially visible, so set
+        // the offset ourselves: the header's Y within the viewport, added to the
+        // current offset, is its content-space Y — park the viewport there so the
+        // header sits at the top and its children fill the space below. Clamp to the
+        // scrollable range (a folder near the end scrolls only as far as it can). The
+        // virtualized panel keeps re-estimating the extent for a few passes after an
+        // expand, which drifts the header; re-asserting each pass converges on it.
+        if (item.TranslatePoint(default, scroll)?.Y is not { } headerY) return false;
+        double max = Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height);
+        double target = Math.Clamp(scroll.Offset.Y + headerY, 0, max);
+
+        if (Math.Abs(headerY) < 2)
         {
-            Log($"    '{name}' p{pass} already-at-top headerY={headerY:0.#}");
+            Log($"    '{name}' p{pass} at-top off={scroll.Offset.Y:0}");
             return true;
         }
 
-        Log($"    '{name}' p{pass} bring vp={scroll.Viewport.Height:0} headerY={headerY:0.#} off={scroll.Offset.Y:0}");
-        item.BringIntoView(new Rect(0, 0, 1, scroll.Viewport.Height));
+        Log($"    '{name}' p{pass} set off={scroll.Offset.Y:0}->{target:0} headerY={headerY:0} max={max:0}");
+        scroll.Offset = scroll.Offset.WithY(target);
         return false;
     }
 
