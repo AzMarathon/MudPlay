@@ -2,7 +2,9 @@
 
 ## 3.44.9
 
-- Navigation GOTO and Loops + Lairs folder trees no longer jump when you expand a folder: the automatic scroll-on-expand — which fought the list's virtualization and threw the view to the top on a large list — has been removed, so a folder now opens in place (fixed on both the map rail and the Navigation Management window)
+- Navigation GOTO and Loops + Lairs folder lists no longer jump or drift when you expand a folder — the folder now opens in place with its contents right below it
+- Fixes the erratic scrollbar on large lists (the thumb lurching tiny/huge as an expanded folder scrolled past): the lists now render as a flat, uniform-height virtualized list instead of a nested tree where an expanded folder became one giant item that wrecked the scroll estimate
+- Applies to all four lists — the map rail's GOTO and Loops + Lairs, and both lists in the Navigation Management window
 
 ## 3.44.8
 
