@@ -1,5 +1,9 @@
 # Version history
 
+## 3.44.9
+
+- Navigation GOTO and Loops + Lairs folder trees: expanding a folder now scrolls its header to the top of the list with its contents below it, instead of the list jumping to the top or scrolling the folder off — so you no longer have to scroll back to find the folder you just opened (fixed on both the map rail and the Navigation Management window)
+
 ## 3.44.8
 
 - Terminal font size is now a true **point** size — picking "16" matches MegaMUD's "16" glyph-for-glyph instead of rendering ~25% smaller ("zoomed out"); the setting was already labelled "in points" but never converted point → pixel before drawing
