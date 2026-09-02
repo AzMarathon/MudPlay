@@ -1,9 +1,11 @@
 # Version history
 
-## 3.44.9
+## 3.44.10
 
 - Fixed a running loop stalling forever (then popping a false "Lost") when the connection drops mid-recovery — nothing previously told the loop or the recovery gate that a disconnect had happened, so a stuck backtrack/rm wait sat there until reconnect fed it an unrelated room render and misread it as the answer it was waiting for. A disconnect now stops the loop cleanly (no Lost dialog) and automatically resumes it on the first in-game prompt after reconnect
-- bug reports addressed: paradigm-20260901-191945
+- Fixed the walker giving up a whole approach/walk after just one blocked-move retry — a tight single-retry budget couldn't tell a genuinely blocked exit from an unlucky run of confusion fumbles on the same direction, so it now hands off to the same rm-backed re-plan already used elsewhere instead of failing immediately
+- Fixed that re-plan's own retry budget never actually accumulating — re-planning calls back into the walk-start path, which unconditionally zeroed the counter that was supposed to bound it, so a persistently blocked exit could have retried indefinitely instead of eventually failing cleanly
+- bug reports addressed: paradigm-20260901-191945, paradigm-20260901-201514
 
 ## 3.44.8
 
