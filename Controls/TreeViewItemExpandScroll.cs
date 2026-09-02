@@ -10,12 +10,11 @@ namespace MudPlay.Controls;
 // the enclosing scroll viewport so the folder stays put and the children it just
 // revealed flow into view below it. Opt in via TreeViewItemExpandScroll.Enable="True".
 //
-// DIAGNOSTIC BUILD: the fix keeps snapping the folder back to the top on expand and
-// four blind attempts haven't caught the cause, so this version logs the full
-// ancestor scroll-chain state (viewport / extent / offset + the header's Y in each)
-// at every layout pass to the Program Log under source "NavScroll". Expand one
-// folder, read the lines, and the reset shows itself. Strip the logging once the
-// cause is understood.
+// DIAGNOSTIC BUILD (round 2): the offset-set converges in sv0's own coordinates
+// (headerY -> 0) yet the folder still isn't visually where expected, so this logs the
+// header's position relative to the WINDOW too (winY) — if winY isn't near the top of
+// the visible list, sv0 isn't the scroller that matters and we're setting the wrong
+// one. Source "NavScroll". Strip once understood.
 public static class TreeViewItemExpandScroll
 {
     public static readonly AttachedProperty<bool> EnableProperty =
@@ -25,7 +24,6 @@ public static class TreeViewItemExpandScroll
     public static bool GetEnable(TreeViewItem item) => item.GetValue(EnableProperty);
     public static void SetEnable(TreeViewItem item, bool value) => item.SetValue(EnableProperty, value);
 
-    private const int StablePassesToStop = 2;
     private const int MaxPasses = 16;
 
     static TreeViewItemExpandScroll()
@@ -40,18 +38,16 @@ public static class TreeViewItemExpandScroll
     private static void HoldHeaderAtTop(TreeViewItem item)
     {
         string name = FolderName(item);
-        Log($"EXPAND '{name}' enable=true{ScrollLine(item)}");
+        Log($"EXPAND '{name}'{ScrollLine(item)}{WindowLine(item)}");
 
-        int stable = 0, total = 0;
+        int passes = 0;
         void OnLayout(object? sender, EventArgs e)
         {
-            Log($"  '{name}' p{total} pre{ScrollLine(item)}");
-            bool atTop = BringHeaderToTop(item, name, total);
-            stable = atTop ? stable + 1 : 0;
-            if (stable >= StablePassesToStop || ++total >= MaxPasses)
+            bool done = BringHeaderToTop(item, name, passes);
+            if (done || ++passes >= MaxPasses)
             {
                 item.LayoutUpdated -= OnLayout;
-                Log($"  '{name}' STOP after {total} pass(es), stable={stable}{ScrollLine(item)}");
+                Log($"  '{name}' STOP done={done} passes={passes}{ScrollLine(item)}{WindowLine(item)}");
             }
         }
         item.LayoutUpdated += OnLayout;
@@ -62,28 +58,24 @@ public static class TreeViewItemExpandScroll
     {
         if (FindScrollableAncestor(item) is not { Viewport.Height: > 0 } scroll)
         {
-            Log($"    '{name}' p{pass} no-scrollable-ancestor");
+            Log($"    '{name}' p{pass} no-scrollable{WindowLine(item)}");
+            return false;
+        }
+        if (item.TranslatePoint(default, scroll)?.Y is not { } headerY)
+        {
+            Log($"    '{name}' p{pass} header-not-realised");
             return false;
         }
 
-        // BringIntoView is a no-op once the header is even partially visible, so set
-        // the offset ourselves: the header's Y within the viewport, added to the
-        // current offset, is its content-space Y — park the viewport there so the
-        // header sits at the top and its children fill the space below. Clamp to the
-        // scrollable range (a folder near the end scrolls only as far as it can). The
-        // virtualized panel keeps re-estimating the extent for a few passes after an
-        // expand, which drifts the header; re-asserting each pass converges on it.
-        if (item.TranslatePoint(default, scroll)?.Y is not { } headerY) return false;
         double max = Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height);
         double target = Math.Clamp(scroll.Offset.Y + headerY, 0, max);
-
-        if (Math.Abs(headerY) < 2)
+        if (Math.Abs(target - scroll.Offset.Y) < 0.5)
         {
-            Log($"    '{name}' p{pass} at-top off={scroll.Offset.Y:0}");
+            Log($"    '{name}' p{pass} settled off={scroll.Offset.Y:0} headerY={headerY:0}{WindowLine(item)}");
             return true;
         }
 
-        Log($"    '{name}' p{pass} set off={scroll.Offset.Y:0}->{target:0} headerY={headerY:0} max={max:0}");
+        Log($"    '{name}' p{pass} set off={scroll.Offset.Y:0}->{target:0} headerY={headerY:0}{WindowLine(item)}");
         scroll.Offset = scroll.Offset.WithY(target);
         return false;
     }
@@ -101,14 +93,19 @@ public static class TreeViewItemExpandScroll
     private static void Log(string message) =>
         MudPlay.Services.AppServices.CurrentOrNull?.Log.Info("NavScroll", message);
 
-    // The folder's display name, read reflectively so this Controls-layer class
-    // doesn't take a ViewModels dependency for a temporary diagnostic.
     private static string FolderName(TreeViewItem item) =>
         item.DataContext?.GetType().GetProperty("Name")?.GetValue(item.DataContext) as string
         ?? item.DataContext?.GetType().Name ?? "?";
 
-    // Every ancestor ScrollViewer on one line: index, viewport/extent/offset, and
-    // the header's Y relative to that viewport (negative = above the fold).
+    // Header Y relative to the window + the window's client height — the unambiguous
+    // "where is it on screen" that a scroll-viewport-local number can't reveal.
+    private static string WindowLine(TreeViewItem item)
+    {
+        if (TopLevel.GetTopLevel(item) is not { } top) return " [no-toplevel]";
+        double y = item.TranslatePoint(default, top)?.Y ?? double.NaN;
+        return $" winY={y:0}/{top.Bounds.Height:0}";
+    }
+
     private static string ScrollLine(TreeViewItem item)
     {
         var sb = new StringBuilder();
@@ -120,6 +117,6 @@ public static class TreeViewItemExpandScroll
                 sb.Append($" [sv{i} vp{sv.Viewport.Height:0} ext{sv.Extent.Height:0} off{sv.Offset.Y:0} hY{hy:0}]");
                 i++;
             }
-        return sb.Length == 0 ? " [no-scrollviewer-ancestor]" : sb.ToString();
+        return sb.Length == 0 ? " [no-sv]" : sb.ToString();
     }
 }
