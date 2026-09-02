@@ -49,6 +49,10 @@ public sealed class LoopRunner : IRecoverableEngine
     // AutoWalkManager.SetPartyLeaderCheck. Null until wired.
     private Func<bool>? _isLeaderWithFollowers;
 
+    // True while the character is Confused (ConditionTracker.IsConfused). Read
+    // by EnterRecovery — see MaxRecoverAttempts below. Null until wired.
+    private Func<bool>? _isConfused;
+
     // Fired after a leading character crosses a party-splitting CMD teleport so
     // the party engine reforms the dissolved group. Mirrors the walker's
     // AutoWalkManager.SetPartySplitHandler. Null until wired.
@@ -125,7 +129,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // loop segment (see EnterRecovery) instead of failing straight to Idle. This
     // caps how many consecutive recoveries we attempt before giving up; it resets
     // to 0 on any forward progress (AdvanceStep) and on a fresh (non-recovery)
-    // Start, so a healthy loop always has the full budget.
+    // Start, so a healthy loop always has the full budget. Not charged for an
+    // attempt taken while the character is Confused — see EnterRecovery.
     private int _recoverAttempts;
     private const int MaxRecoverAttempts = 3;
 
@@ -492,6 +497,14 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(isLeaderWithFollowers);
         _isLeaderWithFollowers = isLeaderWithFollowers;
+    }
+
+    // Wire the Confused check (AppServices binds this to Conditions.IsConfused) so
+    // EnterRecovery can tell a confusion fumble apart from a genuine block.
+    public void SetConfusedCheck(Func<bool> isConfused)
+    {
+        ArgumentNullException.ThrowIfNull(isConfused);
+        _isConfused = isConfused;
     }
 
     // Wire the party-split-teleport handler so a leading character reforms the
@@ -1571,14 +1584,31 @@ public sealed class LoopRunner : IRecoverableEngine
             return;
         }
 
-        _recoverAttempts++;
-        if (_recoverAttempts > MaxRecoverAttempts)
+        // A block landing while the character is Confused is the movement-fumble
+        // mechanic (GAME_MECHANICS: "You fumble in confusion!" / "You convulse
+        // violently!") — the just-sent move was consumed by the fumble, not a
+        // genuine mapping/graph problem, and the resync below confirms the
+        // tracker's belief is correct every time. Confusion can fumble several
+        // moves back-to-back well inside MaxRecoverAttempts' window; charging
+        // those against the same budget used for real desyncs starves it in
+        // seconds and fails the whole loop while the character is otherwise fine
+        // and just waiting out a status effect (report paradigm-20260902-113201).
+        // Don't count this attempt while it's active — the reroute below still
+        // fires, so the step is retried the moment a move actually lands. A
+        // genuine block hit right after confusion clears still gets the full
+        // budget, since only attempts taken *while confused* are exempted.
+        bool confused = _isConfused?.Invoke() == true;
+        if (!confused)
         {
-            _log?.Warn("LoopRunner",
-                $"recovery exhausted after {MaxRecoverAttempts} attempts; failing loop. last={reason}");
-            RaiseAfterReset(new LoopEvent(LoopEventKind.Failed,
-                $"recovery exhausted: {reason}"));
-            return;
+            _recoverAttempts++;
+            if (_recoverAttempts > MaxRecoverAttempts)
+            {
+                _log?.Warn("LoopRunner",
+                    $"recovery exhausted after {MaxRecoverAttempts} attempts; failing loop. last={reason}");
+                RaiseAfterReset(new LoopEvent(LoopEventKind.Failed,
+                    $"recovery exhausted: {reason}"));
+                return;
+            }
         }
 
         // Drop the gate + any in-flight step; we're re-planning from scratch.

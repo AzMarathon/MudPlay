@@ -5125,6 +5125,11 @@ public sealed class AppServices
         // overlay.
         LoopRunner = new Game.Map.LoopRunner(RoomTracker, MovementCoordinator,
             PromptScanner, Log, RoomGraph, Recovery, Bfs, Walker, Movement);
+        // A confusion fumble ("You convulse violently!" / "You fumble in
+        // confusion!") can bonk several consecutive moves in a row well inside
+        // the loop's bounded recovery budget; EnterRecovery reads this to avoid
+        // charging those against it (report paradigm-20260902-113201).
+        LoopRunner.SetConfusedCheck(() => Conditions.IsConfused);
         // Same proactive pre-move approach sequence for loop circuits — backstab
         // gear before the sneak (equipping breaks sneak), then the move.
         LoopRunner.SetPreMoveHook(() =>

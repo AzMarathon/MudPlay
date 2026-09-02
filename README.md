@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.11**
-> - Fixed a running loop stalling forever (then popping a false "Lost") when the connection drops mid-recovery — nothing previously told the loop or the recovery gate that a disconnect had happened, so a stuck backtrack/rm wait sat there until reconnect fed it an unrelated room render and misread it as the answer it was waiting for. A disconnect now stops the loop cleanly (no Lost dialog) and automatically resumes it on the first in-game prompt after reconnect
-> - Fixed the walker giving up a whole approach/walk after just one blocked-move retry — a tight single-retry budget couldn't tell a genuinely blocked exit from an unlucky run of confusion fumbles on the same direction, so it now hands off to the same rm-backed re-plan already used elsewhere instead of failing immediately
-> - Fixed that re-plan's own retry budget never actually accumulating — re-planning calls back into the walk-start path, which unconditionally zeroed the counter that was supposed to bound it, so a persistently blocked exit could have retried indefinitely instead of eventually failing cleanly
-> - Fixed a loop step confirming, mid-pause, to a room that's neither where it started nor where it was headed (a graph exit leading somewhere unexpected, or a name-ambiguous zone) — every existing resume guard checked "at target" or "at source" but none covered "at neither," so it silently fell through to blindly resending the stale step. That could paper over one hop by luck, then hard-fail the very next step against a route plan that no longer matched reality. Now forwarded to the recovery gate like the same shape already is in real time
+> **Version 3.44.12**
+> - Fixed a loop permanently failing when convulsions/confusion fumbled several moves in a row on the same room — those bonks were charged against the same 3-attempt recovery budget a genuine desync uses, so a short unlucky run of fumbles (well under 10 seconds) burned it and stopped the loop for good, leaving the character standing there Confused with nothing running. Repeated fumbles no longer count against the budget; a real block hit right after confusion clears still fails normally
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

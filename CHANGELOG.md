@@ -1,5 +1,10 @@
 # Version history
 
+## 3.44.12
+
+- Fixed a loop permanently failing when convulsions/confusion fumbled several moves in a row on the same room — those bonks were charged against the same 3-attempt recovery budget a genuine desync uses, so a short unlucky run of fumbles (well under 10 seconds) burned it and stopped the loop for good, leaving the character standing there Confused with nothing running. Repeated fumbles no longer count against the budget; a real block hit right after confusion clears still fails normally
+- bug reports addressed: paradigm-20260902-113201
+
 ## 3.44.11
 
 - Fixed a running loop stalling forever (then popping a false "Lost") when the connection drops mid-recovery — nothing previously told the loop or the recovery gate that a disconnect had happened, so a stuck backtrack/rm wait sat there until reconnect fed it an unrelated room render and misread it as the answer it was waiting for. A disconnect now stops the loop cleanly (no Lost dialog) and automatically resumes it on the first in-game prompt after reconnect

@@ -630,6 +630,62 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void BlockedAtSource_WhileConfused_DoesNotExhaustBudget()
+    {
+        // Report paradigm-20260902-113201: a confusion fumble ("You convulse
+        // violently!") can bonk several moves in a row on the same room, well
+        // inside MaxRecoverAttempts' window — charging those against the same
+        // budget a genuine desync uses starved it in seconds and permanently
+        // failed the loop while the character was otherwise fine, just waiting
+        // out the status effect. More blocks than MaxRecoverAttempts while
+        // confused must keep rerouting/resending, never fail.
+        Harness h = NewHarness();
+        h.Runner.SetConfusedCheck(() => true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 6; i++)
+        {
+            h.Tracker.NoteMoveBlocked();
+        }
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        // Initial send + one resend per block — every block rerouted, none skipped.
+        Assert.Equal(7, h.Sent.Count);
+        Assert.All(h.Sent, b => Assert.Equal("n\r", Encoding.Latin1.GetString(b)));
+    }
+
+    [Fact]
+    public void BlockedAtSource_ConfusionClearing_GenuineBlockAfterwardStillExhaustsBudget()
+    {
+        // Confusion exempting recovery attempts from the budget must not leak
+        // into a real problem once the status clears — a persistent block hit
+        // right after confusion wears off still fails after MaxRecoverAttempts
+        // genuine attempts, exactly like BlockedAtSource_PersistentBlock above.
+        Harness h = NewHarness();
+        bool confused = true;
+        h.Runner.SetConfusedCheck(() => confused);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 5; i++)
+        {
+            h.Tracker.NoteMoveBlocked();
+        }
+        Assert.Equal(LoopState.Running, h.Runner.State);   // unaffected while confused
+
+        confused = false;
+        for (int i = 0; i < 4; i++)
+        {
+            h.Tracker.NoteMoveBlocked();
+        }
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
     public void SuspectWhilePaused_ForwardsToRecoveryGateOnResume_InsteadOfResendingSameMove()
     {
         // Regression (paradigm-20260829-111627): an ambiguous room
