@@ -109,9 +109,6 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         LineValue = LineCopper > 0 ? ShopPriceCalculator.FormatCopper(LineCopper) : "—";
     }
 
-    // What the Drop button drops: the leftover you're NOT selling (held − picked).
-    public int DropQty => Math.Max(0, Gained - SellQty);
-
     // Apply a confirmed SELL of `count` of this item: the sold copies were the
     // picked-to-sell portion, so shed both the held count and the pick by `count`.
     // Returns true when nothing's left and the row should be removed.
@@ -123,9 +120,8 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         return Gained <= 0;
     }
 
-    // Apply a confirmed DROP of `count` of this item: the dropped copies were the
-    // leftover you weren't selling, so shed the held count but keep the sell pick
-    // (clamped to what remains). Returns true when nothing's left.
+    // Apply a confirmed DROP of `count` of this item: shed the held count and
+    // clamp the sell pick to what remains. Returns true when nothing's left.
     public bool ApplyDropped(int count)
     {
         Gained = Math.Max(0, Gained - count);

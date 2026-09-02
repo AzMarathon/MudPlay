@@ -202,7 +202,7 @@
                                                                 Margin="0,0,6,0"
                                                                 ToolTip.Tip="Sell the quantity picked above (do this while standing in the shop). The row updates when the game confirms the sale — a refused sale changes nothing."/>
                                                         <Button Grid.Column="6" Content="Drop" Command="{Binding DropCommand}"
-                                                                ToolTip.Tip="Drop the leftover you're NOT selling (held − picked). The row updates when the game confirms the drop."/>
+                                                                ToolTip.Tip="Drop this item's whole held stack. The row updates when the game confirms the drop."/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

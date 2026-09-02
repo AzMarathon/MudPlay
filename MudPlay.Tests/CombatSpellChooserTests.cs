@@ -211,6 +211,36 @@ public sealed class CombatSpellChooserTests
         Assert.Equal("harm", attack.Spell);
     }
 
+    // The AoE per-room cap survives a ROSTER clear (an AoE multi-kill empties the
+    // listed pack and fires a synthetic room-clear though the character never moved),
+    // so the area debuff doesn't re-fire at the same physical room's survivors /
+    // re-reveals (report paradigm-20260902-160110 — "ISTO fired twice in one fight").
+    // A genuine physical-room change (ResetForNewRoom) still re-arms it.
+    [Fact]
+    public void ChooseDebuff_Area_CapSurvivesRosterClear_ResetsOnNewRoom()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("blindall", minEnemies: 2),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        CombatSpellDecision? first = sut.ChooseDebuff(settings, Ctx(enemies: 3));
+        Assert.Equal(CombatSpellAction.AreaDebuff, first?.Action);
+        sut.MarkCast(first!.Value, "a rat");
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3)));   // cap reached
+
+        // Roster clear (AoE wave-kill in the SAME room) must NOT re-arm the cap.
+        sut.ResetForRosterClear();
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3)));
+
+        // A real room change re-arms it.
+        sut.ResetForNewRoom();
+        Assert.Equal(CombatSpellAction.AreaDebuff,
+            sut.ChooseDebuff(settings, Ctx(enemies: 3))?.Action);
+    }
+
     [Fact]
     public void ChooseDebuff_Area_BelowMinEnemies_Skipped()
     {

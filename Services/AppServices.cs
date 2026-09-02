@@ -3582,6 +3582,7 @@ public sealed class AppServices
         // due, so a normal engage is untouched.
         Combat.SetInBetweenEvaluator(CastDirector.Evaluate);
         Combat.SetBetweenRoundSlotMarker(CastDirector.MarkBetweenRoundSlotUsed);
+        Combat.SetBetweenRoundSlotQuery(() => CastDirector.BetweenRoundSlotUsed);
         // A between-round survival cast stops our auto-attack; let the combat
         // engine resume the weapon attack on the resulting *Combat Off*
         // instead of idling until the next round.
@@ -4209,6 +4210,20 @@ public sealed class AppServices
         // `rest` between every command (the rest/stand thrash of a pre-rest gear swap,
         // report paradigm-20260825-103537).
         Health.SetEquipmentApplyingProbe(() => Equipment.IsApplyingSet);
+        // Anchor rest triggers/targets to the DEFAULT gear set's max HP/mana (so a
+        // Pre-rest set that swaps a +MaxHP/+MaxMana item doesn't move the target the
+        // user tuned against their normal loadout), capped by the current gear's real
+        // stat-screen max (so a rest set that LOWERS the pool can never strand the rest
+        // out of reach — report paradigm-20260902-052036).
+        Health.SetRestPoolMaxProviders(
+            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerStats.MaxHits),
+            () => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerStats.MaxMana),
+            () => PlayerStats.MaxHits,
+            () => PlayerStats.MaxMana);
+        // Self-heal HP triggers anchor to the Default set too (same basis as rest).
+        CastDirector.SetRestPoolMaxHp(
+            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerStats.MaxHits),
+            () => PlayerStats.MaxHits);
 
         // Hold every movement engine while a paced gear-set apply streams, so the
         // loop never steps out of a room mid-swap — the "finished resting, moved,
@@ -4409,6 +4424,10 @@ public sealed class AppServices
         // later). Hold resting until that re-confirm so a monster still in the room
         // doesn't get a `rest` sent at it (paradigm-20260814-225055).
         CombatTracker.CombatForceCleared += Health.NoteCombatForceCleared;
+        // Drop CombatManager's stale target on a force-clear too — otherwise the
+        // between-round debuff director fires an AoE debuff at the just-abandoned
+        // mob as the walker steps away (report paradigm-20260902-053911).
+        CombatTracker.CombatForceCleared += Combat.OnCombatForceCleared;
 
         // A disconnect can strand the Acquisition gate's deferred-collect hold
         // (cash/items queued mid-fight), pausing the loop until a manual `rm`. On the
@@ -5955,6 +5974,51 @@ public sealed class AppServices
             .FirstOrDefault(s => s.Trigger == Models.Profile.EquipTriggerType.Default)?.Slots
             .FirstOrDefault(e => e.Slot == slot && !string.IsNullOrWhiteSpace(e.ItemName))?.ItemName;
         return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+    }
+
+    // The DEFAULT gear set's max HP / mana for the Settings rest-preview conversions
+    // — the same basis the rest engine anchors to — so the displayed "= N/M" figures
+    // stay put while a Pre-rest set that alters the pool is worn. Falls back to the
+    // live pool max before a stat screen / when no Default set is configured.
+    public int RestPreviewMaxHp()
+        => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerStats.MaxHits) is int v and > 0 ? v : PlayerState.MaxHp;
+    public int RestPreviewMaxMa()
+        => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerStats.MaxMana) is int v and > 0 ? v : PlayerState.MaxMa;
+
+    // The max HP or mana the DEFAULT gear set would give (selector picks the pool
+    // from an equipment-stat summary). Re-bases the authoritative current-gear max
+    // (stat screen) from the CURRENTLY-worn flat pool bonus to the DEFAULT set's, so
+    // the rest engine anchors to the loadout the user's rest %s are tuned for
+    // regardless of any Pre-rest set swapped in. Returns 0 (→ HealthManager falls back
+    // to its own real / live max) before a stat screen has landed or when no Default
+    // set is configured.
+    private int DefaultSetMaxPool(Func<Game.Calculators.EquipmentStatSummary, int> pool, int realMax)
+    {
+        if (realMax <= 0) return 0;
+        IReadOnlyList<Game.Inventory.EquippedItem> defaultItems = DefaultSetEquippedItems();
+        if (defaultItems.Count == 0) return 0;
+        int worn = pool(Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals);
+        int def = pool(Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(defaultItems, GameData).Totals);
+        return Math.Max(1, realMax - worn + def);
+    }
+
+    // The DEFAULT gear set's item-bearing slots as EquippedItems, for summing their
+    // flat +MaxHP/+MaxMana bonuses. Skips empty slots and the two virtual
+    // alternate-weapon slots (never worn — they write CombatSettings, not the wire).
+    private IReadOnlyList<Game.Inventory.EquippedItem> DefaultSetEquippedItems()
+    {
+        if (Profile.Current?.Equipment is not { } eq)
+            return Array.Empty<Game.Inventory.EquippedItem>();
+        return eq.Sets
+            .FirstOrDefault(s => s.Trigger == Models.Profile.EquipTriggerType.Default)?.Slots
+            .Where(e => !string.IsNullOrWhiteSpace(e.ItemName)
+                     && e.Slot != Models.Profile.EquipmentSlot.AlternateWeapon
+                     && e.Slot != Models.Profile.EquipmentSlot.AlternateOffHand)
+            .Select(e => new Game.Inventory.EquippedItem(e.ItemName!.Trim(), string.Empty))
+            .ToList()
+            ?? (IReadOnlyList<Game.Inventory.EquippedItem>)Array.Empty<Game.Inventory.EquippedItem>();
     }
 
     private (string Caster, long DurationSec)? BuffInfoByShort(string castCode)

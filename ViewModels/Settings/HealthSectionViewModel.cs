@@ -171,11 +171,19 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     }
 
     // Live MaxHp from Game.PlayerState. 0 when no connection / no prompt observed
-    // yet — conversion strings then render empty.
+    // yet. Drives the Hang-up ticker's death-floor scale (a live-pool concern).
     public int LiveMaxHp => _state?.MaxHp ?? 0;
 
     // Live MaxMa from Game.PlayerState.
     public int LiveMaxMa => _state?.MaxMa ?? 0;
+
+    // The max the rest / heal / run / hang CONVERSION strings resolve against — the
+    // DEFAULT gear set's pool (what the thresholds are tuned for), so the displayed
+    // "= N/M" stays put while a Pre-rest set that alters the pool is worn, letting you
+    // adjust your values mid-rest. Falls back to the live pool max before a stat
+    // screen / when no Default set is configured.
+    public int PreviewMaxHp => AppServices.CurrentOrNull?.RestPreviewMaxHp() ?? (_state?.MaxHp ?? 0);
+    public int PreviewMaxMa => AppServices.CurrentOrNull?.RestPreviewMaxMa() ?? (_state?.MaxMa ?? 0);
 
     // NumericUpDown Maximum for the threshold fields: 100 in Percentage mode (a % can't
     // exceed 100), the absolute ceiling in Value mode.
@@ -224,22 +232,22 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         return $"{pct}%";
     }
 
-    // ----- HP conversion strings -----
-    public string RestMaxHpConverted              => FormatConversion(RestMaxHp,              LiveMaxHp, HpModePercentage);
-    public string RestIfBelowHpConverted          => FormatConversion(RestIfBelowHp,          LiveMaxHp, HpModePercentage);
-    public string HealRestTriggerConverted        => FormatConversion(HealRestTrigger,        LiveMaxHp, HpModePercentage);
-    public string MinorHealCombatTriggerConverted => FormatConversion(MinorHealCombatTrigger, LiveMaxHp, HpModePercentage);
-    public string MajorHealCombatTriggerConverted => FormatConversion(MajorHealCombatTrigger, LiveMaxHp, HpModePercentage);
-    public string RunIfBelowHpConverted           => FormatConversion(RunIfBelowHp,           LiveMaxHp, HpModePercentage);
-    public string HangIfBelowHpConverted          => FormatConversion(HangIfBelowHp,          LiveMaxHp, HpModePercentage);
+    // ----- HP conversion strings (resolve against the Default-set basis) -----
+    public string RestMaxHpConverted              => FormatConversion(RestMaxHp,              PreviewMaxHp, HpModePercentage);
+    public string RestIfBelowHpConverted          => FormatConversion(RestIfBelowHp,          PreviewMaxHp, HpModePercentage);
+    public string HealRestTriggerConverted        => FormatConversion(HealRestTrigger,        PreviewMaxHp, HpModePercentage);
+    public string MinorHealCombatTriggerConverted => FormatConversion(MinorHealCombatTrigger, PreviewMaxHp, HpModePercentage);
+    public string MajorHealCombatTriggerConverted => FormatConversion(MajorHealCombatTrigger, PreviewMaxHp, HpModePercentage);
+    public string RunIfBelowHpConverted           => FormatConversion(RunIfBelowHp,           PreviewMaxHp, HpModePercentage);
+    public string HangIfBelowHpConverted          => FormatConversion(HangIfBelowHp,          PreviewMaxHp, HpModePercentage);
 
-    // ----- MA conversion strings -----
-    public string RestMaxMaConverted              => FormatConversion(RestMaxMa,              LiveMaxMa, MaModePercentage);
-    public string RestIfBelowMaConverted          => FormatConversion(RestIfBelowMa,          LiveMaxMa, MaModePercentage);
-    public string HealIfAboveMaRestingConverted   => FormatConversion(HealIfAboveMaResting,   LiveMaxMa, MaModePercentage);
-    public string HealIfAboveMaCombatConverted    => FormatConversion(HealIfAboveMaCombat,    LiveMaxMa, MaModePercentage);
-    public string RunIfBelowMaConverted           => FormatConversion(RunIfBelowMa,           LiveMaxMa, MaModePercentage);
-    public string BlessIfAboveMaConverted         => FormatConversion(BlessIfAboveMa,         LiveMaxMa, MaModePercentage);
+    // ----- MA conversion strings (resolve against the Default-set basis) -----
+    public string RestMaxMaConverted              => FormatConversion(RestMaxMa,              PreviewMaxMa, MaModePercentage);
+    public string RestIfBelowMaConverted          => FormatConversion(RestIfBelowMa,          PreviewMaxMa, MaModePercentage);
+    public string HealIfAboveMaRestingConverted   => FormatConversion(HealIfAboveMaResting,   PreviewMaxMa, MaModePercentage);
+    public string HealIfAboveMaCombatConverted    => FormatConversion(HealIfAboveMaCombat,    PreviewMaxMa, MaModePercentage);
+    public string RunIfBelowMaConverted           => FormatConversion(RunIfBelowMa,           PreviewMaxMa, MaModePercentage);
+    public string BlessIfAboveMaConverted         => FormatConversion(BlessIfAboveMa,         PreviewMaxMa, MaModePercentage);
 
     public override void Apply()
     {

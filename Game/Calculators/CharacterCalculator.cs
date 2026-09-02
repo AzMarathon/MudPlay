@@ -344,9 +344,9 @@ public static class CharacterCalculator
     // aggregation the Character Workshop's Calculators tab performs for its
     // own Normal-attack case (see CalculatorsSectionViewModel.CaptureActuals /
     // ComputeWeaponOffense), extracted here for Monster Intel's rounds-to-kill
-    // estimate. Deliberately skips completed-quest bonuses — that tracker
-    // isn't wired into Monster Intel's constructor, and a quick pre-fight
-    // glance doesn't need full DPS-simulator fidelity.
+    // estimate. Deliberately skips completed-quest OFFENSE bonuses — Monster Intel
+    // folds quest rewards into its defense AC (see MonsterIntelViewModel), but a
+    // quick pre-fight rounds-to-kill glance doesn't need full quest-adjusted DPS fidelity.
     public static PlayerMatchupProfile BuildNormalAttackProfile(
         PlayerStats stats, IReadOnlyList<EquippedItem> worn, EncumbranceReading encum, GameDataCache gameData)
         => BuildMeleeAttackProfile(MudAttackType.Normal, stats, worn, encum, gameData);

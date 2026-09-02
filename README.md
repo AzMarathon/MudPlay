@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.12**
-> - Fixed a loop permanently failing when convulsions/confusion fumbled several moves in a row on the same room — those bonks were charged against the same 3-attempt recovery budget a genuine desync uses, so a short unlucky run of fumbles (well under 10 seconds) burned it and stopped the loop for good, leaving the character standing there Confused with nothing running. Repeated fumbles no longer count against the budget; a real block hit right after confusion clears still fails normally
+> **Version 3.44.22**
+> - Fixed a running loop stalling forever (then popping a false "Lost") when the connection drops mid-recovery — a disconnect now stops the loop cleanly (no Lost dialog) and automatically resumes it on the first in-game prompt after reconnect
+> - Fixed the walker giving up a whole approach/walk after just one blocked-move retry — it now hands off to the same rm-backed re-plan already used elsewhere instead of failing immediately (and fixed that re-plan's own retry budget never actually accumulating)
+> - Fixed a loop step confirming, mid-pause, to a room that's neither where it started nor where it was headed — it silently resent the stale step; now forwarded to the recovery gate like the same shape already is in real time
+> - Fixed a loop permanently failing when confusion/convulsion fumbled several moves in a row on the same room — those bonks were charged against the same 3-attempt recovery budget a genuine desync uses; repeated fumbles no longer count against it, and a real block after confusion clears still fails normally
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

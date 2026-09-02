@@ -81,12 +81,18 @@ public sealed class CombatSpellChooser
     private bool _attackSpellLatchedOff;
     private bool _castSingleTargetAttackThisTarget;
 
-    // Reset all per-room cast bookkeeping. Call when the room clears / the engine
-    // starts a fresh engagement.
-    public void ResetForNewRoom()
+    // Reset the cast bookkeeping a fresh ROSTER owns — the single-target economy,
+    // the multi-attack tally, and the weapon latches — WITHOUT touching the AoE
+    // area-debuff per-room cap (_areaDebuffCasts / _areaDebuffedMobs). Called on an
+    // end-of-fight / roster clear that is NOT a physical room change: an AoE
+    // multi-kill that empties the listed pack fires a synthetic room-clear even
+    // though the character never moved, and re-arming the area debuff there re-fires
+    // it at the same room's survivors / late reveals (report paradigm-20260902-160110
+    // — "ISTO fired twice in the same fight"). The area debuff blankets the PHYSICAL
+    // room and its tags must ride through the wave-clear; the multi-attack (the kill)
+    // still resets so it keeps swinging at what's left.
+    public void ResetForRosterClear()
     {
-        _areaDebuffCasts = 0;
-        _areaDebuffedMobs.Clear();
         _singleDebuffCasts = 0;
         _multiAttackCasts = 0;
         _normalAttackCasts = 0;
@@ -95,6 +101,17 @@ public sealed class CombatSpellChooser
         _singleDebuffedTargets.Clear();
         _attackSpellLatchedOff = false;
         _castSingleTargetAttackThisTarget = false;
+    }
+
+    // Full per-room reset — the roster-clear economy PLUS the AoE area-debuff cap.
+    // Call on a genuine PHYSICAL room change (the pre-move hook): a new room's mobs
+    // must be debuffable again, and same-species area-debuff tags must not bleed
+    // across rooms (that bleed is why the tags reset on move — see NotePreMove).
+    public void ResetForNewRoom()
+    {
+        ResetForRosterClear();
+        _areaDebuffCasts = 0;
+        _areaDebuffedMobs.Clear();
     }
 
     // Reset the per-TARGET single-target cast counters. The single-target slots
