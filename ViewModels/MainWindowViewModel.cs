@@ -4543,7 +4543,8 @@ public partial class MainWindowViewModel : ObservableObject
                 svc.GameData, svc.MonsterCatalog, svc.Resolver,
                 svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic,
                 svc.MonsterObservations, svc.PlayerState,
-                buffProvider: () => svc.Profile.Current?.PartyBuffs),
+                buffProvider: () => svc.Profile.Current?.PartyBuffs,
+                profile: svc.Profile),
         };
         window.Closed += (_, _) => _monsterIntel = null;
         _monsterIntel = window;
@@ -4932,8 +4933,17 @@ public partial class MainWindowViewModel : ObservableObject
 
         AppServices.Current.CombatTracker.ResetCombatState("Reset States (manual)");
 
+        // Force back into the Default gear set — a stuck rest set or a half-finished
+        // swap is exactly what a manual reset rescues — and re-poll `stat` so a max
+        // HP/mana high-water mark that drifted above the real ceiling re-latches to
+        // the authoritative value (a stale max is what strands a rest).
+        Game.Inventory.EquipResult equip =
+            AppServices.Current.Equipment.ApplyByTrigger(Models.Profile.EquipTriggerType.Default);
+        SendUserText("stat");
+
         AppServices.Current.Log.Info(Game.Conditions.ConditionTracker.LogCategory,
-            "Reset States — self conditions, ailment chips, combat state, and derived movement holds cleared (manual).");
+            "Reset States — self conditions, ailment chips, combat state, and derived movement holds cleared; "
+            + $"re-equipping Default set ({equip}) and re-polling stat to re-latch max HP/mana (manual).");
     }
 
     // ----- Inventory / equipment bulk actions (Action menu + toolbar) -----

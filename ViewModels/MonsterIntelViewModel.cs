@@ -8,6 +8,7 @@ using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
+using MudPlay.Game.Quests;
 using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -39,6 +40,13 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly PlayerState? _playerState;
     private readonly InventoryManager? _inventory;
     private readonly SpellbookState? _spellbook;
+    // Read of the character's completed-quest permanent bonuses (via the profile's
+    // quest log). Monster Intel is a standalone window, so it can't share the
+    // Character Workshop's live QuestBonusState — it re-resolves off the profile,
+    // cached so a loot-churn re-capture doesn't re-crawl the quest tree.
+    private readonly ProfileService? _profile;
+    private IReadOnlyList<QuestBonus> _questBonusCache = System.Array.Empty<QuestBonus>();
+    private string _questBonusSig = " ";   // impossible initial sig → first read resolves
 
     // Live read of the character's configured buff plan (Profile.Current.PartyBuffs)
     // so the projected AC / DR assumes those buffs are up. Null in tests.
@@ -101,7 +109,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         PlayerStats? stats = null, InventoryManager? inventory = null,
         SpellbookState? spellbook = null, ItemMagicIndex? itemMagic = null,
         MonsterObservationTracker? observations = null, PlayerState? playerState = null,
-        System.Func<Models.Profile.BuffSettings?>? buffProvider = null)
+        System.Func<Models.Profile.BuffSettings?>? buffProvider = null,
+        ProfileService? profile = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -116,6 +125,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _itemMagic = itemMagic;
         _observations = observations;
         _buffProvider = buffProvider;
+        _profile = profile;
         _hasCharacterContext = _stats is not null && _inventory is not null
             && _spellbook is not null && _itemMagic is not null;
 
@@ -270,6 +280,24 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // Recomputes weapon HitMagic, the owned-attack-spell set, and the live
     // AC/Dodge/ward totals behind the Hits-You-% threshold checkboxes,
     // the master list's "Hits You %" / "Est. Rounds to Kill" columns, and
+    // Completed-quest permanent bonuses for the current character, cached so a
+    // loot-churn re-capture doesn't re-walk the quest tree — re-resolved only when the
+    // class or the completed-quest set actually changes.
+    private IReadOnlyList<QuestBonus> QuestBonusesForCharacter()
+    {
+        if (_profile?.Current is not { } prof || _stats is null) return _questBonusCache;
+        int? classId = CompletedQuestBonuses.ResolveClassId(_gameData, _stats.Class);
+        string sig = classId + "|" + string.Join(",",
+            (prof.QuestLog ?? Enumerable.Empty<QuestProgress>())
+                .Where(p => p.Complete).Select(p => $"{p.Flag}:{p.Step}"));
+        if (sig != _questBonusSig)
+        {
+            _questBonusSig = sig;
+            _questBonusCache = CompletedQuestBonuses.Resolve(_gameData, classId, prof.QuestLog);
+        }
+        return _questBonusCache;
+    }
+
     // Your Matchup. Called once at startup and again whenever gear or the
     // spellbook changes, so a mid-session weapon swap or a newly-obtained
     // spell updates the character bar and re-filters the list without
@@ -303,19 +331,30 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         }
         KnownAttackSpellCount = _ownedAttackSpells.Count;
 
-        // Same equipment-aggregation recipe CalculatorsSectionViewModel uses to
-        // seed its own live player-side matchup inputs (AggregateEquipmentStats
-        // + CalcDodge off level/agility/charm/encumbrance) — reused here rather
-        // than re-derived, so this reads the same AC/Dodge/wards that tab would.
+        // Same equipment-aggregation recipe CalculatorsSectionViewModel uses to seed
+        // its own live player-side matchup inputs (AggregateEquipmentStats + the
+        // permanent race/class/quest folds + CalcDodge off level/agility/charm/
+        // encumbrance) — reused here so this reads the same AC/Dodge/wards that tab would.
         EquipmentStatBreakdown gear = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
+        // Fold in the permanent race/class innate + completed-quest bonuses the
+        // worn-gear aggregate alone misses — otherwise the AC (and dodge/wards) reads
+        // low by any innate or quest bonus (user report: a completed +1-AC quest left
+        // the sim 1 AC short). Matches the Character sheet / Equipment Manager, which
+        // fold the same permanent base.
+        PlayerStats st = _stats!;
+        if (_gameData.FindRowByName("Races", st.Race) is System.Text.Json.JsonElement raceRow)
+            CharacterCalculator.ApplyAbilityBonuses(gear, raceRow, st.Race);
+        if (_gameData.FindRowByName("Classes", st.Class) is System.Text.Json.JsonElement classRow)
+            CharacterCalculator.ApplyAbilityBonuses(gear, classRow, st.Class);
+        CharacterCalculator.ApplyQuestBonuses(gear, QuestBonusesForCharacter(), "Quests");
         EquipmentStatSummary totals = gear.Totals;
         EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
         // Assume the character's configured AC buffs are up — a "with my buffs"
-        // pre-fight read. Base the AC on WORN gear + configured buffs, NOT the
-        // live `stat` ArmourClass: the game's ArmourClass already reflects any
-        // buffs active when it was captured, so adding the configured-buff AC on
-        // top double-counts them (report: game AC 57 read as 79). This matches
-        // how the Equipment Manager builds Projected AC (gear PlusAC + buff.Ac).
+        // pre-fight read. Base the AC on the WORN gear + permanent base (above) +
+        // configured buffs, NOT the live `stat` ArmourClass: the game's ArmourClass
+        // already reflects any buffs active when it was captured, so adding the
+        // configured-buff AC on top double-counts them (report: game AC 57 read as
+        // 79). This matches how the Equipment Manager builds Projected AC.
         Game.Spells.BuffDefense buff = Game.Spells.BuffDefenseCalculator.Compute(
             _buffProvider?.Invoke(), _stats!.Level, _spellbook!.Available);
         _playerAc = (int)System.Math.Round(totals.PlusAC) + buff.Ac;

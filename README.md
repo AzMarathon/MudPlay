@@ -1,10 +1,16 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.9**
-> - Navigation GOTO and Loops + Lairs folder lists no longer jump or drift when you expand a folder — the folder now opens in place with its contents right below it
-> - Fixes the erratic scrollbar on large lists (the thumb lurching tiny/huge as an expanded folder scrolled past): the lists now render as a flat, uniform-height virtualized list instead of a nested tree where an expanded folder became one giant item that wrecked the scroll estimate
-> - Applies to all four lists — the map rail's GOTO and Loops + Lairs, and both lists in the Navigation Management window
+> **Version 3.44.18**
+> - **Reset States** now also re-equips your Default gear set and re-polls `stat` — so a stuck rest set is undone and a drifted max HP/mana re-latches to the real value
+> - Heal, flee (run) and emergency-hangup HP triggers now anchor to your **Default set's** max HP too (like rest), so a Pre-rest set that alters your pool doesn't shift them
+> - Area-debuff (e.g. ice storm) no longer fires twice in one fight: an AoE wave-kill that empties a pack no longer resets the once-per-room cap, so the debuff isn't re-cast at the same room's survivors
+> - A pre-attack debuff no longer stalls your attack ~3s when the round's spell slot is already spent by a self-buff — it now stands down and the attack fires immediately
+> - Area-debuff no longer fires at a monster you've just walked away from: a force-cleared fight now drops its stale combat target
+> - Chest Offload: the per-item **Drop** button now drops that item's whole held stack (matching Drop All) instead of doing nothing
+> - Rest no longer gets stuck forever after a max-HP/mana change: rest targets now anchor to your **Default gear set's** max and cap at your current gear's real max, so a Pre-rest set that alters your pool can't strand the rest. The Health-settings previews ratchet off the Default set too
+> - Conversation window font size now renders at its true point size (was ~25% small; same point→DIP fix as the terminal)
+> - Monster Intel's defense AC now includes your permanent race/class innate and completed-quest bonuses (a completed +1-AC quest no longer leaves the sim 1 AC short)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
