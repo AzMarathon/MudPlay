@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
@@ -7,25 +8,14 @@ namespace MudPlay.Controls;
 
 // Attached behavior: when a TreeViewItem expands, scroll its HEADER to the top of
 // the enclosing scroll viewport so the folder stays put and the children it just
-// revealed flow into view below it. Opt in via TreeViewItemExpandScroll.Enable="True"
-// on a TreeViewItem style — used by the Navigation rail's folder trees and the
-// Navigation Management dialog's trees (loops / auto-lairs / goto favourites).
+// revealed flow into view below it. Opt in via TreeViewItemExpandScroll.Enable="True".
 //
-// Two problems, and why the code looks the way it does:
-//  1. Alignment. Plain item.BringIntoView() reveals the item's FULL rectangle —
-//     header plus the tall subtree it just expanded — and for a subtree taller than
-//     the viewport that bottom-aligns, shoving the header off the top. We instead
-//     bring a rectangle exactly one viewport tall, anchored at the item's top, into
-//     view: a viewport-tall rect can only be shown by putting its top at the viewport
-//     top, so the header top-aligns. It propagates through the tree's own MaxHeight
-//     scroll and the outer rail scroll alike.
-//  2. Timing. These trees use a VirtualizingStackPanel, which re-measures across
-//     SEVERAL layout passes as it settles an expand and resets the scroll offset
-//     toward the top on one of them — a single post-expand scroll (at any priority)
-//     gets undone by a later pass, so the folder snaps back to the top. Rather than
-//     guess which pass resets it, re-assert the header-to-top on EACH layout pass
-//     until the position holds for two passes running, then stop (a hard cap bounds
-//     it so we never keep fighting the user's own scrolling afterward).
+// DIAGNOSTIC BUILD: the fix keeps snapping the folder back to the top on expand and
+// four blind attempts haven't caught the cause, so this version logs the full
+// ancestor scroll-chain state (viewport / extent / offset + the header's Y in each)
+// at every layout pass to the Program Log under source "NavScroll". Expand one
+// folder, read the lines, and the reset shows itself. Strip the logging once the
+// cause is understood.
 public static class TreeViewItemExpandScroll
 {
     public static readonly AttachedProperty<bool> EnableProperty =
@@ -35,9 +25,6 @@ public static class TreeViewItemExpandScroll
     public static bool GetEnable(TreeViewItem item) => item.GetValue(EnableProperty);
     public static void SetEnable(TreeViewItem item, bool value) => item.SetValue(EnableProperty, value);
 
-    // Two stable passes = settled; the cap is the escape hatch if it never settles
-    // (both are just a few frames of layout — imperceptible, and over before the
-    // user could scroll themselves).
     private const int StablePassesToStop = 2;
     private const int MaxPasses = 16;
 
@@ -52,38 +39,77 @@ public static class TreeViewItemExpandScroll
 
     private static void HoldHeaderAtTop(TreeViewItem item)
     {
+        string name = FolderName(item);
+        Log($"EXPAND '{name}' enable=true{ScrollLine(item)}");
+
         int stable = 0, total = 0;
         void OnLayout(object? sender, EventArgs e)
         {
-            bool atTop = BringHeaderToTop(item);
+            Log($"  '{name}' p{total} pre{ScrollLine(item)}");
+            bool atTop = BringHeaderToTop(item, name, total);
             stable = atTop ? stable + 1 : 0;
             if (stable >= StablePassesToStop || ++total >= MaxPasses)
+            {
                 item.LayoutUpdated -= OnLayout;
+                Log($"  '{name}' STOP after {total} pass(es), stable={stable}{ScrollLine(item)}");
+            }
         }
         item.LayoutUpdated += OnLayout;
-        BringHeaderToTop(item);
+        BringHeaderToTop(item, name, -1);
     }
 
-    // Aligns the header to the top of its scroll viewport; returns true once it is
-    // already there (so the caller can tell the list has settled).
-    private static bool BringHeaderToTop(TreeViewItem item)
+    private static bool BringHeaderToTop(TreeViewItem item, string name, int pass)
     {
-        if (FindScrollableAncestor(item) is not { Viewport.Height: > 0 } scroll) return false;
+        if (FindScrollableAncestor(item) is not { Viewport.Height: > 0 } scroll)
+        {
+            Log($"    '{name}' p{pass} no-scrollable-ancestor");
+            return false;
+        }
 
-        // Already at the top (header within ~1px of the viewport top) → nothing to do.
-        if (item.TranslatePoint(default, scroll) is { } p && p.Y is > -1 and < 2) return true;
+        double headerY = item.TranslatePoint(default, scroll)?.Y ?? double.NaN;
+        if (headerY is > -1 and < 2)
+        {
+            Log($"    '{name}' p{pass} already-at-top headerY={headerY:0.#}");
+            return true;
+        }
 
+        Log($"    '{name}' p{pass} bring vp={scroll.Viewport.Height:0} headerY={headerY:0.#} off={scroll.Offset.Y:0}");
         item.BringIntoView(new Rect(0, 0, 1, scroll.Viewport.Height));
         return false;
     }
 
-    // Nearest ancestor that can actually scroll vertically — the tree's own MaxHeight
-    // viewport when it's overflowing, otherwise the outer rail scroll.
     private static ScrollViewer? FindScrollableAncestor(Visual from)
     {
         for (Visual? v = from.GetVisualParent(); v is not null; v = v.GetVisualParent())
             if (v is ScrollViewer sv && sv.Extent.Height - sv.Viewport.Height > 0.5)
                 return sv;
         return null;
+    }
+
+    // ----- diagnostics ---------------------------------------------------
+
+    private static void Log(string message) =>
+        MudPlay.Services.AppServices.CurrentOrNull?.Log.Info("NavScroll", message);
+
+    // The folder's display name, read reflectively so this Controls-layer class
+    // doesn't take a ViewModels dependency for a temporary diagnostic.
+    private static string FolderName(TreeViewItem item) =>
+        item.DataContext?.GetType().GetProperty("Name")?.GetValue(item.DataContext) as string
+        ?? item.DataContext?.GetType().Name ?? "?";
+
+    // Every ancestor ScrollViewer on one line: index, viewport/extent/offset, and
+    // the header's Y relative to that viewport (negative = above the fold).
+    private static string ScrollLine(TreeViewItem item)
+    {
+        var sb = new StringBuilder();
+        int i = 0;
+        for (Visual? v = item.GetVisualParent(); v is not null; v = v.GetVisualParent())
+            if (v is ScrollViewer sv)
+            {
+                double hy = item.TranslatePoint(default, sv)?.Y ?? double.NaN;
+                sb.Append($" [sv{i} vp{sv.Viewport.Height:0} ext{sv.Extent.Height:0} off{sv.Offset.Y:0} hY{hy:0}]");
+                i++;
+            }
+        return sb.Length == 0 ? " [no-scrollviewer-ancestor]" : sb.ToString();
     }
 }
