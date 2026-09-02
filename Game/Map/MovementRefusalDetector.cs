@@ -83,6 +83,7 @@ public sealed partial class MovementRefusalDetector : IDisposable
         AlignmentBlocksExit(),
         FumbleInConfusion(),
         ConvulseViolently(),
+        LooksAroundStupidly(),
     };
 
     [GeneratedRegex(
@@ -175,4 +176,15 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*You convulse violently[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ConvulseViolently();
+
+    // A third convulsions fumble wording, alongside the generic fumble and
+    // "You convulse violently!" above — same consumed-command mechanic, a
+    // different line. Found via a messages.md cross-reference, not a live bug
+    // report: without this, a move fumbled with this exact wording never
+    // reverts, reproducing the same stranded-tracker failure the other two
+    // wordings were fixed for.
+    [GeneratedRegex(
+        @"^\s*You look around stupidly and do nothing[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex LooksAroundStupidly();
 }

@@ -91,6 +91,8 @@ public sealed class MovementRefusalDetectorTests : IDisposable
     // line and `convulsions`' own wording bonk here.
     [InlineData("You fumble in confusion!")]
     [InlineData("You convulse violently!")]
+    // A third convulsions fumble wording, same mechanic as the two above.
+    [InlineData("You look around stupidly and do nothing!")]
     public void RefusalLines_RevertPendingToLocated(string line)
     {
         (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();

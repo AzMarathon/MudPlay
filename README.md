@@ -1,11 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.22**
-> - Fixed a running loop stalling forever (then popping a false "Lost") when the connection drops mid-recovery — a disconnect now stops the loop cleanly (no Lost dialog) and automatically resumes it on the first in-game prompt after reconnect
-> - Fixed the walker giving up a whole approach/walk after just one blocked-move retry — it now hands off to the same rm-backed re-plan already used elsewhere instead of failing immediately (and fixed that re-plan's own retry budget never actually accumulating)
-> - Fixed a loop step confirming, mid-pause, to a room that's neither where it started nor where it was headed — it silently resent the stale step; now forwarded to the recovery gate like the same shape already is in real time
-> - Fixed a loop permanently failing when confusion/convulsion fumbled several moves in a row on the same room — those bonks were charged against the same 3-attempt recovery budget a genuine desync uses; repeated fumbles no longer count against it, and a real block after confusion clears still fails normally
+> **Version 3.44.23**
+> - Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, so a move fumbled this way reverts cleanly instead of stranding the tracker
+> - Fixed the death dog's shriek confusion wear-off typo ("wear" → "wears") that stopped it matching real output, which could leave the Confused flag stuck until an unrelated confusion cleared it
+> - `form of the monkey` confusion now clears when the form wears off — the form buff itself carries the Confused state (set while in form, cleared when it drops), so it no longer relies on the per-action distraction fumble to keep it up
+> - Added condition-tracking coverage for status effects that previously had none: constriction, an alternate entangle wording, terror/madness, umbral chains, alternate wrathful-curse and black-curse (blindness) wordings, plague, an alternate runed-cape aura, an alternate sleep wording, poison bolt/cloud/flay/venom-spit onsets, and two combat-end trigger lines (Rakshasha, brain eater)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

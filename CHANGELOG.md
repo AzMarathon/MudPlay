@@ -1,5 +1,12 @@
 # Version history
 
+## 3.44.23
+
+- Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, so a move fumbled this way reverts cleanly instead of stranding the tracker
+- Fixed the death dog's shriek confusion wear-off typo ("wear" → "wears") that stopped it matching real output, which could leave the Confused flag stuck until an unrelated confusion cleared it
+- `form of the monkey` confusion now clears when the form wears off — the form buff itself carries the Confused state (set while in form, cleared when it drops), so it no longer relies on the per-action distraction fumble to keep it up
+- Added condition-tracking coverage for status effects that previously had none: constriction, an alternate entangle wording, terror/madness, umbral chains, alternate wrathful-curse and black-curse (blindness) wordings, plague, an alternate runed-cape aura, an alternate sleep wording, poison bolt/cloud/flay/venom-spit onsets, and two combat-end trigger lines (Rakshasha, brain eater)
+
 ## 3.44.22
 
 - Fixed a running loop stalling forever (then popping a false "Lost") when the connection drops mid-recovery — nothing previously told the loop or the recovery gate that a disconnect had happened, so a stuck backtrack/rm wait sat there until reconnect fed it an unrelated room render and misread it as the answer it was waiting for. A disconnect now stops the loop cleanly (no Lost dialog) and automatically resumes it on the first in-game prompt after reconnect
