@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.44.9**
-> - Navigation GOTO and Loops + Lairs folder trees: expanding a folder now scrolls the folder into view so its contents are visible, instead of leaving the folder off-screen so you had to scroll back to find what you just opened (fixed on both the map rail and the Navigation Management window)
+> - Navigation GOTO and Loops + Lairs folder trees no longer jump when you expand a folder: the automatic scroll-on-expand — which fought the list's virtualization and threw the view to the top on a large list — has been removed, so a folder now opens in place (fixed on both the map rail and the Navigation Management window)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

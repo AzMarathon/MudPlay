@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Navigation"
-        xmlns:controls="using:MudPlay.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="540"
@@ -229,10 +228,6 @@
                                     </Style>
                                     <Style Selector="TreeViewItem" x:DataType="vm:NavFolderNodeViewModel">
                                         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                                        <!-- Scroll an expanded folder's header to the top of the
-                                             tree viewport so its revealed loops/lairs come into
-                                             view without the list jumping away. -->
-                                        <Setter Property="controls:TreeViewItemExpandScroll.Enable" Value="True"/>
                                     </Style>
                                 </TreeView.Styles>
                                 <!-- Root-level right-click creates a folder
@@ -487,10 +482,6 @@
                                             </Style>
                                             <Style Selector="TreeViewItem" x:DataType="vm:NavFolderNodeViewModel">
                                                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                                                <!-- Scroll an expanded folder's header to the top of the
-                                                     tree viewport so its revealed favourites come into
-                                                     view without the list jumping away. -->
-                                                <Setter Property="controls:TreeViewItemExpandScroll.Enable" Value="True"/>
                                             </Style>
                                         </TreeView.Styles>
                                         <!-- Root-level right-click → new GOTO folder / add favourite. -->

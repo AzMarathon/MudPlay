@@ -1371,9 +1371,6 @@
                                             </Style>
                                             <Style Selector="TreeViewItem" x:DataType="vm:NavFolderNodeViewModel">
                                                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                                                <!-- Scroll a folder into view when it's expanded so its
-                                                     revealed children aren't left below the fold. -->
-                                                <Setter Property="controls:TreeViewItemExpandScroll.Enable" Value="True"/>
                                             </Style>
                                             <!-- Reclaim the Fluent chevron gutter. The default
                                                  TreeViewItem template reserves a fixed 36px left
@@ -1569,9 +1566,6 @@
                                             </Style>
                                             <Style Selector="TreeViewItem" x:DataType="vm:NavFolderNodeViewModel">
                                                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                                                <!-- Scroll a folder into view when it's expanded so its
-                                                     revealed children aren't left below the fold. -->
-                                                <Setter Property="controls:TreeViewItemExpandScroll.Enable" Value="True"/>
                                             </Style>
                                             <!-- Reclaim the Fluent chevron gutter so loop /
                                                  Auto-Lair names hug the rail edge. The default

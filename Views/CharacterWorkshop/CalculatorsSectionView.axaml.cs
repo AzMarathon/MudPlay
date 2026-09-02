@@ -75,9 +75,10 @@ public partial class CalculatorsSectionView : UserControl
 
     // Deep-link: expand + center a calculator. The IsExpanded two-way binding has
     // already opened the target (the VM set its flag); defer the centering to
-    // Loaded priority so the newly-revealed content is laid out first (mirrors
-    // TreeViewItemExpandScroll). BringIntoView only reveals to the nearest edge,
-    // so compute the offset that centers it in the scroll viewport ourselves.
+    // Loaded priority so the newly-revealed content is laid out first. BringIntoView
+    // only reveals to the nearest edge, so compute the offset that centers it in the
+    // scroll viewport ourselves. (This works here — unlike the Navigation folder
+    // trees — because these Expanders sit in a plain, non-virtualized ScrollViewer.)
     private void CenterCalculator(CalculatorsSectionViewModel.CalculatorId id)
     {
         Control? target = ExpanderFor(id);
