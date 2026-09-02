@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.8**
-> - Terminal font size is now a true **point** size — picking "16" matches MegaMUD's "16" glyph-for-glyph instead of rendering ~25% smaller ("zoomed out"); the setting was already labelled "in points" but never converted point → pixel before drawing
-> - Default terminal font size changed from 16 pt to **12 pt** (only affects characters that haven't picked a size of their own)
-> - Backscroll window now renders in your **terminal font** (family + size) instead of a fixed font, so history looks exactly like the live screen
+> **Version 3.44.9**
+> - Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, same as the other two — a move fumbled this way now reverts cleanly instead of risking a stranded tracker
+> - Fixed a typo in the death dog's shriek confusion record's wear-off text ("wear" → "wears") that meant it could never match real game output, potentially leaving the Confused flag stuck until an unrelated confusion source cleared it
+> - Added condition-tracking coverage for ~19 status effects cross-referenced from a messages.md export that previously had zero footprint: constriction, an alternate entangle wording, terror/madness, umbral chains, alternate wrathful curse and black curse (blindness) wordings, plague, an alternate runed cape aura, an alternate sleep wording, poison bolt/poison cloud/flay/venom-spit onset variants, two action-fumble notices (breathes, form of the monkey), a creature-illusion dispel line, and two combat-end trigger lines (Rakshasha, brain eater)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

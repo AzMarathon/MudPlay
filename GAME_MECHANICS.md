@@ -3024,6 +3024,13 @@ glass jug               5               2 gold crowns
   always appears as the direct reply to the command it swallowed, never as unprompted ambient text.
   **Client encoding:** `MovementRefusalDetector` recognizes BOTH `You fumble in confusion!` and `You
   convulse violently!` as movement refusals, reverting the pending move immediately.
+- **[UNVERIFIED] 2026-09-02, cross-referenced from a messages.md export, not a live bug report:**
+  `convulsions` may have a THIRD fumble wording alongside the generic fumble and its own `You convulse
+  violently!` — `You look around stupidly and do nothing!`, flagged `LastActionFailed` in the source data.
+  Not yet confirmed against a live session; treat as provisional until it's actually observed. **Client
+  encoding:** `MovementRefusalDetector` now also recognizes this line as a movement refusal (same revert
+  mechanic as the other two), so if it does turn out to be real, a move fumbled this way won't strand the
+  tracker.
 
 ## One BETWEEN-ROUND spell per combat round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
 
