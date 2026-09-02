@@ -453,6 +453,83 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Running, h.Runner.State);
     }
 
+    // ----- disconnect / reconnect resume --------------------------------
+
+    [Fact]
+    public void NotifyDisconnected_WhileIdle_DoesNothing()
+    {
+        Harness h = NewHarness();
+
+        h.Runner.NotifyDisconnected();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Empty(h.Events);
+    }
+
+    [Fact]
+    public void NotifyDisconnected_WhileRunning_StopsCleanlyAndRemembersLoop()
+    {
+        // Live bug: nothing in the recovery ladder (the gate's Tier2/Tier3/
+        // awaiting-rm wait, or this runner's own local EnterRecovery) has any way
+        // to know the connection died mid-wait. It just sits there, and when the
+        // wire comes back the FIRST post-reconnect room render gets fed into that
+        // stale wait as if it were the landing/reply it was expecting — a false
+        // "Lost" (report paradigm-20260901-191945). NotifyDisconnected must stop
+        // cleanly (no Lost dialog) and remember the loop to resume.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        h.Runner.NotifyDisconnected();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeForTests!.Name);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Stopped && e.Detail.Contains("disconnected"));
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void FirstPromptAfterDisconnect_ResumesTheRememberedLoop()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);   // step 1 ("n") of the original run
+
+        h.Runner.NotifyDisconnected();
+        h.Events.Clear();
+
+        // First in-game prompt after reconnect — the same trigger
+        // DeferredCollectReconnectReleaser uses. Tracker is still located at 1/1
+        // (a real reconnect would have re-established it via the login sequence).
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);   // one-shot, consumed
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Started);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);   // fresh Start() sent step 1 again
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    [Fact]
+    public void PromptObserved_WithNoPendingReconnect_DoesNotReStartTheLoop()
+    {
+        // A prompt with nothing pending must fall through to the normal
+        // custom-command-step handling, unaffected by the reconnect path.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Events.Clear();
+
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Started);
+        Assert.Single(h.Sent);   // no extra send
+    }
+
     [Fact]
     public void RefusedWhilePaused_EntersRecoveryOnResume_InsteadOfResendingSameMove()
     {

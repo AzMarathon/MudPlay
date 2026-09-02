@@ -2757,6 +2757,12 @@ public partial class MainWindowViewModel : ObservableObject
                 // They resume on the first in-game prompt after we're back.
                 AppServices.Current.PartyPoller.NotifyDisconnected();
                 AppServices.Current.PartyProbe.NotifyDisconnected();
+                // A running/paused/recovering loop has no way to know the
+                // connection died mid-recovery — stop it cleanly instead of
+                // leaving a stale wait to misread whatever the reconnect
+                // redisplays. Resumes itself on the first in-game prompt after
+                // reconnect (see LoopRunner.NotifyDisconnected).
+                AppServices.Current.LoopRunner.NotifyDisconnected();
 
                 // Drop per-session condition state so a fresh login starts clean: any
                 // non-auto-clearing condition (no AppliedEndsWith) must not survive the

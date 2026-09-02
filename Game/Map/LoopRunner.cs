@@ -1391,6 +1391,15 @@ public sealed class LoopRunner : IRecoverableEngine
     // EmitCardinal actually armed the watchdog on send — this can.
     internal bool IsStallWatchdogArmedForTests => _stallWatchdog?.IsEnabled == true;
 
+    // Test seam — pretend the bound prompt scanner just observed an in-game
+    // prompt (the reconnect-resume trigger), without needing a real
+    // WirePromptScanner wired to a wire.
+    internal void FirePromptObservedForTests() => OnPromptObserved(default);
+
+    // Test seam — the loop NotifyDisconnected captured to resume on the next
+    // in-game prompt, or null if nothing is pending.
+    internal Loop? PendingReconnectResumeForTests => _pendingReconnectResume;
+
     private void Write(byte[] bytes, string reason)
     {
         _sent.Add(bytes);
@@ -1492,7 +1501,47 @@ public sealed class LoopRunner : IRecoverableEngine
         }
     }
 
-    private void OnPromptObserved(PromptObservation _) => OnPromptObservedCore();
+    // Set by NotifyDisconnected when a running/paused/recovering loop is torn down
+    // because the connection dropped. Captures the loop definition so the first
+    // real in-game prompt after reconnect can restart it from scratch via a
+    // genuine Start() call — see NotifyDisconnected's rationale.
+    private Loop? _pendingReconnectResume;
+
+    // Torn down by a connection drop (wired from MainWindowViewModel's
+    // client.Disconnected, mirroring every other subsystem's NotifyDisconnected).
+    // Nothing in the recovery ladder (the gate's Tier2/Tier3/awaiting-rm wait, or
+    // this runner's own local EnterRecovery) has any way to know the connection
+    // died mid-wait — it just sits there forever, and when the wire comes back the
+    // FIRST post-reconnect room render gets fed into that stale wait as if it were
+    // the landing/reply it was expecting, producing a false "Lost" (report
+    // paradigm-20260901-191945). Stop cleanly instead — identical teardown to a
+    // user Stop, which already correctly unwinds every sub-state (Approaching's
+    // walker, Recovering's local retry, an attached gate) — and remember the loop
+    // so the first genuine in-game prompt after reconnect restarts it fresh, with
+    // no stale recovery state left to misread.
+    public void NotifyDisconnected()
+    {
+        if (State == LoopState.Idle) return;
+        _pendingReconnectResume = _loop;
+        Stop("disconnected — will resume on reconnect");
+    }
+
+    private void OnPromptObserved(PromptObservation _)
+    {
+        // Fires before the normal per-step handling below: the reconnect resume
+        // takes priority over — and would otherwise be masked by — the
+        // State != Running early-return in OnPromptObservedCore, since
+        // NotifyDisconnected always leaves State at Idle.
+        if (_pendingReconnectResume is { } loop)
+        {
+            _pendingReconnectResume = null;
+            _log?.Info("LoopRunner",
+                $"reconnect: resuming loop '{loop.Name}' on first in-game prompt");
+            Start(loop);
+            return;
+        }
+        OnPromptObservedCore();
+    }
 
     private void OnPromptObservedCore()
     {
