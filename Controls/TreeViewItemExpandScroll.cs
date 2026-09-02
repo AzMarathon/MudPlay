@@ -1,20 +1,25 @@
-using System;
-using System.Text;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.VisualTree;
+using Avalonia.Threading;
 
 namespace MudPlay.Controls;
 
-// Attached behavior: when a TreeViewItem expands, scroll its HEADER to the top of
-// the enclosing scroll viewport so the folder stays put and the children it just
-// revealed flow into view below it. Opt in via TreeViewItemExpandScroll.Enable="True".
+// Attached behavior: when a TreeViewItem expands, bring it into view so the children
+// it just revealed aren't left below the fold. Opt in via
+// TreeViewItemExpandScroll.Enable="True" on a TreeViewItem style — used by the
+// Navigation folder trees (loops / auto-lairs / goto favourites).
 //
-// DIAGNOSTIC BUILD (round 2): the offset-set converges in sv0's own coordinates
-// (headerY -> 0) yet the folder still isn't visually where expected, so this logs the
-// header's position relative to the WINDOW too (winY) — if winY isn't near the top of
-// the visible list, sv0 isn't the scroller that matters and we're setting the wrong
-// one. Source "NavScroll". Strip once understood.
+// Why BringIntoView and not a hand-set offset: these trees are virtualized
+// (VirtualizingStackPanel), whose scroll offset lives in ESTIMATED coordinates that
+// shift as a folder's children realise. Setting the offset by hand to pin the header
+// to the top therefore lands on the wrong rows — confirmed by logging, where the
+// header reported "at the top" while the panel painted entirely different folders
+// there. The framework's own BringIntoView realises the row and scrolls to its real
+// position, which is reliable. For a folder taller than the viewport it reveals the
+// lower portion rather than pinning the header to the very top — an accepted tradeoff
+// for keeping the tree virtualized (precise top-alignment isn't achievable while it
+// is). Deferred to Background priority so the expanded children are realised — and
+// the estimated extent has settled — before we scroll.
 public static class TreeViewItemExpandScroll
 {
     public static readonly AttachedProperty<bool> EnableProperty =
@@ -24,99 +29,14 @@ public static class TreeViewItemExpandScroll
     public static bool GetEnable(TreeViewItem item) => item.GetValue(EnableProperty);
     public static void SetEnable(TreeViewItem item, bool value) => item.SetValue(EnableProperty, value);
 
-    private const int MaxPasses = 16;
-
     static TreeViewItemExpandScroll()
     {
+        // One class handler for every TreeViewItem; the Enable flag gates which ones
+        // scroll, and leaves never raise an expand so the check is cheap.
         TreeViewItem.IsExpandedProperty.Changed.AddClassHandler<TreeViewItem>((item, e) =>
         {
             if (e.GetNewValue<bool>() && GetEnable(item))
-                HoldHeaderAtTop(item);
+                Dispatcher.UIThread.Post(item.BringIntoView, DispatcherPriority.Background);
         });
-    }
-
-    private static void HoldHeaderAtTop(TreeViewItem item)
-    {
-        string name = FolderName(item);
-        Log($"EXPAND '{name}'{ScrollLine(item)}{WindowLine(item)}");
-
-        int passes = 0;
-        void OnLayout(object? sender, EventArgs e)
-        {
-            bool done = BringHeaderToTop(item, name, passes);
-            if (done || ++passes >= MaxPasses)
-            {
-                item.LayoutUpdated -= OnLayout;
-                Log($"  '{name}' STOP done={done} passes={passes}{ScrollLine(item)}{WindowLine(item)}");
-            }
-        }
-        item.LayoutUpdated += OnLayout;
-        BringHeaderToTop(item, name, -1);
-    }
-
-    private static bool BringHeaderToTop(TreeViewItem item, string name, int pass)
-    {
-        if (FindScrollableAncestor(item) is not { Viewport.Height: > 0 } scroll)
-        {
-            Log($"    '{name}' p{pass} no-scrollable{WindowLine(item)}");
-            return false;
-        }
-        if (item.TranslatePoint(default, scroll)?.Y is not { } headerY)
-        {
-            Log($"    '{name}' p{pass} header-not-realised");
-            return false;
-        }
-
-        double max = Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height);
-        double target = Math.Clamp(scroll.Offset.Y + headerY, 0, max);
-        if (Math.Abs(target - scroll.Offset.Y) < 0.5)
-        {
-            Log($"    '{name}' p{pass} settled off={scroll.Offset.Y:0} headerY={headerY:0}{WindowLine(item)}");
-            return true;
-        }
-
-        Log($"    '{name}' p{pass} set off={scroll.Offset.Y:0}->{target:0} headerY={headerY:0}{WindowLine(item)}");
-        scroll.Offset = scroll.Offset.WithY(target);
-        return false;
-    }
-
-    private static ScrollViewer? FindScrollableAncestor(Visual from)
-    {
-        for (Visual? v = from.GetVisualParent(); v is not null; v = v.GetVisualParent())
-            if (v is ScrollViewer sv && sv.Extent.Height - sv.Viewport.Height > 0.5)
-                return sv;
-        return null;
-    }
-
-    // ----- diagnostics ---------------------------------------------------
-
-    private static void Log(string message) =>
-        MudPlay.Services.AppServices.CurrentOrNull?.Log.Info("NavScroll", message);
-
-    private static string FolderName(TreeViewItem item) =>
-        item.DataContext?.GetType().GetProperty("Name")?.GetValue(item.DataContext) as string
-        ?? item.DataContext?.GetType().Name ?? "?";
-
-    // Header Y relative to the window + the window's client height — the unambiguous
-    // "where is it on screen" that a scroll-viewport-local number can't reveal.
-    private static string WindowLine(TreeViewItem item)
-    {
-        if (TopLevel.GetTopLevel(item) is not { } top) return " [no-toplevel]";
-        double y = item.TranslatePoint(default, top)?.Y ?? double.NaN;
-        return $" winY={y:0}/{top.Bounds.Height:0}";
-    }
-
-    private static string ScrollLine(TreeViewItem item)
-    {
-        var sb = new StringBuilder();
-        int i = 0;
-        for (Visual? v = item.GetVisualParent(); v is not null; v = v.GetVisualParent())
-            if (v is ScrollViewer sv)
-            {
-                double hy = item.TranslatePoint(default, sv)?.Y ?? double.NaN;
-                sb.Append($" [sv{i} vp{sv.Viewport.Height:0} ext{sv.Extent.Height:0} off{sv.Offset.Y:0} hY{hy:0}]");
-                i++;
-            }
-        return sb.Length == 0 ? " [no-sv]" : sb.ToString();
     }
 }
