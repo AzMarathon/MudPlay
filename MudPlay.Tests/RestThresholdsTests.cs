@@ -48,6 +48,17 @@ public sealed class RestThresholdsTests
     }
 
     [Fact]
+    public void ResolveValue_AnchorsSingleThresholdToDefault_CappedAtReal()
+    {
+        // A flee/heal/hang trigger: 30% of the DEFAULT set's 230, capped at real 205.
+        Assert.Equal(69, RestThresholds.ResolveValue(
+            ThresholdMode.Percentage, 30, defaultMax: 230, realMax: 205, liveMax: 230));
+        // A high trigger caps at the real max rather than exceeding reach.
+        Assert.Equal(205, RestThresholds.ResolveValue(
+            ThresholdMode.Percentage, 95, defaultMax: 230, realMax: 205, liveMax: 230));
+    }
+
+    [Fact]
     public void AbsoluteMode_PassesValueThrough_ButStillCapsAtRealMax()
     {
         (int trigger, int max) = RestThresholds.Resolve(

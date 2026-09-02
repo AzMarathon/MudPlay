@@ -27,4 +27,11 @@ internal static class RestThresholds
         }
         return (trigger, max);
     }
+
+    // A single threshold (a flee / hang / heal trigger) resolved against the same
+    // Default-set basis + real-max cap. Heal/run/hang anchor to the Default set's pool
+    // like rest does, so a Pre-rest set that alters the pool doesn't shift them.
+    public static int ResolveValue(
+        ThresholdMode mode, int pct, int defaultMax, int realMax, int liveMax)
+        => Resolve(mode, pct, pct, defaultMax, realMax, liveMax).Max;
 }

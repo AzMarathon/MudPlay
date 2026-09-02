@@ -419,6 +419,16 @@ public sealed class HealthManager : IDisposable
         => RestThresholds.Resolve(mode, triggerPct, maxPct,
             defaultMax?.Invoke() ?? 0, realMax?.Invoke() ?? 0, liveMax);
 
+    // A single HP / MA threshold (flee / hang trigger) resolved against the same
+    // Default-set basis + real-max cap the rest gates use — so heal/run/hang anchor to
+    // the loadout the user tuned rather than a Pre-rest set's altered pool.
+    private int ResolveHpThreshold(ThresholdMode mode, int pct)
+        => RestThresholds.ResolveValue(mode, pct,
+            _defaultSetMaxHp?.Invoke() ?? 0, _realMaxHp?.Invoke() ?? 0, _state.MaxHp);
+    private int ResolveMaThreshold(ThresholdMode mode, int pct)
+        => RestThresholds.ResolveValue(mode, pct,
+            _defaultSetMaxMa?.Invoke() ?? 0, _realMaxMa?.Invoke() ?? 0, _state.MaxMa);
+
     // Wire ShadowRest (Paradigm): classes with the ability can rest while
     // hidden/sneaking in a room with monsters without being attacked (see
     // GAME_MECHANICS "ShadowRest"). All three predicates plus the
@@ -769,8 +779,8 @@ public sealed class HealthManager : IDisposable
         }
         else if (!_fledThisCombat)
         {
-            int hpRunTrigger = PoolThreshold.Resolve(s.HpThresholdMode, s.RunIfBelowHp, _state.MaxHp);
-            int maRunTrigger = PoolThreshold.Resolve(s.MaThresholdMode, s.RunIfBelowMa, _state.MaxMa);
+            int hpRunTrigger = ResolveHpThreshold(s.HpThresholdMode, s.RunIfBelowHp);
+            int maRunTrigger = ResolveMaThreshold(s.MaThresholdMode, s.RunIfBelowMa);
             // A run-trigger of 0 means "never flee on this pool" — the pool's
             // flee is off. Gate on the RAW setting so "off" is mode-agnostic
             // (0% and absolute-0 both resolve to a 0 trigger, and without this
@@ -809,8 +819,8 @@ public sealed class HealthManager : IDisposable
         // from the current room; Forward continues toward the destination.
         if (_fleeEngine is not null && _fleeQueue.Count == 0 && _state.MaxHp > 0)
         {
-            int hpRunTrigger = PoolThreshold.Resolve(s.HpThresholdMode, s.RunIfBelowHp, _state.MaxHp);
-            int maRunTrigger = PoolThreshold.Resolve(s.MaThresholdMode, s.RunIfBelowMa, _state.MaxMa);
+            int hpRunTrigger = ResolveHpThreshold(s.HpThresholdMode, s.RunIfBelowHp);
+            int maRunTrigger = ResolveMaThreshold(s.MaThresholdMode, s.RunIfBelowMa);
             // A disabled pool (run-trigger 0) never blocks resume — otherwise a
             // caster with MA flee off could never climb "above" a 0 trigger with
             // 0 mana and would stay paused forever.
@@ -927,7 +937,7 @@ public sealed class HealthManager : IDisposable
         // while fighting, the flee block above takes over instead. Auto-Combat ON needs
         // nothing (the engine already engages); ShadowRest rests through it stealthed.
         bool autoCombatOn = _isAutoCombatEnabled?.Invoke() ?? true;
-        int restClearRunTrigger = PoolThreshold.Resolve(s.HpThresholdMode, s.RunIfBelowHp, _state.MaxHp);
+        int restClearRunTrigger = ResolveHpThreshold(s.HpThresholdMode, s.RunIfBelowHp);
         bool hpFleeWorthy = s.RunIfBelowHp > 0 && _state.Hp > 0 && _state.Hp <= restClearRunTrigger;
         bool wantRestClear = !autoCombatOn && hostilesPresent && shouldRest
             && !hpFleeWorthy && !_fledThisCombat && !shadowRest;
@@ -1103,7 +1113,7 @@ public sealed class HealthManager : IDisposable
         if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return false;
         if (_state.MaxHp <= 0) return false;
 
-        int hangTrigger = PoolThreshold.Resolve(s.HpThresholdMode, s.HangIfBelowHp, _state.MaxHp);
+        int hangTrigger = ResolveHpThreshold(s.HpThresholdMode, s.HangIfBelowHp);
         int deathFloor = Math.Min(0, _readDeathFloor?.Invoke() ?? -25);
         bool inWindow = _state.Hp > deathFloor && _state.Hp <= hangTrigger;
 
