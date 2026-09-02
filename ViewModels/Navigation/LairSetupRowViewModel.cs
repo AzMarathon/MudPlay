@@ -23,6 +23,12 @@ public sealed class LairSetupRowViewModel
             ? string.Empty
             : $"{Source.Markers[0].Map}/{Source.Markers[0].Room}";
 
+    // Whole-entry text for the row's mouseover tooltip — name plus the same
+    // anchor · count detail line — so a narrow rail that ellipsises either line
+    // still reveals the full entry on hover.
+    public string RowTooltip =>
+        AnchorKey.Length == 0 ? $"{Name}\n{SubLabel}" : $"{Name}\n{AnchorKey} · {SubLabel}";
+
     // Context-menu label reflecting the current favourite state (the setup's
     // Favorite flag feeds the terminal right-click Favourites flyout). The row is
     // rebuilt on every SetupsChanged, so a plain computed getter stays in sync.

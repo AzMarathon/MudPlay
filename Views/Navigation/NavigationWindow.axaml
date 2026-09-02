@@ -336,6 +336,20 @@
             <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
+
+        <!-- Top-bar status line severity: default grey, amber when movement is
+             held for a reason, red when a nav action failed. A base class carries
+             the default so the override classes (style setters) can win — an
+             inline Foreground would beat them. -->
+        <Style Selector="TextBlock.TopBarStatus">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.TopBarStatus.StatusWarning">
+            <Setter Property="Foreground" Value="{StaticResource SeverityWarnBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.TopBarStatus.StatusFailure">
+            <Setter Property="Foreground" Value="{StaticResource SeverityErrorBrush}"/>
+        </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto">
@@ -375,8 +389,11 @@
                 </Border>
                 <TextBlock Grid.Column="2"
                            Text="{Binding TopBarStatusText}"
+                           ToolTip.Tip="{Binding TopBarStatusText}"
+                           Classes="TopBarStatus"
+                           Classes.StatusWarning="{Binding StatusIsWarning}"
+                           Classes.StatusFailure="{Binding StatusIsFailure}"
                            VerticalAlignment="Center"
-                           Foreground="{StaticResource ChromeFgSecBrush}"
                            FontSize="11"
                            Margin="0,0,10,0"
                            TextTrimming="CharacterEllipsis"/>
@@ -450,6 +467,7 @@
                                     <ListBox.ItemTemplate>
                                         <DataTemplate DataType="vm:GotoHistoryRowViewModel">
                                             <TextBlock Text="{Binding Label}"
+                                                       ToolTip.Tip="{Binding Label}"
                                                        FontSize="11"
                                                        TextTrimming="CharacterEllipsis"/>
                                         </DataTemplate>
@@ -816,10 +834,12 @@
                                     Background="Transparent">
                                 <StackPanel>
                                     <TextBlock Text="{Binding PrimaryLine}"
+                                               ToolTip.Tip="{Binding PrimaryLine}"
                                                FontSize="11"
                                                Foreground="{StaticResource ChromeFgBrush}"
                                                TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding SecondaryLine}"
+                                               ToolTip.Tip="{Binding SecondaryLine}"
                                                FontSize="10"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                TextTrimming="CharacterEllipsis"
@@ -1239,6 +1259,7 @@
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CurrentNavRowViewModel">
                                         <Border Classes="NavRow"
+                                                ToolTip.Tip="{Binding RowTooltip}"
                                                 Classes.Completed="{Binding IsCompleted}"
                                                 Classes.Current="{Binding IsCurrent}"
                                                 Classes.Upcoming="{Binding IsUpcoming}"
@@ -1409,6 +1430,7 @@
                                                                    VerticalAlignment="Center"/>
                                                         <TextBlock Grid.Column="1"
                                                                    Text="{Binding Name}"
+                                                                   ToolTip.Tip="{Binding Name}"
                                                                    FontSize="14"
                                                                    FontWeight="SemiBold"
                                                                    Foreground="{StaticResource AccentVioletBrush}"
@@ -1442,6 +1464,7 @@
                                                                ToolTip.Tip="In the right-click Favorites menu"/>
                                                     <Button Grid.Column="1"
                                                             Content="{Binding Label}"
+                                                            ToolTip.Tip="{Binding LabelWithKey}"
                                                             HorizontalAlignment="Stretch"
                                                             HorizontalContentAlignment="Left"
                                                             FontSize="11"
@@ -1613,6 +1636,7 @@
                                                                    VerticalAlignment="Center"/>
                                                         <TextBlock Grid.Column="1"
                                                                    Text="{Binding Name}"
+                                                                   ToolTip.Tip="{Binding Name}"
                                                                    FontSize="14"
                                                                    FontWeight="SemiBold"
                                                                    Foreground="{StaticResource AccentVioletBrush}"
@@ -1636,13 +1660,13 @@
                                             </DataTemplate>
                                             <!-- Auto-Lair setup leaf — amber accent. -->
                                             <DataTemplate DataType="vm:LairSetupRowViewModel">
-                                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2" ColumnSpacing="4" Background="Transparent">
+                                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2" ColumnSpacing="4" Background="Transparent"
+                                                      ToolTip.Tip="{Binding RowTooltip}">
                                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" MinWidth="0">
                                                         <TextBlock Text="{Binding Name}"
                                                                    FontSize="11"
                                                                    Foreground="{StaticResource AccentAmberBrush}"
-                                                                   TextTrimming="CharacterEllipsis"
-                                                                   ToolTip.Tip="{Binding Name}"/>
+                                                                   TextTrimming="CharacterEllipsis"/>
                                                         <TextBlock FontSize="10"
                                                                    Foreground="{StaticResource ChromeFgMutedBrush}"
                                                                    TextTrimming="CharacterEllipsis">
@@ -1689,13 +1713,13 @@
                                                  second line. Load + Run stay right-aligned at
                                                  any name length. -->
                                             <DataTemplate DataType="vm:LoopRowViewModel">
-                                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2" ColumnSpacing="4" Background="Transparent">
+                                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2" ColumnSpacing="4" Background="Transparent"
+                                                      ToolTip.Tip="{Binding RowTooltip}">
                                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" MinWidth="0">
                                                         <TextBlock Text="{Binding Name}"
                                                                    FontSize="11"
                                                                    Foreground="{StaticResource AccentGreenBrush}"
-                                                                   TextTrimming="CharacterEllipsis"
-                                                                   ToolTip.Tip="{Binding Name}"/>
+                                                                   TextTrimming="CharacterEllipsis"/>
                                                         <TextBlock FontSize="10"
                                                                    Foreground="{StaticResource ChromeFgMutedBrush}"
                                                                    TextTrimming="CharacterEllipsis">
@@ -1821,6 +1845,7 @@
                                                         <TextBlock Grid.Column="0" FontSize="11"
                                                                    Foreground="{StaticResource ChromeFgSecBrush}"
                                                                    TextTrimming="CharacterEllipsis"
+                                                                   ToolTip.Tip="{Binding RoomLabel}"
                                                                    Text="{Binding RoomLabel}"/>
                                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                                             <!-- Death-summon lair: exp/time already fold in the
@@ -1854,6 +1879,7 @@
                                                             <TextBlock Grid.Column="0" FontSize="11"
                                                                        Foreground="{StaticResource ChromeFgSecBrush}"
                                                                        TextTrimming="CharacterEllipsis"
+                                                                       ToolTip.Tip="{Binding Label}"
                                                                        Text="{Binding Label}"/>
                                                             <TextBlock Grid.Column="1" FontSize="11" Foreground="#E0B060"
                                                                        Text="{Binding ContribLabel}"/>
@@ -1878,6 +1904,7 @@
                                                             <TextBlock Grid.Column="1" FontSize="11"
                                                                        Foreground="{StaticResource ChromeFgSecBrush}"
                                                                        TextTrimming="CharacterEllipsis"
+                                                                       ToolTip.Tip="{Binding SpellName}"
                                                                        Text="{Binding SpellName}"/>
                                                             <TextBlock Grid.Column="2" FontSize="11" Foreground="#E0B060"
                                                                        Text="{Binding ContribLabel}"/>

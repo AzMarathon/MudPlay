@@ -21,6 +21,12 @@ public sealed class CurrentNavRowViewModel
     // affordance so they leave this null.
     public RoomKey? EditKey { get; }
 
+    // Whole-entry text for the row's mouseover tooltip — the step label plus
+    // its sublabel — so a narrow rail that ellipsises either still reveals the
+    // full entry on hover.
+    public string RowTooltip =>
+        string.IsNullOrEmpty(SubLabel) ? Label : $"{Label}\n{SubLabel}";
+
     public bool IsCompleted => Status == CurrentNavRowStatus.Completed;
     public bool IsCurrent   => Status == CurrentNavRowStatus.Current;
     public bool IsUpcoming  => Status == CurrentNavRowStatus.Upcoming;
