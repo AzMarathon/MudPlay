@@ -4266,6 +4266,17 @@ public sealed class AppServices
                 // held while a swap streams, and nothing re-triggered Evaluate when it
                 // ended).
                 Health.Evaluate();
+                // A rest that completes in the SAME tick it starts fires the pre-rest
+                // swap AND the recovery-complete Default revert together; the revert
+                // runs first and no-ops against the not-yet-streamed pre-rest set, then
+                // the pre-rest swap lands last and strands the medi/pre-rest gear
+                // (report paradigm-20260903-111227). Now that the pre-rest set is
+                // actually worn and recovery is done, re-fire the Default revert (it
+                // will diff correctly this time). OnRecoveryComplete self-guards on
+                // combat + using-rest-sets; the Default swap it fires re-enters here
+                // with Default worn, so this terminates after one correction.
+                if (!Health.IsRecoveringRest && CurrentEquippedIsPreRestSet())
+                    AutoEquip.OnRecoveryComplete();
             }
         };
 
@@ -6037,6 +6048,16 @@ public sealed class AppServices
         int def = pool(Game.Calculators.CharacterCalculator
             .AggregateEquipmentStats(defaultItems, GameData).Totals);
         return Math.Max(1, realMax - worn + def);
+    }
+
+    // Whether the gear set the engine last equipped is a pre-rest swap set (HP / Mana)
+    // — used to detect a stranded pre-rest loadout after a same-tick rest completion.
+    private bool CurrentEquippedIsPreRestSet()
+    {
+        if (Equipment.CurrentSetId is not { } id) return false;
+        return Profile.Current?.Equipment?.Sets.FirstOrDefault(s => s.Id == id)
+            is { Trigger: Models.Profile.EquipTriggerType.PreRestHp
+                       or Models.Profile.EquipTriggerType.PreRestMana };
     }
 
     // The DEFAULT gear set's item-bearing slots as EquippedItems, for summing their

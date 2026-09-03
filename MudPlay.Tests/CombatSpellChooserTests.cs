@@ -241,6 +241,35 @@ public sealed class CombatSpellChooserTests
             sut.ChooseDebuff(settings, Ctx(enemies: 3))?.Action);
     }
 
+    // A same-room RESPAWN after the debuff wore off must be re-debuffed, while a
+    // same-fight survivor (revealed within seconds) must NOT be (report
+    // paradigm-20260903-070438 vs the -160110 "isto fired twice" fix).
+    [Fact]
+    public void ChooseDebuff_Area_TagExpires_ReDebuffsSameRoomRespawn()
+    {
+        var clock = System.DateTimeOffset.UnixEpoch;
+        CombatSpellChooser sut = new() { NowProvider = () => clock };
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("blindall", minEnemies: 2),
+            NormalAttackSpell = Slot("harm"),
+        };
+        var keys = new[] { "slimeworm" };
+
+        CombatSpellDecision? first = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: keys));
+        Assert.Equal(CombatSpellAction.AreaDebuff, first?.Action);
+        sut.MarkCast(first!.Value, "slimeworm", keys);
+
+        // Seconds later a same-species survivor reveals — tag fresh, not re-debuffed.
+        clock = clock.AddSeconds(10);
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: keys)));
+
+        // Minutes later the room respawns — tag expired + cap refreshed → re-debuff.
+        clock = clock.AddMinutes(5);
+        Assert.Equal(CombatSpellAction.AreaDebuff,
+            sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: keys))?.Action);
+    }
+
     [Fact]
     public void ChooseDebuff_Area_BelowMinEnemies_Skipped()
     {

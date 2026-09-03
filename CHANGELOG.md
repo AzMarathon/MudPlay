@@ -1,5 +1,15 @@
 # Version history
 
+## 3.46.11
+
+- Paired ring/wrist gear swaps are now **realm-aware** (Paradigm evicts slot 1, Stock slot 2) and use `eq`, so re-equipping a set that keeps one member of a full pair no longer emits a needless `rem`
+- Rest no longer **hangs at full HP** after a medi/pre-rest swap — the rest target caps at the live gear-swap-aware max instead of the stale stat screen
+- Gear reliably **swaps back to Default** after a rest that completes the instant it starts (no more pathing in medi gear)
+- **Disabling the rest engine** now drops the engage-to-clear override, so a drain/nuke no longer fires while Auto-Combat is off
+- No more **double-attack** when a kill re-picks a same-species survivor mid cap-switch
+- The room **AoE debuff** (isto) re-fires on a same-room respawn once the debuff has worn off
+- bug reports addressed: paradigm-20260903-070438, paradigm-20260903-073107, paradigm-20260903-110346, paradigm-20260903-111227, paradigm-20260903-111522, paradigm-20260903-113054
+
 ## 3.46.5
 
 - Equipment Manager: new per-character **"Don't swap to default upon entering combat"** checkbox (checked = the long-standing behavior)

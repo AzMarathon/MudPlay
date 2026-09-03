@@ -57,13 +57,29 @@ public sealed class CombatSpellChooser
     private int _drainCasts;
     private readonly HashSet<string> _singleDebuffedTargets =
         new(StringComparer.OrdinalIgnoreCase);
-    // RawName keys of the mobs present when each AoE debuff cast went out this room.
-    // The AoE debuff casts ONCE and "tags" the room; it re-fires (up to its per-room
-    // MaxCasts cap) only for a mob that wasn't tagged — a new arrival / summon — rather
-    // than repeatedly like an attack spell. Per-room, keyed like _singleDebuffedTargets;
-    // reset at room-clear.
-    private readonly HashSet<string> _areaDebuffedMobs =
+    // RawName keys of the mobs present when each AoE debuff cast went out this room,
+    // stamped with when the tag was set. The AoE debuff casts ONCE and "tags" the room;
+    // it re-fires (up to its per-room MaxCasts cap) only for a mob that wasn't tagged —
+    // a new arrival / summon — rather than repeatedly like an attack spell. Per-room,
+    // keyed like _singleDebuffedTargets; reset at room-clear.
+    //
+    // A tag EXPIRES after ReDebuffAfter: same-species SURVIVORS of a wave-clear reveal
+    // within seconds, so their tag is fresh and they're not re-debuffed (report
+    // paradigm-20260902-160110 — "ISTO fired twice in the same fight"); but a same-room
+    // RESPAWN happens minutes later (the player cleared the room and rested there), by
+    // which point the debuff has long worn off and the fresh wave SHOULD be re-debuffed
+    // (report paradigm-20260903-070438 — "did not isto the respawned slimeworms"). The
+    // window is comfortably longer than any single fight's survivor-reveal gap and
+    // shorter than a rest-then-respawn, so it separates the two cleanly.
+    private readonly Dictionary<string, DateTimeOffset> _areaDebuffedMobs =
         new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan ReDebuffAfter = TimeSpan.FromSeconds(90);
+    // When the last AoE debuff went out this room — drives the per-room cap refresh
+    // for a respawn (a fresh wave after the window resets the cap budget).
+    private DateTimeOffset _lastAreaDebuffAt = DateTimeOffset.MinValue;
+
+    // Clock seam for the AoE tag expiry (tests override for determinism).
+    internal Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.Now;
 
     // Per-target weapon latch. Once we've actually been casting a single-target
     // attack spell at the current target and the cascade then lapses (its mana
@@ -112,6 +128,7 @@ public sealed class CombatSpellChooser
         ResetForRosterClear();
         _areaDebuffCasts = 0;
         _areaDebuffedMobs.Clear();
+        _lastAreaDebuffAt = DateTimeOffset.MinValue;
     }
 
     // Reset the per-TARGET single-target cast counters. The single-target slots
@@ -241,6 +258,13 @@ public sealed class CombatSpellChooser
 
         if (areaCovering)
         {
+            // A same-room RESPAWN after the debuff wore off is a fresh wave: refresh the
+            // per-room cap budget alongside the expired tags (else the first wave's casts
+            // would cap out the respawn — report paradigm-20260903-070438). Keyed on the
+            // last AoE cast aging past the re-debuff window, the same signal the tags use.
+            if (_areaDebuffCasts > 0 && NowProvider() - _lastAreaDebuffAt >= ReDebuffAfter)
+                _areaDebuffCasts = 0;
+
             // The AoE owns the room. Cast it as FEW times as possible: fire only when a
             // mob that wasn't present at the last AoE cast is here (the first cast, or a
             // new arrival / summon), under the per-room cap and mana floor — NOT every
@@ -287,8 +311,13 @@ public sealed class CombatSpellChooser
     private bool AoeHasNewTarget(in CombatSpellContext ctx)
     {
         if (ctx.RoomMobKeys is not { } keys) return _areaDebuffCasts == 0;
+        DateTimeOffset now = NowProvider();
         foreach (string key in keys)
-            if (!_areaDebuffedMobs.Contains(key)) return true;
+            // Untagged (a new arrival / summon), or the tag has aged past the re-debuff
+            // window (a same-room respawn after the debuff wore off) — either is a fresh
+            // target the AoE should cover again.
+            if (!_areaDebuffedMobs.TryGetValue(key, out DateTimeOffset tagged)
+                || now - tagged >= ReDebuffAfter) return true;
         return false;
     }
 
@@ -408,8 +437,9 @@ public sealed class CombatSpellChooser
                 // it re-fires only for a later NEW arrival rather than every round. A null
                 // roster (unwired callers / tests) still bumps the counter → once-per-room.
                 _areaDebuffCasts++;
+                _lastAreaDebuffAt = NowProvider();
                 if (roomMobKeys is not null)
-                    foreach (string key in roomMobKeys) _areaDebuffedMobs.Add(key);
+                    foreach (string key in roomMobKeys) _areaDebuffedMobs[key] = _lastAreaDebuffAt;
                 break;
             case CombatSpellAction.SingleDebuff:
                 if (!string.IsNullOrEmpty(targetRawName))
