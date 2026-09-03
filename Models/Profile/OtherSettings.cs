@@ -126,6 +126,12 @@ public sealed class OtherSettings
     public List<string> MonsterIntelHiddenAttacks { get; set; } = new();
     public string? MonsterIntelRoundsAttack { get; set; }
 
+    // Monster Intel "Apply Debuffs" picker state, Char-tier. Each entry is a
+    // known stat-affecting debuff spell's cast code (its Short); when applied, its
+    // AC/DR/Dodge/accuracy/slowness effect is folded onto the selected monster in
+    // the matchup what-if. Empty = no debuffs applied.
+    public List<string> MonsterIntelAppliedDebuffs { get; set; } = new();
+
     // Note: the former per-character verbose toggles (VerboseCombat /
     // VerboseRoomClassifier / VerboseCasting / VerboseCash / VerboseStealth) +
     // WriteCombatRoundTrace lived here briefly. They moved to the Log pane menu

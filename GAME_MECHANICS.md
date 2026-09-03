@@ -3335,6 +3335,25 @@ the attack rotation); the **AoE** debuff is gated by **Auto-Nuke**.
   *([CONFIRMED] 2026-08-31 vs MMUD-Explorer + live game — a L28 Paladin (CombatLVL 6) with
   throwing hammers (speed 1100) at 57% encum reads normal 7.143 / bash 3.572 in `stat all`,
   matching `level × 6`; `level × 8` inflated it to 9 / 4.5.)*
+- **Monster attacks/round = `energy ÷ per-attack energy`.** A monster's per-round energy
+  budget (the `Energy` field, 1000 on Stock) divided by a slot's `AttEnergy-N` gives that
+  slot's attacks/round — the same `Max N x/round` the Game-Data monster readout shows; the
+  monster-side analog of the player's `floor(1000/EnergyCost)`.
+- **Slowness (ability 68) multiplies attack speed/energy by ×1.5** (`Fix(speed × 3 / 2)` —
+  MMUD-Explorer `AdjustSpeedForSlowness` + the per-attack `bAbil68Slow` overrides), yielding ~a
+  third fewer swings. On the PLAYER path MMUD-Explorer applies it to weapon speed; applied to a
+  MONSTER (a slowness debuff landed on it) it raises the monster's effective per-attack energy
+  the same ×1.5, thinning its attacks/round. *([CONFIRMED] 2026-09-02, user + syntax53/MMUD-Explorer
+  `modMMudFunc.bas`.)* See [[reference_mmud_explorer_source]].
+- **Stat debuffs on a monster SUBTRACT their listed magnitude and may go NEGATIVE.** An enemy
+  debuff that lists e.g. "AC -20" / "Accuracy -10" lowers the monster's AC / accuracy by that
+  much, and the result is **not** floored at 0 — a monster pushed below zero accuracy can't land
+  a hit, below-zero AC makes it trivially hit (your to-hit benefits a lot). Same ability codes
+  as the equip/buff resolvers (AC 2/10, DR 7 [stored ×10], Dodge 34, Accuracy 22/105/106);
+  debuff values are stored signed ("-20"), so the fold takes the magnitude. *([CONFIRMED]
+  2026-09-02, user.)* **Client:** modelled only in Monster Intel's "Apply Debuffs" WHAT-IF
+  (`MonsterDebuffCalculator` + the `MonsterMatchupCalculator` monster-swing model) — the app does
+  NOT apply debuff stat effects during live combat; this is a preview.
 - **Player attack order = announce order, FIFO.** Players deal their damage in the order
   they engaged/announced their attacks — first to announce fires first. Party rank does NOT
   change this order.
