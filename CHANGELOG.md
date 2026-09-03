@@ -1,5 +1,11 @@
 # Version history
 
+## 3.46.5
+
+- Equipment Manager: new per-character **"Don't swap to default upon entering combat"** checkbox (checked = the long-standing behavior)
+- Unchecked, a fight that interrupts a rest is fought in your **Default** set — swap on combat entry, then back to the pre-rest set on room-clear if you haven't yet reached rest-max
+- The 4-set list no longer stretches the column, making room for the new checkbox
+
 ## 3.46.4
 
 - **Reset States** now re-anchors max HP/mana with the game's compact `health` command instead of the full `stat` screen — the same correction with far less terminal scroll
