@@ -1,5 +1,11 @@
 # Version history
 
+## 3.45.0
+
+- Monster Intel: new **Apply Debuffs** button (under Edit Attacks) — check your known enemy debuffs to fold them onto the selected monster in Your Matchup and see the fight against a softened target; stats can go negative (below-zero accuracy can't hit you, below-zero AC is trivially hit), and slowness thins the monster's attacks/round
+- Monster Intel now models the monster's swings/round (energy ÷ attack-energy) — Your Matchup shows a Melee threat line with its attacks/round and rough damage/round, so slowness and the monster's real output are visible
+- Monster Intel: the displayed attacks in Your Matchup are grouped — Physical attacks, then Spell attacks split into Single-target and AOE
+
 ## 3.44.25
 
 - Navigation rail entries that are too long for a narrow panel now show their full text on hover — the status line, GOTO / loop / lair / favourite rows, the live step list, search results, folder names, and the exp-estimator rows

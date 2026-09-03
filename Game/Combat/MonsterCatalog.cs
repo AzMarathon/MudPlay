@@ -138,6 +138,13 @@ public sealed record MonsterCatalogEntry(
     // MonsterMatchupCalculator needs to project a rounds-to-kill estimate.
     public int PrimaryPhysicalAvgDamage
         => PrimaryPhysicalSlot is { } s ? (s.MinDamage + s.MaxDamage) / 2 : 0;
+
+    // Per-attack energy cost of the primary physical slot — Energy / this is the
+    // monster's attacks/round with that slot (the same figure the Game-Data
+    // readout shows). A slowness debuff raises the effective value; the matchup
+    // sim reads it to project the monster's swing count.
+    public int PrimaryPhysicalEnergy
+        => PrimaryPhysicalSlot is { } s ? s.Energy : 0;
 }
 
 // Typed, parsed-once view of the active game-data set's Monsters table (cross-
