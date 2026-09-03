@@ -4161,6 +4161,10 @@ public sealed class AppServices
             canEquipItem: CanCharacterEquipItem,
             restrictsEquip: IsEquipRestricted,
             log: Log);
+        // Realm picks which physical slot a full paired-family eq/wear evicts —
+        // Paradigm slot 1 (first-listed), Stock slot 2 — so the swap builder rems
+        // the right odd-out (see EquipmentManager.ComposePairedSlotCommands).
+        Equipment.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
 
         // Casting-spell profiles: the same read/write-Combat pair the Equipment
