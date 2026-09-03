@@ -60,6 +60,47 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     public override string Title => "Calculators";
     public override Control View => _view ??= new CalculatorsSectionView { DataContext = this };
 
+    // ----- Calculator deep-link (from the customizable terminal right-click menu)
+    // A "Calculator: X" entry opens the Workshop on this tab, expands that one
+    // calculator, and centers it. Each Expander two-way-binds IsExpanded to the
+    // matching flag (so a user toggle also updates the flag); NavigateToCalculator
+    // sets the flag and raises ScrollToCalculatorRequested. PendingScrollTarget
+    // covers the lazy-tab case: a deep-link can fire before the view is built, so
+    // the view centers the pending target on first load.
+    public enum CalculatorId { Hit, Movement, Swing, Backstab, ManaRegen, RealmRankings, MonsterAggro }
+
+    [ObservableProperty] private bool _hitExpanded;
+    [ObservableProperty] private bool _movementExpanded;
+    [ObservableProperty] private bool _swingExpanded;
+    [ObservableProperty] private bool _backstabExpanded;
+    [ObservableProperty] private bool _manaRegenExpanded;
+    [ObservableProperty] private bool _realmRankingsExpanded;
+    [ObservableProperty] private bool _monsterAggroExpanded;
+
+    public event Action<CalculatorId>? ScrollToCalculatorRequested;
+    public CalculatorId? PendingScrollTarget { get; private set; }
+
+    // Expand + reveal one calculator by its CalculatorId name (leaves the others
+    // as the user left them; the view centers it once laid out).
+    public void NavigateToCalculator(string? calculatorId)
+    {
+        if (!Enum.TryParse(calculatorId, ignoreCase: true, out CalculatorId id)) return;
+        switch (id)
+        {
+            case CalculatorId.Hit: HitExpanded = true; break;
+            case CalculatorId.Movement: MovementExpanded = true; break;
+            case CalculatorId.Swing: SwingExpanded = true; break;
+            case CalculatorId.Backstab: BackstabExpanded = true; break;
+            case CalculatorId.ManaRegen: ManaRegenExpanded = true; break;
+            case CalculatorId.RealmRankings: RealmRankingsExpanded = true; break;
+            case CalculatorId.MonsterAggro: MonsterAggroExpanded = true; break;
+        }
+        PendingScrollTarget = id;
+        ScrollToCalculatorRequested?.Invoke(id);
+    }
+
+    public void ClearPendingScrollTarget() => PendingScrollTarget = null;
+
     // ----- Monster typeahead ---------------------------------------------
     // Typeahead source: "<name> (#<number>)" per monster.
     public ObservableCollection<string> MonsterNames { get; } = new();
@@ -106,11 +147,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // Your raw dodge used in the incoming-hit calc — seeded from actuals, editable. May be negative.
     [ObservableProperty] private int _playerDodge;
 
-    // "Show me the Monsters" picker: the % chance a monster hits you (vs your AC +
-    // dodge above). The button below finds the accuracy that produces this hit-% and
-    // opens the Monsters game-data tab filtered to Acc ≥ that value.
-    [ObservableProperty] private int _hitPercentTarget = 50;
-
     // ----- Monster → You (incoming) --------------------------------------
     // One row per monster physical attack — or a single "Custom attack" row when
     // no monster is picked, so the incoming-hit calculator always works. Each
@@ -146,6 +182,60 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // band; Heavy / Encumbered share the slow band.
     public string StockMoveFastBandText { get; }
     public string StockMoveSlowBandText { get; }
+
+    // ----- Monster Aggro calculator --------------------------------------
+    // One "Monster Aggro" calculator that shows the loaded set's model: Paradigm
+    // (150-base weighted lottery over Charm / party position / recent aggro) or
+    // Stock (acquisition by Align + guard, the 50−5×hits spread, Follow%
+    // stickiness). AggroIsParadigm follows GameDataCache.ActiveRealm and flips on a
+    // set change; each party row carries both models' inputs and the view shows
+    // only the active realm's fields.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AggroIsStock))]
+    private bool _aggroIsParadigm;
+    public bool AggroIsStock => !AggroIsParadigm;
+
+    // Up to 6 configurable party members (both models' inputs per row).
+    public ObservableCollection<AggroMemberRowViewModel> AggroMembers { get; } = new();
+    public const int MaxAggroMembers = 6;
+
+    // Stock monster inputs — type a record NUMBER or a NAME (best match) to auto-fill
+    // number + name + Align + Follow% + guard. Number + name + Align are the looked-up
+    // monster's (read-only); Follow% + guard stay editable after seeding.
+    [ObservableProperty] private string _aggroMonsterQuery = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AggroMonsterLabel))]
+    private int _aggroMonsterNumber;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AggroMonsterLabel))]
+    private string _aggroMonsterName = "—";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AggroMonsterAlignName))]
+    private int _aggroMonsterAlign;
+    [ObservableProperty] private int _aggroMonsterFollowPercent;
+    [ObservableProperty] private bool _aggroMonsterIsGuard;
+
+    // The matched monster shown beside the query box: "#268 water elemental".
+    public string AggroMonsterLabel =>
+        AggroMonsterNumber > 0 ? $"#{AggroMonsterNumber} {AggroMonsterName}" : "—";
+
+    // Friendly Align label for the resolved monster (0-6).
+    public string AggroMonsterAlignName => AggroMonsterAlign switch
+    {
+        0 => "Good",
+        1 => "Evil",
+        2 => "Chaotic Evil",
+        3 => "Neutral",
+        4 => "Lawful Good",
+        5 => "Neutral Evil",
+        6 => "Lawful Evil",
+        _ => "—",
+    };
+
+    // Summary lines filled by the recompute.
+    [ObservableProperty] private string _aggroAcquisitionSummary = "—";   // stock
+    [ObservableProperty] private string _aggroStickinessText = "—";        // stock
+    [ObservableProperty] private string _aggroParadigmSummary = "—";       // paradigm
 
     // ----- Swing calculator ----------------------------------------------
     // Selected swing weapon — null / unmatched means the equipped weapon.
@@ -229,7 +319,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // Suspends RecomputeManaRegen while a multi-input seed / rebuild is in flight,
     // so the outputs recompute once at the end rather than per property.
     private bool _suspendManaRecompute;
-    private int _plusMaxDamage, _plusCrits;
+    private int _plusMaxDamage, _plusMinDamage, _plusCrits;
     private int _equipWeaponMin, _equipWeaponMax, _equipWeaponSpeed, _equipWeaponStrReq;
 
     // Accuracy inputs captured on refresh: the worn accy total and the effective
@@ -750,6 +840,10 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         EnsureClassFilterOptions();
         SeedAll();
         RebuildLeaderboard();
+
+        _gameData.ActiveSetChanged += OnAggroActiveSetChanged;
+        SeedDefaultAggroParty();
+        RecomputeAggro();
     }
 
     // Full (re)seed: refresh the actual snapshot, push it into the editable
@@ -842,6 +936,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             // crit for the selected attack type through the shared helpers so the
             // weapon picker + attack-type dropdown can re-run them in isolation.
             _plusMaxDamage = t.PlusMaxDamage;
+            _plusMinDamage = t.PlusMinDamage;   // abil 1 "Damage" — the low-end add, was previously dropped
             _plusCrits = t.PlusCrits;
             _equipWeaponMin = t.WeaponMin;
             _equipWeaponMax = t.WeaponMax;
@@ -975,33 +1070,17 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         int wSpeed = _hasSelectedWeapon ? _selWeaponSpeed : _equipWeaponSpeed;
         int wStrReq = _hasSelectedWeapon ? _selWeaponStrReq : _equipWeaponStrReq;
 
-        _hasWeapon = wMax > 0;
-        MeleeDamageResult dmg = CombatCalculator.CalcMeleeDamage(
-            type, _realm, _str, wMin, wMax, _plusMaxDamage);
-        _avgWeaponDamage = _hasWeapon ? (dmg.MinDamage + dmg.MaxDamage) / 2 : 0;
-
-        SwingCalcResult swings = CombatCalculator.CalcSwings(
-            _nCombatLevel, _level, wSpeed, _agi, _str, wStrReq,
-            _encumCur, _encumMax, isBashing: type == MudAttackType.Bash, realmType: _realm);
-        // Smash locks the round to a single swing regardless of weapon speed.
-        _swingsPerRound = type == MudAttackType.Smash ? (_hasWeapon ? 1 : 0) : swings.RawSwings;
-
-        // Crit folds into DPS only for the plain Attack, the same way CalculateAttack
-        // does: gear/quest crit (abil 58) + the Quick-and-Deadly bonus (only when STR
-        // meets the weapon's requirement), then diminishing returns; a crit averages
-        // 3× the max. Bash / Smash crit interaction isn't a verified mechanic, so
-        // those project without a crit term.
-        if (type == MudAttackType.Normal && _hasWeapon)
-        {
-            int qnd = (wStrReq <= 0 || _str >= wStrReq) ? swings.QnDCritBonus : 0;
-            _critChance = CombatCalculator.CalcCritChance(_plusCrits, qnd, _realm);
-            _avgCritDamage = dmg.MaxDamage * 3;
-        }
-        else
-        {
-            _critChance = 0;
-            _avgCritDamage = 0;
-        }
+        // Damage / swings / crit through the shared CombatCalculator helper, so
+        // this and Monster Intel's rounds-to-kill read identically (it carries the
+        // +MinDamage add — abil 1 — the old inline call here silently dropped).
+        MeleeOffense off = CombatCalculator.ComputeMeleeOffense(
+            type, _realm, _level, _nCombatLevel, _str, _agi, wMin, wMax, wSpeed, wStrReq,
+            _plusMaxDamage, _plusMinDamage, _plusCrits, _encumCur, _encumMax);
+        _hasWeapon = off.HasWeapon;
+        _avgWeaponDamage = off.AvgDamage;
+        _swingsPerRound = off.SwingsPerRound;
+        _critChance = off.CritChance;
+        _avgCritDamage = off.AvgCritDamage;
     }
 
     // Punch / Kick / Jumpkick — a bare-handed strike whose fixed attack speed
@@ -1247,16 +1326,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         MonsterAttacks.Add(row);
         RenumberAttacks();
         RecomputeRow(row);
-    }
-
-    // "Show me the Monsters": turn the hit-% picker into the monster accuracy that
-    // hits you that often (inverting the live hit formula against your AC + dodge),
-    // then open the Monsters game-data tab filtered to Acc ≥ that accuracy.
-    [RelayCommand]
-    private void ShowMonstersAtHitPercent()
-    {
-        int acc = CombatCalculator.AccuracyForHitChance(HitPercentTarget, PlayerAc, PlayerDodge, _realm);
-        AppServices.Current.OpenMonstersWithAccuracy(acc);
     }
 
     // Row-invoked removal. Keep at least one row so the incoming calc is never
@@ -1708,6 +1777,219 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         LeaderboardRebuilt?.Invoke();
     }
 
+    // ----- Monster Aggro: inputs, party management, recompute -------------
+    private bool _suppressAggroRecompute;
+    private const int JailSpellId = 583;   // the guard "jail" spell — the guard proxy
+
+    partial void OnAggroMonsterQueryChanged(string value) => ResolveAggroMonster();
+    partial void OnAggroMonsterFollowPercentChanged(int value) => RecomputeAggro();
+    partial void OnAggroMonsterIsGuardChanged(bool value) => RecomputeAggro();
+
+    private AggroMemberRowViewModel NewAggroRow(string name)
+        => new(name, _ => RecomputeAggro(), RemoveAggroMember, OnAggroLastAttacker);
+
+    private void SeedDefaultAggroParty()
+    {
+        AggroMembers.Clear();
+        AggroMembers.Add(NewAggroRow("Member 1"));
+        AggroMembers.Add(NewAggroRow("Member 2"));
+        ReconcileAggroPositions();
+    }
+
+    // The first member is the party's point man: forced to Frontrank in a party, or to
+    // Solo when they're the only member (a lone player is just as exposed as a
+    // frontliner — same aggro weight). Their rank isn't a choice, so the view shows it
+    // read-only. Every other member keeps its own rank; a freshly-added one defaults to
+    // Midrank (the row VM's default). Silent sets — the caller recomputes once.
+    private void ReconcileAggroPositions()
+    {
+        for (int i = 0; i < AggroMembers.Count; i++)
+        {
+            AggroMemberRowViewModel row = AggroMembers[i];
+            if (i == 0)
+            {
+                row.PositionEditable = false;
+                row.SetPositionSilently(AggroMembers.Count == 1 ? "Solo" : "Frontrank");
+            }
+            else
+            {
+                row.PositionEditable = true;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void AddAggroMember()
+    {
+        if (AggroMembers.Count >= MaxAggroMembers) return;
+        AggroMembers.Add(NewAggroRow(
+            string.Create(CultureInfo.InvariantCulture, $"Member {AggroMembers.Count + 1}")));
+        ReconcileAggroPositions();
+        RecomputeAggro();
+    }
+
+    private void RemoveAggroMember(AggroMemberRowViewModel row)
+    {
+        if (AggroMembers.Count <= 1) return;   // always keep one member
+        AggroMembers.Remove(row);
+        ReconcileAggroPositions();
+        RecomputeAggro();
+    }
+
+    [RelayCommand]
+    private void ResetAggro()
+    {
+        _suppressAggroRecompute = true;
+        AggroMonsterQuery = string.Empty;   // clears the matched monster via resolve
+        SeedDefaultAggroParty();
+        _suppressAggroRecompute = false;
+        RecomputeAggro();
+    }
+
+    // Radio behaviour — only one member is the "last attacker"; clear the others.
+    private void OnAggroLastAttacker(AggroMemberRowViewModel picked)
+    {
+        foreach (AggroMemberRowViewModel r in AggroMembers)
+            if (!ReferenceEquals(r, picked) && r.IsLastAttacker)
+                r.SetLastAttackerSilently(false);
+    }
+
+    // Resolve the typed query — a record NUMBER or a NAME (best match) → number + name
+    // + Align + Follow% + guard. Guard is auto-seeded from a jail-583 scan (still
+    // user-editable). Save/restore the suppress flag so a call from an already-
+    // suppressed context (reset / set change) stays suppressed and recomputes once at
+    // the outer level.
+    private void ResolveAggroMonster()
+    {
+        bool prev = _suppressAggroRecompute;
+        _suppressAggroRecompute = true;
+        string query = (AggroMonsterQuery ?? string.Empty).Trim();
+        JsonElement? found = query.Length == 0 ? null
+            : int.TryParse(query, NumberStyles.Integer, CultureInfo.InvariantCulture, out int num) && num > 0
+                ? FindMonsterRowByNumber(num)
+                : FindMonsterRowByName(query);
+        if (found is JsonElement row)
+        {
+            AggroMonsterNumber = GetInt(row, "Number");
+            AggroMonsterName = row.TryGetProperty("Name", out JsonElement ne)
+                               && ne.ValueKind == JsonValueKind.String && ne.GetString() is { Length: > 0 } nm
+                ? nm : "—";
+            AggroMonsterAlign = GetInt(row, "Align");
+            AggroMonsterFollowPercent = GetInt(row, "Follow%");
+            AggroMonsterIsGuard = MonsterReferencesSpell(row, JailSpellId);
+        }
+        else
+        {
+            AggroMonsterNumber = 0;
+            AggroMonsterName = "—";
+        }
+        _suppressAggroRecompute = prev;
+        RecomputeAggro();
+    }
+
+    // Best-match monster lookup by name for the aggro query box: an exact
+    // (case-insensitive) name wins; else the first name that STARTS WITH the query;
+    // else the first that CONTAINS it. Null when nothing matches / no table loaded.
+    private JsonElement? FindMonsterRowByName(string query)
+    {
+        JsonDocument? doc = _gameData.GetRawTable("Monsters");
+        if (doc is null) return null;
+        JsonElement? startsWith = null, contains = null;
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            if (!row.TryGetProperty("Name", out JsonElement ne)
+                || ne.ValueKind != JsonValueKind.String
+                || ne.GetString() is not { Length: > 0 } name)
+                continue;
+            if (string.Equals(name, query, StringComparison.OrdinalIgnoreCase)) return row;
+            if (startsWith is null && name.StartsWith(query, StringComparison.OrdinalIgnoreCase))
+                startsWith = row;
+            else if (contains is null && name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                contains = row;
+        }
+        return startsWith ?? contains;
+    }
+
+    // Guard proxy: a monster that casts jail (583) is a guard. Name-agnostic —
+    // scans every numeric property whose name mentions "Spell" for the id.
+    private static bool MonsterReferencesSpell(JsonElement row, int spellId)
+    {
+        foreach (JsonProperty p in row.EnumerateObject())
+        {
+            if (p.Name.IndexOf("Spell", StringComparison.OrdinalIgnoreCase) < 0) continue;
+            if (p.Value.ValueKind == JsonValueKind.Number && p.Value.TryGetInt32(out int v) && v == spellId)
+                return true;
+        }
+        return false;
+    }
+
+    private void OnAggroActiveSetChanged(string? setName) => ResolveAggroMonster();
+
+    private void RecomputeAggro()
+    {
+        if (_suppressAggroRecompute) return;
+        AggroIsParadigm = _gameData.ActiveRealm == RealmType.ParaMud;
+        if (AggroIsParadigm) RecomputeParadigmAggro();
+        else RecomputeStockAggro();
+    }
+
+    private void RecomputeParadigmAggro()
+    {
+        var members = new List<ParadigmAggroMember>(AggroMembers.Count);
+        foreach (AggroMemberRowViewModel r in AggroMembers)
+            members.Add(new ParadigmAggroMember(r.Name, r.Charm, ParsePosition(r.Position), r.IsLastAttacker));
+
+        ParadigmAggroResult res = ParadigmAggroCalculator.Compute(members);
+        for (int i = 0; i < res.Members.Count && i < AggroMembers.Count; i++)
+        {
+            ParadigmAggroMemberResult m = res.Members[i];
+            AggroMemberRowViewModel row = AggroMembers[i];
+            row.Score = m.Score;
+            row.SharePercentText = string.Create(CultureInfo.InvariantCulture, $"{m.Percent:0.0}%");
+            row.BreakdownText = string.Create(CultureInfo.InvariantCulture,
+                $"150 {Signed(m.CharmDelta)} chr {Signed(m.PositionBonus)} pos {Signed(m.AggroDelta)} aggro = {m.RawScore}");
+        }
+        AggroParadigmSummary = string.Create(CultureInfo.InvariantCulture,
+            $"Total {res.TotalScore} — the monster rolls a weighted lottery; a bigger share = better odds.");
+    }
+
+    private void RecomputeStockAggro()
+    {
+        var members = new List<StockAggroMember>(AggroMembers.Count);
+        foreach (AggroMemberRowViewModel r in AggroMembers)
+            members.Add(new StockAggroMember(
+                r.Name, r.AlignmentTitle, r.HasProvoked, r.IncomingHits, r.IsLastAttacker));
+
+        StockAggroResult res = StockAggroCalculator.Compute(
+            AggroMonsterAlign, AggroMonsterIsGuard, AggroMonsterFollowPercent, members);
+        for (int i = 0; i < res.Members.Count && i < AggroMembers.Count; i++)
+        {
+            StockAggroMemberResult m = res.Members[i];
+            AggroMemberRowViewModel row = AggroMembers[i];
+            row.IsAggroed = m.Aggroed;
+            row.AcquireReason = m.Reason;
+            row.SpreadPercentText = m.Aggroed
+                ? string.Create(CultureInfo.InvariantCulture, $"{m.SpreadPercent:0.0}%")
+                : "—";
+        }
+        AggroAcquisitionSummary = string.Create(CultureInfo.InvariantCulture,
+            $"Opens on {res.AggroedCount} of {AggroMembers.Count} member(s).");
+        AggroStickinessText = res.Stickiness;
+    }
+
+    private static PartyPosition ParsePosition(string s) => s switch
+    {
+        "Frontrank" => PartyPosition.Frontrank,
+        "Midrank" => PartyPosition.Midrank,
+        "Backrank" => PartyPosition.Backrank,
+        "Solo" => PartyPosition.Solo,
+        _ => PartyPosition.Midrank,
+    };
+
+    private static string Signed(int v)
+        => v >= 0 ? string.Create(CultureInfo.InvariantCulture, $"+{v}")
+                  : v.ToString(CultureInfo.InvariantCulture);
+
     public override void Dispose()
     {
         _stats.PropertyChanged -= OnStatsChanged;
@@ -1715,5 +1997,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
         _questBonuses.Changed -= OnQuestBonusesChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
         _leaderboards.Changed -= OnLeaderboardChanged;
+        _gameData.ActiveSetChanged -= OnAggroActiveSetChanged;
     }
 }

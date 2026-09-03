@@ -67,6 +67,7 @@ public static class BugReportBuilder
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
+            new("Combat spell profiles", SafeSection(() => BuildCombatProfiles(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
             new("Monster observations (this character)", SafeSection(() => BuildMonsterObservations(svc))),
             new("Item overrides", SafeSection(() => BuildItemOverrides(svc))),
@@ -184,6 +185,11 @@ public static class BugReportBuilder
         // armed and how the last pile resolved (Recovered / Partial / Missing).
         Kv(sb, "Auto-recover deathpiles", svc.DeathRecovery.AutoRecover ? "on" : "off");
         Kv(sb, "Auto-equip on recovery", svc.DeathRecovery.AutoEquip ? "on" : "off");
+        // Whether a rest-interrupting fight swaps to the Default set (then back on
+        // room-clear if still gated). Off = the pre-rest loadout is kept through the
+        // fight. Answers a "why did/didn't my gear swap when a mob showed up" report.
+        Kv(sb, "Swap to Default on combat",
+            (svc.Profile.Current?.Equipment?.SwapToDefaultOnCombat ?? false) ? "on" : "off");
         // Non-zero while an in-combat recovery is still pacing its re-equip across
         // rounds — shows a "recovered but not fully re-equipped" report mid-burst.
         if (svc.DeathRecovery.PendingReequipCount > 0)
@@ -373,6 +379,10 @@ public static class BugReportBuilder
         // recast-interval block left this stuck, and the character never attacked
         // again for the rest of the fight).
         Kv(sb, "Combat off (stuck?)", svc.Combat.CombatOff.ToString());
+        // True when Auto-Combat is off but a room hostile is blocking a needed rest
+        // (HP still above the flee trigger) — the engine is force-engaging to clear it
+        // so recovery can proceed (report paradigm-20260901-093301).
+        Kv(sb, "Engaging to clear a rest-blocker", svc.Health.ForceClearForRest.ToString());
         // Alternating action-order phase — pairs with the resolved Combat "ActionOrder"
         // setting below to explain why an alternate-order character is casting or
         // swinging this round (even rounds open on the mode's first phase).
@@ -564,6 +574,7 @@ public static class BugReportBuilder
         sb.Append("**Mana-regen reroll**\n\n");
         sb.Append($"- Roll signal: {rerollSignal}\n");
         sb.Append($"- Cycle active: {reroll.CycleActive}; rerolls used this cycle: {reroll.RerollsUsed}\n");
+        sb.Append($"- Waiting for mana to resume: {reroll.WaitingForMana}\n");
         sb.Append($"- Last observed roll value: {(reroll.LastObservedValue is { } v ? v.ToString() : "(none judged yet)")}\n");
         sb.Append('\n');
 
@@ -1210,6 +1221,36 @@ public static class BugReportBuilder
     // Resolve one tab-keyed section across the tier hierarchy and emit it as a
     // labelled JSON block. Isolated per-section so one section failing to
     // resolve leaves the rest intact.
+    // Casting spell profiles: how many exist, which is active, and every profile's
+    // FULL held config — each slot (empty shown as —) with its gates, plus the
+    // mana-mode / drain-trigger / drains-override knobs, the active one flagged. So
+    // a "wrong spells firing" report shows which profile was live, what it held, and
+    // what the others hold. Spells by cast code, never full name.
+    private static string BuildCombatProfiles(AppServices svc)
+    {
+        System.Collections.Generic.IReadOnlyList<Models.Profile.CombatSpellProfile> profiles =
+            svc.CombatProfiles.Profiles;
+        if (profiles.Count == 0) return "No combat spell profiles.";
+        int active = svc.CombatProfiles.ActiveIndex;
+
+        StringBuilder sb = new();
+        string activeLabel = active >= 0 && active < profiles.Count
+            ? (string.IsNullOrWhiteSpace(profiles[active].Name)
+                ? $"profile {active + 1}"
+                : $"profile {active + 1} ({profiles[active].Name.Trim()})")
+            : "(none)";
+        sb.Append(profiles.Count).Append(profiles.Count == 1 ? " profile" : " profiles")
+          .Append(". Active: ").Append(activeLabel).Append(".\n\n");
+
+        for (int i = 0; i < profiles.Count; i++)
+        {
+            sb.Append(Game.Combat.CombatSpellProfileReport.DescribeConfig(profiles[i], i + 1));
+            if (i == active) sb.Append("  (ACTIVE)");
+            sb.Append('\n');
+        }
+        return sb.ToString();
+    }
+
     private static void AppendResolved<T>(StringBuilder sb, AppServices svc, string tabKey)
         where T : class, new()
     {

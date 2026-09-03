@@ -67,6 +67,21 @@ public sealed partial class CombatManager
     // that were present when it was PICKED (not whenever the coordinator confirms it).
     private IReadOnlyList<string>? _pendingDebuffRoomKeys;
 
+    // A debuff is sent OPTIMISTICALLY — TryCast returns on wire-write, before the
+    // server accepts or rejects it — so MarkCast tags the mob(s) debuffed before we
+    // know it landed. Remember the marked debuff so a "You have already cast a spell
+    // this round!" rejection arriving moments later (it collided with a buff or the
+    // user's manual cast) can roll the mark back and re-fire it next round, instead of
+    // the mob staying falsely marked debuffed (reports paradigm-20260901-123720 /
+    // -140747). Matched by cast-code within a freshness window so a stale marker can't
+    // undo an unrelated later cast.
+    private (CombatSpellDecision Decision, string Target, IReadOnlyList<string>? RoomKeys, DateTimeOffset At)? _debuffAwaitingConfirm;
+
+    // A debuff rejection lands within the round it was sent — a couple of seconds at
+    // most. Past this the awaiting-confirm marker is stale (the debuff is assumed to
+    // have landed) and no longer rolls back.
+    private static readonly TimeSpan DebuffRejectionWindow = TimeSpan.FromSeconds(2);
+
     // Optional bridge to the CastingDirector's in-between window (Evaluate). Used
     // by TryPreAttackInBetween to let a due survival cast — or, failing that, the
     // configured debuff — fire BEFORE the attack on engage, honouring the
@@ -77,6 +92,11 @@ public sealed partial class CombatManager
     // debuff fires directly (bypassing Evaluate), so the director can't queue a
     // second between-round cast the same round. Optional — no-ops until set.
     private Action? _markBetweenRoundSlotUsed;
+    // Reads whether the director's one-between-round-cast slot is ALREADY spent this
+    // round, so the pre-attack debuff can stand down instead of firing a doomed cast
+    // into a spent slot (which draws "already cast this round" and latches the block
+    // that then delays the coupled attack). Optional — assumed free until wired.
+    private Func<bool>? _isBetweenRoundSlotUsed;
 
     // ----- Deterministic magic eligibility (game-data gated) ----------
     // Optional, like the spell caster. Until SetMagicEligibility runs, the
@@ -172,9 +192,36 @@ public sealed partial class CombatManager
     {
         ArgumentNullException.ThrowIfNull(cast);
         ArgumentNullException.ThrowIfNull(readMana);
+        if (_cast is not null) _cast.CastFailed -= OnCombatCastFailed;
         _cast = cast;
         _readMana = readMana;
         _readHp = readHp;
+        // Watch for a debuff the server rejects after our optimistic send so we can
+        // roll the mark back and re-fire it next round (see _debuffAwaitingConfirm).
+        _cast.CastFailed += OnCombatCastFailed;
+    }
+
+    // A cast the engine sent failed on the wire. We only care about a DEBUFF rejected
+    // with "already cast this round" — its optimistic MarkCast tagged the mob debuffed,
+    // but the cast never landed, so undo the mark and let the next round re-fire it.
+    // Other reasons / non-matching codes are left to the buff path (CastingDirector)
+    // and the attack path (which owes-and-retries its own blocked send).
+    private void OnCombatCastFailed(CastFailureReason reason, string detail, string? spell)
+    {
+        if (reason != CastFailureReason.AlreadyCastThisRound) return;
+        if (_debuffAwaitingConfirm is not { } pending) return;
+        if (_now() - pending.At > DebuffRejectionWindow) { _debuffAwaitingConfirm = null; return; }
+        // The rejection line never names the spell; CastCoordinator attributes it to
+        // the last code it sent. Only roll back when that matches the debuff we're
+        // awaiting — otherwise a later attack's rejection could wrongly unmark it.
+        if (!string.IsNullOrEmpty(spell)
+            && !string.Equals(spell, pending.Decision.Spell, StringComparison.OrdinalIgnoreCase))
+            return;
+        _spellChooser.UnmarkCast(pending.Decision, pending.Target, pending.RoomKeys);
+        _debuffAwaitingConfirm = null;
+        _log?.Combat(LogCategory,
+            $"pre-attack debuff {pending.Decision.Spell} rejected (already cast this round) — "
+            + "un-marked so it re-fires next round");
     }
 
     // Opt into drain-life target eligibility. monsterLife reports whether each
@@ -226,6 +273,15 @@ public sealed partial class CombatManager
     {
         ArgumentNullException.ThrowIfNull(marker);
         _markBetweenRoundSlotUsed = marker;
+    }
+
+    // Wire the read-side of the one-between-round-cast slot (CastingDirector's
+    // BetweenRoundSlotUsed). TryPreAttackInBetween consults it so it won't send a
+    // pre-attack debuff into a slot a survival/buff cast already spent this round.
+    public void SetBetweenRoundSlotQuery(Func<bool> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        _isBetweenRoundSlotUsed = query;
     }
 
     // True once SetCombatSpellCaster has wired both the coordinator and the mana
@@ -829,6 +885,20 @@ public sealed partial class CombatManager
             if (to is { } toSpell
                 && string.Equals(_announcedSpellCode, toSpell, StringComparison.OrdinalIgnoreCase))
                 return;
+            // A kill landed since this switch was armed and the death→re-observe path
+            // already re-picked a SAME-SPECIES survivor and fired a fresh attack at it
+            // (_attackSentSinceDeath). This switch was armed for the DEAD instance;
+            // firing it now is a second attack on the survivor — the reported
+            // double-attack (report paradigm-20260903-113054). The name / TargetPresent
+            // guard below can't catch it because the survivor shares the killed mob's
+            // RawName. Skip (mirrors the resume path's death-interrupt guard).
+            if (DateTimeOffset.Now - _lastDeathAt < DeathInterruptWindow && _attackSentSinceDeath)
+            {
+                _log?.Combat(LogCategory,
+                    $"spell {reason} {from ?? "?"}→{to ?? "?"} at '{target}' skipped — a kill re-picked a "
+                    + "same-species survivor and already re-attacked; not double-firing at it");
+                return;
+            }
             // A same-burst / adjacent-packet kill / departure nulls both target latches;
             // either mismatch means the switch would land on a corpse (or a re-picked mob).
             if (!string.Equals(_castingSpellTarget, target, StringComparison.OrdinalIgnoreCase)
@@ -921,6 +991,22 @@ public sealed partial class CombatManager
             return true;
         }
 
+        // The evaluator can also return null because the round's ONE between-round
+        // slot is already spent (a survival / self-buff cast took it) — not because
+        // nothing was due. Firing the debuff now would only draw the server's
+        // "already cast a spell this round" rejection, whose failure latch then
+        // blocks the very attack we defer behind it (report paradigm-20260902-134633:
+        // a pre-attack isto right after a blur delayed the msto ~3s to the next tick).
+        // Stand the debuff down and let the caller dispatch the attack directly this
+        // round; the debuff re-offers next round once the slot frees.
+        if (_isBetweenRoundSlotUsed?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory,
+                $"pre-attack debuff {decision.Spell} held — between-round slot already spent this " +
+                "round; dispatching the attack directly (debuff re-offers next round)");
+            return false;
+        }
+
         // Nothing higher-priority was queued — fire the debuff before the attack.
         // Open the round's per-target caps exactly as DispatchRoundAction would on
         // a new target (the AoE / debuff per-room counters are untouched).
@@ -944,6 +1030,8 @@ public sealed partial class CombatManager
             return false;
 
         _spellChooser.MarkCast(decision, picked.RawName, ctx.RoomMobKeys);
+        // Optimistic send — remember the mark so a server rejection can roll it back.
+        _debuffAwaitingConfirm = (decision, picked.RawName, ctx.RoomMobKeys, _now());
         _currentTarget = picked.RawName;
         // Stamp the between-round cast so the debuff's *Combat Off* is attributed to
         // OUR cast (not misread as a kill by OnCombatStatus's no-between-round-cast
@@ -1109,6 +1197,8 @@ public sealed partial class CombatManager
     {
         if (_pendingDebuff is not { } decision) return;
         _spellChooser.MarkCast(decision, _pendingDebuffTarget ?? string.Empty, _pendingDebuffRoomKeys);
+        // Optimistic send — remember the mark so a server rejection can roll it back.
+        _debuffAwaitingConfirm = (decision, _pendingDebuffTarget ?? string.Empty, _pendingDebuffRoomKeys, _now());
         _pendingDebuff = null;
         _pendingDebuffTarget = null;
         _pendingDebuffRoomKeys = null;

@@ -43,12 +43,19 @@ public static class MonsterMatchupCalculator
             ? playerHit.OverallHitPercent / 100.0 * effectivePerHit * player.SwingsPerRound
             : 0;
         // RoundsToKill is 0 when the player can't out-damage a kill (no weapon
-        // or zero effective DPS) — the UI renders that as "—".
-        int roundsToKill = dps > 0 ? (int)System.Math.Ceiling(monster.Hp / dps) : 0;
+        // or zero effective DPS) — the UI renders that as "—". Clamp before the
+        // int cast: a pathological superboss (Hp/dps past int range — e.g. a
+        // high-DR boss chipped only by a crit sliver) saturates to int.MaxValue,
+        // which the caller's rounds-to-kill cap then shows as "<cap>+", rather
+        // than wrapping to a negative that renders blank.
+        double rounds = dps > 0 ? System.Math.Ceiling(monster.Hp / dps) : 0;
+        int roundsToKill = rounds >= int.MaxValue ? int.MaxValue : (int)rounds;
 
         // Monster → player. Only the primary physical slot is previewed.
         int monsterHit = 0;
         int monsterDmgPerHit = 0;
+        int monsterSwings = 0;
+        double monsterDps = 0;
         if (monster.HasPhysicalAttack)
         {
             HitCalcResult mHit = CombatCalculator.CalculateHitChance(
@@ -60,6 +67,14 @@ public static class MonsterMatchupCalculator
                 realmType: realm);
             monsterHit = mHit.OverallHitPercent;
             monsterDmgPerHit = System.Math.Max(0, monster.AvgAttackDamage - player.DamageResist);
+            // Monster attacks/round = its per-round energy budget divided by the
+            // primary attack's energy cost — the same energy/AttEnergy formula the
+            // Game-Data monster readout uses. A slowness debuff (folded by the
+            // caller into a raised Slot energy) thins the swing count here, which
+            // is what makes the monster attack less. Falls back to a single swing
+            // when the row carries no usable energy figures.
+            monsterSwings = MonsterSwingsPerRound(monster.EnergyPerRound, monster.PrimaryAttackEnergy);
+            monsterDps = monsterHit / 100.0 * monsterDmgPerHit * monsterSwings;
         }
 
         return new MonsterMatchupResult(
@@ -71,8 +86,35 @@ public static class MonsterMatchupCalculator
             HasWeapon: player.HasWeapon,
             MonsterHasPhysicalAttack: monster.HasPhysicalAttack,
             MonsterHitPercent: monsterHit,
-            MonsterDamagePerHit: monsterDmgPerHit);
+            MonsterDamagePerHit: monsterDmgPerHit,
+            MonsterSwingsPerRound: monsterSwings,
+            MonsterDps: monsterDps);
     }
+
+    // Attacks/round the monster lands with its primary physical slot: the
+    // per-round energy budget floor-divided by that slot's energy cost (>=1 when
+    // both are positive). Mirrors the Game-Data readout's "Max N x/round". When
+    // either figure is missing (0), fall back to a single swing so the preview
+    // still shows one attack rather than zero.
+    public static int MonsterSwingsPerRound(int energyPerRound, int primaryAttackEnergy)
+    {
+        if (energyPerRound <= 0 || primaryAttackEnergy <= 0) return 1;
+        return System.Math.Max(1, energyPerRound / primaryAttackEnergy);
+    }
+
+    // Combat rounds per minute — a round is 5 seconds, so 12 rounds = 1 minute.
+    // Damage-per-minute figures multiply a per-round damage by this.
+    public const int RoundsPerMinute = 12;
+
+    // Average swings/round the monster lands over a long window (a minute), honouring
+    // energy ROLLOVER: a monster always spends its whole budget, and leftover energy
+    // (budget mod cost) carries into the next round, so across many rounds the mean
+    // swing count is the true FRACTIONAL budget/cost ratio — not the single-round
+    // integer floor MonsterSwingsPerRound returns. Monsters have no realm swing cap
+    // (unlike the player's 5/6): energy is the only limit. Used for DPM, where the
+    // fractional part matters (e.g. 1000/300 averages 3.33/round, not 3).
+    public static double AverageMonsterSwingsPerRound(int energyPerRound, int attackEnergy)
+        => energyPerRound <= 0 || attackEnergy <= 0 ? 1.0 : (double)energyPerRound / attackEnergy;
 }
 
 // Player-side inputs to MonsterMatchupCalculator.Compute — the offensive numbers
@@ -117,6 +159,10 @@ public readonly record struct PlayerMatchupProfile(
 //   AvgAttackDamage   — avg of the primary physical slot's min/max, before player DR.
 //   IsEvil            — monster is evil (Align in {1,2,5,6}), enables prot-evil.
 //   IsGood            — monster is good (Align in {0,4}), enables prot-good.
+//   EnergyPerRound    — the monster's per-round energy budget (row Energy).
+//   PrimaryAttackEnergy — the primary physical slot's per-attack energy cost;
+//                       swings/round = EnergyPerRound / this. A slowness debuff
+//                       is folded in by the caller as a raised value here.
 public readonly record struct MonsterMatchupProfile(
     int ArmourClass,
     int DamageResist,
@@ -126,7 +172,9 @@ public readonly record struct MonsterMatchupProfile(
     int AttackAccuracy,
     int AvgAttackDamage,
     bool IsEvil,
-    bool IsGood);
+    bool IsGood,
+    int EnergyPerRound = 0,
+    int PrimaryAttackEnergy = 0);
 
 // Output of MonsterMatchupCalculator.Compute — both hit directions plus the
 // player's DPS / rounds-to-kill projection.
@@ -140,6 +188,9 @@ public readonly record struct MonsterMatchupProfile(
 //   MonsterHasPhysicalAttack  — whether the monster has a physical slot to preview.
 //   MonsterHitPercent         — monster's primary-physical hit chance vs player.
 //   MonsterDamagePerHit       — monster avg damage per landed hit, after player DR.
+//   MonsterSwingsPerRound     — attacks/round the monster lands (energy/attEnergy),
+//                               thinned by a slowness debuff; 0 with no physical slot.
+//   MonsterDps                — monster damage/round: hit% * dmg/hit * swings.
 public readonly record struct MonsterMatchupResult(
     int PlayerHitPercent,
     int PlayerDamagePerHit,
@@ -149,7 +200,9 @@ public readonly record struct MonsterMatchupResult(
     bool HasWeapon,
     bool MonsterHasPhysicalAttack,
     int MonsterHitPercent,
-    int MonsterDamagePerHit);
+    int MonsterDamagePerHit,
+    int MonsterSwingsPerRound = 0,
+    double MonsterDps = 0);
 
 // One of the player's known, damage-dealing attack spells — the input
 // MonsterMatchupCalculator.RankAttackSpells scores against a specific
@@ -160,10 +213,12 @@ public readonly record struct MonsterMatchupResult(
 // Game.Spells dependency. AffectsUndeadOnly / AffectsLivingOnly mirror the
 // spell's own Abil 23 / Abil 108 flags (AbilityNames.cs) — a caster-side
 // target-type gate independent of SpellImmu and elemental resist.
+//   Targets — the spell's raw target-scope code; area scopes (DebuffTargeting.
+//     IsAreaEnemy: 3/5/9/11/12) mark it an AOE attack, the rest single-target.
 public readonly record struct PlayerAttackSpell(
     string Name, string Short, int ReqLevel, int AttType,
     long MaxDamagePerRound, long ManaCostPerRound,
-    bool AffectsUndeadOnly = false, bool AffectsLivingOnly = false);
+    bool AffectsUndeadOnly = false, bool AffectsLivingOnly = false, int Targets = 0);
 
 // One spell's effectiveness against a specific monster — either blocked
 // (SpellImmu too high, or the monster resists its element at or above 100%)
@@ -171,7 +226,13 @@ public readonly record struct PlayerAttackSpell(
 // effective damage.
 public readonly record struct SpellEffectivenessResult(
     string Name, string Short, string Element, long EffectiveDamage,
-    long ManaCostPerRound, bool Eligible, string? BlockedReason);
+    long ManaCostPerRound, bool Eligible, string? BlockedReason, bool IsAoe = false)
+{
+    // EffectiveDamage is already the resist-adjusted PER-ROUND figure (level-scaled
+    // + energy-multiplied at the caster side, then resist-adjusted here), so a minute
+    // is simply ×12 rounds. Meaningful only when Eligible.
+    public long DamagePerMinute => EffectiveDamage * MonsterMatchupCalculator.RoundsPerMinute;
+}
 
 // Spell-matchup additions to MonsterMatchupCalculator below — kept as their
 // own members rather than folded into Compute(), since the inputs (known
@@ -186,6 +247,90 @@ public static class MonsterMatchupCalculatorSpells
     // ability reads 0, so any weapon (including bare hands, HitMagic 0) hits.
     public static bool WeaponMeetsMagical(int weaponHitMagic, int monsterMagical)
         => weaponHitMagic >= monsterMagical;
+
+    // Chance THIS monster's own attack lands on a defender with the given
+    // live AC/Dodge, given whichever ward (Prot Evil/Prot Good) applies
+    // against its alignment — the Monster → player direction Compute() above
+    // already implements, exposed standalone since Monster Intel's "Hits You
+    // %" column needs it for every catalog row, not a single picked monster.
+    // Null when the monster has no catalogued physical attack to compute
+    // against. MajorMUD alignment codes 1/2/5/6 are evil, 0/4 are good.
+    public static int? IncomingHitPercent(
+        (int Majority, int Max)? physicalAccuracy, int alignment,
+        int defenderAc, int defenderDodge, int protEvil, int protGood,
+        RealmType realm, bool hasShadow = false,
+        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint)
+        => physicalAccuracy is { } acc
+            ? AttackHitPercent(acc.Majority, alignment, defenderAc, defenderDodge, protEvil,
+                protGood, realm, hasShadow, vileWard, defenderEvil)
+            : null;
+
+    // Chance ONE monster attack of the given accuracy lands on the defender,
+    // applying whichever ward (Prot Evil / Prot Good / Vile Ward) matches the
+    // monster's alignment. Shared by the single-slot IncomingHitPercent, the
+    // weighted blend below, and Monster Intel's per-attack detail lines.
+    // MajorMUD alignment codes 1/2/5/6 are evil, 0/4 are good.
+    public static int AttackHitPercent(
+        int accuracy, int alignment,
+        int defenderAc, int defenderDodge, int protEvil, int protGood,
+        RealmType realm, bool hasShadow = false,
+        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint)
+    {
+        bool isEvil = alignment is 1 or 2 or 5 or 6;
+        bool isGood = alignment is 0 or 4;
+        // Prot Evil and Vile Ward are evil-only wards: they raise the defender's
+        // defense only when the attacker (this monster) is evil, so both are
+        // zeroed against a neutral/good monster. Vile Ward's raw value is scaled
+        // by the defender's own evil tier inside CalculateHitChance (AdjustVileWard).
+        return CombatCalculator.CalculateHitChance(
+            attackerAccuracy: accuracy,
+            defenderAC: defenderAc,
+            defenderDodge: defenderDodge,
+            protEvil: isEvil ? protEvil : 0,
+            protGood: isGood ? protGood : 0,
+            vileWard: isEvil ? vileWard : 0,
+            evilLevel: defenderEvil,
+            hasShadow: hasShadow,
+            realmType: realm).OverallHitPercent;
+    }
+
+    // A monster's overall chance to land a hit when it swings, blended across ALL
+    // its physical attacks: each attack's own hit% weighted by how often the
+    // monster throws it (its use-weight, which sums to ~100 across the physical
+    // slots). This is the "resembles the real chance it hits you, considering
+    // every attack" figure — more faithful than the single majority-slot accuracy,
+    // and it averages the per-attack hit OUTPUTS, not the accuracies (which would
+    // skew through the non-linear hit formula). `accuracyDelta` is subtracted from
+    // every attack's accuracy (a folded accuracy debuff; 0 for the base case) and
+    // may push it negative. Null when the monster has no physical attack to blend.
+    public static int? WeightedIncomingHitPercent(
+        IReadOnlyList<(int Accuracy, double Weight)> physicalAttacks, int accuracyDelta,
+        int alignment, int defenderAc, int defenderDodge, int protEvil, int protGood,
+        RealmType realm, bool hasShadow = false,
+        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint)
+    {
+        if (physicalAttacks is null || physicalAttacks.Count == 0) return null;
+        double totalWeight = 0, weightedHit = 0;
+        foreach ((int accuracy, double weight) in physicalAttacks)
+        {
+            double w = weight > 0 ? weight : 0;
+            int hit = AttackHitPercent(accuracy - accuracyDelta, alignment, defenderAc,
+                defenderDodge, protEvil, protGood, realm, hasShadow, vileWard, defenderEvil);
+            weightedHit += w * hit;
+            totalWeight += w;
+        }
+        // Every weight zero (a data quirk) → fall back to a plain mean so the row
+        // still shows a number rather than dropping out.
+        if (totalWeight <= 0)
+        {
+            double sum = 0;
+            foreach ((int accuracy, double _) in physicalAttacks)
+                sum += AttackHitPercent(accuracy - accuracyDelta, alignment, defenderAc,
+                    defenderDodge, protEvil, protGood, realm, hasShadow, vileWard, defenderEvil);
+            return (int)System.Math.Round(sum / physicalAttacks.Count);
+        }
+        return (int)System.Math.Round(weightedHit / totalWeight);
+    }
 
     // Rank the player's known attack spells by effective damage against one
     // monster: a spell whose ReqLevel is below the monster's SpellImmu never
@@ -214,25 +359,28 @@ public static class MonsterMatchupCalculatorSpells
         {
             string element = Game.GameData.LookupEnums.FormatSpellAttackType(
                 s.AttType.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? "?";
+            // Area target scopes (Divided/Full Attack Area) mark an AOE attack;
+            // everything else is single-target. Drives the panel's spell grouping.
+            bool isAoe = Game.Combat.DebuffTargeting.IsAreaEnemy(s.Targets);
 
             if (s.ReqLevel < monsterSpellImmunity)
             {
                 results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
                     s.ManaCostPerRound, Eligible: false,
-                    $"Spell immune below level {monsterSpellImmunity} (this spell is {s.ReqLevel})"));
+                    $"Spell immune below level {monsterSpellImmunity} (this spell is {s.ReqLevel})", IsAoe: isAoe));
                 continue;
             }
 
             if (s.AffectsUndeadOnly && !monsterIsUndead)
             {
                 results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
-                    s.ManaCostPerRound, Eligible: false, "Affects undead only — this monster isn't undead"));
+                    s.ManaCostPerRound, Eligible: false, "Affects undead only — this monster isn't undead", IsAoe: isAoe));
                 continue;
             }
             if (s.AffectsLivingOnly && monsterIsUndead)
             {
                 results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
-                    s.ManaCostPerRound, Eligible: false, "Affects living only — this monster is undead"));
+                    s.ManaCostPerRound, Eligible: false, "Affects living only — this monster is undead", IsAoe: isAoe));
                 continue;
             }
 
@@ -243,14 +391,14 @@ public static class MonsterMatchupCalculatorSpells
             {
                 results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
                     s.ManaCostPerRound, Eligible: false,
-                    resistPercent == 100 ? $"{element} fully resisted" : $"{element} heals this monster instead"));
+                    resistPercent == 100 ? $"{element} fully resisted" : $"{element} heals this monster instead", IsAoe: isAoe));
                 continue;
             }
 
             long effective = (long)System.Math.Round(
                 s.MaxDamagePerRound * (100 - resistPercent) / 100.0, System.MidpointRounding.AwayFromZero);
             results.Add(new SpellEffectivenessResult(
-                s.Name, s.Short, element, effective, s.ManaCostPerRound, Eligible: true, BlockedReason: null));
+                s.Name, s.Short, element, effective, s.ManaCostPerRound, Eligible: true, BlockedReason: null, IsAoe: isAoe));
         }
 
         return results

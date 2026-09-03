@@ -211,6 +211,67 @@ public sealed class CombatSpellChooserTests
         Assert.Equal("harm", attack.Spell);
     }
 
+    // The AoE per-room cap survives a ROSTER clear (an AoE multi-kill empties the
+    // listed pack and fires a synthetic room-clear though the character never moved),
+    // so the area debuff doesn't re-fire at the same physical room's survivors /
+    // re-reveals (report paradigm-20260902-160110 — "ISTO fired twice in one fight").
+    // A genuine physical-room change (ResetForNewRoom) still re-arms it.
+    [Fact]
+    public void ChooseDebuff_Area_CapSurvivesRosterClear_ResetsOnNewRoom()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("blindall", minEnemies: 2),
+            NormalAttackSpell = Slot("harm"),
+        };
+
+        CombatSpellDecision? first = sut.ChooseDebuff(settings, Ctx(enemies: 3));
+        Assert.Equal(CombatSpellAction.AreaDebuff, first?.Action);
+        sut.MarkCast(first!.Value, "a rat");
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3)));   // cap reached
+
+        // Roster clear (AoE wave-kill in the SAME room) must NOT re-arm the cap.
+        sut.ResetForRosterClear();
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3)));
+
+        // A real room change re-arms it.
+        sut.ResetForNewRoom();
+        Assert.Equal(CombatSpellAction.AreaDebuff,
+            sut.ChooseDebuff(settings, Ctx(enemies: 3))?.Action);
+    }
+
+    // A same-room RESPAWN (after the room is confirmed cleared — the player rested)
+    // must be re-debuffed, while a same-fight survivor (a mid-fight wave-clear roster
+    // reset) must NOT be (report paradigm-20260903-070438 vs the -160110 "isto fired
+    // twice" fix).
+    [Fact]
+    public void ChooseDebuff_Area_ResetOnRoomClear_ReDebuffsRespawn_NotSurvivor()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("blindall", minEnemies: 2),
+            NormalAttackSpell = Slot("harm"),
+        };
+        var keys = new[] { "slimeworm" };
+
+        CombatSpellDecision? first = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: keys));
+        Assert.Equal(CombatSpellAction.AreaDebuff, first?.Action);
+        sut.MarkCast(first!.Value, "slimeworm", keys);
+
+        // A mid-fight wave-clear roster reset (hidden same-species survivors) keeps the
+        // tags — the survivor is NOT re-debuffed.
+        sut.ResetForRosterClear();
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: keys)));
+
+        // The room is confirmed genuinely cleared (the player rested) — a same-room
+        // respawn after that IS re-debuffed.
+        sut.ResetAreaDebuffTags();
+        Assert.Equal(CombatSpellAction.AreaDebuff,
+            sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: keys))?.Action);
+    }
+
     [Fact]
     public void ChooseDebuff_Area_BelowMinEnemies_Skipped()
     {
@@ -372,6 +433,36 @@ public sealed class CombatSpellChooserTests
         sut.ResetForNewRoom();
         CombatSpellDecision? room2 = sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: crabs));
         Assert.Equal(CombatSpellAction.AreaDebuff, room2?.Action);
+    }
+
+    // reports paradigm-20260901-123720 / -140747: a pre-attack AoE debuff is sent
+    // optimistically, so MarkCast tags the room BEFORE the server accepts it. When the
+    // cast is rejected ("You have already cast a spell this round!" — it collided with a
+    // buff or the user's manual cast), UnmarkCast rolls the tag + per-room count back so
+    // the debuff re-fires next round instead of the room staying falsely debuffed.
+    [Fact]
+    public void UnmarkCast_Area_RejectedSend_RefiresNextRound()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            AreaDebuffSpell = Slot("isto", minEnemies: 2, maxCasts: 1),
+        };
+        string[] roster = { "slimeworm", "slimeworm" };
+
+        CombatSpellDecision? first = sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster));
+        Assert.Equal(CombatSpellAction.AreaDebuff, first?.Action);
+        sut.MarkCast(first!.Value, "slimeworm", roster);      // optimistic tag, per-room cap spent
+
+        // Same round, still tagged → won't re-offer (correct once-per-room).
+        Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster)));
+
+        // The send was rejected — roll the mark back.
+        sut.UnmarkCast(first.Value, "slimeworm", roster);
+
+        // Re-fires next round as though never cast.
+        CombatSpellDecision? again = sut.ChooseDebuff(settings, Ctx(enemies: 2, roomMobKeys: roster));
+        Assert.Equal(CombatSpellAction.AreaDebuff, again?.Action);
     }
 
     [Fact]

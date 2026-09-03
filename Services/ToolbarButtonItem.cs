@@ -46,6 +46,13 @@ public sealed partial class ToolbarButtonItem : ObservableObject
     // True → show AlternateIconResourceKey in place of IconResourceKey.
     [ObservableProperty] private bool _showAlternate;
 
+    // Short text shown in place of the icon (e.g. the Combat-Profile cycle button's
+    // "P1"). Empty/null → the icon renders as usual.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBadgeText))]
+    private string? _badgeText;
+    public bool HasBadgeText => !string.IsNullOrEmpty(BadgeText);
+
     public ToolbarButtonItem(
         ToolbarItemKind kind,
         string? actionId,

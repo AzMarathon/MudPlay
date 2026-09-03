@@ -78,6 +78,12 @@ public sealed class ManaRegenReroller : IDisposable
     private int _rerollsUsed;
     private bool _awaitingAbil;
     private bool _awaitingTick;
+    // True when a cycle has more rerolls left but the next recast couldn't be paid
+    // without dropping under the mana floor. The cycle is SUSPENDED, not ended: the
+    // reroll counter is preserved and OnRecoveryTick resumes it once mana recovers,
+    // so it uses its full cap instead of surrendering at the floor (report
+    // paradigm-20260901-114223 — gave up at 3/20 when it ran out of mana).
+    private bool _waitingForMana;
     private bool _disposed;
 
     public ManaRegenReroller(
@@ -108,6 +114,11 @@ public sealed class ManaRegenReroller : IDisposable
     // idle. For diagnostics / tests.
     public int RerollsUsed => _rerollsUsed;
 
+    // True while a cycle is suspended at the mana floor, waiting for mana to recover
+    // before the next reroll. For the bug report, so a paused reroll reads as
+    // "waiting for mana" rather than looking stalled. For diagnostics / tests.
+    public bool WaitingForMana => _waitingForMana;
+
     // The roll quality last judged — the abil-145 spells value (Paradigm) or the
     // observed tick (Stock). Null until the first roll is evaluated. For the bug
     // report, so a "reroll isn't working" capture shows what value the engine saw.
@@ -131,6 +142,11 @@ public sealed class ManaRegenReroller : IDisposable
             Reset();
             return;
         }
+
+        // A cast is on the wire (our resume recast, or maintenance recasting an
+        // expired flux) — supersede any mana-floor wait; the abil read below drives
+        // the decision from here.
+        _waitingForMana = false;
 
         if (_activeShort is null
             || !string.Equals(_activeShort, spellShort, StringComparison.OrdinalIgnoreCase))
@@ -184,9 +200,30 @@ public sealed class ManaRegenReroller : IDisposable
         Decide(tickAmount, "tick");
     }
 
+    // Host heartbeat (~1s). Resume a cycle suspended at the mana floor once mana has
+    // climbed back enough to pay for the next recast. Idle unless a cycle is waiting.
+    // The recast rides the normal reroll path (RequestManaRegenReroll → priority cast
+    // loop), so it takes the round's cast slot cleanly rather than racing a swing.
+    public void OnRecoveryTick()
+    {
+        if (!_waitingForMana) return;
+        if (_activeShort is not { } shortCode) { _waitingForMana = false; return; }
+
+        ManaRegenRerollConfig cfg = _readConfig();
+        if (cfg.Threshold is null) { Reset(); return; }     // rerolling disabled meanwhile
+        if (_rerollsUsed >= cfg.Cap) { Reset(); return; }   // defensive: nothing left to spend
+        if (!_canAffordReroll()) return;                    // still under the floor — keep waiting
+
+        _waitingForMana = false;
+        _rerollsUsed++;
+        _log?.Info(LogCategory,
+            $"resuming reroll spell={shortCode} after mana recovery — attempt {_rerollsUsed}/{cfg.Cap}");
+        _recast(shortCode);
+    }
+
     // The shared accept-or-reroll decision. value is the roll's quality — the rolled
     // percent on Paradigm, the observed tick on Stock — compared against the configured
-    // threshold; reroll while below it, up to the cap, hard-stopping at the mana floor.
+    // threshold; reroll while below it, up to the cap, pausing at the mana floor.
     private void Decide(int value, string valueLabel)
     {
         if (_activeShort is not { } shortCode) return;   // defensive: no active cycle
@@ -221,10 +258,16 @@ public sealed class ManaRegenReroller : IDisposable
 
         if (!_canAffordReroll())
         {
+            // Out of mana to recast, but rerolls remain — SUSPEND the cycle rather
+            // than accept the bad roll. Keep the counter; OnRecoveryTick resumes the
+            // next attempt once mana climbs back over the floor, so we spend the full
+            // cap instead of quitting at the floor (report paradigm-20260901-114223).
+            _awaitingAbil = false;
+            _awaitingTick = false;
+            _waitingForMana = true;
             _log?.Info(LogCategory,
-                $"reroll stopped at mana floor spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
-                $"after {_rerollsUsed} reroll(s)");
-            Reset();
+                $"reroll paused at mana floor spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
+                $"after {_rerollsUsed}/{cfg.Cap} reroll(s) — waiting for mana to recover before the next attempt");
             return;
         }
 
@@ -243,6 +286,7 @@ public sealed class ManaRegenReroller : IDisposable
         _rerollsUsed = 0;
         _awaitingAbil = false;
         _awaitingTick = false;
+        _waitingForMana = false;
     }
 
     public void Dispose()

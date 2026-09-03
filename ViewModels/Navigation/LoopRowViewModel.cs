@@ -22,6 +22,12 @@ public sealed class LoopRowViewModel
     // "4 rooms" — count of waypoints in the loop.
     public string SubLabel => $"{Source.RoomCount} room{(Source.RoomCount == 1 ? "" : "s")}";
 
+    // Whole-entry text for the row's mouseover tooltip — name plus the same
+    // anchor · count detail line — so a narrow rail that ellipsises either line
+    // still reveals the full entry on hover.
+    public string RowTooltip =>
+        StartRoomKey.Length == 0 ? $"{Name}\n{SubLabel}" : $"{Name}\n{StartRoomKey} · {SubLabel}";
+
     // Context-menu label reflecting the current favourite state (the loop's
     // Favorite flag feeds the terminal right-click Favourites flyout). The row is
     // rebuilt on every LoopsChanged, so a plain computed getter stays in sync.

@@ -24,8 +24,10 @@ public static class CombatCalculator
     public const int PARAMUD_DODGE_SOFTCAP = 55;
     // ParaMUD dodge hard ceiling.
     public const int PARAMUD_DODGE_CAP = 98;
-    // Maximum swings landable in a single round.
-    public const int MAX_SWINGS = 5;
+    // Maximum swings landable in a single round — realm-dependent: hard-capped
+    // at 5 on Stock, 6 on Paradigm (GAME_MECHANICS.md "Combat order… swings per
+    // round"). A fixed 5 under-counted every Paradigm swing/DPS/rounds figure.
+    public static int MaxSwingsForRealm(RealmType realm) => realm == RealmType.ParaMud ? 6 : 5;
 
     // ----- Hit chance ------------------------------------------------------
 
@@ -146,29 +148,11 @@ public static class CombatCalculator
             DodgeCap: dodgeCap);
     }
 
-    // Inverse of CalculateHitChance for a normal monster→player attack: the smallest
-    // attacker accuracy whose overall hit chance against the given defences reaches
-    // targetHitPercent. Binary search over the same formula (hit chance is monotonic
-    // in accuracy), so it stays exact to whatever the live calculator produces. Used by
-    // the Hit Calculator to turn a "% chance to hit me" into a monster accuracy to
-    // filter on. No alignment wards — a generic monster of unknown alignment.
-    public static int AccuracyForHitChance(int targetHitPercent, int defenderAC, int defenderDodge, RealmType realmType)
-    {
-        targetHitPercent = Math.Clamp(targetHitPercent, 0, 100);
-        int lo = 1, hi = 9999, result = 9999;
-        while (lo <= hi)
-        {
-            int mid = (lo + hi) / 2;
-            int hit = CalculateHitChance(mid, defenderAC, defenderDodge, realmType: realmType).OverallHitPercent;
-            if (hit >= targetHitPercent) { result = mid; hi = mid - 1; }
-            else lo = mid + 1;
-        }
-        return result;
-    }
-
     // Scale a defender's vile ward by evil level: <=Seedy → 0, <=Criminal →
-    // halved, then always divided by 10.
-    private static int AdjustVileWard(int vileWard, EvilLevel evilLevel)
+    // halved, then always divided by 10. Public so callers computing a displayed
+    // "effective AC vs an evil target" (Monster Intel) convert the raw ward the
+    // same way the hit-chance math does, instead of re-deriving the ~10:1 rate.
+    public static int AdjustVileWard(int vileWard, EvilLevel evilLevel)
     {
         if (vileWard <= 0 || evilLevel <= EvilLevel.Saint) return 0;
         if (evilLevel <= EvilLevel.Seedy) return 0;
@@ -662,7 +646,16 @@ public static class CombatCalculator
     {
         int speed = hasSlowness ? (attackSpeed * 3) / 2 : attackSpeed;
 
-        int divisor = ((level * (combatLevel + 2)) + 45) * (agility + 150) / 6;
+        // Combat term is level × the class CombatLVL. MMUD-Explorer feeds this
+        // formula GetClassCombat (= CombatLVL − 2, modMMudDatabase.bas) into a
+        // (nCombat + 2) form — net level × CombatLVL. We pass the raw CombatLVL and
+        // drop the +2, which is identical. Passing the raw CombatLVL into a
+        // (combatLevel + 2) form was the bug: an extra level×2 in the divisor
+        // undercut energy ~26% and inflated every swing/DPS/rounds figure (report:
+        // L28 Paladin, throwing hammers speed 1100, 57% encum — read 9 swings
+        // uncapped / bash 4.5 where the game shows 7.143 / 3.572). Accuracy keeps
+        // the raw CombatLVL (CalcAccuracy), which the game does too.
+        int divisor = ((level * combatLevel) + 45) * (agility + 150) / 6;
         if (divisor < 1) divisor = 1;
         int energy = (speed * 1000) / divisor;
 
@@ -706,8 +699,9 @@ public static class CombatCalculator
 
         int qndBonus = CalcQuickAndDeadlyBonus(agility, energy, encumPercent, realmType);
 
+        int maxSwings = MaxSwingsForRealm(realmType);
         double rawSwings = 1000.0 / energy;
-        if (rawSwings > MAX_SWINGS) rawSwings = MAX_SWINGS;
+        if (rawSwings > maxSwings) rawSwings = maxSwings;
 
         var swingsPerRound = new int[10];
         var energyRemaining = new int[10];
@@ -716,7 +710,7 @@ public static class CombatCalculator
         for (int round = 0; round < 10; round++)
         {
             int swings = remaining / energy;
-            if (swings > MAX_SWINGS) swings = MAX_SWINGS;
+            if (swings > maxSwings) swings = maxSwings;
             swingsPerRound[round] = swings;
             remaining = (remaining % energy) + 1000;
             energyRemaining[round] = remaining - 1000; // carry into next round
@@ -776,5 +770,47 @@ public static class CombatCalculator
             }
         }
         return crit < 0 ? 0 : crit;
+    }
+
+    // Damage / swings / crit for one melee attack type, from resolved weapon +
+    // stat inputs. The shared core behind BOTH the Character Workshop Calculators
+    // tab's weapon offense and CharacterCalculator.BuildNormalAttackProfile
+    // (Monster Intel's rounds-to-kill) — kept in one place so a +MinDamage source,
+    // a Bash swing rate, or the Smash single-swing can't read differently on the
+    // two surfaces. Accuracy is deliberately NOT computed here: the Calculators
+    // tab folds martial-arts strikes into its accuracy path, which has no analogue
+    // on the weapon side, so each caller resolves accuracy itself.
+    public static MeleeOffense ComputeMeleeOffense(
+        MudAttackType type, RealmType realmType, int level, int combatLevel,
+        int strength, int agility, int weaponMin, int weaponMax, int weaponSpeed, int weaponStrReq,
+        int plusMaxDamage, int plusMinDamage, int plusCrits, int currentEncum, int maxEncum)
+    {
+        bool hasWeapon = weaponMax > 0;
+
+        MeleeDamageResult dmg = CalcMeleeDamage(
+            type, realmType, strength, weaponMin, weaponMax, plusMaxDamage, plusMinDamage);
+        int avgDamage = hasWeapon ? (dmg.MinDamage + dmg.MaxDamage) / 2 : 0;
+
+        SwingCalcResult swings = CalcSwings(
+            combatLevel, level, weaponSpeed, agility, strength, weaponStrReq,
+            currentEncum, maxEncum, isBashing: type == MudAttackType.Bash, realmType: realmType);
+        // Smash locks the round to a single swing regardless of weapon speed.
+        // A no-weapon projection reads 0 swings (the DPS gate + the UI both key
+        // off HasWeapon, so the raw value is never shown for an empty hand).
+        double swingsPerRound = !hasWeapon ? 0
+            : type == MudAttackType.Smash ? 1 : swings.RawSwings;
+
+        // Crit folds into DPS only for the plain Normal attack (Bash / Smash crit
+        // interaction isn't a verified mechanic); a crit averages 3x the max, and
+        // the Quick-and-Deadly bonus only applies when STR meets the weapon's req.
+        int critChance = 0, avgCritDamage = 0;
+        if (type == MudAttackType.Normal && hasWeapon)
+        {
+            int qnd = (weaponStrReq <= 0 || strength >= weaponStrReq) ? swings.QnDCritBonus : 0;
+            critChance = CalcCritChance(plusCrits, qnd, realmType);
+            avgCritDamage = dmg.MaxDamage * 3;
+        }
+
+        return new MeleeOffense(avgDamage, swingsPerRound, critChance, avgCritDamage, hasWeapon);
     }
 }

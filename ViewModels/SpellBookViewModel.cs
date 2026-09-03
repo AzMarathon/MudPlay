@@ -32,7 +32,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         _book = book;
         _classNameProvider = classNameProvider;
         // Live Spellcasting stat, read fresh on each Rebuild — feeds the per-row
-        // cast-success ("Difficulty") column. Null in tests (rows then show "—").
+        // cast-success ("Success %") column. Null in tests (rows then show "—").
         _spellcastingProvider = spellcastingProvider;
         _book.Changed += OnBookChanged;
         _allCastItems = _book.GetCastItems();
@@ -92,12 +92,14 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         }
     }
 
-    // Header hint that spells out how the Difficulty column is computed — the
+    // Header hint that spells out how the Success % column is computed — the
     // formula in variable form (the per-row tooltip fills in the actual numbers).
-    public string DifficultyFormulaText
+    // The value it yields is the caster's chance to land the spell, so it reads
+    // "Success % = …", not "Difficulty = …".
+    public string SuccessFormulaText
         => _book.Available.Count == 0
             ? string.Empty
-            : "Difficulty = Spellcasting + spell difficulty  (clamped 0–98%)";
+            : "Success % = your Spellcasting + the spell's difficulty  (capped at 98%, 100% for Kai)";
 
     // Footer summary: obtained-of-total + filtered count.
     public string StatusText
@@ -122,7 +124,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         _allCastItems = _book.GetCastItems();
         Rebuild();
         OnPropertyChanged(nameof(HeaderText));
-        OnPropertyChanged(nameof(DifficultyFormulaText));
+        OnPropertyChanged(nameof(SuccessFormulaText));
     }
 
     private void Rebuild()

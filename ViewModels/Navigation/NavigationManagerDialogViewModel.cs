@@ -62,6 +62,14 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     // them together. Lairs sort ahead of loops within a folder (added first).
     public ObservableCollection<object> WalkTree { get; } = new();
 
+    // Flat, uniform-height projection of WalkTree the tab actually renders (a
+    // virtualized ListBox over these rows). A nested TreeView makes an expanded
+    // folder one giant item that wrecks the virtualized scrollbar and drifts on
+    // expand; a flat list of same-height rows keeps it stable. Kept in sync by
+    // RebuildWalkTree + the expand/collapse splice in ToggleFolder — see NavFlatList.
+    private readonly NavFlatList _walkFlat = new();
+    public ObservableCollection<NavFlatRow> WalkRows => _walkFlat.Rows;
+
     // In-progress build session from the Navigation window, or null when the
     // user isn't in LoopBuild mode. When non-null the dialog's Draft section
     // is visible — the user gives the draft a name + clicks Save to persist
@@ -241,6 +249,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
             defaultExpanded: false, _walkExpandOverrides,
             harvest: !_walkWasFiltering, forceExpandAll: false);
         _walkWasFiltering = filtering;
+        _walkFlat.Rebuild(WalkTree);
         OnPropertyChanged(nameof(HasWalkTree));
         OnPropertyChanged(nameof(HasNoWalkMatches));
     }
@@ -263,6 +272,21 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
 
     // Folder-grouped GOTO tree (NavFolderNodeViewModel folders + FavoriteRowViewModel leaves).
     public ObservableCollection<object> FavoriteTree { get; } = new();
+
+    // Flat projection of FavoriteTree the GOTO tab renders — see _walkFlat / NavFlatList.
+    private readonly NavFlatList _favoriteFlat = new();
+    public ObservableCollection<NavFlatRow> FavoriteRows => _favoriteFlat.Rows;
+
+    // Expand/collapse a folder in either flat list, splicing its rows in/out so the
+    // scroll position — and the folder row you clicked — stays put. Routed by which
+    // list holds the folder so one command serves both tabs' lists.
+    [RelayCommand]
+    private void ToggleFolder(NavFolderNodeViewModel? folder)
+    {
+        if (folder is null) return;
+        if (_favoriteFlat.Contains(folder)) _favoriteFlat.ToggleFolder(folder);
+        else if (_walkFlat.Contains(folder)) _walkFlat.ToggleFolder(folder);
+    }
 
     public bool HasFavorites => Favorites.Count > 0;
     public bool HasFavoriteTree => FavoriteTree.Count > 0;
@@ -346,6 +370,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
             defaultExpanded: false, _gotoExpandOverrides,
             harvest: !_gotoWasFiltering, forceExpandAll: false);
         _gotoWasFiltering = filtering;
+        _favoriteFlat.Rebuild(FavoriteTree);
         OnPropertyChanged(nameof(HasFavoriteTree));
         OnPropertyChanged(nameof(HasNoGotoMatches));
     }

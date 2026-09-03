@@ -114,6 +114,13 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     // False with no character loaded — gates the set list and the empty state.
     [ObservableProperty] private bool _hasProfile;
 
+    // The "Don't swap to default upon entering combat" checkbox — the inverse of the
+    // persisted EquipmentSettings.SwapToDefaultOnCombat, so the checkbox reads true
+    // (checked) for the long-standing default (keep the pre-rest loadout through a
+    // rest-interrupting fight). Unchecking it opts into swapping to Default for the
+    // fight and back afterward. Persisted on change; loaded under _suppress.
+    [ObservableProperty] private bool _dontSwapToDefaultOnCombat = true;
+
     // True when the bonuses panel has at least one non-zero stat row.
     [ObservableProperty] private bool _hasBonuses;
 
@@ -209,6 +216,16 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         _profile.Save();
         EnableCommand.NotifyCanExecuteChanged();
         DisableCommand.NotifyCanExecuteChanged();
+    }
+
+    // The checkbox is the inverse of the persisted flag; write it through and save,
+    // unless we're mid-load (seeding the box from the profile).
+    partial void OnDontSwapToDefaultOnCombatChanged(bool value)
+    {
+        if (_suppress) return;
+        if (_profile.Current?.Equipment is not { } cfg) return;
+        cfg.SwapToDefaultOnCombat = !value;
+        _profile.Save();
     }
 
     // Hand the selected set to the engine to walk the character into it.
@@ -343,12 +360,14 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         try
         {
             SetRows.Clear();
+            DontSwapToDefaultOnCombat = true;
             if (_profile.Current is { } p)
             {
                 EquipmentSettings cfg = p.Equipment ??= new EquipmentSettings();
                 if (EnsureSets(cfg)) _profile.Save();
                 foreach (EquipmentSet s in cfg.Sets)
                     SetRows.Add(new EquipmentSetRowViewModel(s));
+                DontSwapToDefaultOnCombat = !cfg.SwapToDefaultOnCombat;
             }
             SelectedSetRow = SetRows.FirstOrDefault();
         }
@@ -491,7 +510,6 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     // The AC-relevant portion of the character's configured self-buff spells,
     // summed once per bonus rebuild. ProtEvil rides its own conditional line;
     // shadow / VileWard are presence flags (magnitude handled separately).
-    private readonly record struct SpellAcContribution(double Ac, int ProtEvil, bool HasShadow, bool HasVileWard);
 
     // Fold the set's item AC together with the character's innate race / class
     // bonuses, completed-quest rewards, configured AC self-buffs, and the shadow
@@ -507,94 +525,37 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         if (classRow is JsonElement c) CharacterCalculator.ApplyAbilityBonuses(combined, c, _stats.Class);
         CharacterCalculator.ApplyQuestBonuses(combined, _questBonuses.Bonuses, "Quests");
 
-        SpellAcContribution spell = SumConfiguredSpellAc();
+        // Configured self-applicable buffs, assuming up — the shared roster
+        // ("everything that lands on you": self-only, whole-party-on, and
+        // single-target cast-on-self) used identically by Monster Intel and
+        // Character Info, so the three surfaces never drift.
+        BuffDefense buff = Game.Spells.BuffDefenseCalculator.Compute(
+            _profile.Current?.PartyBuffs, _stats.Level, AppServices.Current.Spellbook.Available);
 
         double itemAc = itemBreakdown.Totals.PlusAC;
         double innateAc = combined.Totals.PlusAC - itemAc;   // race + class + quest
 
         // Shadow lands once across gear / race / class / quest (folded into
         // PlusShadowResist) or any configured self-buff that grants it.
-        bool hasShadow = combined.Totals.PlusShadowResist != 0 || spell.HasShadow;
+        bool hasShadow = combined.Totals.PlusShadowResist != 0 || buff.HasShadow;
         int shadowAc = hasShadow ? ShadowAcBonus : 0;
 
-        double total = combined.Totals.PlusAC + spell.Ac + shadowAc;
+        double total = combined.Totals.PlusAC + buff.Ac + shadowAc;
         ProjectedAc = total.ToString("+0.#;-0.#", CultureInfo.InvariantCulture);
 
         // Prot-Evil is 1 AC per point but only versus evil monsters, so it's a
         // conditional line rather than part of the flat projected total.
-        int protEvil = combined.Totals.PlusProtEvil + spell.ProtEvil;
+        int protEvil = combined.Totals.PlusProtEvil + buff.ProtEvil;
         HasProjectedProtEvil = protEvil != 0;
         ProjectedProtEvil = protEvil.ToString("+0;-0", CultureInfo.InvariantCulture);
 
-        bool hasVileWard = spell.HasVileWard
+        bool hasVileWard = buff.HasVileWard
             || WornHasAbility(worn, VileWardAbilityCode)
             || RowHasAbility(raceRow, VileWardAbilityCode, MaxRecordAbilSlots)
             || RowHasAbility(classRow, VileWardAbilityCode, MaxRecordAbilSlots)
             || _questBonuses.Bonuses.Any(q => q.AbilityId == VileWardAbilityCode);
 
-        ProjectedAcTooltip = BuildProjectedAcTooltip(itemAc, innateAc, spell.Ac, shadowAc, hasVileWard);
-    }
-
-    // Sum the AC-relevant affects of every configured self-buff spell — the bless
-    // slots plus the mana-regen / when-full downtime buffs, the same roster the
-    // engine's self-buff path recasts. A slot naming a spell that grants AC (Abil
-    // 2 / 10) adds its magnitude; ProtEvil (24) sums separately; shadow (9) and
-    // VileWard (1113) are noted as present.
-    private SpellAcContribution SumConfiguredSpellAc()
-    {
-        SpellsSettings spells = ReadSpellsSettings();
-        Game.Spells.KnownSpellCatalog catalog = AppServices.Current.SpellCatalog;
-        int classNumber = catalog.ResolveClassNumber(_stats.Class) ?? 0;
-        int level = _stats.Level;
-
-        double ac = 0;
-        int protEvil = 0;
-        bool hasShadow = false, hasVileWard = false;
-
-        foreach (string code in EnumerateSelfBuffCodes(spells, _profile.Current?.PartyBuffs))
-        {
-            if (catalog.GetByShort(code, classNumber, level) is not { } spell) continue;
-            foreach (SpellAbility a in spell.Formula.Abilities)
-            {
-                switch (a.Code)
-                {
-                    case 2 or 10: ac += Magnitude(a, spell.Formula, level); break;
-                    case 24: protEvil += (int)Magnitude(a, spell.Formula, level); break;
-                    case 9: hasShadow = true; break;
-                    case VileWardAbilityCode: hasVileWard = true; break;
-                }
-            }
-        }
-        return new SpellAcContribution(ac, protEvil, hasShadow, hasVileWard);
-    }
-
-    // An affect's magnitude: the stored AbilVal when non-zero, else the spell's
-    // level-scaled Max — mirrors how SpellEffectFormatter renders AbilVal-0 affects.
-    private static double Magnitude(SpellAbility a, in SpellFormulaInput formula, int level)
-        => a.Value != 0 ? a.Value : SpellCalculator.AffectMagnitude(formula, level).Max;
-
-    // The canonical self-buff cast-code roster, matching CastingDirector's self-buff
-    // enumeration: the CastOnSelf slots in the unified buff list (bless + when-full
-    // folded there), then the mana-regen buff still on the Spells tab. Blank picks
-    // drop out.
-    private static IEnumerable<string> EnumerateSelfBuffCodes(SpellsSettings spells, BuffSettings? buffs)
-    {
-        if (buffs is not null)
-            foreach (BuffSlot slot in buffs.Slots)
-                if (slot.CastOnSelf && !string.IsNullOrWhiteSpace(slot.Spell))
-                    yield return slot.Spell!.Trim();
-        if (!string.IsNullOrWhiteSpace(spells.MaRegenSpell)) yield return spells.MaRegenSpell!.Trim();
-    }
-
-    // Read the character-tier "Spells" section the same way the settings tab and
-    // the casting engine do — a missing / malformed section reads as defaults.
-    private SpellsSettings ReadSpellsSettings()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new SpellsSettings();
-        if (!profile.Settings.TryGetValue("Spells", out JsonElement json)) return new SpellsSettings();
-        try { return JsonSerializer.Deserialize<SpellsSettings>(json) ?? new SpellsSettings(); }
-        catch { return new SpellsSettings(); }
+        ProjectedAcTooltip = BuildProjectedAcTooltip(itemAc, innateAc, buff.Ac, shadowAc, hasVileWard);
     }
 
     // True when any worn item carries the given ability code in its slots.

@@ -3542,8 +3542,8 @@
   {
     "Id": "5e50d4fc5206d233",
     "Name": "form of the monkey",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
+    "Flags": "Confused, LastActionFailed",
+    "RawFlagsHex": 8194,
     "CasterMessage": "You invoke the {spellname}.",
     "TargetMessage": "",
     "WitnessMessage": "{source} invokes the {spellname}!",
@@ -29608,5 +29608,17 @@
         "Number": 1208
       }
     ]
+  },
+  {
+    "Id": "e9c672d2d9d51d3f",
+    "Name": "brain eater",
+    "Flags": "EndsCombat",
+    "RawFlagsHex": 4096,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "and a small creature leaps out!",
+    "AppliedEndsWith": "",
+    "Links": []
   }
 ]

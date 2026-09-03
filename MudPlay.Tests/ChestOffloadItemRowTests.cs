@@ -4,7 +4,7 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // The per-item Sell/Drop reconcile math: Sell sheds the picked quantity, Drop sheds
-// the leftover (held − picked), and both react to the game's CONFIRMED counts.
+// the dropped count, and both react to the game's CONFIRMED counts.
 public sealed class ChestOffloadItemRowTests
 {
     private static ChestOffloadItemRow Row(int gained)
@@ -12,14 +12,10 @@ public sealed class ChestOffloadItemRowTests
             currentShop: 1, onQtyChanged: null);
 
     [Fact]
-    public void DropQty_IsHeldMinusPicked()
+    public void SellQty_DefaultsToSellAll()
     {
         ChestOffloadItemRow row = Row(10);
         Assert.Equal(10, row.SellQty);   // defaults to sell-all
-        Assert.Equal(0, row.DropQty);    // nothing left over
-
-        row.SellQty = 3;
-        Assert.Equal(7, row.DropQty);    // keep 3 to sell, drop the other 7
     }
 
     [Fact]

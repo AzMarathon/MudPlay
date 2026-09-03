@@ -8,18 +8,21 @@ namespace MudPlay.ViewModels.GameData.Edit;
 // flies out its own effect lines, so a verbose block doesn't blow the pane out.
 // A room-list row (Spawns In / Placed In / Summoned In) carries clickable
 // per-room chips that open the room-detail popup; an item-list row (Item Drops)
-// carries clickable per-item chips that jump to the item's Items-tab record. A
-// FullWidth row (an attack's name header) spans both columns so a long name wraps
-// instead of being clipped in the narrow key column, with its stat sub-rows
-// following. Keywords / Rooms / Items are null for plain rows. Key/Value are named
-// to match the previous KeyValuePair binding so the template keeps working for
-// plain rows.
+// carries clickable per-item chips that jump to the item's Items-tab record. An
+// Inlines row (Between Rounds / Summons) reads as running text with a single
+// embedded link — the summon spell opens its Spell record, the summoned NPC opens
+// its Monster record. A FullWidth row (an attack's name header) spans both columns
+// so a long name wraps instead of being clipped in the narrow key column, with its
+// stat sub-rows following. Keywords / Rooms / Items / Inlines are null for plain
+// rows. Key/Value are named to match the previous KeyValuePair binding so the
+// template keeps working for plain rows.
 public sealed record MdbInfoRow(
     string Key,
     string Value,
     IReadOnlyList<GreetKeyword>? Keywords = null,
     IReadOnlyList<RoomLink>? Rooms = null,
     IReadOnlyList<ItemLink>? Items = null,
+    IReadOnlyList<MdbInline>? Inlines = null,
     bool FullWidth = false)
 {
     // View binds this to render the value as a wrap of clickable keyword chips,
@@ -32,11 +35,15 @@ public sealed record MdbInfoRow(
     // View binds this to render the value as a wrap of clickable item chips.
     public bool HasItems => Items is { Count: > 0 };
 
+    // View binds this to render the value as running text with embedded links
+    // (plain runs + link runs), for the Between Rounds / Summons rows.
+    public bool HasInlines => Inlines is { Count: > 0 };
+
     // A FullWidth row renders its Key across both grid columns (wrapping), so the
     // normal key cell + every value branch below stay hidden for it.
     public bool ShowKeyCell => !FullWidth;
 
     // The plain-text branch shows only when no rich branch applies — compiled
     // bindings can't express the whole negation inline.
-    public bool IsPlain => !HasKeywords && !HasRooms && !HasItems && !FullWidth;
+    public bool IsPlain => !HasKeywords && !HasRooms && !HasItems && !HasInlines && !FullWidth;
 }

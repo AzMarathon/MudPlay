@@ -138,6 +138,11 @@ public sealed partial class CombatManager : IDisposable
     private Func<bool>? _isStealthed;
     private Func<int, bool>? _hasSeeHidden;
     private Func<bool>? _seeHiddenClearActive;
+    // HealthManager's engage-to-clear signal: a room hostile is blocking a needed
+    // rest while Auto-Combat is OFF (and HP still above the flee trigger). Like the
+    // see-hidden latch, when true it makes us engage despite being disabled and
+    // bypass the Min/Max gate — to kill the rest-blocker so recovery can proceed.
+    private Func<bool>? _restClearActive;
     private Func<bool>? _shadowRestHolding;
 
     // Passive-neutral recovery hold: engage a KillOnSight neutral only when we're not
@@ -847,6 +852,24 @@ public sealed partial class CombatManager : IDisposable
         _seeHiddenClearActive = seeHiddenClearActive;
     }
 
+    // Wire HealthManager's engage-to-clear-a-rest-blocker signal (see _restClearActive).
+    public void SetRestClearGate(Func<bool> restClearActive)
+    {
+        ArgumentNullException.ThrowIfNull(restClearActive);
+        _restClearActive = restClearActive;
+    }
+
+    // Re-run the room engage while the rest-clear override is active — HealthManager
+    // pokes this when a hostile is blocking a needed rest with Auto-Combat OFF, to
+    // fire the first attack (the server then auto-repeats it). No-op unless the
+    // override is still asserted, so a stale poke can't engage after recovery.
+    public void RequestRestClearEngage()
+    {
+        if (_disposed) return;
+        if (_restClearActive?.Invoke() != true) return;
+        if (_classifier.Current is { } obs) OnEntitiesObserved(obs);
+    }
+
     // Wire the ShadowRest combat hold: shadowRestHolding reports whether
     // HealthManager is mid-ShadowRest-recovery (a solo, stealthed ShadowRest
     // character resting toward rest-max — see GAME_MECHANICS "ShadowRest"). While
@@ -1103,8 +1126,13 @@ public sealed partial class CombatManager : IDisposable
         // With combat OFF the latch additionally makes us engage despite being
         // disabled; with combat ON we'd engage anyway, and the latch's job is only
         // the Min/Max bypass.
-        bool seeHiddenOverride = _seeHiddenClearActive?.Invoke() == true;
-        if (!_isEnabled() && !seeHiddenOverride)
+        // Rest-blocker force-clear (report paradigm-20260901-093301): a hostile
+        // blocking a needed rest with Auto-Combat OFF makes us engage-to-clear it
+        // anyway, on the same footing as the see-hidden override — both bypass the
+        // disabled gate here and the Min/Max gate below.
+        bool forceClearOverride = _seeHiddenClearActive?.Invoke() == true
+                                  || _restClearActive?.Invoke() == true;
+        if (!_isEnabled() && !forceClearOverride)
         {
             _currentTarget = null;
             // AutoCombat going off mid-fight must drop the attack-spell cascade
@@ -1230,7 +1258,9 @@ public sealed partial class CombatManager : IDisposable
         // treated as "no gate" with a single log-once warning rather
         // than silently never engaging. The SeeHidden clear-override
         // bypasses the gate entirely — its whole point is clearing the
-        // WHOLE room regardless of count so re-sneak is possible.
+        // WHOLE room regardless of count so re-sneak is possible. The rest-blocker
+        // force-clear (folded into forceClearOverride) bypasses it for the same
+        // reason: kill whatever is blocking rest, regardless of room population.
         //
         // The whole point of this gate is "don't STOP here while passing
         // through" — it only makes sense while something is actually trying
@@ -1244,7 +1274,7 @@ public sealed partial class CombatManager : IDisposable
         // walker running to begin with). Unwired _isMovementActive fails open
         // to the gate always applying, matching this check's original,
         // unconditional behavior.
-        if (!seeHiddenOverride && (_isMovementActive?.Invoke() ?? true))
+        if (!forceClearOverride && (_isMovementActive?.Invoke() ?? true))
         {
             int min = Math.Max(0, settings.MinMonstersInRoom);
             int max = settings.MaxMonstersInRoom > 0 ? settings.MaxMonstersInRoom : int.MaxValue;
@@ -1563,7 +1593,12 @@ public sealed partial class CombatManager : IDisposable
         // re-stamps _betweenRoundCastAt — but cheap insurance).
         _suppressResumeForBetweenRoundStamp = DateTimeOffset.MinValue;
         _attackSpellImmuneSpecies.Clear();
-        _spellChooser.ResetForNewRoom();
+        // Roster-clear reset, NOT a full new-room reset: this path also fires on the
+        // AoE multi-kill's synthetic room-clear (same physical room), so it must keep
+        // the area-debuff per-room cap so the debuff doesn't re-fire at the same
+        // room's survivors. The genuine physical-room-change reset (which clears that
+        // cap) lives in NotePreMove.
+        _spellChooser.ResetForRosterClear();
     }
 
     // Player death: the corpse room and whatever comes after (recovery walk,
@@ -1607,6 +1642,26 @@ public sealed partial class CombatManager : IDisposable
         ClearAttackSpellCascadeState();
     }
 
+    // The idle-stall watchdog force-clears combat when a room falls quiet (empty,
+    // no combat activity) — CombatStateTracker raises CombatForceCleared. Unlike a
+    // clean room-clear, that path emits no fresh observation, so _currentTarget and
+    // the attack-spell cascade would otherwise SURVIVE the clear. The between-round
+    // director keys its debuff purely off _currentTarget + the last observation
+    // (it has no InCombat/movement gate), so a stale target left here lets an AoE
+    // debuff fire into the room the character has since walked out of — an `isto`
+    // went out the instant the walker stepped away, still aimed at the prior
+    // fight's mob (report paradigm-20260902-053911). Drop the target the same way
+    // OnPlayerDeath / OnDisconnected do so the next genuine engage starts clean.
+    public void OnCombatForceCleared()
+    {
+        if (_currentTarget is null && !_spellAttackOwed) return;
+        _log?.Combat(LogCategory,
+            $"combat force-clear dropped stale target — target={_currentTarget ?? "(none)"}, "
+            + $"spellTarget={_castingSpellTarget ?? "(none)"}");
+        _currentTarget = null;
+        ClearAttackSpellCascadeState();
+    }
+
     // Pre-move backstab prep — invoked from the walker / loop-runner pre-move
     // hook immediately before the sneak, so the whole approach sequence is
     // weapon → armor → sn → move. Equipping breaks sneak, so the gear MUST land
@@ -1645,7 +1700,22 @@ public sealed partial class CombatManager : IDisposable
     // displays — lands ahead of the next room's opener, so each room fires its AoE
     // debuff exactly once with no double-fire. Fires for every mover (backstab or
     // not), so unlike PrepBackstabForMove it is not gated on DoBackstab.
-    public void NotePreMove() => _spellChooser.ResetForNewRoom();
+    public void NotePreMove()
+    {
+        _spellChooser.ResetForNewRoom();
+        // Leaving the room drops any debuff still awaiting a rejection — its mark is
+        // gone with the room reset, so there's nothing left to roll back.
+        _debuffAwaitingConfirm = null;
+    }
+
+    // The room is confirmed genuinely CLEARED of all hostiles — the player just entered
+    // a rest posture, and a rest only starts once nothing is left to fight. Reset the
+    // AoE area-debuff room tags so a same-room RESPAWN after this is debuffed as a fresh
+    // wave (report paradigm-20260903-070438). Distinct from NotePreMove (a physical
+    // move) and from the mid-fight wave-clear roster reset, which keeps the tags for
+    // hidden same-species survivors (report paradigm-20260902-160110). Wired in
+    // AppServices to the PlayerState.Position rest edge.
+    public void NoteRoomClearedByRest() => _spellChooser.ResetAreaDebuffTags();
 
     // Re-arm the surprise round for a fresh hide established in the current room —
     // the stationary hidden opener (a monster walks into a room the character is
@@ -3336,6 +3406,7 @@ public sealed partial class CombatManager : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        if (_cast is not null) _cast.CastFailed -= OnCombatCastFailed;
         _classifier.EntitiesObserved -= OnEntitiesObserved;
         _announceSub.Dispose();
         _castAnnounceSub.Dispose();

@@ -63,23 +63,31 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Number"]     = "ID",
-            ["RegenTime"]  = "Rgn",
+            ["RegenTime"]  = "Respawn",
             ["EXP"]        = "Exp",
             ["AcDr"]       = "AC/DR",
-            ["MagicRes"]   = "MR",
-            ["Accuracy"]   = "Acc (Maj/Mx)",
-            ["Efficiency"]  = "Exp/(Dmg+HP)",
+            ["MagicRes"]   = "Magic Res",
+            ["Accuracy"]   = "Acc (typ/max)",
+            ["Damage"]      = "Avg Damage",
+            ["Mag"]         = "Mag-wpn req",
+            ["Efficiency"]  = "Exp Eff",
             ["AvgLairExp"]  = "Lair Exp",
             ["Lairs"]       = "# Lairs",
             ["AvgLairSize"] = "Avg Lair Size",
             ["BiggestLair"] = "Biggest Lair",
         };
 
-    // Carried on each row for filtering but not shown as grid columns: Alignment
-    // (its dropdown reads the formatted value), and the raw AC / DR fields so the
-    // AC ≥ / DR ≥ threshold filters work even though the table shows them combined.
+    // Carried on each row for filtering but not shown as grid columns: the raw
+    // AC / DR fields (the grid shows them combined), Alignment + Type (their
+    // dropdowns read the formatted value), and the Monster-Intel facets synthesised
+    // in ComputeRowCells (elemental resists, spell immunity, flag presences).
     protected override IReadOnlyList<string> FilterOnlyColumns { get; } =
-        new[] { "Align", "ArmourClass", "DamageResist" };
+        new[]
+        {
+            "Align", "Type", "ArmourClass", "DamageResist",
+            "ResCold", "ResFire", "ResStone", "ResLightning", "ResWater",
+            "SpellImmu", "Animal", "NonLiving", "CastsSpells", "HasLoot",
+        };
 
     public override string SearchKeyColumn => "Name";
 
@@ -103,8 +111,10 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["Efficiency"] = FormatThousands,
             // Undead monsters render an "✗"; living monsters read blank.
             ["Undead"]     = static raw => raw is null or "" or "0" ? "" : "✗",
-            // Filter-only column: format so the Alignment dropdown reads names, not codes.
+            // Filter-only columns: format so the Alignment / Type dropdowns read
+            // names, not codes.
             ["Align"]      = LookupEnums.FormatMonAlignment,
+            ["Type"]       = LookupEnums.FormatMonType,
         };
 
     // Thousands-separated display for big counts ("300,000"); 0 / blank render empty.
@@ -137,42 +147,85 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         _roomGraph = roomGraph;
         OpenEditAsyncCommand = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
 
-        // Filter panel: each stat carries one single-threshold bound, all "at least" (≥).
-        // You're finding monsters that HAVE at least this much of a stat — HP ≥ 5000 to
-        // surface the tough targets, Exp ≥ 5000 for the rewarding ones, Acc ≥ N for the
-        // dangerous hitters. The value tested is the leading integer of each cell's raw
-        // value (so "80/10" AC/DR filters on 80). Undead is a checkbox; Alignment is a
-        // dropdown built after load (see OnRowsLoaded).
-        foreach ((string label, string column) in new (string, string)[]
-        {
-            ("Exp",      "EXP"),
-            ("HP",       "HP"),
-            ("AC",       "ArmourClass"),
-            ("DR",       "DamageResist"),
-            ("Dodge",    "Dodge"),
-            ("MR",       "MagicRes"),
-            ("Acc",      "Accuracy"),
-            ("Damage",   "Damage"),
-            ("Mag",      "Mag"),
-            ("Lair Exp", "AvgLairExp"),
-            ("# Lairs",  "Lairs"),
-            ("Rgn",      "RegenTime"),
-        })
-            ThresholdFilters.Add(new ThresholdFilter(label, column, ThresholdDirection.AtLeast));
+        // Curation filter panel, grouped into legible sections. Every numeric facet
+        // is a min/max range (either bound optional) so you can bracket — HP 500–2000,
+        // or AC ≤ 50 to find easy kills. The value tested is the leading integer of the
+        // cell's raw value (so "80/10" AC/DR reads 80). This absorbs Monster Intel's
+        // filtering dimensions (elemental resists, spell immunity, magic-weapon
+        // requirement, type/flags, loot). Live — editing any control re-filters.
+        FilterGroups.Add(new FilterGroup("Combat",
+            ranges: new[]
+            {
+                new RangeFilter("Exp", "EXP", "Experience per kill (base × multiplier)"),
+                new RangeFilter("HP", "HP"),
+                new RangeFilter("Avg damage", "Damage", "Average damage it deals per round"),
+                new RangeFilter("Accuracy", "Accuracy", "Its attack accuracy — higher means it hits you more"),
+                new RangeFilter("AC", "ArmourClass", "Armour Class — harder to hit as this rises"),
+                new RangeFilter("DR", "DamageResist", "Damage Resist — flat reduction to physical damage it takes"),
+                new RangeFilter("Dodge", "Dodge"),
+                new RangeFilter("Magic Resist", "MagicRes", "Cuts spell damage once above 50; never fully immune"),
+            }));
 
-        BoolFilters.Add(new BoolFilter("Undead only", "Undead",
-            static raw => !(raw is null or "" or "0")));
+        FilterGroups.Add(new FilterGroup("Elemental defenses",
+            ranges: new[]
+            {
+                new RangeFilter("Cold resist %", "ResCold", ResistHint),
+                new RangeFilter("Fire resist %", "ResFire", ResistHint),
+                new RangeFilter("Stone resist %", "ResStone", ResistHint),
+                new RangeFilter("Lightning resist %", "ResLightning", ResistHint),
+                new RangeFilter("Water resist %", "ResWater", ResistHint),
+            }));
+
+        FilterGroups.Add(new FilterGroup("Casting & immunity",
+            ranges: new[]
+            {
+                new RangeFilter("Magic-weapon req", "Mag",
+                    "Your weapon's HitMagic must be at least this to hit it physically (0 = any weapon)"),
+                new RangeFilter("Spell immunity", "SpellImmu",
+                    "Immune to spells whose ReqLevel is below this (0 = none)"),
+            },
+            bools: new[]
+            {
+                new BoolFilter("Casts spells", "CastsSpells", FlagPresent, "Has a between-rounds spell it casts"),
+            }));
+
+        FilterGroups.Add(new FilterGroup("Type & alignment",
+            bools: new[]
+            {
+                new BoolFilter("Undead", "Undead", FlagPresent),
+                new BoolFilter("Animal", "Animal", FlagPresent),
+                new BoolFilter("Non-living", "NonLiving", FlagPresent, "Immune to life-drain"),
+            },
+            categories: new[]
+            {
+                new CategoryFilter("Type", "Type", WithAny(LookupEnums.MonTypeOptions)),
+                new CategoryFilter("Alignment", "Align", WithAny(LookupEnums.MonAlignmentOptions)),
+            }));
+
+        FilterGroups.Add(new FilterGroup("Loot & lairs",
+            ranges: new[]
+            {
+                new RangeFilter("Lair Exp", "AvgLairExp"),
+                new RangeFilter("# Lairs", "Lairs"),
+                new RangeFilter("Respawn (sec)", "RegenTime"),
+            },
+            bools: new[]
+            {
+                new BoolFilter("Drops an item", "HasLoot", FlagPresent),
+            }));
     }
 
-    // Programmatically apply "Acc ≥ minAcc" and show the result — the Hit
-    // Calculator's "Show me the Monsters" action opens this tab and calls here
-    // with the accuracy that hits the player at the picked hit-%.
-    public void FilterByAccuracyAtLeast(int minAcc)
+    // A flag facet stores "1" when present, blank otherwise.
+    private static readonly Func<string?, bool> FlagPresent = static raw => !(raw is null or "" or "0");
+
+    private const string ResistHint = "Negative = vulnerable (extra damage), 100 = immune, over 100 = healed";
+
+    // Prepend "(any)" to a fixed option list for a category dropdown.
+    private static IReadOnlyList<string> WithAny(IReadOnlyList<string> options)
     {
-        ThresholdFilter? acc = ThresholdFilters.FirstOrDefault(t => t.Column == "Accuracy");
-        if (acc is null) return;
-        acc.Value = minAcc;
-        ApplyFiltersCommand.Execute(null);   // commit the pending value + re-filter
+        var list = new List<string>(options.Count + 1) { CategoryFilter.AnyOption };
+        list.AddRange(options);
+        return list;
     }
 
     // Monster Number → lair stats from the room graph: Count (# rooms whose lair tag
@@ -188,32 +241,6 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     {
         BuildLairIndex();
         base.PopulateRows(rows);
-    }
-
-    // Runs on the UI thread after AllRows lands (PopulateRows runs on a worker thread,
-    // so the observable-collection mutation must happen here, not there — doing it in
-    // PopulateRows corrupted the ItemsControl and doubled the dropdowns).
-    protected override void OnRowsLoaded() => RebuildCategoryFilters(AllRows);
-
-    // The Alignment dropdown is data-driven: its options are the distinct alignments
-    // actually present in the loaded set. Rebuilt on every load / set switch.
-    private void RebuildCategoryFilters(System.Collections.Generic.IList<GameDataRow> rows)
-    {
-        CategoryFilters.Clear();
-        CategoryFilters.Add(BuildCategoryFilter("Alignment", "Align", rows));
-        OnPropertyChanged(nameof(HasFilterPanel));
-    }
-
-    private CategoryFilter BuildCategoryFilter(string label, string column, System.Collections.Generic.IList<GameDataRow> rows)
-    {
-        var options = new List<string> { CategoryFilter.AnyOption };
-        options.AddRange(rows
-            .Select(r => r.GetDisplay(column))
-            .Where(v => !string.IsNullOrEmpty(v))
-            .Select(v => v!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(v => v, StringComparer.OrdinalIgnoreCase));
-        return new CategoryFilter(label, column, options);
     }
 
     // Capture the room graph's immutable per-monster lair-size snapshot (built from
@@ -250,6 +277,20 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["Damage"]     = damage > 0 ? damage.ToString(Inv) : null,
             ["Accuracy"]   = ComputeAttackAccuracy(element),
             ["Efficiency"] = ComputeEfficiency(effExp, damage, hp),
+            // Filter-only facets absorbed from Monster Intel. Elemental resists are
+            // the signed % (0 = none, negative = vulnerable) stored ALWAYS so a
+            // "resist ≤ 0" query can find non-resistant monsters; spell immunity
+            // likewise. The flag facets store "1" when present, else blank.
+            ["ResCold"]      = ReadAbilValue(element, 3).ToString(Inv),
+            ["ResFire"]      = ReadAbilValue(element, 5).ToString(Inv),
+            ["ResStone"]     = ReadAbilValue(element, 65).ToString(Inv),
+            ["ResLightning"] = ReadAbilValue(element, 66).ToString(Inv),
+            ["ResWater"]     = ReadAbilValue(element, 147).ToString(Inv),
+            ["SpellImmu"]    = ReadAbilValue(element, 139).ToString(Inv),
+            ["Animal"]       = HasAbil(element, 78) ? "1" : null,
+            ["NonLiving"]    = HasAbil(element, 109) ? "1" : null,
+            ["CastsSpells"]  = HasMidSpell(element) ? "1" : null,
+            ["HasLoot"]      = HasDrop(element) ? "1" : null,
         };
         if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int Count, long SumMax, int MaxMax) lair)
             && lair.Count > 0)
@@ -280,6 +321,32 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             if (ReadInt(el, $"Abil-{i}") == code)
                 return ReadInt(el, $"AbilVal-{i}");
         return 0;
+    }
+
+    // Presence of an ability code in the monster's Abil-0..9 slots — for the flag
+    // facets (Animal 78, NonLiving 109) whose value carries no meaning, only
+    // presence.
+    private static bool HasAbil(JsonElement el, int code)
+    {
+        for (int i = 0; i < 10; i++)
+            if (ReadInt(el, $"Abil-{i}") == code) return true;
+        return false;
+    }
+
+    // True when the monster casts a between-rounds spell (any MidSpell-0..4 slot set).
+    private static bool HasMidSpell(JsonElement el)
+    {
+        for (int i = 0; i < 5; i++)
+            if (ReadInt(el, $"MidSpell-{i}") > 0) return true;
+        return false;
+    }
+
+    // True when the monster drops at least one item (any DropItem-0..9 slot set).
+    private static bool HasDrop(JsonElement el)
+    {
+        for (int i = 0; i < 10; i++)
+            if (ReadInt(el, $"DropItem-{i}") > 0) return true;
+        return false;
     }
 
     // "Acc (Maj/Mx)" — the accuracy of the monster's majority (most-frequent) physical

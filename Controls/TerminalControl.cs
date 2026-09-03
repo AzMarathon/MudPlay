@@ -37,8 +37,10 @@ public sealed class TerminalControl : Control
             nameof(FontFamily),
             new FontFamily("avares://MudPlay/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16"));
 
+    // Fallback default kept in sync with DisplayConfig.DefaultFontSize; the live
+    // binding from the char-tier setting drives this in practice.
     public static readonly StyledProperty<double> FontSizeProperty =
-        AvaloniaProperty.Register<TerminalControl, double>(nameof(FontSize), 16.0);
+        AvaloniaProperty.Register<TerminalControl, double>(nameof(FontSize), 12.0);
 
     // When true, scale the glyphs up to fill ViewportSize while keeping the
     // fixed cell grid (cols/rows unchanged — a purely visual zoom). Bound from
@@ -139,11 +141,19 @@ public sealed class TerminalControl : Control
 
     private double MaxScale => Math.Max(1.0, MaxEffectiveFontSize / FontSize);
 
+    // FontSize is a POINT size — the same unit MegaMUD and every Windows font
+    // dialog use, so "16" here is 16pt and matches MegaMUD's "16" glyph-for-glyph.
+    // Avalonia measures/draws in device-independent PIXELS (1px = 1pt only at 72
+    // DPI), so convert points → DIP (× 96/72) before touching any FormattedText.
+    // Without this the terminal rendered ~25% small ("zoomed out") next to MegaMUD.
+    private const double PointToPixel = 96.0 / 72.0;
+    private double RenderFontSize => FontSize * PointToPixel;
+
     private Typeface _typeface;
-    // Native cell box at FontSize. Glyphs are ALWAYS drawn at this size; any
-    // window fitting happens by upscaling the rendered bitmap, never by
-    // rasterising the bitmap font at a fractional point size (which smears
-    // block-drawing glyphs and stems).
+    // Native cell box at RenderFontSize (the DIP form of the chosen point size).
+    // Glyphs are ALWAYS drawn at this size; any window fitting happens by
+    // upscaling the rendered bitmap, never by rasterising the bitmap font at a
+    // fractional point size (which smears block-drawing glyphs and stems).
     private double _cellW = 8;
     private double _cellH = 16;
     // Independent horizontal/vertical zoom applied to the native render to
@@ -352,13 +362,13 @@ public sealed class TerminalControl : Control
         MudPlay.Services.AppServices.CurrentOrNull?.TerminalInput.UnregisterTerminal();
     }
 
-    // Rebuild the native cell metrics at FontSize, then re-fit the window zoom.
-    // Runs when the font or family changes.
+    // Rebuild the native cell metrics at RenderFontSize, then re-fit the window
+    // zoom. Runs when the font or family changes.
     private void RecalculateMetrics()
     {
         _typeface = new Typeface(FontFamily);
         UpdateRenderMode();
-        (_cellW, _cellH) = MeasureCell(FontSize);
+        (_cellW, _cellH) = MeasureCell(RenderFontSize);
         RecomputeScale();
         InvalidateMeasure();
         InvalidateVisual();
@@ -676,7 +686,7 @@ public sealed class TerminalControl : Control
                         CultureInfo.InvariantCulture,
                         FlowDirection.LeftToRight,
                         _typeface,
-                        FontSize,
+                        RenderFontSize,
                         Brushes.LightGray);
                     context.DrawText(glyph, new Point(px, py));
                     col++;
@@ -759,7 +769,7 @@ public sealed class TerminalControl : Control
             char ch = screen[i, y].Char;
             if (ch == ' ') continue;
             var ft = new FormattedText(ch.ToString(), CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight, typeface, FontSize, fg);
+                FlowDirection.LeftToRight, typeface, RenderFontSize, fg);
             context.DrawText(ft, new Point(x0 == i ? left : i * _cellW, top));
         }
 

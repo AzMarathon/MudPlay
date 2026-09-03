@@ -131,7 +131,7 @@ public sealed class EquipmentManagerTests
 
         List<string> cmds = EquipmentManager.BuildWearCommands(set, Worn());
 
-        Assert.Equal(new[] { "wear long sword" }, cmds);
+        Assert.Equal(new[] { "eq long sword" }, cmds);   // weapons take the universal eq verb
     }
 
     [Fact]
@@ -386,6 +386,49 @@ public sealed class EquipmentManagerTests
         EquipmentManager mgr = Manager(settings, InventorySnapshot.Empty, new CombatSettings());
 
         Assert.Equal(EquipResult.Applied, mgr.ApplyByKeyword("fighting"));
+    }
+
+    // Regression (report paradigm-20260831-071637): a burst of auto-fire triggers
+    // re-applied the Default set several times a second, spamming the same wears
+    // faster than the game could confirm them. The in-flight guard suppresses a
+    // re-apply while the prior apply's wears are still outstanding, then releases
+    // once they confirm.
+    [Fact]
+    public void ApplyByTrigger_ReapplyWhileWearsInFlight_SuppressedUntilConfirmed()
+    {
+        EquipmentSet def = Set("default", "Default",
+            Entry(EquipmentSlot.Waist, "multicoloured sash"),
+            Entry(EquipmentSlot.Feet, "adamantite chainmail boots"));
+        def.Id = "def";
+        def.Trigger = EquipTriggerType.Default;
+        EquipmentSettings settings = new() { Sets = { def } };
+
+        // Worn: the pre-rest items in those two slots; the set's items sit in the
+        // pack (available to wear), so the Default apply diffs to two wears.
+        InventorySnapshot snap = InventorySnapshot.Empty with
+        {
+            EquippedItems = new List<EquippedItem>
+            {
+                new("trollskin belt", "Waist"),
+                new("trollskin boots", "Feet"),
+            },
+            CarriedItems = new List<string> { "multicoloured sash", "adamantite chainmail boots" },
+            LastUpdated = DateTimeOffset.UtcNow,
+        };
+        EquipmentManager mgr = Manager(settings, snap, new CombatSettings());
+
+        // First apply sends the two wears.
+        Assert.Equal(EquipResult.Applied, mgr.ApplyByTrigger(EquipTriggerType.Default));
+        Assert.Equal(
+            new[] { "wear multicoloured sash", "wear adamantite chainmail boots" }, Wire(mgr));
+
+        // Re-applied while those wears are still in flight → suppressed, no re-send.
+        Assert.Equal(EquipResult.NoChange, mgr.ApplyByTrigger(EquipTriggerType.Default));
+
+        // Once the game confirms both wears, the guard releases.
+        mgr.NoteEquipSucceeded("multicoloured sash");
+        mgr.NoteEquipSucceeded("adamantite chainmail boots");
+        Assert.Equal(EquipResult.Applied, mgr.ApplyByTrigger(EquipTriggerType.Default));
     }
 
     [Fact]
@@ -857,91 +900,170 @@ public sealed class EquipmentManagerTests
         params (string Name, string Slot)[] items)
         => items.Select(i => new EquippedItem(i.Name, i.Slot)).ToList();
 
-    // ===== BuildPairedSlotRems (paired finger/wrist thrash fix) =====
+    // ===== ComposePairedSlotCommands (paired finger/wrist slot-1 vs slot-2 rem) =====
+    // CONFIRMED mechanic (report paradigm-20260901-130100): a `wear`/`eq` into a FULL
+    // paired family evicts the FIRST-listed (slot-1) worn member; into a free slot it
+    // just fills it. So a slot-1 swap rides the wear (no rem); only a slot-2 swap that
+    // keeps slot 1 must rem the old ring first.
 
     [Fact]
-    public void BuildPairedSlotRems_FreesTheOddFinger_BeforeSwappingIn()
+    public void ComposePairedSlotCommands_Slot1Swap_RidesTheWear_NoRem()
     {
-        // Set wants pearl (F1) + silver (F2); worn is pearl + gold jeweled. Swapping
-        // silver in must rem the odd worn ring (gold jeweled) first so `wear silver`
-        // lands on the freed finger instead of trading with the kept pearl — the
-        // non-converging thrash (report paradigm-20260814-215046).
+        // The reported bug: worn diamond-studded (slot 1) + gold jeweled (slot 2); the
+        // set swaps slot 1 to pearl and keeps gold jeweled. `wear pearl` auto-evicts
+        // the slot-1 diamond-studded ring, so NO `rem` is needed — the old code emitted
+        // a redundant `rem diamond-studded ring` first.
+        EquipmentSet set = Set("prerest-mana", "Pre-rest Mana",
+            Entry(EquipmentSlot.Finger1, "pearl ring"),
+            Entry(EquipmentSlot.Finger2, "gold jeweled ring"));
+        IReadOnlyList<EquippedItem> worn = WornList(
+            ("diamond-studded ring", "Finger"), ("gold jeweled ring", "Finger"));
+        var wears = new List<string> { "wear pearl ring" };
+
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, wears);
+
+        Assert.Equal(new[] { "wear pearl ring" }, cmds);
+    }
+
+    [Fact]
+    public void ComposePairedSlotCommands_Slot2Swap_RemsSlot2First()
+    {
+        // Slot 1 (pearl) is kept, slot 2 swaps gold jeweled → silver. `wear silver`
+        // would auto-evict the slot-1 pearl the set keeps, so free slot 2 first.
         EquipmentSet set = Set("prerest-mana", "Pre-rest Mana",
             Entry(EquipmentSlot.Finger1, "pearl ring"),
             Entry(EquipmentSlot.Finger2, "silver ring"));
         IReadOnlyList<EquippedItem> worn = WornList(
             ("pearl ring", "Finger"), ("gold jeweled ring", "Finger"));
-        var beingWorn = new HashSet<string>(new[] { "silver ring" }, StringComparer.OrdinalIgnoreCase);
+        var wears = new List<string> { "wear silver ring" };
 
-        List<string> rems = EquipmentManager.BuildPairedSlotRems(set, worn, beingWorn);
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, wears);
 
-        Assert.Equal(new[] { "rem gold jeweled ring" }, rems);
+        Assert.Equal(new[] { "rem gold jeweled ring", "wear silver ring" }, cmds);
     }
 
     [Fact]
-    public void BuildPairedSlotRems_FreeFingerAvailable_NoRem()
+    public void ComposePairedSlotCommands_FreeSlot_JustWears_NoRem()
     {
-        // Only pearl worn — a finger is free, so `wear silver` fills it; nothing odd
-        // to strip.
+        // Only pearl worn — a finger is free, so `wear silver` fills it; nothing to rem.
         EquipmentSet set = Set("prerest-mana", "Pre-rest Mana",
             Entry(EquipmentSlot.Finger1, "pearl ring"),
             Entry(EquipmentSlot.Finger2, "silver ring"));
         IReadOnlyList<EquippedItem> worn = WornList(("pearl ring", "Finger"));
-        var beingWorn = new HashSet<string>(new[] { "silver ring" }, StringComparer.OrdinalIgnoreCase);
+        var wears = new List<string> { "wear silver ring" };
 
-        Assert.Empty(EquipmentManager.BuildPairedSlotRems(set, worn, beingWorn));
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, wears);
+
+        Assert.Equal(new[] { "wear silver ring" }, cmds);
     }
-
-    [Fact]
-    public void BuildPairedSlotRems_FamilyNotGaining_LeavesWornAlone()
-    {
-        // Nothing in this family is being worn this apply → never strip a worn ring.
-        EquipmentSet set = Set("prerest-mana", "Pre-rest Mana",
-            Entry(EquipmentSlot.Finger1, "pearl ring"),
-            Entry(EquipmentSlot.Finger2, "silver ring"));
-        IReadOnlyList<EquippedItem> worn = WornList(
-            ("pearl ring", "Finger"), ("gold jeweled ring", "Finger"));
-
-        Assert.Empty(EquipmentManager.BuildPairedSlotRems(
-            set, worn, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
-    }
-
-    // ===== ComposePairedSlotCommands (both-swap single-rem optimization) =====
 
     [Fact]
     public void ComposePairedSlotCommands_BothWristsSwap_InterleavesOneRem_NotTwo()
     {
-        // Both bracelets swap (worn b1,b2 → set b3,b4): the first `wear` auto-evicts
-        // the first-worn (b1), so only b2 needs an explicit rem — interleaved before
-        // b4's wear. One rem, not two (report paradigm-20260827-082305).
+        // Both bracelets swap (worn b1,b2 → set b3,b4): `wear b3` auto-evicts slot-1 b1,
+        // then `wear b4` would evict the just-worn b3, so rem the remaining odd b2
+        // before it. One rem, not two (report paradigm-20260827-082305).
         EquipmentSet set = Set("mana", "Pre-rest Mana",
             Entry(EquipmentSlot.Wrist1, "b3"),
             Entry(EquipmentSlot.Wrist2, "b4"));
         IReadOnlyList<EquippedItem> worn = WornList(("b1", "Wrist"), ("b2", "Wrist"));
-        var beingWorn = new HashSet<string>(new[] { "b3", "b4" }, StringComparer.OrdinalIgnoreCase);
         var wears = new List<string> { "wear b3", "wear b4" };
 
-        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, beingWorn, wears);
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, wears);
 
         Assert.Equal(new[] { "wear b3", "rem b2", "wear b4" }, cmds);
     }
 
     [Fact]
-    public void ComposePairedSlotCommands_OneWristSwap_KeepsPrependedFree()
+    public void ComposePairedSlotCommands_Slot1SwapKeepsSlot2_NoRem()
     {
-        // Only Wrist1 changes (b1 → b3); the set keeps b2 on the other wrist, so the
-        // single-swap path stands: free the odd b1 up front (can't rely on the wear
-        // trading with the right member).
+        // Only Wrist1 changes (slot-1 b1 → b3); the set keeps b2 on slot 2. `wear b3`
+        // auto-evicts b1, so just the wear — no rem (was the redundant-rem bug).
         EquipmentSet set = Set("mana", "Pre-rest Mana",
             Entry(EquipmentSlot.Wrist1, "b3"),
             Entry(EquipmentSlot.Wrist2, "b2"));
         IReadOnlyList<EquippedItem> worn = WornList(("b1", "Wrist"), ("b2", "Wrist"));
-        var beingWorn = new HashSet<string>(new[] { "b3" }, StringComparer.OrdinalIgnoreCase);
         var wears = new List<string> { "wear b3" };
 
-        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, beingWorn, wears);
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, wears);
 
-        Assert.Equal(new[] { "rem b1", "wear b3" }, cmds);
+        Assert.Equal(new[] { "wear b3" }, cmds);
+    }
+
+    [Fact]
+    public void ComposePairedSlotCommands_FamilyNotGaining_PassesNonFamilyWearsThrough()
+    {
+        // Both worn rings already match the set (family not gaining) → no rem; an
+        // unrelated wear in the list passes through untouched.
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Finger1, "b1"),
+            Entry(EquipmentSlot.Finger2, "b2"));
+        IReadOnlyList<EquippedItem> worn = WornList(("b1", "Finger"), ("b2", "Finger"));
+        var wears = new List<string> { "wear iron helm" };
+
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(set, worn, wears);
+
+        Assert.Equal(new[] { "wear iron helm" }, cmds);
+    }
+
+    // ===== realm-aware eviction (Paradigm evicts slot 1, Stock slot 2) =====
+
+    [Fact]
+    public void ComposePaired_Paradigm_Slot1Swap_KeepsSlot2_NoRem()
+    {
+        // report paradigm-20260903-111522: re-equipping Default, only the slot-1 ring
+        // changes (silver → sunstone) and slot 2 (ivory) is kept. On Paradigm a full-
+        // pair eq evicts SLOT 1 (the odd-out silver), so just the eq — no rem.
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Wrist1, "sunstone wristband"),
+            Entry(EquipmentSlot.Wrist2, "ivory bracelet"));
+        IReadOnlyList<EquippedItem> worn = WornList(
+            ("silver bracelet", "Wrist"),    // slot 1 (odd-out — the eq evicts it)
+            ("ivory bracelet", "Wrist"));    // slot 2 (kept)
+        var wears = new List<string> { "eq sunstone wristband" };
+
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(
+            set, worn, wears, evictsFirstListed: true);
+
+        Assert.Equal(new[] { "eq sunstone wristband" }, cmds);
+    }
+
+    [Fact]
+    public void ComposePaired_Stock_Slot1Swap_KeepsSlot2_RemsFirst()
+    {
+        // Same swap on Stock: a full-pair eq evicts SLOT 2 (the kept ivory), so the
+        // slot-1 change must rem the odd-out silver first (else it drops ivory).
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Wrist1, "sunstone wristband"),
+            Entry(EquipmentSlot.Wrist2, "ivory bracelet"));
+        IReadOnlyList<EquippedItem> worn = WornList(
+            ("silver bracelet", "Wrist"),    // slot 1 (odd-out)
+            ("ivory bracelet", "Wrist"));    // slot 2 (kept — Stock's eq would evict this)
+        var wears = new List<string> { "eq sunstone wristband" };
+
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(
+            set, worn, wears, evictsFirstListed: false);
+
+        Assert.Equal(new[] { "rem silver bracelet", "eq sunstone wristband" }, cmds);
+    }
+
+    [Fact]
+    public void ComposePaired_Stock_Slot2Swap_KeepsSlot1_NoRem()
+    {
+        // On Stock the eq evicts slot 2, so changing the slot-2 ring (gold → silver)
+        // while keeping slot 1 (pearl) needs just the eq — no rem.
+        EquipmentSet set = Set("default", "Default",
+            Entry(EquipmentSlot.Finger1, "pearl ring"),
+            Entry(EquipmentSlot.Finger2, "silver ring"));
+        IReadOnlyList<EquippedItem> worn = WornList(
+            ("pearl ring", "Finger"),           // slot 1 (kept)
+            ("gold jeweled ring", "Finger"));   // slot 2 (odd-out — Stock's eq evicts it)
+        var wears = new List<string> { "eq silver ring" };
+
+        List<string> cmds = EquipmentManager.ComposePairedSlotCommands(
+            set, worn, wears, evictsFirstListed: false);
+
+        Assert.Equal(new[] { "eq silver ring" }, cmds);
     }
 
     [Fact]
@@ -972,7 +1094,7 @@ public sealed class EquipmentManagerTests
         List<string> cmds = EquipmentManager.BuildEquipCommands(
             set, carried, WornList(), resolve, EquipAll);
 
-        Assert.Equal(new[] { "wear silver bracelet", "wear ivory bracelet" }, cmds);
+        Assert.Equal(new[] { "eq silver bracelet", "eq ivory bracelet" }, cmds);   // paired items take eq
     }
 
     [Fact]
@@ -989,7 +1111,7 @@ public sealed class EquipmentManagerTests
         List<string> cmds = EquipmentManager.BuildEquipCommands(
             set, carried, WornList(), resolve, EquipAll);
 
-        Assert.Equal(new[] { "wear ruby ring", "wear emerald ring" }, cmds);
+        Assert.Equal(new[] { "eq ruby ring", "eq emerald ring" }, cmds);   // paired items take eq
     }
 
     [Fact]
@@ -1010,8 +1132,8 @@ public sealed class EquipmentManagerTests
 
         List<string> cmds = EquipmentManager.BuildEquipCommands(set, carried, worn, resolve, EquipAll);
 
-        // rem the odd worn ring FIRST, then wear the set's second ring onto the freed finger.
-        Assert.Equal(new[] { "rem gold jeweled ring", "wear silver ring" }, cmds);
+        // rem the odd worn ring FIRST, then eq the set's second ring onto the freed finger.
+        Assert.Equal(new[] { "rem gold jeweled ring", "eq silver ring" }, cmds);
     }
 
     [Fact]

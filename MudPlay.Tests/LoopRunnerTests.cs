@@ -66,6 +66,8 @@ public sealed class LoopRunnerTests : IDisposable
         // (postToUi captures instead of running). Drain() runs them in order to
         // simulate the next UI tick. Empty/unused in the default synchronous mode.
         public required List<Action> Posted { get; init; }
+        // Present only when NewHarness(withWalker: true).
+        public AutoWalkManager? Walker { get; init; }
         public void Drain()
         {
             // Copy-then-clear so a posted action that re-posts (a chained resume)
@@ -82,7 +84,7 @@ public sealed class LoopRunnerTests : IDisposable
     // to capture them in Harness.Posted for manual Drain() — needed to interleave
     // a same-burst gate assert between a resume and its deferred send.
     private Harness NewHarness(string json = GraphJson, bool deferResume = false,
-        bool wireRecovery = false)
+        bool wireRecovery = false, bool withWalker = false)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
@@ -109,15 +111,21 @@ public sealed class LoopRunnerTests : IDisposable
             gate.TryResync = reason => { resyncReasons.Add(reason); return true; };
         }
         TestAvoidFilter filter = new();
+        // Constructed BEFORE the runner (when requested) so its RoomTracker.StateChanged
+        // subscription registers first — matching AppServices' real construction order
+        // (Walker before LoopRunner) and reproducing the same-burst reentrancy that order
+        // depends on.
+        AutoWalkManager? walker = withWalker ? new AutoWalkManager(graph, bfs, tracker, coord) : null;
         LoopRunner runner = new(tracker, coord, graph: graph, recovery: gate, bfs: bfs,
-            filter: filter, postToUi: deferResume ? posted.Add : a => a());
+            walker: walker, filter: filter, postToUi: deferResume ? posted.Add : a => a());
         Harness h = new()
         {
             Tracker = tracker, Coordinator = coord, Runner = runner, Posted = posted,
-            Gate = gate, ResyncReasons = resyncReasons, Filter = filter,
+            Gate = gate, ResyncReasons = resyncReasons, Filter = filter, Walker = walker,
         };
         runner.SetWireSender(b => h.Sent.Add(b));
         runner.Event += e => h.Events.Add(e);
+        walker?.SetWireSender(b => h.Sent.Add(b));
         return h;
     }
 
@@ -392,6 +400,170 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void BlockedAtSource_LeansOnRmFirst_ReroutesFromCorrectedRoom()
+    {
+        // A "blocked at source" mismatch is exactly what a name-ambiguous zone
+        // (many identically-named rooms sharing an exit pattern) can produce: the
+        // tracker's Confirmed belief LOOKS right but is actually the wrong
+        // physical room, so rerouting from it just repeats the same failure
+        // (report paradigm-20260901-100523). Leaning on rm first — stubbed here
+        // to resolve to a DIFFERENT room than the tracker's stale belief, mirroring
+        // ParadigmPositionResolver hard-locating the tracker via SetLocated before
+        // invoking the callback — must reroute from the CORRECTED room, not the
+        // stale one.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+
+        List<string> resyncCalls = new();
+        h.Gate!.TryResyncOnce = (reason, onResolved, _) =>
+        {
+            resyncCalls.Add(reason);
+            h.Tracker.SetLocated(new RoomKey(1, 2));   // rm's authoritative correction
+            onResolved(new RoomKey(1, 2));
+            return true;
+        };
+
+        h.Tracker.NoteMoveBlocked();   // reverts to Confirmed at the stale belief (1/1)
+
+        Assert.Single(resyncCalls);
+        // Rerouted from the corrected room (1/2): the next step is S (1/2 → 1/1),
+        // not another N from the stale 1/1 belief.
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
+    [Fact]
+    public void BlockedAtSource_RmUnavailable_FallsBackToTrustingTracker()
+    {
+        // Stock realm / no rm reply: TryResyncOnce returns false, so the existing
+        // "trust the tracker, reroute immediately" behavior is unchanged.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Gate!.TryResyncOnce = (_, _, _) => false;
+
+        h.Tracker.NoteMoveBlocked();
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));   // re-sent from 1/1, unchanged
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
+    // ----- disconnect / reconnect resume --------------------------------
+
+    [Fact]
+    public void NotifyDisconnected_WhileIdle_DoesNothing()
+    {
+        Harness h = NewHarness();
+
+        h.Runner.NotifyDisconnected();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Empty(h.Events);
+    }
+
+    [Fact]
+    public void NotifyDisconnected_WhileRunning_StopsCleanlyAndRemembersLoop()
+    {
+        // Live bug: nothing in the recovery ladder (the gate's Tier2/Tier3/
+        // awaiting-rm wait, or this runner's own local EnterRecovery) has any way
+        // to know the connection died mid-wait. It just sits there, and when the
+        // wire comes back the FIRST post-reconnect room render gets fed into that
+        // stale wait as if it were the landing/reply it was expecting — a false
+        // "Lost" (report paradigm-20260901-191945). NotifyDisconnected must stop
+        // cleanly (no Lost dialog) and remember the loop to resume.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Equal(LoopState.Running, h.Runner.State);
+
+        h.Runner.NotifyDisconnected();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeForTests!.Name);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Stopped && e.Detail.Contains("disconnected"));
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void FirstPromptAfterDisconnect_ResumesTheRememberedLoop()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);   // step 1 ("n") of the original run
+
+        h.Runner.NotifyDisconnected();
+        h.Events.Clear();
+
+        // First in-game prompt after reconnect — the same trigger
+        // DeferredCollectReconnectReleaser uses. Tracker is still located at 1/1
+        // (a real reconnect would have re-established it via the login sequence).
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);   // one-shot, consumed
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Started);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);   // fresh Start() sent step 1 again
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    [Fact]
+    public void PromptObserved_WithNoPendingReconnect_DoesNotReStartTheLoop()
+    {
+        // A prompt with nothing pending must fall through to the normal
+        // custom-command-step handling, unaffected by the reconnect path.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Events.Clear();
+
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Started);
+        Assert.Single(h.Sent);   // no extra send
+    }
+
+    [Fact]
+    public void ResumeAfterPause_LandedAtUnexpectedThirdRoom_ForwardsToRecoveryGate()
+    {
+        // Live bug: a step's confirmation lands somewhere that's neither its
+        // expected target (the overshoot guard) nor its source
+        // (refused-while-paused) while the loop is paused — the exit's real
+        // destination simply doesn't match what the graph said, or a name-
+        // ambiguous zone misattributed the landing to the wrong room
+        // entirely. None of the existing resume guards catch this shape, so
+        // it fell through to a blind resend of the stale step on resume.
+        // SendMove's fresh room-lookup can paper over that ONE hop by luck
+        // (it reads the real current room, not a stale target), but the rest
+        // of the 18-step plan was drawn for a route that no longer matches
+        // reality from here, and the very next step hard-fails with "no exit"
+        // one hop later (report paradigm-20260902-072545).
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());   // step 1: N, expects 1/1 -> 1/2
+        Assert.Single(h.Sent);
+
+        h.Coordinator.AssertGate("Combat");   // pause mid-step
+
+        // Landed at room C (1/3) — neither the expected target (1/2) nor the
+        // source (1/1) — while paused. A real move genuinely completed
+        // (unlike a refusal), just to somewhere the plan never expected.
+        h.Tracker.NoteRoomObserved(new RoomObservation("C",
+            new HashSet<Direction> { Direction.S }));
+
+        h.Coordinator.ClearGate("Combat");   // resume
+
+        Assert.Single(h.ResyncReasons);   // forwarded to the gate, not blindly resent
+    }
+
+    [Fact]
     public void RefusedWhilePaused_EntersRecoveryOnResume_InsteadOfResendingSameMove()
     {
         // Regression (paradigm-20260829-084558 / paradigm-20260829-104437): a
@@ -451,6 +623,62 @@ public sealed class LoopRunnerTests : IDisposable
             h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
             h.Tracker.NoteMoveBlocked();
             h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        }
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    [Fact]
+    public void BlockedAtSource_WhileConfused_DoesNotExhaustBudget()
+    {
+        // Report paradigm-20260902-113201: a confusion fumble ("You convulse
+        // violently!") can bonk several moves in a row on the same room, well
+        // inside MaxRecoverAttempts' window — charging those against the same
+        // budget a genuine desync uses starved it in seconds and permanently
+        // failed the loop while the character was otherwise fine, just waiting
+        // out the status effect. More blocks than MaxRecoverAttempts while
+        // confused must keep rerouting/resending, never fail.
+        Harness h = NewHarness();
+        h.Runner.SetConfusedCheck(() => true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 6; i++)
+        {
+            h.Tracker.NoteMoveBlocked();
+        }
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        // Initial send + one resend per block — every block rerouted, none skipped.
+        Assert.Equal(7, h.Sent.Count);
+        Assert.All(h.Sent, b => Assert.Equal("n\r", Encoding.Latin1.GetString(b)));
+    }
+
+    [Fact]
+    public void BlockedAtSource_ConfusionClearing_GenuineBlockAfterwardStillExhaustsBudget()
+    {
+        // Confusion exempting recovery attempts from the budget must not leak
+        // into a real problem once the status clears — a persistent block hit
+        // right after confusion wears off still fails after MaxRecoverAttempts
+        // genuine attempts, exactly like BlockedAtSource_PersistentBlock above.
+        Harness h = NewHarness();
+        bool confused = true;
+        h.Runner.SetConfusedCheck(() => confused);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        for (int i = 0; i < 5; i++)
+        {
+            h.Tracker.NoteMoveBlocked();
+        }
+        Assert.Equal(LoopState.Running, h.Runner.State);   // unaffected while confused
+
+        confused = false;
+        for (int i = 0; i < 4; i++)
+        {
+            h.Tracker.NoteMoveBlocked();
         }
 
         Assert.Equal(LoopState.Idle, h.Runner.State);
@@ -598,6 +826,38 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Single(h.Sent);   // not re-sent
 
         // The wait window elapses with the move still wedged Pending → escalate.
+        h.Runner.FireStallWatchdogForTests();
+
+        Assert.Single(h.ResyncReasons);
+        Assert.Contains("in-flight stall", h.ResyncReasons[0]);
+    }
+
+    [Fact]
+    public void InFlightStall_NoPauseInvolved_WatchdogStillEscalates()
+    {
+        // Regression (reports paradigm-20260831-091353 and -100557: "the debuff
+        // wore off and it got stuck" / "movement stopped again"): the stall
+        // watchdog used to be armed only from the resume-reconciliation path
+        // (see InFlightStall_ConfirmationNeverArrives_WatchdogEscalatesToRecovery
+        // above), so an ordinary mid-loop move that went Pending with NO pause
+        // anywhere near it had no timeout at all if its confirmation got
+        // swallowed (there, a debuff reapplying the same instant the move was
+        // sent). One incident hung 19s, the other over 4 minutes, both only
+        // ending because the player noticed and filed a report. EmitCardinal now
+        // arms the watchdog on every send, not just the resume path.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+
+        // The real regression: FireStallWatchdogForTests bypasses arming (it
+        // invokes the elapsed-handler directly regardless), so it can't catch
+        // "never armed in the first place" -- this can.
+        Assert.True(h.Runner.IsStallWatchdogArmedForTests);
+
+        // No pause, no resume -- just the plain send above, then the wait window
+        // elapses with the move still wedged Pending.
         h.Runner.FireStallWatchdogForTests();
 
         Assert.Single(h.ResyncReasons);
@@ -1032,6 +1292,50 @@ public sealed class LoopRunnerTests : IDisposable
 
         Assert.Equal(1, h.Events.Count(e => e.Kind == LoopEventKind.Started));
         Assert.Equal(1, h.Events.Count(e => e.Kind == LoopEventKind.ReachedFirstWaypoint));
+    }
+
+    // A real walker's arrival-confirming observation fires RoomTracker.StateChanged
+    // once — but the walker's own subscription (registered first, mirroring
+    // AppServices' construction order) synchronously hands off into
+    // LoopRunner.BeginCircle/SendNextStep before the SAME dispatch reaches the
+    // runner's own StateChanged subscription. Without deferring that hand-off, the
+    // runner would process the walker's already-consumed arrival transition against
+    // its own freshly-advanced Running/step-in-flight state and misread it as a bad
+    // landing of the step it had just sent (report paradigm-20260901-090044).
+    [Fact]
+    public void ApproachArrival_DoesNotLeakStaleTransitionAsCircleStepMismatch()
+    {
+        Harness h = NewHarness(deferResume: true, wireRecovery: true, withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        // 1/1 isn't a waypoint of this loop, so Start takes the walker-approach
+        // branch: closest waypoint is 1/2, one hop north.
+        Loop loop = new("bc", new[] { new RoomKey(1, 2), new RoomKey(1, 3) });
+        Assert.True(h.Runner.Start(loop));
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Single(h.Sent);   // the approach's "n"
+
+        // Confirm the approach's arrival at 1/2 — the walker's single-hop path
+        // completes on this one observation, synchronously firing Finished into
+        // the runner before this same dispatch reaches the runner's own
+        // subscription for it.
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        // The fix defers BeginCircle past the current dispatch, so the circle
+        // hasn't started yet — and, critically, nothing wrongly escalated to
+        // recovery off the walker's own already-consumed transition.
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Single(h.Sent);
+        Assert.Empty(h.ResyncReasons);
+
+        h.Drain();
+
+        // The deferred hand-off now runs cleanly: circle begins, step 1 sent.
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.Empty(h.ResyncReasons);
     }
 
     [Fact]

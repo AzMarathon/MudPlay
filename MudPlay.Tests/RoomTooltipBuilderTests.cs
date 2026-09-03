@@ -187,6 +187,80 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
+    public void RoomLightSummary_SignedOffset_WithPhrase_ForDarkRoom()
+    {
+        var (graph, _) = NewGraph();
+        Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
+
+        // The ROOM INFO panel's "Room Illu" line: the room alone (no player light),
+        // "Room Illu: <signed value> - <phrase>".
+        string summary = RoomTooltipBuilder.BuildRoomLightSummary(dark);
+
+        Assert.StartsWith("Room Illu: -180", summary);
+        Assert.Contains("very dark", summary);
+    }
+
+    [Fact]
+    public void LightSummary_ShowsBaseValue_ForFullyLitRoom()
+    {
+        var (graph, _) = NewGraph();
+        Room lit = graph.GetRoom(new RoomKey(1, 1))!;       // Light = 0
+
+        // Light 0 isn't "no illu" — it's the base value 0, which still shows a line
+        // reading "You can see."
+        string room = RoomTooltipBuilder.BuildRoomLightSummary(lit);
+        Assert.StartsWith("Room Illu: 0", room);
+        Assert.Contains("You can see.", room);
+
+        string player = RoomTooltipBuilder.BuildPlayerLightSummary(lit, playerIllu: 200);
+        Assert.StartsWith("Your Illu: +200", player);
+        Assert.Contains("You can see.", player);
+    }
+
+    [Fact]
+    public void PlayerLightSummary_FoldsPlayerIllu_IntoEffectiveValue()
+    {
+        var (graph, _) = NewGraph();
+        Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
+
+        // "Your Illu" folds carried illumination into the room's light: -180 + 100
+        // = -80, which lands in the dimly-lit band.
+        string summary = RoomTooltipBuilder.BuildPlayerLightSummary(dark, playerIllu: 100);
+
+        Assert.StartsWith("Your Illu: -80", summary);
+        Assert.Contains("dimly lit", summary);
+    }
+
+    [Fact]
+    public void RoomLightSummary_OmitsPhrase_WhenRequested()
+    {
+        var (graph, _) = NewGraph();
+        Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
+
+        // With the player carrying light the phrase moves to Your Illu, so Room
+        // Illu shows just its value.
+        string summary = RoomTooltipBuilder.BuildRoomLightSummary(dark, includePhrase: false);
+
+        Assert.Equal("Room Illu: -180", summary);
+    }
+
+    [Fact]
+    public void PlayerLightSummary_YouCanSee_OnlyWhenFullyLit()
+    {
+        var (graph, _) = NewGraph();
+        Room dark = graph.GetRoom(new RoomKey(1, 2))!;      // Light = -180
+
+        // Only fully-lit (V >= 0) reads "You can see."; the darker bands keep their
+        // game phrase. -180 + 200 = +20 (fully lit) → "You can see."; -180 + 40 =
+        // -140 (barely visible) keeps its line.
+        Assert.Contains("You can see.", RoomTooltipBuilder.BuildPlayerLightSummary(dark, playerIllu: 200));
+        string barely = RoomTooltipBuilder.BuildPlayerLightSummary(dark, playerIllu: 40);
+        Assert.StartsWith("Your Illu: -140", barely);
+        Assert.Contains("barely visible", barely);
+        Assert.DoesNotContain("You can see.", barely);
+    }
+
+    [Fact]
     public void Build_ExitsList_ListsAllDirections_WithDestinationNames()
     {
         var (graph, cache) = NewGraph();

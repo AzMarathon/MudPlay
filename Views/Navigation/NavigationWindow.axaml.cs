@@ -65,8 +65,8 @@ public partial class NavigationWindow : Window
         // Auto-Lair setups each get the same leaf-drag → folder-drop
         // wiring; the drop handler routes by leaf type to the matching
         // VM move method.
-        if (this.FindControl<TreeView>("FavoriteTreeView") is { } favTree) WireRowDragDrop(favTree);
-        if (this.FindControl<TreeView>("NavTreeView")      is { } navTree) WireRowDragDrop(navTree);
+        if (this.FindControl<ListBox>("FavoriteTreeView") is { } favTree) WireRowDragDrop(favTree);
+        if (this.FindControl<ListBox>("NavTreeView")      is { } navTree) WireRowDragDrop(navTree);
 
         // Right-click → "Center on Player" routes through a VM event so
         // the command can sit on the VM (where the rest of the context-
@@ -345,6 +345,7 @@ public partial class NavigationWindow : Window
             FlyoutBase.ShowAttachedFlyout(searchBox);
     }
 
+
     // Picking a recent destination arms it (VM OnSelectedGotoHistoryChanged) and
     // should dismiss the flyout — otherwise it lingers until a click elsewhere.
     // Only a real pick closes it (the VM resets the selection to null afterwards,
@@ -436,7 +437,7 @@ public partial class NavigationWindow : Window
     // args.
     private PointerPressedEventArgs? _pressArgs;
 
-    private void WireRowDragDrop(TreeView tree)
+    private void WireRowDragDrop(Control tree)
     {
         // Tunnel so we record the pressed row before inner controls
         // (the Load / Run / ✎ / ✕ buttons) get a chance to handle it.
@@ -510,12 +511,15 @@ public partial class NavigationWindow : Window
     {
         for (StyledElement? e = src; e is not null; e = e.Parent)
         {
-            switch (e.DataContext)
+            // A flat row wraps the leaf/folder VM; unwrap it so a press on the row
+            // chrome (indent / chevron) resolves the same as one on the content.
+            object? dc = e.DataContext is NavFlatRow flat ? flat.Item : e.DataContext;
+            switch (dc)
             {
                 case FavoriteRowViewModel:
                 case LoopRowViewModel:
                 case LairSetupRowViewModel:
-                    return e.DataContext;
+                    return dc;
                 case NavFolderNodeViewModel:
                     return null;
             }
@@ -530,7 +534,8 @@ public partial class NavigationWindow : Window
     {
         for (StyledElement? e = src; e is not null; e = e.Parent)
         {
-            switch (e.DataContext)
+            object? dc = e.DataContext is NavFlatRow flat ? flat.Item : e.DataContext;
+            switch (dc)
             {
                 case NavFolderNodeViewModel folder: return folder.Path;
                 case FavoriteRowViewModel fav:      return fav.Folder;

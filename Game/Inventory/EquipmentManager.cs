@@ -56,6 +56,11 @@ public sealed class EquipmentManager
     // rather than clobbering its swap — see ApplySet.
     private Func<bool>? _combatOwnsWeaponSlot;
 
+    // True on Paradigm (where a full-pair eq/wear evicts SLOT 1), false on Stock
+    // (evicts SLOT 2) — see ComposePairedSlotCommands. Null before wiring / in tests
+    // ⇒ Paradigm behaviour (the historical default the set-only tests exercise).
+    private Func<bool>? _paradigmPairedEviction;
+
     // Thrash guard: a gear set that keeps producing commands without converging (a
     // paired-slot swap the game won't satisfy, say) must not re-apply forever. Count
     // applies-that-produced-commands for the SAME set within a window; past the limit,
@@ -149,6 +154,12 @@ public sealed class EquipmentManager
 
     // Bind the wire sink. Idempotent; later binds replace earlier ones.
     public void SetWireSender(Action<byte[]> send) => _wire.Bind(send);
+
+    // Bind the realm probe (true on Paradigm) so paired-slot swaps pick the right
+    // evicted slot. Read live per-apply, so a mid-session set swap is honoured.
+    public void SetRealmProbe(Func<bool> onParadigm) => _paradigmPairedEviction = onParadigm;
+
+    private bool ParadigmPairedEviction => _paradigmPairedEviction?.Invoke() ?? true;
 
     // Bind the combat weapon-ownership probe (CombatManager.IsWeaponOverrideActive).
     // Wired post-construction to break the manager ↔ combat-engine build cycle.
@@ -389,6 +400,24 @@ public sealed class EquipmentManager
         if (cmds.Count == 0)
             return combatChanged;
 
+        // In-flight guard: the previous apply of this set is still awaiting the
+        // game's `wear` confirmations, so the worn snapshot hasn't caught up and
+        // re-diffing re-emits the very same wears. A burst of auto-fire triggers
+        // (a rest-complete + posture + walker churn while Default and a pre-rest
+        // set overlap the same slots, with HP hovering at the rest threshold)
+        // otherwise re-sends the identical `wear`s several times a second — the
+        // first lands, the rest bounce off as "you do not have X left unequipped"
+        // (report paradigm-20260831-071637). Hold until the confirmations arrive
+        // (NoteEquipSucceeded clears _pending) or the pending window lapses; the
+        // thrash net still backstops a genuine non-convergence.
+        if (IsReapplyInFlight(set, cmds))
+        {
+            _log?.Debug(LogCategory,
+                $"gear set '{set.Name}': prior apply still in flight — not re-sending "
+                + $"{cmds.Count} duplicate command(s)");
+            return combatChanged;
+        }
+
         if (IsThrashing(set))
             return combatChanged;
 
@@ -396,6 +425,32 @@ public sealed class EquipmentManager
         RecordPending(set, cmds);
         SendSet(cmds);
         return true;
+    }
+
+    // True when every item this apply would (re)wear is already outstanding for
+    // THIS set from a prior apply whose confirmations haven't landed yet — a pure
+    // re-send. A genuinely new / changed slot (not yet pending) falls through so
+    // the real swap still goes out. _pending is cleared as each wear confirms
+    // (NoteEquipSucceeded) or when the pending window lapses (ExpirePending).
+    private bool IsReapplyInFlight(EquipmentSet set, IReadOnlyList<string> cmds)
+    {
+        ExpirePending();
+        if (_pending.Count == 0) return false;
+
+        bool any = false;
+        foreach (string c in cmds)
+        {
+            string? name =
+                c.StartsWith("wear ", StringComparison.Ordinal) ? c["wear ".Length..] :
+                c.StartsWith("eq ", StringComparison.Ordinal) ? c["eq ".Length..] : null;
+            if (name is null) continue;   // a `rem` prepend isn't a wear
+            any = true;
+            string n = name.Trim();
+            if (!_pending.Any(p => string.Equals(p.SetId, set.Id, StringComparison.Ordinal)
+                                   && string.Equals(p.ItemName, n, StringComparison.OrdinalIgnoreCase)))
+                return false;             // a wear that isn't already in flight — let it through
+        }
+        return any;
     }
 
     // Whether the same set has produced commands too many times in the window — i.e.
@@ -454,7 +509,8 @@ public sealed class EquipmentManager
             && _resolveItemSlot is not null && _canEquipItem is not null)
         {
             return BuildEquipCommands(
-                set, snap.CarriedItems, snap.EquippedItems, _resolveItemSlot, _canEquipItem, blocked);
+                set, snap.CarriedItems, snap.EquippedItems, _resolveItemSlot, _canEquipItem,
+                blocked, ParadigmPairedEviction);
         }
 
         var worn = new HashSet<string>(
@@ -466,14 +522,11 @@ public sealed class EquipmentManager
             availableNames: haveInventory ? HeldNames(snap) : null, blockedNames: blocked);
         if (wears.Count == 0) return wears;
 
-        // Free paired finger / wrist slots first so a swap of one member lands on the
-        // freed slot instead of trading with the member the set keeps (the non-
-        // converging thrash). Only families actually gaining a member are pruned.
-        var beingWorn = wears
-            .Where(c => c.StartsWith("wear ", StringComparison.Ordinal))
-            .Select(c => c["wear ".Length..])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return ComposePairedSlotCommands(set, snap.EquippedItems, beingWorn, wears);
+        // Compose the paired finger / wrist frees around the equips so the pick bound
+        // for the OTHER slot rems its odd-out first (the pick bound for the evicted
+        // slot rides the eq's auto-evict) — see ComposePairedSlotCommands. Only
+        // families actually gaining a member are touched.
+        return ComposePairedSlotCommands(set, snap.EquippedItems, wears, ParadigmPairedEviction);
     }
 
     // ----- pure apply logic (unit-tested directly) ------------------------
@@ -508,7 +561,7 @@ public sealed class EquipmentManager
             // Known-unwearable (blocked) picks are skipped so a swap doesn't
             // re-bonk on an item the character can't wear (alignment / refusal).
             if (blockedNames is not null && blockedNames.Contains(name)) continue;
-            cmds.Add($"wear {name}");
+            cmds.Add($"{Verb(e.Slot)} {name}");
         }
         return cmds;
     }
@@ -516,58 +569,31 @@ public sealed class EquipmentManager
     private static readonly EquipmentSlot[] PairedFamilies =
         { EquipmentSlot.Finger1, EquipmentSlot.Wrist1 };
 
-    // `rem` commands to free paired finger / wrist slots BEFORE the set's new members
-    // are worn. The game's `wear <ring>` auto-picks a finger and trades places with
-    // whichever it chooses — often the WRONG family member — so a set that keeps one
-    // ring and swaps the other never converges: the two rings oscillate on one finger
-    // and the set re-applies forever, breaking rest each time (report
-    // paradigm-20260814-215046). For a paired family that's GAINING a member this
-    // apply, `rem` the worn members the set doesn't want (the odd ones out) so the
-    // following `wear` lands on the freed slot instead of trading with a kept member.
-    // Single slots trade-place cleanly, so they're untouched; only families actually
-    // gaining a member are pruned, so a set fully in effect strips nothing.
-    internal static List<string> BuildPairedSlotRems(
-        EquipmentSet set, IReadOnlyList<EquippedItem> worn, ISet<string> beingWorn)
-    {
-        var rems = new List<string>();
-        foreach (EquipmentSlot family in PairedFamilies)
-        {
-            var setMembers = set.Slots
-                .Where(e => !IsVirtual(e.Slot) && FamilyOf(e.Slot) == family
-                            && !string.IsNullOrWhiteSpace(e.ItemName))
-                .Select(e => e.ItemName!.Trim())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (setMembers.Count == 0) continue;
-            if (!setMembers.Any(beingWorn.Contains)) continue;   // family isn't gaining a member
-
-            foreach (EquippedItem e in worn)
-            {
-                if (EquipmentSlotMap.FromWornString(e.Slot) is not { } s || FamilyOf(s) != family)
-                    continue;
-                string wornName = e.Name.Trim();
-                if (!setMembers.Contains(wornName))
-                    rems.Add($"rem {wornName}");
-            }
-        }
-        return rems;
-    }
-
-    // Compose the paired finger / wrist frees around the set's wears. Starts from the
-    // full odd-out rem list (BuildPairedSlotRems), then optimizes each family that's
-    // swapping BOTH of its members: the game's first `wear` into a full paired family
-    // auto-evicts the FIRST-worn member, so only the SECOND worn member needs an
-    // explicit `rem` — interleaved right before its replacement's wear rather than
-    // prepending both frees. Saves one `rem` line per such family (report
-    // paradigm-20260827-082305). A single-member swap (or a slot already free) keeps
-    // the prepend-all-frees form, which converges safely.
+    // Compose the paired finger / wrist frees around the set's equips. CONFIRMED
+    // mechanic (user in-game tests, 2026-09-03, both realms): the `lo`/`i` listing
+    // order IS reliable physical slot order (first-listed = slot 1). An `eq`/`wear`
+    // into a FULL paired family target-swaps ONE physical slot — the new item evicts
+    // that slot's occupant and takes its place; into a family with a free slot it
+    // fills the empty slot. WHICH slot is evicted differs by realm:
+    //   - Paradigm evicts SLOT 1 (the first-listed).
+    //   - Stock evicts SLOT 2 (the last-listed).
+    // Paired items are equipped with `eq` (see Verb), which takes the evicted slot in
+    // place — `wear` on Paradigm appends the new ring to slot 2 and shuffles the
+    // survivor into slot 1, which scrambled the order across a swap cycle and made the
+    // client emit a needless `rem` every time (report paradigm-20260903-111522).
     //
-    // LIVE-TEST / mechanic: rests on `wear` evicting the FIRST-listed worn member of
-    // the family (worn order = the game's `i` order). worn must be in that order.
+    // So a set pick destined for the evicted slot needs NO `rem` (the eq auto-evicts
+    // the odd-out sitting there); a pick destined for the OTHER slot — the one the eq
+    // would leave alone — needs the odd-out remmed first (else the eq drops the member
+    // the set keeps). We simulate the equips in order and emit a `rem` only when a
+    // bare eq would evict a member the set keeps. Non-family commands pass through
+    // untouched. evictsFirstListed = the realm's evicted slot (true = Paradigm/slot 1).
     internal static List<string> ComposePairedSlotCommands(
-        EquipmentSet set, IReadOnlyList<EquippedItem> worn, ISet<string> beingWorn, List<string> wears)
+        EquipmentSet set, IReadOnlyList<EquippedItem> worn, List<string> wears,
+        bool evictsFirstListed = true)
     {
-        List<string> rems = BuildPairedSlotRems(set, worn, beingWorn);
-        var result = new List<string>(wears);
+        // Which family equips need a `rem` before them (keyed by the exact command).
+        var remBefore = new Dictionary<string, string>(StringComparer.Ordinal);
 
         foreach (EquipmentSlot family in PairedFamilies)
         {
@@ -578,34 +604,60 @@ public sealed class EquipmentManager
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (setMembers.Count == 0) continue;
 
-            // Worn members of this family the set doesn't want, in `i` (worn) order.
-            var oddOuts = worn
-                .Where(e => EquipmentSlotMap.FromWornString(e.Slot) is { } s && FamilyOf(s) == family
-                            && !setMembers.Contains(e.Name.Trim()))
+            // This family's new-member equips, in the order they'll be sent (either verb).
+            var familyWears = wears
+                .Where(c => PairedCommandItem(c) is { } it && setMembers.Contains(it))
+                .ToList();
+            if (familyWears.Count == 0) continue;   // family isn't gaining a member
+
+            // Worn family members in `i` (slot) order — index 0 is slot 1 (reliable).
+            var wornList = worn
+                .Where(e => EquipmentSlotMap.FromWornString(e.Slot) is { } s && FamilyOf(s) == family)
                 .Select(e => e.Name.Trim())
                 .ToList();
-            // The family's new-member wears actually queued (set-slot order).
-            var familyWears = result
-                .Where(c => c.StartsWith("wear ", StringComparison.Ordinal)
-                            && setMembers.Contains(c["wear ".Length..]))
-                .ToList();
 
-            // Both members swapping: the first wear evicts oddOuts[0]; drop both
-            // prepended frees and interleave a single `rem oddOuts[1]` before the
-            // second replacement's wear.
-            if (oddOuts.Count >= 2 && familyWears.Count >= 2)
+            foreach (string wearCmd in familyWears)
             {
-                rems.RemoveAll(r =>
-                    string.Equals(r, $"rem {oddOuts[0]}", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(r, $"rem {oddOuts[1]}", StringComparison.OrdinalIgnoreCase));
-                int idxSecondWear = result.IndexOf(familyWears[1]);
-                result.Insert(idxSecondWear, $"rem {oddOuts[1]}");
+                string newItem = PairedCommandItem(wearCmd)!;
+                if (wornList.Count < 2)
+                {
+                    wornList.Add(newItem);   // a slot is free — the eq fills it, evicting nothing
+                    continue;
+                }
+                // The physical slot a bare eq/wear evicts: slot 1 (index 0) on
+                // Paradigm, slot 2 (the last) on Stock.
+                int evictIdx = evictsFirstListed ? 0 : wornList.Count - 1;
+                if (!setMembers.Contains(wornList[evictIdx]))
+                {
+                    wornList[evictIdx] = newItem;   // evicted slot holds an odd-out — the eq drops it, no `rem`
+                }
+                else
+                {
+                    // The evicted slot holds a member the set keeps — a bare eq would
+                    // drop it, so free a slot by remming an odd-out first.
+                    string? oddOut = wornList.FirstOrDefault(n => !setMembers.Contains(n));
+                    if (oddOut is null) { wornList.Add(newItem); continue; }   // full of kept members (invalid set)
+                    remBefore[wearCmd] = $"rem {oddOut}";
+                    wornList.Remove(oddOut);
+                    wornList.Add(newItem);
+                }
             }
         }
 
-        rems.AddRange(result);
-        return rems;
+        var result = new List<string>(wears.Count + remBefore.Count);
+        foreach (string cmd in wears)
+        {
+            if (remBefore.TryGetValue(cmd, out string? rem)) result.Add(rem);
+            result.Add(cmd);
+        }
+        return result;
     }
+
+    // The item name from a paired-slot equip command ("eq X" / "wear X"), or null.
+    private static string? PairedCommandItem(string cmd) =>
+        cmd.StartsWith("eq ", StringComparison.Ordinal) ? cmd["eq ".Length..]
+        : cmd.StartsWith("wear ", StringComparison.Ordinal) ? cmd["wear ".Length..]
+        : null;
 
     // A two-handed weapon and an off-hand item can't coexist — the game rejects
     // whichever wear would violate that, so a set swap that changes the hands must
@@ -682,7 +734,8 @@ public sealed class EquipmentManager
         IReadOnlyList<EquippedItem> worn,
         Func<string, EquipmentSlot?> resolveSlot,
         Func<string, bool> canEquip,
-        ISet<string>? blockedNames = null)
+        ISet<string>? blockedNames = null,
+        bool evictsFirstListed = true)
     {
         var result = new List<string>();
         var wornNames = new HashSet<string>(
@@ -731,17 +784,13 @@ public sealed class EquipmentManager
             Bump(used, family);
         }
 
-        // Free the paired finger / wrist slots BEFORE their new members go on — the
-        // same non-convergence guard the set-only path uses. This inventory-aware
-        // path otherwise emitted only wears, so swapping the SECOND ring / bracelet
-        // let the game's `wear` trade with the member the set keeps and never
-        // settled (report paradigm-20260825-103537). Only families actually gaining
-        // a member are pruned, so a loadout already in effect strips nothing.
-        var beingWorn = result
-            .Where(c => c.StartsWith("wear ", StringComparison.Ordinal))
-            .Select(c => c["wear ".Length..])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return ComposePairedSlotCommands(set, worn, beingWorn, result);
+        // Compose the paired finger / wrist frees around the wears — the same slot-2-
+        // rems / slot-1-rides-the-wear logic the set-only path uses (see
+        // ComposePairedSlotCommands). This inventory-aware path otherwise emitted only
+        // wears, so swapping the SECOND ring / bracelet let the game's `wear` trade
+        // with the member the set keeps and never settled (report
+        // paradigm-20260825-103537). Only families actually gaining a member are touched.
+        return ComposePairedSlotCommands(set, worn, result, evictsFirstListed);
     }
 
     // The game lists a stack of identical items as "<count> <name>" (e.g.
@@ -779,8 +828,18 @@ public sealed class EquipmentManager
 
     // The equip verb: weapons take the universal `eq` (wear is armor-only per the
     // game's verb set); everything worn takes `wear`, matching the set-only diff.
-    private static string Verb(EquipmentSlot slot) =>
-        slot == EquipmentSlot.Weapon ? "eq" : "wear";
+    // The universal `eq` verb for weapons AND the paired finger / wrist families;
+    // plain `wear` for single armour slots. `eq` on a paired item target-swaps the
+    // evicted physical slot in place (the new ring takes that slot), where `wear`
+    // could append and shuffle the pair's order across a swap cycle (report
+    // paradigm-20260903-111522). Single slots don't care — either verb replaces.
+    private static string Verb(EquipmentSlot slot) => slot switch
+    {
+        EquipmentSlot.Weapon => "eq",
+        EquipmentSlot.Finger1 or EquipmentSlot.Finger2
+            or EquipmentSlot.Wrist1 or EquipmentSlot.Wrist2 => "eq",
+        _ => "wear",
+    };
 
     // Fold a set's virtual-slot items into combat (Alternate Weapon →
     // CombatSettings.AlternateWeapon, Alternate Off-Hand → AlternateOffHand) and

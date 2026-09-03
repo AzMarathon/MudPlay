@@ -1,6 +1,298 @@
 # Version history
 
-Notable changes per merged PR, **newest first**. The top of the [README](README.md) mirrors the most recent entry. Versioning follows semver (post-1.0), by change type: **MAJOR** = whole-program refactor, **MINOR** = a brand-new feature or a large (~1000+ line) rewrite/expansion of an existing one, **PATCH** = bug fixes AND ordinary enhancements to existing features (one increment per bug report handled or per enhancement).
+## 3.48.0
+
+- Bosses tab: a per-boss **Grab All** checkbox (default off) that blindly grabs a boss's loot the instant it's available — a **monster** boss: `get` every item in its drop table when it dies; an **item** boss (a box, e.g. a bogwood box): `get` it on room entry. No room re-parse.
+- The Grab All checkbox is hidden (a dash with a "cannot resolve" tooltip) for a boss whose name is neither a specific monster nor item (e.g. a touch-to-awaken mechanic like Iceforge)
+
+## 3.47.0
+
+- **Monster Intel** detail now shows an **Abilities & resistances** panel — the monster's elemental weakness/strength, spell immunity, magic-weapon requirement, damage/magic resist, undead / non-living, and other notable abilities
+- Each of the monster's attacks now lists its **incoming damage/minute** against you, and the melee threat line shows a per-minute total
+- Your **Physical attacks** matchup lines lead with your **damage/minute** to the monster (alongside rounds-to-kill), and each **ranked attack spell** shows its damage/minute too
+- DPM averages a monster's output over 12 rounds (a round is 5s), honouring energy rollover so the fractional swing rate is counted
+
+## 3.46.15
+
+- Roomba (Workshop → Gang House): each labeled room now has a **Goto** button (left of Remove) that opens the map and walks you straight to that room
+
+## 3.46.14
+
+- Route **Details**: a "Color monsters by hit %" toggle tints monster names green→red by how likely they are to hit you (Monster Intel's Hits-You-%) instead of by alignment
+- The green / yellow / red split is adjustable on a two-thumb slider (default green ≤ 15%, yellow ≤ 45%, red above); the toggle + split are saved per character
+- Route Details flags a **see-hidden** monster with an 👁 eyeball on either side of its name
+- Conversation input box now caps at the terminal's 254-character line limit, so the two match
+
+## 3.46.11
+
+- Paired ring/wrist gear swaps are now **realm-aware** (Paradigm evicts slot 1, Stock slot 2) and use `eq`, so re-equipping a set that keeps one member of a full pair no longer emits a needless `rem`
+- Rest no longer **hangs at full HP** after a medi/pre-rest swap — the rest target caps at the live gear-swap-aware max instead of the stale stat screen
+- Gear reliably **swaps back to Default** after a rest that completes the instant it starts (no more pathing in medi gear)
+- **Disabling the rest engine** now drops the engage-to-clear override, so a drain/nuke no longer fires while Auto-Combat is off
+- No more **double-attack** when a kill re-picks a same-species survivor mid cap-switch
+- The room **AoE debuff** (isto) re-fires on a same-room respawn — the room tags reset once the room is genuinely cleared (you rest), while a mid-fight survivor still isn't re-debuffed
+- bug reports addressed: paradigm-20260903-070438, paradigm-20260903-073107, paradigm-20260903-110346, paradigm-20260903-111227, paradigm-20260903-111522, paradigm-20260903-113054
+
+## 3.46.5
+
+- Equipment Manager: new per-character **"Don't swap to default upon entering combat"** checkbox (checked = the long-standing behavior)
+- Unchecked, a fight that interrupts a rest is fought in your **Default** set — swap on combat entry, then back to the pre-rest set on room-clear if you haven't yet reached rest-max
+- The 4-set list no longer stretches the column, making room for the new checkbox
+
+## 3.46.4
+
+- **Reset States** now re-anchors max HP/mana with the game's compact `health` command instead of the full `stat` screen — the same correction with far less terminal scroll
+- Typing `health` yourself re-latches your max HP and pool ceilings too; the command works on **both realms**, and the readout parses HP plus your class's pool — **Mana**, **Kai**, or HP-only
+
+## 3.46.3
+
+- The route picker now handles a **mixed** route — one that crosses a survivable hazard (a river) **and** a hard gate past it (a keyed door you lack), like the walk to the Iceforge — instead of showing a single "walk to the gate and stop" card
+- For such a route it offers **"Obtain a raft, then cross"** (when a counter can be sourced) or **"Walk to the hazard and stop"** (when it can't), plus **"Cross unprotected — take the damage"** — each stopping at the hard gate you clear yourself
+- "Walk to the hazard and stop" walks only to the room just short of the hazard (the river's edge), so you can fetch a counter / clear the gate by hand from there rather than crossing blindly
+- The "obtain" card's requirement line now names the **specific** counter it'll fetch and where — e.g. *"log raft (buy at Pier)"* — instead of the whole "log raft or wooden skiff or …" list; when several counters are buyable it picks the **cheapest**
+- The route **Details…** window now includes the final destination room as an arrival step, so the plan shows where it lands, and its **title bar shows the ETA** to arrive via that route (e.g. *"Current route → The Iceforge (3/632) · ~6m 55s"*)
+
+## 3.46.2
+
+- A previewed walk-to whose only route crosses a hazard (a river / lava you lack a counter for) now **draws its route line** instead of a blank map — the preview falls back to the through-the-hazard route the walk would take
+- The route picker now always offers a clearly-worded **"Cross unprotected — take the damage"** choice for a survivable-damage hazard (a river, heat) you have no counter for — and never for a lethal one (a drown / freeze death, a forced teleport), where a counter is the only safe way past
+- Hazard severity (survivable damage vs grave) is decoded from the spell's effect chain, so the "cross unprotected" offer is gated on it
+- Diagnostic logging added for the hazard-counter shop/give/drop resolver, so a missing "obtain, then cross" card is captured in the program log
+- bug reports addressed: paradigm-20260902-222504, paradigm-20260902-222525
+
+## 3.46.0
+
+- New **Details…** button on the **CURRENT NAV** panel header — opens the current route's full step plan in a scrollable window, the same numbered "room < command" list the route picker shows, for whatever's executing (walk / loop / Auto-Lair) **or a previewed walk-to** armed from the search box
+- The route picker's old *Show steps* flyout is replaced by a matching **Details…** button (bottom-left) — the same fuller window, browse the selected route before committing to it
+- Each step's **room name is a link** — click it to flash the room on the map and centre there (the `@where` treatment)
+- Each room lists its notable monsters (placed fixtures + lair spawners) as clickable record links, tinted by **alignment** — evil red, neutral cyan, good/lawful white (the game's own colouring)
+- A step that needs a special item — a **hazard** room (a river crossing, lava, the desert heat…) or an **item-gated exit** (a cliff needing rope & grapple, a raft crossing…) — is flagged with ⚠ and names the item(s) required to cross it in dark yellow (and, for a hazard, the harmful spell), each linking its Game Data record
+
+## 3.45.6
+
+- On Paradigm, navigation now asks the game `rm` for your true room before it ever falls back to the blind reverse-walk recovery — and again as a last resort before the "Lost" dialog — so a client is only ever genuinely Lost when `rm` itself can't answer, instead of giving up while an authoritative position was one command away
+- A `rm` that goes unanswered because a confusion fumble ate the command is re-asked until the confusion passes, rather than being treated as a real failure
+- bug reports addressed: paradigm-20260902-223159
+
+## 3.45.5
+
+- Nav no longer routes non-bards through the barmaid's bard-only ask-transport — a `class N` gate on a greet teleport now keeps the edge for that class only and drops it for everyone else
+- Greet teleports (ask-an-NPC transports) now verify they actually arrived and re-ask until they do — a class's skill roll on the transport can fail silently, and the walker recognises it didn't move rather than stalling or failing the walk
+- bug reports addressed: issue #455
+
+## 3.45.4
+
+- Fixed the walker's point-to-point replan budget (a fallback the loop-runner's own recovery already hands off to) still failing a walk over a short burst of confusion fumbles — it now gets the same "don't charge the budget while confused" exemption already applied to the loop's recovery budget, so a genuinely blocked exit still fails cleanly but a confusion streak no longer stalls movement outright
+- bug reports addressed: paradigm-20260902-173754
+
+## 3.45.3
+
+- Monster Intel: the Hits-You-% filter is now a **multi-select dropdown** with finer, **realm-aware** bands — Paradigm offers `2 / 5 / 10 / 15 / 20 / … / 100`, Stock drops the 2% / 5% bands (below its 8% hit floor) and starts at 8%, so no band is a dead no-op for your realm
+
+## 3.45.2
+
+- Monster Intel now considers **all** of a monster's physical attacks, not just its highest-accuracy one: the master list's Accuracy column lists every attack's accuracy, and **Hits You %** is now a use-chance-weighted blend of each attack's hit% — a truer "how often does it actually connect"
+- Monster Intel detail pane: each physical attack line now shows its own **→ N% to hit you**, and the Melee threat summary uses the same weighted figure
+
+## 3.45.0
+
+- Monster Intel: new **Apply Debuffs** button (under Edit Attacks) — check your known enemy debuffs to fold them onto the selected monster in Your Matchup and see the fight against a softened target; stats can go negative (below-zero accuracy can't hit you, below-zero AC is trivially hit), and slowness thins the monster's attacks/round
+- Monster Intel now models the monster's swings/round (energy ÷ attack-energy) — Your Matchup shows a Melee threat line with its attacks/round and rough damage/round, so slowness and the monster's real output are visible
+- Monster Intel: the displayed attacks in Your Matchup are grouped — Physical attacks, then Spell attacks split into Single-target and AOE
+
+## 3.44.25
+
+- Navigation rail entries that are too long for a narrow panel now show their full text on hover — the status line, GOTO / loop / lair / favourite rows, the live step list, search results, folder names, and the exp-estimator rows
+- The nav status line is now colour-coded: amber while movement is held for a reason (resting, held, confused, party wait, Auto-All off…) and red when a nav action fails or the tracker loses your position
+
+## 3.44.23
+
+- Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, so a move fumbled this way reverts cleanly instead of stranding the tracker
+- Fixed the death dog's shriek confusion wear-off typo ("wear" → "wears") that stopped it matching real output, which could leave the Confused flag stuck until an unrelated confusion cleared it
+- `form of the monkey` confusion now clears when the form wears off — the form buff itself carries the Confused state (set while in form, cleared when it drops), so it no longer relies on the per-action distraction fumble to keep it up
+- Added condition-tracking coverage for status effects that previously had none: constriction, an alternate entangle wording, terror/madness, umbral chains, alternate wrathful-curse and black-curse (blindness) wordings, plague, an alternate runed-cape aura, an alternate sleep wording, poison bolt/cloud/flay/venom-spit onsets, and two combat-end trigger lines (Rakshasha, brain eater)
+
+## 3.44.22
+
+- Fixed a running loop stalling forever (then popping a false "Lost") when the connection drops mid-recovery — nothing previously told the loop or the recovery gate that a disconnect had happened, so a stuck backtrack/rm wait sat there until reconnect fed it an unrelated room render and misread it as the answer it was waiting for. A disconnect now stops the loop cleanly (no Lost dialog) and automatically resumes it on the first in-game prompt after reconnect
+- Fixed the walker giving up a whole approach/walk after just one blocked-move retry — a tight single-retry budget couldn't tell a genuinely blocked exit from an unlucky run of confusion fumbles on the same direction, so it now hands off to the same rm-backed re-plan already used elsewhere instead of failing immediately
+- Fixed that re-plan's own retry budget never actually accumulating — re-planning calls back into the walk-start path, which unconditionally zeroed the counter that was supposed to bound it, so a persistently blocked exit could have retried indefinitely instead of eventually failing cleanly
+- Fixed a loop step confirming, mid-pause, to a room that's neither where it started nor where it was headed (a graph exit leading somewhere unexpected, or a name-ambiguous zone) — every existing resume guard checked "at target" or "at source" but none covered "at neither," so it silently fell through to blindly resending the stale step. Now forwarded to the recovery gate like the same shape already is in real time
+- Fixed a loop permanently failing when convulsions/confusion fumbled several moves in a row on the same room — those bonks were charged against the same 3-attempt recovery budget a genuine desync uses, so a short unlucky run of fumbles (well under 10 seconds) burned it and stopped the loop for good. Repeated fumbles no longer count against the budget; a real block hit right after confusion clears still fails normally
+- bug reports addressed: paradigm-20260901-191945, paradigm-20260901-201514, paradigm-20260902-072545, paradigm-20260902-113201
+
+## 3.44.18
+
+- **Reset States** now also re-equips your Default gear set and re-polls `stat` — so a stuck rest set is undone and a drifted max HP/mana re-latches to the real value
+- Heal, flee (run) and emergency-hangup HP triggers now anchor to your **Default set's** max HP too (like rest), so a Pre-rest set that alters your pool doesn't shift them
+- Area-debuff (e.g. ice storm) no longer fires twice in one fight: an AoE wave-kill that empties a pack no longer resets the once-per-room cap, so the debuff isn't re-cast at the same room's survivors
+- A pre-attack debuff no longer stalls your attack ~3s when the round's spell slot is already spent by a self-buff — it now stands down and the attack fires immediately (the debuff re-offers next round)
+- Area-debuff no longer fires at a monster you've just walked away from: a force-cleared fight now drops its stale combat target
+- Chest Offload: the per-item **Drop** button now drops that item's whole held stack (matching Drop All) instead of doing nothing
+- Rest no longer gets stuck forever after a max-HP/mana change: rest targets now anchor to your **Default gear set's** max and cap at your current gear's real max, so a Pre-rest set that alters your pool can't strand the rest. The Health-settings previews ratchet off the Default set too
+- Conversation window font size now renders at its true point size (was ~25% small; same point→DIP fix as the terminal)
+- Monster Intel's defense AC now includes your permanent race/class innate and completed-quest bonuses (a completed +1-AC quest no longer leaves the sim 1 AC short)
+- bug reports addressed: paradigm-20260902-160110, paradigm-20260902-134633, paradigm-20260902-053911, paradigm-20260902-135211, paradigm-20260902-052036, paradigm-20260902-100509
+
+## 3.44.9
+
+- Navigation GOTO and Loops + Lairs folder lists no longer jump or drift when you expand a folder — the folder now opens in place with its contents right below it
+- Fixes the erratic scrollbar on large lists (the thumb lurching tiny/huge as an expanded folder scrolled past): the lists now render as a flat, uniform-height virtualized list instead of a nested tree where an expanded folder became one giant item that wrecked the scroll estimate
+- Applies to all four lists — the map rail's GOTO and Loops + Lairs, and both lists in the Navigation Management window
+
+## 3.44.8
+
+- Terminal font size is now a true **point** size — picking "16" matches MegaMUD's "16" glyph-for-glyph instead of rendering ~25% smaller ("zoomed out"); the setting was already labelled "in points" but never converted point → pixel before drawing
+- Default terminal font size changed from 16 pt to **12 pt** (only affects characters that haven't picked a size of their own)
+- Backscroll window now renders in your **terminal font** (family + size) instead of a fixed font, so history looks exactly like the live screen
+
+## 3.44.5
+
+- With **Auto-Combat off**, a monster blocking a needed rest (HP **or** mana below its *rest if below*, with HP still above *run if below*) is now fought to clear the room so you can recover — then it flees (break + run) if HP drops to *run if below* during the fight. Ends the "sit there and take damage" deadlock where the client would neither fight, rest, nor run
+- bug reports addressed: paradigm-20260901-093301
+
+## 3.44.4
+
+- Confusion fumbles no longer strand the walker: **both** fumble lines — the generic `You fumble in confusion!` and `convulsions`' own `You convulse violently!` — now revert a move sent while confused instead of leaving a stale pending move that could poison recovery and strand a tier-3 backtrack indefinitely awaiting a landing that would never arrive
+- Fixed a loop-runner reentrancy bug: the walker's own arrival-confirm could hand off into the loop's next step before that same room-tracker event finished reaching the loop runner's handler, which then misread the walker's already-consumed arrival as a bad landing and wrongly triggered a recovery cascade
+- Fixed the walker resending a just-refused move on every pause/resume cycle with no retry cap — a move refused while paused now forces a re-plan instead of blindly retrying the same doomed direction forever
+- Loop / walker recovery now leans on Paradigm's authoritative `rm` before trusting a "blocked at source" or mid-step-desync belief and rerouting from it — a name-ambiguous zone (many identically-named rooms) can leave that belief pointing at the wrong physical room, and `rm` corrects it instead of rerouting from the same wrong room until the retry budget burns out
+- bug reports addressed: paradigm-20260901-080223, paradigm-20260901-090044, paradigm-20260901-091527, paradigm-20260901-100523
+
+## 3.44.0
+
+- New **Monster Aggro** calculator (Workshop → Calculators): predicts which party member a monster attacks, for up to 6 members; shows the **Paradigm** or **Stock** model automatically from the loaded game-data set's realm
+- Paradigm: each member's score (150 base + Charm + party position + last-hitter) and their share of the monster's weighted target lottery
+- Stock: type a monster **record number** to auto-fill Align / Follow% / guard, then see who it opens on (by alignment), each aggroed member's per-beat **target %** (the 50−5×hits spread), and the Follow% stickiness
+- Openable from the terminal right-click menu or a toolbar button like any other calculator
+
+## 3.43.10
+
+- Mana-regen reroll (flux / nature tap): running out of mana mid-cycle now **pauses and resumes** after you meditate back up, spending the full reroll budget instead of quitting early at the mana floor
+- Combat: a pre-attack debuff the server rejects with "You have already cast a spell this round!" (it collided with a buff recast or your own manual cast) now re-fires next round instead of leaving the monster falsely marked debuffed
+- bug reports addressed: paradigm-20260901-114223, paradigm-20260901-123720, paradigm-20260901-140747
+
+## 3.43.7
+
+- Equipment sets: swapping the **first** ring/bracelet slot now sends only the `wear` (the game auto-evicts what's on slot 1) instead of a redundant `rem` + `wear`; only the **second** slot still rems first
+- bug reports addressed: paradigm-20260901-130100
+
+## 3.43.6
+
+- Buff Watchdog targeting: when **solo**, the row shows only the **Self** box (the per-member + All columns are hidden); in a party it shows Self, a box per member, then the **All/None** master (renamed from "All")
+- The **All/None** master is now **independent of Self** — unchecking it no longer unchecks Self (the reported bug); it selects/clears the party members only
+- A member who **joins** is auto-blessed only when **All/None** is checked; with it off, only the members you explicitly ticked are targeted
+- bug reports addressed: paradigm-20260901-103538
+
+## 3.43.5
+
+- Monster record: a summoner's **Between Rounds** summon spell now links to that spell's record, and each entry in the **Summons** list links to the summoned monster's record
+
+## 3.43.4
+
+- Terminal right-click menu: add direct links to any **Settings tab** — opens Settings straight to General / Combat / Health / Party / Statline / Auto-Lair / … instead of its last tab
+- Terminal right-click menu: add direct links to the rest of the **Game Data** tables (Monsters / Items / Spells / Rooms / Shops / Classes / Races / Messages / …), not just Players / Macros / Triggers / Aliases
+
+## 3.43.2
+
+- Fixed the **`@profile`** remote command crashing the receiving client — the swap's terminal echo re-entered the emulator mid-parse; it's now deferred like the other in-pump notices
+- `@profile` with **no argument** now reports the roster — the active profile plus the others on standby (e.g. `{Current: 1)Fire, On Standby: 2)Cold, 3)Lightning}`) — instead of just the active profile's spells
+
+## 3.43.0
+
+- New **casting spell profiles** (Settings → Combat): save and quick-swap named sets of the spell-combat slots (the six spell rows + their gates + mana mode + drain trigger); non-spell combat settings stay shared
+- Numbered profile **chips** (active one gold) + a **name box** + ＋/✕; the profile editor is fully **staged** — switch, add, remove, and edit boxes freely and nothing applies until **Save/OK** (**Cancel** discards). Once applied, the active profile goes live next combat round
+- Swap from the **Action → Combat Profiles** fly-out, or the new **`@profile <number|name>`** remote command (best-match names, gated by the Alter-settings permission)
+- Two optional **toolbar buttons**: a **cycle** button showing `P#` (left-click next, right-click previous) and a **menu** button with a fly-out picker
+- Every swap reports the live profile + its slots **by cast code** to the terminal (and to the requester, for `@profile`)
+- Combat profiles are captured in the **bug report** (count, active, every profile's full config) and the **program log** (switch + combat-engage lines) so a "wrong spells" report shows which profile fought and how it was set up
+
+## 3.42.6
+
+- Clicking a monster's **lair** (or a room chip) in its Game Data record — and double-clicking a **Rooms**-tab row — now opens the map on that room and selects it, showing its details in **Room info**, instead of a separate popup
+- **Room info** now shows the room's **illumination** (`Room Illu: <value> - <phrase>`) under the map/room number, and its **obvious exits** (click one to re-root the map on that neighbour)
+- Room info's illumination gained a **`Your Illu:`** line — shown when you carry light (worn +illu gear, readied light, or a Buff Watchdog light spell), folding your light into the room's; the visibility phrase (or **"You can see."** once fully lit) sits on the line that matches your real visibility
+- Clicking a **shop room's name** in Room info opens its shop stock popup, not the bare Rooms record
+- Blacklisting a room **from the map** now keeps it drawn (still selected) until you click a **different** room, so you can confirm you hid the right one before it disappears
+- The shop/room detail popup drops its blacklist buttons (blacklisting lives on the map's right-click menu)
+
+## 3.42.1
+
+- Fixed Monster Intel's **AC being inflated** — the defense simulator seeded its AC from the live `stat` Armour Class *plus* your configured buffs, but the game's Armour Class already includes whatever buffs were up when it was captured, so the buffs were counted twice (a 57-AC character read as 79). It now bases AC on worn gear + buffs the same way the Equipment Manager's Projected AC does, so the two agree
+- bug reports addressed: paradigm-20260831-201306
+
+## 3.42.0
+
+- The **terminal right-click menu is now customizable** (Settings → Toolbar + Shortcuts, at the bottom) — the whole menu is yours to arrange, including the **Favorites / Recent destinations** GOTO walk fly-outs (move, rename, or remove them like anything else)
+- Add any **menu command** (window opens, one-shots, utilities like Bug report / Program Log / Wire Inspector); auto-engine toggles are left out (they belong on the toolbar / Action menu)
+- Add a **direct link to a Player Workshop tab** (opens the Workshop straight to Character Info / Equipment / Calculators / Bosses / Roomba / …)
+- Add a **direct link to a calculator** — opens the Workshop on the Calculators tab with that calculator **expanded and centered** (Hit / Movement / Swing / Backstab / Mana Regen / Realm Rankings)
+- Build your own **fly-out folders** — named submenus you fill with whatever items you want
+- **Rename** any entry (or folder) to whatever you want while an entry still links to the same action; reorder, add separators, or Reset to the built-in menu
+- **Import** a menu from another character or a shared `.json` file, and **Export** yours to share with friends
+- Saved per character
+
+## 3.41.0
+
+- Monster Intel gains a **defense simulator** at the top: **AC** is now an editable field (seeded to your worn gear + configured buffs on open), alongside a **Shadow AC** checkbox, a **Prot Evil** field, and a raw **Vile Ward** field with an **alignment** picker (not evil 0% / outlaw-criminal 50% / villain-fiend 100%). Edit any of them and every monster's **Hits You %** recomputes live — a what-if for how safe a fight is with different defense. The evil-only wards (Prot Evil, Vile Ward) apply only versus evil monsters; Shadow is +10 vs all
+- Monster Intel character bar adds **AC vs Selected Target** — the effective AC the selected monster's attack actually rolls against (base AC + Shadow, plus the wards that apply to that monster's alignment)
+- Monster Intel gains a **Hide regen timers** checkbox — drops monsters that respawn on their own timer (bosses, lair leaders, other timed spawns), leaving only freely-farmable monsters
+- Fixed Monster Intel's **EXP column undercounting multiplier monsters** — it read the raw base EXP and ignored the ExpMulti multiplier, so an aged earth dragon read 65,000 instead of its true 2,600,000 (now matches the Game Data Monsters tab; sorting uses the true value too)
+- Monster Intel's **rounds-to-kill cap now filters** monsters over it out of the list (was: showing "&lt;cap&gt;+") — the table shows only fights you can finish within the cap; a monster you can't kill at all still shows "—"
+- Fixed swings per round being over-counted for **every** character — the energy formula used `level × (CombatLVL + 2)` where the game uses `level × CombatLVL`, an extra `level × 2` in the divisor that inflated every swings / DPS / rounds-to-kill figure (Character Info, Calculators tab, Monster Intel). A L28 Paladin's bash read 4.5 where the game's `stat all` shows 3.572; normal read 9 vs the game's 7.143. Matched to MMUD-Explorer's `GetClassCombat` and confirmed against the live game to the decimal (accuracy already used the raw CombatLVL and was correct)
+- Fixed physical swings per round capping at 5 on Paradigm — the cap should be **6** (it was a fixed constant, so a fast weapon was clipped a swing on Paradigm). Verified the full swing/energy math (Normal / Bash / Smash / martial-arts, both realms) against the MMUD-Explorer reference (incl. jumpkick 1900 Stock / 2800 Paradigm)
+
+## 3.40.4
+
+- Fixed the auto-equip spamming the same `wear` commands several times a second when a Default set and a Pre-rest set overlap the same slots — a re-apply now holds while the previous swap's wears are still awaiting confirmation, instead of re-sending the identical commands until the thrash guard trips
+- Fixed a loop wedging forever when a move's room-confirmation got swallowed by an unrelated line (e.g. a debuff reapplying the same instant) — the stall watchdog is now armed on every move sent, not only around a pause/resume
+- Fixed a self-buff spamming a reject/retry loop out of combat — the cast-blocked latch now clears on the same ~5.5s cadence as the once-per-round cast slot, instead of a too-short 3s that retried before the slot had refreshed
+- bug reports addressed: paradigm-20260831-071637, paradigm-20260831-091353, paradigm-20260831-100557, paradigm-20260831-091839
+
+## 3.40.0
+
+- Monster Intel **Edit Attacks** picker (button top-right): check which of your attacks — every usable melee type *and* each obtained attack spell — appear in Your Matchup, and pick (radio) which one drives the **Est. Rounds to Kill** column, so you can ask "how fast if I nuke it?" vs "if I swing my weapon?"
+- Your Matchup now lists your **melee attacks** (rounds to kill / hit% / dmg-per-hit vs the selected monster) alongside the ranked spells; both honor the picker's show/hide
+- Rounds-to-kill for any melee type (Bash / Smash / Backstab / Martial Arts) reuses the same per-type combat math the Character Info sheet uses — no drift
+- Hit Calculator: removed the "Hits me %" picker and "Show me the Monsters" button — the Monsters game-data tab's own filters cover the same ground
+- Monster Intel top bar now shows plain **AC** (worn gear + configured buffs + Shadow) instead of "AC vs Evil" — the evil-only wards (Prot Evil, Vile Ward) no longer inflate the number against a neutral or good monster
+- Editing the rounds-to-kill cap now re-applies to the list immediately, not just on reopen
+- Rounds-to-kill cap spinner moved inline, to the right of the Hits-You-% checkboxes
+- Filter-by-name box no longer resizes as the monster count changes; the count reserves room for 5 digits
+- Removed the in-window Close button — the title-bar X closes it
+- Double-click a monster row to open its full record in the Game Data Browser
+
+## 3.39.0
+
+- Game Data → Monsters filter panel reworked: grouped into labelled sections (Combat / Elemental defenses / Casting & immunity / Type & alignment / Loot & lairs) with friendlier labels + tooltips, an **Apply** and a **Reset** button, and the range boxes are plain text fields so you can type any value (including a negative resist to find vulnerabilities)
+- Every numeric monster filter is now a **min/max range** (either bound optional), so you can bracket — HP 500–2000, or AC ≤ 20 to find easy kills — not just "at least N"
+- Monster filtering absorbs Monster Intel's dimensions: per-element resists (Cold/Fire/Stone/Lightning/Water, signed so you can find vulnerabilities), spell-immunity level, magic-weapon requirement, monster Type, Undead / Animal / Non-living flags, "casts spells", and "drops an item"
+- The search box and the filter panel are now clearly split: the box FINDS a monster within the list, the panel CURATES which monsters are in it
+- Monster record Abilities now list one per line (easier to read), and the meaningless "Damage" ability code is no longer shown
+- Clicking a monster filter range box selects its whole value, so you can overtype or clear it in one action
+
+## 3.38.5
+
+- Character Workshop → Calculators tab: fixed the outgoing weapon damage / DPS / rounds-to-kill silently undercounting **+MinDamage gear** (ability-1 "Damage" items — the flat low-end add) — it never fed that bonus into the melee-damage math
+- The Calculators tab and Monster Intel's matchup now compute melee offense through one shared helper, so the two can't drift apart (Monster Intel already had this right)
+- **Defense readouts now assume your configured buffs are up.** Monster Intel's Hits-You-% / AC-vs-Evil, the Equipment Manager's projected AC, and Character Info all fold in the AC (and DR) your configured self-buffs grant — computed once, identically, from the same shared calculator so the three never disagree
+- Buff roster is "everything that lands on you" — self-only spells, whole-party buffs you keep on, and single-target buffs you cast on yourself — which also fixes the Equipment Manager previously ignoring whole-party AC buffs
+- Character Info gains an **AC / DR breakdown** below Wealth: one line for what worn gear grants, one for what your buffs add on top
+
+## 3.38.3
+
+- Monster Intel refocused into a fast pre-fight check — "can I safely fight this right now?" The master list now shows **Name / HP / EXP / Accuracy / Hits You % / Est. Rounds to Kill**, dropping the broad reference view (still available on the Game Data Browser's Monsters tab)
+- **Hits You %** — that monster's own physical attack's chance to land on you, given your live AC / Dodge and whichever ward applies (Prot Evil / Prot Good, plus the flat +10 Shadow AC bonus that applies against every attacker)
+- **Est. Rounds to Kill** — projected rounds for your currently-equipped weapon's Normal attack to drop the monster (live accuracy / damage / swings / crit; reuses the Character Workshop Calculators tab's MonsterMatchupCalculator); shows "—" when unarmed or unable to out-damage it, and caps at a tunable ceiling (default 999, editable in the window) shown as `<cap>+` so a superboss doesn't project into the millions
+- Replaced the single Safe threshold with a row of **Hits-You-% checkboxes** — six contiguous bands (2 / 5 / 10 / 20 / 40 / 40%+, covering 0-2, 3-5, 6-10, 11-20, 21-40, 41-100 with no gap or overlap); check any combination and a monster shows if it matches any checked band
+- Character bar gains **AC vs Evil** — your Armour Class plus your worn Prot Evil, the combined defense an evil monster's attack actually rolls against
+- A monster with no computable Hits You % (an NPC / caster-only record with no physical attack — trainer, quest-giver, etc.) is dropped from the list once a character is loaded, instead of showing blank
+- Removed from the window (all still on the Game Data Browser's Monsters tab): the "In this room" context bar, the Overview grab-bag, the Elemental Defenses matrix, the Casts panel, Loot, Locations, the Automation overlay editor, and multi-select comparison — kept: Attacks, Your Matchup, and Your Observations
+
+## 3.38.2
+
+- Spell Book: the "Difficulty" column is renamed **Success %** — the number it shows is your chance to land the cast, so "Difficulty" read backwards; the header equation now reads "Success % = your Spellcasting + the spell's difficulty (capped at 98%, 100% for Kai)"
+- Game Data → Items filter now matches the friendly column labels, so you can type `weapon`, `feet`, or `plate` to filter by item type / worn slot / weapon or armour type — not just the raw code (applies to every MDB tab's Filter… box)
 
 ## 3.38.0
 

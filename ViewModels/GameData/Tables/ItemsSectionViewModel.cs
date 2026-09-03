@@ -61,8 +61,9 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
     public override string SearchKeyColumn => "Name";
 
     public override string? FilterHint =>
-        "Type text to match name / columns, or a flag keyword to show only items with that " +
-        "flag set: collect, discard, open, buy, sell, stash.";
+        "Type text to match name, item type, worn slot, or weapon / armour type " +
+        "(e.g. \"weapon\", \"feet\", \"plate\"), or a flag keyword to show only items " +
+        "with that flag set: collect, discard, open, buy, sell, stash.";
 
     public override IEnumerable<string> SearchableLabels => new[]
     {

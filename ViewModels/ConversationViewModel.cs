@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.Terminal;
 
 namespace MudPlay.ViewModels;
 
@@ -43,12 +44,21 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // template. Empty ConvoFont falls back to the bundled JetBrains Mono
     // (FontMono); ConvoFontSize <= 0 falls back to the built-in 12. Applied on
     // window open — a read-only toggle window picks up edits on the next open.
-    private const double DefaultMessageFontSize = 12;
+    private const double DefaultMessageFontSize = 12;   // points
+    // The Talk size setting is in POINTS, but these values bind straight to
+    // Avalonia TextBlock.FontSize, which is DIP — so convert, exactly like the
+    // terminal and Backscroll do at their draw sites. Without it every size
+    // renders ~25% small and a size change barely moves (the "does nothing" bug).
+    private const double PointToPixel = 96.0 / 72.0;
     public FontFamily RowFontFamily { get; }
-    public double MessageFontSize { get; }
+    // Message body size in POINTS (from Talk settings); MessageFontSize / MetaFontSize
+    // are the DIP equivalents Avalonia actually renders.
+    private readonly double _messagePointSize;
+    public double MessageFontSize => _messagePointSize * PointToPixel;
     // Timestamp / channel-tag / speaker sit one point smaller than the message
-    // body, preserving the built-in visual hierarchy as the size scales.
-    public double MetaFontSize => Math.Max(1, MessageFontSize - 1);
+    // body — take the point off BEFORE the DIP conversion so the gap stays a
+    // true point, not ~0.75pt.
+    public double MetaFontSize => Math.Max(1, _messagePointSize - 1) * PointToPixel;
 
     // Accent brushes the filter-toolbar toggles paint themselves with — the
     // per-channel Label colour after overrides. Resolved once at open.
@@ -76,6 +86,11 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty] private string _inputText = string.Empty;
 
+    // Cap the input box at the terminal's own local-input line limit (the MUD's
+    // wire-level cap), so a line typed here can't exceed what the terminal would
+    // accept — the two stay in lockstep off the single LocalInputBuffer.MaxLength.
+    public int MaxInputLength => LocalInputBuffer.MaxLength;
+
     // Drives the input box's recall-dropdown button (disabled when nothing's been sent yet).
     [ObservableProperty] private bool _hasRecentCommands;
 
@@ -94,7 +109,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         ApplyColorOverrides(talk.ChannelColors);
 
         RowFontFamily = ResolveFont(app, talk.ConvoFont);
-        MessageFontSize = talk.ConvoFontSize > 0 ? talk.ConvoFontSize : DefaultMessageFontSize;
+        _messagePointSize = talk.ConvoFontSize > 0 ? talk.ConvoFontSize : DefaultMessageFontSize;
 
         // Seed the header toggles from the character's saved state. Direct field
         // writes (not the generated setters) so no change notification fires and

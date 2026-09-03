@@ -10,17 +10,20 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.GameData.Edit;
 
-// Interactive "everything attached to this room" popup — opened from the Rooms
-// tab (row double-click) and the Monsters tab's spawn/placed/summoned room
-// chips. Reuses RoomTooltipBuilder for the descriptive tail (shop / room spell /
-// light / room commands / regen) so the popup never drifts from the Navigation
+// Interactive shop / room detail popup — the shop stock table (item · max ·
+// regen · buy · sell + charm picker) plus the room's monsters, exits, and
+// descriptive tail. Opened from the Shops tab (row double-click) and the
+// Navigation ROOM INFO panel's shop link / shop-room title; the Rooms tab and
+// the Monsters tab's room chips open the map's ROOM INFO panel instead.
+// Blacklisting lives on the map's right-click menu, so this popup carries no
+// blacklist controls. Reuses RoomTooltipBuilder for the descriptive tail (shop /
+// room spell / light / room commands / regen) so the popup never drifts from the
 // map hover, and layers clickable affordances on top:
 //   - the room title centres the Navigation map on that room (opening the
-//     window if it's closed),
+//     window if it's closed) and inspects it,
 //   - each exit destination re-roots the popup itself on the neighbour and, if
 //     the map is already open, lets it follow along (never force-opens it),
-//   - each monster name jumps to its Game Data record,
-//   - Add / Remove buttons toggle the room on the per-BBS blacklist.
+//   - each monster name jumps to its Game Data record.
 public sealed partial class RoomDetailDialogViewModel
     : ObservableObject, IDialogViewModel<bool>
 {
@@ -118,15 +121,6 @@ public sealed partial class RoomDetailDialogViewModel
     private string _extrasText = string.Empty;
     public bool HasExtras => ExtrasText.Length > 0;
 
-    // Blacklist toggle state — drives the two mutually-exclusive buttons.
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanAddToBlacklist))]
-    [NotifyPropertyChangedFor(nameof(CanRemoveFromBlacklist))]
-    private bool _isBlacklisted;
-
-    public bool CanAddToBlacklist => !IsBlacklisted;
-    public bool CanRemoveFromBlacklist => IsBlacklisted;
-
     public RoomDetailDialogViewModel(AppServices services, RoomKey key)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -157,14 +151,12 @@ public sealed partial class RoomDetailDialogViewModel
             KeyLabel = key.ToString();
             MonsterHeader = string.Empty;
             ExtrasText = $"No room record for {key} in the active game-data set.";
-            IsBlacklisted = _services.RoomBlacklist.IsBlacklisted(key);
             RaiseSectionVisibility();
             return;
         }
 
         Title = room.DisplayName;
         KeyLabel = $"Map {key.Map} · Room {key.Room}";
-        IsBlacklisted = _services.RoomBlacklist.IsBlacklisted(key);
 
         // Monsters — split into Placed (the room's NPC fixture / a boss),
         // Assigned (roam / rare-random spawns), and Lair (consistent lair
@@ -391,26 +383,10 @@ public sealed partial class RoomDetailDialogViewModel
     private RoomDetailLink MakeMonsterLink(int id, string name, string? note)
         => new($"{name}(#{id})", note, new RelayCommand(() => _services.OpenMonsterGameData(id)));
 
-    // Title / key click — open (or focus) the Navigation map and centre it on
-    // whichever room the popup is currently showing.
+    // Title / key click — open (or focus) the Navigation map, centre it on
+    // whichever room the popup is currently showing, and inspect it in ROOM INFO.
     [RelayCommand]
     private void OpenInNavigation() => _services.NavigateToRoom(_key);
-
-    [RelayCommand]
-    private void AddToBlacklist()
-    {
-        if (IsBlacklisted) return;
-        _services.RoomBlacklist.Add(_key, Title);          // fires Changed → map redraws
-        IsBlacklisted = true;
-    }
-
-    [RelayCommand]
-    private void RemoveFromBlacklist()
-    {
-        if (!IsBlacklisted) return;
-        _services.RoomBlacklist.Remove(_key);              // fires Changed → map redraws
-        IsBlacklisted = false;
-    }
 
     [RelayCommand]
     private void Close() => CloseRequested?.Invoke(true);

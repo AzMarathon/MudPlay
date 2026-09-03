@@ -4,7 +4,7 @@ namespace MudPlay.Game.Calculators;
 // carried, since the round remainder rolls into the next round and produces a
 // repeating swing pattern.
 //   EnergyPerSwing  — energy each swing costs out of the 1000-per-round budget.
-//   RawSwings       — naive 1000 / EnergyPerSwing, capped at MAX_SWINGS.
+//   RawSwings       — naive 1000 / EnergyPerSwing, capped at the realm's max swings (5 Stock / 6 Paradigm).
 //   EncumPercent    — encumbrance percentage used in the calculation.
 //   QnDCritBonus    — Quick & Deadly crit bonus from a fast weapon at low encum.
 //   SwingsPerRound  — swings landed in each of 10 rounds (energy carried forward).

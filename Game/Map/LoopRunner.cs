@@ -49,6 +49,10 @@ public sealed class LoopRunner : IRecoverableEngine
     // AutoWalkManager.SetPartyLeaderCheck. Null until wired.
     private Func<bool>? _isLeaderWithFollowers;
 
+    // True while the character is Confused (ConditionTracker.IsConfused). Read
+    // by EnterRecovery — see MaxRecoverAttempts below. Null until wired.
+    private Func<bool>? _isConfused;
+
     // Fired after a leading character crosses a party-splitting CMD teleport so
     // the party engine reforms the dissolved group. Mirrors the walker's
     // AutoWalkManager.SetPartySplitHandler. Null until wired.
@@ -125,7 +129,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // loop segment (see EnterRecovery) instead of failing straight to Idle. This
     // caps how many consecutive recoveries we attempt before giving up; it resets
     // to 0 on any forward progress (AdvanceStep) and on a fresh (non-recovery)
-    // Start, so a healthy loop always has the full budget.
+    // Start, so a healthy loop always has the full budget. Not charged for an
+    // attempt taken while the character is Confused — see EnterRecovery.
     private int _recoverAttempts;
     private const int MaxRecoverAttempts = 3;
 
@@ -494,6 +499,14 @@ public sealed class LoopRunner : IRecoverableEngine
         _isLeaderWithFollowers = isLeaderWithFollowers;
     }
 
+    // Wire the Confused check (AppServices binds this to Conditions.IsConfused) so
+    // EnterRecovery can tell a confusion fumble apart from a genuine block.
+    public void SetConfusedCheck(Func<bool> isConfused)
+    {
+        ArgumentNullException.ThrowIfNull(isConfused);
+        _isConfused = isConfused;
+    }
+
     // Wire the party-split-teleport handler so a leading character reforms the
     // party after a party-splitting CMD teleport. Mirrors
     // AutoWalkManager.SetPartySplitHandler.
@@ -838,9 +851,32 @@ public sealed class LoopRunner : IRecoverableEngine
                     break;
                 }
                 // Walker arrived at the chosen waypoint. Rotation already happened
-                // in Start — just hand off into the circle.
+                // in Start — hand off into the circle. Marshalled past the current
+                // dispatch instead of called directly: OnWalkerEvent runs
+                // synchronously from inside RoomTracker.StateChanged (the walker's
+                // own subscription fires first — it's constructed before us in
+                // AppServices), so calling BeginCircle here would race the REST of
+                // that same dispatch. BeginCircle's own SendNextStep flips us to
+                // Running/step-in-flight immediately; by the time the tracker's
+                // later subscribers — including our own OnTrackerStateChanged —
+                // get their turn at the ORIGINAL arrival transition, our guard
+                // (State==Running && step in flight) no longer filters it out, and
+                // we misread the walker's own already-consumed arrival as a bad
+                // landing of the step we hadn't even sent when the dispatch began
+                // (report paradigm-20260901-090044). A pause that lands in the same
+                // window before this runs falls back to the same deferred-resume
+                // handoff the pausedMidApproach branch above uses.
                 _log?.Info("LoopRunner", "approach finished; entering circle");
-                BeginCircle();
+                _postToUi(() =>
+                {
+                    if (State == LoopState.Paused && _pausedFromApproach)
+                    {
+                        _approachFinishedWhilePaused = true;
+                        return;
+                    }
+                    if (State != LoopState.Approaching) return;
+                    BeginCircle();
+                });
                 break;
             case WalkEventKind.Failed:
                 // Walker gave up (tier-3 abort, blocked, no path, etc.).
@@ -1108,6 +1144,18 @@ public sealed class LoopRunner : IRecoverableEngine
     // Emit a plain cardinal move for the circuit, notifying the tracker + recovery
     // gate and firing the pre-move stealth hook. note annotates the wire reason
     // (e.g. "door pre-open"); null for an ordinary passage.
+    //
+    // Arms the stall watchdog on every send, not just the resume-reconciliation
+    // path (ArmStallWatchdog's other two call sites) — this is the ONE place every
+    // plain cardinal actually goes on the wire, ordinary mid-loop sends included.
+    // Without it, a move that goes Pending outside a pause/resume boundary and then
+    // gets swallowed by an unrelated line (a debuff reapplying mid-move, say) had
+    // no timeout at all: AdvanceStep only disarms on confirmation, so nothing was
+    // ever watching for one that never arrives. Reports paradigm-20260831-091353
+    // and -100557 ("the debuff wore off and it got stuck" / "movement stopped
+    // again"): a rabid-dire-wolf convulsions tick landed the same instant a step's
+    // move went out, the room confirmation never came, and the loop sat wedged —
+    // once for 19s, once for over 4 minutes — because no watchdog had been armed.
     private void EmitCardinal(Direction direction, RoomKey target, string? note)
     {
         _tracker.NoteMoveSent(direction);
@@ -1118,6 +1166,7 @@ public sealed class LoopRunner : IRecoverableEngine
             ? $"move {direction} → {target}"
             : $"move {direction} ({note})";
         Write(bytes, reason);
+        ArmStallWatchdog($"step {_index + 1} move sent");
     }
 
     // Fail the active circuit with reason and reset.
@@ -1349,6 +1398,21 @@ public sealed class LoopRunner : IRecoverableEngine
     // Test seam — pretend the in-flight stall watchdog just elapsed.
     internal void FireStallWatchdogForTests() => OnStallWatchdogElapsed();
 
+    // Test seam — true while the in-flight stall watchdog is armed and
+    // counting down. FireStallWatchdogForTests bypasses arming entirely (it
+    // invokes the elapsed-handler directly), so it can't tell a test whether
+    // EmitCardinal actually armed the watchdog on send — this can.
+    internal bool IsStallWatchdogArmedForTests => _stallWatchdog?.IsEnabled == true;
+
+    // Test seam — pretend the bound prompt scanner just observed an in-game
+    // prompt (the reconnect-resume trigger), without needing a real
+    // WirePromptScanner wired to a wire.
+    internal void FirePromptObservedForTests() => OnPromptObserved(default);
+
+    // Test seam — the loop NotifyDisconnected captured to resume on the next
+    // in-game prompt, or null if nothing is pending.
+    internal Loop? PendingReconnectResumeForTests => _pendingReconnectResume;
+
     private void Write(byte[] bytes, string reason)
     {
         _sent.Add(bytes);
@@ -1450,7 +1514,47 @@ public sealed class LoopRunner : IRecoverableEngine
         }
     }
 
-    private void OnPromptObserved(PromptObservation _) => OnPromptObservedCore();
+    // Set by NotifyDisconnected when a running/paused/recovering loop is torn down
+    // because the connection dropped. Captures the loop definition so the first
+    // real in-game prompt after reconnect can restart it from scratch via a
+    // genuine Start() call — see NotifyDisconnected's rationale.
+    private Loop? _pendingReconnectResume;
+
+    // Torn down by a connection drop (wired from MainWindowViewModel's
+    // client.Disconnected, mirroring every other subsystem's NotifyDisconnected).
+    // Nothing in the recovery ladder (the gate's Tier2/Tier3/awaiting-rm wait, or
+    // this runner's own local EnterRecovery) has any way to know the connection
+    // died mid-wait — it just sits there forever, and when the wire comes back the
+    // FIRST post-reconnect room render gets fed into that stale wait as if it were
+    // the landing/reply it was expecting, producing a false "Lost" (report
+    // paradigm-20260901-191945). Stop cleanly instead — identical teardown to a
+    // user Stop, which already correctly unwinds every sub-state (Approaching's
+    // walker, Recovering's local retry, an attached gate) — and remember the loop
+    // so the first genuine in-game prompt after reconnect restarts it fresh, with
+    // no stale recovery state left to misread.
+    public void NotifyDisconnected()
+    {
+        if (State == LoopState.Idle) return;
+        _pendingReconnectResume = _loop;
+        Stop("disconnected — will resume on reconnect");
+    }
+
+    private void OnPromptObserved(PromptObservation _)
+    {
+        // Fires before the normal per-step handling below: the reconnect resume
+        // takes priority over — and would otherwise be masked by — the
+        // State != Running early-return in OnPromptObservedCore, since
+        // NotifyDisconnected always leaves State at Idle.
+        if (_pendingReconnectResume is { } loop)
+        {
+            _pendingReconnectResume = null;
+            _log?.Info("LoopRunner",
+                $"reconnect: resuming loop '{loop.Name}' on first in-game prompt");
+            Start(loop);
+            return;
+        }
+        OnPromptObservedCore();
+    }
 
     private void OnPromptObservedCore()
     {
@@ -1480,14 +1584,31 @@ public sealed class LoopRunner : IRecoverableEngine
             return;
         }
 
-        _recoverAttempts++;
-        if (_recoverAttempts > MaxRecoverAttempts)
+        // A block landing while the character is Confused is the movement-fumble
+        // mechanic (GAME_MECHANICS: "You fumble in confusion!" / "You convulse
+        // violently!") — the just-sent move was consumed by the fumble, not a
+        // genuine mapping/graph problem, and the resync below confirms the
+        // tracker's belief is correct every time. Confusion can fumble several
+        // moves back-to-back well inside MaxRecoverAttempts' window; charging
+        // those against the same budget used for real desyncs starves it in
+        // seconds and fails the whole loop while the character is otherwise fine
+        // and just waiting out a status effect (report paradigm-20260902-113201).
+        // Don't count this attempt while it's active — the reroute below still
+        // fires, so the step is retried the moment a move actually lands. A
+        // genuine block hit right after confusion clears still gets the full
+        // budget, since only attempts taken *while confused* are exempted.
+        bool confused = _isConfused?.Invoke() == true;
+        if (!confused)
         {
-            _log?.Warn("LoopRunner",
-                $"recovery exhausted after {MaxRecoverAttempts} attempts; failing loop. last={reason}");
-            RaiseAfterReset(new LoopEvent(LoopEventKind.Failed,
-                $"recovery exhausted: {reason}"));
-            return;
+            _recoverAttempts++;
+            if (_recoverAttempts > MaxRecoverAttempts)
+            {
+                _log?.Warn("LoopRunner",
+                    $"recovery exhausted after {MaxRecoverAttempts} attempts; failing loop. last={reason}");
+                RaiseAfterReset(new LoopEvent(LoopEventKind.Failed,
+                    $"recovery exhausted: {reason}"));
+                return;
+            }
         }
 
         // Drop the gate + any in-flight step; we're re-planning from scratch.
@@ -1503,6 +1624,26 @@ public sealed class LoopRunner : IRecoverableEngine
         _approachTarget = null;
         State = LoopState.Recovering;
         Raise(new LoopEvent(LoopEventKind.Paused, $"recovering: {reason}"));
+
+        // Lean on Paradigm's authoritative `rm` before trusting ANY belief about
+        // where we are. "Blocked at source" / a mid-step mismatch is exactly the
+        // shape a name-ambiguous zone (many identically-named rooms sharing an
+        // exit pattern) produces: the tracker's belief LOOKS Confirmed, but the
+        // room that just refused a move disagrees — and a bare `look` below would
+        // just re-run the same name+exit matching that produced the wrong belief
+        // in the first place. `rm` hard-locates the tracker independent of that
+        // matching, so it corrects a mis-anchor instead of rerouting from the same
+        // wrong room cycle after cycle until the retry budget burns out (report
+        // paradigm-20260901-100523). Both callbacks reroute — RerouteFromCurrentRoom
+        // reads whatever room the tracker holds at that moment, corrected or not —
+        // so a failed/unavailable resync (stock realm, no wire, throttled) falls
+        // through to exactly the prior behavior.
+        if (_recovery?.TryResyncOnce?.Invoke(reason, _ => RerouteFromCurrentRoom(), RerouteFromCurrentRoom) == true)
+        {
+            _log?.Warn("LoopRunner",
+                $"recovery {_recoverAttempts}/{MaxRecoverAttempts}: {reason}; confirming via rm before rerouting");
+            return;
+        }
 
         // Tracker already sure of the room → reroute now. Issuing a `look` here
         // would race the reroute's first move: the echo re-prints the current room
@@ -1527,9 +1668,15 @@ public sealed class LoopRunner : IRecoverableEngine
     // Reroute the active loop from wherever the tracker now says we are — picks the
     // closest waypoint, re-approaches if needed, and continues the circle. Reuses
     // Start's planning; isRecovery keeps the bounded budget + lap continuity.
+    //
+    // Guarded on State == Recovering so a TryResyncOnce success can't double-fire
+    // this: SetLocated's own reentrant tracker transition already reroutes us via
+    // OnRecoveringTransition below before our callback gets its turn, which leaves
+    // State no longer Recovering by the time the callback runs.
     private void RerouteFromCurrentRoom()
     {
         if (_loop is null) return;
+        if (State != LoopState.Recovering) return;
         StartInternal(_loop, isRecovery: true);
     }
 
@@ -1717,6 +1864,35 @@ public sealed class LoopRunner : IRecoverableEngine
                 _log?.Warn("LoopRunner",
                     $"resume: step {_index + 1} was refused while paused (still at {source}, expected {_expectedMoveTarget}); entering recovery");
                 EnterRecovery($"step {_index + 1} refused while paused at {source}");
+                return;
+            }
+            // Landed somewhere that's neither the step's expected target
+            // (overshoot guard above) NOR its source (refused-while-paused
+            // above) — a genuine desync: the exit's real destination doesn't
+            // match what the graph says, or a name-ambiguous zone attributed
+            // the landing to the wrong room entirely. OnTrackerStateChanged's
+            // real-time "Confirmed elsewhere" branch handles the identical
+            // shape by flagging the mismatch to the recovery gate instead of
+            // trusting the stale plan; this resume path had no equivalent, so
+            // it fell all the way through to the blind resend at the bottom.
+            // That resend's fresh SendMove room-lookup can paper over ONE hop
+            // by luck (it reads the real current room, not the stale target),
+            // but _expandedSteps was drawn for a route that no longer matches
+            // reality from here, and the very next step hard-fails with
+            // "no exit" (report paradigm-20260902-072545: a combat pause
+            // absorbed a step landing three rooms off-plan with no mismatch
+            // ever raised, and the loop only noticed one hop later, too late
+            // to recover from).
+            if (_stepInFlight
+                && _expectedMoveTarget is { } stillExpectedTarget
+                && _tracker.State.Confidence == RoomConfidence.Confirmed
+                && _tracker.State.CurrentRoom is { } landedRoom
+                && !landedRoom.Key.Equals(stillExpectedTarget))
+            {
+                _log?.Warn("LoopRunner",
+                    $"resume: step {_index + 1} landed at {landedRoom.Key} (expected {stillExpectedTarget}, source {_expectedMoveSource}); forwarding to recovery gate");
+                _recovery?.NoteSuspectedMismatch(
+                    $"step {_index + 1} landed at {landedRoom.Key} on resume (expected {stillExpectedTarget})");
                 return;
             }
             // The tracker landed in Suspect/Lost/Unknown WHILE paused — an

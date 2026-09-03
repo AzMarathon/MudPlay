@@ -289,6 +289,21 @@ public sealed class CharacterProfile
     // Party window, not the Settings tab. null means nothing configured yet.
     public BuffSettings? PartyBuffs { get; set; }
 
+    // Per-character casting-spell profiles (Settings → Combat) — the named,
+    // quick-swappable snapshots of the Combat tab's spell slots, plus which one is
+    // active. Switching a profile overlays its spells onto the live Combat section
+    // (Settings["Combat"]); non-spell combat settings stay shared. null / empty is
+    // seeded on first load with one profile captured from the current Combat
+    // settings. Managed by CombatProfileManager.
+    public CombatProfileSettings? CombatProfiles { get; set; }
+
+    // Per-character route-Details monster colouring — the "Color monsters by hit %"
+    // toggle and the green / yellow / red band split, set from the Details window's
+    // own checkbox + slider. Saved here so each character keeps its own preference
+    // and the window opens the way that character last left it. null means off with
+    // the factory 15 / 45 bands.
+    public MonsterHitColorSettings? MonsterHitColors { get; set; }
+
     // How the Buff Watchdog window arranges its config table vs the timer bars —
     // stacked (config top / bottom) or side-by-side (config left / right).
     public BuffWatchdogLayout BuffWatchdogLayout { get; set; } = BuffWatchdogLayout.ConfigTop;

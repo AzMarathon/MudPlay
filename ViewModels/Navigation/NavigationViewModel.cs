@@ -318,7 +318,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(AutoLairPhaseLabel));
         OnPropertyChanged(nameof(AutoLairStatusText));
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
         // Target switch reorders the map overlay (active target = #1).
         RefreshAutoLairMarkedKeys();
         RefreshAutoLairApproachPath();
@@ -383,7 +383,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(RunStopLabel));
         OnPropertyChanged(nameof(AutoLairPhaseLabel));
         OnPropertyChanged(nameof(AutoLairStatusText));
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
     }
 
     // One-word label for the bottom-strip badge — "Approaching" / "Waiting" /
@@ -578,7 +578,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // isn't a tracker-state change — refresh the top-bar readout here so
         // the action line advances the moment a lap closes, not only on the
         // next room observation.
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
         OnPropertyChanged(nameof(CurrentNavProgress));
     }
 
@@ -995,7 +995,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // destination is queued OR no path exists. Recomputed on QueuedDestination
     // change and on CurrentRoomKey change (so the preview tracks the player if
     // they move while a target is armed).
-    [ObservableProperty] private IReadOnlyList<RoomKey>? _previewPath;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanShowRouteDetails))]
+    private IReadOnlyList<RoomKey>? _previewPath;
 
     private void RefreshPreviewPath()
     {
@@ -1014,7 +1016,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return;
         }
         IReadOnlyList<Direction>? path = _services.Bfs.FindPath(src, dest, _services.Movement);
-        if (path is null || path.Count == 0) { PreviewPath = null; return; }
+        if (path is null || path.Count == 0)
+        {
+            // The gate-respecting BFS finds nothing when the only route crosses an
+            // acquirable gate or an unsurvivable-without-a-counter hazard (a river,
+            // a locked door). Re-plan with those gates suspended so the armed-walk
+            // preview still draws the line Go would take — the same route the picker
+            // plans through the gate — instead of leaving the map blank.
+            using (_services.Movement.SuspendAcquirableGates())
+                path = _services.Bfs.FindPath(src, dest, _services.Movement);
+            if (path is null || path.Count == 0) { PreviewPath = null; return; }
+        }
 
         var keys = new List<RoomKey>(path.Count + 1) { src };
         RoomKey cur = src;
@@ -1267,6 +1279,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         QueuedDestination = key;
     }
 
+    // "Queue AND start" walk-to from OUTSIDE the window — the Roomba room list's
+    // Goto button. Arms the destination (pans the map, sets QueuedDestination) AND
+    // immediately starts the walk via the full "Walk here" path (stop conflicting
+    // engines, route picker for a gated/hazard/trap crossing, GOTO history). If the
+    // route picker is cancelled the destination stays queued for a manual Run.
+    public Task QueueAndStartWalkTo(RoomKey key)
+    {
+        QueueDestination(key);
+        return WalkToRoom(key);
+    }
+
     // ----- Loops + Auto-Lair setups (combined) ----------------------
 
     // Loops in the active BBS (flat backing list).
@@ -1282,6 +1305,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // rail renders them together as a single combined list under one
     // header.
     public ObservableCollection<object> NavTree { get; } = new();
+
+    // Flat, uniform-height projection of NavTree that the rail actually renders (a
+    // virtualized ItemsControl over these rows). Kept in sync by RebuildNavTree and
+    // the expand/collapse splice in ToggleFolder — see NavFlatList for why flat.
+    private readonly NavFlatList _navFlat = new();
+    public ObservableCollection<NavFlatRow> NavRows => _navFlat.Rows;
 
     // True when the combined tree has any node (leaf or empty folder).
     public bool HasNavTree => NavTree.Count > 0;
@@ -1388,6 +1417,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         NavTreeBuilder.Sync<object>(NavTree, rows, folderOf, folders,
             defaultExpanded: false, _navExpandOverrides,
             harvest: !_navWasFiltering, forceExpandAll: false);
+        _navFlat.Rebuild(NavTree);
         _navWasFiltering = filtering;
         OnPropertyChanged(nameof(HasNavTree));
         OnPropertyChanged(nameof(HasNoLoopMatches));
@@ -1623,6 +1653,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // FavoriteRowViewModel), bound by the rail's TreeView.
     public ObservableCollection<object> FavoriteTree { get; } = new();
 
+    // Flat projection of FavoriteTree the GOTO rail renders — see _navFlat / NavFlatList.
+    private readonly NavFlatList _favoriteFlat = new();
+    public ObservableCollection<NavFlatRow> FavoriteRows => _favoriteFlat.Rows;
+
+    // Expand/collapse a folder in either rail flat list, splicing its rows in/out so
+    // the scroll position stays put (a flat list of same-height rows keeps the
+    // virtualized scrollbar stable, unlike a TreeView where an expanded folder is one
+    // giant item). Routed by which list holds the folder so one command serves both.
+    [RelayCommand]
+    private void ToggleFolder(NavFolderNodeViewModel? folder)
+    {
+        if (folder is null) return;
+        if (_favoriteFlat.Contains(folder)) _favoriteFlat.ToggleFolder(folder);
+        else if (_navFlat.Contains(folder)) _navFlat.ToggleFolder(folder);
+    }
+
     public bool HasFavorites => Favorites.Count > 0;
 
     // True when the GOTO tree has any node (favourite or empty folder) —
@@ -1719,6 +1765,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         NavTreeBuilder.Sync(FavoriteTree, rows, folderOf, folders,
             defaultExpanded: false, _gotoExpandOverrides,
             harvest: !_gotoWasFiltering, forceExpandAll: false);
+        _favoriteFlat.Rebuild(FavoriteTree);
         _gotoWasFiltering = filtering;
         OnPropertyChanged(nameof(HasFavoriteTree));
         OnPropertyChanged(nameof(HasNoFavoriteMatches));
@@ -2676,13 +2723,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(RunStopLabel));
                 OnPropertyChanged(nameof(CanSaveCurrent));
                 RebuildCurrentNavRows();
-                OnPropertyChanged(nameof(TopBarStatusText));
+                RaiseTopBarStatus();
                 break;
             case nameof(LoopBuilderSessionViewModel.Clicks):
             case nameof(LoopBuilderSessionViewModel.HasClicks):
             case nameof(LoopBuilderSessionViewModel.ProposedName):
                 RebuildCurrentNavRows();
-                OnPropertyChanged(nameof(TopBarStatusText));
+                RaiseTopBarStatus();
                 break;
         }
     }
@@ -2732,6 +2779,31 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // change has no auto-centre on its own, so the order matters.
         SelectedRoomKey = newOrigin;
         Layout = _services.Bfs.BuildLayout(newOrigin);
+    }
+
+    // Open-and-inspect entry used by the Game Data room chips (a monster's
+    // lair / placed / summoned rooms and the Rooms-tab double-click): centre the
+    // map on the room, select it, and populate + expand ROOM INFO so its details
+    // show at once. OnFloorChangeRequested only centres + selects; this adds the
+    // ROOM INFO fill the plain focus path deliberately leaves to a live click.
+    public void SelectAndInspect(RoomKey key)
+    {
+        if (_services.RoomGraph.GetRoom(key) is null) return;
+        SelectedRoomKey = key;
+        Layout = _services.Bfs.BuildLayout(key);
+        RoomInfo.Show(key);
+        IsRoomInfoExpanded = true;
+    }
+
+    // A room blacklisted while it's the live selection stays drawn (RefreshLayout
+    // passes it as keepVisible) until the cursor leaves it. Rebuild once we move
+    // off a blacklisted room so that deferred hide finally lands — the rebuild no
+    // longer exempts the departed room, so it drops from the map.
+    partial void OnSelectedRoomKeyChanged(RoomKey? oldValue, RoomKey? newValue)
+    {
+        if (oldValue is { } prev && prev != newValue
+            && _services.RoomBlacklist.IsBlacklisted(prev))
+            RefreshLayout();
     }
 
     // How long each green @where flash stays before it drops. Independent per room, so
@@ -2971,10 +3043,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (!_services.Walker.IsSailing)
         {
             _sailingTick.Stop();
-            OnPropertyChanged(nameof(TopBarStatusText));
+            RaiseTopBarStatus();
             return;
         }
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
     }
     private void OnPauseChanged(bool paused) => IsPaused = paused;
 
@@ -3039,7 +3111,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // idle route reads its reason off the live gates even when the chip itself is
         // empty — so refresh the line on every gate/held change, ahead of the chip's
         // unchanged early-out below.
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
         if (text == _activityStatus && kind == _activityKind) return;
         _activityStatus = text;
         _activityKind   = kind;
@@ -3098,6 +3170,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             RoomConfidence.Lost      => ("Lost",    "#F25C54"),
             _                        => ("Unknown", "#888"),
         };
+        // Confidence drives StatusIsFailure (Lost → red), so refresh the status
+        // severity whenever the tracker re-evaluates our location.
+        RaiseTopBarStatus();
         CurrentRoomLabel = state.CurrentRoom is { } room
             ? $"{room.DisplayName}  ·  {room.Key}"
             : "—";
@@ -3235,7 +3310,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             if (key is null)
                 foreach (Room first in _services.RoomGraph.Rooms) { key = first.Key; break; }
         }
-        Layout = key is { } k ? _services.Bfs.BuildLayout(k) : null;
+        // Deferred blacklist hide: if the room the user is currently pointing at
+        // is itself blacklisted (they just added it), keep it drawn this build.
+        // OnSelectedRoomKeyChanged rebuilds — without the exemption — once the
+        // selection moves off it, so the room finally vanishes then.
+        RoomKey? keepVisible = SelectedRoomKey is { } sel
+            && _services.RoomBlacklist.IsBlacklisted(sel) ? sel : null;
+        Layout = key is { } k ? _services.Bfs.BuildLayout(k, keepVisible: keepVisible) : null;
     }
 
     private void RefreshFromWalker()
@@ -3514,6 +3595,35 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
     }
 
+    // Raise the status line and its severity companions together — every place
+    // that recomputes TopBarStatusText routes through here, so the red/amber
+    // colouring can't drift out of sync with the text it describes.
+    private void RaiseTopBarStatus()
+    {
+        OnPropertyChanged(nameof(TopBarStatusText));
+        OnPropertyChanged(nameof(StatusIsFailure));
+        OnPropertyChanged(nameof(StatusIsWarning));
+    }
+
+    // EngineError carries the walker/loop failure detail; changing it flips the
+    // status line to/from its ⚠ form, so refresh the severity alongside.
+    partial void OnEngineErrorChanged(string? value) => RaiseTopBarStatus();
+
+    // Failure (red status text) — the engine reported an error, or the room
+    // tracker lost track of where we are. Both mean navigation is broken now.
+    public bool StatusIsFailure =>
+        EngineError is { Length: > 0 }
+        || _services.RoomTracker.State.Confidence == RoomConfidence.Lost;
+
+    // Warning (amber status text) — not a hard failure, but movement is held
+    // for a reason (resting / held / confused / party wait / Auto-All off …),
+    // or Auto-Lair is retrying a failed approach. Something worth a glance.
+    public bool StatusIsWarning =>
+        !StatusIsFailure
+        && (CurrentHoldReason() is { Length: > 0 }
+            || (EngineActionKind == NavigationEngineKind.AutoLair
+                && _services.AutoLair.LastWalkerFailure is { Length: > 0 }));
+
     // Shared row population for the AutoLair branch of
     // RebuildCurrentNavRows — runs both in Build mode (pre-scheduler) and
     // during an active run. The only behavioural difference is the per-row
@@ -3686,9 +3796,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void RefreshDerivedState()
     {
         OnPropertyChanged(nameof(IsAnyExecuting));
+        OnPropertyChanged(nameof(CanShowRouteDetails));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(RunStopLabel));
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
         OnPropertyChanged(nameof(TopBarStatusBadge));
         RefreshActivityStatus();
         OnPropertyChanged(nameof(EngineActionIsIdle));
@@ -3947,6 +4058,63 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Rows shown under CURRENT NAV — steps when walking/looping, marked
     // lairs when auto-lairing.
     public ObservableCollection<CurrentNavRowViewModel> CurrentNavRows { get; } = new();
+
+    // The CURRENT NAV header's "Details…" button opens the route the engine is
+    // executing in a browsable window — the route picker's full "N> map/room <
+    // command" step plan, with each lair room's monsters as clickable record links.
+    // A window (not a flyout) so it's easy to scroll and to open several monster
+    // records without it dismissing. Tracked so a re-click toggles it closed.
+    private RouteDetailsDialogViewModel? _routeDetailsVm;
+
+    // The Details… button shows whenever there's a route to detail — one the engine
+    // is executing, OR a previewed walk-to armed via the search box (the red preview
+    // line on the map).
+    public bool CanShowRouteDetails => IsAnyExecuting || PreviewPath is { Count: > 1 };
+
+    [RelayCommand]
+    private void ShowRouteDetails()
+    {
+        if (_routeDetailsVm is { } open) { open.RequestClose(); return; }   // toggle closed
+
+        IReadOnlyList<RoomKey>? route = CurrentRouteForDetails();
+        var vm = RouteDetailsLauncher.BuildViewModel(_services, RouteDetailsTitle(), route);
+        _routeDetailsVm = vm;
+        // Fire-and-forget: awaiting here would disable the command (IAsyncRelayCommand
+        // self-disables while running) and block the re-click toggle. The helper
+        // awaits the modeless window's close and clears the tracker.
+        _ = OpenRouteDetailsAsync(vm);
+    }
+
+    private async System.Threading.Tasks.Task OpenRouteDetailsAsync(RouteDetailsDialogViewModel vm)
+    {
+        try { await _services.Dialogs.OpenWindowAsync<RouteDetailsDialogViewModel, bool?>(vm); }
+        finally { if (ReferenceEquals(_routeDetailsVm, vm)) _routeDetailsVm = null; }
+    }
+
+    private string RouteDetailsTitle()
+    {
+        bool executing = IsAnyExecuting;
+        RoomKey? dest = executing ? DestinationRoomKey : QueuedDestination;
+        string prefix = executing ? "Current route" : "Route preview";
+        if (dest is { } d)
+        {
+            string? name = _services.RoomGraph.GetRoom(d)?.DisplayName;
+            return string.IsNullOrWhiteSpace(name)
+                ? $"{prefix} → {d.Map}/{d.Room}"
+                : $"{prefix} → {d.Map}/{d.Room} {name}";
+        }
+        return prefix;
+    }
+
+    // Whichever route is live (the same room-key polyline the map draws): a walk /
+    // loop / Auto-Lair approach the engine is executing, else the armed-but-not-
+    // running preview (a search-box walk-to). Drives both the Details rows and its
+    // title ETA. Null when there's no route.
+    private IReadOnlyList<RoomKey>? CurrentRouteForDetails() =>
+        EngineActionIsWalking ? WalkPath
+        : EngineActionIsLooping ? LoopPath
+        : EngineActionIsLair ? AutoLairApproachPath
+        : PreviewPath;
 
     // Row the CURRENT NAV ListBox should keep in view — the active step
     // while walking, the next-ready lair while auto-lairing. The window

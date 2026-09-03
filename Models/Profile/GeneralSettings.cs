@@ -56,7 +56,7 @@ public sealed class GeneralSettings
     // character, not the board it happens to be connected to.
     public string? TerminalFontFamily { get; set; }
 
-    // Terminal canvas font size in points. Null = 16 (the default). Char-tier;
+    // Terminal canvas font size in points. Null = 12 (the default). Char-tier;
     // relocated here from the per-BBS Display settings.
     public double? TerminalFontSize { get; set; }
 

@@ -19,7 +19,7 @@ public sealed partial class DisplayConfig : ObservableObject
     public const string DefaultFontFamily =
         "avares://MudPlay/Assets/Fonts/Mx437_IBM_VGA_8x16.ttf#Mx437 IBM VGA 8x16";
 
-    public const double DefaultFontSize = 16.0;
+    public const double DefaultFontSize = 12.0;
 
     // The size the Navigation map hover-tooltip has always rendered at (the
     // FontSize="13" the tooltip's XAML hard-coded before it became configurable).

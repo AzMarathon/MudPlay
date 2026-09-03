@@ -238,6 +238,17 @@ public sealed class CombatSpellSlot
     // Minimum mana required to cast — interpreted per
     // CombatSettings.SpellManaThresholdMode.
     public int MinManaPerCast { get; set; }
+
+    // Deep copy — combat spell profiles snapshot these slots and must never share
+    // a reference with the live CombatSettings (an edit to one would leak to the
+    // other).
+    public CombatSpellSlot Clone() => new()
+    {
+        SpellName = SpellName,
+        MinEnemies = MinEnemies,
+        MaxCastsPerRoom = MaxCastsPerRoom,
+        MinManaPerCast = MinManaPerCast,
+    };
 }
 
 // Which action the auto-attack engine prefers as the round's one combat action.

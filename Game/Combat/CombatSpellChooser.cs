@@ -60,8 +60,17 @@ public sealed class CombatSpellChooser
     // RawName keys of the mobs present when each AoE debuff cast went out this room.
     // The AoE debuff casts ONCE and "tags" the room; it re-fires (up to its per-room
     // MaxCasts cap) only for a mob that wasn't tagged — a new arrival / summon — rather
-    // than repeatedly like an attack spell. Per-room, keyed like _singleDebuffedTargets;
-    // reset at room-clear.
+    // than repeatedly like an attack spell. Per-room, keyed like _singleDebuffedTargets.
+    //
+    // The tags survive a wave-clear roster reset (an AoE multi-kill emptying the listed
+    // pack while hidden same-species SURVIVORS still attack — report
+    // paradigm-20260902-160110, "ISTO fired twice in the same fight"), so a survivor
+    // that reveals a round later isn't re-debuffed. They're cleared on a PHYSICAL room
+    // change (ResetForNewRoom) AND when the room is confirmed genuinely CLEARED of all
+    // hostiles — signalled by the player entering a rest (NoteRoomCleared, wired to a
+    // rest posture: you only rest once nothing is left to fight). That lets a same-room
+    // RESPAWN be re-debuffed (report paradigm-20260903-070438) without touching the
+    // survivor case (a survivor reveals within a round, long before any rest).
     private readonly HashSet<string> _areaDebuffedMobs =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -81,12 +90,18 @@ public sealed class CombatSpellChooser
     private bool _attackSpellLatchedOff;
     private bool _castSingleTargetAttackThisTarget;
 
-    // Reset all per-room cast bookkeeping. Call when the room clears / the engine
-    // starts a fresh engagement.
-    public void ResetForNewRoom()
+    // Reset the cast bookkeeping a fresh ROSTER owns — the single-target economy,
+    // the multi-attack tally, and the weapon latches — WITHOUT touching the AoE
+    // area-debuff per-room cap (_areaDebuffCasts / _areaDebuffedMobs). Called on an
+    // end-of-fight / roster clear that is NOT a physical room change: an AoE
+    // multi-kill that empties the listed pack fires a synthetic room-clear even
+    // though the character never moved, and re-arming the area debuff there re-fires
+    // it at the same room's survivors / late reveals (report paradigm-20260902-160110
+    // — "ISTO fired twice in the same fight"). The area debuff blankets the PHYSICAL
+    // room and its tags must ride through the wave-clear; the multi-attack (the kill)
+    // still resets so it keeps swinging at what's left.
+    public void ResetForRosterClear()
     {
-        _areaDebuffCasts = 0;
-        _areaDebuffedMobs.Clear();
         _singleDebuffCasts = 0;
         _multiAttackCasts = 0;
         _normalAttackCasts = 0;
@@ -95,6 +110,29 @@ public sealed class CombatSpellChooser
         _singleDebuffedTargets.Clear();
         _attackSpellLatchedOff = false;
         _castSingleTargetAttackThisTarget = false;
+    }
+
+    // Full per-room reset — the roster-clear economy PLUS the AoE area-debuff cap.
+    // Call on a genuine PHYSICAL room change (the pre-move hook): a new room's mobs
+    // must be debuffable again, and same-species area-debuff tags must not bleed
+    // across rooms (that bleed is why the tags reset on move — see NotePreMove).
+    public void ResetForNewRoom()
+    {
+        ResetForRosterClear();
+        ResetAreaDebuffTags();
+    }
+
+    // Clear the AoE area-debuff room tags + per-room cap so the next wave is debuffed
+    // afresh — on a PHYSICAL room change (ResetForNewRoom) or when the room is confirmed
+    // genuinely CLEARED of all hostiles (NoteRoomCleared, wired to a rest posture: you
+    // only rest once nothing is left to fight, so a same-room RESPAWN after that is a new
+    // wave — report paradigm-20260903-070438). NOT called on a mid-fight wave-clear
+    // roster reset, where hidden same-species survivors must stay tagged (report
+    // paradigm-20260902-160110).
+    public void ResetAreaDebuffTags()
+    {
+        _areaDebuffCasts = 0;
+        _areaDebuffedMobs.Clear();
     }
 
     // Reset the per-TARGET single-target cast counters. The single-target slots
@@ -271,7 +309,7 @@ public sealed class CombatSpellChooser
     {
         if (ctx.RoomMobKeys is not { } keys) return _areaDebuffCasts == 0;
         foreach (string key in keys)
-            if (!_areaDebuffedMobs.Contains(key)) return true;
+            if (!_areaDebuffedMobs.Contains(key)) return true;   // untagged — a new arrival / summon
         return false;
     }
 
@@ -420,6 +458,32 @@ public sealed class CombatSpellChooser
             case CombatSpellAction.WeaponAttack:
             default:
                 break;
+        }
+    }
+
+    // Roll back a debuff MarkCast whose cast the server REJECTED after the optimistic
+    // send (the pre-attack / in-between debuff returns TryCast=true on wire-write, then
+    // "You have already cast a spell this round!" arrives async). The optimistic mark
+    // tagged the mob(s) debuffed and spent the per-room count; undo both so the debuff
+    // re-fires next round instead of being treated as landed (reports
+    // paradigm-20260901-123720 / -140747). Only the debuff actions have a mark to undo.
+    public void UnmarkCast(in CombatSpellDecision decision, string targetRawName,
+                           IReadOnlyList<string>? roomMobKeys = null)
+    {
+        switch (decision.Action)
+        {
+            case CombatSpellAction.AreaDebuff:
+                if (_areaDebuffCasts > 0) _areaDebuffCasts--;
+                if (roomMobKeys is not null)
+                    foreach (string key in roomMobKeys) _areaDebuffedMobs.Remove(key);
+                break;
+            case CombatSpellAction.SingleDebuff:
+                if (!string.IsNullOrEmpty(targetRawName))
+                    _singleDebuffedTargets.Remove(targetRawName);
+                if (_singleDebuffCasts > 0) _singleDebuffCasts--;
+                break;
+            default:
+                break;   // attack / drain marks aren't rolled back this way
         }
     }
 

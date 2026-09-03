@@ -99,6 +99,17 @@ public static class ToolbarItemCatalogue
             "DepositAllCommand",
             Tooltip: "Deposit All — bank wealth to the keep-on-hand floor"),
 
+        // Casting spell profiles. The cycle button shows "P<active#>" and swaps on
+        // click (left = next, right = previous, handled in the toolbar code-behind).
+        // The menu button opens a fly-out of profiles (also code-behind), so it has
+        // no bound command.
+        new("CycleCombatProfile", "Combat Profile (cycle)", "IconCombatProfile",
+            "CycleCombatProfileCommand",
+            Tooltip: "Combat spell profile — left-click next, right-click previous"),
+        new("CombatProfileMenu",  "Combat Profile (menu)",  "IconCombatProfileMenu",
+            "",
+            Tooltip: "Pick a combat spell profile"),
+
         // Sends the in-game "exp" command (experience-to-next readout).
         new("SendExp",            "Exp",                  "IconExp",
             "SendExpCommand",

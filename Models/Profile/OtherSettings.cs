@@ -108,6 +108,30 @@ public sealed class OtherSettings
     // the terminal scrollback. Off suppresses both. Char-tier; Settings → Other.
     public bool ShowMonsterHpLookup { get; set; } = true;
 
+    // Ceiling for Monster Intel's "Est. Rounds to Kill" column — a monster
+    // whose projected rounds exceed this shows "<cap>+" instead of the raw
+    // number (a superboss can otherwise project into the millions, which
+    // isn't a meaningful number, just noise). Default 999, range 1..999999.
+    // Char-tier; edited directly in Monster Intel (not Settings → Other —
+    // changing it shouldn't mean leaving the window).
+    public int RoundsToKillCap { get; set; } = 999;
+
+    // Monster Intel "Edit Attacks" picker state, Char-tier, edited in the window.
+    // Attack keys are stable strings: "melee:<MudAttackType>" (e.g. "melee:Normal",
+    // "melee:Backstab") for the character's usable melee attacks, and "spell:<Short>"
+    // (e.g. "spell:mm") for an obtained attack spell. HiddenAttacks lists the attacks
+    // hidden from the Your Matchup panel (empty = show all). RoundsAttack is the one
+    // attack whose projection fills the master list's "Est. Rounds to Kill" column;
+    // null / unset / no-longer-available falls back to the Normal melee attack.
+    public List<string> MonsterIntelHiddenAttacks { get; set; } = new();
+    public string? MonsterIntelRoundsAttack { get; set; }
+
+    // Monster Intel "Apply Debuffs" picker state, Char-tier. Each entry is a
+    // known stat-affecting debuff spell's cast code (its Short); when applied, its
+    // AC/DR/Dodge/accuracy/slowness effect is folded onto the selected monster in
+    // the matchup what-if. Empty = no debuffs applied.
+    public List<string> MonsterIntelAppliedDebuffs { get; set; } = new();
+
     // Note: the former per-character verbose toggles (VerboseCombat /
     // VerboseRoomClassifier / VerboseCasting / VerboseCash / VerboseStealth) +
     // WriteCombatRoundTrace lived here briefly. They moved to the Log pane menu

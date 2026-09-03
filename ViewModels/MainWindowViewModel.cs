@@ -116,6 +116,11 @@ public partial class MainWindowViewModel : ObservableObject
     // edits in Settings → Toolbar apply immediately on Apply / OK.
     public Services.ToolbarConfig Toolbar => AppServices.Current.Toolbar;
 
+    // Live layout for the customizable terminal right-click menu — the MainWindow
+    // code-behind rebuilds the ContextMenu from this and re-runs on its
+    // CollectionChanged, mirroring how the toolbar rebuilds from Toolbar.Layout.
+    public Services.ContextMenuConfig ContextMenu => AppServices.Current.ContextMenu;
+
     // Render-ready view-models for the dynamic toolbar ItemsControl. Mirrors
     // ToolbarConfig.Layout; each entry resolves through ToolbarItemCatalogue
     // and binds against the matching command on this view-model. Rebuilt
@@ -613,10 +618,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Same for the room-detail popup: monster names jump to a monster
         // record, and the room title / exits centre the Nav map on a room.
         AppServices.Current.SetMonsterGameDataOpener(OpenMonsterGameData);
-        AppServices.Current.SetMonstersAccuracyOpener(OpenMonstersWithAccuracy);
         AppServices.Current.SetRoomGameDataOpener(OpenRoomGameData);
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
+        AppServices.Current.SetGoWalkOpener(GoWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
         AppServices.Current.SetHighlightWhereOpener(HighlightWhereRoomIfOpen);
         AppServices.Current.SetNavManagerOpener(OpenNavManager);
@@ -756,6 +761,21 @@ public partial class MainWindowViewModel : ObservableObject
         // on profile swap, which GotoHistoryStore fires Changed for).
         RebuildRecentDestinationsMenu();
         AppServices.Current.GotoHistory.Changed += RebuildRecentDestinationsMenu;
+
+        // Casting spell profiles (Settings → Combat): the Action → Profiles fly-out
+        // and the toolbar profile-menu button share one item list, rebuilt on any
+        // profile change; every swap echoes its report to the terminal.
+        // POST the echo, don't call it inline: an @profile remote swap fires from
+        // INSIDE the emulator's message pump (mid-parse of the incoming telepath),
+        // and WriteTerminalStatus re-feeds the emulator — a synchronous echo there
+        // re-enters Emulator.Feed reentrantly and crashed the receiving client.
+        // Deferring lands it after the pump unwinds, like the other pump-fired
+        // notices (OnQuestAvailable / OnEquipSlotBlocked / OnGhSweepCompleted).
+        AppServices.Current.CombatProfiles.Announce =
+            report => Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => WriteTerminalStatus($"[{report}]", TerminalStatusKind.Notice));
+        RebuildCombatProfilesMenu();
+        AppServices.Current.CombatProfiles.Changed += RebuildCombatProfilesMenu;
 
         // Apply the loaded profile's persisted scrollback size now — the
         // buffer was constructed with the default; AppServices already
@@ -1288,6 +1308,11 @@ public partial class MainWindowViewModel : ObservableObject
         PropertyChanged += SyncToolbarStateFlags;
     }
 
+    // Enabler for view-handled toolbar buttons (no CommandName) — a command-less
+    // Button renders disabled, so these carry an always-executable no-op while
+    // their real action runs in MainWindow's Click / PointerReleased handlers.
+    private static readonly ICommand ToolbarNoOpCommand = new RelayCommand(() => { });
+
     // Walks ToolbarConfig.Layout and rebuilds ToolbarItems. Each Button
     // row is resolved through ToolbarItemCatalogue; the command property
     // is fetched by reflection from the catalogue's CommandName so adding
@@ -1312,7 +1337,13 @@ public partial class MainWindowViewModel : ObservableObject
             ToolbarItemCatalogue.Entry? entry = ToolbarItemCatalogue.Find(item.ActionId);
             if (entry is null) continue;
 
-            ICommand? command = GetType().GetProperty(entry.CommandName)?.GetValue(this) as ICommand;
+            // A catalogue entry with no CommandName is a VIEW-handled button — its
+            // action lives in MainWindow's Click / PointerReleased handlers (the
+            // Combat-Profile menu fly-out). Give it an always-executable no-op so
+            // Avalonia doesn't render the command-less button as disabled.
+            ICommand? command = string.IsNullOrEmpty(entry.CommandName)
+                ? ToolbarNoOpCommand
+                : GetType().GetProperty(entry.CommandName)?.GetValue(this) as ICommand;
 
             // Live shortcut hint: if the action id parses as a BuiltInAction,
             // pull the current binding from KeybindingStore so a user rebind
@@ -1364,6 +1395,7 @@ public partial class MainWindowViewModel : ObservableObject
          && e.PropertyName != nameof(IsAutoSearchActive)
          && e.PropertyName != nameof(IsDisableHangupsActive)
          && e.PropertyName != nameof(IsSprintModeActive)
+         && e.PropertyName != nameof(CombatProfileCycleLabel)
          && e.PropertyName != nameof(IsAllAutoOff)) return;
 
         foreach (ToolbarButtonItem row in ToolbarItems)
@@ -1376,6 +1408,10 @@ public partial class MainWindowViewModel : ObservableObject
     {
         switch (row.ActionId)
         {
+            // Cycle button shows the active profile number ("P1") as its label.
+            case "CycleCombatProfile":
+                row.BadgeText = CombatProfileCycleLabel;
+                break;
             case "ToggleConnection":
                 row.IsActive = IsConnecting;
                 row.IsDanger = IsConnected;
@@ -2718,6 +2754,12 @@ public partial class MainWindowViewModel : ObservableObject
                 // They resume on the first in-game prompt after we're back.
                 AppServices.Current.PartyPoller.NotifyDisconnected();
                 AppServices.Current.PartyProbe.NotifyDisconnected();
+                // A running/paused/recovering loop has no way to know the
+                // connection died mid-recovery — stop it cleanly instead of
+                // leaving a stale wait to misread whatever the reconnect
+                // redisplays. Resumes itself on the first in-game prompt after
+                // reconnect (see LoopRunner.NotifyDisconnected).
+                AppServices.Current.LoopRunner.NotifyDisconnected();
 
                 // Drop per-session condition state so a fresh login starts clean: any
                 // non-auto-clearing condition (no AppliedEndsWith) must not survive the
@@ -2807,6 +2849,11 @@ public partial class MainWindowViewModel : ObservableObject
     // (in addition to LogService). Mirrors the classic-BBS-client cadence
     // the user expects: "[CONNECTING TO: …]" / "[DISCONNECTED FROM: …]" /
     // etc. Coloured via inline ANSI SGR so the emulator does the painting.
+    // Drops a coloured status line into the terminal scrollback by FEEDING it back
+    // through the emulator. Re-entrancy hazard: any caller firing from inside the
+    // emulator's message pump (a MessageRouter / ChatRouter / remote-command
+    // handler) must Dispatcher.UIThread.Post this — a synchronous call there
+    // re-enters Emulator.Feed while it's mid-parse and crashes the client.
     private void WriteTerminalStatus(string text, TerminalStatusKind kind)
     {
         string sgr = kind switch
@@ -3235,7 +3282,9 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        BackscrollViewModel vm = new(Emulator, AppServices.Current.Display.BackscrollWheelLines);
+        Services.DisplayConfig display = AppServices.Current.Display;
+        BackscrollViewModel vm = new(
+            Emulator, display.BackscrollWheelLines, display.FontFamily, display.FontSize);
         BackscrollWindow window = new() { DataContext = vm };
         window.Closed += (_, _) => _backscroll = null;
         _backscroll = window;
@@ -3586,7 +3635,28 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenWorkshopDeath() => OpenWorkshopAt("death");
 
-    private void OpenWorkshopAt(string? sectionId)
+    // Terminal right-click "Workshop: <tab>" deep-link — opens the Workshop on a
+    // section (string param = the WorkshopSectionViewModel.Id).
+    [RelayCommand]
+    private void OpenWorkshopTab(string? sectionId) => OpenWorkshopAt(sectionId);
+
+    // Terminal right-click "Calculator: <x>" deep-link — opens the Workshop on the
+    // Calculators tab and reveals that calculator (param = CalculatorId name).
+    [RelayCommand]
+    private void OpenWorkshopCalculator(string? calculatorId)
+        => OpenWorkshopAt("calculators", calculatorId);
+
+    // Terminal right-click "Settings: <tab>" deep-link — opens the Settings window
+    // straight to a section (param = the SettingsSectionViewModel.Id).
+    [RelayCommand]
+    private void OpenSettingsTab(string? sectionId) => OpenSettingsAt(sectionId);
+
+    // Terminal right-click "Game Data: <table>" deep-link — opens the Game Data
+    // Browser on a section (param = the browser section id).
+    [RelayCommand]
+    private void OpenGameDataSection(string? sectionId) => ShowGameDataBrowser(sectionId);
+
+    private void OpenWorkshopAt(string? sectionId, string? calculatorId = null)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
@@ -3603,6 +3673,8 @@ public partial class MainWindowViewModel : ObservableObject
                 ViewModels.CharacterWorkshop.WorkshopSectionViewModel? section = vm.Sections
                     .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
                 if (section is not null) vm.SelectedSection = section;
+                if (calculatorId is not null && section is ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calc)
+                    calc.NavigateToCalculator(calculatorId);
                 existing.Activate();
                 return;
             }
@@ -3634,6 +3706,17 @@ public partial class MainWindowViewModel : ObservableObject
         };
         _workshop = window;
         window.Show(main);
+
+        // Calculator deep-link on a fresh open: the section is already selected
+        // via the ctor's initialSectionId; reveal the target calculator (its view
+        // builds lazily, so NavigateToCalculator arms a pending-scroll the view
+        // honors on first layout).
+        if (calculatorId is not null
+            && workshopVm.Sections.FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase))
+                is ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calcSection)
+        {
+            calcSection.NavigateToCalculator(calculatorId);
+        }
     }
 
     // Singleton-ish handle to the Quick Connect window so re-press of the
@@ -3899,31 +3982,6 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.ItemSources,
             initialSectionId);
 
-    // Registered on AppServices: the Hit Calculator's "Show me the Monsters" opens
-    // (or re-focuses) the browser at the Monsters section with an "Acc ≥ minAcc"
-    // filter. Unlike the toggle command, this never closes an open browser — it
-    // always ends with the Monsters tab shown and filtered.
-    private void OpenMonstersWithAccuracy(int minAcc)
-    {
-        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
-            return;
-
-        if (_gameDataBrowser is { } existing)
-        {
-            (existing.DataContext as MudPlay.ViewModels.GameData.GameDataBrowserViewModel)
-                ?.NavigateToMonstersAccuracy(minAcc);
-            existing.Activate();
-            return;
-        }
-
-        MudPlay.ViewModels.GameData.GameDataBrowserViewModel newVm = NewGameDataBrowserVm("monsters");
-        MudPlay.Views.GameData.GameDataBrowserWindow window = new() { DataContext = newVm };
-        window.Closed += (_, _) => _gameDataBrowser = null;
-        _gameDataBrowser = window;
-        window.Show(main);
-        newVm.NavigateToMonstersAccuracy(minAcc);
-    }
-
     // Items bound to File → Game Data → Active set. Each entry has a
     // checkbox-style header (checked = currently active set) and a command
     // that flips GameDataCache.ActiveSet + writes the resolved BBS's
@@ -3943,6 +4001,50 @@ public partial class MainWindowViewModel : ObservableObject
                 switchCommand: new RelayCommand(() => SwitchActiveGameDataSet(set))));
         }
     }
+
+    // ----- Casting spell profiles (Settings → Combat quick-swap) -----
+
+    // Shared item list for the Action → Profiles fly-out and the toolbar's
+    // profile-menu button — one "N) name" row per configured profile, the active
+    // one checked. Rebuilt on any CombatProfileManager.Changed.
+    public ObservableCollection<CombatProfileMenuItem> CombatProfileItems { get; } = new();
+
+    // Drives the Profiles menu / flyout visibility (always ≥1 once a profile is
+    // loaded).
+    [ObservableProperty] private bool _hasCombatProfiles;
+
+    // The toolbar cycle button's label — "P<active#>". ApplyToolbarRowState copies
+    // it onto the CycleCombatProfile row's badge; SyncToolbarStateFlags re-runs it.
+    [ObservableProperty] private string _combatProfileCycleLabel = "P1";
+
+    private void RebuildCombatProfilesMenu()
+    {
+        Game.Combat.CombatProfileManager mgr = AppServices.Current.CombatProfiles;
+        CombatProfileItems.Clear();
+        IReadOnlyList<Models.Profile.CombatSpellProfile> profiles = mgr.Profiles;
+        int active = mgr.ActiveIndex;
+        for (int i = 0; i < profiles.Count; i++)
+        {
+            int index = i;
+            CombatProfileItems.Add(new CombatProfileMenuItem(
+                number: i + 1,
+                name: profiles[i].Name,
+                isActive: i == active,
+                switchCommand: new RelayCommand(() => AppServices.Current.CombatProfiles.SwitchToIndex(index))));
+        }
+        HasCombatProfiles = profiles.Count > 0;
+        CombatProfileCycleLabel = "P" + (active >= 0 ? active + 1 : 1);
+    }
+
+    // Toolbar cycle button — left-click advances to the next profile (wraps). A
+    // live quick-swap of the saved profiles (independent of the staged Settings
+    // editor).
+    [RelayCommand]
+    private void CycleCombatProfile() => AppServices.Current.CombatProfiles.Cycle();
+
+    // Right-click twin of the cycle button (invoked from the toolbar code-behind) —
+    // steps back to the previous profile (wraps).
+    public void CycleCombatProfileBack() => AppServices.Current.CombatProfiles.CycleBack();
 
     // The terminal right-click Favorites flyout — always MaxStarred numbered
     // slots when any favourite is starred: filled slots first, then "(empty)"
@@ -4271,17 +4373,24 @@ public partial class MainWindowViewModel : ObservableObject
         return vm;
     }
 
-    // Registered on AppServices — the room-detail popup's clickable room title
-    // and exit destinations route here to open/focus the map and re-root it on
-    // the chosen room.
+    // Registered on AppServices — the Game Data room chips (a monster's lair /
+    // placed / summoned rooms, the Rooms-tab double-click) and the shop popup's
+    // clickable room title route here to open/focus the map, re-root it on the
+    // chosen room, select it, and show its details in the ROOM INFO panel.
     private void FocusNavigationOnRoom(Game.Map.RoomKey key)
-        => EnsureNavigationWindow()?.OnFloorChangeRequested(key);
+        => EnsureNavigationWindow()?.SelectAndInspect(key);
 
     // Registered on AppServices — the item record's "Queue Walking here" shop
     // links route here to open/focus the map and ARM the walk (QueuedDestination),
     // exactly as picking a nav search result does; the user then clicks Run.
     private void QueueWalkToRoom(Game.Map.RoomKey key)
         => EnsureNavigationWindow()?.QueueDestination(key);
+
+    // Registered on AppServices — the Roomba room list's "Goto" button routes here
+    // to open/focus the map, arm the room, and START the walk immediately (the full
+    // "Walk here" path), rather than only arming it like QueueWalkToRoom.
+    private void GoWalkToRoom(Game.Map.RoomKey key)
+        => _ = EnsureNavigationWindow()?.QueueAndStartWalkTo(key);
 
     // Room-detail exit clicks re-root the popup on the neighbour and let an
     // already-open map follow — but must not summon the map if it's closed,
@@ -4440,10 +4549,11 @@ public partial class MainWindowViewModel : ObservableObject
         MonsterIntelWindow window = new()
         {
             DataContext = new MonsterIntelViewModel(
-                svc.GameData, svc.MonsterCatalog, svc.Dialogs, svc.Resolver,
-                svc.MonsterOverlaySeed, svc.RoomGraph,
+                svc.GameData, svc.MonsterCatalog, svc.Resolver,
                 svc.PlayerStats, svc.Inventory, svc.Spellbook, svc.ItemMagic,
-                svc.RoomClassifier, svc.MonsterObservations, svc.PlayerState),
+                svc.MonsterObservations, svc.PlayerState,
+                buffProvider: () => svc.Profile.Current?.PartyBuffs,
+                profile: svc.Profile),
         };
         window.Closed += (_, _) => _monsterIntel = null;
         _monsterIntel = window;
@@ -4832,8 +4942,18 @@ public partial class MainWindowViewModel : ObservableObject
 
         AppServices.Current.CombatTracker.ResetCombatState("Reset States (manual)");
 
+        // Force back into the Default gear set — a stuck rest set or a half-finished
+        // swap is exactly what a manual reset rescues — and re-poll `health` (the
+        // compact one-line HP/pool readout — far less scroll than the full stat
+        // screen) so a max HP/mana high-water mark that drifted above the real ceiling
+        // re-latches to the authoritative value (a stale max is what strands a rest).
+        Game.Inventory.EquipResult equip =
+            AppServices.Current.Equipment.ApplyByTrigger(Models.Profile.EquipTriggerType.Default);
+        SendUserText("health");
+
         AppServices.Current.Log.Info(Game.Conditions.ConditionTracker.LogCategory,
-            "Reset States — self conditions, ailment chips, combat state, and derived movement holds cleared (manual).");
+            "Reset States — self conditions, ailment chips, combat state, and derived movement holds cleared; "
+            + $"re-equipping Default set ({equip}) and re-polling `health` to re-latch max HP/mana (manual).");
     }
 
     // ----- Inventory / equipment bulk actions (Action menu + toolbar) -----

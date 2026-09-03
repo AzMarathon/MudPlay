@@ -2,11 +2,21 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 
 namespace MudPlay.ViewModels.GameData.Edit;
+
+// One monster that a monster summons: the target monster number (for the record
+// link), its display name, and the parenthetical "how + chance" context (e.g.
+// "between rounds, 25%"). Built by MonsterMdbInfoBuilder.BuildOutgoingSummonLabels.
+internal readonly record struct OutgoingSummon(int MonsterNumber, string Name, string Context)
+{
+    // The plain one-line label, e.g. "silvery skull (between rounds, 30%)".
+    public string Label => $"{Name} ({Context})";
+}
 
 // Builds the Monster edit dialog's right-pane "Other Info (from MDB)" — the read-only
 // record assembly shown for a monster (stats, cash, spells, greet keywords, attacks,
@@ -172,11 +182,16 @@ public sealed class MonsterMdbInfoBuilder
                     guards.Add(val);
                     continue;
                 }
+                // Code 1 ("Damage") is a spell/item effect code with no defined
+                // effect on a monster — MMUD-Explorer treats it as a non-stat
+                // ability, and it appears on exactly one monster in the stock
+                // data with value 0. Inert noise; don't surface it.
+                if (code == 1) continue;
                 string label = AbilityNames.GetName(code) ?? $"Ability {code}";
                 abilities.Add(val == 0 ? label : $"{label} {FormatSigned(val)}");
             }
             if (abilities.Count > 0)
-                AddRow(kv, "Abilities", string.Join(", ", abilities));
+                AddRow(kv, "Abilities", string.Join("\n", abilities));
             if (guards.Count > 0)
             {
                 List<string> guardNames = new();
@@ -286,14 +301,34 @@ public sealed class MonsterMdbInfoBuilder
                 int lvl = ReadInt(el, $"MidSpellLVL-{i}");
                 string spellName = ResolveSpellWithEffect(spellId, lvl);
                 string row = lvl > 0 ? $"({delta}%) [{spellName}, lvl {lvl}]" : $"({delta}%) [{spellName}]";
-                AddRow(kv, shown == 0 ? "Between Rounds" : string.Empty, row);
+                // The spell name links to its Spell record; the chance + level stay
+                // plain text around it. spellId is body-scoped so the lambda captures
+                // this slot's value.
+                var inlines = new List<MdbInline>
+                {
+                    new($"({delta}%) ["),
+                    new(spellName, new AsyncRelayCommand(() => AppServices.Current.OpenSpellRecordAsync(spellId))),
+                    new(lvl > 0 ? $", lvl {lvl}]" : "]"),
+                };
+                kv.Add(new MdbInfoRow(shown == 0 ? "Between Rounds" : string.Empty, row, Inlines: inlines));
                 shown++;
             }
 
             // ----- Summons (what THIS monster spawns) -----
-            List<string> produces = FindOutgoingSummons(el);
+            List<OutgoingSummon> produces = FindOutgoingSummons(el);
             for (int j = 0; j < produces.Count; j++)
-                AddRow(kv, j == 0 ? "Summons" : string.Empty, produces[j]);
+            {
+                OutgoingSummon s = produces[j];
+                // The summoned monster's name links to its Monster record; the
+                // "how + chance" context stays plain text after it.
+                int monNum = s.MonsterNumber;
+                var inlines = new List<MdbInline>
+                {
+                    new(s.Name, new AsyncRelayCommand(() => AppServices.Current.OpenMonsterRecordAsync(monNum))),
+                    new($" ({s.Context})"),
+                };
+                kv.Add(new MdbInfoRow(j == 0 ? "Summons" : string.Empty, s.Label, Inlines: inlines));
+            }
 
             // ----- Spawns In (lair rooms) -----
             AddRoomList(kv, "Spawns In", FindSpawnRooms(wccNo),
@@ -415,7 +450,7 @@ public sealed class MonsterMdbInfoBuilder
     // FindSummoningMonsters. Walks the viewed monster's own spell slots (create / death /
     // spell-attack / hit-spell / between-rounds), resolves each summon spell to its target
     // monster, and tags how + the % chance where the cast carries one.
-    private List<string> FindOutgoingSummons(JsonElement monster)
+    private List<OutgoingSummon> FindOutgoingSummons(JsonElement monster)
     {
         JsonDocument? spellsDoc = _cache.GetRawTable("Spells");
         if (spellsDoc is null) return new();
@@ -437,22 +472,21 @@ public sealed class MonsterMdbInfoBuilder
     // Pure label-builder behind FindOutgoingSummons — extracted so the context + chance logic
     // is testable without a loaded cache. summonTargetsOf maps a spell id to the monster(s) it
     // summons (empty for non-summon spells); nameOf maps a monster number to its display name.
-    internal static List<string> BuildOutgoingSummonLabels(
+    internal static List<OutgoingSummon> BuildOutgoingSummonLabels(
         JsonElement monster,
         Func<int, IReadOnlyList<int>> summonTargetsOf,
         Func<int, string> nameOf)
     {
-        List<string> result = new();
+        List<OutgoingSummon> result = new();
         HashSet<string> seen = new(StringComparer.Ordinal);
         void Emit(int spellId, string context, string? chance)
         {
             if (spellId <= 0) return;
             foreach (int target in summonTargetsOf(spellId))
             {
-                string label = chance is null
-                    ? $"{nameOf(target)} ({context})"
-                    : $"{nameOf(target)} ({context}, {chance})";
-                if (seen.Add(label)) result.Add(label);
+                string paren = chance is null ? context : $"{context}, {chance}";
+                OutgoingSummon entry = new(target, nameOf(target), paren);
+                if (seen.Add(entry.Label)) result.Add(entry);
             }
         }
 
@@ -543,17 +577,18 @@ public sealed class MonsterMdbInfoBuilder
         return targets;
     }
 
-    // Append a "label (N)" row listing every room as a clickable map/room chip that opens
-    // the room-detail popup. Not truncated — the pane scrolls. Falls back to a plain
-    // comma-joined string when no DialogService is available. No-op when rooms is empty.
+    // Append a "label (N)" row listing every room as a clickable map/room chip that
+    // opens the Navigation map on that room and selects it. Not truncated — the pane
+    // scrolls. Falls back to a plain comma-joined string in design-time (no live app
+    // services). No-op when rooms is empty.
     private void AddRoomList(List<MdbInfoRow> kv, string label, IReadOnlyList<RoomKey> rooms,
         Func<RoomKey, string>? labelFor = null)
     {
         if (rooms.Count == 0) return;
         labelFor ??= static k => $"{k.Map}/{k.Room}";
         string list = string.Join(", ", rooms.Select(labelFor));
-        IReadOnlyList<RoomLink>? links = _dialogs is { } dialogs
-            ? rooms.Select(k => new RoomLink(labelFor(k), k, dialogs)).ToList()
+        IReadOnlyList<RoomLink>? links = _dialogs is not null
+            ? rooms.Select(k => new RoomLink(labelFor(k), k)).ToList()
             : null;
         kv.Add(new MdbInfoRow($"{label} ({rooms.Count})", list, Rooms: links));
     }

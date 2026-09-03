@@ -71,6 +71,23 @@ it isn't here and you're unsure, ask.
   order** with per-mob respawn clocks (per "Lair respawn timers" below), not assume a uniform per-lap
   fire rate — that's what the Exp/Hr estimator now does.
 
+**Monster swings per round — energy budget & rollover** *([CONFIRMED] 2026-09-03, user)*
+- A monster works like a player: it has a **per-round energy budget** (the Monsters-table
+  **`Energy`** field, typically ~1000) and each swing of an attack costs that attack's
+  **`AttEnergy`**. It spends its whole budget each round, landing `floor(available ÷ AttEnergy)`
+  swings.
+- **Leftover energy ROLLS OVER:** round 1 starts at `Energy`, and every round after is
+  `(leftover) + Energy`. So over a long window the mean swing rate is the **FRACTIONAL**
+  `Energy ÷ AttEnergy`, not the single-round integer floor (e.g. 1000/300 = 3.33/round, not 3).
+  This is the same model the player swing calc already uses (`CombatCalculator`: `remaining =
+  (remaining % energy) + 1000`).
+- **No realm swing cap for monsters** — unlike the player's 5 (Stock) / 6 (Paradigm) ceiling,
+  a monster is limited only by energy ÷ attack cost.
+- Damage-per-minute = `hit% × avg-dmg(after DR) × (Energy ÷ AttEnergy) × 12` (12 rounds/min, a
+  round being 5s). Monster Intel's per-attack incoming DPM + the melee threat line use this;
+  `MonsterMatchupCalculator.AverageMonsterSwingsPerRound` / `RoundsPerMinute`. Related:
+  [[project_monster_intel_matchup_arc_20260902]].
+
 ## Equipment & gear
 
 **Equip / remove verbs** *(all [CONFIRMED])*
@@ -93,7 +110,11 @@ it isn't here and you're unsure, ask.
   names are fine — a *silver bracelet* and an *ivory bracelet* equip together.
 - The **finger** and **wrist** families each hold **two** physical pieces (Finger1/Finger2,
   Wrist1/Wrist2), so long as the two are distinct names. Every other slot holds one.
-- **Eviction order when both slots are full** *([CONFIRMED] 2026-08-27, user — report `paradigm-20260827-082305`)*: with both paired slots occupied (e.g. bracelet1 + bracelet2), the **first** `wear` of a new piece evicts the **first-worn** member (the one listed first in `i`), and a **second** `wear` then evicts the **most-recently-worn** piece (the one you just put on). So to swap BOTH members (1,2 → 3,4) you can't just wear both — the second wear would knock off the third you just equipped. The minimal sequence is `wear 3` (evicts 1), `rem 2`, `wear 4` — **one** `rem`, not two. The client's swap builder (`EquipmentManager.ComposePairedSlotCommands`) emits exactly that for a both-members paired swap. Note the client only sees both worn pieces as `(Wrist)` / `(Finger)` in `i`, so it relies on `i`-list order to pick which one to `rem`.
+- **`i`-list order IS physical slot order, and it's reliable** *([CONFIRMED] 2026-09-03, user in-game tests, both realms)*: the first-listed paired piece is slot 1, the second is slot 2, on both Stock and Paradigm.
+- **`eq` and `wear` are identical, and target-swap ONE physical slot in place** *([CONFIRMED] 2026-09-03, user)*: an `eq`/`wear` of a new paired piece into a FULL family evicts one slot's occupant and the new piece takes that slot; into a family with a free slot it fills the empty slot. **Which slot is evicted is realm-specific:**
+  - **Paradigm evicts SLOT 1** (the first-listed): e.g. worn `[adamantite, white gold]` + `eq silver` → removes adamantite → `[silver, white gold]`.
+  - **Stock evicts SLOT 2** (the second-listed): e.g. worn `[amethyst, silver]` + `eq copper` → removes silver → `[amethyst, copper]`.
+- **Consequences for a set swap** (per realm): a set pick bound for the **evicted** slot rides the eq (no `rem` — it drops the odd-out sitting there); a pick bound for the **other** slot needs its odd-out `rem`med first (else the eq drops the member the set keeps). To swap BOTH members: `eq 3` (evicts the odd in the evicted slot), `rem <other odd>`, `eq 4` — **one** `rem`, not two. `EquipmentManager.ComposePairedSlotCommands` takes a realm flag (Paradigm ⇒ evict slot 1) and reasons off the reliable `i` order. Paired items are equipped with **`eq`** (`wear` on Paradigm appended the new ring to slot 2 and shuffled the survivor into slot 1, scrambling the order across a swap cycle and forcing a needless `rem` — report `paradigm-20260903-111522`).
 
 **Other**
 - **[CONFIRMED]** A weapon equip / swap prints a **single** line — `You are now holding <new>.`.
@@ -484,6 +505,14 @@ it isn't here and you're unsure, ask.
   when nothing higher-priority is queued does the debuff pre-empt the attack. *(2026-08-25, report
   `paradigm-20260825-103417`: an AoE debuff went out but the multi-attack spell followed a full round
   later — the attack had been deferred to the debuff's `*Combat Off*`; corrected to fire same-round.)*
+  - **A between-round debuff DOES collide with ANOTHER between-round cast that same round** *(2026-09-01,
+    reports `paradigm-20260901-123720` / `-140747`)*: the one-between-round-cast slot is shared, so if an
+    auto-buff (e.g. a mana-flux recast) or the user's OWN manual cast already spent the round's cast, the
+    debuff draws `You have already cast a spell this round!`. The debuff is sent optimistically (the client
+    marks the mob debuffed on wire-write, before the server answers), so the rejection has to un-mark it —
+    the client now recognizes the rejection and re-fires the debuff next round instead of leaving the mob
+    falsely marked debuffed (and the monster un-debuffed). The combat ATTACK that round self-corrects on
+    its own owed-and-retry path; only the debuff mark needed the rollback.
 - **[CONFIRMED]** *(2026-08-05, user)* **`MaxCasts` counts combat ROUNDS, not individual casts.** It is
   the maximum number of rounds the client will spend casting this spell at a target — one round counts
   as one regardless of how many times the spell fires that round (e.g. a spell that casts twice per
@@ -688,6 +717,38 @@ guardsman (#757). This is a **partial** list — other mobs aggro the evil-title
 `Align ∈ {1,2,5}` (always), or `Align == 6` and our title is Lawful / Good / Neutral, or the monster
 is a **guard** (casts `jail` 583, per above) **and** our title is Outlaw-or-worse. Our own title
 comes from the stat screen / who line (`AlignmentTracker` / `PlayerStats`).
+
+## Monster target selection — who it swings at once fighting
+
+Distinct from *whether* a monster opens on you (above): once a monster is in a fight it
+picks **one target per beat**, and the two realms use different engines. Surfaced in the
+**Monster Aggro** calculator (Workshop → Calculators), which shows the loaded set's model.
+
+**Stock** *([CONFIRMED] — stock DLL source, user-provided)*
+A stock monster attacks a single **locked target** at a time (not everyone it has aggroed).
+Each beat:
+1. **Locked target present** → hit it again (the lock clears if that player left / died).
+2. **No lock → spread pick** among the aggroed players in room / terminal order: each rolls
+   `genrdn(0,100) < 50 − 5 × (hits they're already taking this beat)`; **first to pass** is
+   hit; if none pass, the **last eligible** player is hit (fallback). The mob drifts toward
+   whoever *isn't* already piled on — a player taking ≥10 hits this beat hits a 0% threshold
+   and is skipped by fresh rolls.
+3. **After swinging it rolls `genrdn(1,100) < Follow%`** (Monsters `Follow%`): pass →
+   **lock** onto the just-hit player; fail on an **aggressive** align (∉ {0,3,4}) → **clear**
+   the lock and re-spread next beat; fail on a **passive** align ({0,3,4}) → **keep** the lock.
+   The mirror roll when a *player* hits the mob re-points the lock to that attacker — the
+   "attack last" behaviour. Follow% is the stickiness dial. Special types: summoned (type
+   `0x25`) never manage a lock this way; a type-5 monster only acquires a lock when currently
+   untargeted. Carve-out: an evil NPC won't spread onto a fellow-evil player (`EvilPoints > 39`).
+
+**Paradigm** *([CONFIRMED] — user writeup, Paradigm only)*
+Paradigm rewrote target selection into a **weighted lottery** with no locked-target mechanic.
+Each player scores from a base **150**: `+ (10 − Charm/5)` (higher Charm lowers the score),
+`+` party position (frontrank 60 / midrank 30 / backrank 0; **solo = frontrank 60**), `+`
+recent aggro (last hitter **+30 × players-in-fight**, everyone else **−5 × players-in-fight**),
+**floored at 50**. The monster rolls a weighted lottery over the summed scores — bigger score
+= bigger slice, never a guarantee, never impossible. **Charm and party position have no effect
+on stock target selection** — they are Paradigm-only.
 
 **Monster-kill message order** *([CONFIRMED] 2026-07-23, bug-report captures)*
 - A kill prints in a fixed order: the monster's **death line** (e.g. `The toad croaks in agony, and
@@ -919,6 +980,22 @@ ability, or a TextBlock `cast` of a damaging spell), gate on a survival buff (`c
 desert heat, the drown chain), or `teleport`/`transfer` you out (the sea/ice/pit rooms). *(Encoded in
 `RoomHazardIndex` — see the harm gate in `BuildHazard`.)*
 
+#### Hazard severity — survivable damage vs grave *([CONFIRMED] 2026-09-02, user + game-data trace, Paradigm 1.9.1)*
+
+Among protectable hazards, a further split governs whether the navigator may offer to **cross it
+unprotected** (walk in and eat the effect on the user's say-so):
+- **Survivable damage** — the unprotected outcome is only a `Damage` hit: a direct `Damage` ability, OR a
+  TextBlock `cast` of a spell whose own chain is `Damage`-only. Example: the **Silver River** (`Rooms.Spell
+  753`) → TB `failitem 690/691/1181/3609` (any raft) `: cast 754`, where spell **754 "battered"** is a plain
+  `Damage` spell. You just take the hit and keep walking, so "cross unprotected — take the damage" is a
+  legitimate choice. (Lava / magma heat, `Spell 526`, is the same shape — a direct `Damage` ability.)
+- **Grave** — the chain reaches an `EndCast` death-timer, a `teleport`/`transfer` (forced relocation), or a
+  `checkspell`/`failspell` buff-gate (drown / suffocation / desert-heat-death). These can END or DISPLACE
+  you, not just hurt you, so the counter is the only safe way past — the navigator must **never** offer to
+  cross them unprotected. (Conservatively, ANY `EndCast` or buff-gate is treated as grave.)
+
+*(Encoded as `RoomHazard.IsSurvivableDamage`; classifier `RoomHazardIndex.IsSurvivableHazardDamage`.)*
+
 ## Mana regeneration & the ManaRgn breakpoints *([CONFIRMED] 2026-08-08, against the engine's own reference formula)*
 
 Passive (non-resting, non-meditating) mana regen ticks **every 30 s** (6 rounds) and adds a whole-MP amount computed by one integer formula. `CharacterCalculator.CalcManaRegen` implements it; the Level Projection grid already relies on it.
@@ -941,7 +1018,7 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 
 Only **roll spells** (nature tap / mana flux / `prfl`, and kin — code-145 with stored value 0) are candidates for rerolling: a bad roll drags `ManaRgn%` down, so re-cast to chase a better one. **`CHSU` (chaos surge) is NEVER rerolled** — it's a *constant* mana heal-over-time (the mana analogue of HP regen), not a rolled `ManaRgn%` modifier; maintain it like a normal buff. A fixed (non-zero) code-145 spell isn't rerolled either. (`RegenSpellClassifier` already splits roll / fixed / HoT.)
 
-Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again.
+Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again. **Running out of mana mid-cycle PAUSES, it does not surrender** *(2026-09-01, report `paradigm-20260901-114223`: the reroller quit at 3/20 when a recast would breach the mana floor, stranding the spell at a bad roll)*: each recast costs mana, so if the next one would drop under the buff mana floor the cycle SUSPENDS with its reroll counter intact and resumes the next attempt once meditation lifts mana back over the floor — so it spends its full reroll budget across rest instead of abandoning a bad roll at the floor.
 
 **How the roll is read differs by realm:**
 - **Paradigm** — send **`abil 145`**. The output is three lines for `ManaRegen(145)`:
@@ -1249,6 +1326,16 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
   leader/follower divergence). The client keys on the `Location:` line to re-anchor `RoomTracker`
   via `SetLocated`; if that (map,room) isn't in the imported graph, `SetLocated` logs a warning and
   refuses rather than writing a stale anchor.
+  - **[CONFIRMED, user 2026-09-02] `rm` is reliable — the ONLY way it fails to answer is a
+    confusion fumble eating the command.** There's no game-side throttle or refusal; a `rm` that
+    returns no `Location:` line means the send was consumed by a confusion fumble (same mechanic as
+    a fumbled move / eaten `@wait`), not that the game declined. So on Paradigm the recovery gate
+    treats an *unanswered* forced `rm` as "confused, try again" — re-asking until the confusion
+    self-clears and a `Location:` lands — rather than a genuine failure. This is why the heuristic
+    reverse-walk / "Lost" dialog should essentially never be reached on Paradigm: at every give-up
+    boundary (before the backtrack, and again before Lost) the gate spends a forced `rm` first, and
+    only a `rm` that *answers* with a room the loaded map set doesn't contain — not a fumble-eaten
+    one — is a real dead end (report paradigm-20260902-223159, `EngineRecoveryGate.HandleResyncFailure`).
 - **[CONFIRMED]** **A refused ("bonked") move always prints an explicit line and never
   redisplays the room.** When a move command can't be honoured — no exit that way, a shut
   door, an impairment — the game emits a one-line refusal *instead of* a room display. The
@@ -1441,6 +1528,20 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
   `ask <noun> <keyword>`); gated keywords are skipped because the client can't verify the gate and a
   failed transport would strand the walker. **Party behaviour is unverified** — treat a greet teleport
   the same as a CMD teleport (moves only the asker, likely party-splitting) until captured.
+  - **Class gate + skill roll (issue #455, from Paradigm map 1 data).** Two directive kinds on a greet
+    chain are NOT treated as "unverifiable, skip": a **`class N`** gate (N = `Classes.Number`) restricts
+    the transport to one class — the barmaid (`#248`, `1/391`) carries `class 12:testskill …:teleport
+    391 1`, a **bard-only** ask-transport. This is surfaced as the edge's `ClassGate` so
+    `MovementFilter.IsClassGateBlocked` keeps it routable for that class and drops it for every other,
+    rather than letting non-bards route through a transport they can't use. A **`testskill <skill>
+    <amount> <failTB>`** in the same block is a per-use **skill roll** (like the winch's `testskill
+    strength`) that can fail even for the right class — the client does NOT model the odds; instead the
+    walker treats a greet teleport as a **verify-and-retry** step: after asking, it checks it actually
+    landed in the destination and, if not (a failed roll leaves the asker put — sometimes with no fresh
+    room render at all, so no tracker transition comes), **re-asks until it arrives.** The class gate
+    guarantees only a class that CAN eventually pass the roll ever reaches the step, so the retry
+    converges. (Ordinary CMD teleports — chime / boat / item-cast — stay fire-once; only the
+    `ask`-transport edge, `RawHint` `"greet teleport"`, gets the retry watchdog.)
 - **[CONFIRMED, capture 2026-07-10]** A follower client that receives `@join` while it is **already
   following someone** answers the telepath with **`I'm following someone; denied.`** — `@join` is not
   idempotent against an existing follow. This surfaces as a downstream symptom when a reform re-invite
@@ -2265,6 +2366,30 @@ Name (not the Short cast-code). `You have no spells.` is the authoritative empty
 opens on the header but reads zero rows is a **format miss, not an empty book** — it must not clear
 the obtained set. (SpellListParser + report "sp didn't update spellbook".)
 
+## The `health` command output *([CONFIRMED] 2026-09-03, user captures, stock + Paradigm)*
+
+`health` works on **both realms** (stock + Paradigm) and prints a single compact line of the
+character's HP + power-pool, current/max with a percent — far less scroll than the full `stat`
+screen, so it's the cheap way to re-anchor the authoritative max HP/mana (e.g. after a gear swap
+drifts the high-water mark). The pool field's **label is class-dependent, not realm-dependent**:
+`Mana` for a mana class, `Kai` for a Kai class (mystic), and the pool field is **absent entirely**
+for a class that has only HP.
+
+```
+Health:    593/593  [100%]  Mana:  619/619  [100%]  (mana class → Mana)
+Health:      91/91  [100%]  Kai:  6/10  [60%]       (mystic → Kai)
+Health:    137/137  [100%]                          (HP-only class → no pool field)
+```
+
+Parsing points: the line is anchored at line start with `Health:` and both HP and the pool are
+`cur/max` followed by `[pct%]`; inter-column padding varies, so match whitespace-tolerantly. The
+`Health:` label here is the **HP pool** — note that `stat` labels the HP pool `Hits:` and has its
+own separate `Health:` field, which is the **Health core stat** (a bare number like `Health: 71`,
+alongside Strength / Agility / etc.). The two `Health:` labels collide, so the health-command line
+is parsed on its own outbound gate (`health` observed) and never through the stat-screen field scan.
+(HP/MA **regen** — `HP Regen` / `MA Regen` — only appears in Paradigm's `stat all`, which the client
+does NOT parse; regen is computed from stats in the Player Workshop.) (StatParser.TryHealthCommandLine.)
+
 ## BBS actions / emotes (the `action list` socials) *([CONFIRMED] 2026-08-14, user + live capture)*
 
 MajorMUD / MajorBBS boards ship a **customizable action list** (MUD socials / emotes),
@@ -2972,6 +3097,49 @@ glass jug               5               2 gold crowns
   shriek that wore off left the co-latched `fumble` still holding `Confused`, keeping the nav
   ConfusionGate stuck. **Client encoding:** `ConditionTracker` clears every active `Confused` record when
   a `Confused`-carrying record's wear-off matches.
+- **[CONFIRMED] 2026-09-01, user + report `paradigm-20260901-080223`: a confusion fumble can prevent ANY
+  action, not just combat — and the fumble line can be customized per confuse source.** Most confusion
+  sources surface the generic `You fumble in confusion!`; `convulsions` customizes it to `You convulse
+  violently!` (with its own onset `You are in convulsions!`). Either way the just-sent command is consumed
+  and never executes. The client already re-sends a fumbled combat swing (ConditionTracker's
+  `LastActionFailed` → `CombatManager.OnActionFailed`), but a fumbled **move** has to REVERT its pending
+  step or the tracker strands — the unreverted move got wrongly matched against later unrelated text and
+  stranded a tier-3 recovery backtrack indefinitely (no timeout watched its landing). The fumble line
+  always appears as the direct reply to the command it swallowed, never as unprompted ambient text.
+  **Client encoding:** `MovementRefusalDetector` recognizes BOTH `You fumble in confusion!` and `You
+  convulse violently!` as movement refusals, reverting the pending move immediately.
+- **[CONFIRMED] 2026-09-02, report `paradigm-20260902-113201`: convulsions can fumble several consecutive
+  moves in a row, well inside a handful of seconds.** The revert above is correct per-move, but
+  `LoopRunner`'s bounded recovery budget (3 attempts) was shared between genuine desyncs and these
+  fumbles — three convulsion bonks on the same room burned the whole budget in under 10 seconds and
+  permanently failed the loop, leaving the character standing there Confused with nothing left running.
+  **Client encoding:** `LoopRunner.EnterRecovery` reads `ConditionTracker.IsConfused` (wired via
+  `SetConfusedCheck`) and doesn't charge an attempt against `MaxRecoverAttempts` while it's true — the
+  reroute/resend still happens every time, it just isn't bounded by the same budget a real mapping
+  problem is.
+- **[UNVERIFIED] 2026-09-02, cross-referenced from a messages.md export, not a live bug report:**
+  `convulsions` may have a THIRD fumble wording alongside the generic fumble and its own `You convulse
+  violently!` — `You look around stupidly and do nothing!`, flagged `LastActionFailed` in the source data.
+  Not yet confirmed against a live session; treat as provisional until it's actually observed. **Client
+  encoding:** `MovementRefusalDetector` now also recognizes this line as a movement refusal (same revert
+  mechanic as the other two), so if it does turn out to be real, a move fumbled this way won't strand the
+  tracker.
+- **[CONFIRMED] 2026-09-02, user: a confuse spell surfaces up to FIVE distinct message forms.** From the
+  target's point of view: (1) a caster→you cast line, (2) a third-party witness line, (3) an **applied**
+  onset, (4) a **wear-off**, and (5) a per-action **fumble**. The applied/wear-off pair sets and clears the
+  `Confused` state; the fumble line (carrying `LastActionFailed`) fires on each swallowed command and has
+  no wear-off of its own — it clears with the effect via the single-state confusion clear above. (The
+  parked game-data remodel plans to fold the fumble wordings into a shared table, like monster prefixes,
+  plus an "is a confuse spell" checkbox on the message record — so a confuse record then needs only the
+  standard spell lines, not a hand-built fumble entry.)
+- **[CONFIRMED] 2026-09-02, user: `form of the monkey` inherently confuses the caster for the buff's whole
+  duration.** While the `form of the monkey` self-buff is up (onset `The spirit of the monkey inhabits your
+  body!`), each action has a chance to fumble as `You are distracted!`. There is **no separate wear-off for
+  the confusion** — it ends when the **form itself** wears off (`The spirit of the monkey has left your
+  body!`). **Client encoding:** the `form of the monkey` message record carries `Confused` (set on the
+  form's onset, cleared on the form's wear-off, which triggers the single-state confusion clear); the
+  separate `You are distracted!` record carries `LastActionFailed` (+ `Confused` as the missed-onset
+  fallback) to drive the per-action re-send.
 
 ## One BETWEEN-ROUND spell per combat round; self-buff recast timers anchor on the 4-letter cast code *([CONFIRMED] 2026-08-16, user + report `paradigm-20260816-101702`)*
 
@@ -3237,7 +3405,39 @@ the attack rotation); the **AoE** debuff is gated by **Auto-Nuke**.
 ### Combat order, monster targeting, and attack-last *([CONFIRMED] 2026-08-22, user)*
 
 - **Physical swings per round** come from a swing calculation, hard-capped at **5 on Stock,
-  6 on Paradigm**.
+  6 on Paradigm**. The uncapped raw figure can exceed the cap (e.g. Paradigm `stat all` may
+  read 7.143) — the cap limits the per-round *integer* swings; the surplus over the cap feeds
+  the Quick-and-Deadly bonus, it isn't discarded. *([CONFIRMED] 2026-08-31, user — Paradigm
+  `stat all` shows 7.143 attacks "capped to 6, and the extra then applies towards the QND
+  bonus".)*
+- **Swing energy uses `level × CombatLVL`, NOT `level × (CombatLVL + 2)`.** The per-swing
+  energy divisor is `((level × combatLvl) + 45) × (agi + 150) / 6`, where `combatLvl` is the
+  class's raw **CombatLVL** field. MMUD-Explorer expresses the same value via
+  `GetClassCombat = CombatLVL − 2` (modMMudDatabase.bas) fed into a `(nCombat + 2)` form — the
+  −2 and +2 cancel, so the net is `level × CombatLVL`. Accuracy is the exception: it uses the
+  raw CombatLVL directly (MMUD-Explorer re-adds the +2: `nCombatLevel = GetClassCombat + 2`).
+  *([CONFIRMED] 2026-08-31 vs MMUD-Explorer + live game — a L28 Paladin (CombatLVL 6) with
+  throwing hammers (speed 1100) at 57% encum reads normal 7.143 / bash 3.572 in `stat all`,
+  matching `level × 6`; `level × 8` inflated it to 9 / 4.5.)*
+- **Monster attacks/round = `energy ÷ per-attack energy`.** A monster's per-round energy
+  budget (the `Energy` field, 1000 on Stock) divided by a slot's `AttEnergy-N` gives that
+  slot's attacks/round — the same `Max N x/round` the Game-Data monster readout shows; the
+  monster-side analog of the player's `floor(1000/EnergyCost)`.
+- **Slowness (ability 68) multiplies attack speed/energy by ×1.5** (`Fix(speed × 3 / 2)` —
+  MMUD-Explorer `AdjustSpeedForSlowness` + the per-attack `bAbil68Slow` overrides), yielding ~a
+  third fewer swings. On the PLAYER path MMUD-Explorer applies it to weapon speed; applied to a
+  MONSTER (a slowness debuff landed on it) it raises the monster's effective per-attack energy
+  the same ×1.5, thinning its attacks/round. *([CONFIRMED] 2026-09-02, user + syntax53/MMUD-Explorer
+  `modMMudFunc.bas`.)* See [[reference_mmud_explorer_source]].
+- **Stat debuffs on a monster SUBTRACT their listed magnitude and may go NEGATIVE.** An enemy
+  debuff that lists e.g. "AC -20" / "Accuracy -10" lowers the monster's AC / accuracy by that
+  much, and the result is **not** floored at 0 — a monster pushed below zero accuracy can't land
+  a hit, below-zero AC makes it trivially hit (your to-hit benefits a lot). Same ability codes
+  as the equip/buff resolvers (AC 2/10, DR 7 [stored ×10], Dodge 34, Accuracy 22/105/106);
+  debuff values are stored signed ("-20"), so the fold takes the magnitude. *([CONFIRMED]
+  2026-09-02, user.)* **Client:** modelled only in Monster Intel's "Apply Debuffs" WHAT-IF
+  (`MonsterDebuffCalculator` + the `MonsterMatchupCalculator` monster-swing model) — the app does
+  NOT apply debuff stat effects during live combat; this is a preview.
 - **Player attack order = announce order, FIFO.** Players deal their damage in the order
   they engaged/announced their attacks — first to announce fires first. Party rank does NOT
   change this order.

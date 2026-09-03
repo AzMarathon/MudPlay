@@ -1,15 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.38.0**
-> - Spell Book gains a **Difficulty** column (between Mana and Effect): your real chance to land the cast — Spellcasting + the spell's difficulty, capped at 98% (100% for Kai) — or "—" when you're not a caster / stats aren't read yet
-> - Spell Game Data view overhauled: human-readable field labels (Required Level, Mana Cost, Difficulty, Resist Type, School, …) instead of raw column names
-> - Spell Game Data view no longer triple-lists the same affect — a level-scaling stat affect now shows one row with its real range ("AC Blur +5 → +12"), replacing the meaningless "0" row and the duplicate "Magnitude" row
-> - Spell DR now shown as the value actually gained (raw ÷ 10, e.g. "+1.0"), not the raw store value ("+10")
-> - Spell Energy Cost now spells out its fire rate: 0 → "(between rounds)", otherwise "(up to N times per round)" where N = 1000 ÷ energy cost
-> - Damage spells now lead the Game Data tab with an interactive damage calculator: a Level picker (learned level → cap) recomputes min/max damage live, plus Magic-resist and elemental-resist pickers (where they apply) showing how a resistant target cuts it — replacing the old two contradictory damage numbers + scaling row
-> - Spell Book Difficulty header shows the equation; the clipped Difficulty column header is fixed
-> - RemovesSpell entries collapse into one linked "Removes" row; display-only message-slot rows dropped
+> **Version 3.48.0**
+> - Bosses tab: a per-boss **Grab All** checkbox (default off) that blindly grabs a boss's loot — a **monster** boss: `get` every item in its drop table when it dies; an **item** boss (a box): `get` it on room entry. Hidden (with a "cannot resolve" tooltip) for an unresolvable boss
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -23,16 +16,16 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Faithful terminal** — Telnet (RFC 854/855 with NAWS + TERM-TYPE), an explicit VT100/ANSI escape-sequence parser, and a CP437 cell grid rendered by a custom Avalonia control that scales crisply to fill the window. No host TTY dependency.
 - **Connections & profiles** — per-character profiles layered over a 4-tier settings hierarchy (installed defaults → all characters → this BBS → this character, storing deltas only); multiple BBSes each with their own host/port/accounts; automated logon-menu navigation; and configurable redial/reconnect policies (connect-fail, carrier-lost, server-stall, post-cleanup).
 - **Combat automation** — primary/alternate attack and spell settings, target ordering and priority, backstab handling, area/single-target debuff spells with an immunity-aware fallback cascade, crowd handling, rest-aware back-off, and per-monster attack/priority overrides.
-- **Healing & spells** — HP/mana thresholds, rest management, cures, buffs, mana-regen roll-spell rerolling, a class-aware **Spell Book**, and a **Buff Watchdog** that shows your configured buffs, live timers, and recast-window markers at a glance.
+- **Healing & spells** — HP/mana thresholds, rest management, cures, buffs, mana-regen roll-spell rerolling, a class-aware **Spell Book** (with per-spell cast-success odds and an interactive damage calculator), and a **Buff Watchdog** that shows your configured buffs, live timers, and recast-window markers at a glance.
 - **Navigation & looping** — a room-graph map with go-to routing over saved GOTO locations (search box or right-click menu), storable/runnable loops with exp/hour estimates, an **Auto-Lair** mode, trap and hazard handling (obtain-then-cross and fewest-traps routing), stash rooms, and map overlays.
 - **Party play** — party tracking, coordinated healing/blessing, leader-aware wait/invite logic, reconnect handling, and remote `@`-commands over chat channels — query (@health, @level, @exp, @inv…), move-me, change-my-settings, act-on-my-behalf, and party coordination — each gated by per-player permissions.
 - **Cash & items** — automated loot collection with sell/buy/stash/discard engines, banking, and equipment sets with auto-equip triggers.
 - **Character Workshop** — a unified hub for character management and development: live stats; **Equipment Manager** gear sets; an **Item Finder** with trial gearsets for what-if stat/encumbrance comparisons; **CP allocation** plans; **level projection**; quest, boss, and death tracking (with boss respawn timers you can sync between clients); character-info calculators; and **Roomba** — an automated gang-house item sorter backed by a shared item-location log you can query in-game with `@roomba`.
 - **Automation tools** — macros, aliases, triggers, and events; auto-engine toggles with per-character base modes and reconnect reconciliation; a one-press all-off kill switch; and a Sprint mode.
-- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser. Every engine reads from this data. A dedicated **Monster Intel** window gives a searchable monster reference — elemental resistances, spell-immunity/hit-magic requirements, attacks, loot, and locations — without digging into the Browser.
+- **Game data** — import MajorMUD `.MDB` databases, keep multiple game-data sets, and browse or override records across the 4-tier hierarchy in the Game Data Browser — whose **Monsters tab** curates the full roster with grouped min/max filters (combat stats, per-element resists signed to find vulnerabilities, spell immunity, magic-weapon requirement, type, and loot). Every engine reads from this data. A dedicated **Monster Intel** window answers "can I safely fight this thing right now" — Hits-You-% threshold checkboxes against your live AC/Dodge, an estimated rounds-to-kill per monster with your current weapon, plus its attacks and your own combat history against it — without digging into the Browser.
 - **Conversation & chat** — a dedicated conversation pane with per-channel filtering, search, logging, and history.
 - **Tools & diagnostics** — a timestamped full-ANSI scrollback with search/filter, a **Program Log**, **Session Stats**, a **Wire Inspector** for raw/classified stream inspection, and a ***built-in bug reporter (USE THIS WHEN REPORTING ISSUES — IT CAPTURES FAR MORE THAN YOU CAN DESCRIBE OR SHOW IN A SCREENSHOT)***.
-- **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.
+- **Customization & quality of life** — an editable toolbar, fully rebindable keybinds, a customizable terminal right-click menu (add commands, direct links to a Workshop tab or calculator, and your own fly-out folders — rename, reorder, and import/export to share), edge-snapping windows that move together as a cluster, customizable navigation-line and font styling, output scaling, and type-through so keystrokes keep reaching the terminal while other windows are open.
 
 ## Getting started
 
