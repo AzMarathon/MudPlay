@@ -4906,6 +4906,10 @@ public sealed class AppServices
         // just a point-to-point walk (report stock-20260731-010401). Lazy — reads
         // MovementControl at halt time, after it's constructed below.
         Walker.SetAnyEngineActiveCheck(() => MovementControl.IsActive);
+        // Mirrors LoopRunner.SetConfusedCheck below — same Conditions.IsConfused
+        // source, so the walker's replan budget gets the identical confusion
+        // exemption as the loop's recovery budget.
+        Walker.SetConfusedCheck(() => Conditions.IsConfused);
 
         // Active auto-light engine — announced the same planned route as the
         // item gate above. It scans for the darkest room and readies a covering
