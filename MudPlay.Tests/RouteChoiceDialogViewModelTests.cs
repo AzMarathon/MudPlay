@@ -622,4 +622,49 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.False(noCounter.ShowSendItCard);
         Assert.True(noCounter.ShowGatedCard);      // "walk to the hazard and stop"
     }
+
+    // A MIXED route — a survivable hazard (raft) AND a hard gate past it (a door key)
+    // — with no sourceable counter: base card "walk to the hazard and stop" + "cross
+    // unprotected", and the heading names both the hazard and the gate.
+    [Fact]
+    public void MixedHazard_NoCounter_OffersWalkToEdgeAndCrossUnprotected()
+    {
+        var choice = SoleChoice(
+            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 }),
+            new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 757 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "The Iceforge (3/632)",
+            id => id == 757 ? "the dragon key" : "a raft",
+            hazardCounterSource: null, hazardSurvivable: true);
+
+        Assert.False(vm.HazardObtain);
+        Assert.True(vm.ShowGatedCard);
+        Assert.True(vm.ShowSendItCard);
+        Assert.Contains("Walk to the hazard and stop", vm.GatedSummary);
+        Assert.Contains("Cross unprotected", vm.SendItSummary);
+        Assert.Contains("crosses a hazard, then a gate", vm.Heading);
+        Assert.Contains("the dragon key", vm.RequirementSummary);
+    }
+
+    // A mixed route WITH a sourceable counter: "obtain, then cross" + "cross
+    // unprotected" — the obtain card is offered on a mixed route too.
+    [Fact]
+    public void MixedHazard_WithCounter_OffersObtainAndCrossUnprotected()
+    {
+        var choice = SoleChoice(
+            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 }),
+            new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 757 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "The Iceforge (3/632)",
+            id => id == 757 ? "the dragon key" : "a raft",
+            hazardCounterSource: "buy at Pier", hazardSurvivable: true);
+
+        Assert.True(vm.HazardObtain);
+        Assert.True(vm.ShowGatedCard);
+        Assert.True(vm.ShowSendItCard);
+        Assert.Contains("Obtain, then cross", vm.GatedSummary);
+        Assert.Contains("Cross unprotected", vm.SendItSummary);
+    }
 }

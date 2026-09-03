@@ -35,9 +35,24 @@ public static class RouteDetailsLauncher
         AppServices services, string title, IReadOnlyList<RoomKey>? polyline)
     {
         ArgumentNullException.ThrowIfNull(services);
-        var vm = new RouteDetailsDialogViewModel(title, BuildRows(services, polyline));
+        var vm = new RouteDetailsDialogViewModel(
+            TitleWithEta(services, title, polyline), BuildRows(services, polyline));
         _ = services.Dialogs.OpenWindowAsync<RouteDetailsDialogViewModel, bool?>(vm);
         return vm;
+    }
+
+    // Append the approximate arrival ETA for a route's polyline to a title — the same
+    // realm-aware per-hop travel + lair-fight dwell estimate the picker cards and the
+    // walk-status line show. No suffix for a trivial route or when the estimate is 0.
+    public static string TitleWithEta(
+        AppServices services, string title, IReadOnlyList<RoomKey>? polyline)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        if (polyline is not { Count: > 1 }) return title;
+        TimeSpan eta = RouteEtaEstimator.Estimate(
+            polyline, services.AutoLair.TravelCostModel, services.RoomGraph.GetRoom,
+            includeLairDwell: services.IsAutoCombatEnabled);
+        return eta > TimeSpan.Zero ? $"{title}  ·  ~{RouteEtaEstimator.FormatCompact(eta)}" : title;
     }
 
     // Monster-name tints by MajorMUD alignment code (Monsters-table Align): the

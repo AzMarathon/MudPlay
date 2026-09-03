@@ -136,19 +136,37 @@ public static class RouteChoicePrompt
             choice.GatedPath, services.AutoLair.TravelCostModel,
             services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled);
 
-        // Sole hazard-only route: resolve which counter the run would obtain and
-        // how (floor grab / free give / shop buy / drop hunt), so the picker can
-        // offer "obtain then cross" and Go forces that counter through the acquire
-        // pipeline — an explicit pick, so no AutoObtainForPath flag is needed.
+        // A route that crosses a SURVIVABLE hazard the player can't currently pass —
+        // whether the hazard is the only gate (sole hazard) or the route ALSO has a
+        // hard gate past it (a keyed door: a "mixed" route). Either way the picker
+        // offers to obtain the counter / cross unprotected; the mixed case just also
+        // names the hard gate it stops at. Never for a grave hazard (a drown / freeze
+        // death, a forced teleport) — UnprotectedHazardsAllSurvivable gates that.
+        bool crossesHazard = !choice.HasFreeRoute && choice.Kind != RouteChoiceKind.Teleport
+            && choice.Requirements.Any(r => r.Kind == RouteRequirementKind.HazardProtection);
+        bool crossesSurvivableHazard = crossesHazard
+            && services.UnprotectedHazardsAllSurvivable(choice.GatedPath);
+        bool mixedHazard = crossesSurvivableHazard
+            && choice.Requirements.Any(r => r.Kind != RouteRequirementKind.HazardProtection);
+
+        // Resolve which counter the run would obtain and how (floor grab / free give /
+        // shop buy / drop hunt), so the picker can offer "obtain then cross" and Go
+        // forces that counter through the acquire pipeline — an explicit pick, so no
+        // AutoObtainForPath flag is needed. Run for ANY hazard (survivable OR grave —
+        // a grave hazard's only safe crossing IS obtaining the counter); only the
+        // HAZARD requirements are sourced this way — a hard gate (a door key) is never
+        // auto-fetched.
         List<int> floorCounters = new();     // grabbed in place with a `get`
         List<int> detourCounters = new();    // sourced via the give/shop/drop pipeline
         List<string> hazardSources = new();
-        bool soleHazardOnly = !choice.HasFreeRoute && choice.Kind != RouteChoiceKind.Teleport
-            && choice.Requirements.Count > 0
-            && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
-        if (soleHazardOnly)
+        // The specific counter resolved per hazard requirement (which item, and how) —
+        // so the picker's requirement line names the exact one it'll obtain ("log raft
+        // (buy at Pier)") instead of the whole any-of list.
+        Dictionary<RouteRequirement, (int ItemId, string Source)> resolvedCounters = new();
+        if (crossesHazard)
             foreach (RouteRequirement req in choice.Requirements)
             {
+                if (req.Kind != RouteRequirementKind.HazardProtection) continue;
                 // A counter already chosen for an earlier hazard that also appears in
                 // THIS hazard's any-of set covers it too — both FCCO slide rooms accept
                 // rope-and-grapple OR climbing harness, so one rope answers both. Skip
@@ -160,17 +178,19 @@ public static class RouteChoicePrompt
                     List<int> bucket = r.OnFloor ? floorCounters : detourCounters;
                     if (!bucket.Contains(r.ItemId)) bucket.Add(r.ItemId);
                     if (!hazardSources.Contains(r.Source)) hazardSources.Add(r.Source);
+                    resolvedCounters[req] = (r.ItemId, r.Source);
                 }
             }
         string? hazardCounterSource = hazardSources.Count > 0
             ? string.Join("; ", hazardSources) : null;
+        bool hazardObtain = hazardCounterSource is not null;
 
-        // Whether the gated route's unprotected hazards are all survivable damage —
-        // gates whether the picker offers a "cross unprotected — take the damage"
-        // card (a river / heat you can eat), which it must never do for a grave
-        // hazard (a drown / freeze death, a forced teleport).
-        bool hazardSurvivable = soleHazardOnly
-            && services.UnprotectedHazardsAllSurvivable(choice.GatedPath);
+        // For a mixed route with no sourceable counter, the base card walks to the
+        // hazard's edge and stops (the user then fetches a counter / clears the hard
+        // gate themselves), rather than crossing the hazard blindly.
+        RoomKey? hazardEdge = mixedHazard && !hazardObtain
+            ? services.HazardApproachRoom(choice.GatedPath)
+            : null;
 
         var vm = new RouteChoiceDialogViewModel(
             choice,
@@ -192,7 +212,12 @@ public static class RouteChoicePrompt
             freeEta,
             gatedEta,
             hazardCounterSource,
-            hazardSurvivable);
+            crossesSurvivableHazard,
+            // The specific counter the run resolved for a hazard requirement (item id +
+            // "buy at Pier" / "ask X" / …), so its requirement clause names that one
+            // rather than the whole any-of set.
+            req => resolvedCounters.TryGetValue(req, out (int ItemId, string Source) v)
+                ? v : ((int, string)?)null);
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and
@@ -280,6 +305,13 @@ public static class RouteChoicePrompt
         {
             case RouteChoiceResult.Free:
                 CommitWalk(services, destination, gated: false);
+                break;
+            case RouteChoiceResult.Gated when hazardEdge is { } edge:
+                // Mixed route, no sourceable counter: the base card walks to the
+                // hazard's edge and stops (a plain gate-free walk to the room just
+                // short of the river), so the user can fetch a counter / clear the
+                // hard gate by hand from there — rather than crossing blindly.
+                CommitWalk(services, edge, gated: false);
                 break;
             case RouteChoiceResult.Gated:
                 // Hazard "obtain then cross". A counter already on the floor is

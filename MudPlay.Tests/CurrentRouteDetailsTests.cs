@@ -97,8 +97,9 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         IReadOnlyList<RouteDetailRow> rows =
             CurrentRouteDetails.Build(graph, null, null, route, _ => null, MonsterLinks, _ => { }, _ => null, ItemLink);
 
-        // Two hops → two move rows in the route-picker "N> map/room < command" format.
-        Assert.Equal(2, rows.Count);
+        // Two hops → two move rows in the route-picker "N> map/room < command" format,
+        // PLUS a final arrival row for the destination (1/3) the route ends in.
+        Assert.Equal(3, rows.Count);
         Assert.StartsWith("1>", rows[0].Step.Line);
         Assert.Contains("1/1 Home", rows[0].Step.Line);
         Assert.Contains("< n", rows[0].Step.Line);
@@ -117,6 +118,13 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         Assert.Equal(new RoomKey(1, 2), rows[1].Step.Room);
         Assert.True(rows[1].HasMonsters);
         Assert.Equal("cave worm(#8)", rows[1].Monsters.Single().Text);
+
+        // The final arrival row: the destination 1/3, no command ("(arrive)").
+        Assert.True(rows[2].IsArrival);
+        Assert.Equal(new RoomKey(1, 3), rows[2].Step.Room);
+        Assert.Equal("(arrive)", rows[2].CommandSuffix);
+        Assert.Contains("1/3", rows[2].Location);
+        Assert.Equal("3>", rows[2].NumberLabel);
     }
 
     // Item id → a stub link (the tests never open a real record).
