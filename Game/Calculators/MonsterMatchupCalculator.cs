@@ -226,7 +226,13 @@ public readonly record struct PlayerAttackSpell(
 // effective damage.
 public readonly record struct SpellEffectivenessResult(
     string Name, string Short, string Element, long EffectiveDamage,
-    long ManaCostPerRound, bool Eligible, string? BlockedReason, bool IsAoe = false);
+    long ManaCostPerRound, bool Eligible, string? BlockedReason, bool IsAoe = false)
+{
+    // EffectiveDamage is already the resist-adjusted PER-ROUND figure (level-scaled
+    // + energy-multiplied at the caster side, then resist-adjusted here), so a minute
+    // is simply ×12 rounds. Meaningful only when Eligible.
+    public long DamagePerMinute => EffectiveDamage * MonsterMatchupCalculator.RoundsPerMinute;
+}
 
 // Spell-matchup additions to MonsterMatchupCalculator below — kept as their
 // own members rather than folded into Compute(), since the inputs (known

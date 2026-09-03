@@ -359,9 +359,11 @@
                                                     </MultiBinding>
                                                 </TextBlock.Text>
                                             </TextBlock>
-                                            <TextBlock Classes="DetailLine" Margin="10,0,0,0" IsVisible="{Binding Eligible}">
+                                            <TextBlock Classes="DetailLine" Margin="10,0,0,0" IsVisible="{Binding Eligible}"
+                                                       Foreground="{StaticResource AccentAmberBrush}">
                                                 <TextBlock.Text>
-                                                    <MultiBinding StringFormat="{}{0} effective damage, {1} mana/round">
+                                                    <MultiBinding StringFormat="{}~{0} dmg/min · {1} effective/round · {2} mana/round">
+                                                        <Binding Path="DamagePerMinute"/>
                                                         <Binding Path="EffectiveDamage"/>
                                                         <Binding Path="ManaCostPerRound"/>
                                                     </MultiBinding>

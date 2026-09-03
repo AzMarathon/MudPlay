@@ -964,13 +964,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (m.DamageResist != 0)
             AbilityLines.Add($"Damage resist {m.DamageResist} — flat reduction to the physical damage it takes");
 
-        // Elemental resists → weakness / strength. Negative = vulnerable (takes extra),
-        // 100 = immune, over 100 = healed by that element instead.
+        // Elemental resists → weakness / strength. Negative = vulnerable (takes extra
+        // damage) = weak vs; positive = resists / at 100 immune / over 100 healed by
+        // that element = strong vs. The signed % already conveys the magnitude.
         foreach (int code in ElementResistCodes)
         {
             if (!m.ElementalResists.TryGetValue(code, out int pct) || pct == 0) continue;
             string name = ElementalResistIndex.NameForCode(code) ?? $"element {code}";
-            string tag = pct > 100 ? "healed" : pct == 100 ? "immune" : pct > 0 ? "resists" : "weak";
+            string tag = pct < 0 ? "weak vs" : "strong vs";
             AbilityLines.Add($"{name} {pct:+0;-0}% ({tag})");
         }
 

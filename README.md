@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.47.0**
 > - **Monster Intel** now shows an **Abilities & resistances** panel — elemental weakness/strength, spell immunity, magic-weapon requirement, damage/magic resist, and undead / non-living state
-> - Each monster attack lists its **incoming damage/minute** against you; your **Physical attacks** lines lead with your **damage/minute** to it (DPM averages 12 rounds/minute, honouring energy rollover)
+> - Each monster attack lists its **incoming damage/minute** against you; your **Physical attacks** and **ranked spells** show your **damage/minute** to it (DPM averages 12 rounds/minute, honouring energy rollover)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

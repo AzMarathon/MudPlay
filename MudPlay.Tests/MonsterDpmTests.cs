@@ -56,4 +56,14 @@ public sealed class MonsterDpmTests
     [Fact]
     public void ElementName_UnknownCode_IsNull()
         => Assert.Null(ElementalResistIndex.NameForCode(999));
+
+    [Fact]
+    public void SpellDamagePerMinute_IsEffectivePerRoundTimesTwelve()
+    {
+        // EffectiveDamage is the resist-adjusted per-round figure, so /min is ×12.
+        var spell = new SpellEffectivenessResult(
+            "Magic Missile", "mmis", "Normal", EffectiveDamage: 40,
+            ManaCostPerRound: 12, Eligible: true, BlockedReason: null);
+        Assert.Equal(480, spell.DamagePerMinute);
+    }
 }
