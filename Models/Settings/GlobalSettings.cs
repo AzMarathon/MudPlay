@@ -58,6 +58,12 @@ public sealed class GlobalSettings
     // which pushes it to MapControl.
     public NavLineStyles? NavLines { get; set; }
 
+    // Route Details window: colour monster names by their live Hits-You-% (green
+    // safe → red dangerous) instead of by alignment, with a user-adjustable band
+    // split. Delta only — null means off with the factory 15 / 45 bands. Install-wide
+    // (Global tier); edited from the Details window's own checkbox + range slider.
+    public MonsterHitColorSettings? MonsterHitColors { get; set; }
+
     // Map legend overlay's user-dragged position, in pixels from the top-left of
     // the map viewport. Null (the default) parks it bottom-left. Install-wide
     // (Global tier), persisted on drop and re-clamped into the visible map when

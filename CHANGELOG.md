@@ -1,5 +1,10 @@
 # Version history
 
+## 3.46.12
+
+- Route **Details**: a "Color monsters by hit %" toggle tints monster names green→red by how likely they are to hit you (Monster Intel's Hits-You-%) instead of by alignment
+- The green / amber / red split is adjustable on a two-thumb slider (default green ≤ 15%, amber ≤ 45%, red above); the choice persists install-wide
+
 ## 3.46.11
 
 - Paired ring/wrist gear swaps are now **realm-aware** (Paradigm evicts slot 1, Stock slot 2) and use `eq`, so re-equipping a set that keeps one member of a full pair no longer emits a needless `rem`

@@ -4066,9 +4066,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_routeDetailsVm is { } open) { open.RequestClose(); return; }   // toggle closed
 
         IReadOnlyList<RoomKey>? route = CurrentRouteForDetails();
-        var vm = new RouteDetailsDialogViewModel(
-            RouteDetailsLauncher.TitleWithEta(_services, RouteDetailsTitle(), route),
-            RouteDetailsLauncher.BuildRows(_services, route));
+        var vm = RouteDetailsLauncher.BuildViewModel(_services, RouteDetailsTitle(), route);
         _routeDetailsVm = vm;
         // Fire-and-forget: awaiting here would disable the command (IAsyncRelayCommand
         // self-disables while running) and block the re-click toggle. The helper
