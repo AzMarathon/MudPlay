@@ -9,6 +9,24 @@
         MinWidth="320" MinHeight="240"
         WindowStartupLocation="CenterOwner">
 
+    <Window.Styles>
+        <!-- Client-standard record link: cyan text, no chrome, underline on hover
+             (same look the Game Data record dialogs use for inline links). -->
+        <Style Selector="Button.MdbLink">
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.MdbLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
+    </Window.Styles>
+
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
         <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
             <TextBlock Grid.Row="0"
@@ -32,8 +50,8 @@
                                            FontSize="12"
                                            Foreground="{StaticResource ChromeFgBrush}"
                                            TextWrapping="Wrap"/>
-                                <ItemsControl ItemsSource="{Binding LairMonsters}"
-                                              IsVisible="{Binding HasLair}"
+                                <ItemsControl ItemsSource="{Binding Monsters}"
+                                              IsVisible="{Binding HasMonsters}"
                                               Margin="20,1,0,2">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
@@ -42,10 +60,10 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="gd:RoomDetailLink">
-                                            <Button Classes="RecordLink"
+                                            <Button Classes="MdbLink"
                                                     Content="{Binding Text}"
                                                     Command="{Binding Open}"
-                                                    Margin="0,0,8,2"/>
+                                                    Margin="0,0,12,2"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -62,18 +80,11 @@
                        Foreground="{StaticResource ChromeFgMutedBrush}"
                        IsVisible="{Binding !HasRows}"/>
 
-            <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0"
-                           Text="Monsters shown at each lair room — click to open its record."
-                           VerticalAlignment="Center"
-                           TextWrapping="Wrap"
-                           FontSize="10"
-                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                <Button Grid.Column="1"
-                        Content="Close"
-                        Command="{Binding CloseCommand}"
-                        FontSize="11" Padding="12,4"/>
-            </Grid>
+            <Button Grid.Row="2"
+                    Content="Close"
+                    Command="{Binding CloseCommand}"
+                    HorizontalAlignment="Right"
+                    FontSize="11" Padding="12,4"/>
         </Grid>
     </Border>
 </Window>

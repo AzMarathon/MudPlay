@@ -60,19 +60,20 @@ public sealed class CurrentRouteDetailsTests : IDisposable
     }
 
     [Fact]
-    public void Build_RendersStepRows_AndAttachesLairMonstersToTheirRoom()
+    public void Build_RendersStepRows_AndAttachesMonstersToTheirRoom()
     {
         RoomGraphManager graph = NewGraph();
         var route = new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) };
 
-        // Only 1/2 hosts a lair — the injected lookup mirrors the VM's real one.
-        RoomKey lairRoom = new(1, 2);
+        // Only 1/2 has monsters — the injected lookup mirrors the VM's real one
+        // (placed + lair, deduped).
+        RoomKey monsterRoom = new(1, 2);
         var link = new RoomDetailLink("cave worm(#8)", null, new RelayCommand(() => { }));
-        IReadOnlyList<RoomDetailLink> LairLinks(RoomKey k) =>
-            k.Equals(lairRoom) ? new[] { link } : Array.Empty<RoomDetailLink>();
+        IReadOnlyList<RoomDetailLink> MonsterLinks(RoomKey k) =>
+            k.Equals(monsterRoom) ? new[] { link } : Array.Empty<RoomDetailLink>();
 
         IReadOnlyList<RouteDetailRow> rows =
-            CurrentRouteDetails.Build(graph, null, null, route, _ => null, LairLinks);
+            CurrentRouteDetails.Build(graph, null, null, route, _ => null, MonsterLinks);
 
         // Two hops → two move rows in the route-picker "N> map/room < command" format.
         Assert.Equal(2, rows.Count);
@@ -80,23 +81,23 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         Assert.Contains("1/1 Home", rows[0].Line);
         Assert.Contains("< n", rows[0].Line);
 
-        // Row 0 departs 1/1 (no lair); row 1 departs 1/2 (lair → the monster link).
+        // Row 0 departs 1/1 (no monsters); row 1 departs 1/2 (→ the monster link).
         Assert.Equal(new RoomKey(1, 1), rows[0].Step.Room);
-        Assert.False(rows[0].HasLair);
-        Assert.Empty(rows[0].LairMonsters);
+        Assert.False(rows[0].HasMonsters);
+        Assert.Empty(rows[0].Monsters);
 
         Assert.Equal(new RoomKey(1, 2), rows[1].Step.Room);
-        Assert.True(rows[1].HasLair);
-        Assert.Equal("cave worm(#8)", rows[1].LairMonsters.Single().Text);
+        Assert.True(rows[1].HasMonsters);
+        Assert.Equal("cave worm(#8)", rows[1].Monsters.Single().Text);
     }
 
     [Fact]
     public void Build_TrivialOrEmptyRoute_ReturnsNoRows()
     {
         RoomGraphManager graph = NewGraph();
-        IReadOnlyList<RoomDetailLink> NoLair(RoomKey _) => Array.Empty<RoomDetailLink>();
+        IReadOnlyList<RoomDetailLink> NoMonsters(RoomKey _) => Array.Empty<RoomDetailLink>();
 
-        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, Array.Empty<RoomKey>(), _ => null, NoLair));
-        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, new[] { new RoomKey(1, 1) }, _ => null, NoLair));
+        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, Array.Empty<RoomKey>(), _ => null, NoMonsters));
+        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, new[] { new RoomKey(1, 1) }, _ => null, NoMonsters));
     }
 }

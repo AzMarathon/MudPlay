@@ -4087,23 +4087,28 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (route is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
         return CurrentRouteDetails.Build(
             _services.RoomGraph, _services.Bfs, _services.Movement,
-            route, _services.ItemNames.GetName, LairLinksForRoom);
+            route, _services.ItemNames.GetName, RoomMonsterLinksForRoom);
     }
 
-    // The lair monsters standing in a room, each opening its Game Data record on
-    // click — mirrors the ROOM INFO panel's monster links (RoomInfoViewModel). Empty
-    // for a room with no lair (the common case, so most rows carry none).
-    private IReadOnlyList<RoomDetailLink> LairLinksForRoom(RoomKey key)
+    // A room's notable monsters — placed fixtures (a boss / NPC) then lair spawners
+    // — each opening its Game Data record on click, mirroring the ROOM INFO panel's
+    // monster links (RoomInfoViewModel). Deduped by id so a monster that is both
+    // placed and a lair spawner isn't listed twice. Empty for a room with none.
+    private IReadOnlyList<RoomDetailLink> RoomMonsterLinksForRoom(RoomKey key)
     {
         Room? room = _services.RoomGraph.GetRoom(key);
         if (room is null) return Array.Empty<RoomDetailLink>();
         RoomTooltipBuilder.RoomMonsters rm =
             RoomTooltipBuilder.ResolveRoomMonsters(room, _services.GameData, _services.MonsterSpawns);
-        if (rm.Lair.Count == 0) return Array.Empty<RoomDetailLink>();
-        var links = new List<RoomDetailLink>(rm.Lair.Count);
-        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Lair)
+
+        var links = new List<RoomDetailLink>(rm.Placed.Count + rm.Lair.Count);
+        var seen = new HashSet<int>();
+        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Placed.Concat(rm.Lair))
+        {
+            if (!seen.Add(m.Id)) continue;
             links.Add(new RoomDetailLink($"{m.Name}(#{m.Id})", null,
                 new AsyncRelayCommand(() => _services.OpenMonsterRecordAsync(m.Id))));
+        }
         return links;
     }
 

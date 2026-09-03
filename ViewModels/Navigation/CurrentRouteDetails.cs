@@ -22,11 +22,11 @@ public static class CurrentRouteDetails
         IRoomFilter? filter,
         IReadOnlyList<RoomKey> route,
         Func<int, string?> itemName,
-        Func<RoomKey, IReadOnlyList<RoomDetailLink>> lairLinks)
+        Func<RoomKey, IReadOnlyList<RoomDetailLink>> roomMonsterLinks)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(itemName);
-        ArgumentNullException.ThrowIfNull(lairLinks);
+        ArgumentNullException.ThrowIfNull(roomMonsterLinks);
 
         // A route needs at least one hop (two rooms) to have any steps.
         if (route is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
@@ -48,7 +48,7 @@ public static class CurrentRouteDetails
 
         var details = new List<RouteDetailRow>(rows.Count);
         foreach (RouteStepRow row in rows)
-            details.Add(new RouteDetailRow(row, lairLinks(row.Room)));
+            details.Add(new RouteDetailRow(row, roomMonsterLinks(row.Room)));
         return details;
     }
 }
