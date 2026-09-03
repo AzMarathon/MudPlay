@@ -135,18 +135,29 @@
                        TextWrapping="Wrap"
                        Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
-            <StackPanel Grid.Row="3"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Right"
-                        Spacing="8">
-                <Button Content="Cancel"
-                        Command="{Binding CancelCommand}"
-                        IsCancel="True" MinWidth="80"/>
-                <Button Content="Go"
-                        Command="{Binding GoCommand}"
-                        IsDefault="True" MinWidth="80"
-                        Classes="accent"/>
-            </StackPanel>
+            <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">
+                <!-- Details…: bottom-left, enabled once a route is picked. Opens the
+                     shared route-details browse window for the selected route — the
+                     full step plan with each room's monsters, hazards, and item gates
+                     linked to their records. Richer than the Show-steps flyout. -->
+                <Button Grid.Column="0"
+                        Content="Details…"
+                        Command="{Binding ShowDetailsCommand}"
+                        FontSize="11" Padding="10,4"
+                        HorizontalAlignment="Left"/>
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Spacing="8">
+                    <Button Content="Cancel"
+                            Command="{Binding CancelCommand}"
+                            IsCancel="True" MinWidth="80"/>
+                    <Button Content="Go"
+                            Command="{Binding GoCommand}"
+                            IsDefault="True" MinWidth="80"
+                            Classes="accent"/>
+                </StackPanel>
+            </Grid>
         </Grid>
     </Border>
 </Window>

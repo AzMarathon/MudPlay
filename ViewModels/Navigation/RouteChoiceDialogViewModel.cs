@@ -37,6 +37,13 @@ public sealed partial class RouteChoiceDialogViewModel
     // maps the selected route to its FreePath / GatedPath and pushes it.
     public event Action<RouteChoiceResult?>? PreviewRequested;
 
+    // Raised when the user clicks Details… for the selected route, so the prompt
+    // can open the shared route-details browse window (the same one the CURRENT NAV
+    // panel uses) for that route's polyline — the full step plan with per-room
+    // monsters, hazards, and item gates. The picker has no map/graph knowledge, so
+    // it just forwards which route is selected and lets the prompt resolve it.
+    public event Action<RouteChoiceResult>? ShowDetailsRequested;
+
     public string Heading { get; }
     public string FreeSummary { get; }
     public string GatedSummary { get; }
@@ -108,6 +115,7 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(HasStepRows))]
     [NotifyPropertyChangedFor(nameof(CanShowSteps))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ShowDetailsCommand))]
     private RouteChoiceResult? _selectedRoute;
 
     // The full start-to-finish command sequence for each route (moves, lever/winch/
@@ -355,6 +363,17 @@ public sealed partial class RouteChoiceDialogViewModel
         SelectedRoute = RouteChoiceResult.GatedNoAcquire;
         // Same physical route as the gated acquire choice — preview its line.
         PreviewRequested?.Invoke(RouteChoiceResult.GatedNoAcquire);
+    }
+
+    // The Details… button lights up once a route is picked: it opens the shared
+    // route-details browse window for that route (richer than the Show-steps
+    // flyout — per-room monsters, hazards, and item gates, each linking its record).
+    private bool CanShowDetails => SelectedRoute is not null;
+
+    [RelayCommand(CanExecute = nameof(CanShowDetails))]
+    private void ShowDetails()
+    {
+        if (SelectedRoute is { } r) ShowDetailsRequested?.Invoke(r);
     }
 
     private bool CanGo => SelectedRoute is not null;

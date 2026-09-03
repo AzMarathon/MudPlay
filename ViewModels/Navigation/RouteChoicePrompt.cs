@@ -216,6 +216,15 @@ public static class RouteChoicePrompt
             vm.RaiseSelectionPreview();
         }
 
+        // Details… opens the shared route-details browse window for the selected
+        // route's polyline — the same window the CURRENT NAV panel uses, with each
+        // room's monsters, hazards, and item gates linked to their records. Both
+        // direct choices trace the same physical gated line.
+        string detailsTitle = $"Route → {DestinationLabel(services, destination)}";
+        vm.ShowDetailsRequested += r => RouteDetailsLauncher.Open(
+            services, detailsTitle,
+            r == RouteChoiceResult.Free ? choice.FreePath : choice.GatedPath);
+
         RouteChoiceResult? result;
         try
         {
@@ -371,26 +380,6 @@ public static class RouteChoicePrompt
             key => graph.GetRoom(key)?.DisplayName,
             services.ItemNames.GetName,
             req => ObtainLabel(services, req, source, destination));
-    }
-
-    // The hop directions implied by a RoomKey polyline — for each consecutive pair,
-    // the exit off the first room whose target is the next room. Stops at the first
-    // pair the graph can't connect (a stale path); the expander truncates likewise.
-    private static IReadOnlyList<Direction> DirectionsAlong(
-        RoomGraphManager graph, IReadOnlyList<RoomKey> path)
-    {
-        var dirs = new List<Direction>(Math.Max(0, path.Count - 1));
-        for (int i = 0; i + 1 < path.Count; i++)
-        {
-            Room? room = graph.GetRoom(path[i]);
-            if (room is null) break;
-            Direction? hop = null;
-            foreach ((Direction d, RoomExit exit) in room.Exits)
-                if (exit.Target.Equals(path[i + 1])) { hop = d; break; }
-            if (hop is null) break;
-            dirs.Add(hop.Value);
-        }
-        return dirs;
     }
 
     private static bool IsAutoSourceable(RouteRequirement req) =>

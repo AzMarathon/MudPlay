@@ -25,6 +25,38 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
         </Style>
+
+        <!-- Monster links: combat-line red, so the list of monsters reads apart from
+             the blue room/spell links. -->
+        <Style Selector="Button.MonsterLink">
+            <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.MonsterLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
+
+        <!-- Required-item links (hazard counters + item-gated exits): a dark yellow,
+             matching the ⚠ warning tone. -->
+        <Style Selector="Button.ItemLink">
+            <Setter Property="Foreground" Value="#FFC9A030"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.ItemLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
@@ -114,7 +146,7 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="gd:RoomDetailLink">
-                                                <Button Classes="MdbLink"
+                                                <Button Classes="ItemLink"
                                                         Content="{Binding Text}"
                                                         Command="{Binding Open}"
                                                         Margin="0,0,10,0"/>
@@ -132,7 +164,7 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="gd:RoomDetailLink">
-                                            <Button Classes="MdbLink"
+                                            <Button Classes="MonsterLink"
                                                     Content="{Binding Text}"
                                                     Command="{Binding Open}"
                                                     Margin="0,0,12,2"/>

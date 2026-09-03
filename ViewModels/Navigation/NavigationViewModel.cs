@@ -11,7 +11,6 @@ using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
-using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -4085,10 +4084,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         return prefix;
     }
 
-    // Build the step rows from whichever route is live (the same room-key polyline
-    // the map draws): a walk / loop / Auto-Lair approach the engine is executing,
-    // else the armed-but-not-running preview (a search-box walk-to). Empty when
-    // there's neither.
+    // The step rows for whichever route is live (the same room-key polyline the map
+    // draws): a walk / loop / Auto-Lair approach the engine is executing, else the
+    // armed-but-not-running preview (a search-box walk-to). Built via the shared
+    // launcher so the picker's Details button renders identically. Empty when there's
+    // no route.
     private IReadOnlyList<RouteDetailRow> BuildCurrentRouteRows()
     {
         IReadOnlyList<RoomKey>? route =
@@ -4096,64 +4096,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             : EngineActionIsLooping ? LoopPath
             : EngineActionIsLair ? AutoLairApproachPath
             : PreviewPath;
-        if (route is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
-        return CurrentRouteDetails.Build(
-            _services.RoomGraph, _services.Bfs, _services.Movement,
-            route, _services.ItemNames.GetName, RoomMonsterLinksForRoom, ShowWhereHighlight,
-            RoomHazardForRoom, ItemLinkFor);
-    }
-
-    // A room's protectable cast-on-enter hazard (RoomHazardIndex) — the harmful
-    // spell + the item(s) that make it safe to cross (a raft, phoenix feather,
-    // waterskin…), each opening its Game Data record. Null for a room with no
-    // room-entry hazard (an item-gated EXIT off it is handled by the builder, not
-    // here); the builder folds the two into one warning.
-    private RouteStepWarning? RoomHazardForRoom(RoomKey key)
-    {
-        Room? room = _services.RoomGraph.GetRoom(key);
-        if (room is null || room.Spell <= 0) return null;
-        if (_services.RoomHazards.HazardForSpell(room.Spell) is not { } hz) return null;
-
-        string spellName = _services.GameData.FindNameByNumber("Spells", room.Spell)
-            ?? $"spell #{room.Spell}";
-        var spellLink = new RoomDetailLink(spellName, null,
-            new AsyncRelayCommand(() => _services.OpenSpellRecordAsync(room.Spell)));
-
-        var counters = new List<RoomDetailLink>(hz.ProtectingItems.Count);
-        foreach (int itemId in hz.ProtectingItems)
-            counters.Add(ItemLinkFor(itemId));
-        return new RouteStepWarning(spellLink, counters);
-    }
-
-    // An item id → a clickable link to its Game Data record. Used for hazard
-    // counters and item-gated-exit requirements alike (rope & grapple, a raft…).
-    private RoomDetailLink ItemLinkFor(int itemId)
-    {
-        string itemName = _services.ItemNames.GetName(itemId) ?? $"item #{itemId}";
-        return new RoomDetailLink(itemName, null,
-            new RelayCommand(() => _services.OpenItemGameData(itemId)));
-    }
-
-    // A room's notable monsters — placed fixtures (a boss / NPC) then lair spawners
-    // — each opening its Game Data record on click, mirroring the ROOM INFO panel's
-    // monster links (RoomInfoViewModel). Deduped by id so a monster that is both
-    // placed and a lair spawner isn't listed twice. Empty for a room with none.
-    private IReadOnlyList<RoomDetailLink> RoomMonsterLinksForRoom(RoomKey key)
-    {
-        Room? room = _services.RoomGraph.GetRoom(key);
-        if (room is null) return Array.Empty<RoomDetailLink>();
-        RoomTooltipBuilder.RoomMonsters rm =
-            RoomTooltipBuilder.ResolveRoomMonsters(room, _services.GameData, _services.MonsterSpawns);
-
-        var links = new List<RoomDetailLink>(rm.Placed.Count + rm.Lair.Count);
-        var seen = new HashSet<int>();
-        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Placed.Concat(rm.Lair))
-        {
-            if (!seen.Add(m.Id)) continue;
-            links.Add(new RoomDetailLink($"{m.Name}(#{m.Id})", null,
-                new AsyncRelayCommand(() => _services.OpenMonsterRecordAsync(m.Id))));
-        }
-        return links;
+        return RouteDetailsLauncher.BuildRows(_services, route);
     }
 
     // Row the CURRENT NAV ListBox should keep in view — the active step
