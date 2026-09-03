@@ -48,6 +48,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private bool _awaitingWinch;
     private Func<RoomKey, RoomKey, string?>? _teleportResolver;
     private Func<bool>? _isLeaderWithFollowers;
+    // True while the character is Confused (ConditionTracker.IsConfused). Read
+    // by TryReplanOrFail — see MaxReplansPerWalk below. Null until wired.
+    private Func<bool>? _isConfused;
     // True when ANY nav engine is driving (loop / auto-lair / point-to-point walk).
     // The abandoned-combat halt asserts a coordinator-wide gate, so it must fire
     // for a running loop too, not only when this point-to-point walker is active.
@@ -546,6 +549,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(check);
         _isLeaderWithFollowers = check;
+    }
+
+    // Wire the Confused check (AppServices binds this to Conditions.IsConfused) so
+    // TryReplanOrFail can tell a confusion fumble apart from a genuine block.
+    // Mirrors LoopRunner.SetConfusedCheck.
+    public void SetConfusedCheck(Func<bool> isConfused)
+    {
+        ArgumentNullException.ThrowIfNull(isConfused);
+        _isConfused = isConfused;
     }
 
     // Predicate reporting whether ANY nav engine is driving (loop / auto-lair /
@@ -2125,9 +2137,25 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private void TryReplanOrFail(RoomConfidence newConfidence)
     {
+        // A block landing while the character is Confused is the movement-fumble
+        // mechanic (GAME_MECHANICS: "You fumble in confusion!" / "You convulse
+        // violently!"), not a genuine mapping/graph problem — mirrors
+        // LoopRunner.EnterRecovery's identical rationale. LoopRunner's own
+        // recovery budget was exempted from this already (paradigm-20260902-
+        // 113201), but it can hand off into this walker's separate replan budget
+        // (e.g. via the blocked-at-source escape hatch above), which had no such
+        // exemption: a short burst of confusion fumbles during that fallback
+        // could still exhaust MaxReplansPerWalk just as fast as a real block and
+        // fail the whole walk while the character was otherwise fine, just
+        // waiting out the status effect (report paradigm-20260902-173754). Don't
+        // count an attempt taken while confused — the replan below still fires,
+        // so the step is retried the moment a move actually lands. A genuine
+        // block hit right after confusion clears still gets the full budget.
+        bool confused = _isConfused?.Invoke() == true;
+
         // Re-plan caps avoid infinite ping-pong when manual user
         // typing keeps interfering with the walker's expectations.
-        if (_replanCount >= MaxReplansPerWalk
+        if ((!confused && _replanCount >= MaxReplansPerWalk)
             || _destination is not { } dest
             || _tracker.State.CurrentRoom is not { } here)
         {
@@ -2138,7 +2166,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
-        _replanCount++;
+        if (!confused) _replanCount++;
         _stepInFlight = false;
         Raise(new WalkEvent(WalkEventKind.Retrying,
             $"tracker entered {newConfidence} mid-step; re-planning from {here.Key} (attempt {_replanCount}/{MaxReplansPerWalk})",

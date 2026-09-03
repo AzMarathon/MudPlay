@@ -1,5 +1,10 @@
 # Version history
 
+## 3.44.26
+
+- Fixed the walker's point-to-point replan budget (a fallback the loop-runner's own recovery already hands off to) still failing a walk over a short burst of confusion fumbles — it now gets the same "don't charge the budget while confused" exemption already applied to the loop's recovery budget, so a genuinely blocked exit still fails cleanly but a confusion streak no longer stalls movement outright
+- bug reports addressed: paradigm-20260902-173754
+
 ## 3.44.25
 
 - Navigation rail entries that are too long for a narrow panel now show their full text on hover — the status line, GOTO / loop / lair / favourite rows, the live step list, search results, folder names, and the exp-estimator rows
