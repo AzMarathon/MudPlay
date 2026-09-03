@@ -2194,6 +2194,22 @@ public sealed class AppServices
             Player.ApplyStatScreenMax(snapshot.MaxHits, snapshot.MaxMana);
             SeedSpellbook(snapshot);
         };
+        // The compact `health` command (Reset States, or a manual `health`) re-anchors
+        // the HP + power-pool ceilings without the full stat-screen scroll. Snap
+        // PlayerState.MaxHp/MaxMa to them — through PromptParser, the sole max-field
+        // writer — and persist the refreshed snapshot so the next session hydrates the
+        // corrected ceilings. poolMax is whichever pool the class carries (mana or kai),
+        // so it re-latches a kai ceiling the stat-screen path (which passes only MaxMana)
+        // never could. It carries no class/level, so no spellbook reseed.
+        Stats.HealthReanchored += (maxHits, poolMax) =>
+        {
+            Player.ApplyStatScreenMax(maxHits, poolMax);
+            if (Profile.Current is { } p)
+            {
+                p.LastKnownStats = Stats.Snapshot();
+                Profile.Save();
+            }
+        };
         // Restore the snapshot back into live PlayerStats whenever a
         // profile loads. StatParser owns the PlayerStats fields, so
         // hydration MUST route through Stats.Hydrate; passing null

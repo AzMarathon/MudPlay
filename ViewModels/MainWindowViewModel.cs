@@ -4940,16 +4940,17 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.CombatTracker.ResetCombatState("Reset States (manual)");
 
         // Force back into the Default gear set — a stuck rest set or a half-finished
-        // swap is exactly what a manual reset rescues — and re-poll `stat` so a max
-        // HP/mana high-water mark that drifted above the real ceiling re-latches to
-        // the authoritative value (a stale max is what strands a rest).
+        // swap is exactly what a manual reset rescues — and re-poll `health` (the
+        // compact one-line HP/pool readout — far less scroll than the full stat
+        // screen) so a max HP/mana high-water mark that drifted above the real ceiling
+        // re-latches to the authoritative value (a stale max is what strands a rest).
         Game.Inventory.EquipResult equip =
             AppServices.Current.Equipment.ApplyByTrigger(Models.Profile.EquipTriggerType.Default);
-        SendUserText("stat");
+        SendUserText("health");
 
         AppServices.Current.Log.Info(Game.Conditions.ConditionTracker.LogCategory,
             "Reset States — self conditions, ailment chips, combat state, and derived movement holds cleared; "
-            + $"re-equipping Default set ({equip}) and re-polling stat to re-latch max HP/mana (manual).");
+            + $"re-equipping Default set ({equip}) and re-polling `health` to re-latch max HP/mana (manual).");
     }
 
     // ----- Inventory / equipment bulk actions (Action menu + toolbar) -----
