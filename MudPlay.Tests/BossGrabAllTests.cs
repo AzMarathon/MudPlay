@@ -3,6 +3,7 @@ using System.Linq;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -55,5 +56,27 @@ public sealed class BossGrabAllTests
 
         edited.GrabAll = false;
         Assert.True(edited.MatchesSeed(seed));              // back to default → dropped from overlay
+    }
+
+    [Theory]
+    // hasMonsterNumber, isMonster, isItem  → expected kind
+    [InlineData(true, false, false, BossGrabKind.Monster)]   // number alone = monster
+    [InlineData(false, true, false, BossGrabKind.Monster)]   // monster name
+    [InlineData(true, false, true, BossGrabKind.Monster)]    // monster wins over item
+    [InlineData(false, true, true, BossGrabKind.Monster)]    // monster wins over item
+    [InlineData(false, false, true, BossGrabKind.Item)]      // item only
+    [InlineData(false, false, false, BossGrabKind.None)]     // unresolvable (Iceforge)
+    public void ClassifyKind_PrioritisesMonster_ThenItem_ElseNone(
+        bool hasNumber, bool isMonster, bool isItem, BossGrabKind expected)
+        => Assert.Equal(expected, BossGrabAllCommands.ClassifyKind(hasNumber, isMonster, isItem));
+
+    [Fact]
+    public void NameCandidates_DropsLeadingArticle()
+    {
+        Assert.Equal(new[] { "the bogwood box", "bogwood box" },
+            BossGrabClassifier.NameCandidates("the bogwood box"));
+        Assert.Equal(new[] { "Pastor Landor's box" },
+            BossGrabClassifier.NameCandidates("  Pastor Landor's box  "));   // trimmed, no article
+        Assert.Empty(BossGrabClassifier.NameCandidates("   "));
     }
 }

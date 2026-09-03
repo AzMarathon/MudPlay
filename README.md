@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.48.0**
-> - Bosses tab: a per-boss **Grab All** checkbox (default off) — the moment that boss dies, the client blindly sends `get <item>` for every item in its drop table, no room re-parse
+> - Bosses tab: a per-boss **Grab All** checkbox (default off) that blindly grabs a boss's loot — a **monster** boss: `get` every item in its drop table when it dies; an **item** boss (a box): `get` it on room entry. Hidden (with a "cannot resolve" tooltip) for an unresolvable boss
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

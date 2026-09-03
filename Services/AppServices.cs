@@ -3386,6 +3386,17 @@ public sealed class AppServices
             CastDirector.NoteRoomChanged();
         };
 
+        // Item-boss Grab-All: walking into a room that holds a Grab-All *item* boss
+        // (a box, not a monster) fires a blind `get` for it — item bosses never die,
+        // so they're grabbed on entry instead of on death. Separate handler with a
+        // looser guard so it fires on the very first room entry too (a teleport-in).
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom is not { } nr) return;
+            if (t.PreviousRoom is { } pr && pr.Key.Equals(nr.Key)) return;
+            FireItemBossGrabOnEntry(nr.Key);
+        };
+
         // CastCoordinator. Subscribes to spell-failure
         // patterns directly; tick-clears its block latch + cooldown via
         // TickEngine.CombatTickElapsed so the next round can cast.
@@ -6391,6 +6402,29 @@ public sealed class AppServices
         if (GameData.FindRowByName("Monsters", name) is not System.Text.Json.JsonElement row) return null;
         return row.TryGetProperty("Number", out System.Text.Json.JsonElement el)
                && el.TryGetInt32(out int n) ? n : null;
+    }
+
+    // Walking into a room that holds a Grab-All ITEM boss (a box that just sits there,
+    // not a monster that dies) — blindly `get` it. Fires on every entry; a harmless
+    // no-op when the box isn't currently there.
+    private void FireItemBossGrabOnEntry(Game.Map.RoomKey room)
+    {
+        foreach (Models.Profile.BossDef def in Bosses.Resolve())
+        {
+            if (!def.GrabAll) continue;
+            if (BossGrabClassifier.Classify(GameData, def) != Game.Inventory.BossGrabKind.Item) continue;
+            if (!BossDefRoomsContain(def, room)) continue;
+            string getName = BossGrabClassifier.ItemGetName(GameData, def.Name) ?? def.Name.Trim();
+            SendGameCommand($"get {getName}");
+            Log.Info("GrabAll", $"entered {room} — grabbing item boss '{def.Name}'");
+        }
+    }
+
+    private static bool BossDefRoomsContain(Models.Profile.BossDef def, Game.Map.RoomKey key)
+    {
+        foreach (string wire in def.Rooms)
+            if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k) && k == key) return true;
+        return false;
     }
 
     // A self-buff of ours was just CAST (fired from StartSelfBuffTimer, after the cast

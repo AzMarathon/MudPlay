@@ -42,8 +42,14 @@ public sealed partial class BossRowViewModel : ObservableObject
     [ObservableProperty] private bool _stopBefore;
 
     // Blind-grab-on-kill flag (inline-editable, like StopBefore): when set, the moment
-    // this boss dies the client fires `get <item>` for its whole drop table.
+    // this boss dies the client fires `get <item>` for its whole drop table (a monster
+    // boss), or `get <item>` on room entry (an item boss).
     [ObservableProperty] private bool _grabAll;
+
+    // Whether Grab-All can apply to this boss at all — its name resolves to a specific
+    // monster or item. False for an unresolvable name (a touch-to-awaken mechanic like
+    // Iceforge); the tab hides the checkbox and shows a "cannot resolve" tooltip.
+    public bool CanGrabAll { get; }
 
     // Static respawn length ("10h" / "Cleanup" / "?") + its sort key (hours).
     [ObservableProperty] private string _respawnDisplay = string.Empty;
@@ -76,7 +82,7 @@ public sealed partial class BossRowViewModel : ObservableObject
 
     public BossRowViewModel(
         BossDef def, RealmType realm, int? respawnHours, BossTimerStore timers,
-        Action onEdit, Action<BossRowViewModel> onMarkRequested)
+        Action onEdit, Action<BossRowViewModel> onMarkRequested, bool canGrabAll = true)
     {
         ArgumentNullException.ThrowIfNull(def);
         ArgumentNullException.ThrowIfNull(timers);
@@ -86,6 +92,7 @@ public sealed partial class BossRowViewModel : ObservableObject
         _onEdit = onEdit;
         _onMarkRequested = onMarkRequested;
         _def = def;
+        CanGrabAll = canGrabAll;
         _suppress = true;
         Name = def.Name;
         Rooms = BossRoomText.Format(def.Rooms);
