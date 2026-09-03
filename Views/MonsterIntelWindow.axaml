@@ -224,20 +224,31 @@
                      (cap to the right of the boxes); the WrapPanel drops the cap onto a
                      second line only when the pane is too narrow to fit both. -->
                 <WrapPanel Grid.Row="1" Margin="0,0,0,8" IsVisible="{Binding HasCharacterContext}">
-                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,16,4">
-                        <TextBlock Classes="FieldLabel" Text="Hits You %:" VerticalAlignment="Center"/>
-                        <CheckBox Content="2%" IsChecked="{Binding ShowHits2, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 0-2% chance to hit you."/>
-                        <CheckBox Content="5%" IsChecked="{Binding ShowHits5, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 3-5% chance to hit you."/>
-                        <CheckBox Content="10%" IsChecked="{Binding ShowHits10, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 6-10% chance to hit you."/>
-                        <CheckBox Content="20%" IsChecked="{Binding ShowHits20, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 11-20% chance to hit you."/>
-                        <CheckBox Content="40%" IsChecked="{Binding ShowHits40, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 21-40% chance to hit you."/>
-                        <CheckBox Content="40%+" IsChecked="{Binding ShowHits100, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 41% or more chance to hit you."/>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,4">
+                        <!-- Multi-select dropdown of Hits-You-% bands. Bands are
+                             realm-dependent (Stock's lowest is 8%, ParaMUD's 2%);
+                             pick any combination — the list shows monsters in the
+                             union. Nothing picked = show all. -->
+                        <Button Content="{Binding HitsFilterLabel}"
+                                ToolTip.Tip="Filter the list by how likely the monster is to hit you. Pick any combination of %-bands; the bands differ by realm — the lowest a monster's attack can land is 8% on Stock, 2% on ParaMUD.">
+                            <Button.Flyout>
+                                <Flyout Placement="Bottom">
+                                    <StackPanel MinWidth="150" Spacing="2">
+                                        <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="200"
+                                                   Margin="0,0,0,4"
+                                                   Text="Show monsters whose Hits You % is in any checked band:"/>
+                                        <ItemsControl ItemsSource="{Binding HitsFilterBuckets}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:HitsFilterBucket">
+                                                    <CheckBox Content="{Binding Label}" Margin="0,1"
+                                                              IsChecked="{Binding Selected, Mode=TwoWay}"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,4">
                         <TextBlock Classes="FieldLabel" Text="Max Rnds to Kill:" VerticalAlignment="Center"/>
