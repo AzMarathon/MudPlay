@@ -345,14 +345,6 @@ public partial class NavigationWindow : Window
             FlyoutBase.ShowAttachedFlyout(searchBox);
     }
 
-    // Rebuild the current route's step plan for the live position, then drop the
-    // Details flyout attached to the button. Built on click (not kept live) so a
-    // long walk / loop doesn't pay to re-render every step.
-    private void OnRouteDetailsButtonClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is NavigationViewModel vm) vm.RebuildRouteDetails();
-        if (sender is Button btn) FlyoutBase.ShowAttachedFlyout(btn);
-    }
 
     // Picking a recent destination arms it (VM OnSelectedGotoHistoryChanged) and
     // should dismiss the flyout — otherwise it lingers until a click elsewhere.

@@ -1,0 +1,79 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.Navigation"
+        xmlns:gd="using:MudPlay.ViewModels.GameData.Edit"
+        x:Class="MudPlay.Views.Navigation.RouteDetailsDialog"
+        x:DataType="vm:RouteDetailsDialogViewModel"
+        Title="{Binding Title}"
+        Width="460" Height="600"
+        MinWidth="320" MinHeight="240"
+        WindowStartupLocation="CenterOwner">
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+            <TextBlock Grid.Row="0"
+                       Text="{Binding Title}"
+                       FontSize="13" FontWeight="SemiBold"
+                       Foreground="{StaticResource ChromeFgBrush}"/>
+
+            <!-- The full step plan, scrollable. Each step is a mono
+                 "N> map/room < command" line; a step whose room has a lair lists
+                 that lair's monsters beneath it, each a clickable record link. -->
+            <ScrollViewer Grid.Row="1"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto"
+                          IsVisible="{Binding HasRows}">
+                <ItemsControl ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:RouteDetailRow">
+                            <StackPanel Margin="0,0,0,3">
+                                <TextBlock Text="{Binding Line}"
+                                           FontFamily="{StaticResource FontMono}"
+                                           FontSize="12"
+                                           Foreground="{StaticResource ChromeFgBrush}"
+                                           TextWrapping="Wrap"/>
+                                <ItemsControl ItemsSource="{Binding LairMonsters}"
+                                              IsVisible="{Binding HasLair}"
+                                              Margin="20,1,0,2">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="gd:RoomDetailLink">
+                                            <Button Classes="RecordLink"
+                                                    Content="{Binding Text}"
+                                                    Command="{Binding Open}"
+                                                    Margin="0,0,8,2"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <TextBlock Grid.Row="1"
+                       Text="No active route."
+                       VerticalAlignment="Top"
+                       FontSize="12"
+                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                       IsVisible="{Binding !HasRows}"/>
+
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="Monsters shown at each lair room — click to open its record."
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"
+                           FontSize="10"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                <Button Grid.Column="1"
+                        Content="Close"
+                        Command="{Binding CloseCommand}"
+                        FontSize="11" Padding="12,4"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

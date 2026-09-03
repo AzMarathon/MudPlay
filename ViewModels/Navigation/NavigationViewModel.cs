@@ -4036,34 +4036,58 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // lairs when auto-lairing.
     public ObservableCollection<CurrentNavRowViewModel> CurrentNavRows { get; } = new();
 
-    // Full step plan for the route the engine is CURRENTLY executing — the header's
-    // "Details…" flyout. Same numbered "N> map/room < command" rows the route
-    // picker's Show-steps panel uses, with each lair room's monsters attached as
-    // clickable record links. Built on demand (RebuildRouteDetails) when the flyout
-    // opens, so it's fresh for the current position without rebuilding every step.
-    public ObservableCollection<RouteDetailRow> RouteDetailRows { get; } = new();
+    // The CURRENT NAV header's "Details…" button opens the route the engine is
+    // executing in a browsable window — the route picker's full "N> map/room <
+    // command" step plan, with each lair room's monsters as clickable record links.
+    // A window (not a flyout) so it's easy to scroll and to open several monster
+    // records without it dismissing. Tracked so a re-click toggles it closed.
+    private RouteDetailsDialogViewModel? _routeDetailsVm;
 
-    public bool HasRouteDetails => RouteDetailRows.Count > 0;
-
-    // Rebuild RouteDetailRows from whichever engine's route is live (the same
-    // room-key polyline the map draws): a point-to-point walk, a loop circuit, or an
-    // Auto-Lair approach. No-op / empty when nothing is executing.
-    public void RebuildRouteDetails()
+    [RelayCommand]
+    private void ShowRouteDetails()
     {
-        RouteDetailRows.Clear();
+        if (_routeDetailsVm is { } open) { open.RequestClose(); return; }   // toggle closed
+
+        var vm = new RouteDetailsDialogViewModel(RouteDetailsTitle(), BuildCurrentRouteRows());
+        _routeDetailsVm = vm;
+        // Fire-and-forget: awaiting here would disable the command (IAsyncRelayCommand
+        // self-disables while running) and block the re-click toggle. The helper
+        // awaits the modeless window's close and clears the tracker.
+        _ = OpenRouteDetailsAsync(vm);
+    }
+
+    private async System.Threading.Tasks.Task OpenRouteDetailsAsync(RouteDetailsDialogViewModel vm)
+    {
+        try { await _services.Dialogs.OpenWindowAsync<RouteDetailsDialogViewModel, bool?>(vm); }
+        finally { if (ReferenceEquals(_routeDetailsVm, vm)) _routeDetailsVm = null; }
+    }
+
+    private string RouteDetailsTitle()
+    {
+        if (DestinationRoomKey is { } dest)
+        {
+            string? name = _services.RoomGraph.GetRoom(dest)?.DisplayName;
+            return string.IsNullOrWhiteSpace(name)
+                ? $"Current route → {dest.Map}/{dest.Room}"
+                : $"Current route → {dest.Map}/{dest.Room} {name}";
+        }
+        return "Current route";
+    }
+
+    // Build the current route's step rows from whichever engine is live (the same
+    // room-key polyline the map draws): a walk, a loop circuit, or an Auto-Lair
+    // approach. Empty when nothing is executing.
+    private IReadOnlyList<RouteDetailRow> BuildCurrentRouteRows()
+    {
         IReadOnlyList<RoomKey>? route =
             EngineActionIsWalking ? WalkPath
             : EngineActionIsLooping ? LoopPath
             : EngineActionIsLair ? AutoLairApproachPath
             : null;
-        if (route is { Count: > 1 })
-        {
-            foreach (RouteDetailRow row in CurrentRouteDetails.Build(
-                         _services.RoomGraph, _services.Bfs, _services.Movement,
-                         route, _services.ItemNames.GetName, LairLinksForRoom))
-                RouteDetailRows.Add(row);
-        }
-        OnPropertyChanged(nameof(HasRouteDetails));
+        if (route is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
+        return CurrentRouteDetails.Build(
+            _services.RoomGraph, _services.Bfs, _services.Movement,
+            route, _services.ItemNames.GetName, LairLinksForRoom);
     }
 
     // The lair monsters standing in a room, each opening its Game Data record on

@@ -2,7 +2,7 @@
 
 ## 3.46.0
 
-- New **Details…** button on the Navigation header (shown while a route is running) — opens the current route's full step plan, the same numbered "room < command" list the route picker shows, for whatever's executing (walk, loop, or Auto-Lair approach)
+- New **Details…** button on the **CURRENT NAV** panel header (shown while a route is running) — opens the current route's full step plan in a scrollable window, the same numbered "room < command" list the route picker shows, for whatever's executing (walk, loop, or Auto-Lair approach)
 - Each room on that plan that has a lair now lists its lair monsters right there, each a clickable link that opens the monster's Game Data record
 
 ## 3.45.6
