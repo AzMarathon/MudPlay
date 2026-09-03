@@ -37,6 +37,13 @@ public sealed partial class RouteChoiceDialogViewModel
     // maps the selected route to its FreePath / GatedPath and pushes it.
     public event Action<RouteChoiceResult?>? PreviewRequested;
 
+    // Raised when the user clicks Details… for the selected route, so the prompt
+    // can open the shared route-details browse window (the same one the CURRENT NAV
+    // panel uses) for that route's polyline — the full step plan with per-room
+    // monsters, hazards, and item gates. The picker has no map/graph knowledge, so
+    // it just forwards which route is selected and lets the prompt resolve it.
+    public event Action<RouteChoiceResult>? ShowDetailsRequested;
+
     public string Heading { get; }
     public string FreeSummary { get; }
     public string GatedSummary { get; }
@@ -104,26 +111,9 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(IsFreeSelected))]
     [NotifyPropertyChangedFor(nameof(IsGatedSelected))]
     [NotifyPropertyChangedFor(nameof(IsSendItSelected))]
-    [NotifyPropertyChangedFor(nameof(CurrentStepRows))]
-    [NotifyPropertyChangedFor(nameof(HasStepRows))]
-    [NotifyPropertyChangedFor(nameof(CanShowSteps))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ShowDetailsCommand))]
     private RouteChoiceResult? _selectedRoute;
-
-    // The full start-to-finish command sequence for each route (moves, lever/winch/
-    // door detours, and acquire steps), surfaced by the Show-steps flyout. Free
-    // traces the gate-free line; the two gated choices share the same physical route.
-    private readonly IReadOnlyList<RouteStepRow> _freeSteps;
-    private readonly IReadOnlyList<RouteStepRow> _gatedSteps;
-
-    public IReadOnlyList<RouteStepRow> CurrentStepRows =>
-        SelectedRoute == RouteChoiceResult.Free ? _freeSteps : _gatedSteps;
-
-    public bool HasStepRows => CurrentStepRows.Count > 0;
-
-    // The Show-steps button lights up once a route is picked and there's a sequence
-    // to show — clicking it opens the flyout listing that route's full step plan.
-    public bool CanShowSteps => SelectedRoute is not null && HasStepRows;
 
     public bool IsFreeSelected => SelectedRoute == RouteChoiceResult.Free;
     public bool IsGatedSelected => SelectedRoute == RouteChoiceResult.Gated;
@@ -138,15 +128,10 @@ public sealed partial class RouteChoiceDialogViewModel
         Func<int, string?>? dropNameForItem = null,
         TimeSpan freeEta = default,
         TimeSpan gatedEta = default,
-        string? hazardCounterSource = null,
-        IReadOnlyList<RouteStepRow>? freeSteps = null,
-        IReadOnlyList<RouteStepRow>? gatedSteps = null)
+        string? hazardCounterSource = null)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
-
-        _freeSteps = freeSteps ?? Array.Empty<RouteStepRow>();
-        _gatedSteps = gatedSteps ?? Array.Empty<RouteStepRow>();
 
         IsTeleportChoice = choice.Kind == RouteChoiceKind.Teleport;
         IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;
@@ -355,6 +340,17 @@ public sealed partial class RouteChoiceDialogViewModel
         SelectedRoute = RouteChoiceResult.GatedNoAcquire;
         // Same physical route as the gated acquire choice — preview its line.
         PreviewRequested?.Invoke(RouteChoiceResult.GatedNoAcquire);
+    }
+
+    // The Details… button lights up once a route is picked: it opens the shared
+    // route-details browse window for that route (richer than the Show-steps
+    // flyout — per-room monsters, hazards, and item gates, each linking its record).
+    private bool CanShowDetails => SelectedRoute is not null;
+
+    [RelayCommand(CanExecute = nameof(CanShowDetails))]
+    private void ShowDetails()
+    {
+        if (SelectedRoute is { } r) ShowDetailsRequested?.Invoke(r);
     }
 
     private bool CanGo => SelectedRoute is not null;

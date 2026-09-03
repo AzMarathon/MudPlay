@@ -995,7 +995,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // destination is queued OR no path exists. Recomputed on QueuedDestination
     // change and on CurrentRoomKey change (so the preview tracks the player if
     // they move while a target is armed).
-    [ObservableProperty] private IReadOnlyList<RoomKey>? _previewPath;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanShowRouteDetails))]
+    private IReadOnlyList<RoomKey>? _previewPath;
 
     private void RefreshPreviewPath()
     {
@@ -3773,6 +3775,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void RefreshDerivedState()
     {
         OnPropertyChanged(nameof(IsAnyExecuting));
+        OnPropertyChanged(nameof(CanShowRouteDetails));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(RunStopLabel));
         RaiseTopBarStatus();
@@ -4034,6 +4037,67 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Rows shown under CURRENT NAV — steps when walking/looping, marked
     // lairs when auto-lairing.
     public ObservableCollection<CurrentNavRowViewModel> CurrentNavRows { get; } = new();
+
+    // The CURRENT NAV header's "Details…" button opens the route the engine is
+    // executing in a browsable window — the route picker's full "N> map/room <
+    // command" step plan, with each lair room's monsters as clickable record links.
+    // A window (not a flyout) so it's easy to scroll and to open several monster
+    // records without it dismissing. Tracked so a re-click toggles it closed.
+    private RouteDetailsDialogViewModel? _routeDetailsVm;
+
+    // The Details… button shows whenever there's a route to detail — one the engine
+    // is executing, OR a previewed walk-to armed via the search box (the red preview
+    // line on the map).
+    public bool CanShowRouteDetails => IsAnyExecuting || PreviewPath is { Count: > 1 };
+
+    [RelayCommand]
+    private void ShowRouteDetails()
+    {
+        if (_routeDetailsVm is { } open) { open.RequestClose(); return; }   // toggle closed
+
+        var vm = new RouteDetailsDialogViewModel(RouteDetailsTitle(), BuildCurrentRouteRows());
+        _routeDetailsVm = vm;
+        // Fire-and-forget: awaiting here would disable the command (IAsyncRelayCommand
+        // self-disables while running) and block the re-click toggle. The helper
+        // awaits the modeless window's close and clears the tracker.
+        _ = OpenRouteDetailsAsync(vm);
+    }
+
+    private async System.Threading.Tasks.Task OpenRouteDetailsAsync(RouteDetailsDialogViewModel vm)
+    {
+        try { await _services.Dialogs.OpenWindowAsync<RouteDetailsDialogViewModel, bool?>(vm); }
+        finally { if (ReferenceEquals(_routeDetailsVm, vm)) _routeDetailsVm = null; }
+    }
+
+    private string RouteDetailsTitle()
+    {
+        bool executing = IsAnyExecuting;
+        RoomKey? dest = executing ? DestinationRoomKey : QueuedDestination;
+        string prefix = executing ? "Current route" : "Route preview";
+        if (dest is { } d)
+        {
+            string? name = _services.RoomGraph.GetRoom(d)?.DisplayName;
+            return string.IsNullOrWhiteSpace(name)
+                ? $"{prefix} → {d.Map}/{d.Room}"
+                : $"{prefix} → {d.Map}/{d.Room} {name}";
+        }
+        return prefix;
+    }
+
+    // The step rows for whichever route is live (the same room-key polyline the map
+    // draws): a walk / loop / Auto-Lair approach the engine is executing, else the
+    // armed-but-not-running preview (a search-box walk-to). Built via the shared
+    // launcher so the picker's Details button renders identically. Empty when there's
+    // no route.
+    private IReadOnlyList<RouteDetailRow> BuildCurrentRouteRows()
+    {
+        IReadOnlyList<RoomKey>? route =
+            EngineActionIsWalking ? WalkPath
+            : EngineActionIsLooping ? LoopPath
+            : EngineActionIsLair ? AutoLairApproachPath
+            : PreviewPath;
+        return RouteDetailsLauncher.BuildRows(_services, route);
+    }
 
     // Row the CURRENT NAV ListBox should keep in view — the active step
     // while walking, the next-ready lair while auto-lairing. The window

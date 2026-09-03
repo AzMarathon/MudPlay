@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.45.6**
-> - On Paradigm, navigation now asks the game `rm` for your true room before it ever falls back to the blind reverse-walk recovery — and again as a last resort before the "Lost" dialog — so a client is only ever genuinely Lost when `rm` itself can't answer, instead of giving up while an authoritative position was one command away
-> - A `rm` that goes unanswered because a confusion fumble ate the command is re-asked until the confusion passes, rather than being treated as a real failure
+> **Version 3.46.0**
+> - New **Details…** button on the **CURRENT NAV** panel header — opens the current route's full step plan in a scrollable window (the route picker's numbered "room < command" list) for whatever's executing (walk / loop / Auto-Lair) **or a previewed walk-to** armed from the search box; the route picker's old *Show steps* flyout is replaced by a matching **Details…** button (bottom-left) to browse a route before committing
+> - Each step's **room name links** to flash + centre it on the map (`@where`-style); each room lists its notable monsters (placed + lair) as record links tinted by **alignment** (evil red / neutral cyan / good-lawful white); and a step that needs a special item — a **hazard** room or an **item-gated exit** — is flagged ⚠ with the item(s) required to cross (raft, rope & grapple, phoenix feather…) in dark yellow and, for a hazard, the harmful spell, all linking their records
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
