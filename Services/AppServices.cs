@@ -3933,6 +3933,20 @@ public sealed class AppServices
         PlayerState.PropertyChanged += (_, _) => TimeAnalysis.NotePlayerState(
             PlayerState.InCombat, PlayerState.Position,
             PlayerState.Hp, PlayerState.MaxHp, PlayerState.Ma, PlayerState.MaxMa);
+        // Entering a rest posture confirms the room is genuinely cleared of hostiles (a
+        // rest only starts once nothing is left to fight), so the AoE area-debuff room
+        // tags reset — a same-room respawn after this is debuffed afresh (report
+        // paradigm-20260903-070438), without disturbing the mid-fight survivor case.
+        Game.PlayerPosition lastPosForAoe = PlayerState.Position;
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(Game.PlayerState.Position)) return;
+            Game.PlayerPosition pos = PlayerState.Position;
+            bool wasResting = lastPosForAoe is Game.PlayerPosition.Resting or Game.PlayerPosition.Meditating;
+            bool nowResting = pos is Game.PlayerPosition.Resting or Game.PlayerPosition.Meditating;
+            lastPosForAoe = pos;
+            if (nowResting && !wasResting) Combat.NoteRoomClearedByRest();
+        };
         Conditions.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Game.Conditions.ConditionTracker.ActiveFlags))
@@ -4161,6 +4175,10 @@ public sealed class AppServices
             canEquipItem: CanCharacterEquipItem,
             restrictsEquip: IsEquipRestricted,
             log: Log);
+        // Realm picks which physical slot a full paired-family eq/wear evicts —
+        // Paradigm slot 1 (first-listed), Stock slot 2 — so the swap builder rems
+        // the right odd-out (see EquipmentManager.ComposePairedSlotCommands).
+        Equipment.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
 
         // Casting-spell profiles: the same read/write-Combat pair the Equipment
@@ -4262,6 +4280,17 @@ public sealed class AppServices
                 // held while a swap streams, and nothing re-triggered Evaluate when it
                 // ended).
                 Health.Evaluate();
+                // A rest that completes in the SAME tick it starts fires the pre-rest
+                // swap AND the recovery-complete Default revert together; the revert
+                // runs first and no-ops against the not-yet-streamed pre-rest set, then
+                // the pre-rest swap lands last and strands the medi/pre-rest gear
+                // (report paradigm-20260903-111227). Now that the pre-rest set is
+                // actually worn and recovery is done, re-fire the Default revert (it
+                // will diff correctly this time). OnRecoveryComplete self-guards on
+                // combat + using-rest-sets; the Default swap it fires re-enters here
+                // with Default worn, so this terminates after one correction.
+                if (!Health.IsRecoveringRest && CurrentEquippedIsPreRestSet())
+                    AutoEquip.OnRecoveryComplete();
             }
         };
 
@@ -6033,6 +6062,16 @@ public sealed class AppServices
         int def = pool(Game.Calculators.CharacterCalculator
             .AggregateEquipmentStats(defaultItems, GameData).Totals);
         return Math.Max(1, realMax - worn + def);
+    }
+
+    // Whether the gear set the engine last equipped is a pre-rest swap set (HP / Mana)
+    // — used to detect a stranded pre-rest loadout after a same-tick rest completion.
+    private bool CurrentEquippedIsPreRestSet()
+    {
+        if (Equipment.CurrentSetId is not { } id) return false;
+        return Profile.Current?.Equipment?.Sets.FirstOrDefault(s => s.Id == id)
+            is { Trigger: Models.Profile.EquipTriggerType.PreRestHp
+                       or Models.Profile.EquipTriggerType.PreRestMana };
     }
 
     // The DEFAULT gear set's item-bearing slots as EquippedItems, for summing their
