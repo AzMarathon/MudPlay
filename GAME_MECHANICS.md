@@ -1482,6 +1482,20 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
   `ask <noun> <keyword>`); gated keywords are skipped because the client can't verify the gate and a
   failed transport would strand the walker. **Party behaviour is unverified** — treat a greet teleport
   the same as a CMD teleport (moves only the asker, likely party-splitting) until captured.
+  - **Class gate + skill roll (issue #455, from Paradigm map 1 data).** Two directive kinds on a greet
+    chain are NOT treated as "unverifiable, skip": a **`class N`** gate (N = `Classes.Number`) restricts
+    the transport to one class — the barmaid (`#248`, `1/391`) carries `class 12:testskill …:teleport
+    391 1`, a **bard-only** ask-transport. This is surfaced as the edge's `ClassGate` so
+    `MovementFilter.IsClassGateBlocked` keeps it routable for that class and drops it for every other,
+    rather than letting non-bards route through a transport they can't use. A **`testskill <skill>
+    <amount> <failTB>`** in the same block is a per-use **skill roll** (like the winch's `testskill
+    strength`) that can fail even for the right class — the client does NOT model the odds; instead the
+    walker treats a greet teleport as a **verify-and-retry** step: after asking, it checks it actually
+    landed in the destination and, if not (a failed roll leaves the asker put — sometimes with no fresh
+    room render at all, so no tracker transition comes), **re-asks until it arrives.** The class gate
+    guarantees only a class that CAN eventually pass the roll ever reaches the step, so the retry
+    converges. (Ordinary CMD teleports — chime / boat / item-cast — stay fire-once; only the
+    `ask`-transport edge, `RawHint` `"greet teleport"`, gets the retry watchdog.)
 - **[CONFIRMED, capture 2026-07-10]** A follower client that receives `@join` while it is **already
   following someone** answers the telepath with **`I'm following someone; denied.`** — `@join` is not
   idempotent against an existing follow. This surfaces as a downstream symptom when a reform re-invite
