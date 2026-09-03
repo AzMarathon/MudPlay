@@ -3080,6 +3080,11 @@ public sealed class AppServices
         // through the engaged name, so they're covered too.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key, Combat.CurrentTarget);
+        // Grab-All: the moment a tracked boss with GrabAll set dies, blindly `get`
+        // every item in its game-data drop table — no room re-parse. BossKilled fires
+        // for any matched boss; we gate on the flag here, where the catalog + item
+        // names + wire sender are all reachable.
+        BossTimers.BossKilled += FireBossGrabAll;
         // Surface recognized deaths in the Wire Inspector's Classified view (a passive
         // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
@@ -3379,6 +3384,17 @@ public sealed class AppServices
             Health.NoteRoomChanged(t.NewRoom.Key);
             // A move retries any party-buff targets we'd backed off as hidden.
             CastDirector.NoteRoomChanged();
+        };
+
+        // Item-boss Grab-All: walking into a room that holds a Grab-All *item* boss
+        // (a box, not a monster) fires a blind `get` for it — item bosses never die,
+        // so they're grabbed on entry instead of on death. Separate handler with a
+        // looser guard so it fires on the very first room entry too (a teleport-in).
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom is not { } nr) return;
+            if (t.PreviousRoom is { } pr && pr.Key.Equals(nr.Key)) return;
+            FireItemBossGrabOnEntry(nr.Key);
         };
 
         // CastCoordinator. Subscribes to spell-failure
@@ -6355,6 +6371,60 @@ public sealed class AppServices
         if (_engineWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
         _engineWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
         return true;
+    }
+
+    // A Grab-All boss just died: fire a blind `get <item>` for every item in its
+    // game-data drop table (no room re-parse). Gated here on the per-boss flag; the
+    // event fires for every matched boss regardless.
+    private void FireBossGrabAll(Models.Profile.BossDef def)
+    {
+        if (!def.GrabAll) return;
+        int? number = def.MonsterNumber ?? ResolveMonsterNumberByName(def.Name);
+        if (number is not { } num)
+        {
+            Log.Info("GrabAll", $"'{def.Name}' died but has no monster number — can't read its drop table");
+            return;
+        }
+        IReadOnlyList<string> cmds = Game.Inventory.BossGrabAllCommands.Build(MonsterCatalog.Get(num)?.Drops, ItemNames.GetName);
+        if (cmds.Count == 0)
+        {
+            Log.Info("GrabAll", $"'{def.Name}' died — no known droppable items to grab");
+            return;
+        }
+        Log.Info("GrabAll", $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")}");
+        foreach (string cmd in cmds) SendGameCommand(cmd);
+    }
+
+    // The Monsters-table Number for a boss whose BossDef didn't carry one — resolved
+    // by its game-data name. Null when the active set has no such monster.
+    private int? ResolveMonsterNumberByName(string name)
+    {
+        if (GameData.FindRowByName("Monsters", name) is not System.Text.Json.JsonElement row) return null;
+        return row.TryGetProperty("Number", out System.Text.Json.JsonElement el)
+               && el.TryGetInt32(out int n) ? n : null;
+    }
+
+    // Walking into a room that holds a Grab-All ITEM boss (a box that just sits there,
+    // not a monster that dies) — blindly `get` it. Fires on every entry; a harmless
+    // no-op when the box isn't currently there.
+    private void FireItemBossGrabOnEntry(Game.Map.RoomKey room)
+    {
+        foreach (Models.Profile.BossDef def in Bosses.Resolve())
+        {
+            if (!def.GrabAll) continue;
+            if (BossGrabClassifier.Classify(GameData, def) != Game.Inventory.BossGrabKind.Item) continue;
+            if (!BossDefRoomsContain(def, room)) continue;
+            string getName = BossGrabClassifier.ItemGetName(GameData, def.Name) ?? def.Name.Trim();
+            SendGameCommand($"get {getName}");
+            Log.Info("GrabAll", $"entered {room} — grabbing item boss '{def.Name}'");
+        }
+    }
+
+    private static bool BossDefRoomsContain(Models.Profile.BossDef def, Game.Map.RoomKey key)
+    {
+        foreach (string wire in def.Rooms)
+            if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k) && k == key) return true;
+        return false;
     }
 
     // A self-buff of ours was just CAST (fired from StartSelfBuffTimer, after the cast
