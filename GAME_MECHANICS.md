@@ -960,6 +960,22 @@ ability, or a TextBlock `cast` of a damaging spell), gate on a survival buff (`c
 desert heat, the drown chain), or `teleport`/`transfer` you out (the sea/ice/pit rooms). *(Encoded in
 `RoomHazardIndex` — see the harm gate in `BuildHazard`.)*
 
+#### Hazard severity — survivable damage vs grave *([CONFIRMED] 2026-09-02, user + game-data trace, Paradigm 1.9.1)*
+
+Among protectable hazards, a further split governs whether the navigator may offer to **cross it
+unprotected** (walk in and eat the effect on the user's say-so):
+- **Survivable damage** — the unprotected outcome is only a `Damage` hit: a direct `Damage` ability, OR a
+  TextBlock `cast` of a spell whose own chain is `Damage`-only. Example: the **Silver River** (`Rooms.Spell
+  753`) → TB `failitem 690/691/1181/3609` (any raft) `: cast 754`, where spell **754 "battered"** is a plain
+  `Damage` spell. You just take the hit and keep walking, so "cross unprotected — take the damage" is a
+  legitimate choice. (Lava / magma heat, `Spell 526`, is the same shape — a direct `Damage` ability.)
+- **Grave** — the chain reaches an `EndCast` death-timer, a `teleport`/`transfer` (forced relocation), or a
+  `checkspell`/`failspell` buff-gate (drown / suffocation / desert-heat-death). These can END or DISPLACE
+  you, not just hurt you, so the counter is the only safe way past — the navigator must **never** offer to
+  cross them unprotected. (Conservatively, ANY `EndCast` or buff-gate is treated as grave.)
+
+*(Encoded as `RoomHazard.IsSurvivableDamage`; classifier `RoomHazardIndex.IsSurvivableHazardDamage`.)*
+
 ## Mana regeneration & the ManaRgn breakpoints *([CONFIRMED] 2026-08-08, against the engine's own reference formula)*
 
 Passive (non-resting, non-meditating) mana regen ticks **every 30 s** (6 rounds) and adds a whole-MP amount computed by one integer formula. `CharacterCalculator.CalcManaRegen` implements it; the Level Projection grid already relies on it.

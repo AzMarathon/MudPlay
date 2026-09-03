@@ -7143,15 +7143,23 @@ public sealed class AppServices
                         (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.GiveSource giver))
                     return (id, $"ask {giver.GiverName}", false);
 
+            int? Dist(Game.Map.RoomKey a, Game.Map.RoomKey b) => Bfs.DistanceBetween(a, b, Movement);
             foreach (int id in counters)
             {
                 System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
-                if (shops.Count > 0
-                    && Game.Map.PathItemShopRouter.TrySelectShop(
-                        shops, source, destination,
-                        (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.RoomKey shop)
+                if (shops.Count == 0) continue;
+                if (Game.Map.PathItemShopRouter.TrySelectShop(
+                        shops, source, destination, Dist, out Game.Map.RoomKey shop)
                     && RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName)
                     return (id, $"buy at {shopName}", false);
+
+                // A shop stocks the counter but the router found no reachable detour.
+                // Log each candidate's two legs (gates suspended here) so a repro
+                // shows which leg is unreachable — the shop-side sourcing gap.
+                foreach (Game.Map.RoomKey sr in shops)
+                    Log.Debug("HazardCounter",
+                        $"item {id} shop at {sr.Map}/{sr.Room}: src→shop={Dist(source, sr)?.ToString() ?? "∞"}, "
+                        + $"shop→dest={Dist(sr, destination)?.ToString() ?? "∞"}");
             }
 
             foreach (int id in counters)
@@ -7165,7 +7173,36 @@ public sealed class AppServices
             }
         }
 
+        // Nothing sourceable — record it so a "why is there no obtain-then-cross
+        // card?" repro is a log read, not a re-investigation. The per-shop Debug
+        // lines above pinpoint an unreachable-detour cause.
+        Log.Info("HazardCounter",
+            $"no reachable counter source for items [{string.Join(",", counters)}] "
+            + $"from {source.Map}/{source.Room} to {destination.Map}/{destination.Room}");
         return null;
+    }
+
+    // True when every room-entry hazard on `path` that the player has NO counter
+    // for is survivable damage (a river / heat crossing you can just take), so a
+    // "cross unprotected" walk is a damage risk the user may take — not a walk into
+    // a drown / freeze death or a forced teleport that a counter is the only way
+    // past. Rooms with no hazard, or a hazard the player already counters, don't
+    // gate it. Empty / null path → false (nothing to cross unprotected).
+    public bool UnprotectedHazardsAllSurvivable(
+        System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey>? path)
+    {
+        if (path is not { Count: > 0 }) return false;
+        bool sawUnprotected = false;
+        foreach (Game.Map.RoomKey key in path)
+        {
+            int spell = RoomGraph.GetRoom(key)?.Spell ?? 0;
+            if (spell <= 0) continue;
+            if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
+            if (hazard.IsSatisfiedBy(IsItemCarried)) continue;   // player counters it → survives
+            if (!hazard.IsSurvivableDamage) return false;         // an unprotected grave hazard
+            sawUnprotected = true;
+        }
+        return sawUnprotected;
     }
 
     // Items to provision for entering a hazard room: its single-counter mandatory

@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.46.0**
-> - New **Details…** button on the **CURRENT NAV** panel header — opens the current route's full step plan in a scrollable window (the route picker's numbered "room < command" list) for whatever's executing (walk / loop / Auto-Lair) **or a previewed walk-to** armed from the search box; the route picker's old *Show steps* flyout is replaced by a matching **Details…** button (bottom-left) to browse a route before committing
-> - Each step's **room name links** to flash + centre it on the map (`@where`-style); each room lists its notable monsters (placed + lair) as record links tinted by **alignment** (evil red / neutral cyan / good-lawful white); and a step that needs a special item — a **hazard** room or an **item-gated exit** — is flagged ⚠ with the item(s) required to cross (raft, rope & grapple, phoenix feather…) in dark yellow and, for a hazard, the harmful spell, all linking their records
+> **Version 3.46.2**
+> - A previewed walk-to whose only route crosses a hazard you lack a counter for (a river, lava) now **draws its route line** instead of a blank map — the preview falls back to the through-the-hazard route the walk would take
+> - The route picker now always offers a clearly-worded **"Cross unprotected — take the damage"** choice for a survivable-damage hazard (a river, heat) you have no counter for — and never for a lethal one (a drown / freeze death, a forced teleport), where a counter is the only safe way past. Hazard severity is decoded from the spell's effect chain
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -1,5 +1,13 @@
 # Version history
 
+## 3.46.2
+
+- A previewed walk-to whose only route crosses a hazard (a river / lava you lack a counter for) now **draws its route line** instead of a blank map — the preview falls back to the through-the-hazard route the walk would take
+- The route picker now always offers a clearly-worded **"Cross unprotected — take the damage"** choice for a survivable-damage hazard (a river, heat) you have no counter for — and never for a lethal one (a drown / freeze death, a forced teleport), where a counter is the only safe way past
+- Hazard severity (survivable damage vs grave) is decoded from the spell's effect chain, so the "cross unprotected" offer is gated on it
+- Diagnostic logging added for the hazard-counter shop/give/drop resolver, so a missing "obtain, then cross" card is captured in the program log
+- bug reports addressed: paradigm-20260902-222504, paradigm-20260902-222525
+
 ## 3.46.0
 
 - New **Details…** button on the **CURRENT NAV** panel header — opens the current route's full step plan in a scrollable window, the same numbered "room < command" list the route picker shows, for whatever's executing (walk / loop / Auto-Lair) **or a previewed walk-to** armed from the search box

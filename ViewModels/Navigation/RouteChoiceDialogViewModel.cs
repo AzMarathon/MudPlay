@@ -88,22 +88,44 @@ public sealed partial class RouteChoiceDialogViewModel
     // just walk it" note; only the direct route is selectable.
     public bool HasFreeRoute { get; }
 
-    // The "direct — send it" card (cross the gates as-is, no acquisition) is only
-    // offered when a gate-free detour also exists — i.e. the true two-route fork,
-    // where skipping acquisition is a meaningful third choice. When the gated
-    // route is the ONLY way there, the send-it/acquire split collapses to the
-    // single acquire card (chunk-4 flag logic governs that case, not the picker).
-    // A teleport choice has no acquisition, so it never shows the send-it card.
-    // A sole hazard route with an obtainable counter also shows it — as the
-    // "cross unprotected (take the damage)" escape opposite "obtain then cross".
-    // A trap-avoid choice is a plain two-way fork — no send-it card there either.
+    // The "cross unprotected / send it" card. Two flavours share it:
+    //   • item-gate two-route fork (HasFreeRoute): "send it" through the gates as-is
+    //     rather than acquiring — a meaningful third choice only when a free detour
+    //     also exists.
+    //   • sole SURVIVABLE-damage hazard: "cross unprotected — take the damage",
+    //     offered whether or not a counter can be sourced (it's the user's call to
+    //     eat a river / heat crossing). NEVER offered for a GRAVE hazard (a drown /
+    //     freeze death, a forced teleport) — a counter is the only way past those,
+    //     so walking in unprotected is not a choice we hand the user.
+    // A teleport / trap-avoid choice has no send-it split.
     public bool ShowSendItCard =>
-        (HasFreeRoute || HazardObtain) && !IsTeleportChoice && !IsTrapAvoidChoice;
+        (HasFreeRoute || (_soleHazardOnly && _hazardSurvivable))
+        && !IsTeleportChoice && !IsTrapAvoidChoice;
+
+    // The primary route / "obtain then cross" card. Hidden only in the one case
+    // where it would duplicate the cross-unprotected card: a sole SURVIVABLE hazard
+    // with no sourceable counter, where "cross unprotected" is the sole action. Any
+    // other route keeps it — an item / key gate ("walk to the gate and stop"), a
+    // sourceable-counter hazard ("obtain, then cross"), a grave hazard ("walk to
+    // the hazard and stop"), the item-gate fork, teleport, trap-avoid, and blocked.
+    public bool ShowGatedCard => !_soleHazardOnly || HazardObtain || !_hazardSurvivable;
 
     // True when this is a sole hazard-only route the caller resolved an obtainable
     // counter for: Go fetches it then crosses (vs. "cross unprotected"). Drives the
     // obtain wording + the send-it card in the sole-hazard case.
     public bool HazardObtain { get; }
+
+    // Set for a sole hazard route: whether all unprotected hazards crossed are
+    // survivable damage (safe to offer "cross unprotected") + the sole-hazard flag
+    // itself, both used by the card-visibility gates above.
+    private readonly bool _soleHazardOnly;
+    private readonly bool _hazardSurvivable;
+
+    // The muted sub-line under the send-it card — reframed for the hazard flavour
+    // (take the damage) vs the item-gate flavour (carry the gate items yourself).
+    public string SendItDetail => (_soleHazardOnly && _hazardSurvivable)
+        ? "Walks straight through the hazard and takes the damage — no counter fetched."
+        : "Crosses the gates as-is — nothing acquired; you must already carry what's needed.";
 
     // Which route the user has selected to preview. Null until they click one —
     // Go stays disabled until then, forcing the click-to-preview-then-Go flow.
@@ -128,7 +150,8 @@ public sealed partial class RouteChoiceDialogViewModel
         Func<int, string?>? dropNameForItem = null,
         TimeSpan freeEta = default,
         TimeSpan gatedEta = default,
-        string? hazardCounterSource = null)
+        string? hazardCounterSource = null,
+        bool hazardSurvivable = false)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -156,14 +179,18 @@ public sealed partial class RouteChoiceDialogViewModel
             return;
         }
 
-        // A sole hazard-only route the caller resolved an obtainable counter for:
-        // Go fetches it then crosses, and a "cross unprotected" card is offered as
-        // the take-the-damage escape.
+        // A sole hazard-only route: Go crosses the hazard, optionally fetching a
+        // counter first (when one is sourceable), and — for a SURVIVABLE hazard —
+        // "cross unprotected" is offered as the take-the-damage escape.
         bool soleHazardOnly = !HasFreeRoute && !IsTeleportChoice
             && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
+        _soleHazardOnly = soleHazardOnly;
+        _hazardSurvivable = hazardSurvivable;
         HazardObtain = soleHazardOnly && !string.IsNullOrEmpty(hazardCounterSource);
 
-        SendItSummary = HazardObtain
+        // "Cross unprotected — take the damage" for any survivable sole hazard;
+        // "Direct — send it" for the item-gate two-route fork.
+        SendItSummary = (soleHazardOnly && hazardSurvivable)
             ? $"Cross unprotected — take the damage — {StepsEta(choice.GatedStepCount, gatedEta)}"
             : $"Direct — send it — {StepsEta(choice.GatedStepCount, gatedEta)}";
 
@@ -234,6 +261,16 @@ public sealed partial class RouteChoiceDialogViewModel
                     Footnote = "Click a route to preview it on the map, then Go to walk it. "
                         + $"Go fetches a counter ({hazardCounterSource}) then crosses; "
                         + "\"cross unprotected\" walks straight through and takes the damage.";
+                }
+                else if (hazardSurvivable)
+                {
+                    // No sourceable counter, but the hazard is survivable damage — the
+                    // only card shown is "cross unprotected" (the Gated card is hidden
+                    // by ShowGatedCard, so its summary is unused).
+                    GatedSummary = string.Empty;
+                    Footnote = "Click the route to preview it on the map, then Go to cross it. "
+                        + "This is the only way there and there's no counter to fetch nearby — "
+                        + "Go walks straight through and takes the damage; carry a counter yourself to avoid it.";
                 }
                 else
                 {

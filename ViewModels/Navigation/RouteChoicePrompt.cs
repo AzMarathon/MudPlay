@@ -165,6 +165,13 @@ public static class RouteChoicePrompt
         string? hazardCounterSource = hazardSources.Count > 0
             ? string.Join("; ", hazardSources) : null;
 
+        // Whether the gated route's unprotected hazards are all survivable damage —
+        // gates whether the picker offers a "cross unprotected — take the damage"
+        // card (a river / heat you can eat), which it must never do for a grave
+        // hazard (a drown / freeze death, a forced teleport).
+        bool hazardSurvivable = soleHazardOnly
+            && services.UnprotectedHazardsAllSurvivable(choice.GatedPath);
+
         var vm = new RouteChoiceDialogViewModel(
             choice,
             DestinationLabel(services, destination),
@@ -184,7 +191,8 @@ public static class RouteChoicePrompt
             itemId => services.PathItemDropName(itemId, source),
             freeEta,
             gatedEta,
-            hazardCounterSource);
+            hazardCounterSource,
+            hazardSurvivable);
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and

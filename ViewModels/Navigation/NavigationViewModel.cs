@@ -1016,7 +1016,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             return;
         }
         IReadOnlyList<Direction>? path = _services.Bfs.FindPath(src, dest, _services.Movement);
-        if (path is null || path.Count == 0) { PreviewPath = null; return; }
+        if (path is null || path.Count == 0)
+        {
+            // The gate-respecting BFS finds nothing when the only route crosses an
+            // acquirable gate or an unsurvivable-without-a-counter hazard (a river,
+            // a locked door). Re-plan with those gates suspended so the armed-walk
+            // preview still draws the line Go would take — the same route the picker
+            // plans through the gate — instead of leaving the map blank.
+            using (_services.Movement.SuspendAcquirableGates())
+                path = _services.Bfs.FindPath(src, dest, _services.Movement);
+            if (path is null || path.Count == 0) { PreviewPath = null; return; }
+        }
 
         var keys = new List<RoomKey>(path.Count + 1) { src };
         RoomKey cur = src;
