@@ -1,5 +1,10 @@
 # Version history
 
+## 3.46.4
+
+- **Reset States** now re-anchors max HP/mana with the game's compact `health` command instead of the full `stat` screen — the same correction with far less terminal scroll
+- Typing `health` yourself (any realm) re-latches your max HP and mana/kai ceilings too; the readout is parsed on both stock (`Kai`) and Paradigm (`Mana`) and for HP-only classes
+
 ## 3.46.3
 
 - The route picker now handles a **mixed** route — one that crosses a survivable hazard (a river) **and** a hard gate past it (a keyed door you lack), like the walk to the Iceforge — instead of showing a single "walk to the gate and stop" card

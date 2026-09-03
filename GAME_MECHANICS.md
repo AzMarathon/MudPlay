@@ -2346,6 +2346,29 @@ Name (not the Short cast-code). `You have no spells.` is the authoritative empty
 opens on the header but reads zero rows is a **format miss, not an empty book** — it must not clear
 the obtained set. (SpellListParser + report "sp didn't update spellbook".)
 
+## The `health` command output *([CONFIRMED] 2026-09-03, user captures, stock + Paradigm)*
+
+`health` prints a single compact line of the character's HP + power-pool, current/max with a
+percent — far less scroll than the full `stat` screen, so it's the cheap way to re-anchor the
+authoritative max HP/mana (e.g. after a gear swap drifts the high-water mark). The pool field's
+**label is class-dependent**: `Kai` for a Kai class (mystic), `Mana` for a mana class, and the
+pool field is **absent entirely** for a class that has only HP.
+
+```
+Health:      91/91  [100%]  Kai:  6/10  [60%]       (stock, mystic)
+Health:    593/593  [100%]  Mana:  619/619  [100%]  (Paradigm, mana class)
+Health:    137/137  [100%]                          (HP-only class — no pool field)
+```
+
+Parsing points: the line is anchored at line start with `Health:` and both HP and the pool are
+`cur/max` followed by `[pct%]`; inter-column padding varies, so match whitespace-tolerantly. The
+`Health:` label here is the **HP pool** — note that `stat` labels the HP pool `Hits:` and has its
+own separate `Health:` field, which is the **Health core stat** (a bare number like `Health: 71`,
+alongside Strength / Agility / etc.). The two `Health:` labels collide, so the health-command line
+is parsed on its own outbound gate (`health` observed) and never through the stat-screen field scan.
+(HP/MA **regen** — `HP Regen` / `MA Regen` — only appears in Paradigm's `stat all`, which the client
+does NOT parse; regen is computed from stats in the Player Workshop.) (StatParser.TryHealthCommandLine.)
+
 ## BBS actions / emotes (the `action list` socials) *([CONFIRMED] 2026-08-14, user + live capture)*
 
 MajorMUD / MajorBBS boards ship a **customizable action list** (MUD socials / emotes),
