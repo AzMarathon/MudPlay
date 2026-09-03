@@ -389,6 +389,20 @@
                         </StackPanel>
                     </Border>
 
+                    <Border Classes="Group" IsVisible="{Binding HasAbilities}">
+                        <StackPanel>
+                            <TextBlock Classes="Group" Text="Abilities &amp; resistances"
+                                       ToolTip.Tip="This monster's own properties — elemental weakness/strength, spell immunity, magic-weapon requirement, undead / non-living, and other notable abilities."/>
+                            <ItemsControl ItemsSource="{Binding AbilityLines}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Classes="DetailLine" Text="{Binding}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
                     <Border Classes="Group" IsVisible="{Binding HasObservations}">
                         <StackPanel Spacing="6">
                             <Grid ColumnDefinitions="*,Auto">
@@ -419,6 +433,9 @@
                                             <TextBlock Classes="DetailLine" Text="{Binding Detail}" Margin="10,0,0,0"/>
                                             <TextBlock Classes="DetailLine" Text="{Binding Energy}" Margin="10,0,0,0"
                                                        IsVisible="{Binding Energy, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                            <TextBlock Classes="DetailLine" Text="{Binding Dpm}" Margin="10,0,0,0"
+                                                       Foreground="{StaticResource AccentAmberBrush}"
+                                                       IsVisible="{Binding Dpm, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
