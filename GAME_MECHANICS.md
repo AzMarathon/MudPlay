@@ -71,6 +71,23 @@ it isn't here and you're unsure, ask.
   order** with per-mob respawn clocks (per "Lair respawn timers" below), not assume a uniform per-lap
   fire rate — that's what the Exp/Hr estimator now does.
 
+**Monster swings per round — energy budget & rollover** *([CONFIRMED] 2026-09-03, user)*
+- A monster works like a player: it has a **per-round energy budget** (the Monsters-table
+  **`Energy`** field, typically ~1000) and each swing of an attack costs that attack's
+  **`AttEnergy`**. It spends its whole budget each round, landing `floor(available ÷ AttEnergy)`
+  swings.
+- **Leftover energy ROLLS OVER:** round 1 starts at `Energy`, and every round after is
+  `(leftover) + Energy`. So over a long window the mean swing rate is the **FRACTIONAL**
+  `Energy ÷ AttEnergy`, not the single-round integer floor (e.g. 1000/300 = 3.33/round, not 3).
+  This is the same model the player swing calc already uses (`CombatCalculator`: `remaining =
+  (remaining % energy) + 1000`).
+- **No realm swing cap for monsters** — unlike the player's 5 (Stock) / 6 (Paradigm) ceiling,
+  a monster is limited only by energy ÷ attack cost.
+- Damage-per-minute = `hit% × avg-dmg(after DR) × (Energy ÷ AttEnergy) × 12` (12 rounds/min, a
+  round being 5s). Monster Intel's per-attack incoming DPM + the melee threat line use this;
+  `MonsterMatchupCalculator.AverageMonsterSwingsPerRound` / `RoundsPerMinute`. Related:
+  [[project_monster_intel_matchup_arc_20260902]].
+
 ## Equipment & gear
 
 **Equip / remove verbs** *(all [CONFIRMED])*
