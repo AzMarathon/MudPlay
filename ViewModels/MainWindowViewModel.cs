@@ -621,6 +621,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetRoomGameDataOpener(OpenRoomGameData);
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
+        AppServices.Current.SetGoWalkOpener(GoWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
         AppServices.Current.SetHighlightWhereOpener(HighlightWhereRoomIfOpen);
         AppServices.Current.SetNavManagerOpener(OpenNavManager);
@@ -4388,6 +4389,12 @@ public partial class MainWindowViewModel : ObservableObject
     // exactly as picking a nav search result does; the user then clicks Run.
     private void QueueWalkToRoom(Game.Map.RoomKey key)
         => EnsureNavigationWindow()?.QueueDestination(key);
+
+    // Registered on AppServices — the Roomba room list's "Goto" button routes here
+    // to open/focus the map, arm the room, and START the walk immediately (the full
+    // "Walk here" path), rather than only arming it like QueueWalkToRoom.
+    private void GoWalkToRoom(Game.Map.RoomKey key)
+        => _ = EnsureNavigationWindow()?.QueueAndStartWalkTo(key);
 
     // Room-detail exit clicks re-root the popup on the neighbour and let an
     // already-open map follow — but must not summon the map if it's closed,

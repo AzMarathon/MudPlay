@@ -1,5 +1,9 @@
 # Version history
 
+## 3.46.15
+
+- Roomba (Workshop → Gang House): each labeled room now has a **Goto** button (left of Remove) that opens the map and walks you straight to that room
+
 ## 3.46.14
 
 - Route **Details**: a "Color monsters by hit %" toggle tints monster names green→red by how likely they are to hit you (Monster Intel's Hits-You-%) instead of by alignment

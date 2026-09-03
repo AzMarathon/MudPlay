@@ -1279,6 +1279,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         QueuedDestination = key;
     }
 
+    // "Queue AND start" walk-to from OUTSIDE the window — the Roomba room list's
+    // Goto button. Arms the destination (pans the map, sets QueuedDestination) AND
+    // immediately starts the walk via the full "Walk here" path (stop conflicting
+    // engines, route picker for a gated/hazard/trap crossing, GOTO history). If the
+    // route picker is cancelled the destination stays queued for a manual Run.
+    public Task QueueAndStartWalkTo(RoomKey key)
+    {
+        QueueDestination(key);
+        return WalkToRoom(key);
+    }
+
     // ----- Loops + Auto-Lair setups (combined) ----------------------
 
     // Loops in the active BBS (flat backing list).
