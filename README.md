@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.46.14**
-> - Route **Details**: a "Color monsters by hit %" toggle tints monster names green→red by how likely they are to hit you (Monster Intel's Hits-You-%) instead of by alignment
-> - The green / yellow / red split is adjustable on a two-thumb slider (default green ≤ 15%, yellow ≤ 45%, red above); the toggle + split are saved per character
-> - Route Details flags a **see-hidden** monster with an 👁 eyeball on either side of its name
-> - Conversation input box now caps at the terminal's 254-character line limit, so the two match
+> **Version 3.46.15**
+> - Roomba (Workshop → Gang House): each labeled room now has a **Goto** button (left of Remove) that opens the map and walks you straight to that room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

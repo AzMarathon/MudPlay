@@ -93,6 +93,14 @@ public sealed class AppServices
     public void SetQueueWalkOpener(Action<Game.Map.RoomKey> opener) => _queueWalkOpener = opener;
     public void QueueWalkTo(Game.Map.RoomKey key) => _queueWalkOpener?.Invoke(key);
 
+    // Opens (or re-focuses) the Navigation window and STARTS an immediate walk to a
+    // room — the full "Walk here" path (stop conflicting engines, route picker for a
+    // gated/hazard/trap crossing, GOTO history), not merely arming it. Used by the
+    // Roomba room list's Goto button. No-op until the main VM binds it.
+    private Action<Game.Map.RoomKey>? _goWalkOpener;
+    public void SetGoWalkOpener(Action<Game.Map.RoomKey> opener) => _goWalkOpener = opener;
+    public void GoWalkTo(Game.Map.RoomKey key) => _goWalkOpener?.Invoke(key);
+
     // Type text at the game through the SAME path the terminal / Conversation input
     // uses — macro split, alias expansion, and the outbound cast/attack/chat/movement
     // observers — so a programmatic send is indistinguishable from the user typing
