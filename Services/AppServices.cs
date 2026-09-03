@@ -3080,6 +3080,11 @@ public sealed class AppServices
         // through the engaged name, so they're covered too.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key, Combat.CurrentTarget);
+        // Grab-All: the moment a tracked boss with GrabAll set dies, blindly `get`
+        // every item in its game-data drop table — no room re-parse. BossKilled fires
+        // for any matched boss; we gate on the flag here, where the catalog + item
+        // names + wire sender are all reachable.
+        BossTimers.BossKilled += FireBossGrabAll;
         // Surface recognized deaths in the Wire Inspector's Classified view (a passive
         // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
@@ -6355,6 +6360,37 @@ public sealed class AppServices
         if (_engineWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
         _engineWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
         return true;
+    }
+
+    // A Grab-All boss just died: fire a blind `get <item>` for every item in its
+    // game-data drop table (no room re-parse). Gated here on the per-boss flag; the
+    // event fires for every matched boss regardless.
+    private void FireBossGrabAll(Models.Profile.BossDef def)
+    {
+        if (!def.GrabAll) return;
+        int? number = def.MonsterNumber ?? ResolveMonsterNumberByName(def.Name);
+        if (number is not { } num)
+        {
+            Log.Info("GrabAll", $"'{def.Name}' died but has no monster number — can't read its drop table");
+            return;
+        }
+        IReadOnlyList<string> cmds = Game.Inventory.BossGrabAllCommands.Build(MonsterCatalog.Get(num)?.Drops, ItemNames.GetName);
+        if (cmds.Count == 0)
+        {
+            Log.Info("GrabAll", $"'{def.Name}' died — no known droppable items to grab");
+            return;
+        }
+        Log.Info("GrabAll", $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")}");
+        foreach (string cmd in cmds) SendGameCommand(cmd);
+    }
+
+    // The Monsters-table Number for a boss whose BossDef didn't carry one — resolved
+    // by its game-data name. Null when the active set has no such monster.
+    private int? ResolveMonsterNumberByName(string name)
+    {
+        if (GameData.FindRowByName("Monsters", name) is not System.Text.Json.JsonElement row) return null;
+        return row.TryGetProperty("Number", out System.Text.Json.JsonElement el)
+               && el.TryGetInt32(out int n) ? n : null;
     }
 
     // A self-buff of ours was just CAST (fired from StartSelfBuffTimer, after the cast

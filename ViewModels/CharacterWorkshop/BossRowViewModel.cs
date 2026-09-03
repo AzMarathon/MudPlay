@@ -41,6 +41,10 @@ public sealed partial class BossRowViewModel : ObservableObject
 
     [ObservableProperty] private bool _stopBefore;
 
+    // Blind-grab-on-kill flag (inline-editable, like StopBefore): when set, the moment
+    // this boss dies the client fires `get <item>` for its whole drop table.
+    [ObservableProperty] private bool _grabAll;
+
     // Static respawn length ("10h" / "Cleanup" / "?") + its sort key (hours).
     [ObservableProperty] private string _respawnDisplay = string.Empty;
     [ObservableProperty] private int _respawnSortKey = int.MaxValue;
@@ -87,6 +91,7 @@ public sealed partial class BossRowViewModel : ObservableObject
         Rooms = BossRoomText.Format(def.Rooms);
         Notes = def.Notes;
         StopBefore = def.StopBefore;
+        GrabAll = def.GrabAll;
         RespawnType = def.RespawnType;
         RefreshDisplay(realm, respawnHours);
         _suppress = false;
@@ -183,12 +188,14 @@ public sealed partial class BossRowViewModel : ObservableObject
         Early1SortKey = Early2SortKey = Early3SortKey = InactiveSort;
     }
 
-    // Clone the source def with just the inline-edited StopBefore applied — every
-    // other field (rooms, override, Notes, ShowInTable, flags) round-trips untouched.
+    // Clone the source def with just the inline-edited fields (StopBefore, GrabAll)
+    // applied — every other field (rooms, override, Notes, ShowInTable, flags)
+    // round-trips untouched, so a toggle can't clobber a Manage-dialog edit.
     public BossDef ToDef()
     {
         BossDef d = _def.Clone();
         d.StopBefore = StopBefore;
+        d.GrabAll = GrabAll;
         return d;
     }
 
@@ -204,4 +211,5 @@ public sealed partial class BossRowViewModel : ObservableObject
     private void ClearTimer() { _timers.Reset(Name.Trim().ToLowerInvariant()); RefreshStatus(); }
 
     partial void OnStopBeforeChanged(bool value) { if (!_suppress) _onEdit(); }
+    partial void OnGrabAllChanged(bool value) { if (!_suppress) _onEdit(); }
 }

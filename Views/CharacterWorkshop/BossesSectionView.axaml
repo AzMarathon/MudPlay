@@ -50,6 +50,11 @@
             <DataGrid.Columns>
                 <DataGridCheckBoxColumn Header="Stop before" Width="100" CanUserSort="False"
                                         Binding="{ReflectionBinding StopBefore, Mode=TwoWay}"/>
+                <!-- On this boss's death, blindly `get` every item in its drop table
+                     (no room re-parse). Default off. Inserting this column shifts the
+                     early-window columns to indices 5-7 (see the code-behind). -->
+                <DataGridCheckBoxColumn Header="Grab All" Width="85" CanUserSort="False"
+                                        Binding="{ReflectionBinding GrabAll, Mode=TwoWay}"/>
                 <DataGridTextColumn Header="Boss" Width="190" IsReadOnly="True" SortMemberPath="Name"
                                     Binding="{ReflectionBinding Name}"/>
                 <DataGridTextColumn Header="Respawn" Width="90" IsReadOnly="True" SortMemberPath="RespawnSortKey"

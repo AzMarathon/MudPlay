@@ -1,5 +1,9 @@
 # Version history
 
+## 3.48.0
+
+- Bosses tab: a per-boss **Grab All** checkbox (default off) — the moment that boss dies, the client blindly sends `get <item>` for every item in its game-data drop table, no room re-parse
+
 ## 3.47.0
 
 - **Monster Intel** detail now shows an **Abilities & resistances** panel — the monster's elemental weakness/strength, spell immunity, magic-weapon requirement, damage/magic resist, undead / non-living, and other notable abilities
