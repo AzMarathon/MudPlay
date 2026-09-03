@@ -6,7 +6,7 @@ using MudPlay.Game.Calculators;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Map;
 using MudPlay.Game.Quests;
-using MudPlay.Models.Settings;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
 
@@ -44,20 +44,23 @@ public static class RouteDetailsLauncher
     {
         ArgumentNullException.ThrowIfNull(services);
         MonsterHitColorSettings colors =
-            services.Settings.Current.MonsterHitColors ?? new MonsterHitColorSettings();
+            services.Profile.Current?.MonsterHitColors ?? new MonsterHitColorSettings();
         return new RouteDetailsDialogViewModel(
             TitleWithEta(services, title, polyline),
             BuildRows(services, polyline),
             colors.Enabled, colors.GreenMax, colors.YellowMax,
             (enabled, greenMax, yellowMax) =>
             {
-                // Install-wide (Global tier): a display preference that holds across
-                // characters. Save fires GlobalSettingsChanged — harmless for a read.
-                services.Settings.Current.MonsterHitColors = new MonsterHitColorSettings
+                // Per-character: saved on the loaded profile so each character keeps
+                // its own toggle + band split and the window opens the way that
+                // character last left it. A plain profile Save is quiet (no
+                // ProfileLoaded / ProfileMutated fan-out).
+                if (services.Profile.Current is not { } profile) return;
+                profile.MonsterHitColors = new MonsterHitColorSettings
                 {
                     Enabled = enabled, GreenMax = greenMax, YellowMax = yellowMax,
                 };
-                services.Settings.Save();
+                services.Profile.Save();
             });
     }
 

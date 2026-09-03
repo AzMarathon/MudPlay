@@ -3,7 +3,7 @@ using System.Linq;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using MudPlay.Models.Settings;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
 

@@ -3,7 +3,7 @@
 ## 3.46.13
 
 - Route **Details**: a "Color monsters by hit %" toggle tints monster names green→red by how likely they are to hit you (Monster Intel's Hits-You-%) instead of by alignment
-- The green / yellow / red split is adjustable on a two-thumb slider (default green ≤ 15%, yellow ≤ 45%, red above); the choice persists install-wide
+- The green / yellow / red split is adjustable on a two-thumb slider (default green ≤ 15%, yellow ≤ 45%, red above); the toggle + split are saved per character
 - Conversation input box now caps at the terminal's 254-character line limit, so the two match
 
 ## 3.46.11
