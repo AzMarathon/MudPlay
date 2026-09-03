@@ -4,7 +4,7 @@
 > **Version 3.46.11**
 > - Paired ring/wrist gear swaps are now **realm-aware** (Paradigm evicts slot 1, Stock slot 2) and use `eq`, so re-equipping a set that keeps one member of a full pair no longer emits a needless `rem`
 > - Rest no longer **hangs at full HP** after a medi/pre-rest swap, and gear reliably **swaps back to Default** after an instant rest (no more pathing in medi gear)
-> - **Disabling the rest engine** drops the engage-to-clear override (no stray drain with Auto-Combat off); no more **double-attack** at a same-species survivor after a kill; the **AoE debuff** re-fires on a same-room respawn
+> - **Disabling the rest engine** drops the engage-to-clear override (no stray drain with Auto-Combat off); no more **double-attack** at a same-species survivor after a kill; the **AoE debuff** re-fires on a same-room respawn (tags reset once you rest)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

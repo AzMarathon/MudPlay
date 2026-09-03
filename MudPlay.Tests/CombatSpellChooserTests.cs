@@ -241,14 +241,14 @@ public sealed class CombatSpellChooserTests
             sut.ChooseDebuff(settings, Ctx(enemies: 3))?.Action);
     }
 
-    // A same-room RESPAWN after the debuff wore off must be re-debuffed, while a
-    // same-fight survivor (revealed within seconds) must NOT be (report
-    // paradigm-20260903-070438 vs the -160110 "isto fired twice" fix).
+    // A same-room RESPAWN (after the room is confirmed cleared — the player rested)
+    // must be re-debuffed, while a same-fight survivor (a mid-fight wave-clear roster
+    // reset) must NOT be (report paradigm-20260903-070438 vs the -160110 "isto fired
+    // twice" fix).
     [Fact]
-    public void ChooseDebuff_Area_TagExpires_ReDebuffsSameRoomRespawn()
+    public void ChooseDebuff_Area_ResetOnRoomClear_ReDebuffsRespawn_NotSurvivor()
     {
-        var clock = System.DateTimeOffset.UnixEpoch;
-        CombatSpellChooser sut = new() { NowProvider = () => clock };
+        CombatSpellChooser sut = new();
         CombatSettings settings = new()
         {
             AreaDebuffSpell = Slot("blindall", minEnemies: 2),
@@ -260,12 +260,14 @@ public sealed class CombatSpellChooserTests
         Assert.Equal(CombatSpellAction.AreaDebuff, first?.Action);
         sut.MarkCast(first!.Value, "slimeworm", keys);
 
-        // Seconds later a same-species survivor reveals — tag fresh, not re-debuffed.
-        clock = clock.AddSeconds(10);
+        // A mid-fight wave-clear roster reset (hidden same-species survivors) keeps the
+        // tags — the survivor is NOT re-debuffed.
+        sut.ResetForRosterClear();
         Assert.Null(sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: keys)));
 
-        // Minutes later the room respawns — tag expired + cap refreshed → re-debuff.
-        clock = clock.AddMinutes(5);
+        // The room is confirmed genuinely cleared (the player rested) — a same-room
+        // respawn after that IS re-debuffed.
+        sut.ResetAreaDebuffTags();
         Assert.Equal(CombatSpellAction.AreaDebuff,
             sut.ChooseDebuff(settings, Ctx(enemies: 3, roomMobKeys: keys))?.Action);
     }

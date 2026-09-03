@@ -3933,6 +3933,20 @@ public sealed class AppServices
         PlayerState.PropertyChanged += (_, _) => TimeAnalysis.NotePlayerState(
             PlayerState.InCombat, PlayerState.Position,
             PlayerState.Hp, PlayerState.MaxHp, PlayerState.Ma, PlayerState.MaxMa);
+        // Entering a rest posture confirms the room is genuinely cleared of hostiles (a
+        // rest only starts once nothing is left to fight), so the AoE area-debuff room
+        // tags reset — a same-room respawn after this is debuffed afresh (report
+        // paradigm-20260903-070438), without disturbing the mid-fight survivor case.
+        Game.PlayerPosition lastPosForAoe = PlayerState.Position;
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(Game.PlayerState.Position)) return;
+            Game.PlayerPosition pos = PlayerState.Position;
+            bool wasResting = lastPosForAoe is Game.PlayerPosition.Resting or Game.PlayerPosition.Meditating;
+            bool nowResting = pos is Game.PlayerPosition.Resting or Game.PlayerPosition.Meditating;
+            lastPosForAoe = pos;
+            if (nowResting && !wasResting) Combat.NoteRoomClearedByRest();
+        };
         Conditions.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Game.Conditions.ConditionTracker.ActiveFlags))

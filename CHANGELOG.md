@@ -7,7 +7,7 @@
 - Gear reliably **swaps back to Default** after a rest that completes the instant it starts (no more pathing in medi gear)
 - **Disabling the rest engine** now drops the engage-to-clear override, so a drain/nuke no longer fires while Auto-Combat is off
 - No more **double-attack** when a kill re-picks a same-species survivor mid cap-switch
-- The room **AoE debuff** (isto) re-fires on a same-room respawn once the debuff has worn off
+- The room **AoE debuff** (isto) re-fires on a same-room respawn — the room tags reset once the room is genuinely cleared (you rest), while a mid-fight survivor still isn't re-debuffed
 - bug reports addressed: paradigm-20260903-070438, paradigm-20260903-073107, paradigm-20260903-110346, paradigm-20260903-111227, paradigm-20260903-111522, paradigm-20260903-113054
 
 ## 3.46.5
