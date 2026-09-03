@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.45.5**
-> - Nav no longer routes non-bards through the barmaid's bard-only ask-transport — a `class N` gate on a greet teleport now keeps the edge for that class only and drops it for everyone else
-> - Greet teleports (ask-an-NPC transports) now verify they actually arrived and re-ask until they do — a class's skill roll on the transport can fail silently, and the walker recognises it didn't move rather than stalling or failing the walk
+> **Version 3.45.6**
+> - On Paradigm, navigation now asks the game `rm` for your true room before it ever falls back to the blind reverse-walk recovery — and again as a last resort before the "Lost" dialog — so a client is only ever genuinely Lost when `rm` itself can't answer, instead of giving up while an authoritative position was one command away
+> - A `rm` that goes unanswered because a confusion fumble ate the command is re-asked until the confusion passes, rather than being treated as a real failure
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
