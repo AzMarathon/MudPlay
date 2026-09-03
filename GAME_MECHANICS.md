@@ -2348,16 +2348,17 @@ the obtained set. (SpellListParser + report "sp didn't update spellbook".)
 
 ## The `health` command output *([CONFIRMED] 2026-09-03, user captures, stock + Paradigm)*
 
-`health` prints a single compact line of the character's HP + power-pool, current/max with a
-percent — far less scroll than the full `stat` screen, so it's the cheap way to re-anchor the
-authoritative max HP/mana (e.g. after a gear swap drifts the high-water mark). The pool field's
-**label is class-dependent**: `Kai` for a Kai class (mystic), `Mana` for a mana class, and the
-pool field is **absent entirely** for a class that has only HP.
+`health` works on **both realms** (stock + Paradigm) and prints a single compact line of the
+character's HP + power-pool, current/max with a percent — far less scroll than the full `stat`
+screen, so it's the cheap way to re-anchor the authoritative max HP/mana (e.g. after a gear swap
+drifts the high-water mark). The pool field's **label is class-dependent, not realm-dependent**:
+`Mana` for a mana class, `Kai` for a Kai class (mystic), and the pool field is **absent entirely**
+for a class that has only HP.
 
 ```
-Health:      91/91  [100%]  Kai:  6/10  [60%]       (stock, mystic)
-Health:    593/593  [100%]  Mana:  619/619  [100%]  (Paradigm, mana class)
-Health:    137/137  [100%]                          (HP-only class — no pool field)
+Health:    593/593  [100%]  Mana:  619/619  [100%]  (mana class → Mana)
+Health:      91/91  [100%]  Kai:  6/10  [60%]       (mystic → Kai)
+Health:    137/137  [100%]                          (HP-only class → no pool field)
 ```
 
 Parsing points: the line is anchored at line start with `Health:` and both HP and the pool are
