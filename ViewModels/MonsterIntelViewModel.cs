@@ -147,13 +147,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // read) instead of re-reading the table the catalog has already evicted.
         _spellAttType = catalog.SpellAttType;
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
+        RebuildHitsFilterBuckets();   // realm-dependent Hits-You-% filter bands
 
         PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(NameFilter)
-                or nameof(ShowHits2) or nameof(ShowHits5) or nameof(ShowHits10)
-                or nameof(ShowHits20) or nameof(ShowHits40) or nameof(ShowHits100)
-                or nameof(HideRegenMonsters))
+            if (e.PropertyName is nameof(NameFilter) or nameof(HideRegenMonsters))
             { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
             else if (e.PropertyName == nameof(SelectedEntry)) { RebuildDetail(); UpdateAcVsTarget(); }
         };
@@ -259,24 +257,30 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // that feeds Hits You %, surfaced as a plain number for the picked target.
     [ObservableProperty] private string _acVsTargetText = "—";
 
-    // Hits-You-% threshold checkboxes: independent, OR'd together — checking
-    // none shows every monster (still subject to the "no computable value"
-    // drop below); checking one or more keeps a monster if it falls in ANY
-    // checked band. Six discrete, non-overlapping, contiguous bands covering
-    // the full 0-100% range with no gap (0-2, 3-5, 6-10, 11-20, 21-40,
-    // 41-100) — checking 10% alone must never also surface a 1% or 2%
-    // monster. Doubling scale rather than flat 5%-wide steps: against a
-    // catalog-wide distribution pull (see the PR discussion), a leveled
-    // character's Hits You % spreads across the full range rather than
-    // clustering low, so the old 5-band scheme (topping out at "25%+") left
-    // roughly 40% of fightable monsters undifferentiated in one catch-all
-    // bucket, plus a dead 16-24% zone no box covered at all.
-    [ObservableProperty] private bool _showHits2;
-    [ObservableProperty] private bool _showHits5;
-    [ObservableProperty] private bool _showHits10;
-    [ObservableProperty] private bool _showHits20;
-    [ObservableProperty] private bool _showHits40;
-    [ObservableProperty] private bool _showHits100;
+    // Hits-You-% filter: a multi-select dropdown of contiguous %-bands. Selecting
+    // none shows every monster (still subject to the "no computable value" drop);
+    // selecting any keeps a monster whose Hits You % falls in ANY selected band.
+    // The band set is REALM-DEPENDENT — the lowest a monster's attack can land is
+    // 8% on Stock and 2% on ParaMUD (CombatCalculator.GetHitMin), so Stock drops
+    // the 2/5 bands (dead below its floor) and gains an 8% band. Session-only (not
+    // persisted), built once from the active realm at construction.
+    public ObservableCollection<HitsFilterBucket> HitsFilterBuckets { get; } = new();
+
+    private static readonly int[] ParadigmHitBands =
+        { 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
+    private static readonly int[] StockHitBands =
+        { 8, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
+
+    // The dropdown button's label — "all" when no band is selected, else the count.
+    public string HitsFilterLabel
+    {
+        get
+        {
+            int n = 0;
+            foreach (HitsFilterBucket b in HitsFilterBuckets) if (b.Selected) n++;
+            return n == 0 ? "Hits You %: all" : $"Hits You %: {n} band{(n == 1 ? "" : "s")}";
+        }
+    }
 
     // Drop monsters that respawn on their own timer (a non-zero RegenTime — bosses,
     // lair leaders, other timed spawns) so the list shows only freely-farmable
@@ -769,6 +773,36 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     private void UpdateManaLabel() => ManaLabel = _playerState?.ManaType == ManaType.Kai ? "Kai" : "Mana";
 
+    // Build the Hits-You-% filter bands for the active realm — contiguous [lo,hi]
+    // ranges from the realm's thresholds (Stock omits the 2/5 bands below its 8%
+    // floor, and adds an 8% band). Called once at construction; the realm is fixed
+    // for the window's life, like the catalog itself.
+    private void RebuildHitsFilterBuckets()
+    {
+        foreach (HitsFilterBucket b in HitsFilterBuckets) b.PropertyChanged -= OnHitsFilterBucketChanged;
+        HitsFilterBuckets.Clear();
+        int[] bands = _gameData.ActiveRealm == RealmType.ParaMud ? ParadigmHitBands : StockHitBands;
+        int lo = 0;
+        for (int i = 0; i < bands.Length; i++)
+        {
+            int hi = bands[i];
+            string label = i == 0 ? $"≤{hi}%" : $"{lo}–{hi}%";
+            HitsFilterBucket bucket = new(label, lo, hi);
+            bucket.PropertyChanged += OnHitsFilterBucketChanged;
+            HitsFilterBuckets.Add(bucket);
+            lo = hi + 1;
+        }
+        OnPropertyChanged(nameof(HitsFilterLabel));
+    }
+
+    private void OnHitsFilterBucketChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(HitsFilterBucket.Selected)) return;
+        RowsView.Refresh();
+        OnPropertyChanged(nameof(CountText));
+        OnPropertyChanged(nameof(HitsFilterLabel));
+    }
+
     private bool PassesFilter(object o)
     {
         if (o is not MonsterIntelEntry e) return false;
@@ -791,23 +825,19 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // useful — so only a positive projection over the cap is filtered.
         if (_hasCharacterContext && e.EstimatedRoundsToKill > RoundsToKillCap) return false;
 
-        bool anyThresholdChecked = ShowHits2 || ShowHits5 || ShowHits10 || ShowHits20 || ShowHits40 || ShowHits100;
-        if (anyThresholdChecked)
+        // Hits-You-% bands: selecting none shows every monster; selecting any
+        // keeps a monster whose Hits You % falls in ANY selected band. Each band
+        // is its OWN discrete range, not "at or under" — selecting the 6-10% band
+        // never also surfaces the 2%/5% monsters beneath it.
+        bool anySelected = false;
+        foreach (HitsFilterBucket b in HitsFilterBuckets) if (b.Selected) { anySelected = true; break; }
+        if (anySelected)
         {
-            // Each box is its OWN discrete band, not "at or under" — checking
-            // 10% must show only the 6-10% band, never the 2%/5% monsters
-            // underneath it too (report: checking 10% alone showed 1%/2%
-            // entries because this used to be cumulative thresholds). Bands
-            // are contiguous across the full 0-100% range with no gap.
             int hp = e.IncomingHitPercent;
-            bool inCheckedBand =
-                (ShowHits2 && hp is >= 0 and <= 2)
-                || (ShowHits5 && hp is >= 3 and <= 5)
-                || (ShowHits10 && hp is >= 6 and <= 10)
-                || (ShowHits20 && hp is >= 11 and <= 20)
-                || (ShowHits40 && hp is >= 21 and <= 40)
-                || (ShowHits100 && hp >= 41);
-            if (!inCheckedBand) return false;
+            bool inBand = false;
+            foreach (HitsFilterBucket b in HitsFilterBuckets)
+                if (b.Selected && b.Contains(hp)) { inBand = true; break; }
+            if (!inBand) return false;
         }
         return true;
     }

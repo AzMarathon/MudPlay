@@ -1,5 +1,9 @@
 # Version history
 
+## 3.45.3
+
+- Monster Intel: the Hits-You-% filter is now a **multi-select dropdown** with finer, **realm-aware** bands — Paradigm offers `2 / 5 / 10 / 15 / 20 / … / 100`, Stock drops the 2% / 5% bands (below its 8% hit floor) and starts at 8%, so no band is a dead no-op for your realm
+
 ## 3.45.2
 
 - Monster Intel now considers **all** of a monster's physical attacks, not just its highest-accuracy one: the master list's Accuracy column lists every attack's accuracy, and **Hits You %** is now a use-chance-weighted blend of each attack's hit% — a truer "how often does it actually connect"
