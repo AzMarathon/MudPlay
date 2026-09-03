@@ -101,6 +101,20 @@ public static class MonsterMatchupCalculator
         if (energyPerRound <= 0 || primaryAttackEnergy <= 0) return 1;
         return System.Math.Max(1, energyPerRound / primaryAttackEnergy);
     }
+
+    // Combat rounds per minute — a round is 5 seconds, so 12 rounds = 1 minute.
+    // Damage-per-minute figures multiply a per-round damage by this.
+    public const int RoundsPerMinute = 12;
+
+    // Average swings/round the monster lands over a long window (a minute), honouring
+    // energy ROLLOVER: a monster always spends its whole budget, and leftover energy
+    // (budget mod cost) carries into the next round, so across many rounds the mean
+    // swing count is the true FRACTIONAL budget/cost ratio — not the single-round
+    // integer floor MonsterSwingsPerRound returns. Monsters have no realm swing cap
+    // (unlike the player's 5/6): energy is the only limit. Used for DPM, where the
+    // fractional part matters (e.g. 1000/300 averages 3.33/round, not 3).
+    public static double AverageMonsterSwingsPerRound(int energyPerRound, int attackEnergy)
+        => energyPerRound <= 0 || attackEnergy <= 0 ? 1.0 : (double)energyPerRound / attackEnergy;
 }
 
 // Player-side inputs to MonsterMatchupCalculator.Compute — the offensive numbers
@@ -212,7 +226,13 @@ public readonly record struct PlayerAttackSpell(
 // effective damage.
 public readonly record struct SpellEffectivenessResult(
     string Name, string Short, string Element, long EffectiveDamage,
-    long ManaCostPerRound, bool Eligible, string? BlockedReason, bool IsAoe = false);
+    long ManaCostPerRound, bool Eligible, string? BlockedReason, bool IsAoe = false)
+{
+    // EffectiveDamage is already the resist-adjusted PER-ROUND figure (level-scaled
+    // + energy-multiplied at the caster side, then resist-adjusted here), so a minute
+    // is simply ×12 rounds. Meaningful only when Eligible.
+    public long DamagePerMinute => EffectiveDamage * MonsterMatchupCalculator.RoundsPerMinute;
+}
 
 // Spell-matchup additions to MonsterMatchupCalculator below — kept as their
 // own members rather than folded into Compute(), since the inputs (known

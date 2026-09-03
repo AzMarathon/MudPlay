@@ -1,5 +1,12 @@
 # Version history
 
+## 3.47.0
+
+- **Monster Intel** detail now shows an **Abilities & resistances** panel — the monster's elemental weakness/strength, spell immunity, magic-weapon requirement, damage/magic resist, undead / non-living, and other notable abilities
+- Each of the monster's attacks now lists its **incoming damage/minute** against you, and the melee threat line shows a per-minute total
+- Your **Physical attacks** matchup lines lead with your **damage/minute** to the monster (alongside rounds-to-kill), and each **ranked attack spell** shows its damage/minute too
+- DPM averages a monster's output over 12 rounds (a round is 5s), honouring energy rollover so the fractional swing rate is counted
+
 ## 3.46.15
 
 - Roomba (Workshop → Gang House): each labeled room now has a **Goto** button (left of Remove) that opens the map and walks you straight to that room
