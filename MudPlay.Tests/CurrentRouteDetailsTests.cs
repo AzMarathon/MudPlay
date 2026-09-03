@@ -73,13 +73,19 @@ public sealed class CurrentRouteDetailsTests : IDisposable
             k.Equals(monsterRoom) ? new[] { link } : Array.Empty<RoomDetailLink>();
 
         IReadOnlyList<RouteDetailRow> rows =
-            CurrentRouteDetails.Build(graph, null, null, route, _ => null, MonsterLinks);
+            CurrentRouteDetails.Build(graph, null, null, route, _ => null, MonsterLinks, _ => { });
 
         // Two hops → two move rows in the route-picker "N> map/room < command" format.
         Assert.Equal(2, rows.Count);
-        Assert.StartsWith("1>", rows[0].Line);
-        Assert.Contains("1/1 Home", rows[0].Line);
-        Assert.Contains("< n", rows[0].Line);
+        Assert.StartsWith("1>", rows[0].Step.Line);
+        Assert.Contains("1/1 Home", rows[0].Step.Line);
+        Assert.Contains("< n", rows[0].Step.Line);
+
+        // The line is split so the room is its own link: "1>" / "1/1 Home" / "< n".
+        Assert.Equal("1>", rows[0].NumberLabel);
+        Assert.Equal("1/1 Home", rows[0].Location);
+        Assert.Equal("< n", rows[0].CommandSuffix);
+        Assert.NotNull(rows[0].OpenRoom);
 
         // Row 0 departs 1/1 (no monsters); row 1 departs 1/2 (→ the monster link).
         Assert.Equal(new RoomKey(1, 1), rows[0].Step.Room);
@@ -97,7 +103,7 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         RoomGraphManager graph = NewGraph();
         IReadOnlyList<RoomDetailLink> NoMonsters(RoomKey _) => Array.Empty<RoomDetailLink>();
 
-        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, Array.Empty<RoomKey>(), _ => null, NoMonsters));
-        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, new[] { new RoomKey(1, 1) }, _ => null, NoMonsters));
+        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, Array.Empty<RoomKey>(), _ => null, NoMonsters, _ => { }));
+        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, new[] { new RoomKey(1, 1) }, _ => null, NoMonsters, _ => { }));
     }
 }

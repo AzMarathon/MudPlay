@@ -1148,7 +1148,7 @@
                                                    Margin="0"/>
                                         <Button Grid.Column="1"
                                                 Content="Details…"
-                                                IsVisible="{Binding IsAnyExecuting}"
+                                                IsVisible="{Binding CanShowRouteDetails}"
                                                 Command="{Binding ShowRouteDetailsCommand}"
                                                 Background="{StaticResource ChromeBgElevBrush}"
                                                 BorderBrush="{StaticResource ChromeBorderBrush}"

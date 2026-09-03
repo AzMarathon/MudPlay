@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.ViewModels.GameData.Edit;
 
@@ -22,11 +23,13 @@ public static class CurrentRouteDetails
         IRoomFilter? filter,
         IReadOnlyList<RoomKey> route,
         Func<int, string?> itemName,
-        Func<RoomKey, IReadOnlyList<RoomDetailLink>> roomMonsterLinks)
+        Func<RoomKey, IReadOnlyList<RoomDetailLink>> roomMonsterLinks,
+        Action<RoomKey> onRoomClick)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(itemName);
         ArgumentNullException.ThrowIfNull(roomMonsterLinks);
+        ArgumentNullException.ThrowIfNull(onRoomClick);
 
         // A route needs at least one hop (two rooms) to have any steps.
         if (route is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
@@ -48,7 +51,11 @@ public static class CurrentRouteDetails
 
         var details = new List<RouteDetailRow>(rows.Count);
         foreach (RouteStepRow row in rows)
-            details.Add(new RouteDetailRow(row, roomMonsterLinks(row.Room)));
+        {
+            RoomKey rk = row.Room;
+            details.Add(new RouteDetailRow(
+                row, roomMonsterLinks(rk), new RelayCommand(() => onRoomClick(rk))));
+        }
         return details;
     }
 }

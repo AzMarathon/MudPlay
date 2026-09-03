@@ -996,7 +996,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // destination is queued OR no path exists. Recomputed on QueuedDestination
     // change and on CurrentRoomKey change (so the preview tracks the player if
     // they move while a target is armed).
-    [ObservableProperty] private IReadOnlyList<RoomKey>? _previewPath;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanShowRouteDetails))]
+    private IReadOnlyList<RoomKey>? _previewPath;
 
     private void RefreshPreviewPath()
     {
@@ -3774,6 +3776,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void RefreshDerivedState()
     {
         OnPropertyChanged(nameof(IsAnyExecuting));
+        OnPropertyChanged(nameof(CanShowRouteDetails));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(RunStopLabel));
         RaiseTopBarStatus();
@@ -4043,6 +4046,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // records without it dismissing. Tracked so a re-click toggles it closed.
     private RouteDetailsDialogViewModel? _routeDetailsVm;
 
+    // The Details… button shows whenever there's a route to detail — one the engine
+    // is executing, OR a previewed walk-to armed via the search box (the red preview
+    // line on the map).
+    public bool CanShowRouteDetails => IsAnyExecuting || PreviewPath is { Count: > 1 };
+
     [RelayCommand]
     private void ShowRouteDetails()
     {
@@ -4064,30 +4072,34 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     private string RouteDetailsTitle()
     {
-        if (DestinationRoomKey is { } dest)
+        bool executing = IsAnyExecuting;
+        RoomKey? dest = executing ? DestinationRoomKey : QueuedDestination;
+        string prefix = executing ? "Current route" : "Route preview";
+        if (dest is { } d)
         {
-            string? name = _services.RoomGraph.GetRoom(dest)?.DisplayName;
+            string? name = _services.RoomGraph.GetRoom(d)?.DisplayName;
             return string.IsNullOrWhiteSpace(name)
-                ? $"Current route → {dest.Map}/{dest.Room}"
-                : $"Current route → {dest.Map}/{dest.Room} {name}";
+                ? $"{prefix} → {d.Map}/{d.Room}"
+                : $"{prefix} → {d.Map}/{d.Room} {name}";
         }
-        return "Current route";
+        return prefix;
     }
 
-    // Build the current route's step rows from whichever engine is live (the same
-    // room-key polyline the map draws): a walk, a loop circuit, or an Auto-Lair
-    // approach. Empty when nothing is executing.
+    // Build the step rows from whichever route is live (the same room-key polyline
+    // the map draws): a walk / loop / Auto-Lair approach the engine is executing,
+    // else the armed-but-not-running preview (a search-box walk-to). Empty when
+    // there's neither.
     private IReadOnlyList<RouteDetailRow> BuildCurrentRouteRows()
     {
         IReadOnlyList<RoomKey>? route =
             EngineActionIsWalking ? WalkPath
             : EngineActionIsLooping ? LoopPath
             : EngineActionIsLair ? AutoLairApproachPath
-            : null;
+            : PreviewPath;
         if (route is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
         return CurrentRouteDetails.Build(
             _services.RoomGraph, _services.Bfs, _services.Movement,
-            route, _services.ItemNames.GetName, RoomMonsterLinksForRoom);
+            route, _services.ItemNames.GetName, RoomMonsterLinksForRoom, ShowWhereHighlight);
     }
 
     // A room's notable monsters — placed fixtures (a boss / NPC) then lair spawners

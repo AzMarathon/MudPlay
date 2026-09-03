@@ -45,11 +45,28 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:RouteDetailRow">
                             <StackPanel Margin="0,0,0,3">
-                                <TextBlock Text="{Binding Line}"
-                                           FontFamily="{StaticResource FontMono}"
-                                           FontSize="12"
-                                           Foreground="{StaticResource ChromeFgBrush}"
-                                           TextWrapping="Wrap"/>
+                                <!-- "N>" + the room name as a link (click flashes +
+                                     centres it on the map, @where-style) + "< command". -->
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding NumberLabel}"
+                                               FontFamily="{StaticResource FontMono}"
+                                               FontSize="12"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <Button Classes="MdbLink"
+                                            Content="{Binding Location}"
+                                            Command="{Binding OpenRoom}"
+                                            FontSize="12"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Show this room on the map"/>
+                                    <TextBlock Text="{Binding CommandSuffix}"
+                                               FontFamily="{StaticResource FontMono}"
+                                               FontSize="12"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0,0,0"/>
+                                </StackPanel>
                                 <ItemsControl ItemsSource="{Binding Monsters}"
                                               IsVisible="{Binding HasMonsters}"
                                               Margin="20,1,0,2">
