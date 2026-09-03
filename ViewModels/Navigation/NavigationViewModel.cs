@@ -318,7 +318,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(AutoLairPhaseLabel));
         OnPropertyChanged(nameof(AutoLairStatusText));
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
         // Target switch reorders the map overlay (active target = #1).
         RefreshAutoLairMarkedKeys();
         RefreshAutoLairApproachPath();
@@ -383,7 +383,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(RunStopLabel));
         OnPropertyChanged(nameof(AutoLairPhaseLabel));
         OnPropertyChanged(nameof(AutoLairStatusText));
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
     }
 
     // One-word label for the bottom-strip badge — "Approaching" / "Waiting" /
@@ -578,7 +578,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // isn't a tracker-state change — refresh the top-bar readout here so
         // the action line advances the moment a lap closes, not only on the
         // next room observation.
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
         OnPropertyChanged(nameof(CurrentNavProgress));
     }
 
@@ -2700,13 +2700,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(RunStopLabel));
                 OnPropertyChanged(nameof(CanSaveCurrent));
                 RebuildCurrentNavRows();
-                OnPropertyChanged(nameof(TopBarStatusText));
+                RaiseTopBarStatus();
                 break;
             case nameof(LoopBuilderSessionViewModel.Clicks):
             case nameof(LoopBuilderSessionViewModel.HasClicks):
             case nameof(LoopBuilderSessionViewModel.ProposedName):
                 RebuildCurrentNavRows();
-                OnPropertyChanged(nameof(TopBarStatusText));
+                RaiseTopBarStatus();
                 break;
         }
     }
@@ -3020,10 +3020,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (!_services.Walker.IsSailing)
         {
             _sailingTick.Stop();
-            OnPropertyChanged(nameof(TopBarStatusText));
+            RaiseTopBarStatus();
             return;
         }
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
     }
     private void OnPauseChanged(bool paused) => IsPaused = paused;
 
@@ -3088,7 +3088,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // idle route reads its reason off the live gates even when the chip itself is
         // empty — so refresh the line on every gate/held change, ahead of the chip's
         // unchanged early-out below.
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
         if (text == _activityStatus && kind == _activityKind) return;
         _activityStatus = text;
         _activityKind   = kind;
@@ -3147,6 +3147,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             RoomConfidence.Lost      => ("Lost",    "#F25C54"),
             _                        => ("Unknown", "#888"),
         };
+        // Confidence drives StatusIsFailure (Lost → red), so refresh the status
+        // severity whenever the tracker re-evaluates our location.
+        RaiseTopBarStatus();
         CurrentRoomLabel = state.CurrentRoom is { } room
             ? $"{room.DisplayName}  ·  {room.Key}"
             : "—";
@@ -3569,6 +3572,35 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
     }
 
+    // Raise the status line and its severity companions together — every place
+    // that recomputes TopBarStatusText routes through here, so the red/amber
+    // colouring can't drift out of sync with the text it describes.
+    private void RaiseTopBarStatus()
+    {
+        OnPropertyChanged(nameof(TopBarStatusText));
+        OnPropertyChanged(nameof(StatusIsFailure));
+        OnPropertyChanged(nameof(StatusIsWarning));
+    }
+
+    // EngineError carries the walker/loop failure detail; changing it flips the
+    // status line to/from its ⚠ form, so refresh the severity alongside.
+    partial void OnEngineErrorChanged(string? value) => RaiseTopBarStatus();
+
+    // Failure (red status text) — the engine reported an error, or the room
+    // tracker lost track of where we are. Both mean navigation is broken now.
+    public bool StatusIsFailure =>
+        EngineError is { Length: > 0 }
+        || _services.RoomTracker.State.Confidence == RoomConfidence.Lost;
+
+    // Warning (amber status text) — not a hard failure, but movement is held
+    // for a reason (resting / held / confused / party wait / Auto-All off …),
+    // or Auto-Lair is retrying a failed approach. Something worth a glance.
+    public bool StatusIsWarning =>
+        !StatusIsFailure
+        && (CurrentHoldReason() is { Length: > 0 }
+            || (EngineActionKind == NavigationEngineKind.AutoLair
+                && _services.AutoLair.LastWalkerFailure is { Length: > 0 }));
+
     // Shared row population for the AutoLair branch of
     // RebuildCurrentNavRows — runs both in Build mode (pre-scheduler) and
     // during an active run. The only behavioural difference is the per-row
@@ -3743,7 +3775,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsAnyExecuting));
         OnPropertyChanged(nameof(CanRun));
         OnPropertyChanged(nameof(RunStopLabel));
-        OnPropertyChanged(nameof(TopBarStatusText));
+        RaiseTopBarStatus();
         OnPropertyChanged(nameof(TopBarStatusBadge));
         RefreshActivityStatus();
         OnPropertyChanged(nameof(EngineActionIsIdle));

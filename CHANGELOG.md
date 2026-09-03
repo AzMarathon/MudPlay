@@ -1,5 +1,10 @@
 # Version history
 
+## 3.44.25
+
+- Navigation rail entries that are too long for a narrow panel now show their full text on hover — the status line, GOTO / loop / lair / favourite rows, the live step list, search results, folder names, and the exp-estimator rows
+- The nav status line is now colour-coded: amber while movement is held for a reason (resting, held, confused, party wait, Auto-All off…) and red when a nav action fails or the tracker loses your position
+
 ## 3.44.23
 
 - Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, so a move fumbled this way reverts cleanly instead of stranding the tracker

@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.23**
-> - Recognize a third `convulsions` fumble wording ("You look around stupidly and do nothing!") as a movement refusal, so a move fumbled this way reverts cleanly instead of stranding the tracker
-> - Fixed the death dog's shriek confusion wear-off typo ("wear" → "wears") that stopped it matching real output, which could leave the Confused flag stuck until an unrelated confusion cleared it
-> - `form of the monkey` confusion now clears when the form wears off — the form buff itself carries the Confused state (set while in form, cleared when it drops), so it no longer relies on the per-action distraction fumble to keep it up
-> - Added condition-tracking coverage for status effects that previously had none: constriction, an alternate entangle wording, terror/madness, umbral chains, alternate wrathful-curse and black-curse (blindness) wordings, plague, an alternate runed-cape aura, an alternate sleep wording, poison bolt/cloud/flay/venom-spit onsets, and two combat-end trigger lines (Rakshasha, brain eater)
+> **Version 3.44.25**
+> - Navigation rail entries that are too long for a narrow panel now show their full text on hover — the status line, GOTO / loop / lair / favourite rows, the live step list, search results, folder names, and the exp-estimator rows
+> - The nav status line is now colour-coded: amber while movement is held for a reason (resting, held, confused, party wait, Auto-All off…) and red when a nav action fails or the tracker loses your position
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
