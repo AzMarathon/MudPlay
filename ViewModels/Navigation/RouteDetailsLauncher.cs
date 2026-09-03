@@ -45,7 +45,7 @@ public static class RouteDetailsLauncher
     // Neutral, combat-red for anything evil — mirroring what the terminal renders.
     private static readonly IBrush AlignEvilBrush = new SolidColorBrush(Color.Parse("#E06060"));   // AccentRed
     private static readonly IBrush AlignNeutralBrush = new SolidColorBrush(Color.Parse("#3E9AA6")); // dark cyan
-    private static readonly IBrush AlignGoodBrush = new SolidColorBrush(Color.Parse("#E8E8E8"));    // ChromeFg (white)
+    private static readonly IBrush AlignGoodBrush = new SolidColorBrush(Color.Parse("#FFFFFF"));    // bright white
 
     // Align → tint, using the game's own alignment codes (0 Good, 1 Evil, 2 Chaotic
     // Evil, 3 Neutral, 4 Lawful Good, 5 Neutral Evil, 6 Lawful Evil). Evil is the
