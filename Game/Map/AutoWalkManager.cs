@@ -110,6 +110,24 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private DateTimeOffset _sailingEta;
     private string? _sailingPlace;
 
+    // Greet-teleport (ask-transport) in flight: an `ask <noun> <keyword>` that
+    // ports the asker (GAME_MECHANICS "greet teleport"). Unlike an ordinary
+    // teleport it can SILENTLY FAIL — a class-gated transport (issue #455: the
+    // bard-only barmaid) sits behind a `testskill` skill roll the client doesn't
+    // model, and a failed roll leaves the character exactly where they were,
+    // sometimes with no fresh room render at all. So this step can't just fire and
+    // trust the next observation: it verifies it actually landed in the
+    // destination and, if not, re-asks — driven by a wall-clock watchdog so the
+    // no-render case is caught too — until the destination confirms. The class
+    // gate guarantees only an eligible class reaches this step, so the roll will
+    // eventually pass; there's no wrong-class character to spin forever here.
+    private bool _awaitingGreetTeleport;
+    private string? _greetTeleportCommand;    // the `ask <noun> <keyword>` to re-send
+    private RoomKey _greetTeleportSource;      // room the transport must move us out of
+    private IDisposable? _greetTeleportTimer;
+    private int _greetTeleportAttempts;
+    private static readonly TimeSpan GreetTeleportRetryInterval = TimeSpan.FromSeconds(3);
+
     // A spell round is 3 real seconds (see GAME_MECHANICS "Timing & rounds"), so a
     // voyage's summed transit-spell rounds convert to wall-clock at this rate; the
     // buffer covers the board-cast + landing-render slop past that summed duration.
@@ -1629,7 +1647,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 _teleportResolver, _isLeaderWithFollowers,
                 out string? syncFail,
                 onLeaderPartySplitTeleport: _onLeaderPartySplit);
-            if (sync == SpecialExitSend.Sent) return;
+            if (sync == SpecialExitSend.Sent)
+            {
+                // A greet teleport (`ask <noun> <keyword>`) can silently fail its
+                // skill roll and leave us put (issue #455) — don't just trust the
+                // next observation; arm a verify-and-re-ask watchdog. Ordinary CMD
+                // teleports (chime / boat / item-cast) stay fire-once here so their
+                // party-split relay isn't re-fired.
+                if (IsGreetTeleport(exit)) ArmGreetTeleportRetry(exit);
+                return;
+            }
             if (sync == SpecialExitSend.Failed)
             {
                 _log?.Debug("Walker",
@@ -2042,6 +2069,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
+        // A greet teleport owns its step until it verifies the arrival room (or
+        // re-asks after a failed skill roll). Intercept here so the generic
+        // MoveStep recovery/replan paths — which would fail the walk after a
+        // bounded retry — never see a merely-unlucky roll (issue #455).
+        if (_awaitingGreetTeleport)
+        {
+            HandleGreetTeleportTransition(transition);
+            return;
+        }
+
         if (_path[_index] is not MoveStep) return;
 
         // A door / trap / hidden-exit sub-FSM owns this step until its own
@@ -2298,6 +2335,127 @@ public sealed class AutoWalkManager : IRecoverableEngine
         Reset();
     }
 
+    // A synthesised NPC ask-transport edge (GreetTeleportResolver → the graph's
+    // Direction.Teleport slot, RawHint "greet teleport"). These carry their
+    // `ask <noun> <keyword>` command baked into TextCommands and, unlike a chime /
+    // item CMD teleport, can fail a skill roll — so they get the verify-and-re-ask
+    // watchdog rather than fire-once dispatch.
+    private static bool IsGreetTeleport(in RoomExit exit) =>
+        exit.Hint == RoomExitHint.Teleport
+        && string.Equals(exit.RawHint, "greet teleport", StringComparison.OrdinalIgnoreCase)
+        && exit.TextCommands is { Count: > 0 };
+
+    // Begin waiting on a greet teleport we just asked for: remember the command +
+    // the room we must leave, and arm the re-ask watchdog. _expectedAfterCurrentMove
+    // already holds the destination (set in SendMoveStep).
+    private void ArmGreetTeleportRetry(in RoomExit exit)
+    {
+        _awaitingGreetTeleport = true;
+        _greetTeleportCommand = exit.TextCommands![0];
+        _greetTeleportSource = _tracker.State.CurrentRoom?.Key ?? default;
+        _greetTeleportAttempts = 0;
+        ArmGreetTeleportTimer();
+    }
+
+    private void ArmGreetTeleportTimer()
+    {
+        _greetTeleportTimer?.Dispose();
+        _greetTeleportTimer = _scheduleDelay?.Invoke(GreetTeleportRetryInterval, OnGreetTeleportRetryDeadline);
+    }
+
+    private void ClearGreetTeleportWait()
+    {
+        _awaitingGreetTeleport = false;
+        _greetTeleportCommand = null;
+        _greetTeleportSource = default;
+        _greetTeleportAttempts = 0;
+        _greetTeleportTimer?.Dispose();
+        _greetTeleportTimer = null;
+    }
+
+    // A room-change landed while a greet teleport was in flight. If it's the
+    // destination the transport succeeded; if we're still in the source room the
+    // skill roll failed and we re-ask; anywhere else the graph edge is wrong and we
+    // replan.
+    private void HandleGreetTeleportTransition(RoomTransition transition)
+    {
+        if (transition.NewConfidence != RoomConfidence.Confirmed) return;
+        if (transition.NewRoom?.Key is not { } newKey) return;
+
+        if (newKey.Equals(_expectedAfterCurrentMove))
+        {
+            ClearGreetTeleportWait();
+            _stepInFlight = false;
+            _retryCount = 0;
+            _replanCount = 0;
+            AdvanceStep();
+            return;
+        }
+
+        if (newKey.Equals(_greetTeleportSource))
+        {
+            RetryGreetTeleport("still in the source room (transport roll failed)");
+            return;
+        }
+
+        // Landed somewhere that is neither the source nor the destination — the
+        // synthesised edge's target is stale. Stop re-asking and replan from where
+        // we actually are.
+        ClearGreetTeleportWait();
+        _log?.Info("Walker",
+            $"greet teleport landed at {newKey} (expected {_expectedAfterCurrentMove}); replanning");
+        TryReplanOrFail(RoomConfidence.Confirmed);
+    }
+
+    // The re-ask watchdog fired. Catches the case a failed transport emits NO fresh
+    // room render at all (so no transition ever reaches HandleGreetTeleportTransition):
+    // if we're not in the destination yet, re-ask; if a late render already put us
+    // there, complete the step.
+    private void OnGreetTeleportRetryDeadline()
+    {
+        _greetTeleportTimer?.Dispose();
+        _greetTeleportTimer = null;
+        if (!_awaitingGreetTeleport) return;
+
+        if (_tracker.State.CurrentRoom?.Key is { } here && here.Equals(_expectedAfterCurrentMove))
+        {
+            ClearGreetTeleportWait();
+            _stepInFlight = false;
+            _retryCount = 0;
+            _replanCount = 0;
+            AdvanceStep();
+            return;
+        }
+
+        RetryGreetTeleport("no arrival within the retry window");
+    }
+
+    // Re-send the `ask <noun> <keyword>` and re-arm the watchdog — keeps asking
+    // until the destination confirms. The class gate on the edge guarantees only a
+    // class that CAN pass the roll ever reaches this step, so the retry converges
+    // rather than spinning on a character who can never succeed (issue #455). A held
+    // walk (combat pause) doesn't re-ask; the resume path re-arms the watchdog.
+    //
+    // The tracker is NOT re-notified: the original ask already enqueued one Pending
+    // teleport move, and a failed transport leaves it in place (a same-room
+    // redisplay is swallowed as a passive re-look, a silent fail renders nothing) —
+    // so the single Pending survives every retry and the eventual arrival confirms
+    // it in one step. Re-noting would pile up duplicate Pending moves and the
+    // destination render would only dequeue one, never reaching Confirmed.
+    private void RetryGreetTeleport(string reason)
+    {
+        if (!_awaitingGreetTeleport || _greetTeleportCommand is null) return;
+        if (_coordinator.IsPaused || State != WalkState.Walking) return;
+
+        _greetTeleportAttempts++;
+        _log?.Info("Walker",
+            $"greet teleport didn't arrive ({reason}); re-asking '{_greetTeleportCommand}' "
+            + $"(attempt {_greetTeleportAttempts + 1}).");
+        EmitMoveBytes(Encoding.Latin1.GetBytes(_greetTeleportCommand + "\r"),
+            $"greet-teleport retry '{_greetTeleportCommand}' → {_expectedAfterCurrentMove}");
+        ArmGreetTeleportTimer();
+    }
+
     private void OnPromptObserved(PromptObservation _) => OnPromptObservedCore();
 
     private void OnPromptObservedCore()
@@ -2389,6 +2547,26 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 {
                     _log?.Info("Walker",
                         "resume: boat voyage still in flight; awaiting arrival, not re-sending.");
+                }
+                return;
+            }
+
+            // A greet teleport (ask-transport) owns its own re-ask watchdog, which
+            // holds off while paused. If we already landed while paused, complete
+            // the step; otherwise re-arm the watchdog so it resumes re-asking.
+            if (_awaitingGreetTeleport)
+            {
+                if (_tracker.State.CurrentRoom?.Key is { } here && here.Equals(_expectedAfterCurrentMove))
+                {
+                    _log?.Info("Walker", "resume: greet teleport already arrived while paused; completing step.");
+                    ClearGreetTeleportWait();
+                    _stepInFlight = false;
+                    AdvanceStep();
+                }
+                else
+                {
+                    _log?.Info("Walker", "resume: greet teleport still pending; re-arming re-ask watchdog.");
+                    ArmGreetTeleportTimer();
                 }
                 return;
             }
@@ -2540,6 +2718,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _boatTimer = null;
         _awaitingBoatArrival = false;
         _sailingPlace = null;
+        ClearGreetTeleportWait();
         _deferredWalkTimer?.Dispose();
         _deferredWalkTimer = null;
         _deferredWalkTarget = null;
