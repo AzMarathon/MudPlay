@@ -11,6 +11,7 @@ using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
+using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -4034,6 +4035,53 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Rows shown under CURRENT NAV — steps when walking/looping, marked
     // lairs when auto-lairing.
     public ObservableCollection<CurrentNavRowViewModel> CurrentNavRows { get; } = new();
+
+    // Full step plan for the route the engine is CURRENTLY executing — the header's
+    // "Details…" flyout. Same numbered "N> map/room < command" rows the route
+    // picker's Show-steps panel uses, with each lair room's monsters attached as
+    // clickable record links. Built on demand (RebuildRouteDetails) when the flyout
+    // opens, so it's fresh for the current position without rebuilding every step.
+    public ObservableCollection<RouteDetailRow> RouteDetailRows { get; } = new();
+
+    public bool HasRouteDetails => RouteDetailRows.Count > 0;
+
+    // Rebuild RouteDetailRows from whichever engine's route is live (the same
+    // room-key polyline the map draws): a point-to-point walk, a loop circuit, or an
+    // Auto-Lair approach. No-op / empty when nothing is executing.
+    public void RebuildRouteDetails()
+    {
+        RouteDetailRows.Clear();
+        IReadOnlyList<RoomKey>? route =
+            EngineActionIsWalking ? WalkPath
+            : EngineActionIsLooping ? LoopPath
+            : EngineActionIsLair ? AutoLairApproachPath
+            : null;
+        if (route is { Count: > 1 })
+        {
+            foreach (RouteDetailRow row in CurrentRouteDetails.Build(
+                         _services.RoomGraph, _services.Bfs, _services.Movement,
+                         route, _services.ItemNames.GetName, LairLinksForRoom))
+                RouteDetailRows.Add(row);
+        }
+        OnPropertyChanged(nameof(HasRouteDetails));
+    }
+
+    // The lair monsters standing in a room, each opening its Game Data record on
+    // click — mirrors the ROOM INFO panel's monster links (RoomInfoViewModel). Empty
+    // for a room with no lair (the common case, so most rows carry none).
+    private IReadOnlyList<RoomDetailLink> LairLinksForRoom(RoomKey key)
+    {
+        Room? room = _services.RoomGraph.GetRoom(key);
+        if (room is null) return Array.Empty<RoomDetailLink>();
+        RoomTooltipBuilder.RoomMonsters rm =
+            RoomTooltipBuilder.ResolveRoomMonsters(room, _services.GameData, _services.MonsterSpawns);
+        if (rm.Lair.Count == 0) return Array.Empty<RoomDetailLink>();
+        var links = new List<RoomDetailLink>(rm.Lair.Count);
+        foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Lair)
+            links.Add(new RoomDetailLink($"{m.Name}(#{m.Id})", null,
+                new AsyncRelayCommand(() => _services.OpenMonsterRecordAsync(m.Id))));
+        return links;
+    }
 
     // Row the CURRENT NAV ListBox should keep in view — the active step
     // while walking, the next-ready lair while auto-lairing. The window

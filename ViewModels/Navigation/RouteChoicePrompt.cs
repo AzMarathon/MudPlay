@@ -341,7 +341,7 @@ public static class RouteChoicePrompt
         IReadOnlyList<RoomKey> path, bool gated)
     {
         RoomGraphManager graph = services.RoomGraph;
-        IReadOnlyList<Direction> dirs = DirectionsAlong(graph, path);
+        IReadOnlyList<Direction> dirs = RouteStepList.DirectionsAlong(graph, path);
         if (dirs.Count == 0) return Array.Empty<RouteStepRow>();
 
         // Positioned gates are read with acquirable gates LIVE (so the blocks show);
