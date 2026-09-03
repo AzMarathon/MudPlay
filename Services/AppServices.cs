@@ -4773,6 +4773,17 @@ public sealed class AppServices
         // the solver's. On stock (no `rm`) the solver uses the look-sweep and this
         // gate no-ops anyway.
         Recovery.TryResync = reason => !MazeSolver.Active && ParadigmResync.TryRequestResync(reason);
+        // Forced variant used at the gate's give-up boundaries (before the
+        // heuristic backtrack, and again before the "Lost" dialog): skips the
+        // resolver's anti-storm throttle so a client about to fail out always gets
+        // one authoritative `rm` first (report paradigm-20260902-223159). Same
+        // maze-solver guard — the solver owns `rm` during a solve.
+        Recovery.TryResyncForced = reason => !MazeSolver.Active && ParadigmResync.TryRequestResync(reason, force: true);
+        // Confusion awareness: `rm` only fails to answer when a confusion fumble
+        // eats the command, so a timed-out forced resync while confused is re-asked
+        // (confusion self-clears) rather than dropped to Lost. Same source the
+        // walker / loop-runner confusion exemptions read.
+        Recovery.IsConfused = () => Conditions.IsConfused;
         // Same maze-solver guard as TryResync above — a caller's one-shot re-fix
         // (LoopRunner / AutoWalkManager leaning on rm before trusting a possibly
         // mis-anchored belief) must not race the solver's own rm during a solve.

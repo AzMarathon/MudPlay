@@ -1,5 +1,11 @@
 # Version history
 
+## 3.45.6
+
+- On Paradigm, navigation now asks the game `rm` for your true room before it ever falls back to the blind reverse-walk recovery — and again as a last resort before the "Lost" dialog — so a client is only ever genuinely Lost when `rm` itself can't answer, instead of giving up while an authoritative position was one command away
+- A `rm` that goes unanswered because a confusion fumble ate the command is re-asked until the confusion passes, rather than being treated as a real failure
+- bug reports addressed: paradigm-20260902-223159
+
 ## 3.45.5
 
 - Nav no longer routes non-bards through the barmaid's bard-only ask-transport — a `class N` gate on a greet teleport now keeps the edge for that class only and drops it for everyone else

@@ -1290,6 +1290,16 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
   leader/follower divergence). The client keys on the `Location:` line to re-anchor `RoomTracker`
   via `SetLocated`; if that (map,room) isn't in the imported graph, `SetLocated` logs a warning and
   refuses rather than writing a stale anchor.
+  - **[CONFIRMED, user 2026-09-02] `rm` is reliable — the ONLY way it fails to answer is a
+    confusion fumble eating the command.** There's no game-side throttle or refusal; a `rm` that
+    returns no `Location:` line means the send was consumed by a confusion fumble (same mechanic as
+    a fumbled move / eaten `@wait`), not that the game declined. So on Paradigm the recovery gate
+    treats an *unanswered* forced `rm` as "confused, try again" — re-asking until the confusion
+    self-clears and a `Location:` lands — rather than a genuine failure. This is why the heuristic
+    reverse-walk / "Lost" dialog should essentially never be reached on Paradigm: at every give-up
+    boundary (before the backtrack, and again before Lost) the gate spends a forced `rm` first, and
+    only a `rm` that *answers* with a room the loaded map set doesn't contain — not a fumble-eaten
+    one — is a real dead end (report paradigm-20260902-223159, `EngineRecoveryGate.HandleResyncFailure`).
 - **[CONFIRMED]** **A refused ("bonked") move always prints an explicit line and never
   redisplays the room.** When a move command can't be honoured — no exit that way, a shut
   door, an impairment — the game emits a one-line refusal *instead of* a room display. The
