@@ -1,5 +1,10 @@
 # Version history
 
+## 3.45.2
+
+- Monster Intel now considers **all** of a monster's physical attacks, not just its highest-accuracy one: the master list's Accuracy column lists every attack's accuracy, and **Hits You %** is now a use-chance-weighted blend of each attack's hit% — a truer "how often does it actually connect"
+- Monster Intel detail pane: each physical attack line now shows its own **→ N% to hit you**, and the Melee threat summary uses the same weighted figure
+
 ## 3.45.0
 
 - Monster Intel: new **Apply Debuffs** button (under Edit Attacks) — check your known enemy debuffs to fold them onto the selected monster in Your Matchup and see the fight against a softened target; stats can go negative (below-zero accuracy can't hit you, below-zero AC is trivially hit), and slowness thins the monster's attacks/round

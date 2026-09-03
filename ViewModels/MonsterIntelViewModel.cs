@@ -468,8 +468,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (!_hasCharacterContext) return;
         EvilLevel evil = SimEvilLevel;
         foreach (MonsterIntelEntry entry in _all)
-            entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-                entry.Source.PhysicalAccuracy, entry.Source.Align,
+            // Weighted across every physical attack (each hit% blended by its
+            // use-chance), not just the majority slot. No debuff on the master
+            // list — debuffs are a per-selected-monster what-if in the detail.
+            entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
+                entry.Source.PhysicalAttacks, accuracyDelta: 0, entry.Source.Align,
                 SimAc, _playerDodge, SimProtEvil, _playerProtGood,
                 _gameData.ActiveRealm, SimShadow, SimVileWard, evil) ?? -1;
     }
@@ -861,7 +864,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         MonsterCatalogEntry m = entry.Source;
 
         foreach (MonsterAttackSlot a in m.Attacks)
-            AttackRows.Add(BuildAttackRow(a));
+            AttackRows.Add(BuildAttackRow(a, PerAttackHitYou(a, m)));
         foreach (MonsterMidSpellSlot mid in m.MidSpells)
             AttackRows.Add(new AttackRowViewModel(
                 $"({mid.Percent}%) Between-rounds spell", $"Spell #{mid.SpellId}"
@@ -954,10 +957,22 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             CharacterCalculator.BuildMeleeAttackProfile(MudAttackType.Normal, _stats!, worn, encum, _gameData),
             debuffed);
         if (threat.MonsterHasPhysicalAttack)
+        {
+            // Hit% here is the SAME weighted blend across all the monster's physical
+            // attacks the master list's "Hits You %" uses (folding the accuracy
+            // debuff), not just the primary slot — so the summary matches the column.
+            // dmg/hit + swings stay the primary-slot figures; dmg/round rides the
+            // weighted hit%.
+            int hitYou = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
+                m.PhysicalAttacks, _monsterDebuff.AccDelta, m.Align,
+                SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+                _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel) ?? threat.MonsterHitPercent;
+            double dps = hitYou / 100.0 * threat.MonsterDamagePerHit * threat.MonsterSwingsPerRound;
             IncomingThreatLines.Insert(0,
-                $"Melee: {threat.MonsterHitPercent}% to hit you · {threat.MonsterDamagePerHit} dmg/hit · "
-                + $"{threat.MonsterSwingsPerRound} attack{(threat.MonsterSwingsPerRound == 1 ? "" : "s")}/round · ~{threat.MonsterDps:0} dmg/round"
+                $"Melee: {hitYou}% to hit you · {threat.MonsterDamagePerHit} dmg/hit · "
+                + $"{threat.MonsterSwingsPerRound} attack{(threat.MonsterSwingsPerRound == 1 ? "" : "s")}/round · ~{dps:0} dmg/round"
                 + (HasAppliedDebuffs ? "  (debuffed)" : string.Empty));
+        }
 
         // Melee attacks the picker keeps shown — each projected against THIS
         // monster (rounds to kill, hit%, dmg/hit), folding in any applied debuff
@@ -988,9 +1003,24 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(HasAnyAttackSpells));
     }
 
+    // This one attack's own chance to land on the player, given the current
+    // defense sim (and any applied accuracy debuff). Null without a character or
+    // for a non-physical slot — those have no AC-based to-hit.
+    private int? PerAttackHitYou(MonsterAttackSlot a, MonsterCatalogEntry m)
+    {
+        if (!_hasCharacterContext || (a.Type != 1 && a.Type != 3)) return null;
+        return MonsterMatchupCalculatorSpells.AttackHitPercent(
+            a.Accuracy - _monsterDebuff.AccDelta, m.Align,
+            SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+            _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel);
+    }
+
     // "Majority" resolves a spell-attack slot's Accuracy field back to a spell
-    // number for display (same field-reuse MonsterMdbInfoBuilder decodes).
-    private static AttackRowViewModel BuildAttackRow(MonsterAttackSlot a)
+    // number for display (same field-reuse MonsterMdbInfoBuilder decodes). hitYou
+    // is this physical attack's own chance to land on the player (null for spell
+    // slots / no character), appended to the damage line so each attack shows its
+    // individual to-hit next to its accuracy.
+    private static AttackRowViewModel BuildAttackRow(MonsterAttackSlot a, int? hitYou)
     {
         string header = string.IsNullOrEmpty(a.Name) ? "Attack" : a.Name;
         string chance = $"({(a.TruePercent > 0 ? (int)Math.Round(a.TruePercent) : a.Percent)}%) {header}";
@@ -998,7 +1028,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             return new AttackRowViewModel(chance, $"Spell #{a.Accuracy} lvl {a.MaxDamage}",
                 $"Success {a.MinDamage}%", a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
         string kind = a.Type == 3 ? "Rob" : "Physical";
-        return new AttackRowViewModel(chance, kind, $"{a.MinDamage}-{a.MaxDamage} dmg, acc {a.Accuracy}",
+        string detail = $"{a.MinDamage}-{a.MaxDamage} dmg, acc {a.Accuracy}"
+            + (hitYou is { } h ? $" → {h}% to hit you" : string.Empty);
+        return new AttackRowViewModel(chance, kind, detail,
             a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
     }
 }
