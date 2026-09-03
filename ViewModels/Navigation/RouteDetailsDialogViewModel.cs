@@ -51,8 +51,10 @@ public sealed partial class RouteDetailsDialogViewModel : ObservableObject, IDia
     public IBrush YellowBrush => MonsterHitBand.Yellow;
     public IBrush RedBrush => MonsterHitBand.Red;
 
+    // Middle band is labelled "yellow" in the UI even though the swatch is amber —
+    // the user's preferred wording.
     public string BandLegend =>
-        $"green ≤ {GreenMax:0}%      amber ≤ {YellowMax:0}%      red > {YellowMax:0}%";
+        $"green ≤ {GreenMax:0}%      yellow ≤ {YellowMax:0}%      red > {YellowMax:0}%";
 
     public RouteDetailsDialogViewModel(string title, IReadOnlyList<RouteDetailRow> rows)
         : this(title, rows, false,

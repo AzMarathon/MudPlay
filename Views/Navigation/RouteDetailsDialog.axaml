@@ -62,16 +62,11 @@
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
         <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
-            <TextBlock Grid.Row="0"
-                       Text="{Binding Title}"
-                       FontSize="13" FontWeight="SemiBold"
-                       Foreground="{StaticResource ChromeFgBrush}"/>
-
-            <!-- Monster-name colouring. Off → names tint by alignment (the default).
-                 On → each name recolours by its live Hits-You-% against a green /
-                 amber / red band split the two-thumb slider sets. Only shows when the
-                 route actually passes monster rooms. -->
-            <Border Grid.Row="1"
+            <!-- Monster-name colouring, above the route title. Off → names tint by
+                 alignment (the default). On → each name recolours by its live
+                 Hits-You-% against a green / amber / red band split the two-thumb
+                 slider sets. Only shows when the route actually passes monster rooms. -->
+            <Border Grid.Row="0"
                     IsVisible="{Binding HasMonsters}"
                     Background="{StaticResource ChromeBgSunkenBrush}"
                     BorderBrush="{StaticResource ChromeBorderSoftBrush}"
@@ -98,6 +93,11 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+
+            <TextBlock Grid.Row="1"
+                       Text="{Binding Title}"
+                       FontSize="13" FontWeight="SemiBold"
+                       Foreground="{StaticResource ChromeFgBrush}"/>
 
             <!-- The full step plan, scrollable. Each step is a mono
                  "N> map/room < command" line; a step whose room has a lair lists
