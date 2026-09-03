@@ -197,11 +197,28 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="gd:RoomDetailLink">
-                                            <Button Classes="MonsterLink"
-                                                    Content="{Binding Text}"
-                                                    Command="{Binding Open}"
-                                                    Foreground="{Binding Accent}"
-                                                    Margin="0,0,12,2"/>
+                                            <!-- A see-hidden monster is flanked by an eyeball marker. Kept off the
+                                                 mono link font and sized up so the emoji renders as a clear eye, not
+                                                 a squished glyph. -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,12,2">
+                                                <TextBlock Text="👁"
+                                                           IsVisible="{Binding SeesHidden}"
+                                                           FontSize="16"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,4,0"
+                                                           ToolTip.Tip="See-hidden — this monster defeats sneak"/>
+                                                <Button Classes="MonsterLink"
+                                                        Content="{Binding Text}"
+                                                        Command="{Binding Open}"
+                                                        Foreground="{Binding Accent}"
+                                                        VerticalAlignment="Center"/>
+                                                <TextBlock Text="👁"
+                                                           IsVisible="{Binding SeesHidden}"
+                                                           FontSize="16"
+                                                           VerticalAlignment="Center"
+                                                           Margin="4,0,0,0"
+                                                           ToolTip.Tip="See-hidden — this monster defeats sneak"/>
+                                            </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>

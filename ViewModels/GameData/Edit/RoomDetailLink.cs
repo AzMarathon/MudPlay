@@ -33,6 +33,11 @@ public sealed partial class RoomDetailLink : ObservableObject
     // reads as a muted "no data" tint.
     public int? HitPercent { get; init; }
 
+    // True for a monster carrying the SeeHidden ability (defeats sneak) — the
+    // route-details template flanks the name with an eyeball marker. False for a
+    // non-monster link or a monster without it.
+    public bool SeesHidden { get; init; }
+
     public RoomDetailLink(string text, string? detail, ICommand open)
     {
         Text = text;

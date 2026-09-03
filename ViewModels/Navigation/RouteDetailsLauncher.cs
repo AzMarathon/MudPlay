@@ -145,16 +145,16 @@ public static class RouteDetailsLauncher
             int? hitYou = def is { } profile && entry is not null
                 ? IncomingHitEstimator.WeightedHitPercent(entry, profile, services.GameData.ActiveRealm)
                 : null;
-            // A see-hidden monster (SeeHidden ability) defeats sneak — flag it with an
-            // eyeball on either side of the name so you know it'll spot you coming.
+            // A see-hidden monster (SeeHidden ability) defeats sneak — the template
+            // flanks its name with an eyeball marker so you know it'll spot you coming.
             bool seesHidden = services.SeeHidden is { } seeHidden && seeHidden.Has(m.Id);
-            string label = seesHidden ? $"👁 {m.Name}(#{m.Id}) 👁" : $"{m.Name}(#{m.Id})";
-            links.Add(new RoomDetailLink(label, null,
+            links.Add(new RoomDetailLink($"{m.Name}(#{m.Id})", null,
                 new AsyncRelayCommand(() => services.OpenMonsterRecordAsync(m.Id)))
             {
                 Accent = tint,
                 AlignAccent = tint,
                 HitPercent = hitYou,
+                SeesHidden = seesHidden,
             });
         }
         return links;
