@@ -1,5 +1,11 @@
 # Version history
 
+## 3.46.3
+
+- The route picker now handles a **mixed** route — one that crosses a survivable hazard (a river) **and** a hard gate past it (a keyed door you lack), like the walk to the Iceforge — instead of showing a single "walk to the gate and stop" card
+- For such a route it offers **"Obtain a raft, then cross"** (when a counter can be sourced) or **"Walk to the hazard and stop"** (when it can't), plus **"Cross unprotected — take the damage"** — each stopping at the hard gate you clear yourself
+- "Walk to the hazard and stop" walks only to the room just short of the hazard (the river's edge), so you can fetch a counter / clear the gate by hand from there rather than crossing blindly
+
 ## 3.46.2
 
 - A previewed walk-to whose only route crosses a hazard (a river / lava you lack a counter for) now **draws its route line** instead of a blank map — the preview falls back to the through-the-hazard route the walk would take

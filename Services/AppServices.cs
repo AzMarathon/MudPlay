@@ -7205,6 +7205,26 @@ public sealed class AppServices
         return sawUnprotected;
     }
 
+    // The room to stop at just SHORT of the first room-entry hazard on `path` that
+    // the player can't currently survive — the "hazard's edge" the base picker card
+    // walks to when the user won't cross unprotected and no counter can be sourced.
+    // Null when the path crosses no such hazard (nothing to stop before). When the
+    // hazard is the very first room, returns the path's start (walk nowhere).
+    public Game.Map.RoomKey? HazardApproachRoom(
+        System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey>? path)
+    {
+        if (path is not { Count: > 0 }) return null;
+        for (int i = 0; i < path.Count; i++)
+        {
+            int spell = RoomGraph.GetRoom(path[i])?.Spell ?? 0;
+            if (spell <= 0) continue;
+            if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
+            if (hazard.IsSatisfiedBy(IsItemCarried)) continue;   // player survives it
+            return i > 0 ? path[i - 1] : path[0];
+        }
+        return null;
+    }
+
     // Items to provision for entering a hazard room: its single-counter mandatory
     // items always, plus any any-of counter the user forced via the route picker's
     // "obtain then cross" choice (so that one counter is sourced like a gate item).

@@ -92,38 +92,40 @@ public sealed partial class RouteChoiceDialogViewModel
     //   • item-gate two-route fork (HasFreeRoute): "send it" through the gates as-is
     //     rather than acquiring — a meaningful third choice only when a free detour
     //     also exists.
-    //   • sole SURVIVABLE-damage hazard: "cross unprotected — take the damage",
-    //     offered whether or not a counter can be sourced (it's the user's call to
-    //     eat a river / heat crossing). NEVER offered for a GRAVE hazard (a drown /
-    //     freeze death, a forced teleport) — a counter is the only way past those,
-    //     so walking in unprotected is not a choice we hand the user.
+    //   • SURVIVABLE-damage hazard crossing (sole OR mixed): "cross unprotected —
+    //     take the damage", offered whether or not a counter can be sourced (it's the
+    //     user's call to eat a river / heat crossing). NEVER offered for a GRAVE
+    //     hazard (a drown / freeze death, a forced teleport) — a counter is the only
+    //     way past those, so walking in unprotected is not a choice we hand the user.
     // A teleport / trap-avoid choice has no send-it split.
     public bool ShowSendItCard =>
-        (HasFreeRoute || (_soleHazardOnly && _hazardSurvivable))
+        (HasFreeRoute || _crossesSurvivableHazard)
         && !IsTeleportChoice && !IsTrapAvoidChoice;
 
-    // The primary route / "obtain then cross" card. Hidden only in the one case
-    // where it would duplicate the cross-unprotected card: a sole SURVIVABLE hazard
-    // with no sourceable counter, where "cross unprotected" is the sole action. Any
-    // other route keeps it — an item / key gate ("walk to the gate and stop"), a
-    // sourceable-counter hazard ("obtain, then cross"), a grave hazard ("walk to
-    // the hazard and stop"), the item-gate fork, teleport, trap-avoid, and blocked.
-    public bool ShowGatedCard => !_soleHazardOnly || HazardObtain || !_hazardSurvivable;
+    // The primary route / "obtain then cross" / "walk to the hazard and stop" card.
+    // Hidden only in the one case where it would duplicate the cross-unprotected
+    // card: a SOLE survivable hazard with no sourceable counter, where "cross
+    // unprotected" is the sole action. A MIXED route (hazard + a hard gate) always
+    // keeps it (obtain-then-cross, or walk to the hazard's edge and stop); so does an
+    // item / key gate, a grave hazard, the item-gate fork, teleport, trap-avoid, and
+    // blocked.
+    public bool ShowGatedCard => !_crossesSurvivableHazard || _mixedHazard || HazardObtain;
 
-    // True when this is a sole hazard-only route the caller resolved an obtainable
-    // counter for: Go fetches it then crosses (vs. "cross unprotected"). Drives the
-    // obtain wording + the send-it card in the sole-hazard case.
+    // True when the caller resolved an obtainable counter for the hazard: Go fetches
+    // it then crosses (vs. "cross unprotected"). Drives the obtain wording + the
+    // send-it card, for both a sole hazard and a mixed (hazard + hard gate) route.
     public bool HazardObtain { get; }
 
-    // Set for a sole hazard route: whether all unprotected hazards crossed are
-    // survivable damage (safe to offer "cross unprotected") + the sole-hazard flag
-    // itself, both used by the card-visibility gates above.
+    // The route crosses a survivable hazard the player can't currently pass, whether
+    // that's the only gate (_soleHazardOnly) or there's also a hard gate past it
+    // (_mixedHazard). Both gate the card-visibility rules above.
     private readonly bool _soleHazardOnly;
-    private readonly bool _hazardSurvivable;
+    private readonly bool _crossesSurvivableHazard;
+    private readonly bool _mixedHazard;
 
     // The muted sub-line under the send-it card — reframed for the hazard flavour
     // (take the damage) vs the item-gate flavour (carry the gate items yourself).
-    public string SendItDetail => (_soleHazardOnly && _hazardSurvivable)
+    public string SendItDetail => _crossesSurvivableHazard
         ? "Walks straight through the hazard and takes the damage — no counter fetched."
         : "Crosses the gates as-is — nothing acquired; you must already carry what's needed.";
 
@@ -179,18 +181,23 @@ public sealed partial class RouteChoiceDialogViewModel
             return;
         }
 
-        // A sole hazard-only route: Go crosses the hazard, optionally fetching a
-        // counter first (when one is sourceable), and — for a SURVIVABLE hazard —
-        // "cross unprotected" is offered as the take-the-damage escape.
+        // A route that crosses a survivable hazard: Go crosses it, optionally fetching
+        // a counter first (when sourceable), and "cross unprotected" is the take-the-
+        // damage escape. `hazardSurvivable` (the caller's crossesSurvivableHazard) is
+        // true for both a SOLE hazard route and a MIXED one (hazard + a hard gate past
+        // it); the mixed case also stops at that gate.
         bool soleHazardOnly = !HasFreeRoute && !IsTeleportChoice
             && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
         _soleHazardOnly = soleHazardOnly;
-        _hazardSurvivable = hazardSurvivable;
-        HazardObtain = soleHazardOnly && !string.IsNullOrEmpty(hazardCounterSource);
+        _crossesSurvivableHazard = hazardSurvivable;
+        _mixedHazard = hazardSurvivable && !soleHazardOnly;
+        // A resolved counter source means "obtain then cross" is offerable — for ANY
+        // hazard (a grave hazard's only safe crossing is obtaining the counter).
+        HazardObtain = !string.IsNullOrEmpty(hazardCounterSource);
 
-        // "Cross unprotected — take the damage" for any survivable sole hazard;
+        // "Cross unprotected — take the damage" for any survivable-hazard crossing;
         // "Direct — send it" for the item-gate two-route fork.
-        SendItSummary = (soleHazardOnly && hazardSurvivable)
+        SendItSummary = hazardSurvivable
             ? $"Cross unprotected — take the damage — {StepsEta(choice.GatedStepCount, gatedEta)}"
             : $"Direct — send it — {StepsEta(choice.GatedStepCount, gatedEta)}";
 
@@ -278,6 +285,30 @@ public sealed partial class RouteChoiceDialogViewModel
                     Footnote = "Click the route to preview it on the map, then Go to walk it. "
                         + "This is the only way there — Go walks it and stops at the hazard; "
                         + "carry, buy, or use a counter to cross.";
+                }
+            }
+            else if (_mixedHazard)
+            {
+                // The route crosses a survivable hazard AND a hard gate past it (a
+                // keyed door): offer to obtain-then-cross / cross-unprotected, but
+                // note the walk still stops at the gate you must clear yourself.
+                Heading = $"Only route to {destinationLabel} crosses a hazard, then a gate";
+                FreeSummary = "No hazard-free route — every path there crosses a hazard, "
+                    + "then a gate you must clear yourself";
+                if (HazardObtain)
+                {
+                    GatedSummary = $"Obtain, then cross — {StepsEta(choice.GatedStepCount, gatedEta)}";
+                    Footnote = "Click a route to preview it on the map, then Go to walk it. "
+                        + $"Go fetches a counter ({hazardCounterSource}), crosses, then stops at the "
+                        + "gate you must clear yourself; \"cross unprotected\" takes the damage instead.";
+                }
+                else
+                {
+                    GatedSummary = $"Walk to the hazard and stop — {StepsEta(choice.GatedStepCount, gatedEta)}";
+                    Footnote = "Click a route to preview it on the map, then Go. "
+                        + "There's no counter to fetch nearby — Go walks you to the hazard's edge and "
+                        + "stops; \"cross unprotected\" takes the damage and pushes on to the gate you "
+                        + "must clear yourself.";
                 }
             }
             else
