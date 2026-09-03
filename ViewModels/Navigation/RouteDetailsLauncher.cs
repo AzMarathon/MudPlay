@@ -1,7 +1,12 @@
 using System.Linq;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Combat;
 using MudPlay.Game.Map;
+using MudPlay.Game.Quests;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
 
@@ -15,18 +20,48 @@ namespace MudPlay.ViewModels.Navigation;
 public static class RouteDetailsLauncher
 {
     // The RouteDetailRow list for a route's room-key polyline (source-first). Empty
-    // when the polyline is trivial.
+    // when the polyline is trivial. Each monster link carries its live Hits-You-% so
+    // the window can colour names by danger without recomputing.
     public static IReadOnlyList<RouteDetailRow> BuildRows(AppServices services, IReadOnlyList<RoomKey>? polyline)
     {
         ArgumentNullException.ThrowIfNull(services);
         if (polyline is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
+        PlayerDefenseProfile? def = LiveDefense(services);
         return CurrentRouteDetails.Build(
             services.RoomGraph, services.Bfs, services.Movement,
             polyline, services.ItemNames.GetName,
-            key => MonsterLinks(services, key),
+            key => MonsterLinks(services, key, def),
             services.HighlightWhereRoom,
             key => RoomHazard(services, key),
             id => ItemLink(services, id));
+    }
+
+    // The fully-wired browse VM for a polyline: rows + the persisted hit-% colour
+    // state + a Global-tier persist callback. The single construction path so both
+    // openers (nav header + route picker) get identical settings + persistence.
+    public static RouteDetailsDialogViewModel BuildViewModel(
+        AppServices services, string title, IReadOnlyList<RoomKey>? polyline)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        MonsterHitColorSettings colors =
+            services.Profile.Current?.MonsterHitColors ?? new MonsterHitColorSettings();
+        return new RouteDetailsDialogViewModel(
+            TitleWithEta(services, title, polyline),
+            BuildRows(services, polyline),
+            colors.Enabled, colors.GreenMax, colors.YellowMax,
+            (enabled, greenMax, yellowMax) =>
+            {
+                // Per-character: saved on the loaded profile so each character keeps
+                // its own toggle + band split and the window opens the way that
+                // character last left it. A plain profile Save is quiet (no
+                // ProfileLoaded / ProfileMutated fan-out).
+                if (services.Profile.Current is not { } profile) return;
+                profile.MonsterHitColors = new MonsterHitColorSettings
+                {
+                    Enabled = enabled, GreenMax = greenMax, YellowMax = yellowMax,
+                };
+                services.Profile.Save();
+            });
     }
 
     // Open the browse window for a polyline (modeless, fire-and-forget). Returns the
@@ -35,8 +70,7 @@ public static class RouteDetailsLauncher
         AppServices services, string title, IReadOnlyList<RoomKey>? polyline)
     {
         ArgumentNullException.ThrowIfNull(services);
-        var vm = new RouteDetailsDialogViewModel(
-            TitleWithEta(services, title, polyline), BuildRows(services, polyline));
+        var vm = BuildViewModel(services, title, polyline);
         _ = services.Dialogs.OpenWindowAsync<RouteDetailsDialogViewModel, bool?>(vm);
         return vm;
     }
@@ -53,6 +87,23 @@ public static class RouteDetailsLauncher
             polyline, services.AutoLair.TravelCostModel, services.RoomGraph.GetRoom,
             includeLairDwell: services.IsAutoCombatEnabled);
         return eta > TimeSpan.Zero ? $"{title}  ·  ~{RouteEtaEstimator.FormatCompact(eta)}" : title;
+    }
+
+    // The player's live defence for Hits-You-% colouring, or null when there's no
+    // character context yet (no stat capture) — callers then leave monsters on their
+    // alignment tint. Assembled from the live loadout by the shared IncomingHitEstimator.
+    private static PlayerDefenseProfile? LiveDefense(AppServices services)
+    {
+        PlayerStats stats = services.PlayerStats;
+        if (stats is null || stats.Level <= 0) return null;
+        var snapshot = services.Inventory.Snapshot;
+        var profile = services.Profile.Current;
+        int? classId = CompletedQuestBonuses.ResolveClassId(services.GameData, stats.Class);
+        IReadOnlyList<QuestBonus> quests =
+            CompletedQuestBonuses.Resolve(services.GameData, classId, profile?.QuestLog);
+        return IncomingHitEstimator.BuildLiveDefense(
+            stats, snapshot.EquippedItems, snapshot.Encumbrance, services.GameData,
+            profile?.PartyBuffs, services.Spellbook?.Available, quests);
     }
 
     // Monster-name tints by MajorMUD alignment code (Monsters-table Align): the
@@ -73,9 +124,11 @@ public static class RouteDetailsLauncher
         _ => AlignNeutralBrush,
     };
 
-    // A room's placed + lair monsters (deduped by id), each opening its record and
-    // tinted by its alignment.
-    private static IReadOnlyList<RoomDetailLink> MonsterLinks(AppServices services, RoomKey key)
+    // A room's placed + lair monsters (deduped by id), each opening its record. Tinted
+    // by alignment by default, and carrying its live Hits-You-% (when a character is
+    // loaded) so the window can recolour by danger.
+    private static IReadOnlyList<RoomDetailLink> MonsterLinks(
+        AppServices services, RoomKey key, PlayerDefenseProfile? def)
     {
         Room? room = services.RoomGraph.GetRoom(key);
         if (room is null) return Array.Empty<RoomDetailLink>();
@@ -87,11 +140,21 @@ public static class RouteDetailsLauncher
         foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Placed.Concat(rm.Lair))
         {
             if (!seen.Add(m.Id)) continue;
-            IBrush tint = MonsterAlignBrush(services.MonsterCatalog.Get(m.Id)?.Align);
+            MonsterCatalogEntry? entry = services.MonsterCatalog.Get(m.Id);
+            IBrush tint = MonsterAlignBrush(entry?.Align);
+            int? hitYou = def is { } profile && entry is not null
+                ? IncomingHitEstimator.WeightedHitPercent(entry, profile, services.GameData.ActiveRealm)
+                : null;
+            // A see-hidden monster (SeeHidden ability) defeats sneak — the template
+            // flanks its name with an eyeball marker so you know it'll spot you coming.
+            bool seesHidden = services.SeeHidden is { } seeHidden && seeHidden.Has(m.Id);
             links.Add(new RoomDetailLink($"{m.Name}(#{m.Id})", null,
                 new AsyncRelayCommand(() => services.OpenMonsterRecordAsync(m.Id)))
             {
                 Accent = tint,
+                AlignAccent = tint,
+                HitPercent = hitYou,
+                SeesHidden = seesHidden,
             });
         }
         return links;

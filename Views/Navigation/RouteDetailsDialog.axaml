@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Navigation"
         xmlns:gd="using:MudPlay.ViewModels.GameData.Edit"
+        xmlns:ctl="using:MudPlay.Controls"
         x:Class="MudPlay.Views.Navigation.RouteDetailsDialog"
         x:DataType="vm:RouteDetailsDialogViewModel"
         Title="{Binding Title}"
@@ -60,8 +61,40 @@
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
-        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
-            <TextBlock Grid.Row="0"
+        <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
+            <!-- Monster-name colouring, above the route title. Off → names tint by
+                 alignment (the default). On → each name recolours by its live
+                 Hits-You-% against a green / amber / red band split the two-thumb
+                 slider sets. Only shows when the route actually passes monster rooms. -->
+            <Border Grid.Row="0"
+                    IsVisible="{Binding HasMonsters}"
+                    Background="{StaticResource ChromeBgSunkenBrush}"
+                    BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                    BorderThickness="1" CornerRadius="4"
+                    Padding="8,6">
+                <StackPanel Spacing="6">
+                    <CheckBox Content="Color monsters by hit %"
+                              IsChecked="{Binding ColorByHitPercent}"
+                              FontSize="12"
+                              Foreground="{StaticResource ChromeFgBrush}"
+                              ToolTip.Tip="Tint each monster by its chance to hit you (Monster Intel's Hits-You-%): green = safe, red = dangerous."/>
+                    <StackPanel Spacing="5" IsVisible="{Binding ColorByHitPercent}">
+                        <ctl:BandRangeSlider Height="24"
+                                             Minimum="0" Maximum="100" MinimumGap="2"
+                                             LowerValue="{Binding GreenMax, Mode=TwoWay}"
+                                             UpperValue="{Binding YellowMax, Mode=TwoWay}"
+                                             LowerBrush="{Binding GreenBrush}"
+                                             MiddleBrush="{Binding YellowBrush}"
+                                             UpperBrush="{Binding RedBrush}"/>
+                        <TextBlock Text="{Binding BandLegend}"
+                                   FontFamily="{StaticResource FontMono}"
+                                   FontSize="10"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Grid.Row="1"
                        Text="{Binding Title}"
                        FontSize="13" FontWeight="SemiBold"
                        Foreground="{StaticResource ChromeFgBrush}"/>
@@ -69,7 +102,7 @@
             <!-- The full step plan, scrollable. Each step is a mono
                  "N> map/room < command" line; a step whose room has a lair lists
                  that lair's monsters beneath it, each a clickable record link. -->
-            <ScrollViewer Grid.Row="1"
+            <ScrollViewer Grid.Row="2"
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto"
                           IsVisible="{Binding HasRows}">
@@ -164,11 +197,28 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="gd:RoomDetailLink">
-                                            <Button Classes="MonsterLink"
-                                                    Content="{Binding Text}"
-                                                    Command="{Binding Open}"
-                                                    Foreground="{Binding Accent}"
-                                                    Margin="0,0,12,2"/>
+                                            <!-- A see-hidden monster is flanked by an eyeball marker. Kept off the
+                                                 mono link font and sized up so the emoji renders as a clear eye, not
+                                                 a squished glyph. -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,12,2">
+                                                <TextBlock Text="👁"
+                                                           IsVisible="{Binding SeesHidden}"
+                                                           FontSize="16"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,4,0"
+                                                           ToolTip.Tip="See-hidden — this monster defeats sneak"/>
+                                                <Button Classes="MonsterLink"
+                                                        Content="{Binding Text}"
+                                                        Command="{Binding Open}"
+                                                        Foreground="{Binding Accent}"
+                                                        VerticalAlignment="Center"/>
+                                                <TextBlock Text="👁"
+                                                           IsVisible="{Binding SeesHidden}"
+                                                           FontSize="16"
+                                                           VerticalAlignment="Center"
+                                                           Margin="4,0,0,0"
+                                                           ToolTip.Tip="See-hidden — this monster defeats sneak"/>
+                                            </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -178,14 +228,14 @@
                 </ItemsControl>
             </ScrollViewer>
 
-            <TextBlock Grid.Row="1"
+            <TextBlock Grid.Row="2"
                        Text="No active route."
                        VerticalAlignment="Top"
                        FontSize="12"
                        Foreground="{StaticResource ChromeFgMutedBrush}"
                        IsVisible="{Binding !HasRows}"/>
 
-            <Button Grid.Row="2"
+            <Button Grid.Row="3"
                     Content="Close"
                     Command="{Binding CloseCommand}"
                     HorizontalAlignment="Right"

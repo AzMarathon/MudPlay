@@ -366,41 +366,21 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         RebuildDebuffOptions();
         RecomputeDebuff();
 
-        // Same equipment-aggregation recipe CalculatorsSectionViewModel uses to seed
-        // its own live player-side matchup inputs (AggregateEquipmentStats + the
-        // permanent race/class/quest folds + CalcDodge off level/agility/charm/
-        // encumbrance) — reused here so this reads the same AC/Dodge/wards that tab would.
-        EquipmentStatBreakdown gear = CharacterCalculator.AggregateEquipmentStats(worn, _gameData);
-        // Fold in the permanent race/class innate + completed-quest bonuses the
-        // worn-gear aggregate alone misses — otherwise the AC (and dodge/wards) reads
-        // low by any innate or quest bonus (user report: a completed +1-AC quest left
-        // the sim 1 AC short). Matches the Character sheet / Equipment Manager, which
-        // fold the same permanent base.
-        PlayerStats st = _stats!;
-        if (_gameData.FindRowByName("Races", st.Race) is System.Text.Json.JsonElement raceRow)
-            CharacterCalculator.ApplyAbilityBonuses(gear, raceRow, st.Race);
-        if (_gameData.FindRowByName("Classes", st.Class) is System.Text.Json.JsonElement classRow)
-            CharacterCalculator.ApplyAbilityBonuses(gear, classRow, st.Class);
-        CharacterCalculator.ApplyQuestBonuses(gear, QuestBonusesForCharacter(), "Quests");
-        EquipmentStatSummary totals = gear.Totals;
+        // The player-side defence the Hits-You-% column reads against — worn-gear
+        // aggregate + permanent race/class innate + completed-quest folds + the
+        // character's configured (assumed-up) AC buffs — assembled by the shared
+        // IncomingHitEstimator so the route Details window colours monsters from the
+        // SAME AC/Dodge/wards this window shows. (AC rides worn+base+buffs, not the
+        // live `stat` ArmourClass, which already folds active buffs — see the helper.)
         EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
-        // Assume the character's configured AC buffs are up — a "with my buffs"
-        // pre-fight read. Base the AC on the WORN gear + permanent base (above) +
-        // configured buffs, NOT the live `stat` ArmourClass: the game's ArmourClass
-        // already reflects any buffs active when it was captured, so adding the
-        // configured-buff AC on top double-counts them (report: game AC 57 read as
-        // 79). This matches how the Equipment Manager builds Projected AC.
-        Game.Spells.BuffDefense buff = Game.Spells.BuffDefenseCalculator.Compute(
-            _buffProvider?.Invoke(), _stats!.Level, _spellbook!.Available);
-        _playerAc = (int)System.Math.Round(totals.PlusAC) + buff.Ac;
-        _playerDodge = CombatCalculator.CalcDodge(
-            _stats.Level, _stats.Agility, _stats.Charm, totals.PlusDodge,
-            encum.CurrentWeight, encum.MaxWeight);
-        // Evil-only ward + Shadow also fold in the configured buffs, like the
-        // Equipment Manager, so the simulator seeds match that panel.
-        _playerProtEvil = totals.PlusProtEvil + buff.ProtEvil;
-        _playerProtGood = totals.PlusProtGood;
-        _playerHasShadow = totals.PlusShadowResist > 0 || buff.HasShadow;
+        PlayerDefenseProfile def = IncomingHitEstimator.BuildLiveDefense(
+            _stats!, worn, encum, _gameData, _buffProvider?.Invoke(),
+            _spellbook!.Available, QuestBonusesForCharacter());
+        _playerAc = def.Ac;
+        _playerDodge = def.Dodge;
+        _playerProtEvil = def.ProtEvil;
+        _playerProtGood = def.ProtGood;
+        _playerHasShadow = def.Shadow;
 
         // Seed the editable defense simulator to the live loadout — but only when
         // the WORN set actually changed (first open + a real gear swap). Backpack
@@ -414,7 +394,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             _suppressSimRecompute = true;
             SimAc = _playerAc;                   // worn + buffs; Shadow is its own toggle
             SimProtEvil = _playerProtEvil;
-            SimVileWard = totals.PlusVileWard;
+            SimVileWard = def.VileWard;
             SimShadow = _playerHasShadow;
             _suppressSimRecompute = false;
         }
