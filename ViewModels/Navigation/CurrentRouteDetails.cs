@@ -24,12 +24,14 @@ public static class CurrentRouteDetails
         IReadOnlyList<RoomKey> route,
         Func<int, string?> itemName,
         Func<RoomKey, IReadOnlyList<RoomDetailLink>> roomMonsterLinks,
-        Action<RoomKey> onRoomClick)
+        Action<RoomKey> onRoomClick,
+        Func<RoomKey, RouteRoomHazard?> roomHazard)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(itemName);
         ArgumentNullException.ThrowIfNull(roomMonsterLinks);
         ArgumentNullException.ThrowIfNull(onRoomClick);
+        ArgumentNullException.ThrowIfNull(roomHazard);
 
         // A route needs at least one hop (two rooms) to have any steps.
         if (route is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
@@ -54,7 +56,7 @@ public static class CurrentRouteDetails
         {
             RoomKey rk = row.Room;
             details.Add(new RouteDetailRow(
-                row, roomMonsterLinks(rk), new RelayCommand(() => onRoomClick(rk))));
+                row, roomMonsterLinks(rk), new RelayCommand(() => onRoomClick(rk)), roomHazard(rk)));
         }
         return details;
     }

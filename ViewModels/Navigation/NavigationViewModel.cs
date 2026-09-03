@@ -4099,7 +4099,33 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (route is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
         return CurrentRouteDetails.Build(
             _services.RoomGraph, _services.Bfs, _services.Movement,
-            route, _services.ItemNames.GetName, RoomMonsterLinksForRoom, ShowWhereHighlight);
+            route, _services.ItemNames.GetName, RoomMonsterLinksForRoom, ShowWhereHighlight,
+            RoomHazardForRoom);
+    }
+
+    // A room's protectable cast-on-enter hazard (RoomHazardIndex) — the harmful
+    // spell + the item(s) that make it safe to cross (a raft, rope & grapple,
+    // phoenix feather, waterskin…), each opening its Game Data record. Null for a
+    // safe room, or one whose harmful spell ships no counter (not indexed).
+    private RouteRoomHazard? RoomHazardForRoom(RoomKey key)
+    {
+        Room? room = _services.RoomGraph.GetRoom(key);
+        if (room is null || room.Spell <= 0) return null;
+        if (_services.RoomHazards.HazardForSpell(room.Spell) is not { } hz) return null;
+
+        string spellName = _services.GameData.FindNameByNumber("Spells", room.Spell)
+            ?? $"spell #{room.Spell}";
+        var spellLink = new RoomDetailLink(spellName, null,
+            new AsyncRelayCommand(() => _services.OpenSpellRecordAsync(room.Spell)));
+
+        var counters = new List<RoomDetailLink>(hz.ProtectingItems.Count);
+        foreach (int itemId in hz.ProtectingItems)
+        {
+            string itemName = _services.ItemNames.GetName(itemId) ?? $"item #{itemId}";
+            counters.Add(new RoomDetailLink(itemName, null,
+                new RelayCommand(() => _services.OpenItemGameData(itemId))));
+        }
+        return new RouteRoomHazard(spellLink, counters);
     }
 
     // A room's notable monsters — placed fixtures (a boss / NPC) then lair spawners

@@ -46,7 +46,8 @@
                         <DataTemplate DataType="vm:RouteDetailRow">
                             <StackPanel Margin="0,0,0,3">
                                 <!-- "N>" + the room name as a link (click flashes +
-                                     centres it on the map, @where-style) + "< command". -->
+                                     centres it on the map, @where-style) + "< command".
+                                     A hazard room's name is flanked by ⚠ warnings. -->
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{Binding NumberLabel}"
                                                FontFamily="{StaticResource FontMono}"
@@ -54,18 +55,70 @@
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                VerticalAlignment="Center"
                                                Margin="0,0,6,0"/>
+                                    <TextBlock Text="⚠"
+                                               IsVisible="{Binding HasHazard}"
+                                               Foreground="{StaticResource AccentAmberBrush}"
+                                               FontSize="12"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,4,0"/>
                                     <Button Classes="MdbLink"
                                             Content="{Binding Location}"
                                             Command="{Binding OpenRoom}"
                                             FontSize="12"
                                             VerticalAlignment="Center"
                                             ToolTip.Tip="Show this room on the map"/>
+                                    <TextBlock Text="⚠"
+                                               IsVisible="{Binding HasHazard}"
+                                               Foreground="{StaticResource AccentAmberBrush}"
+                                               FontSize="12"
+                                               VerticalAlignment="Center"
+                                               Margin="4,0,0,0"/>
                                     <TextBlock Text="{Binding CommandSuffix}"
                                                FontFamily="{StaticResource FontMono}"
                                                FontSize="12"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                VerticalAlignment="Center"
                                                Margin="6,0,0,0"/>
+                                </StackPanel>
+
+                                <!-- Hazard sub-line: the harmful spell (→ spell record)
+                                     and the item(s) that make the room safe to cross
+                                     (→ item records). -->
+                                <StackPanel Orientation="Horizontal"
+                                            IsVisible="{Binding HasHazard}"
+                                            Margin="20,0,0,2">
+                                    <TextBlock Text="⚠"
+                                               Foreground="{StaticResource AccentAmberBrush}"
+                                               FontSize="11"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,4,0"/>
+                                    <Button Classes="MdbLink"
+                                            Content="{Binding Hazard.Spell.Text}"
+                                            Command="{Binding Hazard.Spell.Open}"
+                                            VerticalAlignment="Center"/>
+                                    <TextBlock Text="— cross with"
+                                               IsVisible="{Binding Hazard.HasCounters}"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                               FontSize="10"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0,6,0"/>
+                                    <ItemsControl ItemsSource="{Binding Hazard.Counters}"
+                                                  IsVisible="{Binding Hazard.HasCounters}"
+                                                  VerticalAlignment="Center">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="gd:RoomDetailLink">
+                                                <Button Classes="MdbLink"
+                                                        Content="{Binding Text}"
+                                                        Command="{Binding Open}"
+                                                        Margin="0,0,10,0"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
                                 <ItemsControl ItemsSource="{Binding Monsters}"
                                               IsVisible="{Binding HasMonsters}"

@@ -2,8 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.46.0**
-> - New **Details…** button on the **CURRENT NAV** panel header (shown while a route is running) — opens the current route's full step plan in a scrollable window, the same numbered "room < command" list the route picker shows, for whatever's executing (walk, loop, or Auto-Lair approach)
-> - Each room on that plan lists its notable monsters (placed fixtures + lair spawners) right there, each a clickable record link
+> - New **Details…** button on the **CURRENT NAV** panel header — opens the current route's full step plan in a scrollable window (the route picker's numbered "room < command" list) for whatever's executing (walk / loop / Auto-Lair) **or a previewed walk-to** armed from the search box
+> - Each step's **room name links** to flash + centre it on the map (`@where`-style); each room lists its notable monsters (placed + lair) as record links; and a room with a **hazard** is flagged ⚠ with the harmful spell and the item(s) needed to cross it (raft, rope & grapple, phoenix feather…), all linking their records
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

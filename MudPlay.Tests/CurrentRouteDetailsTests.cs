@@ -73,7 +73,7 @@ public sealed class CurrentRouteDetailsTests : IDisposable
             k.Equals(monsterRoom) ? new[] { link } : Array.Empty<RoomDetailLink>();
 
         IReadOnlyList<RouteDetailRow> rows =
-            CurrentRouteDetails.Build(graph, null, null, route, _ => null, MonsterLinks, _ => { });
+            CurrentRouteDetails.Build(graph, null, null, route, _ => null, MonsterLinks, _ => { }, _ => null);
 
         // Two hops → two move rows in the route-picker "N> map/room < command" format.
         Assert.Equal(2, rows.Count);
@@ -98,12 +98,38 @@ public sealed class CurrentRouteDetailsTests : IDisposable
     }
 
     [Fact]
+    public void Build_AttachesHazardToItsRoom()
+    {
+        RoomGraphManager graph = NewGraph();
+        var route = new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) };
+
+        // Only 1/2 is a hazard — the injected lookup mirrors the VM's RoomHazardIndex
+        // resolution (harmful spell + the item that makes it safe to cross).
+        RoomKey hazardRoom = new(1, 2);
+        var hazard = new RouteRoomHazard(
+            new RoomDetailLink("drowning", null, new RelayCommand(() => { })),
+            new[] { new RoomDetailLink("log raft(#5)", null, new RelayCommand(() => { })) });
+        RouteRoomHazard? Hazards(RoomKey k) => k.Equals(hazardRoom) ? hazard : null;
+
+        IReadOnlyList<RouteDetailRow> rows = CurrentRouteDetails.Build(
+            graph, null, null, route, _ => null,
+            _ => Array.Empty<RoomDetailLink>(), _ => { }, Hazards);
+
+        Assert.False(rows[0].HasHazard);
+        Assert.True(rows[1].HasHazard);
+        RouteRoomHazard hz = rows[1].Hazard!;
+        Assert.Equal("drowning", hz.Spell.Text);
+        Assert.True(hz.HasCounters);
+        Assert.Equal("log raft(#5)", hz.Counters.Single().Text);
+    }
+
+    [Fact]
     public void Build_TrivialOrEmptyRoute_ReturnsNoRows()
     {
         RoomGraphManager graph = NewGraph();
         IReadOnlyList<RoomDetailLink> NoMonsters(RoomKey _) => Array.Empty<RoomDetailLink>();
 
-        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, Array.Empty<RoomKey>(), _ => null, NoMonsters, _ => { }));
-        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, new[] { new RoomKey(1, 1) }, _ => null, NoMonsters, _ => { }));
+        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, Array.Empty<RoomKey>(), _ => null, NoMonsters, _ => { }, _ => null));
+        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, new[] { new RoomKey(1, 1) }, _ => null, NoMonsters, _ => { }, _ => null));
     }
 }
