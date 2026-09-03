@@ -113,6 +113,28 @@ public sealed record MonsterCatalogEntry(
         }
     }
 
+    // Every physical/rob attack slot's accuracy paired with its use-weight —
+    // TruePercent, the decoded probability that sums to ~100 across the physical
+    // slots (falls back to the raw Percent when a decode isn't present). Empty for
+    // a spell-only / attackless monster. Feeds Monster Intel's weighted "Hits You
+    // %" (each attack's own hit chance blended by how often the monster throws it)
+    // and the all-accuracies column, which the single "majority" accuracy above
+    // deliberately left for this follow-up.
+    public IReadOnlyList<(int Accuracy, double Weight)> PhysicalAttacks
+    {
+        get
+        {
+            List<(int, double)> list = new();
+            foreach (MonsterAttackSlot a in Attacks)
+            {
+                if (a.Type != 1 && a.Type != 3) continue;
+                if (a.Percent <= 0) continue;
+                list.Add((a.Accuracy, a.TruePercent > 0 ? a.TruePercent : a.Percent));
+            }
+            return list;
+        }
+    }
+
     // The physical/rob slot (Type 1 or 3) with the highest TruePercent chance —
     // the same "majority" slot PhysicalAccuracy tracks — exposed on its own so
     // Monster Intel's rounds-to-kill estimate can also read its damage range,
@@ -138,6 +160,13 @@ public sealed record MonsterCatalogEntry(
     // MonsterMatchupCalculator needs to project a rounds-to-kill estimate.
     public int PrimaryPhysicalAvgDamage
         => PrimaryPhysicalSlot is { } s ? (s.MinDamage + s.MaxDamage) / 2 : 0;
+
+    // Per-attack energy cost of the primary physical slot — Energy / this is the
+    // monster's attacks/round with that slot (the same figure the Game-Data
+    // readout shows). A slowness debuff raises the effective value; the matchup
+    // sim reads it to project the monster's swing count.
+    public int PrimaryPhysicalEnergy
+        => PrimaryPhysicalSlot is { } s ? s.Energy : 0;
 }
 
 // Typed, parsed-once view of the active game-data set's Monsters table (cross-

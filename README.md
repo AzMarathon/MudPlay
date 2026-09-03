@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.44.26**
+> **Version 3.45.4**
 > - Fixed the walker's point-to-point replan budget (a fallback the loop-runner's own recovery already hands off to) still failing a walk over a short burst of confusion fumbles — it now gets the same "don't charge the budget while confused" exemption already applied to the loop's recovery budget, so a genuinely blocked exit still fails cleanly but a confusion streak no longer stalls movement outright
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

@@ -1,9 +1,24 @@
 # Version history
 
-## 3.44.26
+## 3.45.4
 
 - Fixed the walker's point-to-point replan budget (a fallback the loop-runner's own recovery already hands off to) still failing a walk over a short burst of confusion fumbles — it now gets the same "don't charge the budget while confused" exemption already applied to the loop's recovery budget, so a genuinely blocked exit still fails cleanly but a confusion streak no longer stalls movement outright
 - bug reports addressed: paradigm-20260902-173754
+
+## 3.45.3
+
+- Monster Intel: the Hits-You-% filter is now a **multi-select dropdown** with finer, **realm-aware** bands — Paradigm offers `2 / 5 / 10 / 15 / 20 / … / 100`, Stock drops the 2% / 5% bands (below its 8% hit floor) and starts at 8%, so no band is a dead no-op for your realm
+
+## 3.45.2
+
+- Monster Intel now considers **all** of a monster's physical attacks, not just its highest-accuracy one: the master list's Accuracy column lists every attack's accuracy, and **Hits You %** is now a use-chance-weighted blend of each attack's hit% — a truer "how often does it actually connect"
+- Monster Intel detail pane: each physical attack line now shows its own **→ N% to hit you**, and the Melee threat summary uses the same weighted figure
+
+## 3.45.0
+
+- Monster Intel: new **Apply Debuffs** button (under Edit Attacks) — check your known enemy debuffs to fold them onto the selected monster in Your Matchup and see the fight against a softened target; stats can go negative (below-zero accuracy can't hit you, below-zero AC is trivially hit), and slowness thins the monster's attacks/round
+- Monster Intel now models the monster's swings/round (energy ÷ attack-energy) — Your Matchup shows a Melee threat line with its attacks/round and rough damage/round, so slowness and the monster's real output are visible
+- Monster Intel: the displayed attacks in Your Matchup are grouped — Physical attacks, then Spell attacks split into Single-target and AOE
 
 ## 3.44.25
 

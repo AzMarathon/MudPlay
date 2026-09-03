@@ -91,6 +91,19 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private bool _buildingOptions;
     public ObservableCollection<AttackPickRow> AttackOptions { get; } = new();
 
+    // "Apply Debuffs" picker state. DebuffOptions is the picker's rows (the
+    // character's known stat-affecting enemy debuffs); _ownedDebuffSpells backs
+    // them; _appliedDebuffKeys are the cast codes folded onto the selected
+    // monster; _monsterDebuff is their summed effect. Persisted per character.
+    private readonly List<KnownSpell> _ownedDebuffSpells = new();
+    private readonly HashSet<string> _appliedDebuffKeys = new(System.StringComparer.OrdinalIgnoreCase);
+    private bool _buildingDebuffOptions;
+    private Game.Spells.MonsterDebuffEffect _monsterDebuff;
+    public ObservableCollection<DebuffPickRow> DebuffOptions { get; } = new();
+    [ObservableProperty] private bool _hasAppliedDebuffs;
+    [ObservableProperty] private string _debuffSummary = "";
+    public bool HasKnownDebuffs => DebuffOptions.Count > 0;
+
     public DataGridCollectionView RowsView { get; }
 
     [ObservableProperty] private string? _nameFilter;
@@ -134,13 +147,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // read) instead of re-reading the table the catalog has already evicted.
         _spellAttType = catalog.SpellAttType;
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
+        RebuildHitsFilterBuckets();   // realm-dependent Hits-You-% filter bands
 
         PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(NameFilter)
-                or nameof(ShowHits2) or nameof(ShowHits5) or nameof(ShowHits10)
-                or nameof(ShowHits20) or nameof(ShowHits40) or nameof(ShowHits100)
-                or nameof(HideRegenMonsters))
+            if (e.PropertyName is nameof(NameFilter) or nameof(HideRegenMonsters))
             { RowsView.Refresh(); OnPropertyChanged(nameof(CountText)); }
             else if (e.PropertyName == nameof(SelectedEntry)) { RebuildDetail(); UpdateAcVsTarget(); }
         };
@@ -156,6 +167,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             foreach (string k in saved.MonsterIntelHiddenAttacks) _hiddenAttackKeys.Add(k);
             if (!string.IsNullOrEmpty(saved.MonsterIntelRoundsAttack))
                 _roundsAttackKey = saved.MonsterIntelRoundsAttack!;
+            foreach (string k in saved.MonsterIntelAppliedDebuffs) _appliedDebuffKeys.Add(k);
 
             // RowsView was just constructed with Filter = PassesFilter, which
             // reads IncomingHitPercent — still every entry's default -1 until
@@ -245,24 +257,30 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // that feeds Hits You %, surfaced as a plain number for the picked target.
     [ObservableProperty] private string _acVsTargetText = "—";
 
-    // Hits-You-% threshold checkboxes: independent, OR'd together — checking
-    // none shows every monster (still subject to the "no computable value"
-    // drop below); checking one or more keeps a monster if it falls in ANY
-    // checked band. Six discrete, non-overlapping, contiguous bands covering
-    // the full 0-100% range with no gap (0-2, 3-5, 6-10, 11-20, 21-40,
-    // 41-100) — checking 10% alone must never also surface a 1% or 2%
-    // monster. Doubling scale rather than flat 5%-wide steps: against a
-    // catalog-wide distribution pull (see the PR discussion), a leveled
-    // character's Hits You % spreads across the full range rather than
-    // clustering low, so the old 5-band scheme (topping out at "25%+") left
-    // roughly 40% of fightable monsters undifferentiated in one catch-all
-    // bucket, plus a dead 16-24% zone no box covered at all.
-    [ObservableProperty] private bool _showHits2;
-    [ObservableProperty] private bool _showHits5;
-    [ObservableProperty] private bool _showHits10;
-    [ObservableProperty] private bool _showHits20;
-    [ObservableProperty] private bool _showHits40;
-    [ObservableProperty] private bool _showHits100;
+    // Hits-You-% filter: a multi-select dropdown of contiguous %-bands. Selecting
+    // none shows every monster (still subject to the "no computable value" drop);
+    // selecting any keeps a monster whose Hits You % falls in ANY selected band.
+    // The band set is REALM-DEPENDENT — the lowest a monster's attack can land is
+    // 8% on Stock and 2% on ParaMUD (CombatCalculator.GetHitMin), so Stock drops
+    // the 2/5 bands (dead below its floor) and gains an 8% band. Session-only (not
+    // persisted), built once from the active realm at construction.
+    public ObservableCollection<HitsFilterBucket> HitsFilterBuckets { get; } = new();
+
+    private static readonly int[] ParadigmHitBands =
+        { 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
+    private static readonly int[] StockHitBands =
+        { 8, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
+
+    // The dropdown button's label — "all" when no band is selected, else the count.
+    public string HitsFilterLabel
+    {
+        get
+        {
+            int n = 0;
+            foreach (HitsFilterBucket b in HitsFilterBuckets) if (b.Selected) n++;
+            return n == 0 ? "Hits You %: all" : $"Hits You %: {n} band{(n == 1 ? "" : "s")}";
+        }
+    }
 
     // Drop monsters that respawn on their own timer (a non-zero RegenTime — bosses,
     // lair leaders, other timed spawns) so the list shows only freely-farmable
@@ -327,9 +345,26 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             _ownedAttackSpells.Add(new PlayerAttackSpell(
                 known.Name, known.Short, known.ReqLevel, attType,
                 maxDmg, SpellCalculator.ManaCost(known.Formula),
-                undeadOnly, livingOnly));
+                undeadOnly, livingOnly, known.Targets));
         }
         KnownAttackSpellCount = _ownedAttackSpells.Count;
+
+        // Stat-affecting enemy debuffs the character knows — a 0-energy
+        // between-round spell aimed at an enemy (single or area) that carries an
+        // AC / DR / Dodge / accuracy / slowness ability the matchup sim can fold
+        // onto the selected monster. Feeds the "Apply Debuffs" picker.
+        _ownedDebuffSpells.Clear();
+        foreach (KnownSpell known in _spellbook.Available)
+        {
+            if (!_spellbook.IsObtained(known.Number)) continue;
+            if (!Game.Combat.DebuffTargeting.IsBetweenRound(known.Formula.EnergyCost)) continue;
+            if (!Game.Combat.DebuffTargeting.IsSingleTargetEnemy(known.Targets)
+                && !Game.Combat.DebuffTargeting.IsAreaEnemy(known.Targets)) continue;
+            if (!Game.Spells.MonsterDebuffCalculator.AffectsMonsterStats(known)) continue;
+            _ownedDebuffSpells.Add(known);
+        }
+        RebuildDebuffOptions();
+        RecomputeDebuff();
 
         // Same equipment-aggregation recipe CalculatorsSectionViewModel uses to seed
         // its own live player-side matchup inputs (AggregateEquipmentStats + the
@@ -437,8 +472,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (!_hasCharacterContext) return;
         EvilLevel evil = SimEvilLevel;
         foreach (MonsterIntelEntry entry in _all)
-            entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-                entry.Source.PhysicalAccuracy, entry.Source.Align,
+            // Weighted across every physical attack (each hit% blended by its
+            // use-chance), not just the majority slot. No debuff on the master
+            // list — debuffs are a per-selected-monster what-if in the detail.
+            entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
+                entry.Source.PhysicalAttacks, accuracyDelta: 0, entry.Source.Align,
                 SimAc, _playerDodge, SimProtEvil, _playerProtGood,
                 _gameData.ActiveRealm, SimShadow, SimVileWard, evil) ?? -1;
     }
@@ -486,12 +524,30 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     partial void OnSimShadowChanged(bool value) => OnSimInputChanged();
     partial void OnSimVileWardAlignIndexChanged(int value) => OnSimInputChanged();
 
-    private static MonsterMatchupProfile MonsterProfileFor(MonsterCatalogEntry m) => new(
-        ArmourClass: m.ArmourClass, DamageResist: m.DamageResist, Hp: m.Hp, Dodge: m.Dodge,
-        HasPhysicalAttack: m.PhysicalAccuracy is not null,
-        AttackAccuracy: m.PhysicalAccuracy?.Majority ?? 0,
-        AvgAttackDamage: m.PrimaryPhysicalAvgDamage,
-        IsEvil: m.Align is 1 or 2 or 5 or 6, IsGood: m.Align is 0 or 4);
+    // The monster's matchup inputs, optionally with an applied debuff folded in.
+    // Debuff deltas SUBTRACT from the monster's defense (AC / DR / Dodge) and its
+    // to-hit (Accuracy) and are deliberately NOT clamped — a monster pushed below
+    // zero accuracy can't land a hit, below-zero AC is trivially hit. Slowness
+    // raises the primary attack's energy x1.5 (MMUD-Explorer's ×3/2), thinning the
+    // swing count MonsterMatchupCalculator derives from energy/attEnergy. With the
+    // default (no-op) effect this reproduces the plain monster profile.
+    private static MonsterMatchupProfile MonsterProfileFor(
+        MonsterCatalogEntry m, Game.Spells.MonsterDebuffEffect debuff = default)
+    {
+        int attEnergy = m.PrimaryPhysicalEnergy;
+        if (debuff.Slowed && attEnergy > 0) attEnergy = (attEnergy * 3) / 2;
+        return new(
+            ArmourClass: m.ArmourClass - debuff.AcDelta,
+            DamageResist: m.DamageResist - (int)System.Math.Round(debuff.DrDelta),
+            Hp: m.Hp,
+            Dodge: m.Dodge - debuff.DodgeDelta,
+            HasPhysicalAttack: m.PhysicalAccuracy is not null,
+            AttackAccuracy: (m.PhysicalAccuracy?.Majority ?? 0) - debuff.AccDelta,
+            AvgAttackDamage: m.PrimaryPhysicalAvgDamage,
+            IsEvil: m.Align is 1 or 2 or 5 or 6, IsGood: m.Align is 0 or 4,
+            EnergyPerRound: m.Energy,
+            PrimaryAttackEnergy: attEnergy);
+    }
 
     // Rounds for one attack spell to drop a monster: HP / its resist-adjusted
     // per-round damage (the same RankAttackSpells the Your Matchup panel uses).
@@ -613,6 +669,75 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _resolver.WriteAt(SettingsTier.Character, "Other", dto);
     }
 
+    // ----- Apply Debuffs picker -----
+
+    // Rebuild the debuff picker rows from the character's known stat-affecting
+    // debuffs, carrying the applied set across the rebuild. Each row summarises
+    // what the debuff strips so the user can pick by effect, not just name.
+    private void RebuildDebuffOptions()
+    {
+        _buildingDebuffOptions = true;
+        foreach (DebuffPickRow r in DebuffOptions) r.PropertyChanged -= OnDebuffOptionChanged;
+        DebuffOptions.Clear();
+        foreach (KnownSpell s in _ownedDebuffSpells)
+        {
+            var row = new DebuffPickRow(s.Short, s.Name,
+                DebuffEffectSummary(s), applied: _appliedDebuffKeys.Contains(s.Short));
+            row.PropertyChanged += OnDebuffOptionChanged;
+            DebuffOptions.Add(row);
+        }
+        _buildingDebuffOptions = false;
+        OnPropertyChanged(nameof(HasKnownDebuffs));
+    }
+
+    private void OnDebuffOptionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_buildingDebuffOptions || sender is not DebuffPickRow row) return;
+        if (e.PropertyName != nameof(DebuffPickRow.Applied)) return;
+        if (row.Applied) _appliedDebuffKeys.Add(row.Key);
+        else _appliedDebuffKeys.Remove(row.Key);
+        SaveDebuffSettings();
+        RecomputeDebuff();
+        if (SelectedEntry is not null) RebuildDetail();   // re-run the matchup debuffed
+    }
+
+    // Fold the applied debuffs into the single effect the matchup sim subtracts,
+    // and refresh the summary the panel shows above the debuffed numbers.
+    private void RecomputeDebuff()
+    {
+        List<KnownSpell> applied = _ownedDebuffSpells
+            .Where(s => _appliedDebuffKeys.Contains(s.Short)).ToList();
+        _monsterDebuff = Game.Spells.MonsterDebuffCalculator.Fold(applied, _stats?.Level ?? 1);
+        HasAppliedDebuffs = applied.Count > 0;
+        DebuffSummary = HasAppliedDebuffs ? FormatDebuffSummary(_monsterDebuff) : "";
+    }
+
+    // Persist the applied debuff cast-codes on the character tier, resolve-then-write
+    // like the attack picks so it never clobbers the tab's other Other fields.
+    private void SaveDebuffSettings()
+    {
+        if (!_hasCharacterContext) return;
+        OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
+        dto.MonsterIntelAppliedDebuffs =
+            _appliedDebuffKeys.OrderBy(k => k, System.StringComparer.OrdinalIgnoreCase).ToList();
+        _resolver.WriteAt(SettingsTier.Character, "Other", dto);
+    }
+
+    // Short "what it strips" label for one debuff spell's picker row.
+    private string DebuffEffectSummary(KnownSpell spell)
+        => FormatDebuffSummary(Game.Spells.MonsterDebuffCalculator.Fold(new[] { spell }, _stats?.Level ?? 1));
+
+    private static string FormatDebuffSummary(Game.Spells.MonsterDebuffEffect e)
+    {
+        List<string> parts = new();
+        if (e.AcDelta != 0) parts.Add($"-{e.AcDelta} AC");
+        if (e.DrDelta != 0) parts.Add($"-{e.DrDelta:0.#} DR");
+        if (e.DodgeDelta != 0) parts.Add($"-{e.DodgeDelta} Dodge");
+        if (e.AccDelta != 0) parts.Add($"-{e.AccDelta} Accuracy");
+        if (e.Slowed) parts.Add("slowed");
+        return parts.Count == 0 ? "no stat effect" : string.Join(" · ", parts);
+    }
+
     // "12 rounds", or "999+ rounds" past the display cap (same ceiling the column uses).
     private string FormatRounds(int rounds)
         => rounds > RoundsToKillCap ? $"{RoundsToKillCap}+ rounds"
@@ -648,6 +773,36 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     private void UpdateManaLabel() => ManaLabel = _playerState?.ManaType == ManaType.Kai ? "Kai" : "Mana";
 
+    // Build the Hits-You-% filter bands for the active realm — contiguous [lo,hi]
+    // ranges from the realm's thresholds (Stock omits the 2/5 bands below its 8%
+    // floor, and adds an 8% band). Called once at construction; the realm is fixed
+    // for the window's life, like the catalog itself.
+    private void RebuildHitsFilterBuckets()
+    {
+        foreach (HitsFilterBucket b in HitsFilterBuckets) b.PropertyChanged -= OnHitsFilterBucketChanged;
+        HitsFilterBuckets.Clear();
+        int[] bands = _gameData.ActiveRealm == RealmType.ParaMud ? ParadigmHitBands : StockHitBands;
+        int lo = 0;
+        for (int i = 0; i < bands.Length; i++)
+        {
+            int hi = bands[i];
+            string label = i == 0 ? $"≤{hi}%" : $"{lo}–{hi}%";
+            HitsFilterBucket bucket = new(label, lo, hi);
+            bucket.PropertyChanged += OnHitsFilterBucketChanged;
+            HitsFilterBuckets.Add(bucket);
+            lo = hi + 1;
+        }
+        OnPropertyChanged(nameof(HitsFilterLabel));
+    }
+
+    private void OnHitsFilterBucketChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(HitsFilterBucket.Selected)) return;
+        RowsView.Refresh();
+        OnPropertyChanged(nameof(CountText));
+        OnPropertyChanged(nameof(HitsFilterLabel));
+    }
+
     private bool PassesFilter(object o)
     {
         if (o is not MonsterIntelEntry e) return false;
@@ -670,23 +825,19 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // useful — so only a positive projection over the cap is filtered.
         if (_hasCharacterContext && e.EstimatedRoundsToKill > RoundsToKillCap) return false;
 
-        bool anyThresholdChecked = ShowHits2 || ShowHits5 || ShowHits10 || ShowHits20 || ShowHits40 || ShowHits100;
-        if (anyThresholdChecked)
+        // Hits-You-% bands: selecting none shows every monster; selecting any
+        // keeps a monster whose Hits You % falls in ANY selected band. Each band
+        // is its OWN discrete range, not "at or under" — selecting the 6-10% band
+        // never also surfaces the 2%/5% monsters beneath it.
+        bool anySelected = false;
+        foreach (HitsFilterBucket b in HitsFilterBuckets) if (b.Selected) { anySelected = true; break; }
+        if (anySelected)
         {
-            // Each box is its OWN discrete band, not "at or under" — checking
-            // 10% must show only the 6-10% band, never the 2%/5% monsters
-            // underneath it too (report: checking 10% alone showed 1%/2%
-            // entries because this used to be cumulative thresholds). Bands
-            // are contiguous across the full 0-100% range with no gap.
             int hp = e.IncomingHitPercent;
-            bool inCheckedBand =
-                (ShowHits2 && hp is >= 0 and <= 2)
-                || (ShowHits5 && hp is >= 3 and <= 5)
-                || (ShowHits10 && hp is >= 6 and <= 10)
-                || (ShowHits20 && hp is >= 11 and <= 20)
-                || (ShowHits40 && hp is >= 21 and <= 40)
-                || (ShowHits100 && hp >= 41);
-            if (!inCheckedBand) return false;
+            bool inBand = false;
+            foreach (HitsFilterBucket b in HitsFilterBuckets)
+                if (b.Selected && b.Contains(hp)) { inBand = true; break; }
+            if (!inBand) return false;
         }
         return true;
     }
@@ -709,10 +860,17 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // ----- Your Matchup (needs a live character; blank without one) -----
     public ObservableCollection<string> MatchupLines { get; } = new();
     // Per-shown melee attack vs the selected monster (rounds to kill / hit% /
-    // dmg-per-hit) — the melee counterpart to SpellEffectiveness, both gated by
-    // the Edit Attacks picker's show/hide checkboxes.
+    // dmg-per-hit) — the physical counterpart to the attack-spell lists below,
+    // both gated by the Edit Attacks picker's show/hide checkboxes.
     public ObservableCollection<string> MatchupMeleeLines { get; } = new();
-    public ObservableCollection<SpellEffectivenessResult> SpellEffectiveness { get; } = new();
+    // Your attack spells vs the selected monster, split by target scope for the
+    // panel's grouping: single-target (enemy scopes 4/8) and AOE (9/12). Both are
+    // ranked by effective damage; hidden picks are filtered out.
+    public ObservableCollection<SpellEffectivenessResult> AttackSpellsSingleTarget { get; } = new();
+    public ObservableCollection<SpellEffectivenessResult> AttackSpellsAoe { get; } = new();
+    public bool HasSingleTargetSpells => AttackSpellsSingleTarget.Count > 0;
+    public bool HasAoeSpells => AttackSpellsAoe.Count > 0;
+    public bool HasAnyAttackSpells => HasSingleTargetSpells || HasAoeSpells;
     public ObservableCollection<string> IncomingThreatLines { get; } = new();
     [ObservableProperty] private bool _hasMatchupContext;
 
@@ -726,7 +884,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         AttackRows.Clear();
         MatchupLines.Clear();
         MatchupMeleeLines.Clear();
-        SpellEffectiveness.Clear();
+        AttackSpellsSingleTarget.Clear();
+        AttackSpellsAoe.Clear();
         IncomingThreatLines.Clear();
         ObservationLines.Clear();
         HasObservations = false;
@@ -735,7 +894,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         MonsterCatalogEntry m = entry.Source;
 
         foreach (MonsterAttackSlot a in m.Attacks)
-            AttackRows.Add(BuildAttackRow(a));
+            AttackRows.Add(BuildAttackRow(a, PerAttackHitYou(a, m)));
         foreach (MonsterMidSpellSlot mid in m.MidSpells)
             AttackRows.Add(new AttackRowViewModel(
                 $"({mid.Percent}%) Between-rounds spell", $"Spell #{mid.SpellId}"
@@ -814,31 +973,84 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 : $"{element}: your gear resists {myResist:+0;-0}%");
         }
 
-        // Melee attacks the picker keeps shown — each projected against THIS
-        // monster (rounds to kill, hit%, dmg/hit), the same per-type math the
-        // master list's rounds column and the Character Info sheet use.
+        // Any applied debuffs soften THIS monster in the physical/defense math
+        // below (its spell immunity/resist is unaffected, so the ranked spells
+        // don't change). Computed once and reused for the threat line and melee.
         EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
+        MonsterMatchupProfile debuffed = MonsterProfileFor(m, _monsterDebuff);
+
+        // The monster's melee threat: how often + hard it hits YOU and at how many
+        // swings/round — thinned by a slowness debuff, weakened by an accuracy
+        // debuff. The swing model (energy/attEnergy) is new info this panel didn't
+        // surface before, and the clearest place applied debuffs show their effect.
+        MonsterMatchupResult threat = MonsterMatchupCalculator.Compute(
+            CharacterCalculator.BuildMeleeAttackProfile(MudAttackType.Normal, _stats!, worn, encum, _gameData),
+            debuffed);
+        if (threat.MonsterHasPhysicalAttack)
+        {
+            // Hit% here is the SAME weighted blend across all the monster's physical
+            // attacks the master list's "Hits You %" uses (folding the accuracy
+            // debuff), not just the primary slot — so the summary matches the column.
+            // dmg/hit + swings stay the primary-slot figures; dmg/round rides the
+            // weighted hit%.
+            int hitYou = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
+                m.PhysicalAttacks, _monsterDebuff.AccDelta, m.Align,
+                SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+                _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel) ?? threat.MonsterHitPercent;
+            double dps = hitYou / 100.0 * threat.MonsterDamagePerHit * threat.MonsterSwingsPerRound;
+            IncomingThreatLines.Insert(0,
+                $"Melee: {hitYou}% to hit you · {threat.MonsterDamagePerHit} dmg/hit · "
+                + $"{threat.MonsterSwingsPerRound} attack{(threat.MonsterSwingsPerRound == 1 ? "" : "s")}/round · ~{dps:0} dmg/round"
+                + (HasAppliedDebuffs ? "  (debuffed)" : string.Empty));
+        }
+
+        // Melee attacks the picker keeps shown — each projected against THIS
+        // monster (rounds to kill, hit%, dmg/hit), folding in any applied debuff
+        // so the numbers reflect the softened target.
         foreach (MudAttackType mt in _usableMelee)
         {
             if (_hiddenAttackKeys.Contains(MeleeKey(mt))) continue;
             MonsterMatchupResult res = MonsterMatchupCalculator.Compute(
                 CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData),
-                MonsterProfileFor(m));
+                debuffed);
             MatchupMeleeLines.Add(res.HasWeapon && res.RoundsToKill > 0
                 ? $"{MeleeLabel(mt)}: {FormatRounds(res.RoundsToKill)} to kill · {res.PlayerHitPercent}% hit · {res.PlayerDamagePerHit} dmg/hit · {res.PlayerSwingsPerRound:0.0} swings"
                 : $"{MeleeLabel(mt)}: can't out-damage it");
         }
 
-        // Attack spells, ranked by effective damage — hidden picks filtered out.
+        // Attack spells, ranked by effective damage, split single-target vs AOE —
+        // hidden picks filtered out. (Stat debuffs don't touch spell resist, so
+        // this side is unaffected by the applied debuffs.)
         foreach (SpellEffectivenessResult r in MonsterMatchupCalculatorSpells.RankAttackSpells(
             _ownedAttackSpells, m.SpellImmunity, m.ElementalResists, m.Undead))
-            if (!_hiddenAttackKeys.Contains(SpellKey(r.Short)))
-                SpellEffectiveness.Add(r);
+        {
+            if (_hiddenAttackKeys.Contains(SpellKey(r.Short))) continue;
+            if (r.IsAoe) AttackSpellsAoe.Add(r);
+            else AttackSpellsSingleTarget.Add(r);
+        }
+        OnPropertyChanged(nameof(HasSingleTargetSpells));
+        OnPropertyChanged(nameof(HasAoeSpells));
+        OnPropertyChanged(nameof(HasAnyAttackSpells));
+    }
+
+    // This one attack's own chance to land on the player, given the current
+    // defense sim (and any applied accuracy debuff). Null without a character or
+    // for a non-physical slot — those have no AC-based to-hit.
+    private int? PerAttackHitYou(MonsterAttackSlot a, MonsterCatalogEntry m)
+    {
+        if (!_hasCharacterContext || (a.Type != 1 && a.Type != 3)) return null;
+        return MonsterMatchupCalculatorSpells.AttackHitPercent(
+            a.Accuracy - _monsterDebuff.AccDelta, m.Align,
+            SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+            _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel);
     }
 
     // "Majority" resolves a spell-attack slot's Accuracy field back to a spell
-    // number for display (same field-reuse MonsterMdbInfoBuilder decodes).
-    private static AttackRowViewModel BuildAttackRow(MonsterAttackSlot a)
+    // number for display (same field-reuse MonsterMdbInfoBuilder decodes). hitYou
+    // is this physical attack's own chance to land on the player (null for spell
+    // slots / no character), appended to the damage line so each attack shows its
+    // individual to-hit next to its accuracy.
+    private static AttackRowViewModel BuildAttackRow(MonsterAttackSlot a, int? hitYou)
     {
         string header = string.IsNullOrEmpty(a.Name) ? "Attack" : a.Name;
         string chance = $"({(a.TruePercent > 0 ? (int)Math.Round(a.TruePercent) : a.Percent)}%) {header}";
@@ -846,7 +1058,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             return new AttackRowViewModel(chance, $"Spell #{a.Accuracy} lvl {a.MaxDamage}",
                 $"Success {a.MinDamage}%", a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
         string kind = a.Type == 3 ? "Rob" : "Physical";
-        return new AttackRowViewModel(chance, kind, $"{a.MinDamage}-{a.MaxDamage} dmg, acc {a.Accuracy}",
+        string detail = $"{a.MinDamage}-{a.MaxDamage} dmg, acc {a.Accuracy}"
+            + (hitYou is { } h ? $" → {h}% to hit you" : string.Empty);
+        return new AttackRowViewModel(chance, kind, detail,
             a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
     }
 }

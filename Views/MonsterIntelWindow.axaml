@@ -148,8 +148,9 @@
                     <TextBlock Grid.Column="1" Text="{Binding CountText}" Margin="8,0,0,0" MinWidth="96"
                                Foreground="{StaticResource ChromeFgSecBrush}"
                                FontSize="{StaticResource FontSizeSm}" VerticalAlignment="Center"/>
-                    <Button Grid.Column="2" Content="Edit Attacks…" Margin="8,0,0,0"
-                            IsVisible="{Binding HasCharacterContext}"
+                    <StackPanel Grid.Column="2" Margin="8,0,0,0" Spacing="4"
+                                IsVisible="{Binding HasCharacterContext}">
+                    <Button Content="Edit Attacks…" HorizontalAlignment="Stretch"
                             ToolTip.Tip="Pick which of your attacks show in Your Matchup, and which one drives the Est. Rounds to Kill column.">
                         <Button.Flyout>
                             <Flyout Placement="Bottom">
@@ -179,26 +180,75 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
+                    <!-- Apply Debuffs: fold your known enemy debuffs onto the selected
+                         monster in the matchup what-if (AC / DR / Dodge / accuracy /
+                         slowness). Mirrors Edit Attacks' flyout-picker shape. -->
+                    <Button Content="Apply Debuffs…" HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Fold your known enemy debuffs (AC / DR / Dodge / accuracy / slowness) onto the selected monster, so Your Matchup shows the fight against a debuffed target.">
+                        <Button.Flyout>
+                            <Flyout Placement="Bottom">
+                                <StackPanel MinWidth="320" Spacing="6">
+                                    <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="340"
+                                               Text="Check a debuff to fold its effect onto the selected monster in Your Matchup. Stats may go negative — below-zero accuracy can't hit you, below-zero AC is trivially hit."/>
+                                    <TextBlock IsVisible="{Binding !HasKnownDebuffs}"
+                                               Classes="DetailLine" TextWrapping="Wrap" MaxWidth="340"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                               Text="You don't know any stat-affecting debuff spells."/>
+                                    <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl ItemsSource="{Binding DebuffOptions}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:DebuffPickRow">
+                                                    <Grid ColumnDefinitions="Auto,*" Margin="0,2">
+                                                        <CheckBox Grid.Column="0" VerticalAlignment="Center"
+                                                                  IsChecked="{Binding Applied, Mode=TwoWay}"
+                                                                  ToolTip.Tip="Apply this debuff to the selected monster"/>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
+                                                            <TextBlock Classes="DetailLine" Text="{Binding Label}"/>
+                                                            <TextBlock Classes="FieldLabel"
+                                                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                                       Text="{Binding Effect}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    </StackPanel>
                 </Grid>
 
                 <!-- The Hits-You-% checkboxes and the rounds-to-kill cap share one row
                      (cap to the right of the boxes); the WrapPanel drops the cap onto a
                      second line only when the pane is too narrow to fit both. -->
                 <WrapPanel Grid.Row="1" Margin="0,0,0,8" IsVisible="{Binding HasCharacterContext}">
-                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,16,4">
-                        <TextBlock Classes="FieldLabel" Text="Hits You %:" VerticalAlignment="Center"/>
-                        <CheckBox Content="2%" IsChecked="{Binding ShowHits2, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 0-2% chance to hit you."/>
-                        <CheckBox Content="5%" IsChecked="{Binding ShowHits5, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 3-5% chance to hit you."/>
-                        <CheckBox Content="10%" IsChecked="{Binding ShowHits10, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 6-10% chance to hit you."/>
-                        <CheckBox Content="20%" IsChecked="{Binding ShowHits20, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 11-20% chance to hit you."/>
-                        <CheckBox Content="40%" IsChecked="{Binding ShowHits40, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 21-40% chance to hit you."/>
-                        <CheckBox Content="40%+" IsChecked="{Binding ShowHits100, Mode=TwoWay}"
-                                  ToolTip.Tip="Show monsters whose own attack has 41% or more chance to hit you."/>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,4">
+                        <!-- Multi-select dropdown of Hits-You-% bands. Bands are
+                             realm-dependent (Stock's lowest is 8%, ParaMUD's 2%);
+                             pick any combination — the list shows monsters in the
+                             union. Nothing picked = show all. -->
+                        <Button Content="{Binding HitsFilterLabel}"
+                                ToolTip.Tip="Filter the list by how likely the monster is to hit you. Pick any combination of %-bands; the bands differ by realm — the lowest a monster's attack can land is 8% on Stock, 2% on ParaMUD.">
+                            <Button.Flyout>
+                                <Flyout Placement="Bottom">
+                                    <StackPanel MinWidth="150" Spacing="2">
+                                        <TextBlock Classes="FieldLabel" TextWrapping="Wrap" MaxWidth="200"
+                                                   Margin="0,0,0,4"
+                                                   Text="Show monsters whose Hits You % is in any checked band:"/>
+                                        <ItemsControl ItemsSource="{Binding HitsFilterBuckets}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:HitsFilterBucket">
+                                                    <CheckBox Content="{Binding Label}" Margin="0,1"
+                                                              IsChecked="{Binding Selected, Mode=TwoWay}"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,4">
                         <TextBlock Classes="FieldLabel" Text="Max Rnds to Kill:" VerticalAlignment="Center"/>
@@ -226,7 +276,7 @@
                         <DataGridTextColumn Header="Name"       Binding="{ReflectionBinding Name}"                 Width="*"    MinWidth="160" MaxWidth="300" SortMemberPath="Name"/>
                         <DataGridTextColumn Header="HP"         Binding="{ReflectionBinding HpText}"               Width="Auto" MinWidth="80"  SortMemberPath="Hp"/>
                         <DataGridTextColumn Header="EXP"        Binding="{ReflectionBinding ExpText}"              Width="Auto" MinWidth="90"  SortMemberPath="Exp"/>
-                        <DataGridTextColumn Header="Accuracy"   Binding="{ReflectionBinding AccuracyText}"         Width="Auto" MinWidth="90"  SortMemberPath="Accuracy"/>
+                        <DataGridTextColumn Header="Accuracies" Binding="{ReflectionBinding AccuracyText}"         Width="Auto" MinWidth="90"  SortMemberPath="Accuracy"/>
                         <DataGridTextColumn Header="Hits You %" Binding="{ReflectionBinding IncomingHitPercentText}" Width="Auto" MinWidth="90" SortMemberPath="IncomingHitPercent"/>
                         <DataGridTextColumn Header="Est. Rounds to Kill" Binding="{ReflectionBinding EstimatedRoundsToKillText}" Width="Auto" MinWidth="130" SortMemberPath="EstimatedRoundsToKill"/>
                     </DataGrid.Columns>
@@ -255,6 +305,15 @@
                         <StackPanel Spacing="8">
                             <TextBlock Classes="Group" Text="Your Matchup"/>
 
+                            <!-- Applied-debuff banner: names what's folded onto this
+                                 monster below (the numbers reflect the debuffed target). -->
+                            <Border IsVisible="{Binding HasAppliedDebuffs}"
+                                    Background="{StaticResource AccentAmberSoftBrush}"
+                                    CornerRadius="3" Padding="6,3">
+                                <TextBlock Classes="DetailLine" TextWrapping="Wrap"
+                                           Text="{Binding DebuffSummary, StringFormat='Debuffs applied: {0}'}"/>
+                            </Border>
+
                             <ItemsControl ItemsSource="{Binding MatchupLines}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="x:String">
@@ -264,7 +323,7 @@
                             </ItemsControl>
 
                             <StackPanel IsVisible="{Binding IncomingThreatLines.Count}">
-                                <TextBlock Classes="FieldLabel" Text="Incoming elemental threat" Margin="0,4,0,2"/>
+                                <TextBlock Classes="FieldLabel" Text="Incoming threat" Margin="0,4,0,2"/>
                                 <ItemsControl ItemsSource="{Binding IncomingThreatLines}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="x:String">
@@ -274,8 +333,9 @@
                                 </ItemsControl>
                             </StackPanel>
 
+                            <!-- Physical attacks -->
                             <StackPanel IsVisible="{Binding MatchupMeleeLines.Count}">
-                                <TextBlock Classes="FieldLabel" Text="Your melee attacks" Margin="0,4,0,2"/>
+                                <TextBlock Classes="FieldLabel" Text="Physical attacks" Margin="0,4,0,2"/>
                                 <ItemsControl ItemsSource="{Binding MatchupMeleeLines}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="x:String">
@@ -285,34 +345,46 @@
                                 </ItemsControl>
                             </StackPanel>
 
-                            <StackPanel IsVisible="{Binding SpellEffectiveness.Count}">
-                                <TextBlock Classes="FieldLabel" Text="Your attack spells, ranked" Margin="0,4,0,2"/>
-                                <ItemsControl ItemsSource="{Binding SpellEffectiveness}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="calc:SpellEffectivenessResult">
-                                            <StackPanel Margin="0,0,0,4">
-                                                <TextBlock Classes="DetailLine" FontWeight="SemiBold">
-                                                    <TextBlock.Text>
-                                                        <MultiBinding StringFormat="{}{0} ({1})">
-                                                            <Binding Path="Name"/>
-                                                            <Binding Path="Element"/>
-                                                        </MultiBinding>
-                                                    </TextBlock.Text>
-                                                </TextBlock>
-                                                <TextBlock Classes="DetailLine" Margin="10,0,0,0" IsVisible="{Binding Eligible}">
-                                                    <TextBlock.Text>
-                                                        <MultiBinding StringFormat="{}{0} effective damage, {1} mana/round">
-                                                            <Binding Path="EffectiveDamage"/>
-                                                            <Binding Path="ManaCostPerRound"/>
-                                                        </MultiBinding>
-                                                    </TextBlock.Text>
-                                                </TextBlock>
-                                                <TextBlock Classes="DetailLine" Margin="10,0,0,0" Text="{Binding BlockedReason}"
-                                                           IsVisible="{Binding !Eligible}"/>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                            <!-- Spell attacks, split single-target vs AOE. One shared
+                                 row template (defined here so both sub-lists reach it). -->
+                            <StackPanel IsVisible="{Binding HasAnyAttackSpells}">
+                                <StackPanel.Resources>
+                                    <DataTemplate x:Key="SpellRowTemplate" x:DataType="calc:SpellEffectivenessResult">
+                                        <StackPanel Margin="0,0,0,4">
+                                            <TextBlock Classes="DetailLine" FontWeight="SemiBold">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0} ({1})">
+                                                        <Binding Path="Name"/>
+                                                        <Binding Path="Element"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                            <TextBlock Classes="DetailLine" Margin="10,0,0,0" IsVisible="{Binding Eligible}">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0} effective damage, {1} mana/round">
+                                                        <Binding Path="EffectiveDamage"/>
+                                                        <Binding Path="ManaCostPerRound"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                            <TextBlock Classes="DetailLine" Margin="10,0,0,0" Text="{Binding BlockedReason}"
+                                                       IsVisible="{Binding !Eligible}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </StackPanel.Resources>
+                                <TextBlock Classes="FieldLabel" Text="Spell attacks, ranked" Margin="0,4,0,2"/>
+                                <StackPanel IsVisible="{Binding HasSingleTargetSpells}" Margin="0,0,0,4">
+                                    <TextBlock Classes="DetailLine" FontWeight="SemiBold" Text="Single-target"
+                                               Foreground="{StaticResource ChromeFgSecBrush}"/>
+                                    <ItemsControl ItemsSource="{Binding AttackSpellsSingleTarget}"
+                                                  ItemTemplate="{StaticResource SpellRowTemplate}" Margin="6,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel IsVisible="{Binding HasAoeSpells}">
+                                    <TextBlock Classes="DetailLine" FontWeight="SemiBold" Text="AOE"
+                                               Foreground="{StaticResource ChromeFgSecBrush}"/>
+                                    <ItemsControl ItemsSource="{Binding AttackSpellsAoe}"
+                                                  ItemTemplate="{StaticResource SpellRowTemplate}" Margin="6,2,0,0"/>
+                                </StackPanel>
                             </StackPanel>
                         </StackPanel>
                     </Border>
