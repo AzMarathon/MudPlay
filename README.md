@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.46.4**
 > - **Reset States** now re-anchors max HP/mana with the game's compact `health` command instead of the full `stat` screen — the same correction with far less terminal scroll
-> - Typing `health` yourself (any realm) re-latches your max HP and mana/kai ceilings too; the readout is parsed on stock (`Kai`), Paradigm (`Mana`), and HP-only classes
+> - Typing `health` yourself re-latches your max HP and pool ceilings too; the command works on **both realms**, and the readout parses HP plus your class's pool — **Mana**, **Kai**, or HP-only
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
