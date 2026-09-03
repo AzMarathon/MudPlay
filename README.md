@@ -3,7 +3,8 @@
 <!-- current-version:start -->
 > **Version 3.46.3**
 > - The route picker now handles a **mixed** route — one that crosses a survivable hazard (a river) **and** a hard gate past it (a keyed door you lack), like the walk to the Iceforge — instead of a single "walk to the gate and stop" card
-> - It offers **"Obtain a raft, then cross"** (when a counter can be sourced) or **"Walk to the hazard and stop"** (when it can't), plus **"Cross unprotected — take the damage"** — each stopping at the hard gate you clear yourself. "Walk to the hazard and stop" walks only to the room just short of the hazard, so you can fetch a counter / clear the gate by hand from there
+> - It offers **"Obtain a raft, then cross"** (when a counter can be sourced) or **"Walk to the hazard and stop"** (when it can't), plus **"Cross unprotected — take the damage"** — each stopping at the hard gate you clear yourself. The obtain card names the **specific** counter it'll fetch and where — *"log raft (buy at Pier)"* — and picks the **cheapest** when several are buyable
+> - The route **Details…** window now includes the final destination room as an arrival step
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

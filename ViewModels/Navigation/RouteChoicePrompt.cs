@@ -159,6 +159,10 @@ public static class RouteChoicePrompt
         List<int> floorCounters = new();     // grabbed in place with a `get`
         List<int> detourCounters = new();    // sourced via the give/shop/drop pipeline
         List<string> hazardSources = new();
+        // The specific counter resolved per hazard requirement (which item, and how) —
+        // so the picker's requirement line names the exact one it'll obtain ("log raft
+        // (buy at Pier)") instead of the whole any-of list.
+        Dictionary<RouteRequirement, (int ItemId, string Source)> resolvedCounters = new();
         if (crossesHazard)
             foreach (RouteRequirement req in choice.Requirements)
             {
@@ -174,6 +178,7 @@ public static class RouteChoicePrompt
                     List<int> bucket = r.OnFloor ? floorCounters : detourCounters;
                     if (!bucket.Contains(r.ItemId)) bucket.Add(r.ItemId);
                     if (!hazardSources.Contains(r.Source)) hazardSources.Add(r.Source);
+                    resolvedCounters[req] = (r.ItemId, r.Source);
                 }
             }
         string? hazardCounterSource = hazardSources.Count > 0
@@ -207,7 +212,12 @@ public static class RouteChoicePrompt
             freeEta,
             gatedEta,
             hazardCounterSource,
-            crossesSurvivableHazard);
+            crossesSurvivableHazard,
+            // The specific counter the run resolved for a hazard requirement (item id +
+            // "buy at Pier" / "ask X" / …), so its requirement clause names that one
+            // rather than the whole any-of set.
+            req => resolvedCounters.TryGetValue(req, out (int ItemId, string Source) v)
+                ? v : ((int, string)?)null);
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and

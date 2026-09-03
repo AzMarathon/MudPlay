@@ -74,7 +74,7 @@ public static class CurrentRouteDetails
             if (step is MoveStep m) cur = m.ExpectedTarget;
         }
 
-        var details = new List<RouteDetailRow>(rows.Count);
+        var details = new List<RouteDetailRow>(rows.Count + 1);
         for (int i = 0; i < rows.Count; i++)
         {
             RouteStepRow row = rows[i];
@@ -84,8 +84,28 @@ public static class CurrentRouteDetails
             details.Add(new RouteDetailRow(
                 row, roomMonsterLinks(rk), new RelayCommand(() => onRoomClick(rk)), warning));
         }
+
+        // The step rows each name the room a command is issued FROM, so the room the
+        // route ENDS in — the destination, no command from it — gets no row. Append
+        // it as a final arrival row so the plan shows where it lands, with the same
+        // per-room monster/hazard detail.
+        RoomKey dest = route[route.Count - 1];
+        int lastNumber = rows.Count > 0 ? rows[rows.Count - 1].Number : 0;
+        var arrival = new RouteStepRow(
+            lastNumber + 1, LocationLabel(dest, graph.GetRoom(dest)?.DisplayName),
+            Command: string.Empty, Room: dest, IsArrival: true);
+        details.Add(new RouteDetailRow(
+            arrival, roomMonsterLinks(dest), new RelayCommand(() => onRoomClick(dest)),
+            MergeWarning(roomHazard(dest), Array.Empty<int>(), itemLink)));
         return details;
     }
+
+    // "12/431 Tower" — the map/room key plus its name (name omitted when unknown),
+    // matching the label RouteStepList renders for a step row's room.
+    private static string LocationLabel(RoomKey key, string? roomName) =>
+        string.IsNullOrWhiteSpace(roomName)
+            ? $"{key.Map}/{key.Room}"
+            : $"{key.Map}/{key.Room} {roomName}";
 
     // The item(s) an exit REQUIRES to cross — a carry-item (rope & grapple, a raft,
     // a phoenix feather item-use teleport), a ticket, or a multi-action's required

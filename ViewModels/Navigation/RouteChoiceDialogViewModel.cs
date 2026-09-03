@@ -153,7 +153,8 @@ public sealed partial class RouteChoiceDialogViewModel
         TimeSpan freeEta = default,
         TimeSpan gatedEta = default,
         string? hazardCounterSource = null,
-        bool hazardSurvivable = false)
+        bool hazardSurvivable = false,
+        Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -323,7 +324,8 @@ public sealed partial class RouteChoiceDialogViewModel
 
             RequirementSummary = "Requires "
                 + DescribeRequirements(
-                    choice.Requirements, itemName, giveNameForItem, shopNameForItem, dropNameForItem);
+                    choice.Requirements, itemName, giveNameForItem, shopNameForItem,
+                    dropNameForItem, resolvedHazardCounter);
             TeleportCaveat = string.Empty;
             TrapCaveat = string.Empty;
         }
@@ -366,10 +368,18 @@ public sealed partial class RouteChoiceDialogViewModel
         Func<int, string?> itemName,
         Func<int, string?>? giveNameForItem,
         Func<int, string?>? shopNameForItem,
-        Func<int, string?>? dropNameForItem)
+        Func<int, string?>? dropNameForItem,
+        Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null)
     {
         IEnumerable<string> clauses = reqs.Select(r =>
         {
+            // A resolved hazard counter names the SPECIFIC item the run will obtain +
+            // how ("log raft (buy at Pier)"), instead of the whole any-of set — the
+            // picker already chose the cheapest reachable one.
+            if (r.Kind is RouteRequirementKind.HazardProtection
+                && resolvedHazardCounter?.Invoke(r) is { } rc)
+                return $"{itemName(rc.ItemId) ?? $"item #{rc.ItemId}"} ({rc.Source})";
+
             string items = string.Join(" or ", r.ItemIds.Select(id => itemName(id) ?? $"item #{id}"));
             bool autoSourced = r.Kind is RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket
                 || (r.Kind is RouteRequirementKind.HazardProtection && r.ItemIds.Count == 1);

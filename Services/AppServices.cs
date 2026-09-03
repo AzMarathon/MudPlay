@@ -7144,6 +7144,10 @@ public sealed class AppServices
                     return (id, $"ask {giver.GiverName}", false);
 
             int? Dist(Game.Map.RoomKey a, Game.Map.RoomKey b) => Bfs.DistanceBetween(a, b, Movement);
+            // Among the counters buyable at a reachable shop, pick the CHEAPEST by
+            // base Price (deterministic — a log raft over a river punt), not just the
+            // first in the any-of list.
+            (int Id, string ShopName, int Price)? bestBuy = null;
             foreach (int id in counters)
             {
                 System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
@@ -7151,7 +7155,12 @@ public sealed class AppServices
                 if (Game.Map.PathItemShopRouter.TrySelectShop(
                         shops, source, destination, Dist, out Game.Map.RoomKey shop)
                     && RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName)
-                    return (id, $"buy at {shopName}", false);
+                {
+                    int price = ItemNames.PriceOf(id) ?? int.MaxValue;
+                    if (bestBuy is null || price < bestBuy.Value.Price)
+                        bestBuy = (id, shopName, price);
+                    continue;
+                }
 
                 // A shop stocks the counter but the router found no reachable detour.
                 // Log each candidate's two legs (gates suspended here) so a repro
@@ -7161,6 +7170,7 @@ public sealed class AppServices
                         $"item {id} shop at {sr.Map}/{sr.Room}: src→shop={Dist(source, sr)?.ToString() ?? "∞"}, "
                         + $"shop→dest={Dist(sr, destination)?.ToString() ?? "∞"}");
             }
+            if (bestBuy is { } b) return (b.Id, $"buy at {b.ShopName}", false);
 
             foreach (int id in counters)
             {

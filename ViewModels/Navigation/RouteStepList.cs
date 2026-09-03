@@ -13,14 +13,19 @@ namespace MudPlay.ViewModels.Navigation;
 // renders into the display string, exposed as a key so callers can look up per-room
 // detail (e.g. a room's lair monsters for the Current-route Details view). Defaulted
 // so existing constructions that only care about the display line are unaffected.
-public sealed record RouteStepRow(int Number, string Location, string Command, bool IsAcquire = false, RoomKey Room = default)
+public sealed record RouteStepRow(
+    int Number, string Location, string Command,
+    bool IsAcquire = false, RoomKey Room = default, bool IsArrival = false)
 {
     // "1> 13/497 Rugged Shoreline < s" for a move/detour. An acquire row is marked
     // with a ◆ and names the room the obtain happens at, so you can see exactly
     // which step in the plan detours to fetch an item:
-    // "3> ◆ 13/498 Sea Cavern — obtain a raft (buy at General Store)".
-    public string Line => IsAcquire
-        ? $"{Number}> ◆ {Location} — {Command}"
+    // "3> ◆ 13/498 Sea Cavern — obtain a raft (buy at General Store)". An arrival
+    // row (the destination the route ends in, no command issued from it) is shown
+    // with a → and no command.
+    public string Line =>
+        IsArrival ? $"{Number}> → {Location} (arrive)"
+        : IsAcquire ? $"{Number}> ◆ {Location} — {Command}"
         : $"{Number}> {Location} < {Command}";
 }
 
