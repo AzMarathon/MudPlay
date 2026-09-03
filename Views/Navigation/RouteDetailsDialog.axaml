@@ -56,7 +56,7 @@
                                                VerticalAlignment="Center"
                                                Margin="0,0,6,0"/>
                                     <TextBlock Text="⚠"
-                                               IsVisible="{Binding HasHazard}"
+                                               IsVisible="{Binding HasWarning}"
                                                Foreground="{StaticResource AccentAmberBrush}"
                                                FontSize="12"
                                                VerticalAlignment="Center"
@@ -64,11 +64,11 @@
                                     <Button Classes="MdbLink"
                                             Content="{Binding Location}"
                                             Command="{Binding OpenRoom}"
-                                            FontSize="12"
+                                            FontSize="13"
                                             VerticalAlignment="Center"
                                             ToolTip.Tip="Show this room on the map"/>
                                     <TextBlock Text="⚠"
-                                               IsVisible="{Binding HasHazard}"
+                                               IsVisible="{Binding HasWarning}"
                                                Foreground="{StaticResource AccentAmberBrush}"
                                                FontSize="12"
                                                VerticalAlignment="Center"
@@ -81,11 +81,12 @@
                                                Margin="6,0,0,0"/>
                                 </StackPanel>
 
-                                <!-- Hazard sub-line: the harmful spell (→ spell record)
-                                     and the item(s) that make the room safe to cross
-                                     (→ item records). -->
+                                <!-- Warning sub-line: a room-entry hazard's harmful spell
+                                     (→ spell record, shown only for a hazard) and/or the
+                                     item(s) needed to cross — a hazard's counter items or
+                                     an item-gated exit's requirement (→ item records). -->
                                 <StackPanel Orientation="Horizontal"
-                                            IsVisible="{Binding HasHazard}"
+                                            IsVisible="{Binding HasWarning}"
                                             Margin="20,0,0,2">
                                     <TextBlock Text="⚠"
                                                Foreground="{StaticResource AccentAmberBrush}"
@@ -93,17 +94,18 @@
                                                VerticalAlignment="Center"
                                                Margin="0,0,4,0"/>
                                     <Button Classes="MdbLink"
-                                            Content="{Binding Hazard.Spell.Text}"
-                                            Command="{Binding Hazard.Spell.Open}"
+                                            Content="{Binding Warning.Spell.Text}"
+                                            Command="{Binding Warning.Spell.Open}"
+                                            IsVisible="{Binding Warning.HasSpell}"
                                             VerticalAlignment="Center"/>
-                                    <TextBlock Text="— cross with"
-                                               IsVisible="{Binding Hazard.HasCounters}"
+                                    <TextBlock Text="{Binding Warning.Label}"
+                                               IsVisible="{Binding Warning.HasItems}"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                FontSize="10"
                                                VerticalAlignment="Center"
                                                Margin="6,0,6,0"/>
-                                    <ItemsControl ItemsSource="{Binding Hazard.Counters}"
-                                                  IsVisible="{Binding Hazard.HasCounters}"
+                                    <ItemsControl ItemsSource="{Binding Warning.Items}"
+                                                  IsVisible="{Binding Warning.HasItems}"
                                                   VerticalAlignment="Center">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>

@@ -48,10 +48,32 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         ]
         """;
 
-    private RoomGraphManager NewGraph()
+    // 1/1(Ledge) ─N─ 1/2(Cliff) ─N(Item: 474)─ 1/3(Below): the 1/2→1/3 hop is
+    // gated on carrying item 474 (a rope & grapple).
+    private const string ItemGateRooms = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Ledge", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Cliff", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 0,
+            "N": "1/3 (Item: 474)", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Below", "CMD": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "NPC": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private RoomGraphManager NewGraph() => NewGraph(Rooms);
+    private RoomGraphManager NewItemGateGraph() => NewGraph(ItemGateRooms);
+
+    private RoomGraphManager NewGraph(string roomsJson)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), roomsJson);
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
         RoomGraphManager graph = new(cache);
@@ -73,7 +95,7 @@ public sealed class CurrentRouteDetailsTests : IDisposable
             k.Equals(monsterRoom) ? new[] { link } : Array.Empty<RoomDetailLink>();
 
         IReadOnlyList<RouteDetailRow> rows =
-            CurrentRouteDetails.Build(graph, null, null, route, _ => null, MonsterLinks, _ => { }, _ => null);
+            CurrentRouteDetails.Build(graph, null, null, route, _ => null, MonsterLinks, _ => { }, _ => null, ItemLink);
 
         // Two hops → two move rows in the route-picker "N> map/room < command" format.
         Assert.Equal(2, rows.Count);
@@ -97,6 +119,10 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         Assert.Equal("cave worm(#8)", rows[1].Monsters.Single().Text);
     }
 
+    // Item id → a stub link (the tests never open a real record).
+    private static RoomDetailLink ItemLink(int id)
+        => new($"item#{id}", null, new RelayCommand(() => { }));
+
     [Fact]
     public void Build_AttachesHazardToItsRoom()
     {
@@ -106,21 +132,42 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         // Only 1/2 is a hazard — the injected lookup mirrors the VM's RoomHazardIndex
         // resolution (harmful spell + the item that makes it safe to cross).
         RoomKey hazardRoom = new(1, 2);
-        var hazard = new RouteRoomHazard(
+        var hazard = new RouteStepWarning(
             new RoomDetailLink("drowning", null, new RelayCommand(() => { })),
             new[] { new RoomDetailLink("log raft(#5)", null, new RelayCommand(() => { })) });
-        RouteRoomHazard? Hazards(RoomKey k) => k.Equals(hazardRoom) ? hazard : null;
+        RouteStepWarning? Hazards(RoomKey k) => k.Equals(hazardRoom) ? hazard : null;
 
         IReadOnlyList<RouteDetailRow> rows = CurrentRouteDetails.Build(
             graph, null, null, route, _ => null,
-            _ => Array.Empty<RoomDetailLink>(), _ => { }, Hazards);
+            _ => Array.Empty<RoomDetailLink>(), _ => { }, Hazards, ItemLink);
 
-        Assert.False(rows[0].HasHazard);
-        Assert.True(rows[1].HasHazard);
-        RouteRoomHazard hz = rows[1].Hazard!;
-        Assert.Equal("drowning", hz.Spell.Text);
-        Assert.True(hz.HasCounters);
-        Assert.Equal("log raft(#5)", hz.Counters.Single().Text);
+        Assert.False(rows[0].HasWarning);
+        Assert.True(rows[1].HasWarning);
+        RouteStepWarning w = rows[1].Warning!;
+        Assert.True(w.HasSpell);
+        Assert.Equal("drowning", w.Spell!.Text);
+        Assert.True(w.HasItems);
+        Assert.Equal("log raft(#5)", w.Items.Single().Text);
+    }
+
+    [Fact]
+    public void Build_FlagsAnItemGatedExit()
+    {
+        RoomGraphManager graph = NewItemGateGraph();
+        var route = new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) };
+
+        IReadOnlyList<RouteDetailRow> rows = CurrentRouteDetails.Build(
+            graph, null, null, route, _ => null,
+            _ => Array.Empty<RoomDetailLink>(), _ => { }, _ => null, ItemLink);
+
+        // The 1/2 → 1/3 hop is (Item: 474): the row for 1/2 warns, naming the gate
+        // item — no hazard spell, just the requirement.
+        Assert.False(rows[0].HasWarning);
+        Assert.True(rows[1].HasWarning);
+        RouteStepWarning w = rows[1].Warning!;
+        Assert.False(w.HasSpell);
+        Assert.Equal("needs", w.Label);
+        Assert.Contains(w.Items, l => l.Text == "item#474");
     }
 
     [Fact]
@@ -129,7 +176,7 @@ public sealed class CurrentRouteDetailsTests : IDisposable
         RoomGraphManager graph = NewGraph();
         IReadOnlyList<RoomDetailLink> NoMonsters(RoomKey _) => Array.Empty<RoomDetailLink>();
 
-        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, Array.Empty<RoomKey>(), _ => null, NoMonsters, _ => { }, _ => null));
-        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, new[] { new RoomKey(1, 1) }, _ => null, NoMonsters, _ => { }, _ => null));
+        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, Array.Empty<RoomKey>(), _ => null, NoMonsters, _ => { }, _ => null, ItemLink));
+        Assert.Empty(CurrentRouteDetails.Build(graph, null, null, new[] { new RoomKey(1, 1) }, _ => null, NoMonsters, _ => { }, _ => null, ItemLink));
     }
 }

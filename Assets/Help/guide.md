@@ -228,7 +228,7 @@ When the only route somewhere is fully blocked but you can still reach the obsta
 
 - **Each room name is a link** — click it to flash the room on the map and centre there, the same as an `@where` reply.
 - At every room on the route, its **notable monsters** — placed fixtures (a boss / NPC) and lair spawners — are listed under that step, each a **clickable link** to the monster's Game Data record — handy for sizing up what a hunting loop is about to walk into.
-- A room with a **hazard** — a river crossing, lava, an ice climb, the desert heat — is flagged with a **⚠** on either side of its name, and names the harmful spell (linking its record) plus the item(s) that make it safe to cross: a raft (log raft / canoe / punt), rope & grapple, a phoenix feather, a waterskin, and so on (each linking its item record). So you can see at a glance what a route needs before you set off.
+- A step that needs a special item is flagged with a **⚠** on either side of the room name and a sub-line naming what's required — covering both a **hazard** room (a river crossing, lava, the desert heat: the harmful spell links its record, and the item(s) that make it safe to cross are listed) and an **item-gated exit** (a cliff you can only descend with a rope & grapple, a river you cross by raft). The items — a raft (log raft / canoe / punt), rope & grapple, a phoenix feather, a waterskin, and so on — each link their item record, so you can see at a glance what a route needs before you set off.
 
 Click **Details…** again to close the window.
 

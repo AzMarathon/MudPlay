@@ -20,13 +20,13 @@ public sealed class RouteDetailRow
     // Click the room name to flash it on the map and centre there (like @where).
     public ICommand OpenRoom { get; }
 
-    // Set when this row's room is a protectable hazard (lava, a river crossing, an
-    // ice climb…) — the harmful spell + the item(s) needed to cross it safely. Null
-    // for the common safe room.
-    public RouteRoomHazard? Hazard { get; }
+    // Set when this row's room is a hazard (lava, a river crossing…) and/or an exit
+    // off it is item-gated (rope & grapple, a raft…) — the harmful spell + the
+    // item(s) needed to cross. Null for the common unremarkable room.
+    public RouteStepWarning? Warning { get; }
 
     public bool HasMonsters => Monsters.Count > 0;
-    public bool HasHazard => Hazard is not null;
+    public bool HasWarning => Warning is not null;
     public bool IsAcquire => Step.IsAcquire;
 
     // The line split so the room can be its own link: "1>" / "1/224 Town Square" /
@@ -38,11 +38,11 @@ public sealed class RouteDetailRow
 
     public RouteDetailRow(
         RouteStepRow step, IReadOnlyList<RoomDetailLink> monsters, ICommand openRoom,
-        RouteRoomHazard? hazard = null)
+        RouteStepWarning? warning = null)
     {
         Step = step;
         Monsters = monsters ?? Array.Empty<RoomDetailLink>();
         OpenRoom = openRoom;
-        Hazard = hazard;
+        Warning = warning;
     }
 }

@@ -4100,14 +4100,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         return CurrentRouteDetails.Build(
             _services.RoomGraph, _services.Bfs, _services.Movement,
             route, _services.ItemNames.GetName, RoomMonsterLinksForRoom, ShowWhereHighlight,
-            RoomHazardForRoom);
+            RoomHazardForRoom, ItemLinkFor);
     }
 
     // A room's protectable cast-on-enter hazard (RoomHazardIndex) — the harmful
-    // spell + the item(s) that make it safe to cross (a raft, rope & grapple,
-    // phoenix feather, waterskin…), each opening its Game Data record. Null for a
-    // safe room, or one whose harmful spell ships no counter (not indexed).
-    private RouteRoomHazard? RoomHazardForRoom(RoomKey key)
+    // spell + the item(s) that make it safe to cross (a raft, phoenix feather,
+    // waterskin…), each opening its Game Data record. Null for a room with no
+    // room-entry hazard (an item-gated EXIT off it is handled by the builder, not
+    // here); the builder folds the two into one warning.
+    private RouteStepWarning? RoomHazardForRoom(RoomKey key)
     {
         Room? room = _services.RoomGraph.GetRoom(key);
         if (room is null || room.Spell <= 0) return null;
@@ -4120,12 +4121,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
         var counters = new List<RoomDetailLink>(hz.ProtectingItems.Count);
         foreach (int itemId in hz.ProtectingItems)
-        {
-            string itemName = _services.ItemNames.GetName(itemId) ?? $"item #{itemId}";
-            counters.Add(new RoomDetailLink(itemName, null,
-                new RelayCommand(() => _services.OpenItemGameData(itemId))));
-        }
-        return new RouteRoomHazard(spellLink, counters);
+            counters.Add(ItemLinkFor(itemId));
+        return new RouteStepWarning(spellLink, counters);
+    }
+
+    // An item id → a clickable link to its Game Data record. Used for hazard
+    // counters and item-gated-exit requirements alike (rope & grapple, a raft…).
+    private RoomDetailLink ItemLinkFor(int itemId)
+    {
+        string itemName = _services.ItemNames.GetName(itemId) ?? $"item #{itemId}";
+        return new RoomDetailLink(itemName, null,
+            new RelayCommand(() => _services.OpenItemGameData(itemId)));
     }
 
     // A room's notable monsters — placed fixtures (a boss / NPC) then lair spawners

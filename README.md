@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.46.0**
 > - New **Details…** button on the **CURRENT NAV** panel header — opens the current route's full step plan in a scrollable window (the route picker's numbered "room < command" list) for whatever's executing (walk / loop / Auto-Lair) **or a previewed walk-to** armed from the search box
-> - Each step's **room name links** to flash + centre it on the map (`@where`-style); each room lists its notable monsters (placed + lair) as record links; and a room with a **hazard** is flagged ⚠ with the harmful spell and the item(s) needed to cross it (raft, rope & grapple, phoenix feather…), all linking their records
+> - Each step's **room name links** to flash + centre it on the map (`@where`-style); each room lists its notable monsters (placed + lair) as record links; and a step that needs a special item — a **hazard** room or an **item-gated exit** — is flagged ⚠ with the item(s) required to cross (raft, rope & grapple, phoenix feather…) and, for a hazard, the harmful spell, all linking their records
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
