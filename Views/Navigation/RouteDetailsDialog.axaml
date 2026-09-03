@@ -26,10 +26,10 @@
             <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
         </Style>
 
-        <!-- Monster links: combat-line red, so the list of monsters reads apart from
-             the blue room/spell links. -->
+        <!-- Monster links read apart from the blue room/spell links, tinted per
+             monster by its alignment (bound Foreground=Accent on each button: evil
+             red / neutral cyan / good-or-lawful white — the game's own colouring). -->
         <Style Selector="Button.MonsterLink">
-            <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -167,6 +167,7 @@
                                             <Button Classes="MonsterLink"
                                                     Content="{Binding Text}"
                                                     Command="{Binding Open}"
+                                                    Foreground="{Binding Accent}"
                                                     Margin="0,0,12,2"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>

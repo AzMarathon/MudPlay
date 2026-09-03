@@ -3,9 +3,9 @@
 ## 3.46.0
 
 - New **Details…** button on the **CURRENT NAV** panel header — opens the current route's full step plan in a scrollable window, the same numbered "room < command" list the route picker shows, for whatever's executing (walk / loop / Auto-Lair) **or a previewed walk-to** armed from the search box
-- The route picker gains a matching **Details…** button (bottom-left) — browse the selected route's full plan before committing to it
+- The route picker's old *Show steps* flyout is replaced by a matching **Details…** button (bottom-left) — the same fuller window, browse the selected route before committing to it
 - Each step's **room name is a link** — click it to flash the room on the map and centre there (the `@where` treatment)
-- Each room lists its notable monsters (placed fixtures + lair spawners) as clickable record links, coloured combat-red
+- Each room lists its notable monsters (placed fixtures + lair spawners) as clickable record links, tinted by **alignment** — evil red, neutral cyan, good/lawful white (the game's own colouring)
 - A step that needs a special item — a **hazard** room (a river crossing, lava, the desert heat…) or an **item-gated exit** (a cliff needing rope & grapple, a raft crossing…) — is flagged with ⚠ and names the item(s) required to cross it in dark yellow (and, for a hazard, the harmful spell), each linking its Game Data record
 
 ## 3.45.6

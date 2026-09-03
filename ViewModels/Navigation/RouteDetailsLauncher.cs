@@ -1,4 +1,5 @@
 using System.Linq;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Services;
@@ -39,7 +40,26 @@ public static class RouteDetailsLauncher
         return vm;
     }
 
-    // A room's placed + lair monsters (deduped by id), each opening its record.
+    // Monster-name tints by MajorMUD alignment code (Monsters-table Align): the
+    // town-guard white the game itself shows for a Lawful-Good NPC, a dark cyan for
+    // Neutral, combat-red for anything evil — mirroring what the terminal renders.
+    private static readonly IBrush AlignEvilBrush = new SolidColorBrush(Color.Parse("#E06060"));   // AccentRed
+    private static readonly IBrush AlignNeutralBrush = new SolidColorBrush(Color.Parse("#3E9AA6")); // dark cyan
+    private static readonly IBrush AlignGoodBrush = new SolidColorBrush(Color.Parse("#E8E8E8"));    // ChromeFg (white)
+
+    // Align → tint, using the game's own alignment codes (0 Good, 1 Evil, 2 Chaotic
+    // Evil, 3 Neutral, 4 Lawful Good, 5 Neutral Evil, 6 Lawful Evil). Evil is the
+    // {1,2,5,6} set and Good the {0,4} set, matching MonsterMatchupCalculator; a
+    // Neutral or unknown alignment falls to the neutral cyan.
+    private static IBrush MonsterAlignBrush(int? align) => align switch
+    {
+        1 or 2 or 5 or 6 => AlignEvilBrush,
+        0 or 4 => AlignGoodBrush,
+        _ => AlignNeutralBrush,
+    };
+
+    // A room's placed + lair monsters (deduped by id), each opening its record and
+    // tinted by its alignment.
     private static IReadOnlyList<RoomDetailLink> MonsterLinks(AppServices services, RoomKey key)
     {
         Room? room = services.RoomGraph.GetRoom(key);
@@ -52,8 +72,12 @@ public static class RouteDetailsLauncher
         foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Placed.Concat(rm.Lair))
         {
             if (!seen.Add(m.Id)) continue;
+            IBrush tint = MonsterAlignBrush(services.MonsterCatalog.Get(m.Id)?.Align);
             links.Add(new RoomDetailLink($"{m.Name}(#{m.Id})", null,
-                new AsyncRelayCommand(() => services.OpenMonsterRecordAsync(m.Id))));
+                new AsyncRelayCommand(() => services.OpenMonsterRecordAsync(m.Id)))
+            {
+                Accent = tint,
+            });
         }
         return links;
     }

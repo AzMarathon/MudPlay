@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using Avalonia.Media;
 
 namespace MudPlay.ViewModels.GameData.Edit;
 
@@ -12,6 +13,12 @@ public sealed class RoomDetailLink
     public string? Detail { get; }
     public bool HasDetail => !string.IsNullOrEmpty(Detail);
     public ICommand Open { get; }
+
+    // Optional per-link text colour, overriding whatever the template's style
+    // class sets. Used by the route-details window to tint a monster by its
+    // alignment (evil red / neutral cyan / good white). Null leaves the class
+    // colour in force (every other consumer).
+    public IBrush? Accent { get; init; }
 
     public RoomDetailLink(string text, string? detail, ICommand open)
     {
