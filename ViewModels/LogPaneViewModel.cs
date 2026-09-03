@@ -78,6 +78,13 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // normal Info channel), so no Rebuild. Persisted per-character. Off by default.
     [ObservableProperty] private bool _hopTiming;
 
+    // Toggle for unrecognized-message capture. Mirrors
+    // LogDiagnosticState.CaptureUnrecognizedMessages — flipping it gates
+    // Game.MessageCandidateWatcher. Like AutoCollectLogs/HopTiming it doesn't
+    // touch displayed rows (the Warn rows it emits show up through the normal
+    // channel), so no Rebuild. Persisted per-character. On by default.
+    [ObservableProperty] private bool _captureUnrecognizedMessages;
+
     // Reveals the Death Recovery tab's "Simulate Death" test button. Mirrors
     // LogDiagnosticState.ShowSimulateDeath — session-only (off every launch) so a
     // normal user never sees the button; a tester flips it on here. Doesn't touch
@@ -129,6 +136,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             _combatDiagnostics = _diagnostics.CombatDiagnostics;
             _autoCollectLogs   = _diagnostics.AutoCollectLogs;
             _hopTiming         = _diagnostics.HopTiming;
+            _captureUnrecognizedMessages = _diagnostics.CaptureUnrecognizedMessages;
             _showSimulateDeath = _diagnostics.ShowSimulateDeath;
             _showSimulateChest = _diagnostics.ShowSimulateChest;
             _suppressDiagnosticEcho = false;
@@ -168,6 +176,12 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             {
                 _suppressDiagnosticEcho = true;
                 HopTiming = _diagnostics.HopTiming;
+                _suppressDiagnosticEcho = false;
+            }
+            if (CaptureUnrecognizedMessages != _diagnostics.CaptureUnrecognizedMessages)
+            {
+                _suppressDiagnosticEcho = true;
+                CaptureUnrecognizedMessages = _diagnostics.CaptureUnrecognizedMessages;
                 _suppressDiagnosticEcho = false;
             }
             if (ShowSimulateDeath != _diagnostics.ShowSimulateDeath)
@@ -220,6 +234,14 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
         if (_suppressDiagnosticEcho) return;
         if (_diagnostics is null) return;
         _diagnostics.HopTiming = value;
+    }
+
+    partial void OnCaptureUnrecognizedMessagesChanged(bool value)
+    {
+        // Only gates the watcher's capture — no displayed rows change — so no Rebuild.
+        if (_suppressDiagnosticEcho) return;
+        if (_diagnostics is null) return;
+        _diagnostics.CaptureUnrecognizedMessages = value;
     }
 
     partial void OnShowSimulateDeathChanged(bool value)

@@ -339,6 +339,14 @@ public static class BugReportBuilder
               .Append(", acknowledged=").Append(n.Acknowledged).Append('\n');
         }
 
+        // Headline count so confirming candidates are pending is a grep of this
+        // report, not a scroll through the program-log tail for Warn rows.
+        int pendingCandidates = 0;
+        foreach (Models.GameData.MessageCandidateRecord c in svc.MessageCandidates.Candidates)
+            if (!c.Dismissed) pendingCandidates++;
+        sb.Append("\n**Message candidates** (unresolved / total): ")
+          .Append(pendingCandidates).Append(" / ").Append(svc.MessageCandidates.Candidates.Count).Append('\n');
+
         Game.Combat.CombatManager.DebugState combat = svc.Combat.Snapshot();
         // The believed-worn weapon is no longer shadowed in the combat engine —
         // EquipmentManager diffs against live inventory, so the report reads the

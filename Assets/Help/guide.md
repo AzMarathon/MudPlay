@@ -536,7 +536,7 @@ The top **Game Data** menu (in the menu bar) manages your data sets:
 The window is a sidebar plus a content pane:
 
 - The sidebar's **Search…** box filters the **section list**, not the rows — type "weapon" and unrelated sections drop away.
-- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Messages**. (The macro/alias/trigger editors are covered in the **Automation** section.)
+- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Messages, Candidates**. (The macro/alias/trigger editors are covered in the **Automation** section.)
 - **Imported tables** (bottom group) holds the game data: **Monsters, Items, Spells, Rooms, Lairs, Shops, Races, Classes, TextBlocks, Info, Unobtainable, Quest Flags.**
 
 Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column — including the friendly labels, so on the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
@@ -565,6 +565,8 @@ Every numeric filter is a **min / max range** — either box can be blank for no
 - The rest (Lairs, Races, Classes, and so on) are read-only reference.
 
 **Flavor Prefixes** is a small editor of its own in the *Tables + editors* list (not a double-click table). It's the vocabulary of adjectives the game prepends to a monster's name — *large*, *nasty*, *huge*, and so on. The room classifier strips a leading word in this list so "large giant rat" resolves to "giant rat" with no per-monster data. It starts from the built-in stock list and applies to the **active game-data set**, so a custom realm that uses different adjectives just adds them here (type a word → **Add**; **✕** removes one; **Reset to defaults** restores the built-ins). Edits save to that set immediately. If the classifier ever meets a prefixed name whose leading adjective isn't in the list, it flags a Program-Log row you can double-click to add the word in one click.
+
+**Candidates** lists wire lines the Messages catalogue doesn't recognize, staged automatically by the **Capture unrecognized messages** diagnostic (Program Log window, on by default — see *Diagnostics / Log Pane*). Double-click a row to open the same editor Messages uses, pre-filled with the raw text, and Save it in as a real record. Select one or more rows and **Remove** to dismiss them instead — dismissal is sticky, so a dismissed line won't quietly reappear as "new" if it recurs; it still counts occurrences in the background.
 
 ## Monster Intel
 
@@ -1934,7 +1936,7 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 
 ## Diagnostics / Log Pane
 
-Not a Settings tab — these four toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine per-character saved preferences. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
+Not a Settings tab — these five toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine per-character saved preferences. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
 
 ### Debug channel
 
@@ -1957,6 +1959,12 @@ Not a Settings tab — these four toggles live in the **Program Log** window (de
 
 **Default:** Off
 **What it does:** Emits one log line per confirmed room-to-room movement, recording how long it actually took — useful for calibrating the Auto-Lair tab's "Encumbrance-gated" travel-time numbers against your own real movement speed.
+
+### Capture unrecognized messages
+
+**Default:** On
+**What it does:** Stages any wire line the Messages catalogue doesn't recognize (and no other known line type matches) as a review candidate — logging a Warn row the first time that exact text is seen. Double-click the row to open the same editor the Messages tab uses, pre-filled with the raw text, so you can turn it into a real catalogue entry on the spot. Repeated candidates are also listed in Game Data → **Candidates** for batch review later; dismissing one there is sticky, so it won't quietly resurface as "new" if it recurs.
+**Important notes:** On by default — the point of this toggle is catching the game's devs changing or adding message wording before it silently breaks something else (navigation, combat, condition tracking) that depends on recognizing that line.
 
 ---
 

@@ -1,5 +1,12 @@
 # Version history
 
+## 3.46.0
+
+- New: the client now notices its own Messages-catalogue gaps. A wire line that matches no existing spell/buff/debuff/proc record and no known line pattern is staged as a **candidate** (deduped by exact text, occurrence-counted) instead of silently falling through — a Warn row appears in the Program Log the first time it's seen, and double-clicking it opens the same editor the Messages tab uses, pre-filled with the raw text, to turn it into a real record on the spot
+- New **Candidates** tab in the Game Data Browser lists every staged candidate for batch review — search, multi-select, and dismiss (sticky: a dismissed line won't quietly resurface as "new" if it recurs, though it keeps counting occurrences)
+- New **Capture unrecognized messages** diagnostic toggle (Program Log window), on by default
+- Bug reports now include a pending-candidate count
+
 ## 3.45.4
 
 - Fixed the walker's point-to-point replan budget (a fallback the loop-runner's own recovery already hands off to) still failing a walk over a short burst of confusion fumbles — it now gets the same "don't charge the budget while confused" exemption already applied to the loop's recovery budget, so a genuinely blocked exit still fails cleanly but a confusion streak no longer stalls movement outright

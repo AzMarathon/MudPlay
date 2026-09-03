@@ -844,6 +844,17 @@ public sealed class AppServices
     // Data/game data/{set}/monster-messages.json.
     public MonsterMessageStore MonsterMessages { get; private set; } = null!;
 
+    // Staged, unrecognized-message candidates for the active set —
+    // Game.MessageCandidateWatcher's output, reviewed via the LogPane
+    // double-click flow or the Game Data Browser's Candidates tab. Pure
+    // runtime-observed state, not curated data — no seed-file fallback.
+    public MessageCandidateStore MessageCandidates { get; private set; } = null!;
+
+    // Watches the wire for lines the Messages catalogue doesn't recognize and
+    // stages them in MessageCandidates. AttachLineExtractor lands in
+    // MainWindowViewModel alongside the other line consumers.
+    public Game.MessageCandidateWatcher MessageCandidateWatcher { get; private set; } = null!;
+
     // Per-set editable vocabulary of monster flavor adjectives the room classifier
     // strips to resolve a prefixed display name. Defaults to the built-in stock list;
     // edited in the Game Data Browser's Flavor Prefixes section.
@@ -2531,6 +2542,10 @@ public sealed class AppServices
         // same per-set storage + universal seed fallback pattern.
         MonsterMessages = new MonsterMessageStore(Log);
         GameData.ActiveSetChanged += MonsterMessages.Load;
+        // Staged candidates are pure runtime-observed state (no seed fallback),
+        // but still reload per set like every other game-data-scoped store.
+        MessageCandidates = new MessageCandidateStore(Log);
+        GameData.ActiveSetChanged += MessageCandidates.Load;
         // Per-set flavor-adjective vocabulary the room classifier strips ("large
         // giant rat" → "giant rat"). Defaults to the built-in stock list; a
         // custom realm's edits persist per set. Reloads on every set switch.
@@ -3373,6 +3388,11 @@ public sealed class AppServices
         // lands (e.g. "desert damage" → "use water"). Wire-sender + line feed
         // bound per-session by MainWindowViewModel.
         MessageResponder = new Game.Conditions.MessageResponder(Messages, Log);
+        // Watches the same wire for lines neither the catalogue above nor any
+        // registered Router pattern recognizes. AttachLineExtractor lands in
+        // MainWindowViewModel alongside the other line consumers; Enabled
+        // mirrors LogDiagnostics.CaptureUnrecognizedMessages below.
+        MessageCandidateWatcher = new Game.MessageCandidateWatcher(Router, Messages, MessageCandidates, Log);
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a
         // curable ailment (or being held) it announces ".@poisoned" /
@@ -5109,6 +5129,10 @@ public sealed class AppServices
         // construction, before any ProfileLoaded fires) so it's never null.
         HopCalibrator.Enabled = LogDiagnostics.HopTiming;
         LogDiagnostics.Changed += () => HopCalibrator.Enabled = LogDiagnostics.HopTiming;
+        // Same live-gate pattern for message-candidate capture.
+        MessageCandidateWatcher.Enabled = LogDiagnostics.CaptureUnrecognizedMessages;
+        LogDiagnostics.Changed += () =>
+            MessageCandidateWatcher.Enabled = LogDiagnostics.CaptureUnrecognizedMessages;
 
         // Per-BBS room blacklist — hides ganghouse / dead-end rooms
         // from the map render + room search. Loaded on BBS pin so
@@ -5756,18 +5780,20 @@ public sealed class AppServices
         LogDiagnostics.CombatDiagnostics = dto.Combat;
         LogDiagnostics.AutoCollectLogs   = dto.AutoCollect;
         LogDiagnostics.HopTiming         = dto.HopTiming;
+        LogDiagnostics.CaptureUnrecognizedMessages = dto.CaptureUnrecognizedMessages;
         _suppressLogDiagnosticsPersist = false;
     }
 
     private void ResetLogDiagnosticsToDefaults()
     {
         _suppressLogDiagnosticsPersist = true;
-        // Mirror LogDiagnosticsSettings defaults: Debug + Combat on, the heavier
-        // on-disk / hop-timing traces off.
+        // Mirror LogDiagnosticsSettings defaults: Debug + Combat + message-candidate
+        // capture on, the heavier on-disk / hop-timing traces off.
         LogDiagnostics.DebugDiagnostics  = true;
         LogDiagnostics.CombatDiagnostics = true;
         LogDiagnostics.AutoCollectLogs   = false;
         LogDiagnostics.HopTiming         = false;
+        LogDiagnostics.CaptureUnrecognizedMessages = true;
         _suppressLogDiagnosticsPersist = false;
     }
 
@@ -5783,6 +5809,7 @@ public sealed class AppServices
             Combat     = LogDiagnostics.CombatDiagnostics,
             AutoCollect = LogDiagnostics.AutoCollectLogs,
             HopTiming  = LogDiagnostics.HopTiming,
+            CaptureUnrecognizedMessages = LogDiagnostics.CaptureUnrecognizedMessages,
         };
         profile.Settings ??= new();
         profile.Settings["LogDiagnostics"] = System.Text.Json.JsonSerializer.SerializeToElement(dto);

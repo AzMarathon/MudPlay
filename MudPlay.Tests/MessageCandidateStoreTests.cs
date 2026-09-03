@@ -1,0 +1,83 @@
+using MudPlay.Models.GameData;
+using MudPlay.Services;
+using Xunit;
+
+namespace MudPlay.Tests;
+
+public sealed class MessageCandidateStoreTests
+{
+    [Fact]
+    public void RecordSighting_NewText_CreatesRecord_ReturnsIsNewTrue()
+    {
+        MessageCandidateStore store = new();
+        DateTimeOffset t = DateTimeOffset.UtcNow;
+
+        (MessageCandidateRecord record, bool isNew) = store.RecordSighting("A new line", t);
+
+        Assert.True(isNew);
+        Assert.Equal("A new line", record.RawText);
+        Assert.Equal(1, record.Occurrences);
+        Assert.Equal(t, record.FirstSeenAt);
+        Assert.Equal(t, record.LastSeenAt);
+        Assert.False(record.Dismissed);
+        Assert.Single(store.Candidates);
+    }
+
+    [Fact]
+    public void RecordSighting_RepeatText_BumpsOccurrences_ReturnsIsNewFalse()
+    {
+        MessageCandidateStore store = new();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        store.RecordSighting("Same line", t0);
+
+        DateTimeOffset t1 = t0.AddSeconds(5);
+        (MessageCandidateRecord record, bool isNew) = store.RecordSighting("Same line", t1);
+
+        Assert.False(isNew);
+        Assert.Equal(2, record.Occurrences);
+        Assert.Equal(t0, record.FirstSeenAt);
+        Assert.Equal(t1, record.LastSeenAt);
+        Assert.Single(store.Candidates);
+    }
+
+    [Fact]
+    public void Dismiss_MarksDismissed_ButKeepsDedupTracking()
+    {
+        MessageCandidateStore store = new();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        (MessageCandidateRecord created, _) = store.RecordSighting("Boring line", t0);
+
+        store.Dismiss(created.Id);
+        Assert.True(store.Candidates[0].Dismissed);
+
+        // A later recurrence bumps the existing dismissed record instead of
+        // duplicating it or re-alerting — dismissal only stops the watcher's
+        // first-sighting Warn, not dedup tracking.
+        (MessageCandidateRecord record, bool isNew) = store.RecordSighting("Boring line", t0.AddMinutes(1));
+        Assert.False(isNew);
+        Assert.True(record.Dismissed);
+        Assert.Equal(2, record.Occurrences);
+        Assert.Single(store.Candidates);
+    }
+
+    [Fact]
+    public void Remove_DeletesRecord()
+    {
+        MessageCandidateStore store = new();
+        (MessageCandidateRecord created, _) = store.RecordSighting("Gone soon", DateTimeOffset.UtcNow);
+
+        store.Remove(created.Id);
+
+        Assert.Empty(store.Candidates);
+    }
+
+    [Fact]
+    public void Contains_ReflectsCurrentText()
+    {
+        MessageCandidateStore store = new();
+        Assert.False(store.Contains("Not staged"));
+
+        store.RecordSighting("Now staged", DateTimeOffset.UtcNow);
+        Assert.True(store.Contains("Now staged"));
+    }
+}
