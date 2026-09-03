@@ -265,7 +265,7 @@
                         <DataGridTextColumn Header="Name"       Binding="{ReflectionBinding Name}"                 Width="*"    MinWidth="160" MaxWidth="300" SortMemberPath="Name"/>
                         <DataGridTextColumn Header="HP"         Binding="{ReflectionBinding HpText}"               Width="Auto" MinWidth="80"  SortMemberPath="Hp"/>
                         <DataGridTextColumn Header="EXP"        Binding="{ReflectionBinding ExpText}"              Width="Auto" MinWidth="90"  SortMemberPath="Exp"/>
-                        <DataGridTextColumn Header="Accuracy"   Binding="{ReflectionBinding AccuracyText}"         Width="Auto" MinWidth="90"  SortMemberPath="Accuracy"/>
+                        <DataGridTextColumn Header="Accuracies" Binding="{ReflectionBinding AccuracyText}"         Width="Auto" MinWidth="90"  SortMemberPath="Accuracy"/>
                         <DataGridTextColumn Header="Hits You %" Binding="{ReflectionBinding IncomingHitPercentText}" Width="Auto" MinWidth="90" SortMemberPath="IncomingHitPercent"/>
                         <DataGridTextColumn Header="Est. Rounds to Kill" Binding="{ReflectionBinding EstimatedRoundsToKillText}" Width="Auto" MinWidth="130" SortMemberPath="EstimatedRoundsToKill"/>
                     </DataGrid.Columns>
