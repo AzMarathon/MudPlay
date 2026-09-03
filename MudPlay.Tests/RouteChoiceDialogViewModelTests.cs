@@ -108,7 +108,7 @@ public sealed class RouteChoiceDialogViewModelTests
         var vm = new RouteChoiceDialogViewModel(
             choice, "Frozen cavern (10/297)",
             id => id == 11 ? "rope and grapple" : "climbing harness",
-            hazardCounterSource: "grab from the floor here");
+            hazardCounterSource: "grab from the floor here", hazardSurvivable: true);
 
         Assert.True(vm.HazardObtain);
         Assert.True(vm.ShowSendItCard);
@@ -565,5 +565,61 @@ public sealed class RouteChoiceDialogViewModelTests
 
         Assert.True(fired);
         Assert.Equal(RouteChoiceResult.Free, previewed);
+    }
+
+    // A sole SURVIVABLE-damage hazard with no sourceable counter (the Silver River
+    // with no reachable raft): the only card is "cross unprotected — take the
+    // damage"; the obtain/route card is hidden (nothing to obtain).
+    [Fact]
+    public void SoleHazard_Survivable_NoCounter_OffersCrossUnprotectedOnly()
+    {
+        var choice = SoleChoice(new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "A Silvery Stream (1/2409)", id => "a raft",
+            hazardCounterSource: null, hazardSurvivable: true);
+
+        Assert.True(vm.ShowSendItCard);
+        Assert.False(vm.ShowGatedCard);
+        Assert.Contains("Cross unprotected", vm.SendItSummary);
+        Assert.False(vm.HazardObtain);
+    }
+
+    // A sole survivable hazard WITH a sourceable counter offers both: "obtain, then
+    // cross" and "cross unprotected".
+    [Fact]
+    public void SoleHazard_Survivable_WithCounter_OffersObtainAndCrossUnprotected()
+    {
+        var choice = SoleChoice(new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 }));
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "A Silvery Stream (1/2409)", id => "a raft",
+            hazardCounterSource: "buy at Pier", hazardSurvivable: true);
+
+        Assert.True(vm.HazardObtain);
+        Assert.True(vm.ShowGatedCard);
+        Assert.True(vm.ShowSendItCard);
+        Assert.Contains("Obtain, then cross", vm.GatedSummary);
+        Assert.Contains("Cross unprotected", vm.SendItSummary);
+    }
+
+    // A sole GRAVE hazard (a drown / freeze death) NEVER offers "cross unprotected",
+    // even when a counter can be sourced — a counter is the only safe way past.
+    [Fact]
+    public void SoleHazard_Grave_NeverOffersCrossUnprotected()
+    {
+        var choice = SoleChoice(new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 55 }));
+
+        var withCounter = new RouteChoiceDialogViewModel(
+            choice, "Sunken Vault (1/9)", id => "a fish-helm",
+            hazardCounterSource: "buy at Docks", hazardSurvivable: false);
+        Assert.False(withCounter.ShowSendItCard);
+        Assert.True(withCounter.ShowGatedCard);   // "obtain, then cross" still offered
+
+        var noCounter = new RouteChoiceDialogViewModel(
+            choice, "Sunken Vault (1/9)", id => "a fish-helm",
+            hazardCounterSource: null, hazardSurvivable: false);
+        Assert.False(noCounter.ShowSendItCard);
+        Assert.True(noCounter.ShowGatedCard);      // "walk to the hazard and stop"
     }
 }

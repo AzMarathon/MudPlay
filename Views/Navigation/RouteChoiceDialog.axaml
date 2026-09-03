@@ -46,6 +46,7 @@
                 <Button Classes="route"
                         Classes.selected="{Binding IsGatedSelected}"
                         Command="{Binding SelectGatedCommand}"
+                        IsVisible="{Binding ShowGatedCard}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Left"
                         BorderThickness="1"
@@ -75,7 +76,7 @@
                                    FontSize="12"
                                    TextWrapping="Wrap"
                                    Foreground="{StaticResource ChromeFgBrush}"/>
-                        <TextBlock Text="Crosses the gates as-is — nothing acquired; you must already carry what's needed."
+                        <TextBlock Text="{Binding SendItDetail}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
