@@ -4065,7 +4065,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (_routeDetailsVm is { } open) { open.RequestClose(); return; }   // toggle closed
 
-        var vm = new RouteDetailsDialogViewModel(RouteDetailsTitle(), BuildCurrentRouteRows());
+        IReadOnlyList<RoomKey>? route = CurrentRouteForDetails();
+        var vm = new RouteDetailsDialogViewModel(
+            RouteDetailsLauncher.TitleWithEta(_services, RouteDetailsTitle(), route),
+            RouteDetailsLauncher.BuildRows(_services, route));
         _routeDetailsVm = vm;
         // Fire-and-forget: awaiting here would disable the command (IAsyncRelayCommand
         // self-disables while running) and block the re-click toggle. The helper
@@ -4094,20 +4097,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         return prefix;
     }
 
-    // The step rows for whichever route is live (the same room-key polyline the map
-    // draws): a walk / loop / Auto-Lair approach the engine is executing, else the
-    // armed-but-not-running preview (a search-box walk-to). Built via the shared
-    // launcher so the picker's Details button renders identically. Empty when there's
-    // no route.
-    private IReadOnlyList<RouteDetailRow> BuildCurrentRouteRows()
-    {
-        IReadOnlyList<RoomKey>? route =
-            EngineActionIsWalking ? WalkPath
-            : EngineActionIsLooping ? LoopPath
-            : EngineActionIsLair ? AutoLairApproachPath
-            : PreviewPath;
-        return RouteDetailsLauncher.BuildRows(_services, route);
-    }
+    // Whichever route is live (the same room-key polyline the map draws): a walk /
+    // loop / Auto-Lair approach the engine is executing, else the armed-but-not-
+    // running preview (a search-box walk-to). Drives both the Details rows and its
+    // title ETA. Null when there's no route.
+    private IReadOnlyList<RoomKey>? CurrentRouteForDetails() =>
+        EngineActionIsWalking ? WalkPath
+        : EngineActionIsLooping ? LoopPath
+        : EngineActionIsLair ? AutoLairApproachPath
+        : PreviewPath;
 
     // Row the CURRENT NAV ListBox should keep in view — the active step
     // while walking, the next-ready lair while auto-lairing. The window

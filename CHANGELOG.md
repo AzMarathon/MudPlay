@@ -6,7 +6,7 @@
 - For such a route it offers **"Obtain a raft, then cross"** (when a counter can be sourced) or **"Walk to the hazard and stop"** (when it can't), plus **"Cross unprotected — take the damage"** — each stopping at the hard gate you clear yourself
 - "Walk to the hazard and stop" walks only to the room just short of the hazard (the river's edge), so you can fetch a counter / clear the gate by hand from there rather than crossing blindly
 - The "obtain" card's requirement line now names the **specific** counter it'll fetch and where — e.g. *"log raft (buy at Pier)"* — instead of the whole "log raft or wooden skiff or …" list; when several counters are buyable it picks the **cheapest**
-- The route **Details…** window now includes the final destination room as an arrival step, so the plan shows where it lands
+- The route **Details…** window now includes the final destination room as an arrival step, so the plan shows where it lands, and its **title bar shows the ETA** to arrive via that route (e.g. *"Current route → The Iceforge (3/632) · ~6m 55s"*)
 
 ## 3.46.2
 
