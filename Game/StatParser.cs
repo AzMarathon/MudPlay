@@ -38,8 +38,10 @@ public sealed partial class StatParser : IDisposable
 
     // Window after observing outbound `health` during which the single compact
     // health-command line is accepted. Independent of the stat-screen gate — the
-    // `health` output collides with the stat sheet's bare `Health:` regen field,
-    // so it is parsed on its own gate, never through the generic field scan.
+    // `health` output's `Health:` label (the HP pool) collides with the stat
+    // sheet's `Health:` attribute (a core stat like Strength — a bare number; the
+    // stat sheet labels the HP pool `Hits:`), so it is parsed on its own gate,
+    // never through the generic field scan.
     public TimeSpan ExpectingHealthWindow { get; set; } = TimeSpan.FromSeconds(5);
 
     // Test seam.
@@ -544,10 +546,11 @@ public sealed partial class StatParser : IDisposable
     }
 
     // The compact `health` command re-anchors HP + power-pool ceilings with far
-    // less scroll than the full stat screen. Its output collides with the stat
-    // sheet's bare `Health: <regen>` field, so it rides its own single-shot gate
+    // less scroll than the full stat screen. Its `Health:` label (the HP pool)
+    // collides with the stat sheet's `Health:` attribute (a bare-number core stat;
+    // the sheet labels the HP pool `Hits:`), so it rides its own single-shot gate
     // (armed on outbound `health`) and is parsed here — never through ScanLine's
-    // generic HealthRx, which would misread the HP value as the Health regen stat.
+    // generic HealthRx, which would misread the HP value as the Health attribute.
     private void TryHealthWindow(string text)
     {
         if (_healthWindowOpenedAt is not { } opened) return;
@@ -700,8 +703,9 @@ public sealed partial class StatParser : IDisposable
     [GeneratedRegex(@"\bArmour Class:\s+\*?\s*(\d+)/(\d+)",             RegexOptions.CultureInvariant)] private static partial Regex ArmourClassRx();
 
     // The compact `health`-command output. Anchored at line start (with optional
-    // leading whitespace) so it never matches the stat sheet's mid-row `Health:
-    // <regen>` field, and so a chat line embedding it can't fake the prefix. HP is
+    // leading whitespace) so it never matches the stat sheet's mid-row `Health:`
+    // attribute field (a bare-number core stat), and so a chat line embedding it
+    // can't fake the prefix. HP is
     // always paired N/M with a [P%]; the pool (Kai on stock, Mana on paradigm) is
     // optional so a no-mana class parses too. Groups: 1 curHp, 2 maxHp, 3 pool
     // label, 4 curPool, 5 maxPool.

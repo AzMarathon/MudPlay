@@ -551,7 +551,8 @@ public sealed class StatParserTests
 
     // Arm ONLY the health gate — the stat-screen gate stays closed, exactly as a
     // real `health` send leaves it. That closed stat gate is what stops the
-    // health line's HP value bleeding into the stat sheet's `Health:` regen field.
+    // health line's HP value bleeding into the stat sheet's `Health:` attribute
+    // (a core stat; the sheet labels the HP pool `Hits:`).
     private static (StatParser parser, PlayerStats stats) HealthSetup()
     {
         PlayerStats stats = new();
@@ -578,7 +579,7 @@ public sealed class StatParserTests
         Assert.Equal(0,  s.Mana);          // a kai class never writes the mana pool
         Assert.True(fired);
         Assert.Equal((91, 10), captured);  // poolMax is the kai ceiling
-        Assert.Equal(0, s.Health);         // the regen Health stat is NOT clobbered by the HP value
+        Assert.Equal(0, s.Health);         // the Health core-stat attribute is NOT clobbered by the HP value
         Assert.True(p.HasParsed);
     }
 

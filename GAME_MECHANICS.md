@@ -2362,9 +2362,12 @@ Health:    137/137  [100%]                          (HP-only class — no pool f
 
 Parsing points: the line is anchored at line start with `Health:` and both HP and the pool are
 `cur/max` followed by `[pct%]`; inter-column padding varies, so match whitespace-tolerantly. The
-`Health:` label here is the **HP pool**, NOT the stat sheet's `Health:` *regen* stat (a lone number
-in the `stat` screen) — the two collide, so the health-command line is parsed on its own outbound
-gate (`health` observed) and never through the stat-screen field scan. (StatParser.TryHealthCommandLine.)
+`Health:` label here is the **HP pool** — note that `stat` labels the HP pool `Hits:` and has its
+own separate `Health:` field, which is the **Health core stat** (a bare number like `Health: 71`,
+alongside Strength / Agility / etc.). The two `Health:` labels collide, so the health-command line
+is parsed on its own outbound gate (`health` observed) and never through the stat-screen field scan.
+(HP/MA **regen** — `HP Regen` / `MA Regen` — only appears in Paradigm's `stat all`, which the client
+does NOT parse; regen is computed from stats in the Player Workshop.) (StatParser.TryHealthCommandLine.)
 
 ## BBS actions / emotes (the `action list` socials) *([CONFIRMED] 2026-08-14, user + live capture)*
 
