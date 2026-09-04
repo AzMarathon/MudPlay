@@ -385,6 +385,19 @@ it isn't here and you're unsure, ask.
 
 ## Combat & backstab
 
+### Attack-prevented states *([CONFIRMED] 2026-09-03, user)*
+
+- Some status effects — a **stun**, **petrification/petrify**, a leg/body **bind** — leave the
+  character **unable to issue an attack command at all**. While the state is up the server refuses
+  the attack; when the wear-off message lands the block clears and attacking resumes.
+- The block covers **both physical and spell attacks** — it is not one or the other. A message
+  tagged with the **AttackPrevented** effect flag means "hold every attack" (weapon swing, attack
+  spell, and offensive debuff) until the paired wear-off fires. Non-attack casts (self cures /
+  buffs / heals) are a separate concern and not governed by this flag.
+- The client honours this by gating every combat attack chokepoint on
+  `ConditionTracker.IsAttackPrevented` (see `CombatManager.AttacksBlocked`): while true it sends
+  nothing and re-attempts each round, so the fight resumes the instant the effect wears off.
+
 - **[OBSERVED]** Backstab command: `bs <target>`.
 - **[OBSERVED]** A monster in the room with the **see-hidden** ability reveals the sneaker to
   the whole room, so the opening move falls back to a normal attack rather than `bs`.

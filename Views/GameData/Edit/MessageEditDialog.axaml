@@ -4,11 +4,11 @@
         xmlns:spells="using:MudPlay.Game.Spells"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="900"
+        mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="840"
         x:Class="MudPlay.Views.GameData.Edit.MessageEditDialog"
         x:DataType="vm:MessageEditDialogViewModel"
         Title="{Binding Title}"
-        Width="660" Height="900" MinWidth="560" MinHeight="600"
+        Width="660" Height="840" MinWidth="560" MinHeight="560"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>

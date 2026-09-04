@@ -3228,6 +3228,11 @@ public sealed class AppServices
         Combat.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
         CombatTracker.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
 
+        // While an AttackPrevented message is active (stun / petrify / bind), the
+        // server rejects every attack the player issues — weapon and spell — so the
+        // combat engine holds all offensive output until the wear-off clears it.
+        Combat.SetAttackPreventedGate(() => Conditions.IsAttackPrevented);
+
         // A combat-spell engage can lose its initial send to a self-buff that just
         // spent the cast slot. On a fresh process there may be no combat-tick anchor
         // yet, and because no attack reached the server there is no engagement output
