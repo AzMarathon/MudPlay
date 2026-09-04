@@ -206,6 +206,45 @@
                         <TextBlock Text="{Binding AddLinkStatus}"
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
                                    FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                        <!-- Inline collision resolver: appears when the linked spell's
+                             record already has text that differs from the line being
+                             committed. Per field, keep the record's value (checked) or
+                             use the unrecognized line (unchecked), then Apply. -->
+                        <Border IsVisible="{Binding HasLinkFillConflicts}"
+                                Margin="0,10,0,0" Padding="10"
+                                Background="{StaticResource ChromeBgElevBrush}"
+                                BorderBrush="{StaticResource ChromeBorderBrush}"
+                                BorderThickness="1" CornerRadius="3">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="This spell's record already has different text. Pick which to keep for each field:"
+                                           Classes="FieldLabel" TextWrapping="Wrap"/>
+                                <ItemsControl ItemsSource="{Binding LinkFillConflicts}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:LinkFillConflict">
+                                            <StackPanel Margin="0,4" Spacing="2">
+                                                <TextBlock Text="{Binding FieldLabel}"
+                                                           FontWeight="SemiBold" FontSize="11"/>
+                                                <TextBlock Text="{Binding RecordValue, StringFormat='Record: {0}'}"
+                                                           Foreground="{StaticResource ChromeFgSecBrush}"
+                                                           FontFamily="{StaticResource FontMono}"
+                                                           FontSize="11" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding UnrecognizedValue, StringFormat='Unrecognized: {0}'}"
+                                                           Foreground="{StaticResource ChromeFgSecBrush}"
+                                                           FontFamily="{StaticResource FontMono}"
+                                                           FontSize="11" TextWrapping="Wrap"/>
+                                                <CheckBox IsChecked="{Binding UseRecord, Mode=TwoWay}"
+                                                          FontSize="11"
+                                                          Content="Keep the record's value (uncheck to use the unrecognized line)"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Content="Apply choices"
+                                        HorizontalAlignment="Right"
+                                        Command="{Binding ApplyLinkFillCommand}"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Border>
 
