@@ -11,6 +11,7 @@
 > - Program log reports each message-catalogue load on set load/swap (set, realm, source, record count) and warns loudly when a set loads zero message records
 > - **Stock Messages seed completed** from the authoritative stock-engine spell-message database — the lines it was genuinely missing are ingested and every engine-confirmed-absent slot is `{null}`-marked (stock Incomplete drops 551 → 7); the same sync is applied to paradigm for spells whose number + name match Paradigm-1.9.1 (661 → 146), and corrupt binary message payloads are scrubbed from both seeds
 > - Opening a spell-linked record from the Incomplete Messages tab now shows the read-only **Game Data** tab (spell facts + damage calculator), the same as opening it from the Spells tab
+> - Collapsed duplicate spell-message records in both seeds (same spell number + name, complementary/differing lines merged into one), and fixed `ember` (#210) — a combat spell — to `{null}` its applied/wears-off and drop a spurious Diseased flag
 > - An item's **on-use / proc message** is edited from the item record; a complete message claimed by a spell or item is hidden from the Incomplete Messages tab
 > - New **Confuse fumble** field on a Confused message: the line(s) that source emits on a fumble (defaults to *"You fumble in confusion!"*) — a fumbled move reverts on it, so the wordings are game data, not hardcoded
 > - Message editor opens taller and its User Definitions tab scrolls, so the Confuse-fumble box + Effects flags no longer truncate

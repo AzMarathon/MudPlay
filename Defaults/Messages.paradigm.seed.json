@@ -14,24 +14,9 @@
         "Table": "Spells",
         "Number": 126
       }
-    ]
-  },
-  {
-    "Id": "73db6fc6125a6d48",
-    "Name": "acid hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Acid sears {target} for {damage} damage!",
-    "TargetMessage": "Acid burns you for {damage} damage!",
-    "WitnessMessage": "{target} is burned by acid for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 126
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "14188300c2983def",
@@ -51,7 +36,7 @@
     ]
   },
   {
-    "Id": "9f7bfac9718d80eb",
+    "Id": "8a0ac2bc13bb0fe4",
     "Name": "acid rain",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -65,24 +50,9 @@
         "Table": "Spells",
         "Number": 139
       }
-    ]
-  },
-  {
-    "Id": "213ded13e9d7c558",
-    "Name": "acid rain",
-    "Flags": "None",
-    "RawFlagsHex": 8,
-    "CasterMessage": "Acid rain pours down upon your foe!",
-    "TargetMessage": "Acid rain pours down upon you!",
-    "WitnessMessage": "Acid rain pours down upon the room!",
-    "AppliedMessage": "You are covered in acid",
-    "AppliedEndsWith": "The acid covering you dries up",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 139
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "1f2096be7173fa12",
@@ -119,11 +89,11 @@
     ]
   },
   {
-    "Id": "49f0d6427e59efbe",
+    "Id": "6779b02ccdb9c1fb",
     "Name": "acidic blast enchantment",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "",
+    "CasterMessage": "An acidic sheen covers {target}'s weapon!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "Your attacks deal acidic damage",
@@ -133,24 +103,9 @@
         "Table": "Spells",
         "Number": 5592
       }
-    ]
-  },
-  {
-    "Id": "27e5c618f2bca5e2",
-    "Name": "acidic blast enchantment",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "An acidic sheen covers {target}'s weapon!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 5592
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "a765441ab3b2d5e6",
@@ -337,24 +292,9 @@
         "Table": "Spells",
         "Number": 5083
       }
-    ]
-  },
-  {
-    "Id": "51eb6bd7f17bd314",
-    "Name": "arcane assault",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Pure energy rips through {target}, ravaging them for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 5083
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "8739c3f371fe397e",
@@ -695,24 +635,9 @@
         "Table": "Spells",
         "Number": 780
       }
-    ]
-  },
-  {
-    "Id": "4cb2b9ca28616a0e",
-    "Name": "black flail",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "You hold up your black flail!",
-    "TargetMessage": "{null}",
-    "WitnessMessage": "{source} holds up their black flail!",
-    "AppliedMessage": "You feel lucky",
-    "AppliedEndsWith": "The effects of bless wear off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 780
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "6d6243424eb1c07f",
@@ -766,28 +691,11 @@
     ]
   },
   {
-    "Id": "6a7ced0c10ec9cbc",
+    "Id": "1eb5bc9d730fb2b5",
     "Name": "black wind",
     "Flags": "Blinded",
-    "RawFlagsHex": 0,
+    "RawFlagsHex": 1,
     "CasterMessage": "A black wind sweeps throughout the room!",
-    "TargetMessage": "A cool wind blows around you!",
-    "WitnessMessage": "A cool wind blows throughout the room!",
-    "AppliedMessage": "You are blind",
-    "AppliedEndsWith": "You can see again",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 73
-      }
-    ]
-  },
-  {
-    "Id": "b3ffc641795395fd",
-    "Name": "black wind",
-    "Flags": "Blinded",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A cool wind blows throughout the room!",
     "TargetMessage": "A cool wind blows around you!",
     "WitnessMessage": "A cool wind blows throughout the room!",
     "AppliedMessage": "You are blind!",
@@ -797,7 +705,9 @@
         "Table": "Spells",
         "Number": 73
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "e713b44598da731b",
@@ -970,23 +880,6 @@
     ]
   },
   {
-    "Id": "036fada0aa4be18b",
-    "Name": "blizzard",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A storm of freezing hail smashes your foes for {damage} damage!",
-    "TargetMessage": "A storm of freezing hail smashes you for {damage} damage!",
-    "WitnessMessage": "A storm of freezing hail blows through the room!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 771
-      }
-    ]
-  },
-  {
     "Id": "03b7a0788d9c17cf",
     "Name": "blizzard",
     "Flags": "None",
@@ -1001,7 +894,9 @@
         "Table": "Spells",
         "Number": 771
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "61cc30d9b252cc58",
@@ -1089,23 +984,6 @@
     ]
   },
   {
-    "Id": "2a90972df3a62beb",
-    "Name": "boulder",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A massive boulder appears and crushes you for {damage} damage!",
-    "TargetMessage": "A massive boulder appears and crushes you for {damage} damage!",
-    "WitnessMessage": "A massive boulder appears and crushes {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 1047
-      }
-    ]
-  },
-  {
     "Id": "8a48d43d84cc7034",
     "Name": "boulder",
     "Flags": "None",
@@ -1120,13 +998,15 @@
         "Table": "Spells",
         "Number": 1047
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "63c6e2d910b09347",
     "Name": "breathes",
-    "Flags": "Confused, LastActionFailed, Blinded",
-    "RawFlagsHex": 8194,
+    "Flags": "Blinded, Confused, LastActionFailed",
+    "RawFlagsHex": 8195,
     "CasterMessage": "{null}",
     "TargetMessage": "The {source} {spellname} on you!",
     "WitnessMessage": "The {source} {spellname} on {target}!",
@@ -1138,24 +1018,8 @@
         "Number": 84
       }
     ],
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
-    "Id": "45b6f3fdae9d95b3",
-    "Name": "breathes",
-    "Flags": "Blinded",
-    "RawFlagsHex": 1,
-    "CasterMessage": "{null}",
-    "TargetMessage": "The {source} {spellname} on you!",
-    "WitnessMessage": "The {source} {spellname} on {target}!",
-    "AppliedMessage": "You are blind",
-    "AppliedEndsWith": "The effects of the mummy's breath wears off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 84
-      }
-    ]
+    "ConfuseFumbleLine": "You fumble in confusion!",
+    "CastResponse": ""
   },
   {
     "Id": "f3e9984ddb14a39a",
@@ -1189,24 +1053,9 @@
         "Table": "Spells",
         "Number": 589
       }
-    ]
-  },
-  {
-    "Id": "70780797a467e2ac",
-    "Name": "burn hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is burned for {damage} damage!",
-    "TargetMessage": "You are burned for {damage} damage!",
-    "WitnessMessage": "{source} is burned for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 589
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "be20c364372b0de0",
@@ -1345,23 +1194,6 @@
     ]
   },
   {
-    "Id": "666661e14b4780d0",
-    "Name": "chaos shield",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Wild, uncontrolled energy writhes around {spellname}!",
-    "TargetMessage": "Wild, crackling energy writhes around you!",
-    "WitnessMessage": "Wild, crackling energy writhes around {target}!",
-    "AppliedMessage": "You are surrounded by a chaos shield",
-    "AppliedEndsWith": "The chaos shield fizzles out",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 405
-      }
-    ]
-  },
-  {
     "Id": "8de440064bc733e5",
     "Name": "chaos shield",
     "Flags": "None",
@@ -1376,24 +1208,9 @@
         "Table": "Spells",
         "Number": 405
       }
-    ]
-  },
-  {
-    "Id": "bc05d4c17f494cad",
-    "Name": "chaos storm",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A chaotic storm assaults your foe for {damage} damage!",
-    "TargetMessage": "A chaotic storm assaults you for {damage} damage!",
-    "WitnessMessage": "A chaotic storm assaults the room for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 140
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "74e1beee0da14c6e",
@@ -1410,7 +1227,9 @@
         "Table": "Spells",
         "Number": 140
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "27ace1d76a3c2cd5",
@@ -1479,24 +1298,9 @@
         "Table": "Spells",
         "Number": 587
       }
-    ]
-  },
-  {
-    "Id": "ad27a8dd5d4dab44",
-    "Name": "cold hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is chilled for {damage} damage!",
-    "TargetMessage": "You are chilled for {damage} damage!",
-    "WitnessMessage": "{target} is chilled for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 587
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "bb4a52bb85f55fc6",
@@ -1602,10 +1406,10 @@
     "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
-    "Id": "a8bbbe2f3002bc30",
+    "Id": "d90387ba0a050b1c",
     "Name": "constriction",
-    "Flags": "MovementPrevented",
-    "RawFlagsHex": 16,
+    "Flags": "Confused, MovementPrevented",
+    "RawFlagsHex": 18,
     "CasterMessage": "A snake shoots out of the staff and wraps around {target}!",
     "TargetMessage": "A snake shoots out of the staff and wraps around you!",
     "WitnessMessage": "A snake shoots out of the staff and wraps around {target}!",
@@ -1616,85 +1420,15 @@
         "Table": "Spells",
         "Number": 409
       }
-    ]
-  },
-  {
-    "Id": "08e9e4db5925e7b2",
-    "Name": "constriction",
-    "Flags": "Confused, MovementPrevented",
-    "RawFlagsHex": 18,
-    "CasterMessage": "A snake shoots out of the staff and wraps around {target}!",
-    "TargetMessage": "A snake shoots out of the staff and wraps around you!",
-    "WitnessMessage": "A snake shoots out of the staff and wraps around {target}!",
-    "AppliedMessage": "You are caught in a snakes coils.",
-    "AppliedEndsWith": "The constrictor releases its grasp.",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 409
-      }
     ],
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
-    "Id": "07f8453c3c0098c2",
-    "Name": "constriction",
-    "Flags": "Confused, MovementPrevented",
-    "RawFlagsHex": 18,
-    "CasterMessage": "A snake shoots out of the staff and wraps around {target}!",
-    "TargetMessage": "A snake shoots out of the staff and wraps around you!",
-    "WitnessMessage": "A snake shoots out of the staff and wraps around {target}!",
-    "AppliedMessage": "You are caught in the snake's coils.",
-    "AppliedEndsWith": "You break free of the coils!",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 409
-      }
-    ],
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
-    "Id": "3ca8cfccef53340c",
-    "Name": "constriction",
-    "Flags": "Confused, MovementPrevented",
-    "RawFlagsHex": 18,
-    "CasterMessage": "A snake shoots out of the staff and wraps around {target}!",
-    "TargetMessage": "A snake shoots out of the staff and wraps around you!",
-    "WitnessMessage": "A snake shoots out of the staff and wraps around {target}!",
-    "AppliedMessage": "You are caught in the snakes coils.",
-    "AppliedEndsWith": "The constrictor releases its grasp.",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 409
-      }
-    ],
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
-    "Id": "ecb2bdc9837daf73",
-    "Name": "convulsions",
-    "Flags": "Confused",
-    "RawFlagsHex": 2,
-    "CasterMessage": "{null}",
-    "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
-    "AppliedMessage": "You are in convulsions!",
-    "AppliedEndsWith": "Your body returns to normal.",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 951
-      }
-    ],
-    "ConfuseFumbleLine": "You fumble in confusion!\nYou convulse violently\nYou look around stupidly and do nothing!"
+    "ConfuseFumbleLine": "You fumble in confusion!",
+    "CastResponse": ""
   },
   {
     "Id": "529824a8460db78e",
     "Name": "convulsions",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
+    "Flags": "Confused, LastActionFailed",
+    "RawFlagsHex": 8194,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
@@ -1705,7 +1439,9 @@
         "Table": "Spells",
         "Number": 951
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!\nYou convulse violently\nYou look around stupidly and do nothing!",
+    "CastResponse": ""
   },
   {
     "Id": "0fd8a4aee51e9fd4",
@@ -1725,11 +1461,11 @@
     ]
   },
   {
-    "Id": "cb40e0c70b28e295",
+    "Id": "efa611a7d3f4c8c4",
     "Name": "corrosion",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "{null}",
+    "CasterMessage": "A yellowish-brown cloud billows through the room!",
     "TargetMessage": "The {source} casts {spellname}, and a brown tingling mist fills the room!",
     "WitnessMessage": "{null}",
     "AppliedMessage": "You feel vulnerable",
@@ -1739,24 +1475,9 @@
         "Table": "Spells",
         "Number": 255
       }
-    ]
-  },
-  {
-    "Id": "fa4ee7e66bb560b6",
-    "Name": "corrosion",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A yellowish-brown cloud billows through the room!",
-    "TargetMessage": "The {source} casts {spellname}, and a brown tingling mist fills the room!",
-    "WitnessMessage": "{null}",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 255
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "c42d60df7a8dbad6",
@@ -2576,23 +2297,6 @@
     ]
   },
   {
-    "Id": "2e0e632d59656bd2",
-    "Name": "earthquake",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "An earthquake rocks the room for {damage} damage!",
-    "TargetMessage": "An earthquake rocks you for {damage} damage!",
-    "WitnessMessage": "An earthquake rocks the room for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 295
-      }
-    ]
-  },
-  {
     "Id": "5ba94d1e7b55f410",
     "Name": "earthquake",
     "Flags": "None",
@@ -2607,7 +2311,9 @@
         "Table": "Spells",
         "Number": 295
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "be2e280f71edb1b7",
@@ -2712,40 +2418,6 @@
     ]
   },
   {
-    "Id": "c29831724bd1c826",
-    "Name": "elemental fury",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {target} for {damage} damage!",
-    "TargetMessage": "Shards of stone slice you for {damage} damage!",
-    "WitnessMessage": "Shards of stone slice {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 716
-      }
-    ]
-  },
-  {
-    "Id": "049d32346fcce222",
-    "Name": "elemental fury",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Ice freezes {target} for {damage} damage!",
-    "TargetMessage": "Shards of stone slice you for {damage} damage!",
-    "WitnessMessage": "Shards of stone slice {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 716
-      }
-    ]
-  },
-  {
     "Id": "dababd4298337c22",
     "Name": "elemental fury",
     "Flags": "None",
@@ -2760,24 +2432,9 @@
         "Table": "Spells",
         "Number": 716
       }
-    ]
-  },
-  {
-    "Id": "561c903173fdfa73",
-    "Name": "elemental fury",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Shards of stone slice {target} for {damage} damage!",
-    "TargetMessage": "Shards of stone slice you for {damage} damage!",
-    "WitnessMessage": "Shards of stone slice {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 716
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "1398dc62a186f0a5",
@@ -2882,24 +2539,7 @@
     ]
   },
   {
-    "Id": "3e1a5e2becf01f42",
-    "Name": "entangle",
-    "Flags": "MovementPrevented",
-    "RawFlagsHex": 16,
-    "CasterMessage": "You cast {spellname}, ensnaring {target} with powerful vines!",
-    "TargetMessage": "{source} casts {spellname} on you, ensnaring you with powerful vines!",
-    "WitnessMessage": "{source} casts {spellname}, ensnaring {target} with powerful vines!",
-    "AppliedMessage": "You are entangled!",
-    "AppliedEndsWith": "The effects of entangle wear off!",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 93
-      }
-    ]
-  },
-  {
-    "Id": "6dc64d74b8bfcf1b",
+    "Id": "01209cecbef88fcf",
     "Name": "entangle",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 16,
@@ -2907,13 +2547,15 @@
     "TargetMessage": "{source} casts {spellname} on you, ensnaring you with powerful vines!",
     "WitnessMessage": "{source} casts {spellname}, ensnaring {target} with powerful vines!",
     "AppliedMessage": "Your feet are incased in coral!",
-    "AppliedEndsWith": "You can move again!",
+    "AppliedEndsWith": "The effects of entangle wear off!",
     "Links": [
       {
         "Table": "Spells",
         "Number": 93
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "cdbdfce186944360",
@@ -3120,23 +2762,6 @@
     ]
   },
   {
-    "Id": "f80c87bb483f0199",
-    "Name": "fireball",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "The fireball explodes, causing {damage} damage!",
-    "TargetMessage": "You take {damage} damage from the explosion!",
-    "WitnessMessage": "An explosion rocks the room for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 120
-      }
-    ]
-  },
-  {
     "Id": "0c6e1192b7961c81",
     "Name": "fireball",
     "Flags": "None",
@@ -3151,7 +2776,9 @@
         "Table": "Spells",
         "Number": 120
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "ebcc86790063797f",
@@ -3171,11 +2798,11 @@
     ]
   },
   {
-    "Id": "66414d11fa73feaf",
+    "Id": "7d48bf499f28e573",
     "Name": "flame enchantment",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "",
+    "CasterMessage": "{target}'s weapon is enveloped by magical flame!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "Your attacks deal additional fire damage!",
@@ -3185,24 +2812,9 @@
         "Table": "Spells",
         "Number": 5539
       }
-    ]
-  },
-  {
-    "Id": "5a924027749ee847",
-    "Name": "flame enchantment",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s weapon is enveloped by magical flame!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 5539
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "6807656511a96311",
@@ -3358,27 +2970,10 @@
     ]
   },
   {
-    "Id": "8c652e7a028a0230",
-    "Name": "folds of worship",
-    "Flags": "None",
-    "RawFlagsHex": 512,
-    "CasterMessage": "You pull your cloak tight about you!",
-    "TargetMessage": "{null}",
-    "WitnessMessage": "{source} pulls their cloak tight around themself!",
-    "AppliedMessage": "You feel at one with the gods!",
-    "AppliedEndsWith": "Your spiritual link fades to normal!",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 862
-      }
-    ]
-  },
-  {
     "Id": "816efd3f82ecefc6",
     "Name": "folds of worship",
     "Flags": "None",
-    "RawFlagsHex": 512,
+    "RawFlagsHex": 0,
     "CasterMessage": "You pull your cloak tight about you!",
     "TargetMessage": "{null}",
     "WitnessMessage": "{source} pulls their cloak tight around themself!",
@@ -3389,7 +2984,9 @@
         "Table": "Spells",
         "Number": 862
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "7ec542840e0f2436",
@@ -3462,8 +3059,8 @@
   {
     "Id": "b9e985a981c46051",
     "Name": "form of the monkey",
-    "Flags": "None",
-    "RawFlagsHex": 0,
+    "Flags": "Confused, LastActionFailed",
+    "RawFlagsHex": 8194,
     "CasterMessage": "You invoke the {spellname}.",
     "TargetMessage": "{null}",
     "WitnessMessage": "{source} invokes the {spellname}!",
@@ -3474,25 +3071,9 @@
         "Table": "Spells",
         "Number": 841
       }
-    ]
-  },
-  {
-    "Id": "913d004c924ae401",
-    "Name": "form of the monkey",
-    "Flags": "Confused, LastActionFailed",
-    "RawFlagsHex": 8194,
-    "CasterMessage": "You invoke the {spellname}.",
-    "TargetMessage": "{null}",
-    "WitnessMessage": "{source} invokes the {spellname}!",
-    "AppliedMessage": "You are distracted!",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 841
-      }
     ],
-    "ConfuseFumbleLine": "You fumble in confusion!"
+    "ConfuseFumbleLine": "You fumble in confusion!",
+    "CastResponse": ""
   },
   {
     "Id": "9810fe929f0815f2",
@@ -3529,28 +3110,11 @@
     ]
   },
   {
-    "Id": "72ac6999f6d0798f",
+    "Id": "9731fad4856f1f35",
     "Name": "frenzy",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "A shimmering red glow surrounds {spellname}.",
-    "TargetMessage": "A shimmering red glow surrounds you.",
-    "WitnessMessage": "A shimmering red glow surrounds {target}.",
-    "AppliedMessage": "You are in a battle frenzy",
-    "AppliedEndsWith": "Your frenzied state wears off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 345
-      }
-    ]
-  },
-  {
-    "Id": "17f5a676e6d3d726",
-    "Name": "frenzy",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A shimmering red glow surrounds {target}.",
     "TargetMessage": "A shimmering red glow surrounds you.",
     "WitnessMessage": "A shimmering red glow surrounds {target}.",
     "AppliedMessage": "You are in a battle frenzy!",
@@ -3560,7 +3124,9 @@
         "Table": "Spells",
         "Number": 345
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "70f9ddf2a6fc89bc",
@@ -4005,11 +3571,11 @@
     ]
   },
   {
-    "Id": "b529b9b92ab72628",
+    "Id": "b5c8e22b63517ff9",
     "Name": "greater arcane enchantment",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "",
+    "CasterMessage": "{target}'s weapon ripples with arcane power!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "Your attacks deal greater arcane damage!",
@@ -4019,24 +3585,9 @@
         "Table": "Spells",
         "Number": 5541
       }
-    ]
-  },
-  {
-    "Id": "4d3197457e9c916f",
-    "Name": "greater arcane enchantment",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s weapon ripples with arcane power!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 5541
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "dff2c15ed8b21feb",
@@ -4209,28 +3760,11 @@
     ]
   },
   {
-    "Id": "000349155c288aa8",
-    "Name": "hand of death",
-    "Flags": "None",
-    "RawFlagsHex": 8,
-    "CasterMessage": "Destructive energy courses through {spellname}'s body!",
-    "TargetMessage": "Destructive energy courses through your body!",
-    "WitnessMessage": "Destructive energy courses through {target}'s body!",
-    "AppliedMessage": "You are affected by hand of death",
-    "AppliedEndsWith": "The effects of hand of death wear off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 303
-      }
-    ]
-  },
-  {
-    "Id": "9942061c10806f33",
+    "Id": "1d3d9942fedf80c1",
     "Name": "hand of death",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Destructive energy courses through {target}'s body!",
+    "CasterMessage": "Destructive energy courses through {spellname}'s body!",
     "TargetMessage": "Destructive energy courses through your body!",
     "WitnessMessage": "Destructive energy courses through {target}'s body!",
     "AppliedMessage": "You are affected by hand of death!",
@@ -4240,7 +3774,9 @@
         "Table": "Spells",
         "Number": 303
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "61558251d6f26b7b",
@@ -4465,29 +4001,11 @@
     ]
   },
   {
-    "Id": "586dad6f98276678",
+    "Id": "4b78c931fe251e6b",
     "Name": "hypnotic hands",
     "Flags": "Confused",
     "RawFlagsHex": 2,
     "CasterMessage": "{spellname} is mesmerized by the hypnotic movements!",
-    "TargetMessage": "You are mesmerized by the hypnotic movements!",
-    "WitnessMessage": "{target} is mesmerized by the hypnotic movements!",
-    "AppliedMessage": "You are confused",
-    "AppliedEndsWith": "The effect of hypnotic hands wears off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 300
-      }
-    ],
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
-    "Id": "97f07f3fe5ddcd10",
-    "Name": "hypnotic hands",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is mesmerized by the hypnotic movements!",
     "TargetMessage": "You are mesmerized by the hypnotic movements!",
     "WitnessMessage": "{target} is mesmerized by the hypnotic movements!",
     "AppliedMessage": "You are confused!",
@@ -4497,7 +4015,9 @@
         "Table": "Spells",
         "Number": 300
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!",
+    "CastResponse": ""
   },
   {
     "Id": "77ad22bf088550db",
@@ -4568,24 +4088,7 @@
     ]
   },
   {
-    "Id": "767a20d519efca46",
-    "Name": "ice storm",
-    "Flags": "None",
-    "RawFlagsHex": 8,
-    "CasterMessage": "A freezing storm of ice envelops the foe!",
-    "TargetMessage": "A freezing storm of ice surrounds you!",
-    "WitnessMessage": "A freezing storm of ice sweeps through the room!",
-    "AppliedMessage": "You are freezing",
-    "AppliedEndsWith": "Your are no longer freezing",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 135
-      }
-    ]
-  },
-  {
-    "Id": "9d9b5ab27b036295",
+    "Id": "e019a6aa7ef4d42d",
     "Name": "ice storm",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -4593,13 +4096,15 @@
     "TargetMessage": "A freezing storm of ice surrounds you!",
     "WitnessMessage": "A freezing storm of ice sweeps through the room!",
     "AppliedMessage": "You are freezing!",
-    "AppliedEndsWith": "You are no longer freezing.",
+    "AppliedEndsWith": "Your are no longer freezing",
     "Links": [
       {
         "Table": "Spells",
         "Number": 135
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "073a16d63b7966fc",
@@ -4636,24 +4141,7 @@
     ]
   },
   {
-    "Id": "758ace59771a6dd5",
-    "Name": "illuminate",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "You cast {spellname}!",
-    "TargetMessage": "{source} casts {spellname}!",
-    "WitnessMessage": "{source} casts {spellname}!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 2
-      }
-    ]
-  },
-  {
-    "Id": "33b750aa54062be7",
+    "Id": "3b12f03e00c7d24c",
     "Name": "illuminate",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -4667,7 +4155,9 @@
         "Table": "Spells",
         "Number": 2
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "e22188815c9c9c5c",
@@ -4752,24 +4242,9 @@
         "Table": "Spells",
         "Number": 190
       }
-    ]
-  },
-  {
-    "Id": "cea87230141486cc",
-    "Name": "iron tube",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A massive explosion rocks {target} for {damage} damage!",
-    "TargetMessage": "A massive explosion blasts you for {damage} damage!",
-    "WitnessMessage": "A massive explosion rocks the room for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 190
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "da59cc8f554bc93a",
@@ -5095,11 +4570,11 @@
     ]
   },
   {
-    "Id": "97f089b4eb0566a8",
+    "Id": "e7f77b13336ef7b1",
     "Name": "lesser arcane enchantment",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "",
+    "CasterMessage": "{target}'s weapon shimmers with arcane magic!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "Your attacks deal additional arcane damage!",
@@ -5109,31 +4584,16 @@
         "Table": "Spells",
         "Number": 5535
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
-    "Id": "f75ba90bb80d405c",
-    "Name": "lesser arcane enchantment",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s weapon shimmers with arcane magic!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 5535
-      }
-    ]
-  },
-  {
-    "Id": "a4317f189e129b95",
+    "Id": "b26b5119094eaefd",
     "Name": "lesser vampiric enchantment",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "",
+    "CasterMessage": "{target}'s weapon glows a sanguine red!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "Your attacks are draining life!",
@@ -5143,24 +4603,9 @@
         "Table": "Spells",
         "Number": 5560
       }
-    ]
-  },
-  {
-    "Id": "6db88a1fd3f0be3f",
-    "Name": "lesser vampiric enchantment",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s weapon glows a sanguine red!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 5560
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "7f033400af811099",
@@ -5197,11 +4642,11 @@
     ]
   },
   {
-    "Id": "012d34510eeffa64",
+    "Id": "bf73862e13817c48",
     "Name": "lightning enchantment",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "",
+    "CasterMessage": "{target}'s weapon crackles with electricity!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "Your attacks deal additional lightning damage!",
@@ -5211,24 +4656,9 @@
         "Table": "Spells",
         "Number": 5537
       }
-    ]
-  },
-  {
-    "Id": "0b858813ae8c4cc9",
-    "Name": "lightning enchantment",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s weapon crackles with electricity!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 5537
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "f97d0ab2430eeaeb",
@@ -5245,24 +4675,9 @@
         "Table": "Spells",
         "Number": 411
       }
-    ]
-  },
-  {
-    "Id": "8f38c9b605634dfb",
-    "Name": "lightning hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is shocked for {damage} damage!",
-    "TargetMessage": "Lightning strikes you for {damage} damage!",
-    "WitnessMessage": "Lightning strikes {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 411
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "e4e98653bf18a349",
@@ -5316,23 +4731,6 @@
     ]
   },
   {
-    "Id": "5df98b4570f61d5e",
-    "Name": "maelstrom",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A whirling maelstrom assaults your foe for {damage} damage!",
-    "TargetMessage": "A whirling maelstrom assaults you for {damage} damage!",
-    "WitnessMessage": "A whirling maelstrom assaults the room for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 292
-      }
-    ]
-  },
-  {
     "Id": "d94852c655091741",
     "Name": "maelstrom",
     "Flags": "None",
@@ -5347,7 +4745,9 @@
         "Table": "Spells",
         "Number": 292
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "b33f5969c55305a2",
@@ -5401,11 +4801,11 @@
     ]
   },
   {
-    "Id": "bf499cc07bf20afb",
+    "Id": "83845d3f39f93f46",
     "Name": "magic vulnerability enchant",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "",
+    "CasterMessage": "{target}'s weapon glows with a purple light!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "Your attacks reduce magic defenses!",
@@ -5415,24 +4815,9 @@
         "Table": "Spells",
         "Number": 5570
       }
-    ]
-  },
-  {
-    "Id": "d3ba5e0d3ba1f24a",
-    "Name": "magic vulnerability enchant",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s weapon glows with a purple light!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 5570
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "dd76aa569888fc7d",
@@ -5449,24 +4834,9 @@
         "Table": "Spells",
         "Number": 802
       }
-    ]
-  },
-  {
-    "Id": "9a83e8acb1d99e35",
-    "Name": "magma blast",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Your magma blast strikes {target} for {damage} damage!",
-    "TargetMessage": "{source} launches a {spellname} at you for {damage} damage!",
-    "WitnessMessage": "{source} launches a {spellname} at {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 802
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "5d2e89c8ee22be72",
@@ -5517,24 +4887,9 @@
         "Table": "Spells",
         "Number": 257
       }
-    ]
-  },
-  {
-    "Id": "717320bea29b6534",
-    "Name": "mana storm",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A swirling mana storm engulfs your foe for {damage} damage!",
-    "TargetMessage": "{source} casts {spellname} on the room for {damage} damage!",
-    "WitnessMessage": "{null}",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 257
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "df655191e40b2d0a",
@@ -5636,24 +4991,9 @@
         "Table": "Spells",
         "Number": 285
       }
-    ]
-  },
-  {
-    "Id": "8d56fa590cc38c50",
-    "Name": "meteor swarm",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{source} launches a meteor swarm at {target} for {damage} damage!",
-    "TargetMessage": "{source} launches a {spellname} at you for {damage} damage!",
-    "WitnessMessage": "{source} launches a {spellname} at {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 285
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "4d9424842105b734",
@@ -5704,24 +5044,9 @@
         "Table": "Spells",
         "Number": 543
       }
-    ]
-  },
-  {
-    "Id": "285723cdf220afa5",
-    "Name": "molecular agitation",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is wracked with pain for {damage} damage!",
-    "TargetMessage": "You are wracked with pain for {damage} damage!",
-    "WitnessMessage": "{source} is wracked with pain for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 543
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "bf68e6f34f8f2565",
@@ -5874,41 +5199,9 @@
         "Table": "Spells",
         "Number": 391
       }
-    ]
-  },
-  {
-    "Id": "fabd7fc34c430607",
-    "Name": "necromantic beam",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A necromantic beam springs forth and hits you for {damage} damage!",
-    "TargetMessage": "A necromantic beam springs forth and hits you for {damage} damage!",
-    "WitnessMessage": "A necromantic beam springs forth and hits {source} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 391
-      }
-    ]
-  },
-  {
-    "Id": "94d32b7f52eaa0b2",
-    "Name": "necromantic bolt",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} life is drained for {damage} damage!",
-    "TargetMessage": "{source} fires a {spellname} at you for {damage} damage!",
-    "WitnessMessage": "{source} fires a {spellname} at {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 1008
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "aed40c86a550e64b",
@@ -5925,7 +5218,9 @@
         "Table": "Spells",
         "Number": 1008
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "8f57e70b58ec33b0",
@@ -6133,27 +5428,10 @@
     ]
   },
   {
-    "Id": "03222670c2ff2152",
-    "Name": "petrification",
-    "Flags": "MovementPrevented, AttackPrevented",
-    "RawFlagsHex": 4144,
-    "CasterMessage": "{null}",
-    "TargetMessage": "Your body begins to get heavy and solidify!",
-    "WitnessMessage": "{source} is quickly turned into a stone statue!",
-    "AppliedMessage": "You are transformed into stone",
-    "AppliedEndsWith": "Your body returns to its normal state",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 392
-      }
-    ]
-  },
-  {
     "Id": "be939118e80fcc10",
     "Name": "petrification",
-    "Flags": "MovementPrevented, AttackPrevented",
-    "RawFlagsHex": 4144,
+    "Flags": "AttackPrevented, MovementPrevented",
+    "RawFlagsHex": 48,
     "CasterMessage": "{null}",
     "TargetMessage": "Your body begins to get heavy and solidify!",
     "WitnessMessage": "{source} is quickly turned into a stone statue!",
@@ -6164,7 +5442,9 @@
         "Table": "Spells",
         "Number": 392
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "786c85b9572d3141",
@@ -6184,10 +5464,10 @@
     ]
   },
   {
-    "Id": "70b3575c5175904d",
+    "Id": "fd45fffd407771da",
     "Name": "plague",
     "Flags": "Diseased",
-    "RawFlagsHex": 8,
+    "RawFlagsHex": 64,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
     "WitnessMessage": "A hideous plague fills the room!",
@@ -6198,58 +5478,9 @@
         "Table": "Spells",
         "Number": 294
       }
-    ]
-  },
-  {
-    "Id": "8e0f26d68b213cfe",
-    "Name": "plague",
-    "Flags": "Diseased",
-    "RawFlagsHex": 8,
-    "CasterMessage": "A hideous plague consumes your foes!",
-    "TargetMessage": "A hideous plague consumes you!",
-    "WitnessMessage": "A hideous plague fills the room!",
-    "AppliedMessage": "You are plagued",
-    "AppliedEndsWith": "The plague dies down",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 294
-      }
-    ]
-  },
-  {
-    "Id": "9fc06c35ebedb1b5",
-    "Name": "plague",
-    "Flags": "Diseased",
-    "RawFlagsHex": 8,
-    "CasterMessage": "A hideous plague consumes your foes!",
-    "TargetMessage": "A hideous plague consumes you!",
-    "WitnessMessage": "A hideous plague fills the room!",
-    "AppliedMessage": "You are plagued!",
-    "AppliedEndsWith": "The plague dies down.",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 294
-      }
-    ]
-  },
-  {
-    "Id": "63b0d73f9f9d8a01",
-    "Name": "plague",
-    "Flags": "Diseased",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A hideous plague consumes your foes!",
-    "TargetMessage": "A hideous plague consumes you!",
-    "WitnessMessage": "A hideous plague fills the room!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 294
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "b6628ab2945557a9",
@@ -6303,7 +5534,7 @@
     ]
   },
   {
-    "Id": "d684cd167fb44fa6",
+    "Id": "0834a4cd6f875148",
     "Name": "poison bolt",
     "Flags": "Poisoned",
     "RawFlagsHex": 4,
@@ -6317,27 +5548,12 @@
         "Table": "Spells",
         "Number": 35
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
-    "Id": "62e7bd19f6c5d793",
-    "Name": "poison bolt",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "You fire a poison bolt at {target} for {damage} damage!",
-    "TargetMessage": "{source} fires a {spellname} at you for {damage} damage!",
-    "WitnessMessage": "{source} fires a {spellname} at {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 35
-      }
-    ]
-  },
-  {
-    "Id": "4e51290f1d5d2da8",
+    "Id": "814b3172b72ae646",
     "Name": "poison cloud",
     "Flags": "Poisoned",
     "RawFlagsHex": 4,
@@ -6351,24 +5567,9 @@
         "Table": "Spells",
         "Number": 142
       }
-    ]
-  },
-  {
-    "Id": "f25d36970af67e61",
-    "Name": "poison cloud",
-    "Flags": "Poisoned",
-    "RawFlagsHex": 4,
-    "CasterMessage": "You cast {spellname} on the room!",
-    "TargetMessage": "{source} casts {spellname} on you!",
-    "WitnessMessage": "{source} casts {spellname} on the room!",
-    "AppliedMessage": "casts poison cloud on you",
-    "AppliedEndsWith": "The effects of the poison wear off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 142
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "ab46f0d7840f9db9",
@@ -6385,24 +5586,9 @@
         "Table": "Spells",
         "Number": 588
       }
-    ]
-  },
-  {
-    "Id": "09ed74b0dfbd218e",
-    "Name": "poison hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is poisoned for {damage} damage!",
-    "TargetMessage": "You are poisoned for {damage} damage!",
-    "WitnessMessage": "{source} is poisoned for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 588
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "0892216c84e0bb51",
@@ -6507,23 +5693,6 @@
     ]
   },
   {
-    "Id": "d024453adb292ae3",
-    "Name": "prismatic beam",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A massive blast of light sears your foes for {damage} damage!",
-    "TargetMessage": "{source} fires a {spellname} at you for {damage} damage!",
-    "WitnessMessage": "{source} fires a {spellname} at {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 1038
-      }
-    ]
-  },
-  {
     "Id": "2ff6f9135448abd9",
     "Name": "prismatic beam",
     "Flags": "None",
@@ -6538,7 +5707,9 @@
         "Table": "Spells",
         "Number": 1038
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "f1f44322375725c8",
@@ -6762,24 +5933,7 @@
     ]
   },
   {
-    "Id": "0788e07f9e149fee",
-    "Name": "resist cold",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "You cast {spellname} at {target}, surrounding him with a pale blue glow.",
-    "TargetMessage": "{source} casts a spell on you, surrounding you with a pale blue glow.",
-    "WitnessMessage": "{source} casts {spellname} on {target}!",
-    "AppliedMessage": "You feel resistant to cold",
-    "AppliedEndsWith": "The effects of resist cold wear off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 6
-      }
-    ]
-  },
-  {
-    "Id": "05048a084d46ecc2",
+    "Id": "b645363aa17600cf",
     "Name": "resist cold",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6793,7 +5947,9 @@
         "Table": "Spells",
         "Number": 6
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "77a046523e2149ec",
@@ -7051,23 +6207,6 @@
     ]
   },
   {
-    "Id": "ec7ea4edac7708f6",
-    "Name": "sandstorm",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A stinging sandstorm fills the room, scathing your foes!",
-    "TargetMessage": "A stinging sandstorm surrounds you!",
-    "WitnessMessage": "A stinging sandstorm fills the room!",
-    "AppliedMessage": "A sandstorm surrounds you!",
-    "AppliedEndsWith": "The sandstorm subsides, allowing your scathed flesh to heal.",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 1310
-      }
-    ]
-  },
-  {
     "Id": "6c5700e37662d084",
     "Name": "sandstorm",
     "Flags": "None",
@@ -7082,7 +6221,9 @@
         "Table": "Spells",
         "Number": 1310
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "d7d1d0906f43214b",
@@ -7354,24 +6495,9 @@
         "Table": "Spells",
         "Number": 477
       }
-    ]
-  },
-  {
-    "Id": "4b897b36a256504a",
-    "Name": "shock hit",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is shocked for {damage} damage!",
-    "TargetMessage": "You are shocked for {damage} damage!",
-    "WitnessMessage": "{target} is shocked for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 477
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "92709ed21f6c89ef",
@@ -7476,26 +6602,9 @@
     ]
   },
   {
-    "Id": "b7d6875cbb23ec38",
-    "Name": "sleep",
-    "Flags": "MovementPrevented, AttackPrevented",
-    "RawFlagsHex": 48,
-    "CasterMessage": "{null}",
-    "TargetMessage": "The ancient willow sings a whispering, haunting melody to you!",
-    "WitnessMessage": "The ancient willow sings a whispering, haunting melody to {source}!",
-    "AppliedMessage": "You are fast asleep",
-    "AppliedEndsWith": "You awaken from the unnatural slumber",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 372
-      }
-    ]
-  },
-  {
     "Id": "fc8c1ac477debf0b",
     "Name": "sleep",
-    "Flags": "MovementPrevented, AttackPrevented",
+    "Flags": "AttackPrevented, MovementPrevented",
     "RawFlagsHex": 48,
     "CasterMessage": "{null}",
     "TargetMessage": "The ancient willow sings a whispering, haunting melody to you!",
@@ -7507,7 +6616,9 @@
         "Table": "Spells",
         "Number": 372
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "e6e587955d1c7b0b",
@@ -7561,11 +6672,11 @@
     ]
   },
   {
-    "Id": "c6d60bf415760692",
+    "Id": "e6e128c7b5de2b69",
     "Name": "solid fog",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "{null}",
+    "CasterMessage": "A dense grey cloud billows through the room!",
     "TargetMessage": "{source} casts {spellname}, and a grey mist rolls through the room!",
     "WitnessMessage": "{null}",
     "AppliedMessage": "You feel slow",
@@ -7575,24 +6686,9 @@
         "Table": "Spells",
         "Number": 256
       }
-    ]
-  },
-  {
-    "Id": "e54978164f24e78a",
-    "Name": "solid fog",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A dense grey cloud billows through the room!",
-    "TargetMessage": "{source} casts {spellname}, and a grey mist rolls through the room!",
-    "WitnessMessage": "{null}",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 256
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "927e893e7ca58392",
@@ -7612,23 +6708,6 @@
     ]
   },
   {
-    "Id": "47d4233a61c967f5",
-    "Name": "song of battle",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "You raise your head and chant a battle cry!",
-    "TargetMessage": "{source} raises their head and chants a battle cry!",
-    "WitnessMessage": "{source} raises their head and chants a battle cry!",
-    "AppliedMessage": "Your blood races in your veins!",
-    "AppliedEndsWith": "You begin to feel calmer.",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 801
-      }
-    ]
-  },
-  {
     "Id": "05bb12bb25e7930b",
     "Name": "song of battle",
     "Flags": "None",
@@ -7643,7 +6722,9 @@
         "Table": "Spells",
         "Number": 801
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "bc63b2f75ca90a96",
@@ -7766,23 +6847,6 @@
     ]
   },
   {
-    "Id": "78d069e408c8c14d",
-    "Name": "song of draining",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "You sing the song of draining to {target}, draining {damage} hit points!",
-    "TargetMessage": "{source} sings the {spellname} to you, draining {damage} hit points!",
-    "WitnessMessage": "{source} sings the {spellname} to {target}!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 101
-      }
-    ]
-  },
-  {
     "Id": "a8191deefc14895b",
     "Name": "song of draining",
     "Flags": "None",
@@ -7797,7 +6861,9 @@
         "Table": "Spells",
         "Number": 101
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "87cd7b1fcf61bf06",
@@ -7919,24 +6985,7 @@
     ]
   },
   {
-    "Id": "1599702b7908a3e6",
-    "Name": "song of life",
-    "Flags": "None",
-    "RawFlagsHex": 128,
-    "CasterMessage": "You sing the {spellname} to your party!",
-    "TargetMessage": "{source} sings the {spellname} to you!",
-    "WitnessMessage": "{source} sings the {spellname}!",
-    "AppliedMessage": "You are healing faster",
-    "AppliedEndsWith": "The song of life wears off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 269
-      }
-    ]
-  },
-  {
-    "Id": "bb335de4d49ffa36",
+    "Id": "5c74af9a3367c54e",
     "Name": "song of life",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7950,7 +6999,9 @@
         "Table": "Spells",
         "Number": 269
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "b73fa30a6bfcb551",
@@ -8038,23 +7089,6 @@
     ]
   },
   {
-    "Id": "d4128a06bcbb1d04",
-    "Name": "song of shockwave",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A shockwave ripples through the room for {damage} damage!",
-    "TargetMessage": "A shockwave strikes you for {damage} damage!",
-    "WitnessMessage": "A shockwave ripples through the room for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 275
-      }
-    ]
-  },
-  {
     "Id": "83e44b442752a557",
     "Name": "song of shockwave",
     "Flags": "None",
@@ -8069,7 +7103,9 @@
         "Table": "Spells",
         "Number": 275
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "bb7edb61de555601",
@@ -8140,26 +7176,9 @@
     ]
   },
   {
-    "Id": "3c0590563fe8928f",
+    "Id": "f5d8ada617607cf9",
     "Name": "song of stunning",
-    "Flags": "MovementPrevented, AttackPrevented",
-    "RawFlagsHex": 48,
-    "CasterMessage": "You sing the {spellname} to {target}!",
-    "TargetMessage": "{source} sings the {spellname} to you!",
-    "WitnessMessage": "{source} sings the {spellname} to {target}!",
-    "AppliedMessage": "You are stunned",
-    "AppliedEndsWith": "You are no longer stunned",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 274
-      }
-    ]
-  },
-  {
-    "Id": "8fee7146c936d8d1",
-    "Name": "song of stunning",
-    "Flags": "MovementPrevented, AttackPrevented",
+    "Flags": "AttackPrevented, MovementPrevented",
     "RawFlagsHex": 48,
     "CasterMessage": "You sing the {spellname} to {target}!",
     "TargetMessage": "{source} sings the {spellname} to you!",
@@ -8171,7 +7190,9 @@
         "Table": "Spells",
         "Number": 274
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "bc933e2d6c0c695b",
@@ -8225,7 +7246,7 @@
     ]
   },
   {
-    "Id": "ae1358444c29dbfb",
+    "Id": "0c06b7690714da85",
     "Name": "song of the elements",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -8239,24 +7260,9 @@
         "Table": "Spells",
         "Number": 792
       }
-    ]
-  },
-  {
-    "Id": "381954f4fd3e1969",
-    "Name": "song of the elements",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "You sing the {spellname} to your party!",
-    "TargetMessage": "{source} sings the {spellname} to you!",
-    "WitnessMessage": "{source} sings the {spellname}!",
-    "AppliedMessage": "You are protected from the elements!",
-    "AppliedEndsWith": "You are no longer protected from the elements!",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 792
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "e9d2b41cd89e90f2",
@@ -8514,23 +7520,6 @@
     ]
   },
   {
-    "Id": "a2432d3591b362a6",
-    "Name": "spirit horde",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A horde of shrieking spirits ravages your foe for {damage} damage!",
-    "TargetMessage": "A horde of shrieking spirits ravages you for {damage} damage!",
-    "WitnessMessage": "A horde of shrieking spirits sweeps through the room!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 287
-      }
-    ]
-  },
-  {
     "Id": "742bf0c95721f028",
     "Name": "spirit horde",
     "Flags": "None",
@@ -8545,7 +7534,9 @@
         "Table": "Spells",
         "Number": 287
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "440dfdf1e7464657",
@@ -8871,27 +7862,10 @@
     ]
   },
   {
-    "Id": "36f0b13503669b91",
+    "Id": "70b2ba86c79dc6f6",
     "Name": "stunned",
-    "Flags": "MovementPrevented, AttackPrevented",
-    "RawFlagsHex": 4144,
-    "CasterMessage": "{target} reels from the blow!",
-    "TargetMessage": "You reel from the blow!",
-    "WitnessMessage": "{target} reels from the blow!",
-    "AppliedMessage": "You are stunned",
-    "AppliedEndsWith": "You are no longer stunned",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 128
-      }
-    ]
-  },
-  {
-    "Id": "0ef1f0b899c8c1f7",
-    "Name": "stunned",
-    "Flags": "MovementPrevented, AttackPrevented",
-    "RawFlagsHex": 4144,
+    "Flags": "AttackPrevented, MovementPrevented",
+    "RawFlagsHex": 48,
     "CasterMessage": "{target} reels from the blow!",
     "TargetMessage": "You reel from the blow!",
     "WitnessMessage": "{target} reels from the blow!",
@@ -8902,7 +7876,9 @@
         "Table": "Spells",
         "Number": 128
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "c9dc4c1287732fe5",
@@ -9021,24 +7997,9 @@
         "Table": "Spells",
         "Number": 408
       }
-    ]
-  },
-  {
-    "Id": "f17ef01508f46c85",
-    "Name": "sunsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is scorched for {damage} damage!",
-    "TargetMessage": "You are scorched for {damage} damage!",
-    "WitnessMessage": "{target} is scorched for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 408
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "e609b6b527b4e23c",
@@ -9123,24 +8084,9 @@
         "Table": "Spells",
         "Number": 542
       }
-    ]
-  },
-  {
-    "Id": "96b74dc04f9ef419",
-    "Name": "telekinesis",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is picked up by a mysterious force and slammed down for {damage} damage!",
-    "TargetMessage": "You are picked up by a mysterious force and slammed down for {damage} damage!",
-    "WitnessMessage": "{source} is picked up by a strange force and slammed down for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 542
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "1e08e5f501cfdfd2",
@@ -9160,27 +8106,9 @@
     ]
   },
   {
-    "Id": "bd9da7f1acbaf12e",
-    "Name": "terror",
-    "Flags": "Confused",
-    "RawFlagsHex": 2,
-    "CasterMessage": "{null}",
-    "TargetMessage": "The {source}'s unearthly shriek strikes terror into your heart!",
-    "WitnessMessage": "{null}",
-    "AppliedMessage": "You are afraid",
-    "AppliedEndsWith": "The effects of fear wear off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 430
-      }
-    ],
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
     "Id": "dc90815de7b8608d",
     "Name": "terror",
-    "Flags": "Confused, AttackPrevented",
+    "Flags": "AttackPrevented, Confused",
     "RawFlagsHex": 34,
     "CasterMessage": "{null}",
     "TargetMessage": "The {source}'s unearthly shriek strikes terror into your heart!",
@@ -9193,7 +8121,8 @@
         "Number": 430
       }
     ],
-    "ConfuseFumbleLine": "You fumble in confusion!"
+    "ConfuseFumbleLine": "You fumble in confusion!",
+    "CastResponse": ""
   },
   {
     "Id": "8b6ab7a29ba5d929",
@@ -9244,24 +8173,9 @@
         "Table": "Spells",
         "Number": 775
       }
-    ]
-  },
-  {
-    "Id": "1d850a6e32866c8e",
-    "Name": "thunderclap",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A massive thunderclap blasts your foes for {damage} damage!",
-    "TargetMessage": "A massive thunderclap blasts you for {damage} damage!",
-    "WitnessMessage": "A massive thunderclap ripples through the room!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 775
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "6386ce541c631fa9",
@@ -9604,11 +8518,11 @@
     ]
   },
   {
-    "Id": "9a7cf0ddf2236426",
+    "Id": "04fa4092fc029081",
     "Name": "vulnerability enchantment",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "",
+    "CasterMessage": "{target}'s weapon glows with a yellow light!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "Your attacks reduce physical defenses!",
@@ -9618,24 +8532,9 @@
         "Table": "Spells",
         "Number": 5568
       }
-    ]
-  },
-  {
-    "Id": "89306e6c3d3b3e4a",
-    "Name": "vulnerability enchantment",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s weapon glows with a yellow light!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 5568
-      }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "dbced3bd084768ba",
@@ -9706,7 +8605,7 @@
     ]
   },
   {
-    "Id": "94ea1b40e42052e2",
+    "Id": "1d8cc506245d05fc",
     "Name": "way of the cobra",
     "Flags": "Poisoned",
     "RawFlagsHex": 4,
@@ -9714,30 +8613,15 @@
     "TargetMessage": "You are poisoned!",
     "WitnessMessage": "{target} is poisoned!",
     "AppliedMessage": "You are poisoned",
-    "AppliedEndsWith": "The effects of the poison wear off",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 299
-      }
-    ]
-  },
-  {
-    "Id": "e21f74902e7b4bfe",
-    "Name": "way of the cobra",
-    "Flags": "Poisoned",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is poisoned!",
-    "TargetMessage": "You are poisoned!",
-    "WitnessMessage": "{target} is poisoned!",
-    "AppliedMessage": "You feel ill.",
     "AppliedEndsWith": "The effects of the poison wear off!",
     "Links": [
       {
         "Table": "Spells",
         "Number": 299
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "1ed84df96444ec81",
@@ -9859,23 +8743,6 @@
     ]
   },
   {
-    "Id": "870fe56b18c3361f",
-    "Name": "way of the troll",
-    "Flags": "None",
-    "RawFlagsHex": 128,
-    "CasterMessage": "You invoke the {spellname}, and you begin to regenerate!",
-    "TargetMessage": "{null}",
-    "WitnessMessage": "{source} invokes the {spellname}!",
-    "AppliedMessage": "You are regenerating quickly",
-    "AppliedEndsWith": "You stop regenerating",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 350
-      }
-    ]
-  },
-  {
     "Id": "133efe073f626908",
     "Name": "way of the troll",
     "Flags": "None",
@@ -9890,7 +8757,9 @@
         "Table": "Spells",
         "Number": 350
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "d59c1d6a677cd6c7",
@@ -10014,23 +8883,6 @@
     "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
-    "Id": "2405a968919be91e",
-    "Name": "wind of haste",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A cool wind blows throughout the room!",
-    "TargetMessage": "A cool wind blows around you!",
-    "WitnessMessage": "A cool wind blows throughout the room!",
-    "AppliedMessage": "You feel fast",
-    "AppliedEndsWith": "You slow down",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 283
-      }
-    ]
-  },
-  {
     "Id": "4c217ce0b0ab0513",
     "Name": "wind of haste",
     "Flags": "None",
@@ -10045,7 +8897,9 @@
         "Table": "Spells",
         "Number": 283
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   },
   {
     "Id": "dc47921f662fbeeb",
@@ -10949,15 +9803,15 @@
     ]
   },
   {
-    "Id": "5e2400db5977fc22",
+    "Id": "59a4c28f3c85a04d",
     "Name": "ember",
-    "Flags": "Diseased",
+    "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "You launch a massive ball of {spellname}s at {target} for {damage} damage!",
     "TargetMessage": "{source} launches a massive ball of {spellname}s at you for {damage} damage!",
     "WitnessMessage": "{source} launches a massive ball of {spellname}s at {target} for {damage} damage!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
     "Links": [
       {
         "Table": "Spells",
