@@ -26,4 +26,13 @@ public interface IEditableTableSectionViewModel
     // section offers no such action — the Incomplete Messages tab uses it for "Upload edits".
     ICommand? ExportCommand => null;
     string? ExportLabel => null;
+
+    // Optional test-only action, rendered at the far right (left of Export). Unlike Export
+    // its visibility follows the live ShowSimulate flag (refreshed via INotifyPropertyChanged
+    // on the "ShowSimulate" property), so a diagnostic toggle can reveal/hide it while the
+    // window is open. Only the Unrecognized Lines tab uses it — a "Simulate entry" button
+    // gated by the Log pane's Simulate dropdown; every other section leaves it null/false.
+    ICommand? SimulateCommand => null;
+    string? SimulateLabel => null;
+    bool ShowSimulate => false;
 }

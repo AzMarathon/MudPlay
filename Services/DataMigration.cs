@@ -129,26 +129,32 @@ public static class DataMigration
                 $"Retired {retired} pre-split message file(s) to .bak; catalogue now loads from the realm-flavored seeds.");
     }
 
-    // One-time forced reseed of the Messages catalogue for the item-on-use → cast-spell
-    // release. That work recurated the shipped seeds wholesale — an item's on-use / proc
-    // message now lives on the cast SPELL record (exactly one per spell), weapon
-    // combat-proc pure-damage records were dropped, and many realm lines were corrected —
-    // so a user's older Global seed OR per-set edits would keep loading the stale
-    // catalogue (both resolve above the freshly-shipped bundled seed). This runs ONCE
-    // (guarded by its own marker), backs up each stale file to a sibling .bak, then copies
-    // the new bundled seed into Global. Users re-apply any hand edits afterward (the
-    // Incomplete Messages tab's "Upload edits" button is the intended workflow); a lost
+    // One-time forced reseed of the Messages catalogue. It has recurated the shipped seeds
+    // twice now: (1) the item-on-use → cast-spell release (an item's on-use / proc message
+    // moved onto the cast SPELL record, weapon combat-proc pure-damage records dropped, many
+    // realm lines corrected), and (2) the ailment-flag re-derivation — every message's
+    // Blinded/Confused/Poisoned/MovementPrevented Effects flag re-derived from its linked
+    // spell's game-data ability codes (so e.g. a confuse spell whose messages.md decode
+    // missed the flag now carries it). A user's older Global seed OR per-set edits would keep
+    // loading the stale catalogue (both resolve above the freshly-shipped bundled seed), so
+    // this runs ONCE per marker, backs up each stale file to a sibling .bak, then copies the
+    // new bundled seed into Global. The marker is bumped whenever the bundled seed is
+    // recurated, so every install re-seeds once more. Users re-apply any hand edits afterward
+    // (the Incomplete Messages tab's "Upload edits" button is the intended workflow); a lost
     // record is recoverable from the .bak.
     //
-    // REMOVE-AFTER-ROLLOUT: defunct on any install that already carries the marker; delete
-    // this and its startup call a few releases out. Runs AFTER EnsureGlobalSeedsBootstrapped
-    // (so a fresh install already has a Global seed to back up) and after
-    // RetireLegacyMessagesOnce (so the pre-split retirement happens first).
+    // REMOVE-AFTER-ROLLOUT: defunct on any install that already carries the current marker;
+    // delete this and its startup call a few releases out. Runs AFTER
+    // EnsureGlobalSeedsBootstrapped (so a fresh install already has a Global seed to back up)
+    // and after RetireLegacyMessagesOnce (so the pre-split retirement happens first).
     public static void ForceMessageReseedOnce(LogService log)
     {
         ArgumentNullException.ThrowIfNull(log);
 
-        string marker = Path.Combine(AppPaths.DataRoot, "Global", ".messages-reseed-castssp");
+        // Marker bumped for the ailment-flag re-derivation — an install that already carries
+        // the prior .messages-reseed-castssp marker re-seeds once more to pick up the
+        // corrected Effects flags.
+        string marker = Path.Combine(AppPaths.DataRoot, "Global", ".messages-reseed-ailment-flags");
         if (File.Exists(marker)) return;
 
         int reseeded = 0;
@@ -179,7 +185,8 @@ public static class DataMigration
         {
             Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
             File.WriteAllText(marker,
-                "Messages were recurated for the item-on-use → cast-spell release; the prior Global seed " +
+                "Messages were recurated (ailment Effects flags re-derived from linked spells' game-data " +
+                "ability codes, plus the earlier item-on-use → cast-spell recuration); the prior Global seed " +
                 "and per-set edits were backed up to .bak and re-seeded from the shipped copy. " +
                 "Delete this marker to re-run.");
         }

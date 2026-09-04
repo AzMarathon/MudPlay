@@ -4,9 +4,12 @@
 
 - New: the client now notices its own Messages-catalogue gaps. A wire line that matches no existing spell/buff/debuff/proc record and no known line pattern is staged as a **candidate** (deduped by exact text, occurrence-counted) instead of silently falling through — a Warn row appears in the Program Log the first time it's seen, and double-clicking it opens the same editor the Incomplete Messages tab uses, pre-filled with the raw text, to turn it into a real record on the spot
 - Each captured candidate is tagged with the **map and room** you were in when it was first seen — a **Seen In** locator so you can trace where an unattributed message came from
-- New **Candidates** tab in the Game Data Browser lists every staged candidate for batch review (with the **Seen In** map:room column) — search, multi-select, and dismiss (sticky: a dismissed line won't quietly resurface as "new" if it recurs, though it keeps counting occurrences)
-- New **Capture unrecognized messages** diagnostic toggle (Program Log window), on by default
+- New **Unrecognized Lines** tab in the Game Data Browser lists every staged candidate for batch review (with the **Seen In** map:room column) — search, multi-select, and dismiss (sticky: a dismissed line won't quietly resurface as "new" if it recurs, though it keeps counting occurrences)
+- New **Capture unrecognized messages** diagnostic toggle (Program Log window), on by default; recognized confuse-fumble lines are no longer falsely staged as unrecognized
 - Bug reports now include a pending-candidate count
+- New **Simulate entry** test button (top-right of the Unrecognized Lines tab) feeds a synthetic unknown line through the capture flow so you can see it work; it, plus the Simulate Death / Simulate Chest test buttons, now share one **Simulate buttons** dropdown on the Program Log (was three separate checkboxes)
+- Ailment **Effects flags** (Blinded / Confused / Poisoned / Movement-prevented) on every message are now re-derived from its linked spell's game-data ability codes — so a confuse/poison/blind/hold spell whose flag was missing (e.g. rose book confuse) is now marked correctly; both realm seeds are re-seeded once on update
+- Spell Game Data view: a spell's **End cast** chain now shows as a clickable link to the cast spell (with its #id), e.g. poison bolt → poison bite
 
 ## 3.49.1
 

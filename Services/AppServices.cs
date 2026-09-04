@@ -861,7 +861,7 @@ public sealed class AppServices
 
     // Staged, unrecognized-message candidates for the active set —
     // Game.MessageCandidateWatcher's output, reviewed via the LogPane
-    // double-click flow or the Game Data Browser's Candidates tab. Pure
+    // double-click flow or the Game Data Browser's Unrecognized Lines tab. Pure
     // runtime-observed state, not curated data — no seed-file fallback.
     public MessageCandidateStore MessageCandidates { get; private set; } = null!;
 

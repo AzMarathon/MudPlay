@@ -219,7 +219,10 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
                 "Data/game data/{set}/messages.json.");
 
         if (_messageCandidates is not null && _messages is not null)
-            Sections.Add(new MessageCandidatesSectionViewModel(_messageCandidates, _messages, _dialogs, _gameData));
+            Sections.Add(new MessageCandidatesSectionViewModel(
+                _messageCandidates, _messages, _dialogs, _gameData,
+                AppServices.CurrentOrNull?.MessageCandidateWatcher,
+                AppServices.CurrentOrNull?.LogDiagnostics));
         else
             AddPlaceholder("message-candidates", "Candidates", "Diagnostics",
                 "Wire lines the Messages catalogue doesn't recognize, staged by the Program Log " +

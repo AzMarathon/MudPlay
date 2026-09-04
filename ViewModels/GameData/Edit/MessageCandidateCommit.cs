@@ -5,7 +5,7 @@ namespace MudPlay.ViewModels.GameData.Edit;
 
 // Shared seed/commit glue between MessageCandidateWatcher's two review surfaces
 // (the LogPane double-click handler in App.axaml.cs, and the Game Data Browser's
-// Candidates tab) so neither duplicates the other's logic.
+// Unrecognized Lines tab) so neither duplicates the other's logic.
 internal static class MessageCandidateCommit
 {
     // Build a near-blank MessageRecord seeded with the candidate's raw text in

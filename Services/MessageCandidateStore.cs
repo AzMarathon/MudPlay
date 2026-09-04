@@ -13,7 +13,7 @@ namespace MudPlay.Services;
 // Wiring: AppServices subscribes the store to GameDataCache.ActiveSetChanged —
 // on every set switch the per-set file at AppPaths.MessageCandidatesFile is
 // reloaded (missing file ⇒ empty). Game.MessageCandidateWatcher is the sole
-// writer via RecordSighting; the Game Data Browser's Candidates tab and the
+// writer via RecordSighting; the Game Data Browser's Unrecognized Lines tab and the
 // LogPane double-click flow both read/dismiss/remove through this store.
 public sealed class MessageCandidateStore
 {

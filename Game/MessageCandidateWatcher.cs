@@ -13,7 +13,8 @@ namespace MudPlay.Game;
 //
 // A line survives to become a candidate only if it clears every exclusion in
 // order: not a prompt line, not near-empty, not an exact match against any of
-// MessageStore's five perspective slots (own index, rebuilt on
+// MessageStore's recognized wire lines — the five perspective slots plus the
+// Confused records' ConfuseFumbleLine (own index, rebuilt on
 // MessageStore.Messages.CollectionChanged — mirrors ConditionTracker's
 // identical rebuild trigger), and not matched by ANY
 // pattern already registered in MessageRouter's catalog (movement, combat-
@@ -33,7 +34,7 @@ namespace MudPlay.Game;
 // Never writes a MessageRecord itself — a bare line can't say which
 // perspective slot it belongs in or what MessageFlags apply. That's always a
 // human decision made through the LogPane double-click flow or the Game Data
-// Browser's Candidates tab, both of which reuse the existing
+// Browser's Unrecognized Lines tab, both of which reuse the existing
 // MessageEditDialogViewModel via ViewModels.GameData.Edit.MessageCandidateCommit.
 public sealed class MessageCandidateWatcher : IDisposable
 {
@@ -124,6 +125,15 @@ public sealed class MessageCandidateWatcher : IDisposable
             AddIfNotEmpty(known, r.WitnessMessage);
             AddIfNotEmpty(known, r.AppliedMessage);
             AddIfNotEmpty(known, r.AppliedEndsWith);
+            // ConfuseFumbleLine is a recognized wire line too (it drives
+            // MovementRefusalDetector via ConditionTracker.IsConfuseFumbleLine),
+            // but it reaches the app through a predicate, NOT a router pattern —
+            // so without indexing it here a known fumble line ("You look around
+            // stupidly.") would be falsely staged as an unrecognized candidate.
+            // Multi-line (one wording per row), same split ConditionTracker uses.
+            if (!MessageRecord.IsBlankOrAbsent(r.ConfuseFumbleLine))
+                foreach (string wording in r.ConfuseFumbleLine.Split('\n'))
+                    AddIfNotEmpty(known, wording);
         }
         _knownLines = known;
     }
@@ -177,6 +187,24 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (isNew)
             _log?.Warn(LogCategory,
                 $"unrecognized line — double-click to review: '{Truncate(text, 80)}'", context: text);
+    }
+
+    // Test-only counter so each SimulateCapture() call injects a distinct
+    // never-before-seen line (staging a fresh candidate rather than bumping one).
+    private int _simCounter;
+
+    // Feed a synthetic, guaranteed-unrecognized line straight through the real
+    // capture path (OnLine → exclusion checks → room tag → dedup → stage) so the
+    // Unrecognized Lines tab can be exercised without waiting for the game to
+    // emit an unknown message. Honours the Enabled gate exactly like a real line:
+    // with capture off it stages nothing (the point of the feature). Returns the
+    // line it injected. Wired to the tab's test-only "Simulate entry" button.
+    public string SimulateCapture()
+    {
+        string line = $"A shimmering test rune flickers and fades. [sim {++_simCounter}]";
+        OnLine(new LineExtractor.EmittedLine(
+            line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        return line;
     }
 
     private static string Truncate(string text, int maxLength) =>

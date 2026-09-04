@@ -66,6 +66,31 @@ public sealed class MessageCandidateWatcherTests
     }
 
     [Fact]
+    public void ConfuseFumbleLine_DoesNotCreateCandidate()
+    {
+        // A recognized fumble line reaches the app via a predicate, not a router
+        // pattern — the watcher must still exclude it (indexed from the record's
+        // ConfuseFumbleLine slot), or it'd be falsely staged as unrecognized.
+        Harness h = new();
+        h.Messages.Messages.Add(new MessageRecord(
+            Id: MessageRecord.ComputeId("Convulsions", "", "", "", "", ""),
+            Name: "Convulsions",
+            Flags: MessageFlags.Confused,
+            RawFlagsHex: 0,
+            CasterMessage: string.Empty,
+            TargetMessage: string.Empty,
+            WitnessMessage: string.Empty,
+            AppliedMessage: string.Empty,
+            AppliedEndsWith: string.Empty,
+            Links: null,
+            ConfuseFumbleLine: "You look around stupidly."));
+
+        h.Feed("You look around stupidly.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
     public void RouterMatchedLine_DoesNotCreateCandidate()
     {
         Harness h = new();
@@ -129,6 +154,30 @@ public sealed class MessageCandidateWatcherTests
         Assert.Single(h.Candidates.Candidates);
         Assert.Equal(3, h.Candidates.Candidates[0].Occurrences);
         Assert.Equal(1, warnCount);
+    }
+
+    [Fact]
+    public void SimulateCapture_StagesAFreshCandidateEachCall()
+    {
+        Harness h = new();
+
+        string first = h.Watcher.SimulateCapture();
+        string second = h.Watcher.SimulateCapture();
+
+        Assert.NotEqual(first, second);   // varies per call → distinct candidates
+        Assert.Equal(2, h.Candidates.Candidates.Count);
+        Assert.Contains(h.Candidates.Candidates, c => c.RawText == first);
+    }
+
+    [Fact]
+    public void SimulateCapture_RespectsDisabledGate()
+    {
+        Harness h = new();
+        h.Watcher.Enabled = false;
+
+        h.Watcher.SimulateCapture();
+
+        Assert.Empty(h.Candidates.Candidates);
     }
 
     [Fact]

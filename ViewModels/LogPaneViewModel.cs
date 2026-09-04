@@ -96,6 +96,10 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // contract as ShowSimulateDeath. Doesn't touch displayed rows, so no Rebuild.
     [ObservableProperty] private bool _showSimulateChest;
 
+    // Reveals the Unrecognized Lines tab's "Simulate entry" test button. Mirrors
+    // LogDiagnosticState.ShowSimulateUnrecognized — session-only, same contract.
+    [ObservableProperty] private bool _showSimulateUnrecognized;
+
     // When true, every appended row scrolls the list to the bottom. The XAML
     // hooks the actual scroll-into-view call; this flag gates it.
     [ObservableProperty] private bool _autoScroll = true;
@@ -139,6 +143,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             _captureUnrecognizedMessages = _diagnostics.CaptureUnrecognizedMessages;
             _showSimulateDeath = _diagnostics.ShowSimulateDeath;
             _showSimulateChest = _diagnostics.ShowSimulateChest;
+            _showSimulateUnrecognized = _diagnostics.ShowSimulateUnrecognized;
             _suppressDiagnosticEcho = false;
             _diagnostics.Changed += OnDiagnosticsChanged;
         }
@@ -194,6 +199,12 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             {
                 _suppressDiagnosticEcho = true;
                 ShowSimulateChest = _diagnostics.ShowSimulateChest;
+                _suppressDiagnosticEcho = false;
+            }
+            if (ShowSimulateUnrecognized != _diagnostics.ShowSimulateUnrecognized)
+            {
+                _suppressDiagnosticEcho = true;
+                ShowSimulateUnrecognized = _diagnostics.ShowSimulateUnrecognized;
                 _suppressDiagnosticEcho = false;
             }
         });
@@ -258,6 +269,14 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
         if (_suppressDiagnosticEcho) return;
         if (_diagnostics is null) return;
         _diagnostics.ShowSimulateChest = value;
+    }
+
+    partial void OnShowSimulateUnrecognizedChanged(bool value)
+    {
+        // Only gates the Unrecognized Lines tab's test button visibility — no displayed rows change.
+        if (_suppressDiagnosticEcho) return;
+        if (_diagnostics is null) return;
+        _diagnostics.ShowSimulateUnrecognized = value;
     }
 
     private void OnEntryAdded(LogEntry entry)

@@ -143,6 +143,23 @@ public sealed class LogDiagnosticState
         }
     }
 
+    // Reveals the Game Data Browser Unrecognized Lines tab's "Simulate entry"
+    // button — feeds a synthetic never-seen line through MessageCandidateWatcher
+    // so the capture flow can be exercised without waiting for the game to emit
+    // an unknown message. Same contract as the two above: off by default,
+    // session-only (resets off every launch), never persisted.
+    private bool _showSimulateUnrecognized;
+    public bool ShowSimulateUnrecognized
+    {
+        get => _showSimulateUnrecognized;
+        set
+        {
+            if (_showSimulateUnrecognized == value) return;
+            _showSimulateUnrecognized = value;
+            Changed?.Invoke();
+        }
+    }
+
     // Fires after any flag change so observers (the LogPane VM mirroring
     // state across windows; AppServices persisting the change to the active
     // character) can refresh.

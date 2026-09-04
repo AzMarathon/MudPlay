@@ -1,14 +1,16 @@
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Windows.Input;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
-// Game Data Browser → Candidates tab. Surfaces MessageCandidateStore's staged,
+// Game Data Browser → Unrecognized Lines tab. Surfaces MessageCandidateStore's staged,
 // unrecognized wire lines for batch review — the same records the LogPane's
 // "double-click to review" flow (App.axaml.cs) resolves one at a time as they
 // arrive. Both surfaces commit through the shared MessageCandidateCommit
@@ -19,9 +21,11 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
     private readonly MessageStore _messages;
     private readonly DialogService? _dialogs;
     private readonly GameDataCache? _cache;
+    private readonly MessageCandidateWatcher? _watcher;
+    private readonly LogDiagnosticState? _diagnostics;
 
     public override string Id => "message-candidates";
-    public override string Title => "Candidates";
+    public override string Title => "Unrecognized Lines";
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
@@ -38,6 +42,9 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
     // Open the same edit dialog the Messages tab uses, pre-seeded with the raw text.
     public IRelayCommand<GameDataRow?> OpenEditAsyncCommand { get; }
     public IRelayCommand RemoveSelectedCommand { get; }
+    // Test-only: feed a synthetic unrecognized line through the watcher so a
+    // candidate appears here. Null (button absent) unless a watcher was supplied.
+    public IRelayCommand? SimulateEntryCommand { get; }
 
     ICommand IEditableTableSectionViewModel.OpenEditCommand => OpenEditAsyncCommand;
     // No Add button — a candidate only ever arrives from live capture
@@ -45,13 +52,26 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
     ICommand? IEditableTableSectionViewModel.AddCommand     => null;
     ICommand? IEditableTableSectionViewModel.RemoveCommand  => RemoveSelectedCommand;
 
+    // The far-right "Simulate entry" test button — present only when a watcher
+    // is wired, and shown only while the Log pane's Simulate dropdown reveals it
+    // (LogDiagnosticState.ShowSimulateUnrecognized; session-only, off by default).
+    ICommand? IEditableTableSectionViewModel.SimulateCommand => SimulateEntryCommand;
+    string?  IEditableTableSectionViewModel.SimulateLabel    => "Simulate entry";
+    bool     IEditableTableSectionViewModel.ShowSimulate     => ShowSimulate;
+
+    // Backing getter for the interface member; raised on the diagnostics toggle
+    // so the shared view (which watches this property) shows/hides the button live.
+    public bool ShowSimulate => _diagnostics?.ShowSimulateUnrecognized ?? false;
+
     private readonly NotifyCollectionChangedEventHandler _handler;
 
     public MessageCandidatesSectionViewModel(
         MessageCandidateStore candidates,
         MessageStore messages,
         DialogService? dialogs = null,
-        GameDataCache? cache = null)
+        GameDataCache? cache = null,
+        MessageCandidateWatcher? watcher = null,
+        LogDiagnosticState? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(messages);
@@ -59,10 +79,17 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         _messages = messages;
         _dialogs = dialogs;
         _cache = cache;
+        _watcher = watcher;
+        _diagnostics = diagnostics;
         _handler = (_, _) => Reload();
         _candidates.Candidates.CollectionChanged += _handler;
         OpenEditAsyncCommand  = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
         RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => SelectedRow is not null);
+        if (_watcher is not null)
+            SimulateEntryCommand = new RelayCommand(() => _watcher.SimulateCapture());
+        // Mirror the Log pane's Simulate-dropdown toggle so the button appears /
+        // hides live while this tab is open.
+        if (_diagnostics is not null) _diagnostics.Changed += OnDiagnosticsChanged;
 
         PropertyChanged += (_, e) =>
         {
@@ -73,9 +100,13 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         Reload();
     }
 
+    private void OnDiagnosticsChanged() =>
+        Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(ShowSimulate)));
+
     public override void Dispose()
     {
         _candidates.Candidates.CollectionChanged -= _handler;
+        if (_diagnostics is not null) _diagnostics.Changed -= OnDiagnosticsChanged;
         base.Dispose();
     }
 
