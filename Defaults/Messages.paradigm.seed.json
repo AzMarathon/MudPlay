@@ -29321,5 +29321,124 @@
         "Number": 1208
       }
     ]
+  },
+  {
+    "Id": "b5d3db7650f95bab",
+    "Name": "horrid wound",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are losing blood quickly",
+    "AppliedEndsWith": "You staunch the flow of blood",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5108
+      }
+    ]
+  },
+  {
+    "Id": "f92faf2a9862a735",
+    "Name": "stone temple poison",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5109
+      }
+    ]
+  },
+  {
+    "Id": "adb2c93c029de9e0",
+    "Name": "stone regeneration",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are regenerating quickly",
+    "AppliedEndsWith": "You stop regenerating",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5111
+      }
+    ]
+  },
+  {
+    "Id": "68171c69464400b4",
+    "Name": "clay flask",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are in a dream state",
+    "AppliedEndsWith": "The long lucid dream ends",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5112
+      }
+    ]
+  },
+  {
+    "Id": "ea4b9a16735f91da",
+    "Name": "nightfall",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "An unnatural darkness surrounds you",
+    "AppliedEndsWith": "The unnatural darkness dissipates",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5114
+      }
+    ]
+  },
+  {
+    "Id": "6496557540a898fe",
+    "Name": "sunder armour",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "Your defenses are vulnerable",
+    "AppliedEndsWith": "Your defenses return to normal",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5118
+      }
+    ]
+  },
+  {
+    "Id": "e8e77dd3d69bf313",
+    "Name": "diffusive blast",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "You are flat on your back",
+    "AppliedEndsWith": "You get back on your feet",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5126
+      }
+    ]
   }
 ]
