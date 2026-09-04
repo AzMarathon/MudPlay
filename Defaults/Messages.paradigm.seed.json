@@ -153,19 +153,6 @@
     ]
   },
   {
-    "Id": "3d509f799acc5511",
-    "Name": "Afraid",
-    "Flags": "Confused, LastActionFailed",
-    "RawFlagsHex": 8194,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are too afraid to do that!",
-    "AppliedEndsWith": "",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
     "Id": "9b0c4d1c5ca41d41",
     "Name": "agony",
     "Flags": "None",
@@ -983,18 +970,6 @@
     ]
   },
   {
-    "Id": "3b6ece3e568f8fc4",
-    "Name": "blinding light",
-    "Flags": "Blinded",
-    "RawFlagsHex": 1,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are struck blind",
-    "AppliedEndsWith": "You can see again",
-    "Links": null
-  },
-  {
     "Id": "a6d9b97d6c00fe47",
     "Name": "blizzard",
     "Flags": "None",
@@ -1146,19 +1121,6 @@
         "Number": 1047
       }
     ]
-  },
-  {
-    "Id": "3f63d10d8132960a",
-    "Name": "breath attack",
-    "Flags": "Confused",
-    "RawFlagsHex": 2,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "The dried husk breathes on you!",
-    "AppliedEndsWith": "The suffocating fumes dissipate.",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "fd96308f2f00e997",
@@ -2393,18 +2355,6 @@
     ]
   },
   {
-    "Id": "bcaf774efae5ba02",
-    "Name": "dragged under",
-    "Flags": "MovementPrevented",
-    "RawFlagsHex": 16,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You struggle to reach the surface!",
-    "AppliedEndsWith": "You break free, reaching the surface.",
-    "Links": null
-  },
-  {
     "Id": "997659117ed8baaa",
     "Name": "dragonclaw staff",
     "Flags": "None",
@@ -2556,31 +2506,6 @@
         "Number": 3579
       }
     ]
-  },
-  {
-    "Id": "4f12b65889095947",
-    "Name": "dread planewalker darkness",
-    "Flags": "MovementPrevented",
-    "RawFlagsHex": 16,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are enveloped in darkness!",
-    "AppliedEndsWith": "The unnatural darkness lifts.",
-    "Links": null
-  },
-  {
-    "Id": "d0809aafb3504a40",
-    "Name": "dried husk attack",
-    "Flags": "Confused",
-    "RawFlagsHex": 2,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "The dried husk breathes on you!",
-    "AppliedEndsWith": "The suffocating fumes dissipate.",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "afb83d08a6a21e6b",
@@ -3723,19 +3648,6 @@
     ]
   },
   {
-    "Id": "b389d7b49ff08dd8",
-    "Name": "fumble",
-    "Flags": "Confused, LastActionFailed",
-    "RawFlagsHex": 8194,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You fumble in confusion",
-    "AppliedEndsWith": "The effects of confusion wear off",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
     "Id": "a3627499fd21a575",
     "Name": "fungus cloud",
     "Flags": "None",
@@ -4551,19 +4463,6 @@
         "Number": 1499
       }
     ]
-  },
-  {
-    "Id": "33105d78fa6fec27",
-    "Name": "hot pants",
-    "Flags": "Confused",
-    "RawFlagsHex": 2,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are mesmerized!",
-    "AppliedEndsWith": "The effects of the hot pants wear off",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "586dad6f98276678",
@@ -5791,30 +5690,6 @@
     ]
   },
   {
-    "Id": "bda09b142f1521a5",
-    "Name": "mistweed",
-    "Flags": "Poisoned",
-    "RawFlagsHex": 4,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are drowsy and disoriented!",
-    "AppliedEndsWith": "You feel better.",
-    "Links": null
-  },
-  {
-    "Id": "4ae1167410dfc886",
-    "Name": "mistweed",
-    "Flags": "Poisoned, MovementPrevented, AttackPrevented, EndsCombat",
-    "RawFlagsHex": 4148,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are unconscious.",
-    "AppliedEndsWith": "You awaken, groggy and confused from the poison.",
-    "Links": null
-  },
-  {
     "Id": "c5ef3e5589bd4779",
     "Name": "molecular agitation",
     "Flags": "None",
@@ -6053,18 +5928,6 @@
     ]
   },
   {
-    "Id": "6ce3540f9d8e3dd2",
-    "Name": "net hold",
-    "Flags": "MovementPrevented",
-    "RawFlagsHex": 16,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are entangled in a net!",
-    "AppliedEndsWith": "You work yourself free.",
-    "Links": null
-  },
-  {
     "Id": "8f57e70b58ec33b0",
     "Name": "netherworld hammer",
     "Flags": "None",
@@ -6131,19 +5994,6 @@
         "Number": 163
       }
     ]
-  },
-  {
-    "Id": "1b88e26d9cf6e1fd",
-    "Name": "opalescent mist",
-    "Flags": "Confused, MovementPrevented",
-    "RawFlagsHex": 18,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Your mind is muddled",
-    "AppliedEndsWith": "Your mind clears",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "2dd9bd56633e8cac",
@@ -6997,18 +6847,6 @@
     ]
   },
   {
-    "Id": "f7a4d97eb97899c9",
-    "Name": "Retch",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You retch uncontrollably!",
-    "AppliedEndsWith": "",
-    "Links": null
-  },
-  {
     "Id": "c9e0c97c6c8c1603",
     "Name": "righteousness",
     "Flags": "None",
@@ -7383,18 +7221,6 @@
     ]
   },
   {
-    "Id": "e496397a63008db0",
-    "Name": "shake and shiver",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You shake and shiver!",
-    "AppliedEndsWith": "",
-    "Links": null
-  },
-  {
     "Id": "a02e2713219e747d",
     "Name": "sharp blade",
     "Flags": "LosingHp",
@@ -7597,18 +7423,6 @@
         "Number": 170
       }
     ]
-  },
-  {
-    "Id": "6818b21f9019fc52",
-    "Name": "silvery manacles",
-    "Flags": "MovementPrevented",
-    "RawFlagsHex": 16,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are restrained by silvery manacles!",
-    "AppliedEndsWith": "The silvery manacles restraining you shimmer and fade.",
-    "Links": null
   },
   {
     "Id": "b0d33e973c4678ff",
@@ -9329,18 +9143,6 @@
     ]
   },
   {
-    "Id": "edd1ac736f16e4b0",
-    "Name": "teleport",
-    "Flags": "Poisoned",
-    "RawFlagsHex": 4,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are afflicted by teleportation sickness",
-    "AppliedEndsWith": "The teleportation sickness wears off",
-    "Links": null
-  },
-  {
     "Id": "b0e5ec7506d88edd",
     "Name": "tempest",
     "Flags": "None",
@@ -10210,18 +10012,6 @@
       }
     ],
     "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
-    "Id": "99956a5b9acf253e",
-    "Name": "Winch failed",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You heave mightily on the winch, but it does not budge.",
-    "AppliedEndsWith": "",
-    "Links": null
   },
   {
     "Id": "2405a968919be91e",
@@ -29531,17 +29321,5 @@
         "Number": 1208
       }
     ]
-  },
-  {
-    "Id": "e9c672d2d9d51d3f",
-    "Name": "brain eater",
-    "Flags": "EndsCombat",
-    "RawFlagsHex": 4096,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "and a small creature leaps out!",
-    "AppliedEndsWith": "",
-    "Links": []
   }
 ]

@@ -102,19 +102,6 @@
     ]
   },
   {
-    "Id": "3d509f799acc5511",
-    "Name": "Afraid",
-    "Flags": "Confused, LastActionFailed",
-    "RawFlagsHex": 8194,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are too afraid to do that!",
-    "AppliedEndsWith": "",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
     "Id": "9b0c4d1c5ca41d41",
     "Name": "agony",
     "Flags": "None",
@@ -658,18 +645,6 @@
         "Number": 77
       }
     ]
-  },
-  {
-    "Id": "3b6ece3e568f8fc4",
-    "Name": "blinding light",
-    "Flags": "Blinded",
-    "RawFlagsHex": 1,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are struck blind",
-    "AppliedEndsWith": "You can see again",
-    "Links": null
   },
   {
     "Id": "a6d9b97d6c00fe47",
@@ -2617,19 +2592,6 @@
     ]
   },
   {
-    "Id": "b389d7b49ff08dd8",
-    "Name": "fumble",
-    "Flags": "Confused, LastActionFailed",
-    "RawFlagsHex": 8194,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You fumble in confusion",
-    "AppliedEndsWith": "The effects of confusion wear off",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
     "Id": "a3627499fd21a575",
     "Name": "fungus cloud",
     "Flags": "None",
@@ -3207,19 +3169,6 @@
         "Number": 1499
       }
     ]
-  },
-  {
-    "Id": "33105d78fa6fec27",
-    "Name": "hot pants",
-    "Flags": "Confused",
-    "RawFlagsHex": 2,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are mesmerized!",
-    "AppliedEndsWith": "The effects of the hot pants wear off",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "be99e86a88dd0a53",
@@ -3954,30 +3903,6 @@
     ]
   },
   {
-    "Id": "bda09b142f1521a5",
-    "Name": "mistweed",
-    "Flags": "Poisoned",
-    "RawFlagsHex": 4,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are drowsy and disoriented!",
-    "AppliedEndsWith": "You feel better.",
-    "Links": null
-  },
-  {
-    "Id": "4ae1167410dfc886",
-    "Name": "mistweed",
-    "Flags": "Poisoned, MovementPrevented, AttackPrevented, EndsCombat",
-    "RawFlagsHex": 4148,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are unconscious.",
-    "AppliedEndsWith": "You awaken, groggy and confused from the poison.",
-    "Links": null
-  },
-  {
     "Id": "c5ef3e5589bd4779",
     "Name": "molecular agitation",
     "Flags": "None",
@@ -4197,19 +4122,6 @@
         "Number": 163
       }
     ]
-  },
-  {
-    "Id": "1b88e26d9cf6e1fd",
-    "Name": "opalescent mist",
-    "Flags": "Confused, MovementPrevented",
-    "RawFlagsHex": 18,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Your mind is muddled",
-    "AppliedEndsWith": "Your mind clears",
-    "Links": null,
-    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "2dd9bd56633e8cac",
@@ -4825,18 +4737,6 @@
     ]
   },
   {
-    "Id": "f7a4d97eb97899c9",
-    "Name": "Retch",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You retch uncontrollably!",
-    "AppliedEndsWith": "",
-    "Links": null
-  },
-  {
     "Id": "c9e0c97c6c8c1603",
     "Name": "righteousness",
     "Flags": "None",
@@ -5158,18 +5058,6 @@
         "Number": 865
       }
     ]
-  },
-  {
-    "Id": "1f143c1378b4af8e",
-    "Name": "shimmering longsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel lucky",
-    "AppliedEndsWith": "The effects of bless wear off",
-    "Links": null
   },
   {
     "Id": "71a72a4377c1a873",
@@ -6652,18 +6540,6 @@
     ]
   },
   {
-    "Id": "edd1ac736f16e4b0",
-    "Name": "teleport",
-    "Flags": "Poisoned",
-    "RawFlagsHex": 4,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are afflicted by teleportation sickness",
-    "AppliedEndsWith": "The teleportation sickness wears off",
-    "Links": null
-  },
-  {
     "Id": "ec54a4c022e68237",
     "Name": "terror",
     "Flags": "Confused, AttackPrevented",
@@ -7380,18 +7256,6 @@
       }
     ],
     "ConfuseFumbleLine": "You fumble in confusion!"
-  },
-  {
-    "Id": "99956a5b9acf253e",
-    "Name": "Winch failed",
-    "Flags": "LastActionFailed",
-    "RawFlagsHex": 8192,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You heave mightily on the winch, but it does not budge.",
-    "AppliedEndsWith": "",
-    "Links": null
   },
   {
     "Id": "f6a8f6ab75985f7a",
@@ -24676,17 +24540,5 @@
         "Number": 1398
       }
     ]
-  },
-  {
-    "Id": "e9c672d2d9d51d3f",
-    "Name": "brain eater",
-    "Flags": "EndsCombat",
-    "RawFlagsHex": 4096,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "and a small creature leaps out!",
-    "AppliedEndsWith": "",
-    "Links": []
   }
 ]
