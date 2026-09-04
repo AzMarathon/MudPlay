@@ -195,18 +195,22 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             // or fire ActionFailed. Any active copy is dropped in the prune below.
             if (r.Flags.HasFlag(MessageFlags.Disabled)) continue;
 
-            if (!string.IsNullOrWhiteSpace(r.AppliedMessage))
+            // A slot holding a {null}/{void}/{empty} sentinel means "this spell has no such
+            // line" — treat it as absent so it never compiles into a matcher (IsBlankOrAbsent),
+            // exactly as an empty slot would. Only real wording indexes.
+            if (!MessageRecord.IsBlankOrAbsent(r.AppliedMessage))
             {
                 applied.Add((r.AppliedMessage, r));
                 if (!aliases.TryGetValue(r.AppliedMessage, out List<MessageRecord>? group))
                     aliases[r.AppliedMessage] = group = new List<MessageRecord>();
                 group.Add(r);
             }
-            if (!string.IsNullOrWhiteSpace(r.AppliedEndsWith))
+            if (!MessageRecord.IsBlankOrAbsent(r.AppliedEndsWith))
                 ends.Add((r.AppliedEndsWith, r));
-            if (r.Flags.HasFlag(MessageFlags.Confused) && !string.IsNullOrWhiteSpace(r.ConfuseFumbleLine))
+            if (r.Flags.HasFlag(MessageFlags.Confused) && !MessageRecord.IsBlankOrAbsent(r.ConfuseFumbleLine))
                 foreach (string wording in r.ConfuseFumbleLine.Split('\n'))
                 {
+                    if (MessageRecord.IsAbsentSentinel(wording)) continue;
                     string norm = NormalizeFumbleLine(wording);
                     if (norm.Length > 0) fumbles.Add(norm);
                 }

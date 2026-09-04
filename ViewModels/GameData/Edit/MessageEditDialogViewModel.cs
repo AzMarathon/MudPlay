@@ -7,7 +7,7 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.GameData.Edit;
 
-// View-model for the Game Data Browser → Unfiltered Messages tab's per-record edit
+// View-model for the Game Data Browser → Incomplete Messages tab's per-record edit
 // dialog. Edits one MessageRecord end-to-end: Name / Use-tier / four perspective line
 // slots (Caster / Target / Witness / Applied + AppliedEndsWith) / Effects flags / Links.
 // A message is recognition only — no action, no response (those live in Triggers).

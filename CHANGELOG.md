@@ -3,15 +3,17 @@
 ## 3.49.0
 
 - Messages data rebuilt into realm-split **stock / paradigm** seeds (decoded from MegaMUD's messages.md, picked per game-data set) — the old single mixed-realm seed is retired
-- Messages are **recognition-only** now: the Action + Response fields are gone (player responses live in Triggers), the tab is renamed **Unfiltered Messages**, and it hides itself when empty
-- An item's **on-use / proc message** is edited from the item record (a Message section, the same editor the Spells tab uses); a message claimed by a spell or item is hidden from the Unfiltered Messages tab
+- Messages are **recognition-only** now: the Action + Response fields are gone (player responses live in Triggers), and the tab is renamed **Incomplete Messages**, always shown
+- The **Incomplete Messages** tab doubles as a fill-from-game worklist: alongside orphan records (tied to no spell/item) it surfaces any spell-linked message still missing a required line — caster / target / witness / applied / wears-off, and the fumble line on a Confused record — naming the gaps in a **Missing** column
+- Mark a line a spell genuinely lacks by typing **{null}**, **{void}**, or **{empty}** into it: it counts as filled (clearing the record from the Incomplete list) while the recognizer treats it as no line
+- An item's **on-use / proc message** is edited from the item record (a Message section, the same editor the Spells tab uses); a complete message claimed by a spell or item is hidden from the Incomplete Messages tab
 - New **Confuse fumble** field on a Confused message: the line(s) that source emits on a fumble (defaults to *"You fumble in confusion!"*) — a fumbled move reverts on it, so fumble wordings live in game data instead of hardcoded (convulsions keeps its *convulse violently* / *look around stupidly* wordings)
 - Message editor opens taller and its User Definitions tab scrolls, so the Confuse-fumble box + Effects flags no longer truncate
 - New **Cast response** field on a message (sent when its spell is detected cast): a monster whose DeathSpell is a silent *…temp* spell now fires it on death — seeded `^M^M` (two carriage returns) to unstick the game engine those spells stall
 - The ganghouse **guardians, elite guardians, and spellbreakers** now default to **Friend**, so auto-combat leaves the whole set alone
 - Monster record: every spell a monster references — its **spell-attacks, per-hit, create, death, and between-rounds** spells — now links to its Spell record and shows the spell's number (`[#N]`); previously only between-rounds spells linked
 - Removed the spurious *trap disarm* message records — trap-trigger lines wrongly flagged Last-action-failed, which fired a bogus combat re-swing when a trap went off
-- Trimmed the Unfiltered Messages catalogue: removed the standalone condition-detector records (held / blind / confused / poison / fumble / combat-end) from both seeds
+- Trimmed the Incomplete Messages catalogue: removed the standalone condition-detector records (held / blind / confused / poison / fumble / combat-end) from both seeds
 - Paradigm Messages seed: back-filled the missing begin / wear-off lines on 8 buff/debuff spells (the *form of the …* animal spirits, yellow fungus, rosebush sleep, green beam, suffocating-fumes breath), and added 7 more that had no record at all (horrid wound, stone temple poison, stone regeneration, clay flask, nightfall, sunder armour, diffusive blast) — each tied to its Spell record — so those effects are recognized
 - Paradigm Messages seed: pulled the cast / incantation lines ("*{source} makes a sweeping gesture!*") from an older Paradigm export into empty caster/target/witness slots (46 across 30 spell records) and added 6 spells that had none — each gated on the export's spell id **and** name agreeing with the Paradigm-1.9.1 MDB, so renumbered / renamed / junk rows are skipped
 - Message **Effects** flags: the **Disabled (don't use)** checkbox is now honored — a disabled record is ignored wholesale (recognizes nothing, sets no flag), and the four effect bits no engine ever acted on (losing-HP, HP/mana regenerating, ends-combat) were retired from the editor + seeds

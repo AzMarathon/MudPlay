@@ -3,8 +3,10 @@
 <!-- current-version:start -->
 > **Version 3.49.0**
 > - Messages data rebuilt into realm-split **stock / paradigm** seeds (decoded from MegaMUD's messages.md, picked per game-data set); the old single mixed-realm seed is retired
-> - Messages are **recognition-only**: the Action + Response fields are gone (responses live in Triggers), the tab is renamed **Unfiltered Messages**, and it hides itself when empty
-> - An item's **on-use / proc message** is edited from the item record; a message claimed by a spell or item is hidden from the Unfiltered Messages tab
+> - Messages are **recognition-only**: the Action + Response fields are gone (responses live in Triggers), and the tab is renamed **Incomplete Messages**, always shown
+> - The **Incomplete Messages** tab doubles as a fill-from-game worklist: alongside orphan records it surfaces any spell-linked message still missing a required line (caster / target / witness / applied / wears-off, and the fumble line on a Confused record), naming the gaps in a **Missing** column
+> - Mark a line a spell genuinely lacks by typing **{null}**, **{void}**, or **{empty}** into it — it counts as filled (clearing the record from the Incomplete list) while the recognizer treats it as no line
+> - An item's **on-use / proc message** is edited from the item record; a complete message claimed by a spell or item is hidden from the Incomplete Messages tab
 > - New **Confuse fumble** field on a Confused message: the line(s) that source emits on a fumble (defaults to *"You fumble in confusion!"*) — a fumbled move reverts on it, so the wordings are game data, not hardcoded
 > - Message editor opens taller and its User Definitions tab scrolls, so the Confuse-fumble box + Effects flags no longer truncate
 > - New **Cast response** field on a message: a monster whose DeathSpell is a silent *…temp* spell fires it on death (seeded `^M^M`, two carriage returns) to unstick the game engine

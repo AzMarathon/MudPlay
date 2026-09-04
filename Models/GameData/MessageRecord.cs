@@ -94,6 +94,33 @@ public sealed record MessageRecord(
             sb.Append(hash[i].ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
         return sb.ToString();
     }
+
+    // ----- Absent-line sentinels -----
+    // A user marks a message slot the spell genuinely has no wording for by typing one of
+    // these tokens into it, instead of leaving it blank. The distinction cuts two ways: a
+    // recognition consumer (ConditionTracker, CasterMessageMatcher) treats a sentinel as
+    // EMPTY, so it compiles no matcher — "{void}" never becomes a literal pattern that
+    // tries to match a real server line — while the Game Data Browser's Incomplete
+    // Messages worklist counts a sentinel as FILLED, so a fully-triaged record (every slot
+    // either real text or a sentinel) drops off the list. A truly blank slot stays "not
+    // yet investigated".
+    private static readonly string[] AbsentSentinels = { "{null}", "{void}", "{empty}" };
+
+    // True when line is exactly one of the absent-line sentinels (case-insensitive,
+    // surrounding whitespace ignored).
+    public static bool IsAbsentSentinel(string? line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+        string t = line.Trim();
+        foreach (string s in AbsentSentinels)
+            if (string.Equals(t, s, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    // True when a slot carries no usable recognition text — blank OR an absent sentinel.
+    // Recognition consumers skip these: an absent line compiles no pattern.
+    public static bool IsBlankOrAbsent(string? line)
+        => string.IsNullOrWhiteSpace(line) || IsAbsentSentinel(line);
 }
 
 // One back-reference from a MessageRecord to a record inside the active

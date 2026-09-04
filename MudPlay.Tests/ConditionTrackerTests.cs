@@ -89,6 +89,24 @@ public sealed class ConditionTrackerTests
     }
 
     [Fact]
+    public void AbsentSentinelLine_CompilesNoPattern()
+    {
+        // A {null}/{void}/{empty} sentinel means "this spell has no such line" — it must
+        // never index as a literal matcher, so even feeding the sentinel text verbatim
+        // latches nothing.
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("Sentinel poison",
+            MessageFlags.Poisoned,
+            applied: "{void}",
+            endsWith: "{null}"));
+
+        h.Feed("{void}");
+
+        Assert.False(h.Tracker.IsPoisoned);
+        Assert.Empty(h.Applied);
+    }
+
+    [Fact]
     public void DisabledRecord_IsIgnoredWholesale()
     {
         using Harness h = new();

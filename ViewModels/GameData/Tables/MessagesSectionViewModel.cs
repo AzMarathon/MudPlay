@@ -23,32 +23,32 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
     private readonly GameDataCache? _cache;
 
     public override string Id => "messages";
-    public override string Title => "Unfiltered Messages";
+    public override string Title => "Incomplete Messages";
 
-    // Description banner (renders under the title): explains what lands here — the
-    // catalogue records NOT claimed by a spell or item (those are edited from the
-    // Spells / Items tabs). What remains is standalone condition detectors + orphans.
+    // Description banner (renders under the title): explains the two kinds of record that
+    // land here — spell-linked messages still missing a required line (the fill-from-game
+    // worklist) and orphan records tied to no spell/item. A complete spell/item message is
+    // edited from its own tab and stays hidden.
     public override string? BannerText =>
-        "Messages not tied to a spell or item live here. A message linked to a spell is " +
-        "edited from the Spells tab, one linked to an item from the item dialog's Message " +
-        "section; only the leftovers — standalone condition detectors and orphaned records — " +
-        "show in this list.";
-
-    // When nothing is unfiltered, the tab hides itself from the sidebar (the browser
-    // re-checks on every reload) — an empty overflow bucket is just noise.
-    public override bool HideWhenEmpty => true;
+        "Two kinds of message need attention here. A spell-linked record still missing a " +
+        "required line — caster, target, witness, applied, wears-off, or (on a Confused " +
+        "record) the fumble line — is listed with the gaps in the Missing column; fill them " +
+        "in from the game, or type {null} / {void} / {empty} in a line the spell simply " +
+        "doesn't have. A record tied to no spell or item shows as an orphan awaiting a link. " +
+        "Spells with no message record at all are listed separately in the Spell coverage report.";
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Name", "Lines", "Preview",
+        "Name", "Missing", "Lines", "Preview",
     };
 
     public override string SearchKeyColumn => "Name";
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
-        Title, "messages", "unfiltered", "response", "condition", "pattern",
-        "blinded", "poisoned", "paralyzed", "confused", "diseased", "regenerating",
+        Title, "messages", "incomplete", "unfiltered", "missing", "worklist", "orphan",
+        "condition", "pattern", "caster", "target", "witness", "applied", "wears-off", "fumble",
+        "blinded", "poisoned", "paralyzed", "confused", "diseased",
     };
 
     // Open the per-record edit dialog for the row currently double-clicked.
@@ -96,34 +96,48 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
 
     protected override void PopulateRows(IList<GameDataRow> rows)
     {
-        // A message claimed by a spell that EXISTS in this set is edited from the Spells
-        // section (double-click opens its linked message), so hide it here — listing the
-        // same record under both tabs is confusing even though the Messages store is where
-        // it actually lives. A message whose Spells link is orphaned (the spell isn't in
-        // this set) stays visible, so it isn't stranded with no editor to reach it.
         HashSet<int> spellNumbers = _cache?.RowNumbers("Spells") ?? new HashSet<int>();
         HashSet<int> itemNumbers = _cache?.RowNumbers("Items") ?? new HashSet<int>();
 
         foreach (MessageRecord m in _store.Messages)
         {
-            if (IsClaimedByExistingSpell(m, spellNumbers)) continue;
-            // An item-claimed message (its "use <item>" buff line or weapon-proc line)
-            // is edited from the item's dialog Message section, so hide it here — same
-            // rule as spell-claimed records. An orphaned Items link (item not in this
-            // set) does NOT claim it, so it stays visible with the Messages tab as its
-            // only reachable editor.
-            if (IsClaimedByExistingItem(m, itemNumbers)) continue;
-            // Lines column = compact tag string showing which perspective
-            // slots are populated, e.g. "C T W A•" (Caster+Target+Witness
-            // + Applied pair). Preview column = first non-empty line for
-            // a quick at-a-glance read.
-            string lines = BuildLineTags(m);
-            string preview = FirstNonEmptyLine(m);
+            // A disabled record is switched off wholesale — it recognizes nothing and is
+            // parked deliberately, so it's neither a worklist item nor an orphan to chase.
+            if (m.Flags.HasFlag(MessageFlags.Disabled)) continue;
+
+            string missing;
+            if (IsClaimedByExistingSpell(m, spellNumbers))
+            {
+                // A spell's message is edited from the Spells section, so a COMPLETE one is
+                // hidden here (listing the same record under both tabs is confusing). An
+                // INCOMPLETE one — a required perspective/applied slot still blank — surfaces
+                // as a worklist item: the "fill these in from in-game" list.
+                IReadOnlyList<string> gaps = MissingSlots(m);
+                if (gaps.Count == 0) continue;
+                missing = string.Join(", ", gaps);
+            }
+            else if (IsClaimedByExistingItem(m, itemNumbers))
+            {
+                // An item-claimed message (its "use <item>" buff line or weapon-proc line) is
+                // edited from the item dialog's Message section, so it never surfaces here.
+                continue;
+            }
+            else
+            {
+                // Tied to no spell/item in this set — an orphan awaiting a link (renamed-away
+                // spells, standalone detectors, records whose only link is orphaned).
+                missing = "not linked to a spell/item";
+            }
+
+            // Lines column = compact tag string showing which perspective slots ARE populated,
+            // e.g. "C T W A•" (Caster+Target+Witness + Applied pair). Missing column = the
+            // still-blank required slots. Preview column = first non-empty line for a quick read.
             var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Name"]    = m.Name,
-                ["Lines"]   = lines,
-                ["Preview"] = preview,
+                ["Missing"] = missing,
+                ["Lines"]   = BuildLineTags(m),
+                ["Preview"] = FirstNonEmptyLine(m),
             };
             GameDataRow row = GameDataRow.FromDictionary(dict, Columns);
             row.Tag = m;
@@ -133,10 +147,32 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         }
     }
 
+    // The required message slots for a spell-linked record, in fill order: the three
+    // perspective lines + the applied/wear-off pair, plus the confuse-fumble line when the
+    // record is flagged Confused. A slot counts as FILLED when it holds any text — real
+    // wording OR one of the {null}/{void}/{empty} "no such line" sentinels (the user's
+    // explicit "this spell has no wording here"), so a sentinel drops the slot off this
+    // list exactly as real text would. Returns the labels of the still-blank slots; empty
+    // when the record is fully triaged. Drives both the Incomplete row inclusion and its
+    // "Missing" column.
+    internal static IReadOnlyList<string> MissingSlots(MessageRecord m)
+    {
+        List<string> gaps = new(6);
+        if (string.IsNullOrWhiteSpace(m.CasterMessage))   gaps.Add("Caster");
+        if (string.IsNullOrWhiteSpace(m.TargetMessage))   gaps.Add("Target");
+        if (string.IsNullOrWhiteSpace(m.WitnessMessage))  gaps.Add("Witness");
+        if (string.IsNullOrWhiteSpace(m.AppliedMessage))  gaps.Add("Applied");
+        if (string.IsNullOrWhiteSpace(m.AppliedEndsWith)) gaps.Add("Wears-off");
+        if (m.Flags.HasFlag(MessageFlags.Confused) && string.IsNullOrWhiteSpace(m.ConfuseFumbleLine))
+            gaps.Add("Fumble");
+        return gaps;
+    }
+
     // True when the record is claimed by a spell present in the active set — a Links
-    // back-reference to a Spells row whose Number exists. Such records are edited from
-    // the Spells section, so the Messages tab hides them. An orphaned Spells link (spell
-    // not in this set) does NOT claim it, so it stays listed here (its only reachable editor).
+    // back-reference to a Spells row whose Number exists. Such records are edited from the
+    // Spells section, so a COMPLETE one is hidden here (an INCOMPLETE one still surfaces as
+    // a worklist item — see PopulateRows). An orphaned Spells link (spell not in this set)
+    // does NOT claim it, so it stays listed here as an orphan (its only reachable editor).
     internal static bool IsClaimedByExistingSpell(MessageRecord m, HashSet<int> spellNumbers)
     {
         if (m.Links is null) return false;

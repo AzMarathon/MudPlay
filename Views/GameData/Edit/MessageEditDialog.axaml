@@ -140,6 +140,9 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <TextBlock Text="No wording for a line this spell simply doesn't have? Type {null}, {void}, or {empty} — it counts as filled, so the record clears the Incomplete Messages list."
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="11" TextWrapping="Wrap"/>
             </StackPanel>
             <TextBlock Grid.Row="1"
                        Margin="108,0,0,0"

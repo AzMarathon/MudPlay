@@ -16,6 +16,55 @@ public sealed class MessagesSectionFilterTests
             WitnessMessage: "", AppliedMessage: "", AppliedEndsWith: "",
             Links: links.Length == 0 ? null : links);
 
+    private static MessageRecord WithLines(
+        MessageFlags flags, string caster, string target, string witness,
+        string applied, string wearsOff, string fumble = "") =>
+        new(Id: "r", Name: "r", Flags: flags, RawFlagsHex: 0,
+            CasterMessage: caster, TargetMessage: target, WitnessMessage: witness,
+            AppliedMessage: applied, AppliedEndsWith: wearsOff,
+            Links: new[] { new GameDataLink("Spells", 1) }, ConfuseFumbleLine: fumble);
+
+    // ----- MissingSlots (the Incomplete worklist inclusion + Missing column) -----
+
+    [Fact]
+    public void MissingSlots_AllBlank_ListsEveryRequiredSlot()
+    {
+        MessageRecord m = WithLines(MessageFlags.None, "", "", "", "", "");
+        Assert.Equal(
+            new[] { "Caster", "Target", "Witness", "Applied", "Wears-off" },
+            MessagesSectionViewModel.MissingSlots(m));
+    }
+
+    [Fact]
+    public void MissingSlots_Sentinels_CountAsFilled()
+    {
+        // {null}/{void}/{empty} in a slot marks it deliberately absent → filled, so it
+        // drops off the missing list exactly as real text would.
+        MessageRecord m = WithLines(MessageFlags.None,
+            caster: "You cast {s}!", target: "{null}", witness: "{void}",
+            applied: "{empty}", wearsOff: "The effect fades.");
+        Assert.Empty(MessagesSectionViewModel.MissingSlots(m));
+    }
+
+    [Fact]
+    public void MissingSlots_Confused_RequiresFumbleLine()
+    {
+        MessageRecord blank = WithLines(MessageFlags.Confused,
+            "c", "t", "w", "a", "e", fumble: "");
+        Assert.Equal(new[] { "Fumble" }, MessagesSectionViewModel.MissingSlots(blank));
+
+        MessageRecord filled = WithLines(MessageFlags.Confused,
+            "c", "t", "w", "a", "e", fumble: "You fumble in confusion!");
+        Assert.Empty(MessagesSectionViewModel.MissingSlots(filled));
+    }
+
+    [Fact]
+    public void MissingSlots_NonConfused_DoesNotRequireFumble()
+    {
+        MessageRecord m = WithLines(MessageFlags.None, "c", "t", "w", "a", "e", fumble: "");
+        Assert.Empty(MessagesSectionViewModel.MissingSlots(m));
+    }
+
     [Fact]
     public void ClaimedByExistingSpell_IsHidden()
     {
