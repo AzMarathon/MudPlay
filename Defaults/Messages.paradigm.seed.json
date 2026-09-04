@@ -162,7 +162,8 @@
     "WitnessMessage": "",
     "AppliedMessage": "You are too afraid to do that!",
     "AppliedEndsWith": "",
-    "Links": null
+    "Links": null,
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "9b0c4d1c5ca41d41",
@@ -536,7 +537,8 @@
         "Table": "Spells",
         "Number": 202
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "a885db55b21bad5c",
@@ -1155,7 +1157,8 @@
     "WitnessMessage": "",
     "AppliedMessage": "The dried husk breathes on you!",
     "AppliedEndsWith": "The suffocating fumes dissipate.",
-    "Links": null
+    "Links": null,
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "fd96308f2f00e997",
@@ -1172,7 +1175,8 @@
         "Table": "Spells",
         "Number": 84
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "87b9398f1342f94d",
@@ -1495,7 +1499,8 @@
         "Table": "Spells",
         "Number": 521
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "9078463f49402fa0",
@@ -1631,7 +1636,8 @@
         "Table": "Spells",
         "Number": 63
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "a8bbbe2f3002bc30",
@@ -1665,7 +1671,8 @@
         "Table": "Spells",
         "Number": 409
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "07f8453c3c0098c2",
@@ -1682,7 +1689,8 @@
         "Table": "Spells",
         "Number": 409
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "3ca8cfccef53340c",
@@ -1699,7 +1707,8 @@
         "Table": "Spells",
         "Number": 409
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "5e9314f645e0fe2c",
@@ -1716,7 +1725,8 @@
         "Table": "Spells",
         "Number": 951
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!\nYou convulse violently\nYou look around stupidly and do nothing!"
   },
   {
     "Id": "3d68654ab7049875",
@@ -1818,7 +1828,8 @@
         "Table": "Spells",
         "Number": 380
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "0a45b96ffc3fd4f7",
@@ -2568,7 +2579,8 @@
     "WitnessMessage": "",
     "AppliedMessage": "The dried husk breathes on you!",
     "AppliedEndsWith": "The suffocating fumes dissipate.",
-    "Links": null
+    "Links": null,
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "afb83d08a6a21e6b",
@@ -3554,7 +3566,8 @@
         "Table": "Spells",
         "Number": 841
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "19465005e0a71cdd",
@@ -3719,7 +3732,8 @@
     "WitnessMessage": "",
     "AppliedMessage": "You fumble in confusion",
     "AppliedEndsWith": "The effects of confusion wear off",
-    "Links": null
+    "Links": null,
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "a3627499fd21a575",
@@ -4433,7 +4447,8 @@
         "Table": "Spells",
         "Number": 83
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "ed7c781ff963f5f2",
@@ -4547,7 +4562,8 @@
     "WitnessMessage": "",
     "AppliedMessage": "You are mesmerized!",
     "AppliedEndsWith": "The effects of the hot pants wear off",
-    "Links": null
+    "Links": null,
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "586dad6f98276678",
@@ -4564,7 +4580,8 @@
         "Table": "Spells",
         "Number": 300
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "be99e86a88dd0a53",
@@ -6125,7 +6142,8 @@
     "WitnessMessage": "",
     "AppliedMessage": "Your mind is muddled",
     "AppliedEndsWith": "Your mind clears",
-    "Links": null
+    "Links": null,
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "2dd9bd56633e8cac",
@@ -6193,7 +6211,8 @@
         "Table": "Spells",
         "Number": 355
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "4f7b341c5cd4a1f5",
@@ -7895,7 +7914,8 @@
         "Table": "Spells",
         "Number": 53
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "d227902fddf9676c",
@@ -9352,7 +9372,8 @@
         "Table": "Spells",
         "Number": 430
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "b7754af89d96d2f3",
@@ -9369,7 +9390,8 @@
         "Table": "Spells",
         "Number": 430
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "f4c965bb0b3aaf6f",
@@ -10249,7 +10271,8 @@
         "Table": "Spells",
         "Number": 1093
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "4e4b7c90cfe6f2dc",
@@ -10317,7 +10340,8 @@
         "Table": "Spells",
         "Number": 188
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
     "Id": "99956a5b9acf253e",

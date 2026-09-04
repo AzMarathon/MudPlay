@@ -850,7 +850,8 @@ public partial class MainWindowViewModel : ObservableObject
         // — it reads peeked neighbours the tracker would otherwise drop.
         _roomDisplayParser.RoomParsed += AppServices.Current.Recovery.OnRoomObserved;
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
-            AppServices.Current.RoomTracker, AppServices.Current.Log);
+            AppServices.Current.RoomTracker, AppServices.Current.Log,
+            AppServices.Current.Conditions.IsConfuseFumbleLine);
         // Combat-gated-entry refusal: `break` → 3s → revert move so the driving
         // engine retries. Gated on a movement engine actually driving.
         _combatEntryRefusalHandler = new Game.Map.CombatEntryRefusalHandler(Lines,

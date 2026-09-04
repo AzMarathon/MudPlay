@@ -1,5 +1,14 @@
 # Version history
 
+## 3.49.0
+
+- Messages data rebuilt into realm-split **stock / paradigm** seeds (decoded from MegaMUD's messages.md, picked per game-data set) — the old single mixed-realm seed is retired
+- Messages are **recognition-only** now: the Action + Response fields are gone (player responses live in Triggers), the tab is renamed **Unfiltered Messages**, and it hides itself when empty
+- An item's **on-use / proc message** is edited from the item record (a Message section, the same editor the Spells tab uses); a message claimed by a spell or item is hidden from the Unfiltered Messages tab
+- New **Confuse fumble** field on a Confused message: the line(s) that source emits on a fumble (defaults to *"You fumble in confusion!"*) — a fumbled move reverts on it, so fumble wordings live in game data instead of hardcoded (convulsions keeps its *convulse violently* / *look around stupidly* wordings)
+- The ganghouse **guardians, elite guardians, and spellbreakers** now default to **Friend**, so auto-combat leaves the whole set alone
+- Trigger seed trimmed of MegaMUD carryovers; monster-message seed stripped of retired death/combat lines
+
 ## 3.48.0
 
 - Bosses tab: a per-boss **Grab All** checkbox (default off) that blindly grabs a boss's loot the instant it's available — a **monster** boss: `get` every item in its drop table when it dies; an **item** boss (a box, e.g. a bogwood box): `get` it on room entry. No room re-parse.

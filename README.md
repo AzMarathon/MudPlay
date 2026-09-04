@@ -1,8 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.48.0**
-> - Bosses tab: a per-boss **Grab All** checkbox (default off) that blindly grabs a boss's loot — a **monster** boss: `get` every item in its drop table when it dies; an **item** boss (a box): `get` it on room entry. Hidden (with a "cannot resolve" tooltip) for an unresolvable boss
+> **Version 3.49.0**
+> - Messages data rebuilt into realm-split **stock / paradigm** seeds (decoded from MegaMUD's messages.md, picked per game-data set); the old single mixed-realm seed is retired
+> - Messages are **recognition-only**: the Action + Response fields are gone (responses live in Triggers), the tab is renamed **Unfiltered Messages**, and it hides itself when empty
+> - An item's **on-use / proc message** is edited from the item record; a message claimed by a spell or item is hidden from the Unfiltered Messages tab
+> - New **Confuse fumble** field on a Confused message: the line(s) that source emits on a fumble (defaults to *"You fumble in confusion!"*) — a fumbled move reverts on it, so the wordings are game data, not hardcoded
+> - The ganghouse **guardians, elite guardians, and spellbreakers** now default to **Friend**
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

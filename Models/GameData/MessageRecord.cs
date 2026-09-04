@@ -43,6 +43,13 @@ namespace MudPlay.Models.GameData;
 // Triggers table, not here; the legacy per-message Response + Action fields
 // were retired with that split (nothing branched on Action, and the handful
 // of message Responses were the same lines already handled as triggers).
+//
+// ConfuseFumbleLine: only meaningful on a Confused record. The wire line(s) a
+// character confused by THIS source emits when it fumbles a just-sent command
+// (the command is consumed and never executes) — a fumbled MOVE reverts on it.
+// One wording per line; the generic every confuse source shares is
+// "You fumble in confusion!". Recognition metadata, NOT part of the identity
+// hash — editing it doesn't re-Id the record.
 public sealed record MessageRecord(
     string                       Id,
     string                       Name,
@@ -53,7 +60,8 @@ public sealed record MessageRecord(
     string                       WitnessMessage,
     string                       AppliedMessage,
     string                       AppliedEndsWith,
-    IReadOnlyList<GameDataLink>? Links = null)
+    IReadOnlyList<GameDataLink>? Links = null,
+    string                       ConfuseFumbleLine = "")
 {
     // Stable content hash used as Id. SHA1 of every identity field (Name +
     // each of the four perspective line slots + the applied wear-off pair

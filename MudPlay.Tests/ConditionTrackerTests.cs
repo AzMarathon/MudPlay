@@ -130,6 +130,47 @@ public sealed class ConditionTrackerTests
         Assert.Equal("fumble", h.ActionFailed[0].Name);
     }
 
+    // ----- ConfuseFumbleLine (data-driven movement-refusal source) ----
+
+    [Fact]
+    public void IsConfuseFumbleLine_MatchesConfiguredWordings_WholeLineOnly()
+    {
+        using Harness h = new();
+        // A Confused record carrying two fumble wordings, one per line.
+        h.Messages.Messages.Add(new MessageRecord(
+            Id: "conv", Name: "convulsions",
+            Flags: MessageFlags.Confused, RawFlagsHex: 2,
+            CasterMessage: "", TargetMessage: "", WitnessMessage: "",
+            AppliedMessage: "You are in convulsions!", AppliedEndsWith: "",
+            Links: null,
+            ConfuseFumbleLine: "You fumble in confusion!\nYou convulse violently"));
+
+        // Whole-line match, tolerant of a trailing '!'/'.' and case.
+        Assert.True(h.Tracker.IsConfuseFumbleLine("You fumble in confusion!"));
+        Assert.True(h.Tracker.IsConfuseFumbleLine("you fumble in confusion."));
+        Assert.True(h.Tracker.IsConfuseFumbleLine("  You convulse violently  "));
+        // The onset line isn't a fumble wording, and a chat line quoting one must not
+        // match (whole-line, not substring).
+        Assert.False(h.Tracker.IsConfuseFumbleLine("You are in convulsions!"));
+        Assert.False(h.Tracker.IsConfuseFumbleLine("Bob says 'You fumble in confusion!'"));
+    }
+
+    [Fact]
+    public void IsConfuseFumbleLine_IgnoresFumbleLineOnNonConfusedRecord()
+    {
+        using Harness h = new();
+        // ConfuseFumbleLine only contributes from a Confused record.
+        h.Messages.Messages.Add(new MessageRecord(
+            Id: "x", Name: "x",
+            Flags: MessageFlags.Poisoned, RawFlagsHex: 4,
+            CasterMessage: "", TargetMessage: "", WitnessMessage: "",
+            AppliedMessage: "You are poisoned!", AppliedEndsWith: "",
+            Links: null,
+            ConfuseFumbleLine: "You fumble in confusion!"));
+
+        Assert.False(h.Tracker.IsConfuseFumbleLine("You fumble in confusion!"));
+    }
+
     [Fact]
     public void Fumble_FiresEveryLine_NotJustFirst()
     {

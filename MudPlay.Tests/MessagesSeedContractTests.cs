@@ -10,8 +10,10 @@ namespace MudPlay.Tests;
 // The realm-flavored Messages seeds are produced offline by tools/decode_messages_md.py
 // and deserialized by MessageStore via JsonStore.Load<List<MessageRecord>>. This pins the
 // decoder→model JSON contract that the whole catalogue depends on: Flags serialize as
-// MessageFlags enum NAMES (a multi-bit value as a comma-joined list), Action as a
-// MessageAction name, and Links as {Table, Number}. Drift here would silently blank the
+// MessageFlags enum NAMES (a multi-bit value as a comma-joined list) and Links as
+// {Table, Number}, plus the optional ConfuseFumbleLine on Confused records. The legacy
+// Action/Response keys are gone from the model but a seed still carrying them (the fixture
+// below does) must keep loading. Drift here would silently blank the
 // catalogue on load (a corrupt-parse falls through to an empty seed).
 public sealed class MessagesSeedContractTests : IDisposable
 {
@@ -42,7 +44,8 @@ public sealed class MessagesSeedContractTests : IDisposable
             "WitnessMessage": "",
             "AppliedMessage": "You are entangled in a net!",
             "AppliedEndsWith": "You work yourself free.",
-            "Links": null
+            "Links": null,
+            "ConfuseFumbleLine": "You fumble in confusion!"
           },
           {
             "Id": "aaaa000000000002",
@@ -71,6 +74,7 @@ public sealed class MessagesSeedContractTests : IDisposable
         Assert.True(net.Flags.HasFlag(MessageFlags.MovementPrevented));
         Assert.Equal("You are entangled in a net!", net.AppliedMessage);
         Assert.Null(net.Links);
+        Assert.Equal("You fumble in confusion!", net.ConfuseFumbleLine);
 
         MessageRecord belt = recs[1];
         Assert.Equal(MessageFlags.None, belt.Flags);
@@ -78,5 +82,6 @@ public sealed class MessagesSeedContractTests : IDisposable
         Assert.Single(belt.Links!);
         Assert.Equal("Items", belt.Links![0].Table);
         Assert.Equal(438, belt.Links[0].Number);
+        Assert.Equal(string.Empty, belt.ConfuseFumbleLine);   // key absent → default ""
     }
 }

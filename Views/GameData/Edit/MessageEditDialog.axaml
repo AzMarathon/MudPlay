@@ -49,7 +49,7 @@
 
             <!-- ===== Header fields (Name / Use / 4 perspective lines + EndsWith pair) ===== -->
             <Grid Grid.Row="0"
-                  ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   ColumnSpacing="8" RowSpacing="6">
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Name"/>
@@ -82,6 +82,19 @@
                 <TextBlock Grid.Row="6" Grid.Column="0" Classes="FieldLabel" Text="Wears off"
                            ToolTip.Tip="Wear-off line YOU see when the buff/debuff above expires."/>
                 <TextBox   Grid.Row="6" Grid.Column="1" Text="{Binding AppliedEndsWith, Mode=TwoWay}"/>
+
+                <!-- Confuse fumble: only shown when the Confused effect is checked. The
+                     wire line(s) this confuse source emits when it fumbles a just-sent
+                     command (one wording per line) — a fumbled MOVE reverts on any of them.
+                     Defaults to the generic "You fumble in confusion!"; add a spell's own
+                     wording here instead of hardcoding it. -->
+                <TextBlock Grid.Row="7" Grid.Column="0" Classes="FieldLabel" Text="Confuse fumble"
+                           IsVisible="{Binding FlagConfused}"
+                           ToolTip.Tip="Line(s) this confuse source emits when it fumbles a command — one per line. A fumbled move reverts on a match. Defaults to 'You fumble in confusion!'."/>
+                <TextBox   Grid.Row="7" Grid.Column="1" Text="{Binding ConfuseFumbleLine, Mode=TwoWay}"
+                           IsVisible="{Binding FlagConfused}"
+                           AcceptsReturn="True" TextWrapping="Wrap" MinHeight="46"
+                           PlaceholderText="You fumble in confusion!"/>
             </Grid>
 
             <!-- Below the line fields: when the record is valid, show the

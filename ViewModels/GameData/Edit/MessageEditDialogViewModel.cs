@@ -82,6 +82,11 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     [ObservableProperty] private bool _flagLastActionFailed;
     [ObservableProperty] private bool _flagDisabled;
 
+    // Per-source confusion fumble line(s), one wording per line — the textbox binding
+    // it is shown only while Confused is checked. Not part of the record identity, so
+    // editing it never re-Ids the record.
+    [ObservableProperty] private string _confuseFumbleLine = string.Empty;
+
     public IReadOnlyList<TierOption> AvailableTiers { get; } = new[]
     {
         new TierOption(SettingsTier.Defaults,  "Defaults"),
@@ -232,6 +237,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         WitnessMessage  = original.WitnessMessage;
         AppliedMessage  = original.AppliedMessage;
         AppliedEndsWith = original.AppliedEndsWith;
+        ConfuseFumbleLine = original.ConfuseFumbleLine;
 
         FlagBlinded           = original.Flags.HasFlag(MessageFlags.Blinded);
         FlagConfused          = original.Flags.HasFlag(MessageFlags.Confused);
@@ -267,7 +273,8 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
             WitnessMessage:  WitnessMessage  ?? string.Empty,
             AppliedMessage:  AppliedMessage  ?? string.Empty,
             AppliedEndsWith: AppliedEndsWith ?? string.Empty,
-            Links:           LinkRows.Select(r => new GameDataLink(r.Table, r.Number)).ToList());
+            Links:           LinkRows.Select(r => new GameDataLink(r.Table, r.Number)).ToList(),
+            ConfuseFumbleLine: ConfuseFumbleLine ?? string.Empty);
 
         CloseRequested?.Invoke(new MessageEditResult(_original, updated, UseTier));
     }

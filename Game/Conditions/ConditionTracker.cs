@@ -56,6 +56,12 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // any confusion source), so ending any alias ends the whole group — see OnLine.
     private Dictionary<string, List<MessageRecord>> _appliedAliases = new(StringComparer.Ordinal);
 
+    // Normalized confusion-fumble wordings pulled from every Confused record's
+    // ConfuseFumbleLine (one per line). A fumbled MOVE reverts on any of these — see
+    // MovementRefusalDetector, which queries IsConfuseFumbleLine instead of hardcoding
+    // the wordings. Rebuilt with the other indexes on every MessageStore change.
+    private List<string> _confuseFumbleIndex = new();
+
     private LineExtractor? _lines;
     private bool _disposed;
 
@@ -134,6 +140,31 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         return false;
     }
 
+    // True when text is one of the confusion-fumble wordings configured on a Confused
+    // record's ConfuseFumbleLine — the WHOLE line must match (ignoring surrounding
+    // whitespace, a trailing '.'/'!', and case) so a chat line quoting the phrase can't
+    // false-trigger. MovementRefusalDetector calls this to revert a fumbled move without
+    // hardcoding the wordings.
+    public bool IsConfuseFumbleLine(string text)
+    {
+        if (_confuseFumbleIndex.Count == 0 || string.IsNullOrEmpty(text)) return false;
+        string norm = NormalizeFumbleLine(text);
+        if (norm.Length == 0) return false;
+        foreach (string wording in _confuseFumbleIndex)
+            if (string.Equals(norm, wording, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    // Trim surrounding whitespace and one trailing sentence terminator so a stored
+    // "You fumble in confusion!" matches the wire "You fumble in confusion." and vice
+    // versa — the same tolerance the old anchored regexes carried.
+    private static string NormalizeFumbleLine(string s)
+    {
+        s = s.Trim();
+        if (s.Length > 0 && (s[^1] == '.' || s[^1] == '!')) s = s[..^1].TrimEnd();
+        return s;
+    }
+
     // Force-clear all conditions. Wire on disconnect / death / session reset —
     // server state changes reset the truth, our observation log is stale. This is
     // a safe over-clear: the tracker is an observation log, so any condition still
@@ -156,6 +187,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         List<(string, MessageRecord)> applied = new();
         List<(string, MessageRecord)> ends = new();
         Dictionary<string, List<MessageRecord>> aliases = new(StringComparer.Ordinal);
+        List<string> fumbles = new();
         foreach (MessageRecord r in _messages.Messages)
         {
             if (!string.IsNullOrWhiteSpace(r.AppliedMessage))
@@ -167,10 +199,17 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             }
             if (!string.IsNullOrWhiteSpace(r.AppliedEndsWith))
                 ends.Add((r.AppliedEndsWith, r));
+            if (r.Flags.HasFlag(MessageFlags.Confused) && !string.IsNullOrWhiteSpace(r.ConfuseFumbleLine))
+                foreach (string wording in r.ConfuseFumbleLine.Split('\n'))
+                {
+                    string norm = NormalizeFumbleLine(wording);
+                    if (norm.Length > 0) fumbles.Add(norm);
+                }
         }
         _appliedIndex = applied;
         _endsIndex = ends;
         _appliedAliases = aliases;
+        _confuseFumbleIndex = fumbles;
         _log?.Debug(LogCategory,
             $"index built — applied={applied.Count} endsWith={ends.Count} totalRecords={_messages.Messages.Count}");
 
