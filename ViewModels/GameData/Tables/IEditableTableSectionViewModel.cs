@@ -20,4 +20,10 @@ public interface IEditableTableSectionViewModel
     // null when the section can't remove rows. View binds IsEnabled to the selected-row
     // presence so the button greys out before invocation.
     ICommand? RemoveCommand => null;
+
+    // Optional secondary action, rendered as a button at the far right of the toolbar row
+    // (opposite the Add / Remove group). Its label comes from ExportLabel. null when the
+    // section offers no such action — the Incomplete Messages tab uses it for "Upload edits".
+    ICommand? ExportCommand => null;
+    string? ExportLabel => null;
 }

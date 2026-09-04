@@ -471,7 +471,11 @@ public sealed partial class CombatManager
                 // spells keep their mob; _castingSpellTarget still tracks the round's mob.
                 string? castTarget = decision.Action == CombatSpellAction.MultiAttack
                     ? null : picked.RawName;
-                if (_cast!.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true, bypassRecastInterval: bypassRecastInterval))
+                // AttacksBlocked short-circuits the cast: an AttackPrevented condition
+                // makes the server reject an attack spell exactly like a weapon swing, so
+                // fall into the owed/retry branch and re-attempt next tick when it clears.
+                if (!AttacksBlocked()
+                 && _cast!.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true, bypassRecastInterval: bypassRecastInterval))
                 {
                     // Do NOT tally MaxCasts here. Announcing is round 0 — the spell
                     // fires on the NEXT combat tick, not now — so the round is
@@ -1026,7 +1030,10 @@ public sealed partial class CombatManager
         // `stnk <mob>`; a single-target debuff keeps its mob.
         string? castTarget =
             decision.Action == CombatSpellAction.AreaDebuff ? null : picked.RawName;
-        if (!_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
+        // A pre-attack debuff is offensive output too — hold it while AttackPrevented is
+        // active. Returning false lets the caller try the attack directly, which its own
+        // AttacksBlocked gate then also holds, so nothing goes out until the block clears.
+        if (AttacksBlocked() || !_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
             return false;
 
         _spellChooser.MarkCast(decision, picked.RawName, ctx.RoomMobKeys);
