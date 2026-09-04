@@ -1828,6 +1828,13 @@ public sealed class AppServices
         // .bak first. Remove-after-rollout (tracked as a GitHub issue).
         DataMigration.RetireLegacyMessagesOnce(bootstrapLog);
 
+        // One-time forced reseed for the item-on-use → cast-spell recuration: this release
+        // rebuilt the Messages seeds (one message per cast spell, proc-damage records
+        // dropped, realm lines corrected), so an existing install's older Global seed /
+        // per-set edits are backed up to .bak and replaced with the shipped seed. Guarded
+        // by its own marker; remove-after-rollout.
+        DataMigration.ForceMessageReseedOnce(bootstrapLog);
+
         _current = new AppServices(bootstrapLog);
         return _current;
     }
