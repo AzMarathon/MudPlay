@@ -206,6 +206,12 @@ public partial class GameDataTableSectionView : UserControl
             RemoveButton.Command   = remove;
             RemoveButton.IsVisible = true;
         }
+        if (editable.ExportCommand is { } export)
+        {
+            ExportButton.Command   = export;
+            ExportButton.Content   = editable.ExportLabel ?? "Export";
+            ExportButton.IsVisible = true;
+        }
     }
 
     private void TryBuildColumns()

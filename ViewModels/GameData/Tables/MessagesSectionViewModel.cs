@@ -56,9 +56,15 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
     public IRelayCommand AddAsyncCommand { get; }
     public IAsyncRelayCommand RemoveSelectedCommand { get; }
 
+    // Far-right toolbar action: export the user's message edits (vs the shipped seed) to a
+    // Markdown file on the Desktop, so a curated line can be folded back into the seed.
+    public IRelayCommand UploadEditsCommand { get; }
+
     ICommand IEditableTableSectionViewModel.OpenEditCommand => OpenEditAsyncCommand;
     ICommand? IEditableTableSectionViewModel.AddCommand     => AddAsyncCommand;
     ICommand? IEditableTableSectionViewModel.RemoveCommand  => RemoveSelectedCommand;
+    ICommand? IEditableTableSectionViewModel.ExportCommand  => UploadEditsCommand;
+    string?   IEditableTableSectionViewModel.ExportLabel    => "Upload edits";
 
     private readonly NotifyCollectionChangedEventHandler _handler;
 
@@ -78,6 +84,7 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         OpenEditAsyncCommand  = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
         AddAsyncCommand       = new AsyncRelayCommand(AddAsync);
         RemoveSelectedCommand = new AsyncRelayCommand(RemoveSelectedAsync, () => SelectedRow is not null);
+        UploadEditsCommand    = new RelayCommand(UploadEdits);
 
         PropertyChanged += (_, e) =>
         {
@@ -347,5 +354,49 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         if (targets.Count == 0) return;
         foreach (MessageRecord t in targets) _store.Messages.Remove(t);
         _store.Save();
+    }
+
+    // Diff the active set's live catalogue against the bundled (shipped) seed for its realm
+    // and write every ADDED / CHANGED record to a Markdown file on the Desktop — the
+    // user's message edits, keyed by spell / item, for the dev to fold back into the seed.
+    // No-op (logged) when no set is active or the seed can't be read.
+    private void UploadEdits()
+    {
+        AppServices svc = AppServices.Current;
+        string? set = _store.ActiveSet;
+        if (string.IsNullOrWhiteSpace(set))
+        {
+            svc.Log.Warn("Messages", "Upload edits: no active game-data set — nothing to export.");
+            return;
+        }
+
+        string realm = GameDataRealm.Resolve(set);
+        List<MessageRecord> baseline;
+        try
+        {
+            baseline = JsonStore.Load<List<MessageRecord>>(AppPaths.BundledMessagesSeedFile(realm))
+                       ?? new List<MessageRecord>();
+        }
+        catch (Exception ex)
+        {
+            svc.Log.Error("Messages", $"Upload edits: couldn't read the bundled '{realm}' seed: {ex.Message}");
+            return;
+        }
+
+        IReadOnlyList<MessageEditExporter.RecordEdit> edits = MessageEditExporter.Diff(_store.Messages, baseline);
+        DateTime now = DateTime.Now;
+        string content = MessageEditExporter.Render(edits, realm, set, now);
+        try
+        {
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string path = Path.Combine(desktop, MessageEditExporter.FileName(realm, now));
+            File.WriteAllText(path, content);
+            svc.Log.Info("Messages",
+                $"Upload edits: wrote {edits.Count} message edit(s) for realm '{realm}' to {path}.");
+        }
+        catch (Exception ex)
+        {
+            svc.Log.Error("Messages", $"Upload edits: failed to write the export file: {ex.Message}");
+        }
     }
 }
