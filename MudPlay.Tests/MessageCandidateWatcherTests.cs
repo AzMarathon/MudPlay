@@ -181,6 +181,23 @@ public sealed class MessageCandidateWatcherTests
     }
 
     [Fact]
+    public void DismissedLine_IsIgnoredOnRecurrence()
+    {
+        Harness h = new();
+        h.Feed("A shimmering aura surrounds you!");         // stages candidate (occ 1)
+        MessageCandidateRecord c = Assert.Single(h.Candidates.Candidates);
+        h.Candidates.Dismiss(c.Id);
+
+        int warnAfter = 0;
+        h.Log.EntryAdded += e => { if (e.Severity == LogSeverity.Warn) warnAfter++; };
+        h.Feed("A shimmering aura surrounds you!");         // recurrence of a dismissed line
+
+        Assert.Single(h.Candidates.Candidates);             // no duplicate
+        Assert.Equal(1, h.Candidates.Candidates[0].Occurrences);  // not bumped
+        Assert.Equal(0, warnAfter);                         // no re-alert
+    }
+
+    [Fact]
     public void DisabledWatcher_NeverCreatesCandidates()
     {
         Harness h = new();

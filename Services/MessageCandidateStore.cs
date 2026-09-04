@@ -97,6 +97,10 @@ public sealed class MessageCandidateStore
         for (int i = 0; i < Candidates.Count; i++)
         {
             if (Candidates[i].Id != id) continue;
+            // A dismissed candidate is frozen — a recurrence neither bumps its
+            // count nor re-saves (the watcher already gates on IsDismissed; this
+            // keeps a direct call honest too).
+            if (Candidates[i].Dismissed) return (Candidates[i], false);
             MessageCandidateRecord bumped = Candidates[i] with
             {
                 LastSeenAt = when,
@@ -114,9 +118,12 @@ public sealed class MessageCandidateStore
         return (created, true);
     }
 
-    // Sticky dismiss — marks the record Dismissed rather than removing it, so a
-    // future recurrence of the same text bumps the existing dismissed record
-    // instead of re-alerting as new. No-op if id isn't found.
+    // Dismiss — marks the record Dismissed and freezes it: the row stays in the
+    // table (occurrence count frozen where it was) but the watcher then ignores
+    // every future recurrence of that text entirely (IsDismissed gate) — no
+    // re-add, no bump, no re-alert. A final "decided, stop tracking" verdict, as
+    // distinct from Remove (hard delete, which lets a later recurrence re-capture
+    // the line as new). No-op if id isn't found.
     public void Dismiss(string id)
     {
         for (int i = 0; i < Candidates.Count; i++)
@@ -139,6 +146,18 @@ public sealed class MessageCandidateStore
         string id = MessageCandidateRecord.ComputeId(rawText);
         foreach (MessageCandidateRecord c in Candidates)
             if (c.Id == id) return true;
+        return false;
+    }
+
+    // True when this exact text is already staged AND marked dismissed — the
+    // watcher uses this to drop a recurrence of a dismissed line entirely (no
+    // re-add, no occurrence bump, no re-alert): dismissal is a final "I've
+    // decided about this line, stop tracking it" verdict.
+    public bool IsDismissed(string rawText)
+    {
+        string id = MessageCandidateRecord.ComputeId(rawText);
+        foreach (MessageCandidateRecord c in Candidates)
+            if (c.Id == id) return c.Dismissed;
         return false;
     }
 

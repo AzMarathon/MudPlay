@@ -152,6 +152,9 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (text.Length < MinLineLength) return;
         if (_knownLines.Contains(text)) return;
         if (_router.AnyPatternMatches(line)) return;
+        // A dismissed candidate is a final verdict — drop every recurrence
+        // outright: no re-add, no occurrence bump, no re-alert.
+        if (_candidates.IsDismissed(text)) return;
 
         DateTimeOffset now = line.Timestamp;
 

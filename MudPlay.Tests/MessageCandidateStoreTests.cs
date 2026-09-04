@@ -41,7 +41,7 @@ public sealed class MessageCandidateStoreTests
     }
 
     [Fact]
-    public void Dismiss_MarksDismissed_ButKeepsDedupTracking()
+    public void Dismiss_FreezesTheRecord_RecurrenceDoesNotBump()
     {
         MessageCandidateStore store = new();
         DateTimeOffset t0 = DateTimeOffset.UtcNow;
@@ -49,14 +49,14 @@ public sealed class MessageCandidateStoreTests
 
         store.Dismiss(created.Id);
         Assert.True(store.Candidates[0].Dismissed);
+        Assert.True(store.IsDismissed("Boring line"));
 
-        // A later recurrence bumps the existing dismissed record instead of
-        // duplicating it or re-alerting — dismissal only stops the watcher's
-        // first-sighting Warn, not dedup tracking.
+        // A later recurrence of a dismissed line is ignored entirely — no bump,
+        // no duplicate, still dismissed (final "decided, stop tracking" verdict).
         (MessageCandidateRecord record, bool isNew) = store.RecordSighting("Boring line", t0.AddMinutes(1));
         Assert.False(isNew);
         Assert.True(record.Dismissed);
-        Assert.Equal(2, record.Occurrences);
+        Assert.Equal(1, record.Occurrences);
         Assert.Single(store.Candidates);
     }
 

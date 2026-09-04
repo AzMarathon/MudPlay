@@ -44,7 +44,14 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
 
     // Open the same edit dialog the Messages tab uses, pre-seeded with the raw text.
     public IRelayCommand<GameDataRow?> OpenEditAsyncCommand { get; }
+    // Remove = hard-delete the selected row(s) from the catalogue (matches every
+    // other table's Remove). A later recurrence re-captures the line as new.
     public IRelayCommand RemoveSelectedCommand { get; }
+    // Dismiss = sticky "decided, stop tracking" — the row stays (frozen) and the
+    // watcher ignores every future recurrence of that text.
+    public IRelayCommand DismissSelectedCommand { get; }
+    // Export every non-dismissed candidate to a Desktop file for review.
+    public IRelayCommand ExportNonDismissedCommand { get; }
     // Test-only: feed a synthetic unrecognized line through the watcher so a
     // candidate appears here. Null (button absent) unless a watcher was supplied.
     public IRelayCommand? SimulateEntryCommand { get; }
@@ -54,6 +61,10 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
     // (Game.MessageCandidateWatcher); there's nothing to hand-add here.
     ICommand? IEditableTableSectionViewModel.AddCommand     => null;
     ICommand? IEditableTableSectionViewModel.RemoveCommand  => RemoveSelectedCommand;
+    ICommand? IEditableTableSectionViewModel.DismissCommand => DismissSelectedCommand;
+    string?  IEditableTableSectionViewModel.DismissLabel    => "Dismiss";
+    ICommand? IEditableTableSectionViewModel.ExportCommand  => ExportNonDismissedCommand;
+    string?  IEditableTableSectionViewModel.ExportLabel     => "Export";
 
     // The far-right "Simulate entry" test button — present only when a watcher
     // is wired, and shown only while the Log pane's Simulate dropdown reveals it
@@ -90,6 +101,8 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         _candidates.Candidates.CollectionChanged += _handler;
         OpenEditAsyncCommand  = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
         RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => SelectedRow is not null);
+        DismissSelectedCommand = new RelayCommand(DismissSelected, () => SelectedRow is not null);
+        ExportNonDismissedCommand = new RelayCommand(ExportNonDismissed);
         if (_watcher is not null)
             SimulateEntryCommand = new RelayCommand(() => _watcher.SimulateCapture());
         // Mirror the Log pane's Simulate-dropdown toggle so the button appears /
@@ -99,7 +112,10 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SelectedRow))
+            {
                 RemoveSelectedCommand.NotifyCanExecuteChanged();
+                DismissSelectedCommand.NotifyCanExecuteChanged();
+            }
         };
 
         Reload();
@@ -154,23 +170,67 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         MessageCandidateCommit.Commit(_messages, _candidates, result, candidate.Id);
     }
 
-    // Dismiss the selected row(s) — sticky, not a hard delete
-    // (MessageCandidateStore.Dismiss): a dismissed candidate keeps counting
-    // occurrences in the background, so a genuinely boring recurring line
-    // doesn't quietly resurface and re-alert as "new" in a later session.
-    // That's a real deviation from every other table's Remove (hard-delete),
-    // so unlike a typical RemoveSelectedAsync this deliberately skips a
-    // Confirm.ConfirmDeleteAsync prompt — nothing is actually being deleted,
-    // and a "Delete this?" dialog would misleadingly imply otherwise.
-    private void RemoveSelected()
+    // Hard-remove the selected row(s) from the catalogue — matches every other
+    // table's Remove. A candidate is transient review data, not curated game
+    // data, so this deliberately skips the Confirm.ConfirmDeleteAsync prompt the
+    // curated tables use; a later recurrence simply re-captures the line as new.
+    private void RemoveSelected() => ForEachSelected(id => _candidates.Remove(id));
+
+    // Dismiss the selected row(s) — sticky "decided, stop tracking": the row
+    // stays (frozen) but the watcher then ignores every recurrence of that text
+    // (MessageCandidateStore.Dismiss + the watcher's IsDismissed gate). No
+    // confirm prompt — nothing is deleted, so a "Delete this?" dialog would mislead.
+    private void DismissSelected() => ForEachSelected(id => _candidates.Dismiss(id));
+
+    private void ForEachSelected(Action<string> act)
     {
         IReadOnlyList<GameDataRow> selection = SelectedRows.Count > 0
             ? new List<GameDataRow>(SelectedRows)
             : (SelectedRow is null ? Array.Empty<GameDataRow>() : new[] { SelectedRow });
-        if (selection.Count == 0) return;
-
         foreach (GameDataRow row in selection)
             if (row.Tag is MessageCandidateRecord candidate)
-                _candidates.Dismiss(candidate.Id);
+                act(candidate.Id);
+    }
+
+    // Write every non-dismissed candidate to a timestamped file on the Desktop —
+    // the raw line plus its Seen-In location, occurrence count, and Likely-source
+    // shortlist — so a batch of unattributed lines can be handed off for review.
+    private void ExportNonDismissed()
+    {
+        var pending = _candidates.Candidates.Where(c => !c.Dismissed).ToList();
+        LogService? log = AppServices.CurrentOrNull?.Log;
+        if (pending.Count == 0)
+        {
+            log?.Info("Unrecognized Lines", "Export: no non-dismissed lines to write.");
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("# Unrecognized lines — ").Append(pending.Count)
+          .Append(pending.Count == 1 ? " line" : " lines").Append('\n').Append('\n');
+        foreach (MessageCandidateRecord c in pending)
+        {
+            sb.Append("- ").Append(c.RawText).Append('\n');
+            string loc = c.Map is { } m && c.Room is { } rm ? $"{m}:{rm}" : "unknown";
+            sb.Append("  - seen in: ").Append(loc)
+              .Append("  ·  occurrences: ").Append(c.Occurrences).Append('\n');
+            if (c.Map is { } lm && c.Room is { } lr
+                && _likelySource?.Invoke(lm, lr) is { Length: > 0 } src)
+                sb.Append("  - likely source: ").Append(src).Append('\n');
+        }
+
+        try
+        {
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            // Date.Now is app-runtime state (not a workflow script) — fine here.
+            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+            string path = System.IO.Path.Combine(desktop, $"unrecognized-lines-{stamp}.md");
+            System.IO.File.WriteAllText(path, sb.ToString());
+            log?.Info("Unrecognized Lines", $"Export: wrote {pending.Count} line(s) to {path}.");
+        }
+        catch (Exception ex)
+        {
+            log?.Error("Unrecognized Lines", $"Export: failed to write the file: {ex.Message}");
+        }
     }
 }

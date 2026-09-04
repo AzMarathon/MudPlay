@@ -211,6 +211,12 @@ public partial class GameDataTableSectionView : UserControl
             RemoveButton.Command   = remove;
             RemoveButton.IsVisible = true;
         }
+        if (editable.DismissCommand is { } dismiss)
+        {
+            DismissButton.Command   = dismiss;
+            DismissButton.Content   = editable.DismissLabel ?? "Dismiss";
+            DismissButton.IsVisible = true;
+        }
         if (editable.ExportCommand is { } export)
         {
             ExportButton.Command   = export;

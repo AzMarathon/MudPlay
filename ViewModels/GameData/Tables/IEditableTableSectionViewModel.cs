@@ -21,6 +21,12 @@ public interface IEditableTableSectionViewModel
     // presence so the button greys out before invocation.
     ICommand? RemoveCommand => null;
 
+    // Optional Dismiss button next to Remove — a softer "decided, stop tracking" action
+    // distinct from a hard Remove. Only the Unrecognized Lines tab uses it (sticky-dismiss
+    // a candidate so its recurrences are ignored); every other section leaves it null.
+    ICommand? DismissCommand => null;
+    string? DismissLabel => null;
+
     // Optional secondary action, rendered as a button at the far right of the toolbar row
     // (opposite the Add / Remove group). Its label comes from ExportLabel. null when the
     // section offers no such action — the Incomplete Messages tab uses it for "Upload edits".

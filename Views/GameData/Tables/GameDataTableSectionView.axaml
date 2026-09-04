@@ -77,6 +77,8 @@
                              Width="320"/>
                     <Button x:Name="AddButton"    Content="Add"    IsVisible="False"/>
                     <Button x:Name="RemoveButton" Content="Remove" IsVisible="False"/>
+                    <!-- Optional soft "Dismiss" (Unrecognized Lines tab); wired in code-behind. -->
+                    <Button x:Name="DismissButton" Content="Dismiss" IsVisible="False"/>
                 </StackPanel>
             </DockPanel>
 
