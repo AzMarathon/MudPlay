@@ -434,9 +434,9 @@ public static class BugReportBuilder
             if (!string.IsNullOrWhiteSpace(o.OverrideAttackCommand))
                 parts.Add($"attack-cmd \"{o.OverrideAttackCommand}\"");
             if (o.OverrideAttackSpellId is { } atk and > 0)
-                parts.Add($"attack-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}");
+                parts.Add($"attack-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}{ManaSuffix(o.OverrideAttackMinMana)}");
             if (o.OverridePreAttackSpellId is { } pre and > 0)
-                parts.Add($"pre-attack {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}");
+                parts.Add($"pre-attack {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}{ManaSuffix(o.OverridePreAttackMinMana)}");
             if (o.DontBackstab == true) parts.Add("dontBackstab");
             if (o.KillOnSight == true) parts.Add("killOnSight");
             if (parts.Count == 0) parts.Add("(no live fields)");
@@ -492,6 +492,7 @@ public static class BugReportBuilder
 
     // " x20" for a positive per-room cast cap; blank for null/0 (unlimited).
     private static string CountSuffix(int? count) => count is > 0 ? $" x{count}" : string.Empty;
+    private static string ManaSuffix(int? mana) => mana is > 0 ? $" m{mana}" : string.Empty;
 
     // The engine's live engageability verdict for every monster seen in the
     // current room — the reasoning behind a "skip un-actionable … Unkillable"

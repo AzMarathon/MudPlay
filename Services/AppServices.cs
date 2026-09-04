@@ -248,6 +248,13 @@ public sealed class AppServices
     // engines that gate on HP / MP thresholds.
     public Game.PlayerState PlayerState { get; }
 
+    // True when the character's Combat-tab min-mana threshold is read as a percentage
+    // (vs an absolute value). Surfaced so per-monster override editors can present the
+    // same min-mana control (% cap vs absolute ceiling) as Settings → Combat.
+    public bool CombatSpellManaModeIsPercentage =>
+        ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat")
+            .SpellManaThresholdMode == Models.Profile.ThresholdMode.Percentage;
+
     // Parses MajorMUD status-line prompts into PlayerState.
     // Sole writer of the state's HP / MA / position / mana-type fields
     // (the single-writer IL scan enforces this).

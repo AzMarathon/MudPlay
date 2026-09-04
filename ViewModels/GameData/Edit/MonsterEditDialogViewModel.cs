@@ -1,7 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 
@@ -31,13 +34,62 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     [ObservableProperty] private MonsterAttackPriority _priority = MonsterAttackPriority.Normal;
 
     [ObservableProperty] private string _preAttackSpellId = string.Empty;
-    [ObservableProperty] private string _preAttackCount = string.Empty;
+    // Per-room cast cap — null (blank) = unlimited, matching CombatSpellSlot.MaxCastsPerRoom
+    // and the Settings → Combat NumericUpDown.
+    [ObservableProperty] private int? _preAttackCount;
+    // Minimum mana to cast the override pre-attack — 0 = no floor. Interpreted per the
+    // char's Combat-tab mana mode; SpellManaMax + PreAttackMinManaConverted mirror the
+    // Settings → Combat spell-slot control. Mirrors CombatSpellSlot.MinManaPerCast.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PreAttackMinManaConverted))]
+    private int _preAttackMinMana;
     // "Override Attack" holds a Spell.Number, OR a spell cast-code that resolves
     // to one (both land on the mana-gated spell rung; Max is an optional per-room
     // cap, blank = unlimited), OR a raw verb like "attack"/"bash" that doesn't
     // resolve to any spell (sent as-is, no gating). See ParseAttackOverride.
     [ObservableProperty] private string _attackOverride = string.Empty;
-    [ObservableProperty] private string _attackCount = string.Empty;
+    // Per-room cast cap — null (blank) = unlimited (matches Combat's NumericUpDown).
+    [ObservableProperty] private int? _attackCount;
+    // Minimum mana to cast the override attack (same interpretation as pre-attack);
+    // ignored when the override resolves to a raw command rather than a spell.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AttackMinManaConverted))]
+    private int _attackMinMana;
+
+    // Min-mana control parity with Settings → Combat: SpellManaMax caps the NumericUpDown
+    // (100 in % mode, the absolute ceiling in Value mode) and the Converted strings show
+    // the %↔value equivalent against the character's live max mana (snapshot at open).
+    private readonly bool _manaModePercentage;
+    private readonly int _liveMaxMa;
+
+    public decimal SpellManaMax => _manaModePercentage ? 100 : 100_000;
+    public string PreAttackMinManaConverted => FormatMana(PreAttackMinMana);
+    public string AttackMinManaConverted    => FormatMana(AttackMinMana);
+
+    // Percentage mode shows the absolute mana equivalent ("54/66"); Value mode shows the
+    // percentage ("82%"). Empty until a prompt has given us a live max mana. Same rule as
+    // CombatSectionViewModel.FormatMana.
+    private string FormatMana(int value)
+    {
+        if (_liveMaxMa <= 0) return string.Empty;
+        return _manaModePercentage
+            ? $"{(int)System.Math.Round(_liveMaxMa * value / 100.0)}/{_liveMaxMa}"
+            : $"{(int)System.Math.Round(value * 100.0 / _liveMaxMa)}%";
+    }
+
+    // Spell typeahead for the two override pickers — the character's castable spells
+    // (SpellbookState.AvailablePicks), same source the Settings → Combat spell slots
+    // use. Empty in headless tests. The box commits the pick's Short cast-code.
+    public IReadOnlyList<SpellPick> SpellSuggestions { get; }
+
+    // Match typed text against either the cast-code or the spell name, so a slot is
+    // findable by code or name even though the box commits the code.
+    public AutoCompleteFilterPredicate<object?> SpellSuggestionFilter { get; } =
+        static (search, item) =>
+            item is SpellPick pick &&
+            (string.IsNullOrEmpty(search)
+             || pick.Short.Contains(search, StringComparison.OrdinalIgnoreCase)
+             || pick.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
 
     [ObservableProperty] private bool _dontBackstab;
 
@@ -96,10 +148,16 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         IReadOnlyList<SettingsTier>? writableTiers = null,
         MonsterOverlay? installedDefaults = null,
         Func<string, int?>? resolveSpellShort = null,
-        Func<int, string?>? resolveSpellNumber = null)
+        Func<int, string?>? resolveSpellNumber = null,
+        IReadOnlyList<SpellPick>? spellSuggestions = null,
+        bool manaModePercentage = true,
+        int liveMaxMa = 0)
     {
         _resolveSpellShort = resolveSpellShort;
         _resolveSpellNumber = resolveSpellNumber;
+        SpellSuggestions = spellSuggestions ?? Array.Empty<SpellPick>();
+        _manaModePercentage = manaModePercentage;
+        _liveMaxMa = liveMaxMa;
         WccNoStr      = wccNoStr;
         MonsterNumber = int.TryParse(wccNoStr, out int n) ? n : 0;
         Name          = existing?.Name ?? mdbName;
@@ -119,7 +177,8 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         Priority     = existing?.Priority     ?? MonsterAttackPriority.Normal;
 
         PreAttackSpellId = (existing?.OverridePreAttackSpellId is { } pi) ? pi.ToString() : string.Empty;
-        PreAttackCount   = (existing?.OverridePreAttackCount   is { } pc) ? pc.ToString() : string.Empty;
+        PreAttackCount   = existing?.OverridePreAttackCount;
+        PreAttackMinMana = existing?.OverridePreAttackMinMana ?? 0;
         // A command override wins the box display; else show the spell's cast-code
         // when it resolves (round-trips a typed "agon" back to "agon", not its
         // internal number), falling back to the bare number when it doesn't.
@@ -128,7 +187,8 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
             : (existing?.OverrideAttackSpellId is { } ai
                 ? (_resolveSpellNumber?.Invoke(ai) ?? ai.ToString())
                 : string.Empty);
-        AttackCount      = (existing?.OverrideAttackCount      is { } ac) ? ac.ToString() : string.Empty;
+        AttackCount      = existing?.OverrideAttackCount;
+        AttackMinMana    = existing?.OverrideAttackMinMana ?? 0;
 
         DontBackstab = existing?.DontBackstab ?? false;
         KillOnSight  = existing?.KillOnSight  ?? false;
@@ -141,13 +201,15 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
             installedDefaults?.Relationship ?? MonsterRelationship.Enemy,
             installedDefaults?.Priority ?? MonsterAttackPriority.Normal,
             installedDefaults?.OverridePreAttackSpellId?.ToString() ?? string.Empty,
-            installedDefaults?.OverridePreAttackCount?.ToString() ?? string.Empty,
+            installedDefaults?.OverridePreAttackCount,
+            installedDefaults?.OverridePreAttackMinMana ?? 0,
             installedDefaults?.OverrideAttackCommand is { Length: > 0 } dc
                 ? dc
                 : (installedDefaults?.OverrideAttackSpellId is { } dai
                     ? (_resolveSpellNumber?.Invoke(dai) ?? dai.ToString())
                     : string.Empty),
-            installedDefaults?.OverrideAttackCount?.ToString() ?? string.Empty,
+            installedDefaults?.OverrideAttackCount,
+            installedDefaults?.OverrideAttackMinMana ?? 0,
             installedDefaults?.DontBackstab ?? false,
             installedDefaults?.KillOnSight ?? false,
             _resolveSpellShort);
@@ -157,8 +219,8 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     private void Save()
     {
         MonsterOverlay overlay = Compose(
-            Name, Relationship, Priority, PreAttackSpellId, PreAttackCount,
-            AttackOverride, AttackCount, DontBackstab, KillOnSight, _resolveSpellShort);
+            Name, Relationship, Priority, PreAttackSpellId, PreAttackCount, PreAttackMinMana,
+            AttackOverride, AttackCount, AttackMinMana, DontBackstab, KillOnSight, _resolveSpellShort);
 
         // A record (value-equal) comparison against the defaults baseline: true means
         // the user dragged everything back to the seed, so the caller clears the tier's
@@ -171,7 +233,8 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     // defaults-baseline capture, so the two are guaranteed to compare apples-to-apples.
     private static MonsterOverlay Compose(
         string name, MonsterRelationship relationship, MonsterAttackPriority priority,
-        string preAttackSpellId, string preAttackCount, string attackOverride, string attackCount,
+        string preAttackSpellId, int? preAttackCount, int preAttackMinMana,
+        string attackOverride, int? attackCount, int attackMinMana,
         bool dontBackstab, bool killOnSight, Func<string, int?>? resolveSpellShort)
     {
         (int? attackSpellId, string? attackCommand) = ParseAttackOverride(attackOverride, resolveSpellShort);
@@ -181,9 +244,11 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
             Relationship             = relationship,
             Priority                 = priority,
             OverridePreAttackSpellId = ParseNullableInt(preAttackSpellId),
-            OverridePreAttackCount   = ParseNullableInt(preAttackCount),
+            OverridePreAttackCount   = preAttackCount,
+            OverridePreAttackMinMana = preAttackMinMana > 0 ? preAttackMinMana : null,
             OverrideAttackSpellId    = attackSpellId,
-            OverrideAttackCount      = ParseNullableInt(attackCount),
+            OverrideAttackCount      = attackCount,
+            OverrideAttackMinMana    = attackMinMana > 0 ? attackMinMana : null,
             OverrideAttackCommand    = attackCommand,
             DontBackstab             = dontBackstab,
             KillOnSight              = killOnSight,

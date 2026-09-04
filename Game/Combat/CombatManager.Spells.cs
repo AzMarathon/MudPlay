@@ -1278,8 +1278,8 @@ public sealed partial class CombatManager
         int enemyCount, int monsterNumber)
     {
         (int ma, int maxMa) = _readMana!();
-        (string? attackOverride, int? attackCap) = AttackOverrideFor(monsterNumber);
-        (string? preAttackOverride, int? preAttackCap) = PreAttackOverrideFor(monsterNumber);
+        (string? attackOverride, int? attackCap) = AttackOverrideFor(monsterNumber, ma, maxMa, settings.SpellManaThresholdMode);
+        (string? preAttackOverride, int? preAttackCap) = PreAttackOverrideFor(monsterNumber, ma, maxMa, settings.SpellManaThresholdMode);
         (bool hpBelowDrain, bool drainEligible) = DrainGates(settings, monsterNumber);
         return new CombatSpellContext(
             EnemyCount:          enemyCount,
@@ -1381,10 +1381,16 @@ public sealed partial class CombatManager
     // Resolve this monster's override attack spell to a (cast-code, cap) pair, or
     // (null, null) when there's no active override. Delegates to the shared
     // resolver — see ResolveSpellOverride for the "active" conditions.
-    private (string? Spell, int? Cap) AttackOverrideFor(int monsterNumber)
+    private (string? Spell, int? Cap) AttackOverrideFor(int monsterNumber, int mana, int maxMana, ThresholdMode manaMode)
     {
         if (monsterNumber < 0) return (null, null);
         MonsterOverlay overlay = ResolveOverlay(monsterNumber);
+        // Per-monster mana floor (read as % or absolute per the char's Combat-tab mode,
+        // exactly like a CombatSpellSlot.MinManaPerCast): below it the override holds and
+        // the normal combat flow takes the round.
+        int floor = overlay.OverrideAttackMinMana ?? 0;
+        if (floor > 0 && !CombatSpellChooser.ManaMeetsReserve(floor, mana, maxMana, manaMode))
+            return (null, null);
         return ResolveSpellOverride(overlay.OverrideAttackSpellId, overlay.OverrideAttackCount);
     }
 
@@ -1402,10 +1408,13 @@ public sealed partial class CombatManager
 
     // Resolve this monster's override pre-attack spell to a (cast-code, cap) pair,
     // or (null, null) when there's no active override.
-    private (string? Spell, int? Cap) PreAttackOverrideFor(int monsterNumber)
+    private (string? Spell, int? Cap) PreAttackOverrideFor(int monsterNumber, int mana, int maxMana, ThresholdMode manaMode)
     {
         if (monsterNumber < 0) return (null, null);
         MonsterOverlay overlay = ResolveOverlay(monsterNumber);
+        int floor = overlay.OverridePreAttackMinMana ?? 0;
+        if (floor > 0 && !CombatSpellChooser.ManaMeetsReserve(floor, mana, maxMana, manaMode))
+            return (null, null);
         return ResolveSpellOverride(overlay.OverridePreAttackSpellId, overlay.OverridePreAttackCount);
     }
 

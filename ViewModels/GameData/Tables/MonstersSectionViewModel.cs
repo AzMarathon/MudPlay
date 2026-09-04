@@ -414,7 +414,14 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             resolveSpellShort: AppServices.Current.SpellShort.NumberByShort,
             // Inverse — shows the cast-code again on reopen instead of the
             // internal Spells.Number it resolved to.
-            resolveSpellNumber: AppServices.Current.SpellShort.ShortByNumber);
+            resolveSpellNumber: AppServices.Current.SpellShort.ShortByNumber,
+            // Typeahead for the override spell pickers — the character's castable
+            // spells, same source the Settings → Combat spell slots use.
+            spellSuggestions:   AppServices.Current.Spellbook.AvailablePicks,
+            // Min-mana control parity with Settings → Combat (mode caps the box + drives
+            // the %↔value label; live max mana snapshot for the conversion).
+            manaModePercentage: AppServices.Current.CombatSpellManaModeIsPercentage,
+            liveMaxMa:          AppServices.Current.PlayerState.MaxMa);
 
         MonsterEditResult? result = await _dialogs.OpenWindowAsync<MonsterEditDialogViewModel, MonsterEditResult>(vm);
         if (result is null) return;
