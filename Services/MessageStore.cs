@@ -51,18 +51,48 @@ public sealed class MessageStore
     //      a paradigm realm carries message records a stock realm doesn't, and
     //      vice-versa. Bootstrapped from the bundled Defaults/ copies on first
     //      launch via AppPaths.EnsureGlobalSeedsBootstrapped.
-    // The seed itself is never written.
+    //   3. Bundled seed AppPaths.BundledMessagesSeedFile(realm) shipped beside the
+    //      app — the read-only floor. Reached only when the Global copy is missing
+    //      (never bootstrapped, or deleted), so the catalogue is never empty for a
+    //      realm we ship. Consulted last, it never overrides a user's per-set edits.
+    // Neither seed is ever written.
     public void Load(string? setName)
     {
         ActiveSet = setName;
-        if (string.IsNullOrWhiteSpace(setName)) { Messages.ReplaceAll([]); return; }
+        if (string.IsNullOrWhiteSpace(setName))
+        {
+            Messages.ReplaceAll([]);
+            _log?.Log(LogSeverity.Info, "Messages", "no active game-data set — message catalogue cleared.");
+            return;
+        }
 
         string realm = GameDataRealm.Resolve(setName);
-        List<MessageRecord> loaded =
-            TryLoad(AppPaths.MessagesFile(setName)) ??
-            TryLoad(AppPaths.MessagesSeedFile(realm)) ??
-            [];
+        (List<MessageRecord> loaded, string source) = LoadFrom(setName, realm);
         Messages.ReplaceAll(loaded);
+
+        if (loaded.Count == 0)
+            _log?.Log(LogSeverity.Warn, "Messages",
+                $"set '{setName}' (realm '{realm}'): 0 message records — no per-set file, Global seed, or bundled " +
+                "seed was found or parsed, so the Messages tab will be empty and no lines are recognized.");
+        else
+            _log?.Log(LogSeverity.Info, "Messages",
+                $"set '{setName}' (realm '{realm}'): loaded {loaded.Count} message records from {source}.");
+    }
+
+    // First readable source wins: the per-set file (persisted user edits) → the Global
+    // realm seed (bootstrapped on first launch) → the bundled realm seed shipped beside the
+    // app. The bundled copy is the floor — a genuinely-missing Global seed (never
+    // bootstrapped, or deleted) still yields the shipped catalogue instead of an empty one,
+    // and because it is consulted last it can never override a user's per-set edits.
+    private (List<MessageRecord> Records, string Source) LoadFrom(string setName, string realm)
+    {
+        if (TryLoad(AppPaths.MessagesFile(setName)) is { } perSet)
+            return (perSet, "per-set file");
+        if (TryLoad(AppPaths.MessagesSeedFile(realm)) is { } globalSeed)
+            return (globalSeed, "Global seed");
+        if (TryLoad(AppPaths.BundledMessagesSeedFile(realm)) is { } bundled)
+            return (bundled, "bundled seed");
+        return ([], "none");
     }
 
     // Read a JSON list from path. Returns the parsed list (possibly empty) iff
