@@ -99,7 +99,12 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // Editable Links list — see LinkRow for shape.
     public System.Collections.ObjectModel.ObservableCollection<LinkRow> LinkRows { get; } = new();
 
-    public IReadOnlyList<string> LinkTables { get; } = new[] { "Spells", "Items", "Monsters" };
+    // Spells only — this dialog exists to author the message text a spell record
+    // lacks (the MDB imports every spell field EXCEPT its caster/target/witness/
+    // applied/wears-off lines). Item on-use and monster abilities both resolve to
+    // a spell in the Spells table, so there is never a reason to attach a message
+    // to an Item or Monster record here; offering those tables was dead weight.
+    public IReadOnlyList<string> LinkTables { get; } = new[] { "Spells" };
 
     [ObservableProperty] private string _addLinkTable = "Spells";
 
