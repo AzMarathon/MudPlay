@@ -479,7 +479,7 @@
   {
     "Id": "c0737901492dd2e9",
     "Name": "black wind",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "A cool wind blows throughout the room!",
     "TargetMessage": "A cool wind blows around you!",
@@ -496,7 +496,7 @@
   {
     "Id": "6a7ced0c10ec9cbc",
     "Name": "black wind",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "A black wind sweeps throughout the room!",
     "TargetMessage": "A cool wind blows around you!",
@@ -1522,7 +1522,7 @@
   {
     "Id": "c898328309f6fd79",
     "Name": "disease",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -2628,7 +2628,7 @@
   {
     "Id": "e88399801dfd405a",
     "Name": "giant skeleton shriek",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "A storm of freezing hail smashes {target} for {damage} damage!",
     "TargetMessage": "The {source}'s unearthly shriek strikes terror into your heart!",
@@ -2934,7 +2934,7 @@
   {
     "Id": "8c2df78d53a9a489",
     "Name": "gruesome curse",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "A gruesome curse springs forth and you feel tainted!",
@@ -3497,7 +3497,7 @@
   {
     "Id": "916b5163cac6177a",
     "Name": "leprosy",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "You writhe in agony as your flesh erupts and splits open!",
@@ -3820,7 +3820,7 @@
   {
     "Id": "4a80f38bdd48f8d5",
     "Name": "mass entangle",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "A cluster of vines swell from the ground, entangling your foes!",
     "TargetMessage": "A cluster of vines swell from the ground!",
@@ -4263,7 +4263,7 @@
   {
     "Id": "63b0d73f9f9d8a01",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -4280,7 +4280,7 @@
   {
     "Id": "70b3575c5175904d",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -4297,7 +4297,7 @@
   {
     "Id": "20858c4dd7169e8c",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -4824,7 +4824,7 @@
   {
     "Id": "8b8ebf7983641a1d",
     "Name": "rotting flesh",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "You cast {spellname} on {target}!",
     "TargetMessage": "{source} casts {spellname} upon you!",
@@ -6986,7 +6986,7 @@
   {
     "Id": "99a7d4e66e76bee5",
     "Name": "way of the cobra",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "{target} is poisoned!",
     "TargetMessage": "You are poisoned!",
@@ -7242,7 +7242,7 @@
   {
     "Id": "edc440f987fe4b65",
     "Name": "white potion",
-    "Flags": "Confused",
+    "Flags": "Confused, Blinded",
     "RawFlagsHex": 2,
     "CasterMessage": "You quaff a {spellname}.",
     "TargetMessage": "",
@@ -7600,7 +7600,7 @@
   {
     "Id": "b69b06a0f6509b53",
     "Name": "flash",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "You cast {spellname}, blinding everyone in the room!",
     "TargetMessage": "{source} casts {spellname}, blinding everyone in the room!",
@@ -7736,7 +7736,7 @@
   {
     "Id": "c0d8fc3bbe9837f9",
     "Name": "savagely bites",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "You feel VERY sick!",
@@ -8161,7 +8161,7 @@
   {
     "Id": "580047c9470a42ca",
     "Name": "ember",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "You launch a massive ball of {spellname}s at {target} for {damage} damage!",
     "TargetMessage": "{source} launches a massive ball of {spellname}s at you for {damage} damage!",
@@ -8331,7 +8331,7 @@
   {
     "Id": "6b86308ae5c6cf02",
     "Name": "paralyze",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} casts {spellname}, and a wave of energy sweeps the room!",
@@ -8348,7 +8348,7 @@
   {
     "Id": "0f4dbf7cfef9535a",
     "Name": "black wind",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} casts {spellname}, and a dark force sweeps through the room!",
@@ -8518,7 +8518,7 @@
   {
     "Id": "58f3f3f7eb6ae576",
     "Name": "smoke bomb",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "You throw a smoke bomb to the ground!",
     "TargetMessage": "{source} throws a smoke bomb to the ground!",
@@ -8552,7 +8552,7 @@
   {
     "Id": "4b6bb0d3e90e3543",
     "Name": "sphere of isolation",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -8569,7 +8569,7 @@
   {
     "Id": "0aee3a681bf56b30",
     "Name": "ethereal chains",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "Glowing silver manacles clamp around {spellname}'s wrists!",
     "TargetMessage": "Glowing silver manacles clamp around your wrists!",
@@ -8603,7 +8603,7 @@
   {
     "Id": "d14a2f5f94d239b1",
     "Name": "diseased",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source}'s filthy claws corrupt your flesh!",
@@ -8637,7 +8637,7 @@
   {
     "Id": "2a39e785599bf889",
     "Name": "violet fluid mist",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} sprays a mist of violet fluid throughout the room!",
@@ -8654,7 +8654,7 @@
   {
     "Id": "b6c676bbcd57a77f",
     "Name": "area entrap",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} fires a fine net of sticky threads into the air!",
@@ -8841,7 +8841,7 @@
   {
     "Id": "2dc1750f4c93ad9e",
     "Name": "hold person",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -9317,7 +9317,7 @@
   {
     "Id": "875bccaf548973c1",
     "Name": "wasp poison",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "You feel VERY sick!",
@@ -9334,7 +9334,7 @@
   {
     "Id": "7f14bf3266af3be6",
     "Name": "spider poison",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "You feel VERY sick!",
@@ -9402,7 +9402,7 @@
   {
     "Id": "10c77ced23bf91de",
     "Name": "dae asp poison 3",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "Poison burns through your veins!",
@@ -9419,7 +9419,7 @@
   {
     "Id": "9dea9932a1a24b59",
     "Name": "constriction",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "You are caught in the snakes coils.",
     "TargetMessage": "The constrictor coils around you.",
@@ -9436,7 +9436,7 @@
   {
     "Id": "0b6ffbb2d91c39e8",
     "Name": "dae asp poison 1",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "Poison burns through your veins!",
@@ -9453,7 +9453,7 @@
   {
     "Id": "03f8cd18d5938758",
     "Name": "dae asp poison 2",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "Poison burns through your veins!",
@@ -9504,7 +9504,7 @@
   {
     "Id": "1fed2c5a890195d1",
     "Name": "mamba poison",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "Poison burns through your veins!",
@@ -9555,7 +9555,7 @@
   {
     "Id": "f2bf051688cf8925",
     "Name": "wrathful curse",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "You cast {spellname} on {target}!",
     "TargetMessage": "{source} casts {spellname} upon you!",
@@ -9708,7 +9708,7 @@
   {
     "Id": "118429134a6c626a",
     "Name": "frigid blast of wind",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} flaps its wings and a {spellname} knocks you to the ground!",
@@ -9879,7 +9879,7 @@
   {
     "Id": "77fbdfa77934afbc",
     "Name": "disease",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "Their wounds begin to fester!",
     "TargetMessage": "Your wounds begin to fester!",
@@ -9998,7 +9998,7 @@
   {
     "Id": "445a27ef377c71ba",
     "Name": "entangles",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "{source} {spellname} its vines around your legs!",
@@ -10151,7 +10151,7 @@
   {
     "Id": "40940cb2aa9ae9a4",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "A hideous plague consumes you!",
@@ -10338,7 +10338,7 @@
   {
     "Id": "8a838dfa9b3ef3fd",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "A hideous plague consumes you!",
@@ -10355,7 +10355,7 @@
   {
     "Id": "26e3c655cdfe1630",
     "Name": "blind globe",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -10594,7 +10594,7 @@
   {
     "Id": "8266ec35146895ba",
     "Name": "web",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The spider quickly wraps you in a sticky cocoon!",
@@ -10679,7 +10679,7 @@
   {
     "Id": "445ce353a51f3942",
     "Name": "mass entangle",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "A cluster of vines swell from the ground!",
@@ -10883,7 +10883,7 @@
   {
     "Id": "cedd126e02b02382",
     "Name": "roar",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} roars deafeningly!",
@@ -10934,7 +10934,7 @@
   {
     "Id": "335de412a5eff690",
     "Name": "gust of wind",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} flaps its wings and a {spellname} knocks you to the ground!",
@@ -11461,7 +11461,7 @@
   {
     "Id": "0340e7f6ee37abeb",
     "Name": "mirrored shield",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "Your shield flashes blindingly!",
     "TargetMessage": "{source}'s shield flashes blindingly!",
@@ -11529,7 +11529,7 @@
   {
     "Id": "a9cd146b74bb80be",
     "Name": "heavy black rod",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "A strange darkness engulfs {target}!",
     "TargetMessage": "A strange darkness engulfs you!",
@@ -11597,7 +11597,7 @@
   {
     "Id": "843ab63a4ccc1b6f",
     "Name": "yellow potion",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "You quaff a {spellname}, and your body starts to tingle!",
     "TargetMessage": "",
@@ -11682,7 +11682,7 @@
   {
     "Id": "7f5102da33fd432f",
     "Name": "blind book",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "As you read the thin grey tome, a flash of brilliant light erupts from it!",
     "TargetMessage": "",
@@ -11818,7 +11818,7 @@
   {
     "Id": "20074b4d2f2dd517",
     "Name": "black gem",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "Your body is wracked with pain!",
     "TargetMessage": "",
@@ -12192,7 +12192,7 @@
   {
     "Id": "d415524d036ad0ef",
     "Name": "red fungus",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "You eat the red fungus.",
     "TargetMessage": "",
@@ -12974,7 +12974,7 @@
   {
     "Id": "2b66249b6c0a1d4d",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "A billowing yellow smoke fills the room!",
     "TargetMessage": "A billowing yellow smoke fills the room!",
@@ -13892,7 +13892,7 @@
   {
     "Id": "f7e477f521375cd5",
     "Name": "dart poison",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "Poison burns through your veins!",
     "TargetMessage": "",
@@ -13977,7 +13977,7 @@
   {
     "Id": "483735d6aea03072",
     "Name": "poison",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "You suddenly convulse in extreme pain.",
     "TargetMessage": "",
@@ -14419,7 +14419,7 @@
   {
     "Id": "600ca33e4d413dc4",
     "Name": "silver rapier",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "A flash from your {spellname} blinds {target}!",
     "TargetMessage": "A flash from {source}'s {spellname} blinds you!",
@@ -14470,7 +14470,7 @@
   {
     "Id": "e189cfa7eae6e3d4",
     "Name": "witchwood spear",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "Vines grow around {target}'s legs!",
     "TargetMessage": "Vines grow around your legs!",
@@ -14538,7 +14538,7 @@
   {
     "Id": "38cd47ab03fae098",
     "Name": "web entangle",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "You are entangled in sticky strands of webbing.",
     "TargetMessage": "You are entangled in sticky strands of webbing.",
@@ -14674,7 +14674,7 @@
   {
     "Id": "0d5366827f804c7f",
     "Name": "fangblade poison",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "A sickly green beam shoots out and strikes them!",
     "TargetMessage": "A sickly green beam shoots out and strikes you!",
@@ -14691,7 +14691,7 @@
   {
     "Id": "8de21a8b40e3b1d0",
     "Name": "net",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "You throw a {spellname} at {target} and entangle them!",
     "TargetMessage": "{source} throws a {spellname} on you, entangling you!",
@@ -14708,7 +14708,7 @@
   {
     "Id": "6acda280e4fd5889",
     "Name": "darkwood staff",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "Vines grow around {target}'s legs!",
     "TargetMessage": "Vines grow around your legs!",
@@ -14912,7 +14912,7 @@
   {
     "Id": "7d674994e4ebe40c",
     "Name": "poison darts",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -14963,7 +14963,7 @@
   {
     "Id": "b0cfc4f51229eb91",
     "Name": "earthquake hold",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -15558,7 +15558,7 @@
   {
     "Id": "ea5c48ba29b1ef09",
     "Name": "green beam",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "A {spellname} hits {target}",
     "TargetMessage": "{source}'s {spellname} hits you!",
@@ -15643,7 +15643,7 @@
   {
     "Id": "b32cb3b317cc47b0",
     "Name": "green wave",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "A {spellname} sweeps through the room!",
     "TargetMessage": "{source}'s {spellname} sweeps through you!",
@@ -15932,7 +15932,7 @@
   {
     "Id": "bfd07c76bf9cb663",
     "Name": "spear slam knockdown",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "You slam {target} into the ground!",
     "TargetMessage": "You're slammed into the ground!",
@@ -16085,7 +16085,7 @@
   {
     "Id": "dc5d55383d93ecb5",
     "Name": "green beam",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "A {spellname} hits {target}",
     "TargetMessage": "{source}'s {spellname} hits you!",
@@ -16255,7 +16255,7 @@
   {
     "Id": "cc0b72d72ff0f147",
     "Name": "gruesome curse",
-    "Flags": "None",
+    "Flags": "Blinded",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "A gruesome curse springs forth and you feel tainted!",
@@ -16306,7 +16306,7 @@
   {
     "Id": "4d5e38f0cd2f81e3",
     "Name": "knockdown",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "You {spellname} {target} and they land with a heavy thump!",
     "TargetMessage": "You are knocked off your feet, and land with a heavy thump!",
@@ -16714,7 +16714,7 @@
   {
     "Id": "14fedf731e310dcb",
     "Name": "poison bite",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -17292,7 +17292,7 @@
   {
     "Id": "ef7798ef49dbd48d",
     "Name": "redberry poison trap",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "Poison burns through your veins!",
     "TargetMessage": "",
@@ -17802,7 +17802,7 @@
   {
     "Id": "72b35ac0709fe252",
     "Name": "entangle",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} casts {spellname} on you!",
@@ -17905,7 +17905,7 @@
   {
     "Id": "6f2863f118fe89b4",
     "Name": "paralysis",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -18365,7 +18365,7 @@
   {
     "Id": "4ce16145fa6dc5b5",
     "Name": "fear2",
-    "Flags": "None",
+    "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -18416,7 +18416,7 @@
   {
     "Id": "137a922844742817",
     "Name": "green beam",
-    "Flags": "None",
+    "Flags": "Poisoned",
     "RawFlagsHex": 0,
     "CasterMessage": "A {spellname} hits {target}",
     "TargetMessage": "{source}'s {spellname} hits you!",

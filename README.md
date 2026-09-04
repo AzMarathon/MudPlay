@@ -15,7 +15,8 @@
 > - Message **Effects** flags: **Disabled (don't use)** now works — a disabled record is ignored entirely; **Attack prevented** now holds all combat output (weapon, attack spells, debuffs) while a stun/petrify/bind line is active; the four inert effect bits (losing-HP, HP/mana regenerating, ends-combat) were retired
 > - Alias editor shows greyed example placeholders in its Name + Expansion boxes
 > - Game Data record overrides (Monsters & Items): the Use-tier picker adds **Installed defaults** to *reset* a record (wipes your Character/BBS/Global edits back to the seed, behind a confirm), and editing a record back to its defaults auto-clears the redundant override
-> - Message editor no longer false-flags same-text records for *different* spells as duplicates; spell records show a `[#N]` record number on their Removes / Casts / Summons links; paradigm cure-disease removals flagged Diseased
+> - Message editor no longer false-flags same-text records for *different* spells as duplicates; spell records show a `[#N]` record number on their Removes / Casts / Summons links
+> - Both Messages seeds get ailment flags (Diseased / Poisoned / Blinded / Movement-prevented) on every spell that causes them — disease via the cure spells' removal list, poison/blind/hold via the causing spell's ability code — so the auto-cures recognize them
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
