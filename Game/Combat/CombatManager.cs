@@ -3329,15 +3329,17 @@ public sealed partial class CombatManager : IDisposable
         NoteAttackSent();
     }
 
-    // Confusion-fumble recovery, driven by ConditionTracker.ActionFailed (wired in
-    // AppServices). MajorMUD confusion does not block attacking — each command you
-    // send can fumble ("You fumble in confusion!"), consumed without executing, so
-    // the server never engages and the target sits unattacked (the reported
-    // "monsters present but not attacked unless I manually re-send" symptom). We
-    // re-send the last weapon swing verbatim; it fires once per fumble line, so the
-    // server's own fumble echoes pace the retries, and once a swing lands the server
-    // auto-repeats and the fumbles stop. Weapon mode only — spell mode re-issues its
-    // cast on the per-round tick (OnCombatTick), and _lastAttackCommand holds a
+    // Lost-action recovery, driven by ConditionTracker.ActionFailed (wired in
+    // AppServices) — fires for ANY line flagged LastActionFailed: an action you
+    // sent that the server refused or ate without executing. It isn't confusion-
+    // specific; a confused "You fumble in confusion!" is just one line that can
+    // carry the flag (confusion doesn't block attacking — each command can be
+    // eaten, so the server never engages and the target sits unattacked, the
+    // reported "monsters present but not attacked unless I re-send" symptom). We
+    // re-send the last weapon swing verbatim, once per failure line, so the
+    // server's own echoes pace the retries; once a swing lands the server
+    // auto-repeats and the failures stop. Weapon mode only — spell mode re-issues
+    // its cast on the per-round tick (OnCombatTick), and _lastAttackCommand holds a
     // weapon verb we must not fire into a spell fight.
     public void OnActionFailed()
     {
@@ -3348,7 +3350,7 @@ public sealed partial class CombatManager : IDisposable
         if (_wireSender is null) return;
 
         _combatOff = false;
-        _log?.Combat(LogCategory, $"fumble — re-sending last attack '{line}'");
+        _log?.Combat(LogCategory, $"action failed — re-sending last attack '{line}'");
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         NoteAttackSent();
     }

@@ -76,11 +76,8 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     public bool IsConfused           => ActiveFlags.HasFlag(MessageFlags.Confused);
     public bool IsPoisoned           => ActiveFlags.HasFlag(MessageFlags.Poisoned);
     public bool IsDiseased           => ActiveFlags.HasFlag(MessageFlags.Diseased);
-    public bool IsLosingHp           => ActiveFlags.HasFlag(MessageFlags.LosingHp);
     public bool IsMovementPrevented  => ActiveFlags.HasFlag(MessageFlags.MovementPrevented);
     public bool IsAttackPrevented    => ActiveFlags.HasFlag(MessageFlags.AttackPrevented);
-    public bool IsHpRegenerating     => ActiveFlags.HasFlag(MessageFlags.HpRegenerating);
-    public bool IsManaRegenerating   => ActiveFlags.HasFlag(MessageFlags.ManaRegenerating);
 
     // Fires when a record's AppliedMessage matches and the record wasn't already
     // active. Carries the record itself so downstream engines can read its Action
@@ -90,12 +87,15 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // Fires when a previously-active record's AppliedEndsWith matches.
     public event Action<MessageRecord>? ConditionEnded;
 
-    // Fires per matching line for a record carrying LastActionFailed — a
-    // transient per-action outcome (the confusion fumble "You fumble in
-    // confusion"), not a lasting condition. Unlike ConditionApplied this is NOT
-    // deduped by the active set: a confused character fumbles command after
-    // command, re-emitting the same line each time, and combat must re-send its
-    // lost swing on EVERY fumble, not just the first. Fires at most once per line.
+    // Fires per matching line for a record carrying LastActionFailed — the
+    // transient "the action you just sent didn't take, resend it" outcome (a
+    // fizzle, an interrupted/eaten command), NOT a lasting condition and NOT
+    // confusion-specific. (Confusion's fumbled MOVE revert rides the separate
+    // ConfuseFumbleLine path; a fumble line merely happens to be one thing that
+    // can carry this flag.) Unlike ConditionApplied this is NOT deduped by the
+    // active set: the same failure line can recur action after action, and combat
+    // must re-send its lost swing on EVERY occurrence, not just the first. Fires
+    // at most once per line.
     public event Action<MessageRecord>? ActionFailed;
 
     public ConditionTracker(MessageStore messages, LogService? log = null)
@@ -190,6 +190,11 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         List<string> fumbles = new();
         foreach (MessageRecord r in _messages.Messages)
         {
+            // 'Disabled (don't use)' — ignore the record wholesale: it never indexes,
+            // so it can't latch a condition, set a flag, contribute a fumble wording,
+            // or fire ActionFailed. Any active copy is dropped in the prune below.
+            if (r.Flags.HasFlag(MessageFlags.Disabled)) continue;
+
             if (!string.IsNullOrWhiteSpace(r.AppliedMessage))
             {
                 applied.Add((r.AppliedMessage, r));
@@ -221,7 +226,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         {
             HashSet<string> known = new(StringComparer.Ordinal);
             foreach (MessageRecord r in _messages.Messages)
-                known.Add(r.Id);
+                if (!r.Flags.HasFlag(MessageFlags.Disabled)) known.Add(r.Id);
             _active.RemoveWhere(id => !known.Contains(id));
             RecomputeFlags();
         }
@@ -298,8 +303,8 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             {
                 if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
                 // Capture a LastActionFailed match BEFORE the active-set dedup below —
-                // the fumble line re-fires while confusion persists but the record is
-                // only "applied" once, so ActionFailed must ride the raw line. First
+                // a failure line can recur while its record stays "applied" only once,
+                // so ActionFailed must ride the raw line, not the deduped apply. First
                 // match only; alias records sharing the line must not double the retry.
                 if (actionFailed is null && r.Flags.HasFlag(MessageFlags.LastActionFailed))
                     actionFailed = r;

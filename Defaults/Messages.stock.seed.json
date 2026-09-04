@@ -70,7 +70,7 @@
   {
     "Id": "213ded13e9d7c558",
     "Name": "acid rain",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "Acid rain pours down upon your foe!",
     "TargetMessage": "Acid rain pours down upon you!",
@@ -172,7 +172,7 @@
   {
     "Id": "fe13c9911012ae0c",
     "Name": "arcane tome incantation",
-    "Flags": "ManaRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 512,
     "CasterMessage": "The words within slowly form a mystical pattern!",
     "TargetMessage": "",
@@ -411,7 +411,7 @@
   {
     "Id": "89a9f166882a3d31",
     "Name": "birch rod",
-    "Flags": "HpRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 128,
     "CasterMessage": "You brandish your {spellname} at {target}!",
     "TargetMessage": "{source} brandishes a {spellname} at you!",
@@ -581,7 +581,7 @@
   {
     "Id": "918119939190943a",
     "Name": "bleeding",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "The barbs on the blood lance rip {target}!",
     "TargetMessage": "The barbs on the blood lance rip you!",
@@ -785,7 +785,7 @@
   {
     "Id": "43c49dc14b6e239d",
     "Name": "burning",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -802,7 +802,7 @@
   {
     "Id": "a980edd026e3770d",
     "Name": "burning death",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "You invoke {spellname} on {target}, who is enveloped in flames!",
     "TargetMessage": "{source} uses the obsidian runestaff on you! You are enveloped in flames!",
@@ -1284,7 +1284,7 @@
   {
     "Id": "0a45b96ffc3fd4f7",
     "Name": "creeping doom",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "You cast {spellname} on {target}!",
     "TargetMessage": "{source} casts {spellname} upon you!",
@@ -1437,7 +1437,7 @@
   {
     "Id": "ec0f133668399926",
     "Name": "dark plague",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -1522,7 +1522,7 @@
   {
     "Id": "c898328309f6fd79",
     "Name": "disease",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -1998,7 +1998,7 @@
   {
     "Id": "a39bbdc5282605fd",
     "Name": "engulf in flame",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "You are consumed in a blazing inferno!",
@@ -2321,7 +2321,7 @@
   {
     "Id": "3a8138e1472fa1ad",
     "Name": "folds of worship",
-    "Flags": "ManaRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 512,
     "CasterMessage": "You pull your cloak tight about you!",
     "TargetMessage": "",
@@ -2338,7 +2338,7 @@
   {
     "Id": "4598b5c8e4301e43",
     "Name": "folds of worship",
-    "Flags": "ManaRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 512,
     "CasterMessage": "You pull your cloak tight about you!",
     "TargetMessage": "",
@@ -2389,7 +2389,7 @@
   {
     "Id": "af0becec3501e4b7",
     "Name": "form of the dragon",
-    "Flags": "HpRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 128,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -2560,7 +2560,7 @@
   {
     "Id": "bb64576eee52c8f0",
     "Name": "frost sceptre-chill touch",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "{target} shudders violently!",
     "TargetMessage": "A deep chill creeps into your bones!",
@@ -2968,7 +2968,7 @@
   {
     "Id": "000349155c288aa8",
     "Name": "hand of death",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "Destructive energy courses through {target}'s body!",
     "TargetMessage": "Destructive energy courses through your body!",
@@ -3276,7 +3276,7 @@
   {
     "Id": "767a20d519efca46",
     "Name": "ice storm",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "A freezing storm of ice envelops the foe!",
     "TargetMessage": "A freezing storm of ice surrounds you!",
@@ -3480,7 +3480,7 @@
   {
     "Id": "3658ef62cd60e52c",
     "Name": "leafwoven cloak",
-    "Flags": "ManaRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 512,
     "CasterMessage": "You adjust the cloak upon your shoulders!",
     "TargetMessage": "",
@@ -3497,7 +3497,7 @@
   {
     "Id": "916b5163cac6177a",
     "Name": "leprosy",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "You writhe in agony as your flesh erupts and splits open!",
@@ -3735,7 +3735,7 @@
   {
     "Id": "27354450fb2b99f2",
     "Name": "mana flux",
-    "Flags": "ManaRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 512,
     "CasterMessage": "Uncontrollable energy fills {target}!",
     "TargetMessage": "Uncontrollable energy fills your being!",
@@ -4041,7 +4041,7 @@
   {
     "Id": "a48ad1585aed6f68",
     "Name": "nature tap",
-    "Flags": "ManaRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 512,
     "CasterMessage": "You cast {spellname} on {target}!",
     "TargetMessage": "{source} casts {spellname} upon you!",
@@ -4212,7 +4212,7 @@
   {
     "Id": "4c7d6afcfac612c9",
     "Name": "peasant cloak",
-    "Flags": "ManaRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 512,
     "CasterMessage": "You rub the tattered edges of the cloak!",
     "TargetMessage": "",
@@ -4229,7 +4229,7 @@
   {
     "Id": "ac0fbbcebeaff7cc",
     "Name": "petrification",
-    "Flags": "MovementPrevented, AttackPrevented, EndsCombat",
+    "Flags": "MovementPrevented, AttackPrevented",
     "RawFlagsHex": 4144,
     "CasterMessage": "",
     "TargetMessage": "Your body begins to get heavy and solidify!",
@@ -4246,7 +4246,7 @@
   {
     "Id": "9d1e8d33bcd47ec5",
     "Name": "petrification",
-    "Flags": "MovementPrevented, AttackPrevented, EndsCombat",
+    "Flags": "MovementPrevented, AttackPrevented",
     "RawFlagsHex": 4144,
     "CasterMessage": "",
     "TargetMessage": "Your body begins to get heavy and solidify!",
@@ -4280,7 +4280,7 @@
   {
     "Id": "70b3575c5175904d",
     "Name": "plague",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -4297,7 +4297,7 @@
   {
     "Id": "20858c4dd7169e8c",
     "Name": "plague",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -4433,7 +4433,7 @@
   {
     "Id": "a9854c2be9d83b88",
     "Name": "pool",
-    "Flags": "HpRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 128,
     "CasterMessage": "A feeling of peace and tranquility flows through you!",
     "TargetMessage": "",
@@ -4620,7 +4620,7 @@
   {
     "Id": "b028532346f9c934",
     "Name": "Rakshasha",
-    "Flags": "EndsCombat",
+    "Flags": "None",
     "RawFlagsHex": 4096,
     "CasterMessage": "The illusion vanishes in a flash!",
     "TargetMessage": "",
@@ -4637,7 +4637,7 @@
   {
     "Id": "9140cdf3cb136503",
     "Name": "rapid healing",
-    "Flags": "HpRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 128,
     "CasterMessage": "You cast {spellname} on {target}!",
     "TargetMessage": "{source} casts {spellname} upon you!",
@@ -4654,7 +4654,7 @@
   {
     "Id": "81bab8abaa5c19e4",
     "Name": "regeneration",
-    "Flags": "HpRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 128,
     "CasterMessage": "You complete the {spellname} spell and lay your hands upon {target}!",
     "TargetMessage": "{source} lays hands upon you, and your skin begins to tingle!",
@@ -4756,7 +4756,7 @@
   {
     "Id": "4434ae412d12f7fc",
     "Name": "rip",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "You {spellname} {target} wide open!",
     "TargetMessage": "{source} {spellname}s you wide open!",
@@ -4807,7 +4807,7 @@
   {
     "Id": "d71383a03fe37e6a",
     "Name": "rosewood rod",
-    "Flags": "HpRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 128,
     "CasterMessage": "You brandish your {spellname} at {target}!",
     "TargetMessage": "{source} brandishes a {spellname} at you!",
@@ -4824,7 +4824,7 @@
   {
     "Id": "8b8ebf7983641a1d",
     "Name": "rotting flesh",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "You cast {spellname} on {target}!",
     "TargetMessage": "{source} casts {spellname} upon you!",
@@ -4841,7 +4841,7 @@
   {
     "Id": "8a18d30addd35b3e",
     "Name": "runed cape",
-    "Flags": "ManaRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 512,
     "CasterMessage": "You adjust the cape upon your shoulders!",
     "TargetMessage": "The runes on {source}'s cape glow faintly!",
@@ -5028,7 +5028,7 @@
   {
     "Id": "a02e2713219e747d",
     "Name": "sharp blade",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "K\u0003",
     "TargetMessage": "",
@@ -5607,7 +5607,7 @@
   {
     "Id": "1599702b7908a3e6",
     "Name": "song of life",
-    "Flags": "HpRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 128,
     "CasterMessage": "You sing the {spellname} to your party!",
     "TargetMessage": "{source} sings the {spellname} to you!",
@@ -5777,7 +5777,7 @@
   {
     "Id": "6abe27395735a583",
     "Name": "song of soothing",
-    "Flags": "HpRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 128,
     "CasterMessage": "You sing a soothing melody.",
     "TargetMessage": "",
@@ -6321,7 +6321,7 @@
   {
     "Id": "36f0b13503669b91",
     "Name": "stunned",
-    "Flags": "MovementPrevented, AttackPrevented, EndsCombat",
+    "Flags": "MovementPrevented, AttackPrevented",
     "RawFlagsHex": 4144,
     "CasterMessage": "{target} reels from the blow!",
     "TargetMessage": "You reel from the blow!",
@@ -6867,7 +6867,7 @@
   {
     "Id": "288191ce28d0d339",
     "Name": "violet fluid",
-    "Flags": "Blinded, LosingHp",
+    "Flags": "Blinded",
     "RawFlagsHex": 9,
     "CasterMessage": "",
     "TargetMessage": "The {source} sprays a stream of {spellname} onto your face!",
@@ -6901,7 +6901,7 @@
   {
     "Id": "da9b8eafba7eac2a",
     "Name": "vortex of pain",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "A whirling vortex of pulsing energy swirls throughout the room!",
@@ -7156,7 +7156,7 @@
   {
     "Id": "79a6a550a92ca799",
     "Name": "way of the troll",
-    "Flags": "HpRegenerating",
+    "Flags": "None",
     "RawFlagsHex": 128,
     "CasterMessage": "You invoke the {spellname}, and you begin to regenerate!",
     "TargetMessage": "",
@@ -7294,7 +7294,7 @@
   {
     "Id": "6b57cbb89d9ba26b",
     "Name": "wing cut",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -7328,7 +7328,7 @@
   {
     "Id": "4f15999c23ae115b",
     "Name": "wretched boils",
-    "Flags": "LosingHp",
+    "Flags": "None",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "",

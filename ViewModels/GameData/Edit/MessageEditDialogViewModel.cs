@@ -67,18 +67,15 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     private string _appliedEndsWith = string.Empty;
 
     // Typed effect flags — bound to checkboxes in the dialog. Twelve
-    // bits surfaced; the three MegaMUD-specific find-mode flags are
-    // NOT exposed in the UI (the importer strips them at read time).
+    // bits surfaced; the MegaMUD find-mode flags and the four retired inert
+    // effect bits (LosingHp / HpRegenerating / ManaRegenerating / EndsCombat)
+    // are NOT exposed in the UI.
     [ObservableProperty] private bool _flagBlinded;
     [ObservableProperty] private bool _flagConfused;
     [ObservableProperty] private bool _flagPoisoned;
-    [ObservableProperty] private bool _flagLosingHp;
     [ObservableProperty] private bool _flagMovementPrevented;
     [ObservableProperty] private bool _flagAttackPrevented;
     [ObservableProperty] private bool _flagDiseased;
-    [ObservableProperty] private bool _flagHpRegenerating;
-    [ObservableProperty] private bool _flagManaRegenerating;
-    [ObservableProperty] private bool _flagEndsCombat;
     [ObservableProperty] private bool _flagLastActionFailed;
     [ObservableProperty] private bool _flagDisabled;
 
@@ -247,13 +244,9 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         FlagBlinded           = original.Flags.HasFlag(MessageFlags.Blinded);
         FlagConfused          = original.Flags.HasFlag(MessageFlags.Confused);
         FlagPoisoned          = original.Flags.HasFlag(MessageFlags.Poisoned);
-        FlagLosingHp          = original.Flags.HasFlag(MessageFlags.LosingHp);
         FlagMovementPrevented = original.Flags.HasFlag(MessageFlags.MovementPrevented);
         FlagAttackPrevented   = original.Flags.HasFlag(MessageFlags.AttackPrevented);
         FlagDiseased          = original.Flags.HasFlag(MessageFlags.Diseased);
-        FlagHpRegenerating    = original.Flags.HasFlag(MessageFlags.HpRegenerating);
-        FlagManaRegenerating  = original.Flags.HasFlag(MessageFlags.ManaRegenerating);
-        FlagEndsCombat        = original.Flags.HasFlag(MessageFlags.EndsCombat);
         FlagLastActionFailed  = original.Flags.HasFlag(MessageFlags.LastActionFailed);
         FlagDisabled          = original.Flags.HasFlag(MessageFlags.Disabled);
     }
@@ -316,13 +309,9 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         if (FlagBlinded)           f |= MessageFlags.Blinded;
         if (FlagConfused)          f |= MessageFlags.Confused;
         if (FlagPoisoned)          f |= MessageFlags.Poisoned;
-        if (FlagLosingHp)          f |= MessageFlags.LosingHp;
         if (FlagMovementPrevented) f |= MessageFlags.MovementPrevented;
         if (FlagAttackPrevented)   f |= MessageFlags.AttackPrevented;
         if (FlagDiseased)          f |= MessageFlags.Diseased;
-        if (FlagHpRegenerating)    f |= MessageFlags.HpRegenerating;
-        if (FlagManaRegenerating)  f |= MessageFlags.ManaRegenerating;
-        if (FlagEndsCombat)        f |= MessageFlags.EndsCombat;
         if (FlagLastActionFailed)  f |= MessageFlags.LastActionFailed;
         if (FlagDisabled)          f |= MessageFlags.Disabled;
         return f;

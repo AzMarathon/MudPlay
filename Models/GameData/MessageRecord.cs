@@ -109,12 +109,15 @@ public readonly record struct GameDataLink(
 // MegaMUD messages.md 16-bit hex encoding so records round-trip through
 // that format without translation.
 //
-// Three MegaMUD-specific find-mode bits are deliberately omitted:
-// 0x0100 FindInConversations, 0x0400 FindInText, 0x4000 UseWhenChasing.
-// They were stripped from the model per user direction. The importer masks
-// them out on read so they never enter the data; the only
-// preserved-but-unknown bit is 0x0800 (reserved / undocumented in the
-// legacy format), kept on MessageRecord.RawFlagsHex.
+// Several MegaMUD bits are deliberately absent from the model. The three
+// find-mode bits — 0x0100 FindInConversations, 0x0400 FindInText, 0x4000
+// UseWhenChasing — plus four effect bits no engine ever acted on: 0x0008
+// LosingHp, 0x0080 HpRegenerating, 0x0200 ManaRegenerating, 0x1000
+// EndsCombat. The decoder no longer names them and the seeds ship with them
+// stripped; a stale name in an old data file fails the enum parse (caught in
+// MessageStore.TryLoad, which then falls back to the seed). The raw 16-bit
+// word — including the reserved-but-unknown 0x0800 — is still kept verbatim
+// on MessageRecord.RawFlagsHex; it just never parses into a named flag.
 [Flags]
 public enum MessageFlags : ushort
 {
@@ -122,16 +125,16 @@ public enum MessageFlags : ushort
     Blinded             = 0x0001,
     Confused            = 0x0002,
     Poisoned            = 0x0004,
-    LosingHp            = 0x0008,
+    // 0x0008 LosingHp removed per user direction — no engine consumed it
     MovementPrevented   = 0x0010,
     AttackPrevented     = 0x0020,
     Diseased            = 0x0040,
-    HpRegenerating      = 0x0080,
+    // 0x0080 HpRegenerating removed per user direction — no engine consumed it
     // 0x0100 FindInConversations dropped per user direction
-    ManaRegenerating    = 0x0200,
+    // 0x0200 ManaRegenerating removed per user direction — no engine consumed it
     // 0x0400 FindInText dropped per user direction
     // 0x0800 reserved — preserved via RawFlagsHex
-    EndsCombat          = 0x1000,
+    // 0x1000 EndsCombat removed per user direction — no engine consumed it
     LastActionFailed    = 0x2000,
     // 0x4000 UseWhenChasing dropped per user direction
     Disabled            = 0x8000,

@@ -78,15 +78,31 @@ public sealed class ConditionTrackerTests
     {
         using Harness h = new();
         h.Messages.Messages.Add(MakeRecord("Poison",
-            MessageFlags.Poisoned | MessageFlags.LosingHp,
+            MessageFlags.Poisoned,
             applied: "You have been poisoned!",
             endsWith: "The poison wears off."));
 
         h.Feed("You have been poisoned!");
 
         Assert.True(h.Tracker.IsPoisoned);
-        Assert.True(h.Tracker.IsLosingHp);
         Assert.Single(h.Applied);
+    }
+
+    [Fact]
+    public void DisabledRecord_IsIgnoredWholesale()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("Poison (off)",
+            MessageFlags.Poisoned | MessageFlags.Disabled,
+            applied: "You have been poisoned!",
+            endsWith: "The poison wears off."));
+
+        h.Feed("You have been poisoned!");
+
+        // A Disabled record never indexes: no apply event, no flag latched.
+        Assert.Empty(h.Applied);
+        Assert.False(h.Tracker.IsPoisoned);
+        Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
     }
 
     [Theory]

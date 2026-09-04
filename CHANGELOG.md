@@ -13,6 +13,7 @@
 - Removed the spurious *trap disarm* message records — trap-trigger lines wrongly flagged Last-action-failed, which fired a bogus combat re-swing when a trap went off
 - Trimmed the Unfiltered Messages catalogue: removed the standalone condition-detector records (held / blind / confused / poison / fumble / combat-end) from both seeds
 - Paradigm Messages seed: back-filled the missing begin / wear-off lines on 8 buff/debuff spells (the *form of the …* animal spirits, yellow fungus, rosebush sleep, green beam, suffocating-fumes breath), and added 7 more that had no record at all (horrid wound, stone temple poison, stone regeneration, clay flask, nightfall, sunder armour, diffusive blast) — each tied to its Spell record — so those effects are recognized
+- Message **Effects** flags: the **Disabled (don't use)** checkbox is now honored — a disabled record is ignored wholesale (recognizes nothing, sets no flag), and the four effect bits no engine ever acted on (losing-HP, HP/mana regenerating, ends-combat) were retired from the editor + seeds
 - Trigger seed trimmed of MegaMUD carryovers; monster-message seed stripped of retired death/combat lines
 
 ## 3.48.0

@@ -210,10 +210,11 @@
                 </Border>
 
                 <!-- Effects: the condition this line means, as flag checkboxes. Two
-                     columns so all twelve stay visible on a short window. The three
-                     MegaMUD find-mode flags (FindInText / FindInConversations /
-                     UseWhenChasing) are dropped from the UI; their bits round-trip as
-                     "reserved" via RawFlagsHex so a legacy re-save keeps them. -->
+                     columns. The MegaMUD find-mode flags (FindInText /
+                     FindInConversations / UseWhenChasing) and the four retired inert
+                     effect bits (LosingHp / HpRegenerating / ManaRegenerating /
+                     EndsCombat) are not shown; their bits round-trip as "reserved" via
+                     RawFlagsHex so a legacy re-save keeps them. -->
                 <Border Grid.Row="1"
                         BorderBrush="{StaticResource ChromeBorderBrush}"
                         BorderThickness="1" CornerRadius="3" Padding="10">
@@ -225,14 +226,10 @@
                                 <CheckBox Content="Confused"            IsChecked="{Binding FlagConfused, Mode=TwoWay}"/>
                                 <CheckBox Content="Poisoned"            IsChecked="{Binding FlagPoisoned, Mode=TwoWay}"/>
                                 <CheckBox Content="Diseased"            IsChecked="{Binding FlagDiseased, Mode=TwoWay}"/>
-                                <CheckBox Content="Losing HP's (on fire, etc.)" IsChecked="{Binding FlagLosingHp, Mode=TwoWay}"/>
-                                <CheckBox Content="HP regenerating"     IsChecked="{Binding FlagHpRegenerating, Mode=TwoWay}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1">
-                                <CheckBox Content="Mana regenerating"   IsChecked="{Binding FlagManaRegenerating, Mode=TwoWay}"/>
                                 <CheckBox Content="Movement prevented"  IsChecked="{Binding FlagMovementPrevented, Mode=TwoWay}"/>
                                 <CheckBox Content="Attack prevented"    IsChecked="{Binding FlagAttackPrevented, Mode=TwoWay}"/>
-                                <CheckBox Content="Ends combat"         IsChecked="{Binding FlagEndsCombat, Mode=TwoWay}"/>
                                 <CheckBox Content="Last action failed"  IsChecked="{Binding FlagLastActionFailed, Mode=TwoWay}"/>
                                 <CheckBox Content="Disabled (don't use)" IsChecked="{Binding FlagDisabled, Mode=TwoWay}"/>
                             </StackPanel>
