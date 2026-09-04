@@ -4,11 +4,11 @@
         xmlns:spells="using:MudPlay.Game.Spells"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="820"
+        mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="900"
         x:Class="MudPlay.Views.GameData.Edit.MessageEditDialog"
         x:DataType="vm:MessageEditDialogViewModel"
         Title="{Binding Title}"
-        Width="660" Height="820"
+        Width="660" Height="900" MinWidth="560" MinHeight="600"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>
@@ -45,7 +45,11 @@
 
           <TabControl Grid.Row="0" SelectedIndex="{Binding InitialTabIndex, Mode=OneTime}">
             <TabItem Header="User Definitions">
-              <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10" Margin="0,8,0,0">
+              <!-- Scrollable so the fields + Effects never truncate on a short window
+                   (the Confuse-fumble row makes this tab tall); rows are all Auto so the
+                   grid measures to natural height inside the ScrollViewer. -->
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="10" Margin="0,8,8,0">
 
             <!-- ===== Header fields (Name / Use / 4 perspective lines + EndsWith pair) ===== -->
             <Grid Grid.Row="0"
@@ -228,6 +232,7 @@
             </Grid>
 
               </Grid>
+              </ScrollViewer>
             </TabItem>
 
             <!-- ===== Game Data (read-only source-row fields) ===== -->

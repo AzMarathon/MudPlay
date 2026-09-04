@@ -6,6 +6,7 @@
 - Messages are **recognition-only** now: the Action + Response fields are gone (player responses live in Triggers), the tab is renamed **Unfiltered Messages**, and it hides itself when empty
 - An item's **on-use / proc message** is edited from the item record (a Message section, the same editor the Spells tab uses); a message claimed by a spell or item is hidden from the Unfiltered Messages tab
 - New **Confuse fumble** field on a Confused message: the line(s) that source emits on a fumble (defaults to *"You fumble in confusion!"*) — a fumbled move reverts on it, so fumble wordings live in game data instead of hardcoded (convulsions keeps its *convulse violently* / *look around stupidly* wordings)
+- Message editor opens taller and its User Definitions tab scrolls, so the Confuse-fumble box + Effects flags no longer truncate
 - The ganghouse **guardians, elite guardians, and spellbreakers** now default to **Friend**, so auto-combat leaves the whole set alone
 - Trigger seed trimmed of MegaMUD carryovers; monster-message seed stripped of retired death/combat lines
 
