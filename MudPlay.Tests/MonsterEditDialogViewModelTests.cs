@@ -218,4 +218,44 @@ public sealed class MonsterEditDialogViewModelTests
         vm.Relationship = MonsterRelationship.Friend;               // back to the seed
         Assert.True(Save(vm).EqualsInstalledDefaults);
     }
+
+    // ----- Per-monster override mana floors (the Settings → Combat spell-slot parity) ----
+
+    [Fact]
+    public void ManaFloors_LoadFromOverlay()
+    {
+        MonsterOverlay existing = new() { OverridePreAttackMinMana = 30, OverrideAttackMinMana = 40 };
+        MonsterEditDialogViewModel vm = new(
+            wccNoStr: "1", mdbName: "rat", existing: existing,
+            currentTier: SettingsTier.Character, mdbInfo: Array.Empty<MdbInfoRow>(),
+            writableTiers: [SettingsTier.Character]);
+
+        Assert.Equal("30", vm.PreAttackMinMana);
+        Assert.Equal("40", vm.AttackMinMana);
+    }
+
+    [Fact]
+    public void ManaFloors_SaveIntoOverlay()
+    {
+        MonsterEditDialogViewModel vm = MakeVm(existing: null, installedDefaults: null);
+        vm.PreAttackSpellId = "22";
+        vm.PreAttackMinMana = "30";
+        vm.AttackOverride   = "18";
+        vm.AttackMinMana    = "40";
+
+        MonsterOverlay o = Save(vm).Overlay;
+        Assert.Equal(30, o.OverridePreAttackMinMana);
+        Assert.Equal(40, o.OverrideAttackMinMana);
+    }
+
+    [Fact]
+    public void ManaFloors_BlankStaysNull()
+    {
+        MonsterEditDialogViewModel vm = MakeVm(existing: null, installedDefaults: null);
+        vm.PreAttackSpellId = "22";   // spell set, but no mana floor typed
+
+        MonsterOverlay o = Save(vm).Overlay;
+        Assert.Null(o.OverridePreAttackMinMana);
+        Assert.Null(o.OverrideAttackMinMana);
+    }
 }

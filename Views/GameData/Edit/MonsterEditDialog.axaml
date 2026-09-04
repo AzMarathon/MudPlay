@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.GameData.Edit"
         xmlns:conv="using:MudPlay.ViewModels"
+        xmlns:spells="using:MudPlay.Game.Spells"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="780"
@@ -10,6 +11,15 @@
         Title="{Binding Title}"
         Width="920" Height="780"
         WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <!-- Override spell-picker dropdown row: "code — name". The box commits the
+             Short cast-code (ValueMemberBinding); this only shapes the list display,
+             mirroring the Settings → Combat spell slots. -->
+        <DataTemplate x:Key="SpellPickItem" x:DataType="spells:SpellPick">
+            <TextBlock Text="{Binding Display}"/>
+        </DataTemplate>
+    </Window.Resources>
 
     <Window.Styles>
         <!-- Right-aligned so the label hugs its input regardless of column
@@ -114,7 +124,11 @@
                                  cast-codes are all short, so the old 280 was
                                  wasted width. -->
                             <TextBlock Classes="SectionHeader" Text="Details"/>
-                            <Grid ColumnDefinitions="130,140,8,Auto,64"
+                            <!-- Override spell rows mirror the Settings → Combat spell
+                                 slots: a spell picker (code/name typeahead) + a per-room
+                                 Max cast cap + a Mana floor. Columns: label, picker,
+                                 spacer, Max label/box, Mana label/box. -->
+                            <Grid ColumnDefinitions="130,190,8,Auto,64,Auto,64"
                                   RowDefinitions="Auto,Auto,Auto"
                                   ColumnSpacing="6" RowSpacing="4"
                                   HorizontalAlignment="Left">
@@ -126,16 +140,32 @@
                                            HorizontalAlignment="Stretch"/>
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Override Pre-attack"
-                                           ToolTip.Tip="Spell.Number to cast on this monster before melee — takes priority over the global Combat-tab pre-attack."/>
-                                <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding PreAttackSpellId, Mode=TwoWay}"/>
+                                           ToolTip.Tip="Spell to cast on this monster before melee — takes priority over the global Combat-tab pre-attack. Pick from the list (or type a cast-code / Spell.Number). Max caps casts per room (blank = unlimited); Mana is the minimum mana to cast, read as % or absolute per the Combat tab's mana mode."/>
+                                <AutoCompleteBox Grid.Row="1" Grid.Column="1"
+                                                 Text="{Binding PreAttackSpellId, Mode=TwoWay}"
+                                                 ItemsSource="{Binding SpellSuggestions}"
+                                                 ValueMemberBinding="{ReflectionBinding Short}"
+                                                 ItemFilter="{Binding SpellSuggestionFilter}"
+                                                 ItemTemplate="{StaticResource SpellPickItem}"
+                                                 PlaceholderText="code or name…"/>
                                 <TextBlock Grid.Row="1" Grid.Column="3" Classes="FieldLabel" Text="Max"/>
                                 <TextBox   Grid.Row="1" Grid.Column="4" Text="{Binding PreAttackCount, Mode=TwoWay}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="5" Classes="FieldLabel" Text="Mana"/>
+                                <TextBox   Grid.Row="1" Grid.Column="6" Text="{Binding PreAttackMinMana, Mode=TwoWay}"/>
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Override Attack"
-                                           ToolTip.Tip="Force a specific attack on this monster, over the global Combat-tab flow. A Spell.Number OR a spell's cast-code (e.g. &quot;turn&quot;) both cast through the mana-gated attack-spell rung — a typed cast-code auto-resolves to its number. Max is an optional per-room cast cap; leave it blank for unlimited casts. Anything else (e.g. &quot;attack&quot;, &quot;bash&quot;) is sent verbatim as a raw command every round, with no mana/cap gating."/>
-                                <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding AttackOverride, Mode=TwoWay}"/>
+                                           ToolTip.Tip="Force a specific attack on this monster, over the global Combat-tab flow. Pick a spell (or type its cast-code / Spell.Number) to cast through the mana-gated attack-spell rung — Max caps casts per room (blank = unlimited), Mana is the minimum mana to cast (% or absolute per the Combat tab's mana mode). Anything that isn't a spell (e.g. &quot;attack&quot;, &quot;bash&quot;) is sent verbatim as a raw command every round, with no mana/cap gating."/>
+                                <AutoCompleteBox Grid.Row="2" Grid.Column="1"
+                                                 Text="{Binding AttackOverride, Mode=TwoWay}"
+                                                 ItemsSource="{Binding SpellSuggestions}"
+                                                 ValueMemberBinding="{ReflectionBinding Short}"
+                                                 ItemFilter="{Binding SpellSuggestionFilter}"
+                                                 ItemTemplate="{StaticResource SpellPickItem}"
+                                                 PlaceholderText="spell, or a raw verb…"/>
                                 <TextBlock Grid.Row="2" Grid.Column="3" Classes="FieldLabel" Text="Max"/>
                                 <TextBox   Grid.Row="2" Grid.Column="4" Text="{Binding AttackCount, Mode=TwoWay}"/>
+                                <TextBlock Grid.Row="2" Grid.Column="5" Classes="FieldLabel" Text="Mana"/>
+                                <TextBox   Grid.Row="2" Grid.Column="6" Text="{Binding AttackMinMana, Mode=TwoWay}"/>
                             </Grid>
 
                             <!-- Attack Priority + Options border boxes —

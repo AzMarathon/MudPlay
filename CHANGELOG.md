@@ -1,5 +1,9 @@
 # Version history
 
+## 3.49.1
+
+- Monster record's **Override Pre-attack / Override Attack** now mirror the Settings → Combat spell slots: a spell **picker** (type-ahead over your castable spells, commits the cast-code) plus per-room **Max** casts and a **Mana** floor — so a specific spell can be aimed at a specific monster, gated on mana the same way the Combat tab is. Mana is read as % or absolute per the Combat tab's mana mode; below it the override holds and the normal combat flow takes the round. Override Attack still accepts a raw verb (e.g. `bash`), sent verbatim with no gating
+
 ## 3.49.0
 
 - Messages data rebuilt into realm-split **stock / paradigm** seeds (decoded from MegaMUD's messages.md, picked per game-data set) — the old single mixed-realm seed is retired

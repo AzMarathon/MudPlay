@@ -76,7 +76,8 @@ public sealed class MonsterRecordDialogService
             writableTiers:      _resolver.WritableTiers(),
             installedDefaults:  seedDefaults,
             resolveSpellShort:  _spellShort.NumberByShort,
-            resolveSpellNumber: _spellShort.ShortByNumber);
+            resolveSpellNumber: _spellShort.ShortByNumber,
+            spellSuggestions:   AppServices.Current.Spellbook.AvailablePicks);
 
         MonsterEditDialogViewModel? previous = _openVm;
         _openVm = vm;
