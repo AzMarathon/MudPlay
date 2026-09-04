@@ -29542,5 +29542,73 @@
         "Number": 5129
       }
     ]
+  },
+  {
+    "Id": "ec161ef1fa540ce9",
+    "Name": "plagued touch",
+    "Flags": "Diseased",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5551
+      }
+    ]
+  },
+  {
+    "Id": "213929580670bfc6",
+    "Name": "plague bite",
+    "Flags": "Diseased",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5614
+      }
+    ]
+  },
+  {
+    "Id": "efa1cf22a2918dbc",
+    "Name": "plague cask",
+    "Flags": "Diseased",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5619
+      }
+    ]
+  },
+  {
+    "Id": "1dd90e31c44c8104",
+    "Name": "corrupted flesh",
+    "Flags": "Diseased",
+    "RawFlagsHex": 0,
+    "CasterMessage": "",
+    "TargetMessage": "",
+    "WitnessMessage": "",
+    "AppliedMessage": "",
+    "AppliedEndsWith": "",
+    "Links": [
+      {
+        "Table": "Spells",
+        "Number": 5707
+      }
+    ]
   }
 ]
