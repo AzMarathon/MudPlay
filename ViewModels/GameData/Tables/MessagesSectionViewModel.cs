@@ -237,16 +237,46 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         if (row is null || _dialogs is null) return;
         if (row.Tag is not MessageRecord original) return;
 
+        // When the record is anchored to a spell present in the active set, populate the
+        // read-only Game Data tab (spell facts + damage calculator) the same way the Spells
+        // tab does — so an incomplete record can be filled with the spell's details in view.
+        IReadOnlyList<GameDataInfoRow>? info = null;
+        Game.Spells.SpellFormulaInput? formula = null;
+        if (_cache is not null && TryLinkedSpellNumber(original, out int spellNumber))
+        {
+            info = new SpellInfoRowsBuilder(_cache).Build(spellNumber);
+            formula = new Game.Spells.KnownSpellCatalog(_cache).GetFormulaByNumber(spellNumber);
+        }
+
         MessageEditDialogViewModel vm = new(
             original,
             row.SourceTier,
             _store.Messages,
             isNew: false,
-            cache: _cache);
+            cache: _cache,
+            gameDataInfo: info,
+            spellFormula: formula);
         MessageEditResult? result = await _dialogs.OpenWindowAsync<MessageEditDialogViewModel, MessageEditResult>(vm);
         if (result is null) return;
 
         ApplyResult(result);
+    }
+
+    // First Spells back-reference whose Number exists in the active set (so the Game Data
+    // tab has real content to show). False for orphan links / non-spell records.
+    private bool TryLinkedSpellNumber(MessageRecord m, out int spellNumber)
+    {
+        spellNumber = 0;
+        if (m.Links is null || _cache is null) return false;
+        HashSet<int> spellNumbers = _cache.RowNumbers("Spells");
+        foreach (GameDataLink link in m.Links)
+            if (string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase)
+                && spellNumbers.Contains(link.Number))
+            {
+                spellNumber = link.Number;
+                return true;
+            }
+        return false;
     }
 
     private void ApplyResult(MessageEditResult result)
