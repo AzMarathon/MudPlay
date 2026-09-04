@@ -163,7 +163,7 @@
                         BorderThickness="1" CornerRadius="3" Padding="10">
                     <StackPanel>
                         <TextBlock Classes="SectionHeader" Text="Links"/>
-                        <TextBlock Text="The spell / item / monster row(s) this message recognizes."
+                        <TextBlock Text="The spell record(s) this message provides text for."
                                    Classes="FieldLabel"
                                    TextWrapping="Wrap" Margin="0,0,0,8"/>
 
@@ -190,19 +190,16 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <!-- Add-link row: Table dropdown + Number textbox + Add. -->
+                        <!-- Add-link row: a message always attributes to a Spells row,
+                             so there's no table picker — just the spell Number + Add. -->
                         <Border Height="1" Margin="0,8"
                                 Background="{StaticResource ChromeBorderBrush}"/>
-                        <Grid ColumnDefinitions="*,80,Auto" ColumnSpacing="6">
-                            <ComboBox Grid.Column="0"
-                                      ItemsSource="{Binding LinkTables}"
-                                      SelectedItem="{Binding AddLinkTable, Mode=TwoWay}"
-                                      HorizontalAlignment="Stretch"/>
-                            <TextBox  Grid.Column="1"
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                            <TextBox  Grid.Column="0"
                                       Text="{Binding AddLinkNumber, Mode=TwoWay}"
-                                      PlaceholderText="Number"
+                                      PlaceholderText="Spell number"
                                       FontFamily="{StaticResource FontMono}"/>
-                            <Button   Grid.Column="2"
+                            <Button   Grid.Column="1"
                                       Content="Add"
                                       Command="{Binding AddLinkCommand}"/>
                         </Grid>

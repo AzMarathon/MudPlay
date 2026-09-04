@@ -13,6 +13,7 @@
 - Unrecognized Lines tab gains a **Likely source** column — the spells castable by monsters (placed / assigned / lair) in the room where the line was captured, so an unattributed line can be narrowed to a probable spell
 - Spells tab filter now understands ailment keywords — type **poison / confuse / blind / hold** to list every spell that applies that effect (read from its ability codes, following the EndCast chain), not just spells with the word in their name
 - Unrecognized Lines tab now has distinct **Dismiss** / **Remove** / **Export** actions: Dismiss freezes a line and the client ignores every future recurrence of it (no re-add, no re-count, no re-alert); Remove hard-deletes the row; Export writes all non-dismissed lines (with location + likely source) to a Desktop file
+- Message editor's Links picker is spell-only now — a message always attributes to a Spells record (item on-use and monster abilities both resolve to a spell), so the Items/Monsters table options and the table dropdown are gone; just type the spell number
 
 ## 3.49.1
 

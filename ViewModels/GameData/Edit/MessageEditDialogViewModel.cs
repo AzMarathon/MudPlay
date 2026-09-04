@@ -99,14 +99,12 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // Editable Links list — see LinkRow for shape.
     public System.Collections.ObjectModel.ObservableCollection<LinkRow> LinkRows { get; } = new();
 
-    // Spells only — this dialog exists to author the message text a spell record
-    // lacks (the MDB imports every spell field EXCEPT its caster/target/witness/
-    // applied/wears-off lines). Item on-use and monster abilities both resolve to
-    // a spell in the Spells table, so there is never a reason to attach a message
-    // to an Item or Monster record here; offering those tables was dead weight.
-    public IReadOnlyList<string> LinkTables { get; } = new[] { "Spells" };
-
-    [ObservableProperty] private string _addLinkTable = "Spells";
+    // A message always attributes to a Spells row — this dialog exists to author
+    // the message text a spell record lacks (the MDB imports every spell field
+    // EXCEPT its caster/target/witness/applied/wears-off lines). Item on-use and
+    // monster abilities both resolve to a spell in the Spells table, so the
+    // add-link table is a fixed "Spells" (no picker); AddLink builds its link from it.
+    private const string LinkTable = "Spells";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AddLinkStatus))]
@@ -116,12 +114,12 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     {
         get
         {
-            if (string.IsNullOrWhiteSpace(AddLinkNumber)) return "Pick a table + type a Number to add a link.";
+            if (string.IsNullOrWhiteSpace(AddLinkNumber)) return "Type a spell number to add a link.";
             if (!int.TryParse(AddLinkNumber, out int n)) return $"'{AddLinkNumber}' is not a number.";
-            string? name = _cache?.FindNameByNumber(AddLinkTable, n);
+            string? name = _cache?.FindNameByNumber(LinkTable, n);
             return name is null
-                ? $"{AddLinkTable}#{n} — no row with that Number in the active set."
-                : $"Will add: {AddLinkTable}#{n} — {name}";
+                ? $"{LinkTable}#{n} — no row with that Number in the active set."
+                : $"Will add: {LinkTable}#{n} — {name}";
         }
     }
 
@@ -311,12 +309,12 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         if (!int.TryParse(AddLinkNumber, out int n)) return;
         foreach (LinkRow existing in LinkRows)
         {
-            if (string.Equals(existing.Table, AddLinkTable, StringComparison.Ordinal) &&
+            if (string.Equals(existing.Table, LinkTable, StringComparison.Ordinal) &&
                 existing.Number == n)
                 return;
         }
-        string? name = _cache?.FindNameByNumber(AddLinkTable, n);
-        LinkRows.Add(new LinkRow(AddLinkTable, n, name));
+        string? name = _cache?.FindNameByNumber(LinkTable, n);
+        LinkRows.Add(new LinkRow(LinkTable, n, name));
         AddLinkNumber = string.Empty;
     }
 
