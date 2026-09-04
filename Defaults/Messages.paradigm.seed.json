@@ -297,23 +297,6 @@
     ]
   },
   {
-    "Id": "e9b71aac975c5e1e",
-    "Name": "azure shamshir",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1084
-      }
-    ]
-  },
-  {
     "Id": "bfed0a1773eecb9c",
     "Name": "balanced sight",
     "Flags": "None",
@@ -568,23 +551,6 @@
       {
         "Table": "Spells",
         "Number": 189
-      }
-    ]
-  },
-  {
-    "Id": "441318dd221f5356",
-    "Name": "black warhammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel lucky",
-    "AppliedEndsWith": "The effects of bless wear off",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3352
       }
     ]
   },
@@ -1257,23 +1223,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "0fd8a4aee51e9fd4",
-    "Name": "copperwood staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1074
-      }
-    ]
-  },
-  {
     "Id": "efa611a7d3f4c8c4",
     "Name": "corrosion",
     "Flags": "None",
@@ -1719,23 +1668,6 @@
     ]
   },
   {
-    "Id": "997659117ed8baaa",
-    "Name": "dragonclaw staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Blue lightning streaks among your foes for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 741
-      }
-    ]
-  },
-  {
     "Id": "fe5b4a9c932fa5ac",
     "Name": "dragonfire",
     "Flags": "None",
@@ -1783,23 +1715,6 @@
       {
         "Table": "Spells",
         "Number": 1112
-      }
-    ]
-  },
-  {
-    "Id": "b1677cb9ce987ebb",
-    "Name": "earthbreaker",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A wave of force slams {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3335
       }
     ]
   },
@@ -2704,23 +2619,6 @@
     ]
   },
   {
-    "Id": "3982d90c5c14ead7",
-    "Name": "golden broadsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 265
-      }
-    ]
-  },
-  {
     "Id": "f08d0a834b9ea443",
     "Name": "grall bite",
     "Flags": "None",
@@ -2906,23 +2804,6 @@
       {
         "Table": "Spells",
         "Number": 772
-      }
-    ]
-  },
-  {
-    "Id": "afc14e1132755284",
-    "Name": "hammers of balance",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1589
       }
     ]
   },
@@ -3308,40 +3189,6 @@
       {
         "Table": "Spells",
         "Number": 156
-      }
-    ]
-  },
-  {
-    "Id": "9d974b08afdf734d",
-    "Name": "jeweled scimitar",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel lucky",
-    "AppliedEndsWith": "The effects of bless wear off",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 359
-      }
-    ]
-  },
-  {
-    "Id": "3bceeac260ebc190",
-    "Name": "jeweled shamshir",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel lucky",
-    "AppliedEndsWith": "The effects of bless wear off",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3360
       }
     ]
   },
@@ -4016,23 +3863,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "14884556fee0555a",
-    "Name": "nexus spear",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Energy sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 784
-      }
-    ]
-  },
-  {
     "Id": "69ba94ea52b60963",
     "Name": "opal ring",
     "Flags": "None",
@@ -4063,23 +3893,6 @@
       {
         "Table": "Spells",
         "Number": 187
-      }
-    ]
-  },
-  {
-    "Id": "db0a374f3df7bc0a",
-    "Name": "paired dragonblades",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1585
       }
     ]
   },
@@ -4238,23 +4051,6 @@
       {
         "Table": "Spells",
         "Number": 293
-      }
-    ]
-  },
-  {
-    "Id": "841ebfc49392fff0",
-    "Name": "platinum sceptre",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel lucky",
-    "AppliedEndsWith": "The effects of bless wear off",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3351
       }
     ]
   },
@@ -5002,23 +4798,6 @@
     ]
   },
   {
-    "Id": "6ca1fbec60472bbd",
-    "Name": "serpent scourge",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Venom sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 457
-      }
-    ]
-  },
-  {
     "Id": "779d6caf56d77e04",
     "Name": "shadowform",
     "Flags": "None",
@@ -5066,40 +4845,6 @@
       {
         "Table": "Spells",
         "Number": 865
-      }
-    ]
-  },
-  {
-    "Id": "b9d5eb223bdfa421",
-    "Name": "shimmering greatsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel lucky",
-    "AppliedEndsWith": "The effects of bless wear off",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3348
-      }
-    ]
-  },
-  {
-    "Id": "1f143c1378b4af8e",
-    "Name": "shimmering longsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You feel lucky",
-    "AppliedEndsWith": "The effects of bless wear off",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 347
       }
     ]
   },
@@ -5922,23 +5667,6 @@
     ]
   },
   {
-    "Id": "bc66af49783af816",
-    "Name": "Soulwaste",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} life is drained for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1624
-      }
-    ]
-  },
-  {
     "Id": "a4025a236ec1e5aa",
     "Name": "speaks in a booming voice",
     "Flags": "None",
@@ -6175,40 +5903,6 @@
       {
         "Table": "Spells",
         "Number": 94
-      }
-    ]
-  },
-  {
-    "Id": "163f90ff427f7eed",
-    "Name": "stormhammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 877
-      }
-    ]
-  },
-  {
-    "Id": "449e3d0da71ffb77",
-    "Name": "stormmetal greataxe",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1213
       }
     ]
   },
@@ -6491,23 +6185,6 @@
     ],
     "ConfuseFumbleLine": "",
     "CastResponse": ""
-  },
-  {
-    "Id": "00d87fa1cd5c7860",
-    "Name": "thunderstaff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} lightning damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 455
-      }
-    ]
   },
   {
     "Id": "47c564dceba251f2",

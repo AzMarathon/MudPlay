@@ -1097,23 +1097,6 @@
     ]
   },
   {
-    "Id": "2ff028f272e7f082",
-    "Name": "crimson bracers",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A blazing inferno sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 425
-      }
-    ]
-  },
-  {
     "Id": "e203c3570bf14d5a",
     "Name": "cross of vengeance",
     "Flags": "None",
@@ -1367,40 +1350,6 @@
       {
         "Table": "Spells",
         "Number": 267
-      }
-    ]
-  },
-  {
-    "Id": "997659117ed8baaa",
-    "Name": "dragonclaw staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Blue lightning streaks among your foes for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 741
-      }
-    ]
-  },
-  {
-    "Id": "d217808ab4c0d6f7",
-    "Name": "dragonclaw staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Blue lightning streaks out and sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 741
       }
     ]
   },
@@ -3259,23 +3208,6 @@
     ]
   },
   {
-    "Id": "14884556fee0555a",
-    "Name": "nexus spear",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Energy sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 784
-      }
-    ]
-  },
-  {
     "Id": "69ba94ea52b60963",
     "Name": "opal ring",
     "Flags": "None",
@@ -4035,23 +3967,6 @@
       {
         "Table": "Spells",
         "Number": 1377
-      }
-    ]
-  },
-  {
-    "Id": "6ca1fbec60472bbd",
-    "Name": "serpent scourge",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Venom sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 457
       }
     ]
   },
@@ -5110,23 +5025,6 @@
     ]
   },
   {
-    "Id": "163f90ff427f7eed",
-    "Name": "stormhammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 877
-      }
-    ]
-  },
-  {
     "Id": "36f0b13503669b91",
     "Name": "stunned",
     "Flags": "MovementPrevented, AttackPrevented",
@@ -5369,23 +5267,6 @@
     ],
     "ConfuseFumbleLine": "",
     "CastResponse": ""
-  },
-  {
-    "Id": "00d87fa1cd5c7860",
-    "Name": "thunderstaff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} lightning damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 455
-      }
-    ]
   },
   {
     "Id": "47c564dceba251f2",
