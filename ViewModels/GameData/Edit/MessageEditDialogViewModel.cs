@@ -186,9 +186,28 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         foreach (MessageRecord r in _existingRecords)
         {
             if (!_isNew && string.Equals(r.Id, _original.Id, StringComparison.Ordinal)) continue;
-            if (string.Equals(r.Id, projected, StringComparison.Ordinal)) return r;
+            if (!string.Equals(r.Id, projected, StringComparison.Ordinal)) continue;
+            // Same Name + all four lines — but a record anchored to a DIFFERENT game-data
+            // row (another spell/item) is a legitimate alias, not a duplicate: the game
+            // shows the same text for several spells (three separate 'disease' spells all
+            // read "You are diseased"). Only a record that shares THIS one's links (or, like
+            // it, carries none) is a true duplicate worth blocking.
+            if (LinksEqual(r)) return r;
         }
         return null;
+    }
+
+    // The record's back-references (Table#Number, table stem lower-cased) as a set,
+    // compared to the links currently in the editor. Two link-less records match.
+    private bool LinksEqual(MessageRecord r)
+    {
+        HashSet<string> mine = LinkRows
+            .Select(l => $"{l.Table.ToLowerInvariant()}#{l.Number}")
+            .ToHashSet(StringComparer.Ordinal);
+        HashSet<string> theirs = (r.Links ?? Array.Empty<GameDataLink>())
+            .Select(l => $"{l.Table.ToLowerInvariant()}#{l.Number}")
+            .ToHashSet(StringComparer.Ordinal);
+        return mine.SetEquals(theirs);
     }
 
     public bool HasError => GetValidationError() is not null;

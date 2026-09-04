@@ -20,6 +20,9 @@
 - Alias editor: greyed placeholder examples in the Name + Expansion boxes showing how an alias is filled out
 - Game Data record overrides (Monsters & Items): the Use-tier picker now offers **Installed defaults** — picking it *resets* the record (a confirm, then wipes your Character/BBS/Global edits for it back to the seed, so it returns to **Def**); the labels read in plain language (*only for this character / this BBS / for all characters*)
 - Editing a record's values back to the installed defaults now auto-removes that tier's redundant override (the row shifts back toward **Def**) instead of writing a no-op override — fixes a Global edit appearing not to "stick" when a Character override was shadowing it (character → BBS → global → defaults priority, unchanged)
+- Message editor: the duplicate-identity warning no longer blocks legitimate aliases — records with the same Name + lines but linked to a *different* spell/item (three separate 'disease' spells all read "You are diseased") are allowed; only a true duplicate sharing the same links is flagged
+- Spell record: its Removes / Casts / Cast By / Summons / Negated-by / Learned-from references now show the target's record number (`[#N]`) beside the name, matching the Monster record
+- Paradigm seed: the spells removed by *cure disease* / *cure major disease* are now flagged **Diseased** (so the auto-cure recognizes them), and a typo in the *pain* spell's witness line was fixed
 - Trigger seed trimmed of MegaMUD carryovers; monster-message seed stripped of retired death/combat lines
 
 ## 3.48.0

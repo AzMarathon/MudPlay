@@ -2238,7 +2238,7 @@
   {
     "Id": "c898328309f6fd79",
     "Name": "disease",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -5080,7 +5080,7 @@
   {
     "Id": "0f7c6131a06091f9",
     "Name": "leprosy",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "The {target} shrieks a word in an evil-sounding tongue!",
     "TargetMessage": "You writhe in agony as your flesh erupts and splits open!",
@@ -6186,7 +6186,7 @@
   {
     "Id": "70b3575c5175904d",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -6203,7 +6203,7 @@
   {
     "Id": "20858c4dd7169e8c",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "A hideous plague consumes you!",
@@ -6220,7 +6220,7 @@
   {
     "Id": "99b8570407341cd8",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "",
     "TargetMessage": "A hideous plague consumes you!",
@@ -6237,7 +6237,7 @@
   {
     "Id": "63b0d73f9f9d8a01",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -6934,7 +6934,7 @@
   {
     "Id": "8b8ebf7983641a1d",
     "Name": "rotting flesh",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 8,
     "CasterMessage": "You cast {spellname} on {target}!",
     "TargetMessage": "{source} casts {spellname} upon you!",
@@ -10951,7 +10951,7 @@
   {
     "Id": "5e2400db5977fc22",
     "Name": "ember",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "You launch a massive ball of {spellname}s at {target} for {damage} damage!",
     "TargetMessage": "{source} launches a massive ball of {spellname}s at you for {damage} damage!",
@@ -11427,7 +11427,7 @@
   {
     "Id": "d5d42701401b45b1",
     "Name": "diseased",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source}'s filthy claws corrupt your flesh!",
@@ -11920,7 +11920,7 @@
   {
     "Id": "46fd6939280076b8",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -12890,7 +12890,7 @@
   {
     "Id": "ff42a698f8b58c2f",
     "Name": "disease",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -13162,7 +13162,7 @@
   {
     "Id": "022747c030b1e8ab",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -13349,7 +13349,7 @@
   {
     "Id": "94daffce8ded4756",
     "Name": "plague",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
@@ -15238,7 +15238,7 @@
   {
     "Id": "175933cc1529fafc",
     "Name": "disease",
-    "Flags": "None",
+    "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "",
@@ -29510,13 +29510,13 @@
     ]
   },
   {
-    "Id": "8f2f79307d95a46d",
+    "Id": "b8a277fce8750f88",
     "Name": "pain",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} raises his palm towards you!",
-    "WitnessMessage": "The {source} raises him palm towards {target} !",
+    "WitnessMessage": "The {source} raises his palm towards {target} !",
     "AppliedMessage": "",
     "AppliedEndsWith": "",
     "Links": [
