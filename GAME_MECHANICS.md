@@ -3541,3 +3541,24 @@ ailment flag / applied+wear-off → Messages seed (ConditionTracker detector); *
 (pattern + response/action) → the Triggers seed** (e.g. `1 life left` → say warning + hangup; the
 separate `X end` records → response `stat` to refresh status). Decode → our record: Ends-with
 present OR ailment flag → `AppliedMessage`(+`AppliedEndsWith`); else → `CasterMessage`.
+
+## Item-cast spells: on-use vs combat proc (CONFIRMED, user + item panels)
+
+An item delivers a spell via an `Abil 43` (CastsSp) slot, and HOW it fires depends on
+the slot that precedes it:
+- **Bare CastsSp** (no modifier) = a command **on-use** cast — the player `use <item>`s
+  it (weapon major bless #114 blesses your weapon; the nexus spear's spear-slam #72).
+  These are player-visible casts and their message records (caster/target/witness, plus
+  applied/wear-off for a lasting effect) are worth keeping and filling.
+- **CastsSp preceded by `Abil 114` (%Spell) or `1114` (CastOnKill%)** = a **combat proc** —
+  it fires only while the item is equipped and you send a physical attack (the % is the
+  per-swing / per-kill chance; nexus spear's energy-hits #431 at 25%/swing, darkwood
+  staff #849 at 10%/swing). This is the "casts a spell during combat rounds" case.
+
+The on-use / proc MESSAGE lives on the **cast spell's** record (Spells#N), shared by
+every item that casts the same spell — never on the item (see `ItemCastSpells`,
+`Game/GameData/`). A weapon-proc spell that only **deals damage** (no lasting effect —
+`Dur==0`, which excludes every ailment) is not worth a message record and is dropped
+from the seeds; the generic colour combat recognizer still tallies its damage. A proc
+that applies an ailment (poison/blind/hold/disease — `Dur>0`) keeps its record and its
+condition flag; an on-use cast always keeps its record.
