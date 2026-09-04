@@ -12,6 +12,7 @@
 > - Monster record: every spell a monster references (spell-attacks, per-hit, create, death, between-rounds) links to its Spell record and shows the spell number
 > - Paradigm Messages seed back-fills the missing begin / wear-off lines on 8 buff/debuff spells and adds 7 more that had no record at all (horrid wound, stone temple poison, stone regeneration, clay flask, nightfall, sunder armour, diffusive blast), each tied to its Spell record, so those effects are recognized
 > - Message **Effects** flags: **Disabled (don't use)** now works — a disabled record is ignored entirely; **Attack prevented** now holds all combat output (weapon, attack spells, debuffs) while a stun/petrify/bind line is active; the four inert effect bits (losing-HP, HP/mana regenerating, ends-combat) were retired
+> - Alias editor shows greyed example placeholders in its Name + Expansion boxes
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

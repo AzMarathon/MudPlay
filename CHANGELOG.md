@@ -16,6 +16,7 @@
 - Message **Effects** flags: the **Disabled (don't use)** checkbox is now honored — a disabled record is ignored wholesale (recognizes nothing, sets no flag), and the four effect bits no engine ever acted on (losing-HP, HP/mana regenerating, ends-combat) were retired from the editor + seeds
 - **Attack prevented** flag now works too: while a line carrying it is active (stun / petrify / bind), combat holds all offensive output — weapon swings, attack spells, and debuffs — and resumes on the wear-off
 - Message editor default size trimmed to match the smaller Effects box
+- Alias editor: greyed placeholder examples in the Name + Expansion boxes showing how an alias is filled out
 - Trigger seed trimmed of MegaMUD carryovers; monster-message seed stripped of retired death/combat lines
 
 ## 3.48.0
