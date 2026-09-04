@@ -2737,7 +2737,7 @@
     ]
   },
   {
-    "Id": "c71930d5b31423fb",
+    "Id": "5479c2b983db7bbd",
     "Name": "knockdown",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 16,
@@ -4160,23 +4160,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "74fddb6acec1d95a",
-    "Name": "silvery mace",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A shining spark strikes {target} for {damage} damage!",
-    "TargetMessage": "A shining spark strikes you for {damage} damage!",
-    "WitnessMessage": "A shining spark strikes {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 170
-      }
-    ]
-  },
-  {
     "Id": "fc8c1ac477debf0b",
     "Name": "sleep",
     "Flags": "AttackPrevented, MovementPrevented",
@@ -5246,25 +5229,6 @@
     ]
   },
   {
-    "Id": "87efb5952965f119",
-    "Name": "sunsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} are scorched for {damage} damage!",
-    "TargetMessage": "You are scorched for {damage} damage!",
-    "WitnessMessage": "{target} is scorched for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 408
-      }
-    ],
-    "ConfuseFumbleLine": "",
-    "CastResponse": ""
-  },
-  {
     "Id": "e609b6b527b4e23c",
     "Name": "swarm",
     "Flags": "None",
@@ -5454,23 +5418,6 @@
       {
         "Table": "Spells",
         "Number": 18
-      }
-    ]
-  },
-  {
-    "Id": "01bac9afd0399b91",
-    "Name": "twisted bone staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} life is drained for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 687
       }
     ]
   },
@@ -6569,23 +6516,6 @@
     ]
   },
   {
-    "Id": "2165c1d1ef9e61d3",
-    "Name": "flame hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} fire damage!",
-    "TargetMessage": "You take {damage} fire damage!",
-    "WitnessMessage": "{source} takes {spellname} fire damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 109
-      }
-    ]
-  },
-  {
     "Id": "06d82becfdcb06ad",
     "Name": "godheal",
     "Flags": "None",
@@ -6718,74 +6648,6 @@
       {
         "Table": "Spells",
         "Number": 160
-      }
-    ]
-  },
-  {
-    "Id": "72f7a03287115396",
-    "Name": "dark fire",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Dark flame sears {target} for {damage} damage!",
-    "TargetMessage": "Dark flame sears you for {damage} damage!",
-    "WitnessMessage": "Dark flame sears {source} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 172
-      }
-    ]
-  },
-  {
-    "Id": "43dd99522da26747",
-    "Name": "thunderstaff-hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{spellname} takes {damage} lightning damage!",
-    "TargetMessage": "You take {damage} lightning damage!",
-    "WitnessMessage": "{source} takes {spellname} lightning damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 174
-      }
-    ]
-  },
-  {
-    "Id": "57dfb4c145394eef",
-    "Name": "serpent scourge-hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Venom sears {spellname} for {damage} damage!",
-    "TargetMessage": "Venom sears you for {damage} damage!",
-    "WitnessMessage": "Venom sears {source} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 178
-      }
-    ]
-  },
-  {
-    "Id": "1f284e5b06c376cc",
-    "Name": "moonsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A brilliant beam zaps {target} for {damage} damage!",
-    "TargetMessage": "A brilliant beam zaps you for {damage} damage!",
-    "WitnessMessage": "A brilliant beam zaps {source} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 180
       }
     ]
   },
@@ -7368,23 +7230,6 @@
     ]
   },
   {
-    "Id": "8715bafe79205b38",
-    "Name": "poison blade",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} damage from the venom!",
-    "TargetMessage": "You take {damage} damage from the venom!",
-    "WitnessMessage": "{source} takes {damage} damage from the venom!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 354
-      }
-    ]
-  },
-  {
     "Id": "ff00ac1b3ef39628",
     "Name": "vampiric bite",
     "Flags": "None",
@@ -7398,23 +7243,6 @@
       {
         "Table": "Spells",
         "Number": 358
-      }
-    ]
-  },
-  {
-    "Id": "b08edddae88a6eb3",
-    "Name": "drain life",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s life is drained for {damage} damage!",
-    "TargetMessage": "Your life is drained for {damage} damage!",
-    "WitnessMessage": "{source}'s life is drained for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 361
       }
     ]
   },
@@ -7589,23 +7417,6 @@
     ]
   },
   {
-    "Id": "70a81d03e4501318",
-    "Name": "frost hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} damage from the cold!",
-    "TargetMessage": "You take {damage} damage from the cold!",
-    "WitnessMessage": "{source} takes {damage} damage from the cold!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 400
-      }
-    ]
-  },
-  {
     "Id": "abda175a501f03c1",
     "Name": "firestorm",
     "Flags": "None",
@@ -7619,23 +7430,6 @@
       {
         "Table": "Spells",
         "Number": 413
-      }
-    ]
-  },
-  {
-    "Id": "7082d588dc769704",
-    "Name": "blazing comet",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A blazing comet strikes {spellname} for {damage} damage!",
-    "TargetMessage": "A blazing comet strikes you for {damage} damage!",
-    "WitnessMessage": "A blazing comet strikes {source} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 420
       }
     ]
   },
@@ -7687,23 +7481,6 @@
       {
         "Table": "Spells",
         "Number": 429
-      }
-    ]
-  },
-  {
-    "Id": "7aaabe118356518c",
-    "Name": "energy hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Energy sears {spellname} for {damage} damage!",
-    "TargetMessage": "Energy sears you for {damage} damage!",
-    "WitnessMessage": "Energy sears {source} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 431
       }
     ]
   },
@@ -8078,23 +7855,6 @@
       {
         "Table": "Spells",
         "Number": 769
-      }
-    ]
-  },
-  {
-    "Id": "3531b63eac21b3b5",
-    "Name": "sucks the life",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Your blackwood staff {spellname} from {target} for {damage} damage!",
-    "TargetMessage": "{source}'s blackwood staff {spellname} from you for {damage} damage!",
-    "WitnessMessage": "{source}'s blackwood staff {spellname} from {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 787
       }
     ]
   },
@@ -8559,30 +8319,13 @@
     ]
   },
   {
-    "Id": "114d0671ca341966",
-    "Name": "absorb",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "You {spellname} the energy from {target} for {damage} damage!",
-    "TargetMessage": "{source} {spellname}s the energy from your body for {damage} damage!",
-    "WitnessMessage": "{source} {spellname}s the energy from {target}'s body!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 950
-      }
-    ]
-  },
-  {
-    "Id": "25b80ef758b1c4e7",
+    "Id": "de49148d50a2b190",
     "Name": "disease",
     "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "Their wounds begin to fester!",
     "TargetMessage": "Your wounds begin to fester!",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "",
     "AppliedMessage": "You are diseased",
     "AppliedEndsWith": "The disease dies down",
     "Links": [
@@ -8729,74 +8472,6 @@
     ]
   },
   {
-    "Id": "d8e1dddadae08152",
-    "Name": "fire burns",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {spellname} for {damage} damage!",
-    "TargetMessage": "Fire burns you for {damage} damage!",
-    "WitnessMessage": "Fire burns {source} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 979
-      }
-    ]
-  },
-  {
-    "Id": "bf3bec6fd7b521af",
-    "Name": "acid sears",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Acid sears {spellname} for {damage} damage!",
-    "TargetMessage": "Acid sears you for {damage} damage!",
-    "WitnessMessage": "Acid sears {source} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 980
-      }
-    ]
-  },
-  {
-    "Id": "26117ed8f3cc298e",
-    "Name": "lightning shocks",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {spellname} for {damage} damage!",
-    "TargetMessage": "Lightning strikes you for {damage} damage!",
-    "WitnessMessage": "Lightning strikes {source} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 981
-      }
-    ]
-  },
-  {
-    "Id": "e76515ffdbcec4c6",
-    "Name": "purified",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "Purification burns you with divine power for {damage} damage!",
-    "WitnessMessage": "{source} is purified with divine power for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 982
-      }
-    ]
-  },
-  {
     "Id": "5d56126d4c8ff5fb",
     "Name": "lacerate",
     "Flags": "None",
@@ -8827,23 +8502,6 @@
       {
         "Table": "Spells",
         "Number": 987
-      }
-    ]
-  },
-  {
-    "Id": "db82b099189101fc",
-    "Name": "evil random",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{spellname} {target} {damage}",
-    "TargetMessage": "{source} drains your {spellname} for {damage} damage!",
-    "WitnessMessage": "{source} drains the {spellname} of {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 988
       }
     ]
   },
@@ -10600,23 +10258,6 @@
     ]
   },
   {
-    "Id": "32669826d1623362",
-    "Name": "vampiric hits",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "The dagger drains {target} of life for {damage} damage!",
-    "TargetMessage": "The dagger drains you of life for {damage} damage!",
-    "WitnessMessage": "The dagger drains {target} of life for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 342
-      }
-    ]
-  },
-  {
     "Id": "f1b8dab4860e78c7",
     "Name": "tentacles",
     "Flags": "None",
@@ -11514,23 +11155,6 @@
       {
         "Table": "Spells",
         "Number": 410
-      }
-    ]
-  },
-  {
-    "Id": "86848e4a68481332",
-    "Name": "elemental earthquake",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "An earthquake rocks {target} for {damage} damage!",
-    "TargetMessage": "An earthquake rocks you for {damage} damage!",
-    "WitnessMessage": "An earthquake rocks {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 416
       }
     ]
   },
@@ -13592,23 +13216,6 @@
     ]
   },
   {
-    "Id": "2938e0ba6fff552f",
-    "Name": "drain spell",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "The fangblade draws life from you!",
-    "TargetMessage": "You feel rejuvenated!",
-    "WitnessMessage": "{source} looks pale for a moment!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 896
-      }
-    ]
-  },
-  {
     "Id": "2e48cc1d6f72a7db",
     "Name": "poison darts",
     "Flags": "Poisoned",
@@ -13966,23 +13573,6 @@
     ]
   },
   {
-    "Id": "f318d74fc2404cb1",
-    "Name": "rocks shred",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Rocks shred {target} for {damage} damage!",
-    "TargetMessage": "Rocks shred you for {damage} damage!",
-    "WitnessMessage": "Rocks shred {target} for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 977
-      }
-    ]
-  },
-  {
     "Id": "e6fb2aadd2babf69",
     "Name": "card-demon",
     "Flags": "None",
@@ -13996,23 +13586,6 @@
       {
         "Table": "Spells",
         "Number": 983
-      }
-    ]
-  },
-  {
-    "Id": "20ca16ff0b3ab852",
-    "Name": "drain life",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s life is drained for {damage} damage!",
-    "TargetMessage": "Your life is drained for {damage} damage!",
-    "WitnessMessage": "{target}'s life is drained for {damage} damage!",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 984
       }
     ]
   },
@@ -20926,23 +20499,6 @@
     ]
   },
   {
-    "Id": "e3527687078d0d6e",
-    "Name": "random dmg",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{null}",
-    "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 964
-      }
-    ]
-  },
-  {
     "Id": "813619968ea4c096",
     "Name": "vampire mist",
     "Flags": "None",
@@ -22081,23 +21637,6 @@
       {
         "Table": "Spells",
         "Number": 1200
-      }
-    ]
-  },
-  {
-    "Id": "331648161892d1ae",
-    "Name": "cudgel random",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{null}",
-    "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
-    "AppliedMessage": "{null}",
-    "AppliedEndsWith": "{null}",
-    "Links": [
-      {
-        "Table": "Spells",
-        "Number": 1201
       }
     ]
   },
