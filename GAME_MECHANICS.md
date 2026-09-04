@@ -535,16 +535,19 @@ it isn't here and you're unsure, ask.
   dropped for that target** — a mana-regen tick that lifts mana back above the reserve must NOT flip
   the client back to the spell mid-fight; it commits to the weapon until the monster dies (or the room
   clears). This is a per-target latch, mirroring the observed-immunity latch.
-- **[CONFIRMED]** *(2026-09-03, user + Spells-table trace, Paradigm 1.9.1 + Stock)* **A spell's
-  `EnergyCost` separates a per-round attack spell from a between-round buff/debuff.** `EnergyCost`
-  1–1000 = a per-round combat spell (fires `floor(1000 ÷ EnergyCost)` times per round — mmis/lbol at
-  500 → 2×); `EnergyCost` 0 = a between-round spell, and **every** lasting effect — buffs *and* lasting
-  debuffs like poison/bless — sits at 0. **Energy cost alone does NOT imply "no lasting effect",
-  though:** a minority of per-round (1–1000) attack spells still inflict a lasting condition — poison
-  bolt (poison), black curse (blind), paralyze (hold), thunderstun (stun), engulf-in-flame (burning
-  DoT) — so those DO carry an applied + wear-off line. The reliable tell for "pure damage, no
-  applied/wear-off pair" is `EnergyCost` 1–1000 **AND** no condition flag **AND** no already-authored
-  applied/wear-off line; that's exactly the set the Messages seeds pre-mark `{null}` on both slots.
+- **[CONFIRMED]** *(2026-09-03, user + Spells-table trace, Paradigm 1.9.1 + Stock)* **`EnergyCost` sets a
+  spell's per-round firing rate, but `Dur` — not energy — decides whether it carries an applied +
+  wear-off line.** `EnergyCost` 1–1000 fires `floor(1000 ÷ EnergyCost)` times per round (mmis/lbol at
+  500 → 2×); `EnergyCost` 0 is cast between rounds. That does NOT track lasting-effect, though: a
+  monster's damage breath can be `EnergyCost` 0 yet purely instant, and a per-round bolt can still
+  *poison*. The reliable tell is the spell's **duration**: `Dur > 0` (or `DurInc > 0`) ⟺ a lasting
+  effect ⟺ it has an applied + wear-off pair — this covers **every** buff (bless `Dur`=40, prot-evil
+  `Dur`=50) *and* every lasting debuff (poison `Dur`=5000, black curse `Dur`=40, a `Dur`=5 confuse
+  breath, hold/blind). `Dur` == 0 ⟺ an **instant** spell (attack/damage `Abil` 1/17, heal 18,
+  cure 20/81/84/122, dispel 73, life-drain 8, summon 12) ⟺ **no** applied/wear-off. Verified across
+  both realms: **no** `Dur`==0 spell carries a poison/confuse/hold/paralyze/blind ability. The Messages
+  seeds pre-mark `{null}` on both slots for every `Dur`==0 record that has no condition flag and no
+  already-authored effect line.
 - **[CONFIRMED]** *(2026-08-05, user)* **"You attempt to cast <spell>, but fail." means the spell DID
   cast — mana was spent — but it missed the target (a hit-roll failure), NOT a fizzle and NOT
   out-of-mana.** So an attack spell drains mana every round it repeats whether it lands or misses; a
