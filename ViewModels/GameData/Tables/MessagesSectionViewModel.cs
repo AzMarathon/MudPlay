@@ -39,7 +39,7 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Name", "Missing", "Lines", "Preview",
+        "Spell #", "Name", "Missing", "Lines", "Preview",
     };
 
     public override string SearchKeyColumn => "Name";
@@ -47,8 +47,8 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
     public override IEnumerable<string> SearchableLabels => new[]
     {
         Title, "messages", "incomplete", "unfiltered", "missing", "worklist", "orphan",
-        "condition", "pattern", "caster", "target", "witness", "applied", "wears-off", "fumble",
-        "blinded", "poisoned", "paralyzed", "confused", "diseased",
+        "spell", "number", "condition", "pattern", "caster", "target", "witness", "applied",
+        "wears-off", "fumble", "blinded", "poisoned", "paralyzed", "confused", "diseased",
     };
 
     // Open the per-record edit dialog for the row currently double-clicked.
@@ -132,8 +132,10 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
             // Lines column = compact tag string showing which perspective slots ARE populated,
             // e.g. "C T W A•" (Caster+Target+Witness + Applied pair). Missing column = the
             // still-blank required slots. Preview column = first non-empty line for a quick read.
+            // Spell # column = the linked Spell record number(s), blank when tied to no spell.
             var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
+                ["Spell #"] = SpellNumbers(m),
                 ["Name"]    = m.Name,
                 ["Missing"] = missing,
                 ["Lines"]   = BuildLineTags(m),
@@ -145,6 +147,20 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
                 row.SourceTier = _resolver.GetGameDataSourceTier("Messages", m.Id);
             rows.Add(row);
         }
+    }
+
+    // The linked Spell record number(s) for the leading "Spell #" column — the Number of
+    // every Spells back-reference (comma-joined when a record aliases several spells),
+    // blank when the record is tied to no spell. Shown whether or not the spell exists in
+    // the active set (an orphaned link still names the number it points at).
+    internal static string SpellNumbers(MessageRecord m)
+    {
+        if (m.Links is null) return string.Empty;
+        List<int>? nums = null;
+        foreach (GameDataLink link in m.Links)
+            if (string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase))
+                (nums ??= new()).Add(link.Number);
+        return nums is null ? string.Empty : string.Join(", ", nums);
     }
 
     // The required message slots for a spell-linked record, in fill order: the three

@@ -26,6 +26,31 @@ public sealed class MessagesSectionFilterTests
 
     // ----- MissingSlots (the Incomplete worklist inclusion + Missing column) -----
 
+    // ----- SpellNumbers (the leading "Spell #" column) -----
+
+    [Fact]
+    public void SpellNumbers_SingleSpellLink()
+    {
+        Assert.Equal("107",
+            MessagesSectionViewModel.SpellNumbers(WithLinks("bless", new GameDataLink("Spells", 107))));
+    }
+
+    [Fact]
+    public void SpellNumbers_MultipleSpellLinks_CommaJoined()
+    {
+        Assert.Equal("150, 223",
+            MessagesSectionViewModel.SpellNumbers(WithLinks("disease",
+                new GameDataLink("Spells", 150), new GameDataLink("Spells", 223))));
+    }
+
+    [Fact]
+    public void SpellNumbers_NoSpellLink_Blank()
+    {
+        Assert.Equal("", MessagesSectionViewModel.SpellNumbers(WithLinks("plain")));
+        Assert.Equal("", MessagesSectionViewModel.SpellNumbers(
+            WithLinks("itemproc", new GameDataLink("Items", 438))));
+    }
+
     [Fact]
     public void MissingSlots_AllBlank_ListsEveryRequiredSlot()
     {
