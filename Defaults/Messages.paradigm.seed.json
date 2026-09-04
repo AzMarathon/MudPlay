@@ -6898,15 +6898,15 @@
     ]
   },
   {
-    "Id": "262a401a8c9cd457",
+    "Id": "6f36398ab64e9619",
     "Name": "rosebush sleep",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "You awaken from unnatural slumber.",
     "TargetMessage": "The fragarance of the rosebush fills your nostrils.",
     "WitnessMessage": "{source} begins to look drowsy.",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "You are lulled to sleep by a toxic fragerance",
+    "AppliedEndsWith": "You awaken from unnatural slumber",
     "Links": [
       {
         "Table": "Spells",
@@ -12615,15 +12615,15 @@
     ]
   },
   {
-    "Id": "5578b05314c8a193",
+    "Id": "56e734cef4da7c52",
     "Name": "form of the crane",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "You invoke the {spellname}.",
     "TargetMessage": "",
     "WitnessMessage": "{source} invokes the {spellname}!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "The spirit of the crane inhabits your body",
+    "AppliedEndsWith": "The spirit of the crane has left your body",
     "Links": [
       {
         "Table": "Spells",
@@ -12632,15 +12632,15 @@
     ]
   },
   {
-    "Id": "f71192c60bfc630a",
+    "Id": "2954b459ac9ae8b1",
     "Name": "form of the gorilla",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "You invoke the {spellname}.",
     "TargetMessage": "",
     "WitnessMessage": "{source} invokes the {spellname}!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "The spirit of the gorilla inhabits your body",
+    "AppliedEndsWith": "The spirit of the gorilla has left your body",
     "Links": [
       {
         "Table": "Spells",
@@ -12649,15 +12649,15 @@
     ]
   },
   {
-    "Id": "f1c37efe29cd64e4",
+    "Id": "16c7a5b535b767fd",
     "Name": "form of the monkey",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "You invoke the {spellname}.",
     "TargetMessage": "",
     "WitnessMessage": "{source} invokes the {spellname}!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "The spirit of the monkey inhabits your body",
+    "AppliedEndsWith": "The spirit of the monkey has left your body",
     "Links": [
       {
         "Table": "Spells",
@@ -12666,15 +12666,15 @@
     ]
   },
   {
-    "Id": "f063a345898147c7",
+    "Id": "b753324fabbf97ca",
     "Name": "form of the viper",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "You invoke the {spellname}.",
     "TargetMessage": "",
     "WitnessMessage": "{source} invokes the {spellname}!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "The spirit of the viper inhabits your body",
+    "AppliedEndsWith": "The spirit of the viper has left your body",
     "Links": [
       {
         "Table": "Spells",
@@ -15167,14 +15167,14 @@
     ]
   },
   {
-    "Id": "7c03feb5823234fc",
+    "Id": "cdce56f26537110d",
     "Name": "breathes",
     "Flags": "Confused",
     "RawFlagsHex": 2,
     "CasterMessage": "",
     "TargetMessage": "The dried husk breathes on you!",
     "WitnessMessage": "The dried husk breathes on {target}!",
-    "AppliedMessage": "",
+    "AppliedMessage": "Suffocating fumes overwhelm you",
     "AppliedEndsWith": "The suffocating fumes dissipate.",
     "Links": [
       {
@@ -16477,15 +16477,15 @@
     ]
   },
   {
-    "Id": "cb82c9ffad2c1d51",
+    "Id": "e34ed22d05fcc513",
     "Name": "yellow fungus",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "You eat the yellow fungus, and feel better!",
     "TargetMessage": "",
     "WitnessMessage": "{source} eats some yellow fungus!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "You are paralyzed",
+    "AppliedEndsWith": "You can move again",
     "Links": [
       {
         "Table": "Spells",
@@ -19741,15 +19741,15 @@
     ]
   },
   {
-    "Id": "79586b6ce92aa420",
+    "Id": "7875e0c80dee2b4c",
     "Name": "green beam",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "It points towards you, and fires a brilliant green beam for {damage} damage!",
     "WitnessMessage": "It points towards {source}, and fires a brilliant green beam for {damage} damage!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "You feel ill",
+    "AppliedEndsWith": "The effects of the poison wear off",
     "Links": [
       {
         "Table": "Spells",

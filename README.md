@@ -10,6 +10,7 @@
 > - New **Cast response** field on a message: a monster whose DeathSpell is a silent *…temp* spell fires it on death (seeded `^M^M`, two carriage returns) to unstick the game engine
 > - The ganghouse **guardians, elite guardians, and spellbreakers** now default to **Friend**
 > - Monster record: every spell a monster references (spell-attacks, per-hit, create, death, between-rounds) links to its Spell record and shows the spell number
+> - Paradigm Messages seed back-fills the missing begin / wear-off lines on 8 buff/debuff spells (the *form of the …* animal spirits, yellow fungus, rosebush sleep, green beam, suffocating-fumes breath) so those effects are recognized
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

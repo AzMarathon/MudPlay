@@ -12,6 +12,7 @@
 - Monster record: every spell a monster references — its **spell-attacks, per-hit, create, death, and between-rounds** spells — now links to its Spell record and shows the spell's number (`[#N]`); previously only between-rounds spells linked
 - Removed the spurious *trap disarm* message records — trap-trigger lines wrongly flagged Last-action-failed, which fired a bogus combat re-swing when a trap went off
 - Trimmed the Unfiltered Messages catalogue: removed the standalone condition-detector records (held / blind / confused / poison / fumble / combat-end) from both seeds
+- Paradigm Messages seed: back-filled the missing begin / wear-off lines on 8 buff/debuff spells (the *form of the …* animal spirits, yellow fungus paralysis, rosebush sleep, green beam poison, suffocating-fumes breath) so those effects are recognized
 - Trigger seed trimmed of MegaMUD carryovers; monster-message seed stripped of retired death/combat lines
 
 ## 3.48.0
