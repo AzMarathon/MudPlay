@@ -154,12 +154,12 @@
                                             Orientation="Horizontal" Spacing="6" Margin="16,0,0,0">
                                     <TextBlock Classes="FieldLabel" Text="Max casts"/>
                                     <NumericUpDown Value="{Binding PreAttackCount, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="96"
+                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="84"
                                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
                                     <TextBlock Classes="FieldLabel" Text="Min mana to cast" Margin="8,0,0,0"/>
                                     <NumericUpDown Value="{Binding PreAttackMinMana, Mode=TwoWay}"
                                                    Minimum="0" Maximum="{Binding SpellManaMax}"
-                                                   FormatString="0" Increment="1" Width="96"/>
+                                                   FormatString="0" Increment="1" Width="108"/>
                                     <TextBlock Classes="FieldLabel" Text="{Binding PreAttackMinManaConverted}"/>
                                 </StackPanel>
 
@@ -176,12 +176,12 @@
                                             Orientation="Horizontal" Spacing="6" Margin="16,0,0,0">
                                     <TextBlock Classes="FieldLabel" Text="Max casts"/>
                                     <NumericUpDown Value="{Binding AttackCount, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="96"
+                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="84"
                                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
                                     <TextBlock Classes="FieldLabel" Text="Min mana to cast" Margin="8,0,0,0"/>
                                     <NumericUpDown Value="{Binding AttackMinMana, Mode=TwoWay}"
                                                    Minimum="0" Maximum="{Binding SpellManaMax}"
-                                                   FormatString="0" Increment="1" Width="96"/>
+                                                   FormatString="0" Increment="1" Width="108"/>
                                     <TextBlock Classes="FieldLabel" Text="{Binding AttackMinManaConverted}"/>
                                 </StackPanel>
                             </Grid>
