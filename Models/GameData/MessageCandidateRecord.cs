@@ -19,7 +19,13 @@ public sealed record MessageCandidateRecord(
     DateTimeOffset FirstSeenAt,
     DateTimeOffset LastSeenAt,
     int            Occurrences,
-    bool           Dismissed)
+    bool           Dismissed,
+    // Map / room the line was FIRST seen in (null when position wasn't yet known),
+    // a locator hint for where an unrecognized line came from. Not part of Id — the
+    // same line seen in two rooms stays one candidate, tagged with the first sighting.
+    // Trailing + nullable so older message-candidates.json (no location) still loads.
+    int?           Map = null,
+    int?           Room = null)
 {
     public static string ComputeId(string rawText)
     {

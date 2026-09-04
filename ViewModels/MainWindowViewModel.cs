@@ -621,6 +621,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetRoomGameDataOpener(OpenRoomGameData);
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
+        AppServices.Current.SetGoWalkOpener(GoWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
         AppServices.Current.SetHighlightWhereOpener(HighlightWhereRoomIfOpen);
         AppServices.Current.SetNavManagerOpener(OpenNavManager);
@@ -849,7 +850,8 @@ public partial class MainWindowViewModel : ObservableObject
         // — it reads peeked neighbours the tracker would otherwise drop.
         _roomDisplayParser.RoomParsed += AppServices.Current.Recovery.OnRoomObserved;
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
-            AppServices.Current.RoomTracker, AppServices.Current.Log);
+            AppServices.Current.RoomTracker, AppServices.Current.Log,
+            AppServices.Current.Conditions.IsConfuseFumbleLine);
         // Combat-gated-entry refusal: `break` → 3s → revert move so the driving
         // engine retries. Gated on a movement engine actually driving.
         _combatEntryRefusalHandler = new Game.Map.CombatEntryRefusalHandler(Lines,
@@ -885,10 +887,8 @@ public partial class MainWindowViewModel : ObservableObject
         // Messages record's AppliedMessage / AppliedEndsWith pair to
         // surface live ActiveFlags.
         AppServices.Current.Conditions.AttachLineExtractor(Lines);
-        // Game-data message Response auto-send (e.g. desert "use water").
-        AppServices.Current.MessageResponder.AttachLineExtractor(Lines);
-        // Stages lines neither of the two consumers above (nor any registered
-        // Router pattern) recognized, as review candidates for the catalogue.
+        // Stages lines neither the message catalogue above nor any registered
+        // Router pattern recognized, as review candidates for the catalogue.
         AppServices.Current.MessageCandidateWatcher.AttachLineExtractor(Lines);
         // Pyramid solver watches lines for the sphinx "concealed passage" cue, the
         // golden-lion-key pickup, and the scatter room name.
@@ -1238,8 +1238,6 @@ public partial class MainWindowViewModel : ObservableObject
         // Pyramid solver — its climb moves + door/sphinx commands ride the same
         // gate-wrapped pipeline.
         AppServices.Current.PyramidSolver.SetWireSender(engineSend);
-        // Message Response auto-send rides the same gate-wrapped pipeline.
-        AppServices.Current.MessageResponder.SetWireSender(engineSend);
         // Summon-on-death CR recheck rides the same gate-wrapped pipeline.
         AppServices.Current.SummonSettle.SetWireSender(engineSend);
         // Recovery gate's tier-3 look-sweep rides the same gate-wrapped pipeline
@@ -4393,6 +4391,12 @@ public partial class MainWindowViewModel : ObservableObject
     private void QueueWalkToRoom(Game.Map.RoomKey key)
         => EnsureNavigationWindow()?.QueueDestination(key);
 
+    // Registered on AppServices — the Roomba room list's "Goto" button routes here
+    // to open/focus the map, arm the room, and START the walk immediately (the full
+    // "Walk here" path), rather than only arming it like QueueWalkToRoom.
+    private void GoWalkToRoom(Game.Map.RoomKey key)
+        => _ = EnsureNavigationWindow()?.QueueAndStartWalkTo(key);
+
     // Room-detail exit clicks re-root the popup on the neighbour and let an
     // already-open map follow — but must not summon the map if it's closed,
     // so this centres only when the window is up (no EnsureNavigationWindow).
@@ -4944,16 +4948,17 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.CombatTracker.ResetCombatState("Reset States (manual)");
 
         // Force back into the Default gear set — a stuck rest set or a half-finished
-        // swap is exactly what a manual reset rescues — and re-poll `stat` so a max
-        // HP/mana high-water mark that drifted above the real ceiling re-latches to
-        // the authoritative value (a stale max is what strands a rest).
+        // swap is exactly what a manual reset rescues — and re-poll `health` (the
+        // compact one-line HP/pool readout — far less scroll than the full stat
+        // screen) so a max HP/mana high-water mark that drifted above the real ceiling
+        // re-latches to the authoritative value (a stale max is what strands a rest).
         Game.Inventory.EquipResult equip =
             AppServices.Current.Equipment.ApplyByTrigger(Models.Profile.EquipTriggerType.Default);
-        SendUserText("stat");
+        SendUserText("health");
 
         AppServices.Current.Log.Info(Game.Conditions.ConditionTracker.LogCategory,
             "Reset States — self conditions, ailment chips, combat state, and derived movement holds cleared; "
-            + $"re-equipping Default set ({equip}) and re-polling stat to re-latch max HP/mana (manual).");
+            + $"re-equipping Default set ({equip}) and re-polling `health` to re-latch max HP/mana (manual).");
     }
 
     // ----- Inventory / equipment bulk actions (Action menu + toolbar) -----

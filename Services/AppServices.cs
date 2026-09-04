@@ -93,6 +93,14 @@ public sealed class AppServices
     public void SetQueueWalkOpener(Action<Game.Map.RoomKey> opener) => _queueWalkOpener = opener;
     public void QueueWalkTo(Game.Map.RoomKey key) => _queueWalkOpener?.Invoke(key);
 
+    // Opens (or re-focuses) the Navigation window and STARTS an immediate walk to a
+    // room — the full "Walk here" path (stop conflicting engines, route picker for a
+    // gated/hazard/trap crossing, GOTO history), not merely arming it. Used by the
+    // Roomba room list's Goto button. No-op until the main VM binds it.
+    private Action<Game.Map.RoomKey>? _goWalkOpener;
+    public void SetGoWalkOpener(Action<Game.Map.RoomKey> opener) => _goWalkOpener = opener;
+    public void GoWalkTo(Game.Map.RoomKey key) => _goWalkOpener?.Invoke(key);
+
     // Type text at the game through the SAME path the terminal / Conversation input
     // uses — macro split, alias expansion, and the outbound cast/attack/chat/movement
     // observers — so a programmatic send is indistinguishable from the user typing
@@ -239,6 +247,13 @@ public sealed class AppServices
     // bar, the Workshop STATS section, and automation
     // engines that gate on HP / MP thresholds.
     public Game.PlayerState PlayerState { get; }
+
+    // True when the character's Combat-tab min-mana threshold is read as a percentage
+    // (vs an absolute value). Surfaced so per-monster override editors can present the
+    // same min-mana control (% cap vs absolute ceiling) as Settings → Combat.
+    public bool CombatSpellManaModeIsPercentage =>
+        ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat")
+            .SpellManaThresholdMode == Models.Profile.ThresholdMode.Percentage;
 
     // Parses MajorMUD status-line prompts into PlayerState.
     // Sole writer of the state's HP / MA / position / mana-type fields
@@ -1134,9 +1149,6 @@ public sealed class AppServices
     // by CastingDirector's Tier-2 cure path.
     public Game.Conditions.ConditionTracker Conditions { get; private set; } = null!;
 
-    // Sends a game-data message's Response command when its CasterMessage lands.
-    public Game.Conditions.MessageResponder MessageResponder { get; private set; } = null!;
-
     // Outbound ailment-sync engine — on a local curable ailment it
     // announces on say (.@poisoned etc.) so other MudPlay
     // clients mirror our state, and @waits the leader; on clear it @oks.
@@ -1453,6 +1465,11 @@ public sealed class AppServices
     // Opens the spell record (Message / Game-Data) dialog by Number from any surface —
     // the Navigation Room Info panel's room-spell link. Single-instance across callers.
     public SpellRecordDialogService SpellRecord { get; private set; } = null!;
+
+    // Opens an item's on-use / proc message editor from the item dialog's Message
+    // section — the Items-side mirror of SpellRecord. Item-claimed message records are
+    // authored here rather than the Messages tab. Single-instance across callers.
+    public ItemMessageDialogService ItemMessage { get; private set; } = null!;
 
     // Background audit comparing player-facing spells in the active
     // set against the Messages catalogue's Links field — surfaces a
@@ -1822,6 +1839,19 @@ public sealed class AppServices
         // already-migrated trees.
         LogService bootstrapLog = new();
         DataMigration.RunIfNeeded(bootstrapLog);
+
+        // One-time forced retirement of the pre-split Messages catalogue (legacy single
+        // Global seed + per-set messages.json), so existing installs land on the new
+        // realm-flavored seeds bootstrapped just above. Guarded by a marker; backs up to
+        // .bak first. Remove-after-rollout (tracked as a GitHub issue).
+        DataMigration.RetireLegacyMessagesOnce(bootstrapLog);
+
+        // One-time forced reseed for the item-on-use → cast-spell recuration: this release
+        // rebuilt the Messages seeds (one message per cast spell, proc-damage records
+        // dropped, realm lines corrected), so an existing install's older Global seed /
+        // per-set edits are backed up to .bak and replaced with the shipped seed. Guarded
+        // by its own marker; remove-after-rollout.
+        DataMigration.ForceMessageReseedOnce(bootstrapLog);
 
         _current = new AppServices(bootstrapLog);
         return _current;
@@ -2204,6 +2234,22 @@ public sealed class AppServices
             // PromptParser to keep it the sole writer of the max fields).
             Player.ApplyStatScreenMax(snapshot.MaxHits, snapshot.MaxMana);
             SeedSpellbook(snapshot);
+        };
+        // The compact `health` command (Reset States, or a manual `health`) re-anchors
+        // the HP + power-pool ceilings without the full stat-screen scroll. Snap
+        // PlayerState.MaxHp/MaxMa to them — through PromptParser, the sole max-field
+        // writer — and persist the refreshed snapshot so the next session hydrates the
+        // corrected ceilings. poolMax is whichever pool the class carries (mana or kai),
+        // so it re-latches a kai ceiling the stat-screen path (which passes only MaxMana)
+        // never could. It carries no class/level, so no spellbook reseed.
+        Stats.HealthReanchored += (maxHits, poolMax) =>
+        {
+            Player.ApplyStatScreenMax(maxHits, poolMax);
+            if (Profile.Current is { } p)
+            {
+                p.LastKnownStats = Stats.Snapshot();
+                Profile.Save();
+            }
         };
         // Restore the snapshot back into live PlayerStats whenever a
         // profile loads. StatParser owns the PlayerStats fields, so
@@ -3071,10 +3117,21 @@ public sealed class AppServices
         // through the engaged name, so they're covered too.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key, Combat.CurrentTarget);
+        // Grab-All: the moment a tracked boss with GrabAll set dies, blindly `get`
+        // every item in its game-data drop table — no room re-parse. BossKilled fires
+        // for any matched boss; we gate on the flag here, where the catalog + item
+        // names + wire sender are all reachable.
+        BossTimers.BossKilled += FireBossGrabAll;
         // Surface recognized deaths in the Wire Inspector's Classified view (a passive
         // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
             CombatClassifier.NoteMonsterDeath(evt.ExperienceGained);
+        // Temp death-spell recovery: when a monster whose DeathSpell is a silent "…temp"
+        // spell dies, those spells stall the game engine, so send that spell's message
+        // CastResponse (seeded "^M^M" = two carriage returns) to unstick it. Subscribes
+        // BEFORE the roster-resync below so Combat.CurrentTarget — its fallback identity
+        // when the death carried no candidates — is still set.
+        MonsterDeath.MonsterDied += FireTempDeathResponse;
         // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
         // resync handler below: on a kill whose DeathSpell summons, it asserts a
         // hold + sends a CR to re-scan the room, and that hold has to be in place
@@ -3199,6 +3256,11 @@ public sealed class AppServices
         // so combat's engage decision and the walker's gate never disagree.
         Combat.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
         CombatTracker.SetMovementActiveGate(() => Recovery.AttachedEngine is not null);
+
+        // While an AttackPrevented message is active (stun / petrify / bind), the
+        // server rejects every attack the player issues — weapon and spell — so the
+        // combat engine holds all offensive output until the wear-off clears it.
+        Combat.SetAttackPreventedGate(() => Conditions.IsAttackPrevented);
 
         // A combat-spell engage can lose its initial send to a self-buff that just
         // spent the cast slot. On a fresh process there may be no combat-tick anchor
@@ -3372,6 +3434,17 @@ public sealed class AppServices
             CastDirector.NoteRoomChanged();
         };
 
+        // Item-boss Grab-All: walking into a room that holds a Grab-All *item* boss
+        // (a box, not a monster) fires a blind `get` for it — item bosses never die,
+        // so they're grabbed on entry instead of on death. Separate handler with a
+        // looser guard so it fires on the very first room entry too (a teleport-in).
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom is not { } nr) return;
+            if (t.PreviousRoom is { } pr && pr.Key.Equals(nr.Key)) return;
+            FireItemBossGrabOnEntry(nr.Key);
+        };
+
         // CastCoordinator. Subscribes to spell-failure
         // patterns directly; tick-clears its block latch + cooldown via
         // TickEngine.CombatTickElapsed so the next round can cast.
@@ -3384,15 +3457,15 @@ public sealed class AppServices
         // lands in MainWindowViewModel alongside the other line
         // consumers.
         Conditions = new Game.Conditions.ConditionTracker(Messages, Log);
-        // Sends a game-data message's Response command when its CasterMessage
-        // lands (e.g. "desert damage" → "use water"). Wire-sender + line feed
-        // bound per-session by MainWindowViewModel.
-        MessageResponder = new Game.Conditions.MessageResponder(Messages, Log);
-        // Watches the same wire for lines neither the catalogue above nor any
-        // registered Router pattern recognizes. AttachLineExtractor lands in
-        // MainWindowViewModel alongside the other line consumers; Enabled
-        // mirrors LogDiagnostics.CaptureUnrecognizedMessages below.
-        MessageCandidateWatcher = new Game.MessageCandidateWatcher(Router, Messages, MessageCandidates, Log);
+        // Watches the same wire for lines neither the message catalogue above nor any
+        // registered Router pattern recognizes, staging them as review candidates.
+        // AttachLineExtractor lands in MainWindowViewModel alongside the other line
+        // consumers; Enabled mirrors LogDiagnostics.CaptureUnrecognizedMessages below.
+        // currentRoom copies out the live position so each candidate is tagged with
+        // where it was first seen — a locator hint for tracking down the source.
+        MessageCandidateWatcher = new Game.MessageCandidateWatcher(
+            Router, Messages, MessageCandidates,
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key, log: Log);
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a
         // curable ailment (or being held) it announces ".@poisoned" /
@@ -3763,6 +3836,11 @@ public sealed class AppServices
         // shared SpellInfoRowsBuilder. Messages (2366) is ready.
         SpellRecord = new SpellRecordDialogService(GameData, Messages, Dialogs);
 
+        // Item-side mirror of SpellRecord — opens an item's on-use / proc message
+        // editor from the item dialog's Message section. A casting item delegates to
+        // SpellRecord on its CastsSp spell (the shared record), so it takes that here.
+        ItemMessage = new ItemMessageDialogService(GameData, Messages, Dialogs, SpellRecord);
+
         // Light catalogue + live carried illumination. The snapshot provider is
         // deferred (Inventory is assigned later in this method), so reading
         // PlayerIllumination.Current at tooltip / route time sees the live dump.
@@ -3937,6 +4015,20 @@ public sealed class AppServices
         PlayerState.PropertyChanged += (_, _) => TimeAnalysis.NotePlayerState(
             PlayerState.InCombat, PlayerState.Position,
             PlayerState.Hp, PlayerState.MaxHp, PlayerState.Ma, PlayerState.MaxMa);
+        // Entering a rest posture confirms the room is genuinely cleared of hostiles (a
+        // rest only starts once nothing is left to fight), so the AoE area-debuff room
+        // tags reset — a same-room respawn after this is debuffed afresh (report
+        // paradigm-20260903-070438), without disturbing the mid-fight survivor case.
+        Game.PlayerPosition lastPosForAoe = PlayerState.Position;
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(Game.PlayerState.Position)) return;
+            Game.PlayerPosition pos = PlayerState.Position;
+            bool wasResting = lastPosForAoe is Game.PlayerPosition.Resting or Game.PlayerPosition.Meditating;
+            bool nowResting = pos is Game.PlayerPosition.Resting or Game.PlayerPosition.Meditating;
+            lastPosForAoe = pos;
+            if (nowResting && !wasResting) Combat.NoteRoomClearedByRest();
+        };
         Conditions.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Game.Conditions.ConditionTracker.ActiveFlags))
@@ -4165,6 +4257,10 @@ public sealed class AppServices
             canEquipItem: CanCharacterEquipItem,
             restrictsEquip: IsEquipRestricted,
             log: Log);
+        // Realm picks which physical slot a full paired-family eq/wear evicts —
+        // Paradigm slot 1 (first-listed), Stock slot 2 — so the swap builder rems
+        // the right odd-out (see EquipmentManager.ComposePairedSlotCommands).
+        Equipment.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
 
         // Casting-spell profiles: the same read/write-Combat pair the Equipment
@@ -4266,6 +4362,17 @@ public sealed class AppServices
                 // held while a swap streams, and nothing re-triggered Evaluate when it
                 // ended).
                 Health.Evaluate();
+                // A rest that completes in the SAME tick it starts fires the pre-rest
+                // swap AND the recovery-complete Default revert together; the revert
+                // runs first and no-ops against the not-yet-streamed pre-rest set, then
+                // the pre-rest swap lands last and strands the medi/pre-rest gear
+                // (report paradigm-20260903-111227). Now that the pre-rest set is
+                // actually worn and recovery is done, re-fire the Default revert (it
+                // will diff correctly this time). OnRecoveryComplete self-guards on
+                // combat + using-rest-sets; the Default swap it fires re-enters here
+                // with Default worn, so this terminates after one correction.
+                if (!Health.IsRecoveringRest && CurrentEquippedIsPreRestSet())
+                    AutoEquip.OnRecoveryComplete();
             }
         };
 
@@ -4793,6 +4900,17 @@ public sealed class AppServices
         // the solver's. On stock (no `rm`) the solver uses the look-sweep and this
         // gate no-ops anyway.
         Recovery.TryResync = reason => !MazeSolver.Active && ParadigmResync.TryRequestResync(reason);
+        // Forced variant used at the gate's give-up boundaries (before the
+        // heuristic backtrack, and again before the "Lost" dialog): skips the
+        // resolver's anti-storm throttle so a client about to fail out always gets
+        // one authoritative `rm` first (report paradigm-20260902-223159). Same
+        // maze-solver guard — the solver owns `rm` during a solve.
+        Recovery.TryResyncForced = reason => !MazeSolver.Active && ParadigmResync.TryRequestResync(reason, force: true);
+        // Confusion awareness: `rm` only fails to answer when a confusion fumble
+        // eats the command, so a timed-out forced resync while confused is re-asked
+        // (confusion self-clears) rather than dropped to Lost. Same source the
+        // walker / loop-runner confusion exemptions read.
+        Recovery.IsConfused = () => Conditions.IsConfused;
         // Same maze-solver guard as TryResync above — a caller's one-shot re-fix
         // (LoopRunner / AutoWalkManager leaning on rm before trusting a possibly
         // mis-anchored belief) must not race the solver's own rm during a solve.
@@ -6035,6 +6153,16 @@ public sealed class AppServices
         return Math.Max(1, realMax - worn + def);
     }
 
+    // Whether the gear set the engine last equipped is a pre-rest swap set (HP / Mana)
+    // — used to detect a stranded pre-rest loadout after a same-tick rest completion.
+    private bool CurrentEquippedIsPreRestSet()
+    {
+        if (Equipment.CurrentSetId is not { } id) return false;
+        return Profile.Current?.Equipment?.Sets.FirstOrDefault(s => s.Id == id)
+            is { Trigger: Models.Profile.EquipTriggerType.PreRestHp
+                       or Models.Profile.EquipTriggerType.PreRestMana };
+    }
+
     // The DEFAULT gear set's item-bearing slots as EquippedItems, for summing their
     // flat +MaxHP/+MaxMana bonuses. Skips empty slots and the two virtual
     // alternate-weapon slots (never worn — they write CombatSettings, not the wire).
@@ -6310,6 +6438,97 @@ public sealed class AppServices
         return true;
     }
 
+    // A Grab-All boss just died: fire a blind `get <item>` for every item in its
+    // game-data drop table (no room re-parse). Gated here on the per-boss flag; the
+    // event fires for every matched boss regardless.
+    private void FireBossGrabAll(Models.Profile.BossDef def)
+    {
+        if (!def.GrabAll) return;
+        int? number = def.MonsterNumber ?? ResolveMonsterNumberByName(def.Name);
+        if (number is not { } num)
+        {
+            Log.Info("GrabAll", $"'{def.Name}' died but has no monster number — can't read its drop table");
+            return;
+        }
+        IReadOnlyList<string> cmds = Game.Inventory.BossGrabAllCommands.Build(MonsterCatalog.Get(num)?.Drops, ItemNames.GetName);
+        if (cmds.Count == 0)
+        {
+            Log.Info("GrabAll", $"'{def.Name}' died — no known droppable items to grab");
+            return;
+        }
+        Log.Info("GrabAll", $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")}");
+        foreach (string cmd in cmds) SendGameCommand(cmd);
+    }
+
+    // A monster whose DeathSpell is a silent "…temp" spell just died: those spells emit no
+    // wire line but stall the game engine, so send the temp spell's MessageRecord.CastResponse
+    // (seeded "^M^M" = two carriage returns) to nudge the engine past the stall. Identity is
+    // best-effort — the event's Candidates plus the engaged target (the exp-only death path
+    // carries no candidates); a stray extra CR is harmless. Fires at most one response per death.
+    private void FireTempDeathResponse(Game.Combat.MonsterDeathEvent evt)
+    {
+        if (_engineWireSend is null) return;
+        HashSet<int> numbers = new();
+        foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
+            if (id.Number is { } n) numbers.Add(n);
+        if (!string.IsNullOrWhiteSpace(Combat.CurrentTarget)
+            && ResolveMonsterNumberByName(Combat.CurrentTarget) is { } cur) numbers.Add(cur);
+
+        foreach (int num in numbers)
+        {
+            int deathSpell = MonsterCatalog.Get(num)?.DeathSpell ?? 0;
+            if (deathSpell <= 0) continue;
+            string? spellName = GameData.FindNameByNumber("Spells", deathSpell);
+            if (!Game.Combat.TempDeathResponse.IsTempSpell(spellName)) continue;
+
+            foreach (Models.GameData.MessageRecord r in Messages.Messages)
+            {
+                if (string.IsNullOrEmpty(r.CastResponse) || r.Links is null) continue;
+                bool linked = false;
+                foreach (Models.GameData.GameDataLink l in r.Links)
+                    if (l.Table == "Spells" && l.Number == deathSpell) { linked = true; break; }
+                if (!linked) continue;
+                if (Game.Combat.TempDeathResponse.ExpandToWireBytes(r.CastResponse) is not { } bytes) continue;
+                _engineWireSend(bytes);
+                Log.Info("TempDeath",
+                    $"'{spellName}' (#{deathSpell}) death-cast — sent cast response to unstick the engine");
+                return;   // one response per death
+            }
+        }
+    }
+
+    // The Monsters-table Number for a boss whose BossDef didn't carry one — resolved
+    // by its game-data name. Null when the active set has no such monster.
+    private int? ResolveMonsterNumberByName(string name)
+    {
+        if (GameData.FindRowByName("Monsters", name) is not System.Text.Json.JsonElement row) return null;
+        return row.TryGetProperty("Number", out System.Text.Json.JsonElement el)
+               && el.TryGetInt32(out int n) ? n : null;
+    }
+
+    // Walking into a room that holds a Grab-All ITEM boss (a box that just sits there,
+    // not a monster that dies) — blindly `get` it. Fires on every entry; a harmless
+    // no-op when the box isn't currently there.
+    private void FireItemBossGrabOnEntry(Game.Map.RoomKey room)
+    {
+        foreach (Models.Profile.BossDef def in Bosses.Resolve())
+        {
+            if (!def.GrabAll) continue;
+            if (BossGrabClassifier.Classify(GameData, def) != Game.Inventory.BossGrabKind.Item) continue;
+            if (!BossDefRoomsContain(def, room)) continue;
+            string getName = BossGrabClassifier.ItemGetName(GameData, def.Name) ?? def.Name.Trim();
+            SendGameCommand($"get {getName}");
+            Log.Info("GrabAll", $"entered {room} — grabbing item boss '{def.Name}'");
+        }
+    }
+
+    private static bool BossDefRoomsContain(Models.Profile.BossDef def, Game.Map.RoomKey key)
+    {
+        foreach (string wire in def.Rooms)
+            if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k) && k == key) return true;
+        return false;
+    }
+
     // A self-buff of ours was just CAST (fired from StartSelfBuffTimer, after the cast
     // reached the wire). If it's the configured mana-regen roll spell (nature tap /
     // mana flux, a code-145 rolled affect — not a HoT like chaos surge), hand it to the
@@ -6521,12 +6740,26 @@ public sealed class AppServices
     }
 
     // Find the active set's Models.GameData.MessageRecord for an
-    // item — by Items#N link first, then by the item's resolved name.
-    // An item-proc record's Models.GameData.MessageRecord.CasterMessage
-    // is the line YOU see when the weapon procs. Returns null when no
-    // record anchors to the item. Mirrors FindSpellMessage.
+    // item — the line YOU see when the item procs / is used. Resolution order:
+    // (1) the item's CAST SPELL record (Spells#N via CastsSp) — the canonical home
+    // for a casting item's on-use / proc wording, shared across every item casting
+    // that spell; (2) a legacy Items#N-linked record (worn trinkets with a
+    // wield/remove message that cast nothing); (3) the item's resolved name. Returns
+    // null when no record anchors to the item. Mirrors FindSpellMessage.
     private Models.GameData.MessageRecord? FindItemMessage(int itemNumber)
     {
+        if (Game.GameData.ItemCastSpells.PrimaryCastSpell(GameData, itemNumber) is int spell)
+        {
+            foreach (Models.GameData.MessageRecord m in Messages.Messages)
+            {
+                if (m.Links is null) continue;
+                foreach (Models.GameData.GameDataLink link in m.Links)
+                    if (string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase)
+                        && link.Number == spell)
+                        return m;
+            }
+        }
+
         foreach (Models.GameData.MessageRecord m in Messages.Messages)
         {
             if (m.Links is null) continue;
@@ -7159,16 +7392,34 @@ public sealed class AppServices
                         (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.GiveSource giver))
                     return (id, $"ask {giver.GiverName}", false);
 
+            int? Dist(Game.Map.RoomKey a, Game.Map.RoomKey b) => Bfs.DistanceBetween(a, b, Movement);
+            // Among the counters buyable at a reachable shop, pick the CHEAPEST by
+            // base Price (deterministic — a log raft over a river punt), not just the
+            // first in the any-of list.
+            (int Id, string ShopName, int Price)? bestBuy = null;
             foreach (int id in counters)
             {
                 System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
-                if (shops.Count > 0
-                    && Game.Map.PathItemShopRouter.TrySelectShop(
-                        shops, source, destination,
-                        (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.RoomKey shop)
+                if (shops.Count == 0) continue;
+                if (Game.Map.PathItemShopRouter.TrySelectShop(
+                        shops, source, destination, Dist, out Game.Map.RoomKey shop)
                     && RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName)
-                    return (id, $"buy at {shopName}", false);
+                {
+                    int price = ItemNames.PriceOf(id) ?? int.MaxValue;
+                    if (bestBuy is null || price < bestBuy.Value.Price)
+                        bestBuy = (id, shopName, price);
+                    continue;
+                }
+
+                // A shop stocks the counter but the router found no reachable detour.
+                // Log each candidate's two legs (gates suspended here) so a repro
+                // shows which leg is unreachable — the shop-side sourcing gap.
+                foreach (Game.Map.RoomKey sr in shops)
+                    Log.Debug("HazardCounter",
+                        $"item {id} shop at {sr.Map}/{sr.Room}: src→shop={Dist(source, sr)?.ToString() ?? "∞"}, "
+                        + $"shop→dest={Dist(sr, destination)?.ToString() ?? "∞"}");
             }
+            if (bestBuy is { } b) return (b.Id, $"buy at {b.ShopName}", false);
 
             foreach (int id in counters)
             {
@@ -7181,6 +7432,55 @@ public sealed class AppServices
             }
         }
 
+        // Nothing sourceable — record it so a "why is there no obtain-then-cross
+        // card?" repro is a log read, not a re-investigation. The per-shop Debug
+        // lines above pinpoint an unreachable-detour cause.
+        Log.Info("HazardCounter",
+            $"no reachable counter source for items [{string.Join(",", counters)}] "
+            + $"from {source.Map}/{source.Room} to {destination.Map}/{destination.Room}");
+        return null;
+    }
+
+    // True when every room-entry hazard on `path` that the player has NO counter
+    // for is survivable damage (a river / heat crossing you can just take), so a
+    // "cross unprotected" walk is a damage risk the user may take — not a walk into
+    // a drown / freeze death or a forced teleport that a counter is the only way
+    // past. Rooms with no hazard, or a hazard the player already counters, don't
+    // gate it. Empty / null path → false (nothing to cross unprotected).
+    public bool UnprotectedHazardsAllSurvivable(
+        System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey>? path)
+    {
+        if (path is not { Count: > 0 }) return false;
+        bool sawUnprotected = false;
+        foreach (Game.Map.RoomKey key in path)
+        {
+            int spell = RoomGraph.GetRoom(key)?.Spell ?? 0;
+            if (spell <= 0) continue;
+            if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
+            if (hazard.IsSatisfiedBy(IsItemCarried)) continue;   // player counters it → survives
+            if (!hazard.IsSurvivableDamage) return false;         // an unprotected grave hazard
+            sawUnprotected = true;
+        }
+        return sawUnprotected;
+    }
+
+    // The room to stop at just SHORT of the first room-entry hazard on `path` that
+    // the player can't currently survive — the "hazard's edge" the base picker card
+    // walks to when the user won't cross unprotected and no counter can be sourced.
+    // Null when the path crosses no such hazard (nothing to stop before). When the
+    // hazard is the very first room, returns the path's start (walk nowhere).
+    public Game.Map.RoomKey? HazardApproachRoom(
+        System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey>? path)
+    {
+        if (path is not { Count: > 0 }) return null;
+        for (int i = 0; i < path.Count; i++)
+        {
+            int spell = RoomGraph.GetRoom(path[i])?.Spell ?? 0;
+            if (spell <= 0) continue;
+            if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
+            if (hazard.IsSatisfiedBy(IsItemCarried)) continue;   // player survives it
+            return i > 0 ? path[i - 1] : path[0];
+        }
         return null;
     }
 

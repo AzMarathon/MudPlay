@@ -61,6 +61,23 @@ public sealed class MessageCandidateStoreTests
     }
 
     [Fact]
+    public void RecordSighting_StoresLocation_AndKeepsFirstSightingOnBump()
+    {
+        MessageCandidateStore store = new();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+
+        (MessageCandidateRecord created, _) = store.RecordSighting("Located line", t0, map: 7, room: 100);
+        Assert.Equal(7, created.Map);
+        Assert.Equal(100, created.Room);
+
+        // A recurrence elsewhere keeps the first sighting's location — the record
+        // shows where the line was FIRST noticed, not wherever it last recurred.
+        (MessageCandidateRecord bumped, _) = store.RecordSighting("Located line", t0.AddSeconds(5), map: 9, room: 200);
+        Assert.Equal(7, bumped.Map);
+        Assert.Equal(100, bumped.Room);
+    }
+
+    [Fact]
     public void Remove_DeletesRecord()
     {
         MessageCandidateStore store = new();

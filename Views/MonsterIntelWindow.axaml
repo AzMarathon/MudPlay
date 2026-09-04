@@ -359,9 +359,11 @@
                                                     </MultiBinding>
                                                 </TextBlock.Text>
                                             </TextBlock>
-                                            <TextBlock Classes="DetailLine" Margin="10,0,0,0" IsVisible="{Binding Eligible}">
+                                            <TextBlock Classes="DetailLine" Margin="10,0,0,0" IsVisible="{Binding Eligible}"
+                                                       Foreground="{StaticResource AccentAmberBrush}">
                                                 <TextBlock.Text>
-                                                    <MultiBinding StringFormat="{}{0} effective damage, {1} mana/round">
+                                                    <MultiBinding StringFormat="{}~{0} dmg/min · {1} effective/round · {2} mana/round">
+                                                        <Binding Path="DamagePerMinute"/>
                                                         <Binding Path="EffectiveDamage"/>
                                                         <Binding Path="ManaCostPerRound"/>
                                                     </MultiBinding>
@@ -386,6 +388,20 @@
                                                   ItemTemplate="{StaticResource SpellRowTemplate}" Margin="6,2,0,0"/>
                                 </StackPanel>
                             </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="Group" IsVisible="{Binding HasAbilities}">
+                        <StackPanel>
+                            <TextBlock Classes="Group" Text="Abilities &amp; resistances"
+                                       ToolTip.Tip="This monster's own properties — elemental weakness/strength, spell immunity, magic-weapon requirement, undead / non-living, and other notable abilities."/>
+                            <ItemsControl ItemsSource="{Binding AbilityLines}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Classes="DetailLine" Text="{Binding}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </Border>
 
@@ -419,6 +435,9 @@
                                             <TextBlock Classes="DetailLine" Text="{Binding Detail}" Margin="10,0,0,0"/>
                                             <TextBlock Classes="DetailLine" Text="{Binding Energy}" Margin="10,0,0,0"
                                                        IsVisible="{Binding Energy, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                            <TextBlock Classes="DetailLine" Text="{Binding Dpm}" Margin="10,0,0,0"
+                                                       Foreground="{StaticResource AccentAmberBrush}"
+                                                       IsVisible="{Binding Dpm, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

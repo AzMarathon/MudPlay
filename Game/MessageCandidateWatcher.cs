@@ -1,3 +1,4 @@
+using MudPlay.Game.Map;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.Terminal;
@@ -13,8 +14,8 @@ namespace MudPlay.Game;
 // A line survives to become a candidate only if it clears every exclusion in
 // order: not a prompt line, not near-empty, not an exact match against any of
 // MessageStore's five perspective slots (own index, rebuilt on
-// MessageStore.Messages.CollectionChanged — mirrors ConditionTracker's/
-// MessageResponder's identical rebuild trigger), and not matched by ANY
+// MessageStore.Messages.CollectionChanged — mirrors ConditionTracker's
+// identical rebuild trigger), and not matched by ANY
 // pattern already registered in MessageRouter's catalog (movement, combat-
 // round text, chat, item get/drop, party, doors, and more — reusing already-
 // reviewed domain knowledge instead of inventing a new "looks like a spell
@@ -54,6 +55,7 @@ public sealed class MessageCandidateWatcher : IDisposable
     private readonly MessageRouter _router;
     private readonly MessageStore _messages;
     private readonly MessageCandidateStore _candidates;
+    private readonly Func<RoomKey?>? _currentRoom;
     private readonly LogService? _log;
 
     // Built from MessageStore on every CollectionChanged — trimmed text of
@@ -76,8 +78,13 @@ public sealed class MessageCandidateWatcher : IDisposable
     // something forgets to wire it explicitly.
     public bool Enabled { get; set; } = true;
 
+    // currentRoom is a copy-out of the player's live position, read at capture
+    // time so a staged candidate carries a "first seen here" locator hint.
+    // Null-tolerant: a null provider (or a null return before the room is
+    // known) simply stages the candidate without a location.
     public MessageCandidateWatcher(MessageRouter router, MessageStore messages,
-        MessageCandidateStore candidates, LogService? log = null)
+        MessageCandidateStore candidates, Func<RoomKey?>? currentRoom = null,
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(messages);
@@ -85,6 +92,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         _router = router;
         _messages = messages;
         _candidates = candidates;
+        _currentRoom = currentRoom;
         _log = log;
 
         RebuildIndex();
@@ -93,7 +101,7 @@ public sealed class MessageCandidateWatcher : IDisposable
 
     // Bind to the per-session LineExtractor so every inbound line is scanned.
     // Idempotent — re-attaching to the same extractor is a no-op. Mirrors
-    // ConditionTracker.AttachLineExtractor / MessageResponder.AttachLineExtractor.
+    // ConditionTracker.AttachLineExtractor.
     public void AttachLineExtractor(LineExtractor lines)
     {
         ArgumentNullException.ThrowIfNull(lines);
@@ -162,7 +170,10 @@ public sealed class MessageCandidateWatcher : IDisposable
             }
         }
 
-        (_, bool isNew) = _candidates.RecordSighting(text, now);
+        (int? map, int? room) = _currentRoom?.Invoke() is { } key
+            ? ((int?)key.Map, (int?)key.Room)
+            : (null, null);
+        (_, bool isNew) = _candidates.RecordSighting(text, now, map, room);
         if (isNew)
             _log?.Warn(LogCategory,
                 $"unrecognized line — double-click to review: '{Truncate(text, 80)}'", context: text);

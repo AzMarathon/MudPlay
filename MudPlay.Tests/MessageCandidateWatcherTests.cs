@@ -1,4 +1,5 @@
 using MudPlay.Game;
+using MudPlay.Game.Map;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
@@ -17,9 +18,13 @@ public sealed class MessageCandidateWatcherTests
         public MessageCandidateStore Candidates { get; } = new();
         public MessageCandidateWatcher Watcher { get; }
 
+        // Mutable so a test can point the watcher at a known room before feeding.
+        public RoomKey? Room { get; set; }
+
         public Harness()
         {
-            Watcher = new MessageCandidateWatcher(Router, Messages, Candidates, Log);
+            Watcher = new MessageCandidateWatcher(
+                Router, Messages, Candidates, currentRoom: () => Room, log: Log);
         }
 
         // The watcher subscribes to LineExtractor in real life; tests reflect into
@@ -41,10 +46,8 @@ public sealed class MessageCandidateWatcherTests
     private static MessageRecord MakeRecord(string casterMessage) => new(
         Id: MessageRecord.ComputeId("Test", casterMessage, "", "", "", ""),
         Name: "Test",
-        Action: MessageAction.Ignore,
         Flags: MessageFlags.None,
         RawFlagsHex: 0,
-        Response: string.Empty,
         CasterMessage: casterMessage,
         TargetMessage: string.Empty,
         WitnessMessage: string.Empty,
@@ -85,6 +88,31 @@ public sealed class MessageCandidateWatcherTests
         Assert.Single(h.Candidates.Candidates);
         Assert.Equal(1, h.Candidates.Candidates[0].Occurrences);
         Assert.Equal(1, warnCount);
+    }
+
+    [Fact]
+    public void NewLine_TagsCandidateWithCurrentRoom()
+    {
+        Harness h = new();
+        h.Room = new RoomKey(12, 3456);
+
+        h.Feed("A shimmering aura surrounds you!");
+
+        MessageCandidateRecord c = Assert.Single(h.Candidates.Candidates);
+        Assert.Equal(12, c.Map);
+        Assert.Equal(3456, c.Room);
+    }
+
+    [Fact]
+    public void NewLine_WithoutKnownRoom_LeavesLocationNull()
+    {
+        Harness h = new();   // Room stays null
+
+        h.Feed("A shimmering aura surrounds you!");
+
+        MessageCandidateRecord c = Assert.Single(h.Candidates.Candidates);
+        Assert.Null(c.Map);
+        Assert.Null(c.Room);
     }
 
     [Fact]

@@ -7,11 +7,12 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.GameData.Edit;
 
-// View-model for the Game Data Browser → Messages tab's per-record edit dialog. Edits
-// one MessageRecord end-to-end: Name / Use-tier / four perspective line slots (Caster /
-// Target / Witness / Applied + AppliedEndsWith) / Action / Effects flags / Response /
-// Links. Commits on Save (Defaults tier writes back to MessageStore; other tiers are
-// stubbed for the future SettingsResolver.WriteGameDataAt path) or discards on Cancel.
+// View-model for the Game Data Browser → Incomplete Messages tab's per-record edit
+// dialog. Edits one MessageRecord end-to-end: Name / Use-tier / four perspective line
+// slots (Caster / Target / Witness / Applied + AppliedEndsWith) / Effects flags / Links.
+// A message is recognition only — no action, no response (those live in Triggers).
+// Commits on Save (Defaults tier writes back to MessageStore; other tiers are stubbed
+// for the future SettingsResolver.WriteGameDataAt path) or discards on Cancel.
 //
 // Validation runs live — StatusMessage + HasError flag the dialog when Name is blank,
 // when no perspective line has any text (record would carry no matchable content), or
@@ -65,30 +66,27 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     [NotifyPropertyChangedFor(nameof(CanSave))]
     private string _appliedEndsWith = string.Empty;
 
-    // Verbatim response field — stored exactly as MegaMUD's UI would display it, including
-    // literal ^M separators. No splitting happens here; the runtime consumer interprets
-    // ^M / CR as multi-step boundaries when actually sending.
-    [ObservableProperty] private string _response = string.Empty;
-    [ObservableProperty] private MessageAction _action = MessageAction.Ignore;
-
     // Typed effect flags — bound to checkboxes in the dialog. Twelve
-    // bits surfaced; the three MegaMUD-specific find-mode flags are
-    // NOT exposed in the UI (the importer strips them at read time).
+    // bits surfaced; the MegaMUD find-mode flags and the four retired inert
+    // effect bits (LosingHp / HpRegenerating / ManaRegenerating / EndsCombat)
+    // are NOT exposed in the UI.
     [ObservableProperty] private bool _flagBlinded;
     [ObservableProperty] private bool _flagConfused;
     [ObservableProperty] private bool _flagPoisoned;
-    [ObservableProperty] private bool _flagLosingHp;
     [ObservableProperty] private bool _flagMovementPrevented;
     [ObservableProperty] private bool _flagAttackPrevented;
     [ObservableProperty] private bool _flagDiseased;
-    [ObservableProperty] private bool _flagHpRegenerating;
-    [ObservableProperty] private bool _flagManaRegenerating;
-    [ObservableProperty] private bool _flagEndsCombat;
     [ObservableProperty] private bool _flagLastActionFailed;
     [ObservableProperty] private bool _flagDisabled;
 
-    public IReadOnlyList<MessageAction> AvailableActions { get; } =
-        Enum.GetValues<MessageAction>().ToArray();
+    // Per-source confusion fumble line(s), one wording per line — the textbox binding
+    // it is shown only while Confused is checked. Not part of the record identity, so
+    // editing it never re-Ids the record.
+    [ObservableProperty] private string _confuseFumbleLine = string.Empty;
+
+    // Engine-driven response sent when this record's spell is detected cast (the temp
+    // death-spell recovery), '^M' = carriage return. Not part of the record identity.
+    [ObservableProperty] private string _castResponse = string.Empty;
 
     public IReadOnlyList<TierOption> AvailableTiers { get; } = new[]
     {
@@ -150,7 +148,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
 
     public string Title => _isNew ? "Message — (new)" : $"Message — {_original.Name}";
 
-    // Placeholder-token legend shown under the Response field so an author editing a
+    // Placeholder-token legend shown below the line fields so an author editing a
     // message line can see which bracket pins which capture slot (the meaning surfaces on
     // hover). Sourced from the matcher itself so the editor and the runtime interpreter
     // never drift.
@@ -188,9 +186,28 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         foreach (MessageRecord r in _existingRecords)
         {
             if (!_isNew && string.Equals(r.Id, _original.Id, StringComparison.Ordinal)) continue;
-            if (string.Equals(r.Id, projected, StringComparison.Ordinal)) return r;
+            if (!string.Equals(r.Id, projected, StringComparison.Ordinal)) continue;
+            // Same Name + all four lines — but a record anchored to a DIFFERENT game-data
+            // row (another spell/item) is a legitimate alias, not a duplicate: the game
+            // shows the same text for several spells (three separate 'disease' spells all
+            // read "You are diseased"). Only a record that shares THIS one's links (or, like
+            // it, carries none) is a true duplicate worth blocking.
+            if (LinksEqual(r)) return r;
         }
         return null;
+    }
+
+    // The record's back-references (Table#Number, table stem lower-cased) as a set,
+    // compared to the links currently in the editor. Two link-less records match.
+    private bool LinksEqual(MessageRecord r)
+    {
+        HashSet<string> mine = LinkRows
+            .Select(l => $"{l.Table.ToLowerInvariant()}#{l.Number}")
+            .ToHashSet(StringComparer.Ordinal);
+        HashSet<string> theirs = (r.Links ?? Array.Empty<GameDataLink>())
+            .Select(l => $"{l.Table.ToLowerInvariant()}#{l.Number}")
+            .ToHashSet(StringComparer.Ordinal);
+        return mine.SetEquals(theirs);
     }
 
     public bool HasError => GetValidationError() is not null;
@@ -240,19 +257,15 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         WitnessMessage  = original.WitnessMessage;
         AppliedMessage  = original.AppliedMessage;
         AppliedEndsWith = original.AppliedEndsWith;
-        Response        = original.Response;
-        Action          = original.Action;
+        ConfuseFumbleLine = original.ConfuseFumbleLine;
+        CastResponse      = original.CastResponse;
 
         FlagBlinded           = original.Flags.HasFlag(MessageFlags.Blinded);
         FlagConfused          = original.Flags.HasFlag(MessageFlags.Confused);
         FlagPoisoned          = original.Flags.HasFlag(MessageFlags.Poisoned);
-        FlagLosingHp          = original.Flags.HasFlag(MessageFlags.LosingHp);
         FlagMovementPrevented = original.Flags.HasFlag(MessageFlags.MovementPrevented);
         FlagAttackPrevented   = original.Flags.HasFlag(MessageFlags.AttackPrevented);
         FlagDiseased          = original.Flags.HasFlag(MessageFlags.Diseased);
-        FlagHpRegenerating    = original.Flags.HasFlag(MessageFlags.HpRegenerating);
-        FlagManaRegenerating  = original.Flags.HasFlag(MessageFlags.ManaRegenerating);
-        FlagEndsCombat        = original.Flags.HasFlag(MessageFlags.EndsCombat);
         FlagLastActionFailed  = original.Flags.HasFlag(MessageFlags.LastActionFailed);
         FlagDisabled          = original.Flags.HasFlag(MessageFlags.Disabled);
     }
@@ -270,16 +283,16 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
                                  Name, CasterMessage, TargetMessage, WitnessMessage,
                                  AppliedMessage, AppliedEndsWith),
             Name:            Name,
-            Action:          Action,
             Flags:           typed,
             RawFlagsHex:     raw,
-            Response:        Response ?? string.Empty,
             CasterMessage:   CasterMessage   ?? string.Empty,
             TargetMessage:   TargetMessage   ?? string.Empty,
             WitnessMessage:  WitnessMessage  ?? string.Empty,
             AppliedMessage:  AppliedMessage  ?? string.Empty,
             AppliedEndsWith: AppliedEndsWith ?? string.Empty,
-            Links:           LinkRows.Select(r => new GameDataLink(r.Table, r.Number)).ToList());
+            Links:           LinkRows.Select(r => new GameDataLink(r.Table, r.Number)).ToList(),
+            ConfuseFumbleLine: ConfuseFumbleLine ?? string.Empty,
+            CastResponse:      CastResponse ?? string.Empty);
 
         CloseRequested?.Invoke(new MessageEditResult(_original, updated, UseTier));
     }
@@ -315,13 +328,9 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         if (FlagBlinded)           f |= MessageFlags.Blinded;
         if (FlagConfused)          f |= MessageFlags.Confused;
         if (FlagPoisoned)          f |= MessageFlags.Poisoned;
-        if (FlagLosingHp)          f |= MessageFlags.LosingHp;
         if (FlagMovementPrevented) f |= MessageFlags.MovementPrevented;
         if (FlagAttackPrevented)   f |= MessageFlags.AttackPrevented;
         if (FlagDiseased)          f |= MessageFlags.Diseased;
-        if (FlagHpRegenerating)    f |= MessageFlags.HpRegenerating;
-        if (FlagManaRegenerating)  f |= MessageFlags.ManaRegenerating;
-        if (FlagEndsCombat)        f |= MessageFlags.EndsCombat;
         if (FlagLastActionFailed)  f |= MessageFlags.LastActionFailed;
         if (FlagDisabled)          f |= MessageFlags.Disabled;
         return f;

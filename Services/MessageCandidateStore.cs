@@ -87,7 +87,11 @@ public sealed class MessageCandidateStore
     // tracking, so a recurring line that was already dismissed as boring
     // doesn't quietly resurface and re-alert. Returns IsNew so the caller knows
     // whether to log a first-sighting Warn.
-    public (MessageCandidateRecord Record, bool IsNew) RecordSighting(string rawText, DateTimeOffset when)
+    // map/room tag the FIRST sighting's location (a locator hint) — a bump keeps the
+    // original location rather than overwriting, so the record shows where the line
+    // was first noticed even if it later recurs elsewhere.
+    public (MessageCandidateRecord Record, bool IsNew) RecordSighting(
+        string rawText, DateTimeOffset when, int? map = null, int? room = null)
     {
         string id = MessageCandidateRecord.ComputeId(rawText);
         for (int i = 0; i < Candidates.Count; i++)
@@ -103,7 +107,8 @@ public sealed class MessageCandidateStore
             return (bumped, false);
         }
 
-        MessageCandidateRecord created = new(id, rawText, when, when, Occurrences: 1, Dismissed: false);
+        MessageCandidateRecord created = new(
+            id, rawText, when, when, Occurrences: 1, Dismissed: false, Map: map, Room: room);
         Candidates.Add(created);
         QueueSave();
         return (created, true);

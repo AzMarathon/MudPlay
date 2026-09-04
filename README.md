@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.46.0**
-> - New: the client now notices its own Messages-catalogue gaps. A wire line that matches no existing spell/buff/debuff/proc record and no known line pattern is staged as a **candidate** (deduped by exact text, occurrence-counted) instead of silently falling through — a Warn row appears in the Program Log the first time it's seen, and double-clicking it opens the same editor the Messages tab uses, pre-filled with the raw text, to turn it into a real record on the spot
-> - New **Candidates** tab in the Game Data Browser lists every staged candidate for batch review — search, multi-select, and dismiss (sticky: a dismissed line won't quietly resurface as "new" if it recurs, though it keeps counting occurrences)
+> **Version 3.50.0**
+> - New: the client now notices its own Messages-catalogue gaps. A wire line that matches no existing spell/buff/debuff/proc record and no known line pattern is staged as a **candidate** (deduped by exact text, occurrence-counted) instead of silently falling through — a Warn row appears in the Program Log the first time it's seen, and double-clicking it opens the same editor the Incomplete Messages tab uses, pre-filled with the raw text, to turn it into a real record on the spot
+> - Each captured candidate is tagged with the **map and room** you were in when it was first seen — a **Seen In** locator so you can trace where an unattributed message came from
+> - New **Candidates** tab in the Game Data Browser lists every staged candidate for batch review (with the **Seen In** map:room column) — search, multi-select, and dismiss (sticky: a dismissed line won't quietly resurface as "new" if it recurs, though it keeps counting occurrences)
 > - New **Capture unrecognized messages** diagnostic toggle (Program Log window), on by default
 > - Bug reports now include a pending-candidate count
 >

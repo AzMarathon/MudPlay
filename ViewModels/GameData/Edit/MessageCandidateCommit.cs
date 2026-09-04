@@ -17,10 +17,8 @@ internal static class MessageCandidateCommit
     public static MessageRecord BuildSeedRecord(MessageCandidateRecord candidate) => new(
         Id:              string.Empty,
         Name:            string.Empty,
-        Action:          MessageAction.Ignore,
         Flags:           MessageFlags.None,
         RawFlagsHex:     0,
-        Response:        string.Empty,
         CasterMessage:   candidate.RawText,
         TargetMessage:   string.Empty,
         WitnessMessage:  string.Empty,

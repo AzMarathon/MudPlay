@@ -122,4 +122,14 @@ internal static class ElementalResistIndex
             if (string.Equals(name, element, System.StringComparison.Ordinal)) return code;
         return -1;
     }
+
+    // A resist ability code back to its element display name, or null for a
+    // non-elemental code — the reverse of CodeForName, for rendering a monster's own
+    // ElementalResists dict (keyed by these codes) as readable weakness/strength lines.
+    public static string? NameForCode(int code)
+    {
+        foreach ((int c, string name) in Elements)
+            if (c == code) return name;
+        return null;
+    }
 }

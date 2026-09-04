@@ -185,6 +185,11 @@ public static class BugReportBuilder
         // armed and how the last pile resolved (Recovered / Partial / Missing).
         Kv(sb, "Auto-recover deathpiles", svc.DeathRecovery.AutoRecover ? "on" : "off");
         Kv(sb, "Auto-equip on recovery", svc.DeathRecovery.AutoEquip ? "on" : "off");
+        // Whether a rest-interrupting fight swaps to the Default set (then back on
+        // room-clear if still gated). Off = the pre-rest loadout is kept through the
+        // fight. Answers a "why did/didn't my gear swap when a mob showed up" report.
+        Kv(sb, "Swap to Default on combat",
+            (svc.Profile.Current?.Equipment?.SwapToDefaultOnCombat ?? false) ? "on" : "off");
         // Non-zero while an in-combat recovery is still pacing its re-equip across
         // rounds — shows a "recovered but not fully re-equipped" report mid-burst.
         if (svc.DeathRecovery.PendingReequipCount > 0)
@@ -437,9 +442,9 @@ public static class BugReportBuilder
             if (!string.IsNullOrWhiteSpace(o.OverrideAttackCommand))
                 parts.Add($"attack-cmd \"{o.OverrideAttackCommand}\"");
             if (o.OverrideAttackSpellId is { } atk and > 0)
-                parts.Add($"attack-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}");
+                parts.Add($"attack-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}{ManaSuffix(o.OverrideAttackMinMana)}");
             if (o.OverridePreAttackSpellId is { } pre and > 0)
-                parts.Add($"pre-attack {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}");
+                parts.Add($"pre-attack {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}{ManaSuffix(o.OverridePreAttackMinMana)}");
             if (o.DontBackstab == true) parts.Add("dontBackstab");
             if (o.KillOnSight == true) parts.Add("killOnSight");
             if (parts.Count == 0) parts.Add("(no live fields)");
@@ -495,6 +500,7 @@ public static class BugReportBuilder
 
     // " x20" for a positive per-room cast cap; blank for null/0 (unlimited).
     private static string CountSuffix(int? count) => count is > 0 ? $" x{count}" : string.Empty;
+    private static string ManaSuffix(int? mana) => mana is > 0 ? $" m{mana}" : string.Empty;
 
     // The engine's live engageability verdict for every monster seen in the
     // current room — the reasoning behind a "skip un-actionable … Unkillable"

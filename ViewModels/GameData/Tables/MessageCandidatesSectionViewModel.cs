@@ -25,7 +25,7 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Raw Text", "Occurrences", "First Seen", "Last Seen", "Status",
+        "Raw Text", "Seen In", "Occurrences", "First Seen", "Last Seen", "Status",
     };
 
     public override string SearchKeyColumn => "Raw Text";
@@ -86,6 +86,9 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
             var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Raw Text"]    = c.RawText,
+                // Map:Room where the line was first seen — the locator hint for
+                // tracking down its source. Blank when position wasn't yet known.
+                ["Seen In"]     = c.Map is { } m && c.Room is { } rm ? $"{m}:{rm}" : "",
                 ["Occurrences"] = c.Occurrences.ToString(),
                 ["First Seen"]  = c.FirstSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 ["Last Seen"]   = c.LastSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),

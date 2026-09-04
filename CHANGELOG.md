@@ -1,11 +1,137 @@
 # Version history
 
-## 3.46.0
+## 3.50.0
 
-- New: the client now notices its own Messages-catalogue gaps. A wire line that matches no existing spell/buff/debuff/proc record and no known line pattern is staged as a **candidate** (deduped by exact text, occurrence-counted) instead of silently falling through — a Warn row appears in the Program Log the first time it's seen, and double-clicking it opens the same editor the Messages tab uses, pre-filled with the raw text, to turn it into a real record on the spot
-- New **Candidates** tab in the Game Data Browser lists every staged candidate for batch review — search, multi-select, and dismiss (sticky: a dismissed line won't quietly resurface as "new" if it recurs, though it keeps counting occurrences)
+- New: the client now notices its own Messages-catalogue gaps. A wire line that matches no existing spell/buff/debuff/proc record and no known line pattern is staged as a **candidate** (deduped by exact text, occurrence-counted) instead of silently falling through — a Warn row appears in the Program Log the first time it's seen, and double-clicking it opens the same editor the Incomplete Messages tab uses, pre-filled with the raw text, to turn it into a real record on the spot
+- Each captured candidate is tagged with the **map and room** you were in when it was first seen — a **Seen In** locator so you can trace where an unattributed message came from
+- New **Candidates** tab in the Game Data Browser lists every staged candidate for batch review (with the **Seen In** map:room column) — search, multi-select, and dismiss (sticky: a dismissed line won't quietly resurface as "new" if it recurs, though it keeps counting occurrences)
 - New **Capture unrecognized messages** diagnostic toggle (Program Log window), on by default
 - Bug reports now include a pending-candidate count
+
+## 3.49.1
+
+- Monster record's **Override Pre-attack / Override Attack** now mirror the Settings → Combat spell slots — aim a specific spell at a specific monster. Each override is a spell **picker** (type-ahead over your castable spells, commits the cast-code) with **Max casts** and **Min mana to cast** stacked beneath it, using the same controls as the Combat tab: Max casts is a spinner (blank = unlimited), Min mana to cast a spinner with the live %↔value label, read as % or absolute per the Combat tab's mana mode. Below the mana floor the override holds and the normal combat flow takes the round. Override Attack still accepts a raw verb (e.g. `bash`), sent verbatim with no gating. Compact two-column layout (narrower than before)
+
+## 3.49.0
+
+- Messages data rebuilt into realm-split **stock / paradigm** seeds (decoded from MegaMUD's messages.md, picked per game-data set) — the old single mixed-realm seed is retired
+- Messages are **recognition-only** now: the Action + Response fields are gone (player responses live in Triggers), and the tab is renamed **Incomplete Messages**, always shown
+- The **Incomplete Messages** tab doubles as a fill-from-game worklist: alongside orphan records (tied to no spell/item) it surfaces any spell-linked message still missing a required line — caster / target / witness / applied / wears-off, and the fumble line on a Confused record — naming the gaps in a **Missing** column, with a leading **Spell #** column showing the linked spell number
+- Mark a line a spell genuinely lacks by typing **{null}**, **{void}**, or **{empty}** into it: it counts as filled (clearing the record from the Incomplete list) while the recognizer treats it as no line
+- Both Messages seeds pre-fill `{null}` on the applied + wears-off slots of every **instant** spell — zero duration: attack/damage, heal, cure, dispel, life-drain, summon (629 paradigm / 537 stock records) — so they drop off the Incomplete worklist; a spell with **any duration** (a lasting effect — buffs like bless, and lasting debuffs like poison/confuse/hold/blind) keeps those slots, as do records already carrying an effect line or a condition flag. Duration, not energy cost, is the tell — a monster's Dur-0 damage breath and a per-round bolt are both instant, while a per-round bolt that *poisons* is not
+- Message catalogues (spell + monster) now fall back to the **bundled seed** shipped with the app when the Global seed is missing, so recognition and the Messages tab never come up empty just because a seed failed to bootstrap; the per-set file and Global seed still win, so it never overrides your edits
+- Program log now records each message-catalogue load on set load/swap — the set, realm, source (per-set file / Global seed / bundled seed) and record count — with a loud warning when a set loads **zero** message records
+- **Stock Messages seed completed** from the authoritative stock-engine (V1.11p) spell-message database: the ~54 lines the seed was genuinely missing (incantation cast lines + buff onset/wear-off) are ingested, and every slot the engine confirms has **no** line is `{null}`-marked — stock **Incomplete drops 551 → 7** (only condition records still awaiting an in-game onset). The same sync is applied to **paradigm** for spells whose number **and** name match the Paradigm-1.9.1 MDB (**661 → 146**), recovering onset/wear-off lines like *frenzy*, *ice storm*, *hypnotic hands*, *chaos shield*
+- Scrubbed corrupt binary message payloads (a handful of old-decode artifacts like `plague`/`sharp blade`/`power punch`) from both seeds
+- Opening a spell-linked record from the **Incomplete Messages** tab now shows the read-only **Game Data** tab (spell facts + damage calculator), the same as opening it from the Spells tab — so you can fill a message with the spell in view
+- Fixed `ember` (spell #210) in both seeds — it's a combat/damage spell, so its applied + wears-off are now `{null}` and the spurious *Diseased* flag (an artifact of the cure-disease removal list) is cleared
+- Collapsed duplicate spell-message records in both seeds — where two records shared a spell number + name but carried complementary or differing lines (a decode artifact), they're merged into one (perspective slots resolve a line mis-copied from another perspective, buff onset/wear-off prefers the more specific wording). Stock −56, paradigm −75 records
+- On first launch after this update, the Messages catalogue is **force-reseeded once** from the shipped seed: your older Global seed + any per-set message edits are backed up to sibling `.bak` files and replaced with the recurated catalogue, so every install lands on the new one-record-per-spell data. Re-apply any local wording afterward (the Incomplete Messages tab's Upload-edits workflow), or recover a line from the `.bak`
+- New **Upload edits** button on the Incomplete Messages tab (far right of Add / Remove): exports every message record you've changed or added versus the shipped seed — keyed by spell / item number, each field shown as seed → new, plus a machine-readable JSON block — to a timestamped Markdown file on your Desktop, so curated lines can be folded back into the seed for that game type
+- An item's **on-use / proc message now lives on its cast spell's record** (resolved via the item's CastsSp ability), shared by every item that casts that spell — edit it from any one of them and all update; the item record lists its cast spell(s) as a clickable **Casts** link showing the spell number, and the runtime proc recognizer resolves the same way. An item that casts nothing (a wield/remove trinket) keeps its own item-anchored message
+- **weapon major bless** (paradigm spell #114) filled in: self line *"You raise your weapon into the air, summoning its power!"* with *"Your weapon is blessed!"* onset and *"The effects of the blessing wear off!"* wear-off; target + witness `{null}` (self-only)
+- Consolidated per-item on-use message duplicates onto their cast spell's single record: exactly **one** message record per cast spell now — the shared spell record wins and the duplicate item-linked record is dropped (paradigm first adopts the item's corrected `{target}` wording where a clash was purely a bracketed-placeholder difference; ~38 `{spellname}`→`{target}` token / grammar variants auto-corrected; an item-specific perspective line is never pulled into the shared record; stock keeps its authoritative V1.11p spell-message-DB wording). A cast-less item's own wield/remove event (belt of might, midnight glare) stays anchored to the item — it isn't a spell message
+- A weapon **combat-proc** spell (a `%Spell` / on-swing cast) that only deals damage — no ailment — now has its message record **deleted** outright (stock −27, paradigm −60): it only ever needs a message when it applies a lasting effect (poison / blind / hold / disease, which its duration marks — e.g. the darkwood staff's HoldPerson proc is kept). A bare command **on-use** cast (the nexus spear's spear-slam) keeps and needs its messages. Gated on the spell being not player-learnable, so no castable spell's record is removed
+- Correlated the paradigm Messages seed against the latest Paramud MegaMUD export to back-fill buff onset / wear-off lines by spell name
+- New **Confuse fumble** field on a Confused message: the line(s) that source emits on a fumble (defaults to *"You fumble in confusion!"*) — a fumbled move reverts on it, so fumble wordings live in game data instead of hardcoded (convulsions keeps its *convulse violently* / *look around stupidly* wordings)
+- Message editor opens taller and its User Definitions tab scrolls, so the Confuse-fumble box + Effects flags no longer truncate
+- New **Cast response** field on a message (sent when its spell is detected cast): a monster whose DeathSpell is a silent *…temp* spell now fires it on death — seeded `^M^M` (two carriage returns) to unstick the game engine those spells stall
+- The ganghouse **guardians, elite guardians, and spellbreakers** now default to **Friend**, so auto-combat leaves the whole set alone
+- Monster record: every spell a monster references — its **spell-attacks, per-hit, create, death, and between-rounds** spells — now links to its Spell record and shows the spell's number (`[#N]`); previously only between-rounds spells linked
+- Removed the spurious *trap disarm* message records — trap-trigger lines wrongly flagged Last-action-failed, which fired a bogus combat re-swing when a trap went off
+- Trimmed the Incomplete Messages catalogue: removed the standalone condition-detector records (held / blind / confused / poison / fumble / combat-end) from both seeds
+- Paradigm Messages seed: back-filled the missing begin / wear-off lines on 8 buff/debuff spells (the *form of the …* animal spirits, yellow fungus, rosebush sleep, green beam, suffocating-fumes breath), and added 7 more that had no record at all (horrid wound, stone temple poison, stone regeneration, clay flask, nightfall, sunder armour, diffusive blast) — each tied to its Spell record — so those effects are recognized
+- Paradigm Messages seed: pulled the cast / incantation lines ("*{source} makes a sweeping gesture!*") from an older Paradigm export into empty caster/target/witness slots (46 across 30 spell records) and added 6 spells that had none — each gated on the export's spell id **and** name agreeing with the Paradigm-1.9.1 MDB, so renumbered / renamed / junk rows are skipped
+- Message **Effects** flags: the **Disabled (don't use)** checkbox is now honored — a disabled record is ignored wholesale (recognizes nothing, sets no flag), and the four effect bits no engine ever acted on (losing-HP, HP/mana regenerating, ends-combat) were retired from the editor + seeds
+- **Attack prevented** flag now works too: while a line carrying it is active (stun / petrify / bind), combat holds all offensive output — weapon swings, attack spells, and debuffs — and resumes on the wear-off
+- Message editor default size trimmed to match the smaller Effects box
+- Alias editor: greyed placeholder examples in the Name + Expansion boxes showing how an alias is filled out
+- Game Data record overrides (Monsters & Items): the Use-tier picker now offers **Installed defaults** — picking it *resets* the record (a confirm, then wipes your Character/BBS/Global edits for it back to the seed, so it returns to **Def**); the labels read in plain language (*only for this character / this BBS / for all characters*)
+- Editing a record's values back to the installed defaults now auto-removes that tier's redundant override (the row shifts back toward **Def**) instead of writing a no-op override — fixes a Global edit appearing not to "stick" when a Character override was shadowing it (character → BBS → global → defaults priority, unchanged)
+- Message editor: the duplicate-identity warning no longer blocks legitimate aliases — records with the same Name + lines but linked to a *different* spell/item (three separate 'disease' spells all read "You are diseased") are allowed; only a true duplicate sharing the same links is flagged
+- Spell record: its Removes / Casts / Cast By / Summons / Negated-by / Learned-from references now show the target's record number (`[#N]`) beside the name, matching the Monster record
+- Both Messages seeds (stock + paradigm): ailment flags — **Diseased / Poisoned / Blinded / Movement-prevented** — set on every spell that causes them, so the auto-cures and poison rest-gating recognize them. Disease is identified from the *cure disease* / *cure major disease* spells' explicit removal list (it has no engine effect code); poison / blind / hold-person from the causing spell's inflict ability code (Poison 19, BlindUser 107, HoldPerson 74 / Paralyze 75). Paradigm-custom spells with no message record yet were added as flagged placeholders (message text filled in as it's observed in-game). Also fixed a *him→his* typo in the *pain* spell's witness line
+- Trigger seed trimmed of MegaMUD carryovers; monster-message seed stripped of retired death/combat lines
+
+## 3.48.0
+
+- Bosses tab: a per-boss **Grab All** checkbox (default off) that blindly grabs a boss's loot the instant it's available — a **monster** boss: `get` every item in its drop table when it dies; an **item** boss (a box, e.g. a bogwood box): `get` it on room entry. No room re-parse.
+- The Grab All checkbox is hidden (a dash with a "cannot resolve" tooltip) for a boss whose name is neither a specific monster nor item (e.g. a touch-to-awaken mechanic like Iceforge)
+
+## 3.47.0
+
+- **Monster Intel** detail now shows an **Abilities & resistances** panel — the monster's elemental weakness/strength, spell immunity, magic-weapon requirement, damage/magic resist, undead / non-living, and other notable abilities
+- Each of the monster's attacks now lists its **incoming damage/minute** against you, and the melee threat line shows a per-minute total
+- Your **Physical attacks** matchup lines lead with your **damage/minute** to the monster (alongside rounds-to-kill), and each **ranked attack spell** shows its damage/minute too
+- DPM averages a monster's output over 12 rounds (a round is 5s), honouring energy rollover so the fractional swing rate is counted
+
+## 3.46.15
+
+- Roomba (Workshop → Gang House): each labeled room now has a **Goto** button (left of Remove) that opens the map and walks you straight to that room
+
+## 3.46.14
+
+- Route **Details**: a "Color monsters by hit %" toggle tints monster names green→red by how likely they are to hit you (Monster Intel's Hits-You-%) instead of by alignment
+- The green / yellow / red split is adjustable on a two-thumb slider (default green ≤ 15%, yellow ≤ 45%, red above); the toggle + split are saved per character
+- Route Details flags a **see-hidden** monster with an 👁 eyeball on either side of its name
+- Conversation input box now caps at the terminal's 254-character line limit, so the two match
+
+## 3.46.11
+
+- Paired ring/wrist gear swaps are now **realm-aware** (Paradigm evicts slot 1, Stock slot 2) and use `eq`, so re-equipping a set that keeps one member of a full pair no longer emits a needless `rem`
+- Rest no longer **hangs at full HP** after a medi/pre-rest swap — the rest target caps at the live gear-swap-aware max instead of the stale stat screen
+- Gear reliably **swaps back to Default** after a rest that completes the instant it starts (no more pathing in medi gear)
+- **Disabling the rest engine** now drops the engage-to-clear override, so a drain/nuke no longer fires while Auto-Combat is off
+- No more **double-attack** when a kill re-picks a same-species survivor mid cap-switch
+- The room **AoE debuff** (isto) re-fires on a same-room respawn — the room tags reset once the room is genuinely cleared (you rest), while a mid-fight survivor still isn't re-debuffed
+- bug reports addressed: paradigm-20260903-070438, paradigm-20260903-073107, paradigm-20260903-110346, paradigm-20260903-111227, paradigm-20260903-111522, paradigm-20260903-113054
+
+## 3.46.5
+
+- Equipment Manager: new per-character **"Don't swap to default upon entering combat"** checkbox (checked = the long-standing behavior)
+- Unchecked, a fight that interrupts a rest is fought in your **Default** set — swap on combat entry, then back to the pre-rest set on room-clear if you haven't yet reached rest-max
+- The 4-set list no longer stretches the column, making room for the new checkbox
+
+## 3.46.4
+
+- **Reset States** now re-anchors max HP/mana with the game's compact `health` command instead of the full `stat` screen — the same correction with far less terminal scroll
+- Typing `health` yourself re-latches your max HP and pool ceilings too; the command works on **both realms**, and the readout parses HP plus your class's pool — **Mana**, **Kai**, or HP-only
+
+## 3.46.3
+
+- The route picker now handles a **mixed** route — one that crosses a survivable hazard (a river) **and** a hard gate past it (a keyed door you lack), like the walk to the Iceforge — instead of showing a single "walk to the gate and stop" card
+- For such a route it offers **"Obtain a raft, then cross"** (when a counter can be sourced) or **"Walk to the hazard and stop"** (when it can't), plus **"Cross unprotected — take the damage"** — each stopping at the hard gate you clear yourself
+- "Walk to the hazard and stop" walks only to the room just short of the hazard (the river's edge), so you can fetch a counter / clear the gate by hand from there rather than crossing blindly
+- The "obtain" card's requirement line now names the **specific** counter it'll fetch and where — e.g. *"log raft (buy at Pier)"* — instead of the whole "log raft or wooden skiff or …" list; when several counters are buyable it picks the **cheapest**
+- The route **Details…** window now includes the final destination room as an arrival step, so the plan shows where it lands, and its **title bar shows the ETA** to arrive via that route (e.g. *"Current route → The Iceforge (3/632) · ~6m 55s"*)
+
+## 3.46.2
+
+- A previewed walk-to whose only route crosses a hazard (a river / lava you lack a counter for) now **draws its route line** instead of a blank map — the preview falls back to the through-the-hazard route the walk would take
+- The route picker now always offers a clearly-worded **"Cross unprotected — take the damage"** choice for a survivable-damage hazard (a river, heat) you have no counter for — and never for a lethal one (a drown / freeze death, a forced teleport), where a counter is the only safe way past
+- Hazard severity (survivable damage vs grave) is decoded from the spell's effect chain, so the "cross unprotected" offer is gated on it
+- Diagnostic logging added for the hazard-counter shop/give/drop resolver, so a missing "obtain, then cross" card is captured in the program log
+- bug reports addressed: paradigm-20260902-222504, paradigm-20260902-222525
+
+## 3.46.0
+
+- New **Details…** button on the **CURRENT NAV** panel header — opens the current route's full step plan in a scrollable window, the same numbered "room < command" list the route picker shows, for whatever's executing (walk / loop / Auto-Lair) **or a previewed walk-to** armed from the search box
+- The route picker's old *Show steps* flyout is replaced by a matching **Details…** button (bottom-left) — the same fuller window, browse the selected route before committing to it
+- Each step's **room name is a link** — click it to flash the room on the map and centre there (the `@where` treatment)
+- Each room lists its notable monsters (placed fixtures + lair spawners) as clickable record links, tinted by **alignment** — evil red, neutral cyan, good/lawful white (the game's own colouring)
+- A step that needs a special item — a **hazard** room (a river crossing, lava, the desert heat…) or an **item-gated exit** (a cliff needing rope & grapple, a raft crossing…) — is flagged with ⚠ and names the item(s) required to cross it in dark yellow (and, for a hazard, the harmful spell), each linking its Game Data record
+
+## 3.45.6
+
+- On Paradigm, navigation now asks the game `rm` for your true room before it ever falls back to the blind reverse-walk recovery — and again as a last resort before the "Lost" dialog — so a client is only ever genuinely Lost when `rm` itself can't answer, instead of giving up while an authoritative position was one command away
+- A `rm` that goes unanswered because a confusion fumble ate the command is re-asked until the confusion passes, rather than being treated as a real failure
+- bug reports addressed: paradigm-20260902-223159
+
+## 3.45.5
+
+- Nav no longer routes non-bards through the barmaid's bard-only ask-transport — a `class N` gate on a greet teleport now keeps the edge for that class only and drops it for everyone else
+- Greet teleports (ask-an-NPC transports) now verify they actually arrived and re-ask until they do — a class's skill roll on the transport can fail silently, and the walker recognises it didn't move rather than stalling or failing the walk
+- bug reports addressed: issue #455
 
 ## 3.45.4
 
