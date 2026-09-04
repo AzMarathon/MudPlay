@@ -7,6 +7,7 @@
 > - An item's **on-use / proc message** is edited from the item record; a message claimed by a spell or item is hidden from the Unfiltered Messages tab
 > - New **Confuse fumble** field on a Confused message: the line(s) that source emits on a fumble (defaults to *"You fumble in confusion!"*) — a fumbled move reverts on it, so the wordings are game data, not hardcoded
 > - Message editor opens taller and its User Definitions tab scrolls, so the Confuse-fumble box + Effects flags no longer truncate
+> - New **Cast response** field on a message: a monster whose DeathSpell is a silent *…temp* spell fires it on death (seeded `^M^M`, two carriage returns) to unstick the game engine
 > - The ganghouse **guardians, elite guardians, and spellbreakers** now default to **Friend**
 > - Monster record: every spell a monster references (spell-attacks, per-hit, create, death, between-rounds) links to its Spell record and shows the spell number
 >

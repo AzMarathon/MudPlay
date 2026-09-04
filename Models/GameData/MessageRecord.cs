@@ -50,6 +50,15 @@ namespace MudPlay.Models.GameData;
 // One wording per line; the generic every confuse source shares is
 // "You fumble in confusion!". Recognition metadata, NOT part of the identity
 // hash — editing it doesn't re-Id the record.
+//
+// CastResponse: an engine-driven RESPONSE (not recognition) — the one exception
+// to messages being recognition-only. When a spell this record is linked to is
+// detected cast, the client sends this text to the server, with '^M' expanded to
+// a carriage return (the same encoding the Triggers table uses). Its use case is
+// the silent "…temp" death-spells: they emit no line but stall the game engine,
+// so a monster whose DeathSpell is a temp spell fires this on death — seeded to
+// "^M^M" (two carriage returns) to nudge the engine past the stall. Not part of
+// the identity hash.
 public sealed record MessageRecord(
     string                       Id,
     string                       Name,
@@ -61,7 +70,8 @@ public sealed record MessageRecord(
     string                       AppliedMessage,
     string                       AppliedEndsWith,
     IReadOnlyList<GameDataLink>? Links = null,
-    string                       ConfuseFumbleLine = "")
+    string                       ConfuseFumbleLine = "",
+    string                       CastResponse = "")
 {
     // Stable content hash used as Id. SHA1 of every identity field (Name +
     // each of the four perspective line slots + the applied wear-off pair

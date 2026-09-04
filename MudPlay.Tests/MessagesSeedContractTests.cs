@@ -45,7 +45,8 @@ public sealed class MessagesSeedContractTests : IDisposable
             "AppliedMessage": "You are entangled in a net!",
             "AppliedEndsWith": "You work yourself free.",
             "Links": null,
-            "ConfuseFumbleLine": "You fumble in confusion!"
+            "ConfuseFumbleLine": "You fumble in confusion!",
+            "CastResponse": "^M^M"
           },
           {
             "Id": "aaaa000000000002",
@@ -75,6 +76,7 @@ public sealed class MessagesSeedContractTests : IDisposable
         Assert.Equal("You are entangled in a net!", net.AppliedMessage);
         Assert.Null(net.Links);
         Assert.Equal("You fumble in confusion!", net.ConfuseFumbleLine);
+        Assert.Equal("^M^M", net.CastResponse);
 
         MessageRecord belt = recs[1];
         Assert.Equal(MessageFlags.None, belt.Flags);
@@ -82,6 +84,7 @@ public sealed class MessagesSeedContractTests : IDisposable
         Assert.Single(belt.Links!);
         Assert.Equal("Items", belt.Links![0].Table);
         Assert.Equal(438, belt.Links[0].Number);
-        Assert.Equal(string.Empty, belt.ConfuseFumbleLine);   // key absent → default ""
+        Assert.Equal(string.Empty, belt.ConfuseFumbleLine);   // key absent → default
+        Assert.Equal(string.Empty, belt.CastResponse);        // key absent → default ""
     }
 }

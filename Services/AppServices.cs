@@ -3097,6 +3097,12 @@ public sealed class AppServices
         // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
             CombatClassifier.NoteMonsterDeath(evt.ExperienceGained);
+        // Temp death-spell recovery: when a monster whose DeathSpell is a silent "…temp"
+        // spell dies, those spells stall the game engine, so send that spell's message
+        // CastResponse (seeded "^M^M" = two carriage returns) to unstick it. Subscribes
+        // BEFORE the roster-resync below so Combat.CurrentTarget — its fallback identity
+        // when the death carried no candidates — is still set.
+        MonsterDeath.MonsterDied += FireTempDeathResponse;
         // Summon-on-death recheck. MUST subscribe to MonsterDied BEFORE the roster-
         // resync handler below: on a kill whose DeathSpell summons, it asserts a
         // hold + sends a CR to re-scan the room, and that hold has to be in place
@@ -6401,6 +6407,43 @@ public sealed class AppServices
         }
         Log.Info("GrabAll", $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")}");
         foreach (string cmd in cmds) SendGameCommand(cmd);
+    }
+
+    // A monster whose DeathSpell is a silent "…temp" spell just died: those spells emit no
+    // wire line but stall the game engine, so send the temp spell's MessageRecord.CastResponse
+    // (seeded "^M^M" = two carriage returns) to nudge the engine past the stall. Identity is
+    // best-effort — the event's Candidates plus the engaged target (the exp-only death path
+    // carries no candidates); a stray extra CR is harmless. Fires at most one response per death.
+    private void FireTempDeathResponse(Game.Combat.MonsterDeathEvent evt)
+    {
+        if (_engineWireSend is null) return;
+        HashSet<int> numbers = new();
+        foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
+            if (id.Number is { } n) numbers.Add(n);
+        if (!string.IsNullOrWhiteSpace(Combat.CurrentTarget)
+            && ResolveMonsterNumberByName(Combat.CurrentTarget) is { } cur) numbers.Add(cur);
+
+        foreach (int num in numbers)
+        {
+            int deathSpell = MonsterCatalog.Get(num)?.DeathSpell ?? 0;
+            if (deathSpell <= 0) continue;
+            string? spellName = GameData.FindNameByNumber("Spells", deathSpell);
+            if (!Game.Combat.TempDeathResponse.IsTempSpell(spellName)) continue;
+
+            foreach (Models.GameData.MessageRecord r in Messages.Messages)
+            {
+                if (string.IsNullOrEmpty(r.CastResponse) || r.Links is null) continue;
+                bool linked = false;
+                foreach (Models.GameData.GameDataLink l in r.Links)
+                    if (l.Table == "Spells" && l.Number == deathSpell) { linked = true; break; }
+                if (!linked) continue;
+                if (Game.Combat.TempDeathResponse.ExpandToWireBytes(r.CastResponse) is not { } bytes) continue;
+                _engineWireSend(bytes);
+                Log.Info("TempDeath",
+                    $"'{spellName}' (#{deathSpell}) death-cast — sent cast response to unstick the engine");
+                return;   // one response per death
+            }
+        }
     }
 
     // The Monsters-table Number for a boss whose BossDef didn't carry one — resolved

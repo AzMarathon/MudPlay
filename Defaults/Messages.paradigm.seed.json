@@ -22107,7 +22107,8 @@
         "Table": "Spells",
         "Number": 916
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "c9ef5d86b5ccfa01",
@@ -22532,7 +22533,8 @@
         "Table": "Spells",
         "Number": 999
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "e243f1eac3ef8395",
@@ -24283,7 +24285,8 @@
         "Table": "Spells",
         "Number": 541
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "5b277e5af2840923",
@@ -24334,7 +24337,8 @@
         "Table": "Spells",
         "Number": 558
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "4d847d9598a14c20",
@@ -24470,7 +24474,8 @@
         "Table": "Spells",
         "Number": 568
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "6a0236ea9eeb3ba2",
@@ -24504,7 +24509,8 @@
         "Table": "Spells",
         "Number": 570
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "a5bc63145d6787d9",
@@ -24606,7 +24612,8 @@
         "Table": "Spells",
         "Number": 576
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "aa559d06b93bdfb8",
@@ -24640,7 +24647,8 @@
         "Table": "Spells",
         "Number": 578
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "57c6f59ebc0d0ea9",
@@ -24793,7 +24801,8 @@
         "Table": "Spells",
         "Number": 603
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "aea5b7eef6733737",
@@ -24827,7 +24836,8 @@
         "Table": "Spells",
         "Number": 605
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "ec1f0f82c92cbd91",
@@ -24878,7 +24888,8 @@
         "Table": "Spells",
         "Number": 608
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "ea07174238c45238",
@@ -24912,7 +24923,8 @@
         "Table": "Spells",
         "Number": 610
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "705ad826fe7a89e4",
@@ -24946,7 +24958,8 @@
         "Table": "Spells",
         "Number": 612
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "b66c9abaf3218df3",
@@ -24980,7 +24993,8 @@
         "Table": "Spells",
         "Number": 614
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "be4ab5955a2b0060",
@@ -24997,7 +25011,8 @@
         "Table": "Spells",
         "Number": 615
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "1488c90cc31ddb25",
@@ -25031,7 +25046,8 @@
         "Table": "Spells",
         "Number": 617
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "70a0c0bcfecb6b3c",
@@ -25779,7 +25795,8 @@
         "Table": "Spells",
         "Number": 725
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "be37339a73b5f43f",
@@ -25813,7 +25830,8 @@
         "Table": "Spells",
         "Number": 727
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "094e039b6baa27e3",
@@ -25881,7 +25899,8 @@
         "Table": "Spells",
         "Number": 732
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "6f253ae9c53fca8a",
@@ -25915,7 +25934,8 @@
         "Table": "Spells",
         "Number": 734
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "6032c0ad9ec109b5",
@@ -25949,7 +25969,8 @@
         "Table": "Spells",
         "Number": 736
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "0c1da8229d924a0b",
@@ -25966,7 +25987,8 @@
         "Table": "Spells",
         "Number": 740
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "19c378ab927c0501",
@@ -26017,7 +26039,8 @@
         "Table": "Spells",
         "Number": 743
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "cc547ead711bf665",
@@ -26306,7 +26329,8 @@
         "Table": "Spells",
         "Number": 877
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "002ca652457e58b2",
@@ -27598,7 +27622,8 @@
         "Table": "Spells",
         "Number": 1136
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "ae3bb8beb122ac43",
@@ -27887,7 +27912,8 @@
         "Table": "Spells",
         "Number": 1167
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "31f51f6dadfd6be3",
@@ -28006,7 +28032,8 @@
         "Table": "Spells",
         "Number": 1199
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "e20b88dfc2b53188",
@@ -29179,7 +29206,8 @@
         "Table": "Spells",
         "Number": 5203
       }
-    ]
+    ],
+    "CastResponse": "^M^M"
   },
   {
     "Id": "1f66e11d13143cb7",

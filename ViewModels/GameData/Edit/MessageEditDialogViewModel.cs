@@ -87,6 +87,10 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // editing it never re-Ids the record.
     [ObservableProperty] private string _confuseFumbleLine = string.Empty;
 
+    // Engine-driven response sent when this record's spell is detected cast (the temp
+    // death-spell recovery), '^M' = carriage return. Not part of the record identity.
+    [ObservableProperty] private string _castResponse = string.Empty;
+
     public IReadOnlyList<TierOption> AvailableTiers { get; } = new[]
     {
         new TierOption(SettingsTier.Defaults,  "Defaults"),
@@ -238,6 +242,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         AppliedMessage  = original.AppliedMessage;
         AppliedEndsWith = original.AppliedEndsWith;
         ConfuseFumbleLine = original.ConfuseFumbleLine;
+        CastResponse      = original.CastResponse;
 
         FlagBlinded           = original.Flags.HasFlag(MessageFlags.Blinded);
         FlagConfused          = original.Flags.HasFlag(MessageFlags.Confused);
@@ -274,7 +279,8 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
             AppliedMessage:  AppliedMessage  ?? string.Empty,
             AppliedEndsWith: AppliedEndsWith ?? string.Empty,
             Links:           LinkRows.Select(r => new GameDataLink(r.Table, r.Number)).ToList(),
-            ConfuseFumbleLine: ConfuseFumbleLine ?? string.Empty);
+            ConfuseFumbleLine: ConfuseFumbleLine ?? string.Empty,
+            CastResponse:      CastResponse ?? string.Empty);
 
         CloseRequested?.Invoke(new MessageEditResult(_original, updated, UseTier));
     }

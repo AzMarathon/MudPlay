@@ -53,7 +53,7 @@
 
             <!-- ===== Header fields (Name / Use / 4 perspective lines + EndsWith pair) ===== -->
             <Grid Grid.Row="0"
-                  ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   ColumnSpacing="8" RowSpacing="6">
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Name"/>
@@ -99,6 +99,17 @@
                            IsVisible="{Binding FlagConfused}"
                            AcceptsReturn="True" TextWrapping="Wrap" MinHeight="46"
                            PlaceholderText="You fumble in confusion!"/>
+
+                <!-- Cast response: an engine-driven response sent when this record's spell
+                     is detected cast — the one exception to messages being recognition-only.
+                     Its use case is the silent "…temp" death-spells: a monster whose
+                     DeathSpell is a temp spell fires this on death, seeded "^M^M" (two
+                     carriage returns) to nudge the game engine past its stall. '^M' = a
+                     carriage return, like the Triggers table. -->
+                <TextBlock Grid.Row="8" Grid.Column="0" Classes="FieldLabel" Text="Cast response"
+                           ToolTip.Tip="Sent to the server when this spell is detected cast (e.g. a temp death-spell). '^M' = carriage return; temp spells default to '^M^M' (two CRs) to unstick the engine."/>
+                <TextBox   Grid.Row="8" Grid.Column="1" Text="{Binding CastResponse, Mode=TwoWay}"
+                           PlaceholderText="^M^M"/>
             </Grid>
 
             <!-- Below the line fields: when the record is valid, show the
