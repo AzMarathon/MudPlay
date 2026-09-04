@@ -222,7 +222,14 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
             Sections.Add(new MessageCandidatesSectionViewModel(
                 _messageCandidates, _messages, _dialogs, _gameData,
                 AppServices.CurrentOrNull?.MessageCandidateWatcher,
-                AppServices.CurrentOrNull?.LogDiagnostics));
+                AppServices.CurrentOrNull?.LogDiagnostics,
+                likelySource: (map, room) => Game.Combat.RoomSpellAttributor.LikelySource(
+                    new Game.Map.RoomKey(map, room),
+                    AppServices.CurrentOrNull?.RoomGraph,
+                    AppServices.CurrentOrNull?.GameData,
+                    AppServices.CurrentOrNull?.MonsterSpawns,
+                    AppServices.CurrentOrNull?.MonsterCatalog,
+                    AppServices.CurrentOrNull?.SpellCatalog)));
         else
             AddPlaceholder("message-candidates", "Candidates", "Diagnostics",
                 "Wire lines the Messages catalogue doesn't recognize, staged by the Program Log " +

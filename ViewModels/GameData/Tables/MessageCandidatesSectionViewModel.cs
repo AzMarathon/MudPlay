@@ -23,13 +23,16 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
     private readonly GameDataCache? _cache;
     private readonly MessageCandidateWatcher? _watcher;
     private readonly LogDiagnosticState? _diagnostics;
+    // (map, room) -> a "Likely source" hint (spells castable by monsters in that
+    // room). Null when no attributor was supplied (tests / no game data).
+    private readonly Func<int, int, string?>? _likelySource;
 
     public override string Id => "message-candidates";
     public override string Title => "Unrecognized Lines";
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Raw Text", "Seen In", "Occurrences", "First Seen", "Last Seen", "Status",
+        "Raw Text", "Seen In", "Likely source", "Occurrences", "First Seen", "Last Seen", "Status",
     };
 
     public override string SearchKeyColumn => "Raw Text";
@@ -71,7 +74,8 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         DialogService? dialogs = null,
         GameDataCache? cache = null,
         MessageCandidateWatcher? watcher = null,
-        LogDiagnosticState? diagnostics = null)
+        LogDiagnosticState? diagnostics = null,
+        Func<int, int, string?>? likelySource = null)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(messages);
@@ -81,6 +85,7 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         _cache = cache;
         _watcher = watcher;
         _diagnostics = diagnostics;
+        _likelySource = likelySource;
         _handler = (_, _) => Reload();
         _candidates.Candidates.CollectionChanged += _handler;
         OpenEditAsyncCommand  = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
@@ -120,6 +125,9 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
                 // Map:Room where the line was first seen — the locator hint for
                 // tracking down its source. Blank when position wasn't yet known.
                 ["Seen In"]     = c.Map is { } m && c.Room is { } rm ? $"{m}:{rm}" : "",
+                // Spells castable by monsters in that room — a starting point for
+                // "which spell's message is this?". Blank when no location / no attributor.
+                ["Likely source"] = c.Map is { } lm && c.Room is { } lr ? (_likelySource?.Invoke(lm, lr) ?? "") : "",
                 ["Occurrences"] = c.Occurrences.ToString(),
                 ["First Seen"]  = c.FirstSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 ["Last Seen"]   = c.LastSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),

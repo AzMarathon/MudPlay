@@ -10,6 +10,8 @@
 > - New **Simulate entry** test button (top-right of the Unrecognized Lines tab) feeds a synthetic unknown line through the capture flow so you can see it work; it, plus the Simulate Death / Simulate Chest test buttons, now share one **Simulate buttons** dropdown on the Program Log (was three separate checkboxes)
 > - Ailment **Effects flags** (Blinded / Confused / Poisoned / Movement-prevented) on every message are now re-derived from its linked spell's game-data ability codes — so a confuse/poison/blind/hold spell whose flag was missing (e.g. rose book confuse) is now marked correctly; both realm seeds are re-seeded once on update
 > - Spell Game Data view: a spell's **End cast** chain now shows as a clickable link to the cast spell (with its #id), e.g. poison bolt → poison bite
+> - Unrecognized Lines tab gains a **Likely source** column — the spells castable by monsters (placed / assigned / lair) in the room where the line was captured, so an unattributed line can be narrowed to a probable spell
+> - Spells tab filter now understands ailment keywords — type **poison / confuse / blind / hold** to list every spell that applies that effect (read from its ability codes, following the EndCast chain), not just spells with the word in their name
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
