@@ -81,6 +81,8 @@ public sealed class ItemRecordDialogService
             currentTier:      currentTier,
             mdbInfo:          mdb.OtherInfo,
             shops:            mdb.Shops,
+            writableTiers:    _resolver.WritableTiers(),
+            installedDefaults: seedDefaults,
             isLight:          mdb.IsLight,
             isContainer:      mdb.IsContainer,
             chest:            chest,
@@ -106,8 +108,11 @@ public sealed class ItemRecordDialogService
         }
         if (result is null) return;
 
-        // Defaults tier is read-only (MDB is source of truth) — fall back to Character.
-        SettingsTier tier = result.Tier == SettingsTier.Defaults ? SettingsTier.Character : result.Tier;
-        _resolver.WriteGameDataAt(tier, "Items", result.WccNoStr, result.Overlay);
+        // Installed-defaults reset / redundant-override cleanup / normal write —
+        // shared with the browser's Items tab.
+        if (AppServices.Current is { } app)
+            await GameDataOverrideApplier.ApplyAsync(
+                _resolver, app.Confirm, "Items", result.WccNoStr,
+                result.Tier, result.Overlay, result.EqualsInstalledDefaults);
     }
 }

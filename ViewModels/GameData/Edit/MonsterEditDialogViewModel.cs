@@ -80,6 +80,13 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     // game-data set changed since the override was saved).
     private readonly Func<int, string?>? _resolveSpellNumber;
 
+    // The overlay the dialog would Save if the user made no change to the installed
+    // defaults — built by running the SAME Compose over the defaults-derived field
+    // values. On Save an overlay equal to this means "no net change vs the seed", so
+    // the caller clears the tier's redundant override (or, at the Defaults tier,
+    // resets the record). Captured in the ctor from installedDefaults.
+    private readonly MonsterOverlay _defaultsBaseline;
+
     public MonsterEditDialogViewModel(
         string wccNoStr,
         string mdbName,
@@ -87,6 +94,7 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         SettingsTier currentTier,
         IReadOnlyList<MdbInfoRow> mdbInfo,
         IReadOnlyList<SettingsTier>? writableTiers = null,
+        MonsterOverlay? installedDefaults = null,
         Func<string, int?>? resolveSpellShort = null,
         Func<int, string?>? resolveSpellNumber = null)
     {
@@ -95,14 +103,16 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         WccNoStr      = wccNoStr;
         MonsterNumber = int.TryParse(wccNoStr, out int n) ? n : 0;
         Name          = existing?.Name ?? mdbName;
-        AvailableTiers = writableTiers is { Count: > 0 }
+        // The writable tiers (Character / BBS / Global) plus "Installed defaults" as
+        // the last option — picking it resets the record (wipes every tier's
+        // override). The default selection is always a WRITABLE tier, never Defaults,
+        // so a plain edit lands as an override and only an explicit Defaults pick
+        // resets (else saving an unchanged Def record would try to reset it).
+        IReadOnlyList<SettingsTier> writable = writableTiers is { Count: > 0 }
             ? writableTiers
-            : Enum.GetValues<SettingsTier>().ToArray();
-        // Default to the tier the existing override lives at when it's writable;
-        // otherwise the most-specific writable tier (first in the list). Stops
-        // the picker defaulting to read-only Defaults or an unloaded Character,
-        // which made Save throw "no named profile loaded" and crash the app.
-        UseTier       = AvailableTiers.Contains(currentTier) ? currentTier : AvailableTiers[0];
+            : new[] { SettingsTier.Character, SettingsTier.Bbs, SettingsTier.Global };
+        AvailableTiers = writable.Append(SettingsTier.Defaults).ToArray();
+        UseTier        = writable.Contains(currentTier) ? currentTier : writable[0];
         MdbInfo       = mdbInfo;
 
         Relationship = existing?.Relationship ?? MonsterRelationship.Enemy;
@@ -122,27 +132,62 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
 
         DontBackstab = existing?.DontBackstab ?? false;
         KillOnSight  = existing?.KillOnSight  ?? false;
+
+        // What Compose would produce from the installed-defaults values, derived with
+        // the SAME fallbacks the field init above uses — so an unedited (or edited-back)
+        // record compares equal to it.
+        _defaultsBaseline = Compose(
+            installedDefaults?.Name ?? mdbName,
+            installedDefaults?.Relationship ?? MonsterRelationship.Enemy,
+            installedDefaults?.Priority ?? MonsterAttackPriority.Normal,
+            installedDefaults?.OverridePreAttackSpellId?.ToString() ?? string.Empty,
+            installedDefaults?.OverridePreAttackCount?.ToString() ?? string.Empty,
+            installedDefaults?.OverrideAttackCommand is { Length: > 0 } dc
+                ? dc
+                : (installedDefaults?.OverrideAttackSpellId is { } dai
+                    ? (_resolveSpellNumber?.Invoke(dai) ?? dai.ToString())
+                    : string.Empty),
+            installedDefaults?.OverrideAttackCount?.ToString() ?? string.Empty,
+            installedDefaults?.DontBackstab ?? false,
+            installedDefaults?.KillOnSight ?? false,
+            _resolveSpellShort);
     }
 
     [RelayCommand]
     private void Save()
     {
-        (int? attackSpellId, string? attackCommand) = ParseAttackOverride(AttackOverride, _resolveSpellShort);
-        MonsterOverlay overlay = new()
-        {
-            Name                     = string.IsNullOrWhiteSpace(Name) ? null : Name,
-            Relationship             = Relationship,
-            Priority                 = Priority,
-            OverridePreAttackSpellId = ParseNullableInt(PreAttackSpellId),
-            OverridePreAttackCount   = ParseNullableInt(PreAttackCount),
-            OverrideAttackSpellId    = attackSpellId,
-            OverrideAttackCount      = ParseNullableInt(AttackCount),
-            OverrideAttackCommand    = attackCommand,
-            DontBackstab             = DontBackstab,
-            KillOnSight              = KillOnSight,
-        };
+        MonsterOverlay overlay = Compose(
+            Name, Relationship, Priority, PreAttackSpellId, PreAttackCount,
+            AttackOverride, AttackCount, DontBackstab, KillOnSight, _resolveSpellShort);
 
-        CloseRequested?.Invoke(new MonsterEditResult(WccNoStr, overlay, UseTier));
+        // A record (value-equal) comparison against the defaults baseline: true means
+        // the user dragged everything back to the seed, so the caller clears the tier's
+        // now-redundant override instead of writing it.
+        bool equalsInstalledDefaults = overlay.Equals(_defaultsBaseline);
+        CloseRequested?.Invoke(new MonsterEditResult(WccNoStr, overlay, UseTier, equalsInstalledDefaults));
+    }
+
+    // Single overlay construction, shared by Save (live fields) and the ctor's
+    // defaults-baseline capture, so the two are guaranteed to compare apples-to-apples.
+    private static MonsterOverlay Compose(
+        string name, MonsterRelationship relationship, MonsterAttackPriority priority,
+        string preAttackSpellId, string preAttackCount, string attackOverride, string attackCount,
+        bool dontBackstab, bool killOnSight, Func<string, int?>? resolveSpellShort)
+    {
+        (int? attackSpellId, string? attackCommand) = ParseAttackOverride(attackOverride, resolveSpellShort);
+        return new MonsterOverlay
+        {
+            Name                     = string.IsNullOrWhiteSpace(name) ? null : name,
+            Relationship             = relationship,
+            Priority                 = priority,
+            OverridePreAttackSpellId = ParseNullableInt(preAttackSpellId),
+            OverridePreAttackCount   = ParseNullableInt(preAttackCount),
+            OverrideAttackSpellId    = attackSpellId,
+            OverrideAttackCount      = ParseNullableInt(attackCount),
+            OverrideAttackCommand    = attackCommand,
+            DontBackstab             = dontBackstab,
+            KillOnSight              = killOnSight,
+        };
     }
 
     [RelayCommand]
@@ -183,8 +228,11 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
 
 // Returned by MonsterEditDialogViewModel on Save. WccNoStr is the monster's WCC No as a
 // string — primary key for the overlay write; Overlay is the user's edited overlay
-// payload; Tier is the tier the overlay should be written at.
+// payload; Tier is the tier the overlay should be written at (SettingsTier.Defaults =
+// reset the record). EqualsInstalledDefaults is true when the edit matches the seeded
+// defaults, so the applier clears the tier's redundant override rather than writing it.
 public sealed record MonsterEditResult(
     string         WccNoStr,
     MonsterOverlay Overlay,
-    SettingsTier   Tier);
+    SettingsTier   Tier,
+    bool           EqualsInstalledDefaults);

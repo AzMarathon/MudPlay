@@ -209,6 +209,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             currentTier:      row.SourceTier,
             mdbInfo:          mdb.OtherInfo,
             shops:            mdb.Shops,
+            writableTiers:    _resolverRef?.WritableTiers(),
+            installedDefaults: seedDefaults,
             isLight:          mdb.IsLight,
             isContainer:      mdb.IsContainer,
             chest:            chest,
@@ -240,10 +242,12 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
         }
         if (result is null) return;
 
-        // Defaults tier is read-only (MDB is the source of truth) — fall
-        // back to Character if the user picks it. Same guard MonstersTab uses.
-        SettingsTier tier = result.Tier == SettingsTier.Defaults ? SettingsTier.Character : result.Tier;
-        _resolverRef?.WriteGameDataAt(tier, "Items", result.WccNoStr, result.Overlay);
+        // Installed-defaults reset (confirm + wipe all tiers), redundant-override
+        // cleanup (edit == seed → clear the tier), or a normal write — one shared path.
+        if (_resolverRef is { } resolver && AppServices.Current is { } app)
+            await GameDataOverrideApplier.ApplyAsync(
+                resolver, app.Confirm, "Items", result.WccNoStr,
+                result.Tier, result.Overlay, result.EqualsInstalledDefaults);
 
         Reload();
     }

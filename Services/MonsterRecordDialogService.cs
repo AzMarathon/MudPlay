@@ -74,6 +74,7 @@ public sealed class MonsterRecordDialogService
             currentTier:        currentTier,
             mdbInfo:            mdbInfo,
             writableTiers:      _resolver.WritableTiers(),
+            installedDefaults:  seedDefaults,
             resolveSpellShort:  _spellShort.NumberByShort,
             resolveSpellNumber: _spellShort.ShortByNumber);
 
@@ -92,10 +93,10 @@ public sealed class MonsterRecordDialogService
         }
         if (result is null) return;
 
-        // The dialog only offers writable tiers, but guard anyway (a tier whose scope can't
-        // be resolved throws from the write) — fall back to the most-specific writable tier.
-        SettingsTier tier = result.Tier;
-        if (!_resolver.CanWriteAt(tier)) tier = _resolver.WritableTiers()[0];
-        _resolver.WriteGameDataAt(tier, "Monsters", result.WccNoStr, result.Overlay);
+        // Installed-defaults reset / redundant-override cleanup / normal write —
+        // shared with the browser's Monsters tab.
+        await GameDataOverrideApplier.ApplyAsync(
+            _resolver, AppServices.Current.Confirm, "Monsters", result.WccNoStr,
+            result.Tier, result.Overlay, result.EqualsInstalledDefaults);
     }
 }

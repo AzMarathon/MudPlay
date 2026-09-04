@@ -17,6 +17,8 @@
 - **Attack prevented** flag now works too: while a line carrying it is active (stun / petrify / bind), combat holds all offensive output — weapon swings, attack spells, and debuffs — and resumes on the wear-off
 - Message editor default size trimmed to match the smaller Effects box
 - Alias editor: greyed placeholder examples in the Name + Expansion boxes showing how an alias is filled out
+- Game Data record overrides (Monsters & Items): the Use-tier picker now offers **Installed defaults** — picking it *resets* the record (a confirm, then wipes your Character/BBS/Global edits for it back to the seed, so it returns to **Def**); the labels read in plain language (*only for this character / this BBS / for all characters*)
+- Editing a record's values back to the installed defaults now auto-removes that tier's redundant override (the row shifts back toward **Def**) instead of writing a no-op override — fixes a Global edit appearing not to "stick" when a Character override was shadowing it (character → BBS → global → defaults priority, unchanged)
 - Trigger seed trimmed of MegaMUD carryovers; monster-message seed stripped of retired death/combat lines
 
 ## 3.48.0

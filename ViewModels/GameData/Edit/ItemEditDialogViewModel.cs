@@ -154,8 +154,12 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     public IReadOnlyList<ItemGiverRow> Givers { get; }
     public bool HasGivers => Givers.Count > 0;
 
-    public IReadOnlyList<SettingsTier> AvailableTiers { get; } =
-        Enum.GetValues<SettingsTier>().ToArray();
+    public IReadOnlyList<SettingsTier> AvailableTiers { get; }
+
+    // The overlay Save would produce from the installed defaults — see the ctor.
+    // On Save an overlay equal to this means the edit matches the seed, so the
+    // caller clears the tier's redundant override (or resets, at the Defaults tier).
+    private readonly ItemOverlay _defaultsBaseline;
 
     public string Title => $"Item — {(Name.Length > 0 ? Name : $"#{WccNoStr}")}";
 
@@ -176,6 +180,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         SettingsTier currentTier,
         IReadOnlyList<KeyValuePair<string, string>> mdbInfo,
         IReadOnlyList<ShopSaleRow> shops,
+        IReadOnlyList<SettingsTier>? writableTiers = null,
+        ItemOverlay? installedDefaults = null,
         bool isLight = false,
         bool isContainer = false,
         ChestContents? chest = null,
@@ -189,7 +195,13 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     {
         WccNoStr     = wccNoStr;
         Name         = existing?.Name ?? mdbName;
-        UseTier      = currentTier;
+        // Writable tiers + "Installed defaults" (the reset option, last). The default
+        // selection is always a writable tier, never Defaults — see the Monster dialog.
+        IReadOnlyList<SettingsTier> writable = writableTiers is { Count: > 0 }
+            ? writableTiers
+            : new[] { SettingsTier.Character, SettingsTier.Bbs, SettingsTier.Global };
+        AvailableTiers = writable.Append(SettingsTier.Defaults).ToArray();
+        UseTier      = writable.Contains(currentTier) ? currentTier : writable[0];
         MdbInfo      = mdbInfo;
         _shopSalesForCharm = shopSalesForCharm;
         foreach (ShopSaleRow row in shops) ShopSales.Add(row);
@@ -221,6 +233,23 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 
         _editAttachedMessage   = editAttachedMessage;
         AttachedMessageSummary = attachedMessageSummary ?? string.Empty;
+
+        // What Compose produces from the installed defaults (same container gate on
+        // AutoOpen the fields use) — an edit equal to this is a no-op vs the seed.
+        _defaultsBaseline = Compose(
+            installedDefaults?.Name ?? mdbName,
+            installedDefaults?.AutoCollect ?? false,
+            installedDefaults?.AutoDiscard ?? false,
+            isContainer && (installedDefaults?.AutoOpen ?? false),
+            installedDefaults?.AutoBuy ?? false,
+            installedDefaults?.AutoSell ?? false,
+            installedDefaults?.AutoStash ?? false,
+            installedDefaults?.CannotBeTaken ?? false,
+            installedDefaults?.MustHaveMinimum ?? false,
+            installedDefaults?.LoyalItem ?? false,
+            installedDefaults?.AutoObtainForPath ?? false,
+            installedDefaults?.MinToKeep ?? string.Empty,
+            installedDefaults?.MaxToGet ?? string.Empty);
 
         _initialized = true;
     }
@@ -298,25 +327,38 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     [RelayCommand]
     private void Save()
     {
-        ItemOverlay overlay = new()
-        {
-            Name            = string.IsNullOrWhiteSpace(Name) ? null : Name,
-            AutoCollect     = AutoCollect     ? true : null,
-            AutoDiscard     = AutoDiscard     ? true : null,
-            AutoOpen        = AutoOpen        ? true : null,
-            AutoBuy         = AutoBuy         ? true : null,
-            AutoSell        = AutoSell        ? true : null,
-            AutoStash       = AutoStash       ? true : null,
-            CannotBeTaken   = CannotBeTaken   ? true : null,
-            MustHaveMinimum = MustHaveMinimum ? true : null,
-            LoyalItem       = LoyalItem       ? true : null,
-            AutoObtainForPath = AutoObtainForPath ? true : null,
-            MinToKeep       = string.IsNullOrWhiteSpace(MinToKeep) ? null : MinToKeep,
-            MaxToGet        = string.IsNullOrWhiteSpace(MaxToGet)  ? null : MaxToGet,
-        };
+        ItemOverlay overlay = Compose(
+            Name, AutoCollect, AutoDiscard, AutoOpen, AutoBuy, AutoSell, AutoStash,
+            CannotBeTaken, MustHaveMinimum, LoyalItem, AutoObtainForPath, MinToKeep, MaxToGet);
 
-        CloseRequested?.Invoke(new ItemEditResult(WccNoStr, overlay, UseTier));
+        // Record value-equality against the defaults baseline: true means the edit
+        // matches the seed, so the caller clears the tier's redundant override.
+        bool equalsInstalledDefaults = overlay.Equals(_defaultsBaseline);
+        CloseRequested?.Invoke(new ItemEditResult(WccNoStr, overlay, UseTier, equalsInstalledDefaults));
     }
+
+    // Single overlay construction shared by Save (live fields) and the ctor's
+    // defaults-baseline capture, so the two compare apples-to-apples.
+    private static ItemOverlay Compose(
+        string name, bool autoCollect, bool autoDiscard, bool autoOpen, bool autoBuy,
+        bool autoSell, bool autoStash, bool cannotBeTaken, bool mustHaveMinimum,
+        bool loyalItem, bool autoObtainForPath, string minToKeep, string maxToGet)
+        => new()
+        {
+            Name              = string.IsNullOrWhiteSpace(name) ? null : name,
+            AutoCollect       = autoCollect     ? true : null,
+            AutoDiscard       = autoDiscard     ? true : null,
+            AutoOpen          = autoOpen        ? true : null,
+            AutoBuy           = autoBuy         ? true : null,
+            AutoSell          = autoSell        ? true : null,
+            AutoStash         = autoStash       ? true : null,
+            CannotBeTaken     = cannotBeTaken   ? true : null,
+            MustHaveMinimum   = mustHaveMinimum ? true : null,
+            LoyalItem         = loyalItem       ? true : null,
+            AutoObtainForPath = autoObtainForPath ? true : null,
+            MinToKeep         = string.IsNullOrWhiteSpace(minToKeep) ? null : minToKeep,
+            MaxToGet          = string.IsNullOrWhiteSpace(maxToGet)  ? null : maxToGet,
+        };
 
     [RelayCommand]
     private void Cancel() => CloseRequested?.Invoke(null);
@@ -328,4 +370,5 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 public sealed record ItemEditResult(
     string       WccNoStr,
     ItemOverlay  Overlay,
-    SettingsTier Tier);
+    SettingsTier Tier,
+    bool         EqualsInstalledDefaults);
