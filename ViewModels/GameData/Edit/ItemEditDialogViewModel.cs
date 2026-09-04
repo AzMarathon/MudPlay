@@ -135,6 +135,12 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     public IReadOnlyList<PlacedInRow> PlacedIn { get; }
     public bool HasPlacedIn => PlacedIn.Count > 0;
 
+    // Spells the item casts (use-cast / proc), each a clickable link to that spell's
+    // record — where the cast's on-use / proc wording lives, shared across every item
+    // casting it. Empty for an item that casts nothing.
+    public IReadOnlyList<CastsSpellRow> CastsSpells { get; }
+    public bool HasCastsSpells => CastsSpells.Count > 0;
+
     // Chest-contents readout (containers only) — the decoded loot table's
     // per-item drop chances plus a one-line yield summary. Empty for any item
     // that isn't a container wired to a loot textblock.
@@ -190,6 +196,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         Func<int, IReadOnlyList<ShopSaleRow>>? shopSalesForCharm = null,
         IReadOnlyList<DroppedByRow>? droppedBy = null,
         IReadOnlyList<PlacedInRow>? placedIn = null,
+        IReadOnlyList<CastsSpellRow>? castsSpells = null,
         Func<Task<string?>>? editAttachedMessage = null,
         string? attachedMessageSummary = null)
     {
@@ -207,6 +214,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         foreach (ShopSaleRow row in shops) ShopSales.Add(row);
         DroppedBy    = droppedBy ?? Array.Empty<DroppedByRow>();
         PlacedIn     = placedIn  ?? Array.Empty<PlacedInRow>();
+        CastsSpells  = castsSpells ?? Array.Empty<CastsSpellRow>();
         CanBuySell   = !isLight;
         CanAutoOpen  = isContainer;
 

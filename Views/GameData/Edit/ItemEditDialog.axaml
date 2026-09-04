@@ -221,6 +221,29 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
+                            <!-- Casts — spells this item delivers (use-cast / proc). Each
+                                 links to that spell's record, where its on-use / proc wording
+                                 lives (shared across every item casting the same spell).
+                                 Hidden for an item that casts nothing. -->
+                            <ItemsControl ItemsSource="{Binding CastsSpells}" IsVisible="{Binding HasCastsSpells}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:CastsSpellRow">
+                                        <Grid ColumnDefinitions="140,*" Margin="0,1">
+                                            <TextBlock Grid.Column="0" Classes="MdbKey" Text="{Binding Label}"/>
+                                            <StackPanel Grid.Column="1">
+                                                <Button Classes="MdbLink"
+                                                        Content="{Binding SpellName}"
+                                                        Command="{Binding Open}"
+                                                        HorizontalAlignment="Left"
+                                                        ToolTip.Tip="Open this spell's record — its on-use / proc messages live here"/>
+                                                <TextBlock Classes="MdbValue" Text="{Binding Effect}"
+                                                           IsVisible="{Binding HasEffect}" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
                             <!-- Bought / sold — one row per shop that trades this
                                  item. The location links to the host room's Rooms-tab
                                  record; the charm-priced buy/sell line sits beneath.

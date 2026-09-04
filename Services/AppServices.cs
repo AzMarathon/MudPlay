@@ -3799,8 +3799,9 @@ public sealed class AppServices
         SpellRecord = new SpellRecordDialogService(GameData, Messages, Dialogs);
 
         // Item-side mirror of SpellRecord — opens an item's on-use / proc message
-        // editor from the item dialog's Message section.
-        ItemMessage = new ItemMessageDialogService(GameData, Messages, Dialogs);
+        // editor from the item dialog's Message section. A casting item delegates to
+        // SpellRecord on its CastsSp spell (the shared record), so it takes that here.
+        ItemMessage = new ItemMessageDialogService(GameData, Messages, Dialogs, SpellRecord);
 
         // Light catalogue + live carried illumination. The snapshot provider is
         // deferred (Inventory is assigned later in this method), so reading
@@ -6694,12 +6695,26 @@ public sealed class AppServices
     }
 
     // Find the active set's Models.GameData.MessageRecord for an
-    // item — by Items#N link first, then by the item's resolved name.
-    // An item-proc record's Models.GameData.MessageRecord.CasterMessage
-    // is the line YOU see when the weapon procs. Returns null when no
-    // record anchors to the item. Mirrors FindSpellMessage.
+    // item — the line YOU see when the item procs / is used. Resolution order:
+    // (1) the item's CAST SPELL record (Spells#N via CastsSp) — the canonical home
+    // for a casting item's on-use / proc wording, shared across every item casting
+    // that spell; (2) a legacy Items#N-linked record (worn trinkets with a
+    // wield/remove message that cast nothing); (3) the item's resolved name. Returns
+    // null when no record anchors to the item. Mirrors FindSpellMessage.
     private Models.GameData.MessageRecord? FindItemMessage(int itemNumber)
     {
+        if (Game.GameData.ItemCastSpells.PrimaryCastSpell(GameData, itemNumber) is int spell)
+        {
+            foreach (Models.GameData.MessageRecord m in Messages.Messages)
+            {
+                if (m.Links is null) continue;
+                foreach (Models.GameData.GameDataLink link in m.Links)
+                    if (string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase)
+                        && link.Number == spell)
+                        return m;
+            }
+        }
+
         foreach (Models.GameData.MessageRecord m in Messages.Messages)
         {
             if (m.Links is null) continue;

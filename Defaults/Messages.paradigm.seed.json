@@ -55,23 +55,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "1f2096be7173fa12",
-    "Name": "acid slasher",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Acid sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1592
-      }
-    ]
-  },
-  {
     "Id": "57a7f09d7f758bf0",
     "Name": "acid tempest",
     "Flags": "None",
@@ -125,7 +108,7 @@
     ]
   },
   {
-    "Id": "b08b502bf617d630",
+    "Id": "67ab67e8251a37a8",
     "Name": "alertness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -138,23 +121,6 @@
       {
         "Table": "Spells",
         "Number": 91
-      }
-    ]
-  },
-  {
-    "Id": "0cbb64c577fb5125",
-    "Name": "amber sceptre",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1638
       }
     ]
   },
@@ -176,24 +142,24 @@
     ]
   },
   {
-    "Id": "027b367f093ed6f5",
-    "Name": "ancient relic",
+    "Id": "f5215ad9248b4640",
+    "Name": "hallowed flame",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "Hallowed flames consume you for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
     "Links": [
       {
-        "Table": "Items",
-        "Number": 3739
+        "Table": "Spells",
+        "Number": 5645
       }
     ]
   },
   {
-    "Id": "5542df805ee7528a",
+    "Id": "6fac8788492376f7",
     "Name": "angelic halo",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -223,23 +189,6 @@
       {
         "Table": "Spells",
         "Number": 744
-      }
-    ]
-  },
-  {
-    "Id": "2b3bd97350e5f1ae",
-    "Name": "anointed morningstar",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1497
       }
     ]
   },
@@ -297,32 +246,15 @@
     "CastResponse": ""
   },
   {
-    "Id": "8739c3f371fe397e",
-    "Name": "arcane tome",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You have memorized an arcane incantation!",
-    "AppliedEndsWith": "The arcane incantation slips from memory.",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 833
-      }
-    ]
-  },
-  {
-    "Id": "97ba3188f00ca276",
+    "Id": "8cfe5fd3db24ee92",
     "Name": "arcane tome incantation",
     "Flags": "None",
     "RawFlagsHex": 512,
     "CasterMessage": "The words within slowly form a mystical pattern!",
     "TargetMessage": "{null}",
     "WitnessMessage": "{source} appears to have memorized something!",
-    "AppliedMessage": "You have memorized an arcane incantation",
-    "AppliedEndsWith": "The arcane incantation slips from memory",
+    "AppliedMessage": "You have memorized an arcane incantation!",
+    "AppliedEndsWith": "The arcane incantation slips from memory.",
     "Links": [
       {
         "Table": "Spells",
@@ -365,7 +297,7 @@
     ]
   },
   {
-    "Id": "62d7afad377c5cda",
+    "Id": "b712046d497edb67",
     "Name": "ashwood wand",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -399,7 +331,7 @@
     ]
   },
   {
-    "Id": "a5486a7712392100",
+    "Id": "bfed0a1773eecb9c",
     "Name": "balanced sight",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -433,7 +365,7 @@
     ]
   },
   {
-    "Id": "db5b5e8d3e42c2dc",
+    "Id": "549d36315e1239ba",
     "Name": "banish",
     "Flags": "Poisoned",
     "RawFlagsHex": 4,
@@ -570,7 +502,7 @@
     ]
   },
   {
-    "Id": "89a9f166882a3d31",
+    "Id": "42f6f87344a6fc5b",
     "Name": "birch rod",
     "Flags": "None",
     "RawFlagsHex": 128,
@@ -657,23 +589,6 @@
     ]
   },
   {
-    "Id": "f740269941a5b34b",
-    "Name": "black warhammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Your weapon is blessed!",
-    "AppliedEndsWith": "The effects of the blessing wear off!",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3352
-      }
-    ]
-  },
-  {
     "Id": "441318dd221f5356",
     "Name": "black warhammer",
     "Flags": "None",
@@ -708,23 +623,6 @@
     ],
     "ConfuseFumbleLine": "",
     "CastResponse": ""
-  },
-  {
-    "Id": "e713b44598da731b",
-    "Name": "blackwood staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Your blackwood staff sucks the life from {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1226
-      }
-    ]
   },
   {
     "Id": "efb8c6be3c0a4e15",
@@ -812,7 +710,7 @@
     ]
   },
   {
-    "Id": "918119939190943a",
+    "Id": "46c1ddd263797f2b",
     "Name": "bleeding",
     "Flags": "None",
     "RawFlagsHex": 8,
@@ -829,7 +727,7 @@
     ]
   },
   {
-    "Id": "8dcc73891fcd4347",
+    "Id": "a31f5acd673f9114",
     "Name": "bless",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -846,7 +744,7 @@
     ]
   },
   {
-    "Id": "120db516bb2f68ce",
+    "Id": "3b6fa66727bbfec6",
     "Name": "blight",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -863,7 +761,7 @@
     ]
   },
   {
-    "Id": "a2a057ea2d8aeed2",
+    "Id": "c80064e63a9ab5ad",
     "Name": "blind",
     "Flags": "Blinded",
     "RawFlagsHex": 1,
@@ -899,23 +797,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "61cc30d9b252cc58",
-    "Name": "blizzardfang",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} damage from the cold!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1355
-      }
-    ]
-  },
-  {
     "Id": "a4c21ad88ea63ad5",
     "Name": "blood lance",
     "Flags": "None",
@@ -933,7 +814,7 @@
     ]
   },
   {
-    "Id": "9bc536bcae6e1acb",
+    "Id": "e1a86445bd4aef46",
     "Name": "blood ritual",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -950,7 +831,7 @@
     ]
   },
   {
-    "Id": "ebafc3b1eb5b5d2c",
+    "Id": "1d00452974a05981",
     "Name": "blur",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -1022,23 +903,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "f3e9984ddb14a39a",
-    "Name": "brimstone hammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Hellfire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1455
-      }
-    ]
-  },
-  {
     "Id": "2beb0e4d1876e0e1",
     "Name": "burn hits",
     "Flags": "None",
@@ -1075,7 +939,7 @@
     ]
   },
   {
-    "Id": "a980edd026e3770d",
+    "Id": "884d0593de27246d",
     "Name": "burning death",
     "Flags": "None",
     "RawFlagsHex": 8,
@@ -1126,7 +990,7 @@
     ]
   },
   {
-    "Id": "68ba19954775ba9a",
+    "Id": "416bb1e65a8a368e",
     "Name": "cedar rod",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -1143,7 +1007,7 @@
     ]
   },
   {
-    "Id": "710ebe3eb4689f18",
+    "Id": "c367cec05a5edddc",
     "Name": "chain",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 16,
@@ -1177,7 +1041,7 @@
     ]
   },
   {
-    "Id": "53c8ac5b67ac9031",
+    "Id": "8cdd30f43e9ecca9",
     "Name": "chant",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -1232,7 +1096,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "27ace1d76a3c2cd5",
+    "Id": "ef64c8fbf324a216",
     "Name": "chaos surge",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -1320,7 +1184,7 @@
     ]
   },
   {
-    "Id": "488d55105de5edf2",
+    "Id": "bb90d5ed67d8555c",
     "Name": "combat fury",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -1371,14 +1235,14 @@
     ]
   },
   {
-    "Id": "9f1be3d349834a04",
+    "Id": "7e576f7f2c00c0d5",
     "Name": "condemnation",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "You bring down condemnation upon {target}!",
     "TargetMessage": "",
     "WitnessMessage": "",
-    "AppliedMessage": "",
+    "AppliedMessage": "You bring down condemnation upon {target}!",
     "AppliedEndsWith": "",
     "Links": [
       {
@@ -1388,7 +1252,7 @@
     ]
   },
   {
-    "Id": "61aca5463ac5f357",
+    "Id": "2d2d03dc6f02c8ce",
     "Name": "confusion",
     "Flags": "Confused",
     "RawFlagsHex": 2,
@@ -1480,23 +1344,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "c42d60df7a8dbad6",
-    "Name": "cosmic staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are filled with cosmic energy!",
-    "AppliedEndsWith": "The cosmic energy fizzles out.",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1244
-      }
-    ]
-  },
-  {
     "Id": "d87feb1fdd4c8e36",
     "Name": "creature illusion",
     "Flags": "Confused",
@@ -1515,7 +1362,7 @@
     "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
-    "Id": "0a45b96ffc3fd4f7",
+    "Id": "e053a7993d4b89b2",
     "Name": "creeping doom",
     "Flags": "None",
     "RawFlagsHex": 8,
@@ -1549,15 +1396,15 @@
     ]
   },
   {
-    "Id": "e203c3570bf14d5a",
+    "Id": "bd1a5bbb157128df",
     "Name": "cross of vengeance",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "A blazing light springs forth, enveloping you!",
     "TargetMessage": "{null}",
     "WitnessMessage": "A blazing light springs forth, enveloping {source}!",
-    "AppliedMessage": "You are surrounded by a brilliant light",
-    "AppliedEndsWith": "The light from the Cross of Vengeance winks out",
+    "AppliedMessage": "You are surrounded by a brilliant light!",
+    "AppliedEndsWith": "The light from the Cross of Vengeance winks out.",
     "Links": [
       {
         "Table": "Spells",
@@ -1617,7 +1464,7 @@
     ]
   },
   {
-    "Id": "478d99ceeaadd2be",
+    "Id": "2e2c37d215a6345e",
     "Name": "curse",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -1651,24 +1498,7 @@
     ]
   },
   {
-    "Id": "a4708bb5b1e3b5de",
-    "Name": "curved black dagger",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "The dagger drains {target} of life for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 612
-      }
-    ]
-  },
-  {
-    "Id": "2a03db372967694e",
+    "Id": "e2ea329d8ea10805",
     "Name": "damnation",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -1753,7 +1583,7 @@
     ]
   },
   {
-    "Id": "ec0f133668399926",
+    "Id": "10d18517ace908c9",
     "Name": "dark plague",
     "Flags": "None",
     "RawFlagsHex": 8,
@@ -1770,7 +1600,7 @@
     ]
   },
   {
-    "Id": "8666b8049bae3285",
+    "Id": "5bee596be45235b3",
     "Name": "dark transfusion",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -1783,23 +1613,6 @@
       {
         "Table": "Spells",
         "Number": 1061
-      }
-    ]
-  },
-  {
-    "Id": "37148999350d5bf5",
-    "Name": "darkbane",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1449
       }
     ]
   },
@@ -1872,40 +1685,6 @@
     ]
   },
   {
-    "Id": "f43a0f71a64d4a0f",
-    "Name": "demon-carved halberd",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 873
-      }
-    ]
-  },
-  {
-    "Id": "93c0c9fa02dca1fe",
-    "Name": "demonic pitchfork",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Hellfire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1618
-      }
-    ]
-  },
-  {
     "Id": "da50afb908fb6688",
     "Name": "Demontongue",
     "Flags": "None",
@@ -1936,23 +1715,6 @@
       {
         "Table": "Spells",
         "Number": 712
-      }
-    ]
-  },
-  {
-    "Id": "0afe68696179defb",
-    "Name": "diamond longsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1498
       }
     ]
   },
@@ -2008,7 +1770,7 @@
     ]
   },
   {
-    "Id": "76aad2cd39758374",
+    "Id": "759a88329eef15c1",
     "Name": "divine courage",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -2025,7 +1787,7 @@
     ]
   },
   {
-    "Id": "3852146693235132",
+    "Id": "e45ab747c2c3ad99",
     "Name": "divine disfavour",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -2042,7 +1804,7 @@
     ]
   },
   {
-    "Id": "374bc3515e3bac7f",
+    "Id": "a35ca637e2ef9e75",
     "Name": "divine favour",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -2106,23 +1868,6 @@
       {
         "Table": "Items",
         "Number": 741
-      }
-    ]
-  },
-  {
-    "Id": "377a43eb0be23dee",
-    "Name": "dragonfang ninjato",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "acid sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1495
       }
     ]
   },
@@ -2195,19 +1940,19 @@
     ]
   },
   {
-    "Id": "84cfb325a91b5743",
-    "Name": "Dread Harvest",
+    "Id": "9e1be7974bf3c86d",
+    "Name": "consume",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "You drain the energy from {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
     "Links": [
       {
-        "Table": "Items",
-        "Number": 3579
+        "Table": "Spells",
+        "Number": 5476
       }
     ]
   },
@@ -2316,40 +2061,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "be2e280f71edb1b7",
-    "Name": "ebony kris",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} take {damage} damage from the venom!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 686
-      }
-    ]
-  },
-  {
-    "Id": "59c6f0e7541cf587",
-    "Name": "ebony kris",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} damage from the venom!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 686
-      }
-    ]
-  },
-  {
     "Id": "9a6c63ff11cad5c5",
     "Name": "eldritch bolt",
     "Flags": "None",
@@ -2454,42 +2165,8 @@
     ]
   },
   {
-    "Id": "5eeb8c23e1902045",
-    "Name": "embroidered black gauntlets",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Dark energy sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 432
-      }
-    ]
-  },
-  {
-    "Id": "d842fd794cf921cc",
-    "Name": "emerald-tipped crozier",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are protected by divine power",
-    "AppliedEndsWith": "You feel vulnerable",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 203
-      }
-    ]
-  },
-  {
-    "Id": "5dcb3846a49ed7b9",
-    "Name": "engraved warhorn",
+    "Id": "73fabb08f5941c09",
+    "Name": "warhorn blast",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "",
@@ -2499,8 +2176,8 @@
     "AppliedEndsWith": "The inspiration wears off.",
     "Links": [
       {
-        "Table": "Items",
-        "Number": 3587
+        "Table": "Spells",
+        "Number": 5480
       }
     ]
   },
@@ -2556,40 +2233,6 @@
     ],
     "ConfuseFumbleLine": "",
     "CastResponse": ""
-  },
-  {
-    "Id": "cdbdfce186944360",
-    "Name": "ethereal dagger",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Ice freezes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1454
-      }
-    ]
-  },
-  {
-    "Id": "c9dc07957aa466cf",
-    "Name": "ethereal sabre",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Ice freezes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1654
-      }
-    ]
   },
   {
     "Id": "cc20f9b0b48498f9",
@@ -2677,7 +2320,7 @@
     ]
   },
   {
-    "Id": "68ea4007977480c3",
+    "Id": "7f7e0da5e5686114",
     "Name": "fear",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 16,
@@ -2711,24 +2354,7 @@
     ]
   },
   {
-    "Id": "c6bd59d9ccf8ac6c",
-    "Name": "Feyr",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1802
-      }
-    ]
-  },
-  {
-    "Id": "50eb133c65474970",
+    "Id": "a1b8387a452fe32b",
     "Name": "fire shield",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -2781,23 +2407,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "ebcc86790063797f",
-    "Name": "flail of oblivion",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Hellfire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1621
-      }
-    ]
-  },
-  {
     "Id": "7d48bf499f28e573",
     "Name": "flame enchantment",
     "Flags": "None",
@@ -2817,74 +2426,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "6807656511a96311",
-    "Name": "Flamemasher",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1584
-      }
-    ]
-  },
-  {
-    "Id": "a618627d6b586231",
-    "Name": "flametongue",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} take {damage} fire damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 352
-      }
-    ]
-  },
-  {
-    "Id": "86e8c3f26674db53",
-    "Name": "flametongue",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} fire damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 352
-      }
-    ]
-  },
-  {
-    "Id": "f5d941efde60746b",
-    "Name": "flaming dagger",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3525
-      }
-    ]
-  },
-  {
     "Id": "6ecec6015f204de8",
     "Name": "flaming scimitar",
     "Flags": "None",
@@ -2902,41 +2443,7 @@
     ]
   },
   {
-    "Id": "2544b38bc6f84f51",
-    "Name": "flaming scimitar",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 609
-      }
-    ]
-  },
-  {
-    "Id": "c720637450065703",
-    "Name": "flaming star",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Dark flame sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1081
-      }
-    ]
-  },
-  {
-    "Id": "46b15878b7bc838c",
+    "Id": "e50dd48e8ecd9d0c",
     "Name": "flay",
     "Flags": "Poisoned",
     "RawFlagsHex": 4,
@@ -3146,24 +2653,7 @@
     ]
   },
   {
-    "Id": "7e2bc9662e54256a",
-    "Name": "frost sceptre",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A withering blast of cold freezes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 456
-      }
-    ]
-  },
-  {
-    "Id": "bb64576eee52c8f0",
+    "Id": "197eefea980674b7",
     "Name": "frost sceptre-chill touch",
     "Flags": "None",
     "RawFlagsHex": 8,
@@ -3176,23 +2666,6 @@
       {
         "Table": "Spells",
         "Number": 176
-      }
-    ]
-  },
-  {
-    "Id": "7f3e370372910a9d",
-    "Name": "Frosthand",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Ice freezes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1587
       }
     ]
   },
@@ -3299,7 +2772,7 @@
     ]
   },
   {
-    "Id": "375090ec66c51d97",
+    "Id": "3118e9647ba1613b",
     "Name": "glacial mist",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -3418,40 +2891,6 @@
     ]
   },
   {
-    "Id": "ec741767753faa55",
-    "Name": "gnarled wand",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A bolt of white-hot flame strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 597
-      }
-    ]
-  },
-  {
-    "Id": "65547822fa41e913",
-    "Name": "gnarled wand",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{source} points a gnarled wand at {target} and utters \"Shirzak!\"",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 597
-      }
-    ]
-  },
-  {
     "Id": "e5741dc6c9449272",
     "Name": "god's wrath",
     "Flags": "None",
@@ -3554,23 +2993,6 @@
     ]
   },
   {
-    "Id": "57ad03391b45f198",
-    "Name": "great mithril battle-hammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1502
-      }
-    ]
-  },
-  {
     "Id": "b5c8e22b63517ff9",
     "Name": "greater arcane enchantment",
     "Flags": "None",
@@ -3590,7 +3012,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "dff2c15ed8b21feb",
+    "Id": "8cadabc0a282d0a4",
     "Name": "greater bless",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -3607,7 +3029,7 @@
     ]
   },
   {
-    "Id": "e404fd8e71156417",
+    "Id": "d5988c71569f6dd3",
     "Name": "greater curse",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -3726,23 +3148,6 @@
     ]
   },
   {
-    "Id": "615d67f6be35d7af",
-    "Name": "hammers of balance",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Hellfire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1589
-      }
-    ]
-  },
-  {
     "Id": "afc14e1132755284",
     "Name": "hammers of balance",
     "Flags": "None",
@@ -3796,23 +3201,6 @@
     ]
   },
   {
-    "Id": "43ee1593bbe45110",
-    "Name": "hell-flail",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Dark flame sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 454
-      }
-    ]
-  },
-  {
     "Id": "f208128f6945937b",
     "Name": "hellblade",
     "Flags": "None",
@@ -3830,7 +3218,7 @@
     ]
   },
   {
-    "Id": "a9f1cd253661c7f1",
+    "Id": "56350ba43add3b8f",
     "Name": "hellfire shield",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -3881,7 +3269,7 @@
     ]
   },
   {
-    "Id": "1609dc160bb21829",
+    "Id": "36d06c05aa726506",
     "Name": "high-pitched scream",
     "Flags": "Confused",
     "RawFlagsHex": 2,
@@ -3899,7 +3287,7 @@
     "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
-    "Id": "ed7c781ff963f5f2",
+    "Id": "e94c086257ec80f4",
     "Name": "hold person",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 16,
@@ -3933,7 +3321,7 @@
     ]
   },
   {
-    "Id": "c50f11c57a5cbfeb",
+    "Id": "9a5fe612292668b1",
     "Name": "holy aura",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -3984,23 +3372,6 @@
     ]
   },
   {
-    "Id": "820f86160b68edde",
-    "Name": "Holy Wrath and Righteous Fury",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1499
-      }
-    ]
-  },
-  {
     "Id": "4b78c931fe251e6b",
     "Name": "hypnotic hands",
     "Flags": "Confused",
@@ -4020,40 +3391,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "77ad22bf088550db",
-    "Name": "ice crystal falchion",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} damage from the cold!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1350
-      }
-    ]
-  },
-  {
-    "Id": "fd5638df48d8f69b",
-    "Name": "ice crystal staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} damage from the cold!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1075
-      }
-    ]
-  },
-  {
     "Id": "d4c41b7c3d18d390",
     "Name": "ice shards enchantment",
     "Flags": "None",
@@ -4071,7 +3408,7 @@
     ]
   },
   {
-    "Id": "291e79d888c43ebc",
+    "Id": "468acbb8c6d3bd2d",
     "Name": "ice shield",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -4107,40 +3444,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "073a16d63b7966fc",
-    "Name": "icehammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} take {damage} damage from the cold!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 750
-      }
-    ]
-  },
-  {
-    "Id": "6f09d0b396686f08",
-    "Name": "icehammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} damage from the cold!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 750
-      }
-    ]
-  },
-  {
     "Id": "3b12f03e00c7d24c",
     "Name": "illuminate",
     "Flags": "None",
@@ -4160,7 +3463,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "e22188815c9c9c5c",
+    "Id": "64bb126b53614a4a",
     "Name": "infernal darkness",
     "Flags": "Blinded",
     "RawFlagsHex": 1,
@@ -4247,23 +3550,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "da59cc8f554bc93a",
-    "Name": "ivory sceptre",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are protected by divine power",
-    "AppliedEndsWith": "You feel vulnerable",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1515
-      }
-    ]
-  },
-  {
     "Id": "81776f715213405c",
     "Name": "jade amulet",
     "Flags": "Poisoned",
@@ -4277,23 +3563,6 @@
       {
         "Table": "Spells",
         "Number": 156
-      }
-    ]
-  },
-  {
-    "Id": "f3209045c1991853",
-    "Name": "jewel-encrusted warhammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Acid sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1448
       }
     ]
   },
@@ -4366,23 +3635,6 @@
     ]
   },
   {
-    "Id": "e8e7051cd0106114",
-    "Name": "jeweled scimitar",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Your weapon is blessed!",
-    "AppliedEndsWith": "The effects of the blessing wear off!",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 359
-      }
-    ]
-  },
-  {
     "Id": "9d974b08afdf734d",
     "Name": "jeweled scimitar",
     "Flags": "None",
@@ -4396,23 +3648,6 @@
       {
         "Table": "Items",
         "Number": 359
-      }
-    ]
-  },
-  {
-    "Id": "48855a2d611981d8",
-    "Name": "jeweled shamshir",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Your weapon is blessed!",
-    "AppliedEndsWith": "The effects of the blessing wear off!",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3360
       }
     ]
   },
@@ -4434,19 +3669,19 @@
     ]
   },
   {
-    "Id": "1391739748062175",
-    "Name": "jeweled starfall hammer",
+    "Id": "fc09b4a0c877c1ea",
+    "Name": "starblast",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "A brilliant beam of starlight strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
     "Links": [
       {
-        "Table": "Items",
-        "Number": 2224
+        "Table": "Spells",
+        "Number": 5274
       }
     ]
   },
@@ -4485,7 +3720,7 @@
     ]
   },
   {
-    "Id": "c71930d5b31423fb",
+    "Id": "5479c2b983db7bbd",
     "Name": "knockdown",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 16,
@@ -4515,23 +3750,6 @@
       {
         "Table": "Items",
         "Number": 218
-      }
-    ]
-  },
-  {
-    "Id": "55ab6df3b090eb89",
-    "Name": "large silvery cross",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "You are surrounded by a brilliant light!",
-    "AppliedEndsWith": "The light from the Cross of Vengeance winks out.",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 831
       }
     ]
   },
@@ -4680,7 +3898,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "e4e98653bf18a349",
+    "Id": "06dd13a398a8f891",
     "Name": "lightning shield",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -4710,23 +3928,6 @@
       {
         "Table": "Spells",
         "Number": 639
-      }
-    ]
-  },
-  {
-    "Id": "eec0c05324cd5fdf",
-    "Name": "lightning whip",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1972
       }
     ]
   },
@@ -4839,7 +4040,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "5d2e89c8ee22be72",
+    "Id": "ad2f7cb90f27ec92",
     "Name": "mana dead",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -4856,7 +4057,7 @@
     ]
   },
   {
-    "Id": "27354450fb2b99f2",
+    "Id": "e90a2d5b95a53fe5",
     "Name": "mana flux",
     "Flags": "None",
     "RawFlagsHex": 512,
@@ -4926,7 +4127,7 @@
     ]
   },
   {
-    "Id": "4a80f38bdd48f8d5",
+    "Id": "fbf68a632ca3b850",
     "Name": "mass entangle",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
@@ -5049,40 +4250,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "bf68e6f34f8f2565",
-    "Name": "moonblade",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A brilliant beam zaps {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 205
-      }
-    ]
-  },
-  {
-    "Id": "c32714dd86cb9f6a",
-    "Name": "moonstone rod",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1507
-      }
-    ]
-  },
-  {
     "Id": "7f9dafd17f50da68",
     "Name": "multicoloured sash",
     "Flags": "None",
@@ -5117,7 +4284,7 @@
     ]
   },
   {
-    "Id": "810c32570fc233bf",
+    "Id": "2726bcf6abdd127a",
     "Name": "mute",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -5151,7 +4318,7 @@
     ]
   },
   {
-    "Id": "15e2c886359a099c",
+    "Id": "808200542ea200f6",
     "Name": "natural prowess",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -5168,7 +4335,7 @@
     ]
   },
   {
-    "Id": "a48ad1585aed6f68",
+    "Id": "9094b5f98fbbece9",
     "Name": "nature tap",
     "Flags": "None",
     "RawFlagsHex": 512,
@@ -5223,23 +4390,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "8f57e70b58ec33b0",
-    "Name": "netherworld hammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Hellfire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1620
-      }
-    ]
-  },
-  {
     "Id": "14884556fee0555a",
     "Name": "nexus spear",
     "Flags": "None",
@@ -5253,23 +4403,6 @@
       {
         "Table": "Items",
         "Number": 784
-      }
-    ]
-  },
-  {
-    "Id": "b81dcb86b8db60b2",
-    "Name": "obsidian claymore",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Dark flame sears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 541
       }
     ]
   },
@@ -5325,23 +4458,6 @@
     ]
   },
   {
-    "Id": "748be7c41bcb1c60",
-    "Name": "paired dragonblades",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Ice freezes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1585
-      }
-    ]
-  },
-  {
     "Id": "f8061187b56248d1",
     "Name": "pale green lichen",
     "Flags": "Confused",
@@ -5360,7 +4476,7 @@
     "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
-    "Id": "4f7b341c5cd4a1f5",
+    "Id": "3c16f9522426afba",
     "Name": "paralyze",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 16,
@@ -5394,7 +4510,7 @@
     ]
   },
   {
-    "Id": "459ed43c9c4413c2",
+    "Id": "eee13e2286ed4d53",
     "Name": "partial petrification",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -5496,23 +4612,6 @@
       {
         "Table": "Spells",
         "Number": 293
-      }
-    ]
-  },
-  {
-    "Id": "f3bafdc22c76f5cd",
-    "Name": "platinum sceptre",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Your weapon is blessed!",
-    "AppliedEndsWith": "The effects of the blessing wear off!",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3351
       }
     ]
   },
@@ -5659,7 +4758,7 @@
     ]
   },
   {
-    "Id": "64441b78c93368ad",
+    "Id": "acda1d0efa81a283",
     "Name": "priestly benediction",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -5746,7 +4845,7 @@
     ]
   },
   {
-    "Id": "4d1e549737a936be",
+    "Id": "7d85d4e71f955ba4",
     "Name": "profane link",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -5763,7 +4862,7 @@
     ]
   },
   {
-    "Id": "80e11d71daeffdb7",
+    "Id": "6c3880c10660e260",
     "Name": "protection from evil",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -5865,7 +4964,7 @@
     ]
   },
   {
-    "Id": "76cb61c3228dfd4d",
+    "Id": "c33dbb799dc6ef40",
     "Name": "rapid healing",
     "Flags": "None",
     "RawFlagsHex": 128,
@@ -5882,7 +4981,7 @@
     ]
   },
   {
-    "Id": "81bab8abaa5c19e4",
+    "Id": "3541e70799597139",
     "Name": "regeneration",
     "Flags": "None",
     "RawFlagsHex": 128,
@@ -5952,7 +5051,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "77a046523e2149ec",
+    "Id": "35343c03b3b331fd",
     "Name": "resist fire",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -5969,7 +5068,7 @@
     ]
   },
   {
-    "Id": "b59fe26ef5a5b4f2",
+    "Id": "02dad19b0dc3835b",
     "Name": "resist lightning",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6003,7 +5102,7 @@
     ]
   },
   {
-    "Id": "c9e0c97c6c8c1603",
+    "Id": "854296f0e20d7842",
     "Name": "righteousness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6020,7 +5119,7 @@
     ]
   },
   {
-    "Id": "4434ae412d12f7fc",
+    "Id": "bb4f0c4327fa1fa3",
     "Name": "rip",
     "Flags": "None",
     "RawFlagsHex": 8,
@@ -6071,7 +5170,7 @@
     ]
   },
   {
-    "Id": "d71383a03fe37e6a",
+    "Id": "83bb00517a722f23",
     "Name": "rosewood rod",
     "Flags": "None",
     "RawFlagsHex": 128,
@@ -6088,7 +5187,7 @@
     ]
   },
   {
-    "Id": "8b8ebf7983641a1d",
+    "Id": "ad932623064f9e7f",
     "Name": "rotting flesh",
     "Flags": "Diseased",
     "RawFlagsHex": 8,
@@ -6122,7 +5221,7 @@
     ]
   },
   {
-    "Id": "8a18d30addd35b3e",
+    "Id": "a78c39ebf9473b3f",
     "Name": "runed cape",
     "Flags": "None",
     "RawFlagsHex": 512,
@@ -6135,23 +5234,6 @@
       {
         "Table": "Spells",
         "Number": 867
-      }
-    ]
-  },
-  {
-    "Id": "ad8f0e568a003b10",
-    "Name": "runed farming hoe",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1439
       }
     ]
   },
@@ -6226,40 +5308,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "d7d1d0906f43214b",
-    "Name": "sapling longbow",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} damage from the venom!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1201
-      }
-    ]
-  },
-  {
-    "Id": "edd3795f71db5bb3",
-    "Name": "sapphire chakram",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1586
-      }
-    ]
-  },
-  {
     "Id": "1a381603acac5d90",
     "Name": "sawblade trap",
     "Flags": "None",
@@ -6294,7 +5342,7 @@
     ]
   },
   {
-    "Id": "7975bbca87a0352e",
+    "Id": "e8aadea133e2f333",
     "Name": "senselessness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6311,7 +5359,7 @@
     ]
   },
   {
-    "Id": "f1a6c70c5c4d4d9b",
+    "Id": "4b6ec36de16773e3",
     "Name": "serenity",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6379,7 +5427,7 @@
     ]
   },
   {
-    "Id": "20b9bcd3f154aecc",
+    "Id": "233ceaeeeae1e504",
     "Name": "shawl of fortune",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6392,23 +5440,6 @@
       {
         "Table": "Spells",
         "Number": 865
-      }
-    ]
-  },
-  {
-    "Id": "1bc60451cbe844d8",
-    "Name": "shimmering greatsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Your weapon is blessed!",
-    "AppliedEndsWith": "The effects of the blessing wear off!",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 3348
       }
     ]
   },
@@ -6426,23 +5457,6 @@
       {
         "Table": "Items",
         "Number": 3348
-      }
-    ]
-  },
-  {
-    "Id": "ae8c492961689665",
-    "Name": "shimmering longsword",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "Your weapon is blessed!",
-    "AppliedEndsWith": "The effects of the blessing wear off!",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 347
       }
     ]
   },
@@ -6517,23 +5531,6 @@
     ]
   },
   {
-    "Id": "5b5bd927e379de84",
-    "Name": "silverwood staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A brilliant beam of starlight spears {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 742
-      }
-    ]
-  },
-  {
     "Id": "74fddb6acec1d95a",
     "Name": "silvery mace",
     "Flags": "None",
@@ -6551,19 +5548,19 @@
     ]
   },
   {
-    "Id": "b0d33e973c4678ff",
-    "Name": "skorne",
+    "Id": "9ea5ec85fa1b8ffd",
+    "Name": "drinks",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "Your axe drinks the life from {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
     "Links": [
       {
-        "Table": "Items",
-        "Number": 3772
+        "Table": "Spells",
+        "Number": 5673
       }
     ]
   },
@@ -6581,23 +5578,6 @@
       {
         "Table": "Items",
         "Number": 493
-      }
-    ]
-  },
-  {
-    "Id": "b0b9e05accc746a6",
-    "Name": "skull-capped staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A vampiric beam springs from the sockets and hits {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1231
       }
     ]
   },
@@ -6621,7 +5601,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "e6e587955d1c7b0b",
+    "Id": "22918eeb1e078d8a",
     "Name": "slow",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6638,7 +5618,7 @@
     ]
   },
   {
-    "Id": "f630ce4e1df3a050",
+    "Id": "035d75dfb339c9ac",
     "Name": "smite",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6691,7 +5671,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "927e893e7ca58392",
+    "Id": "2490c4ec7d8cf85e",
     "Name": "song of agility",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6727,7 +5707,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "bc63b2f75ca90a96",
+    "Id": "d803c307917fcc7b",
     "Name": "song of beauty",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6761,7 +5741,7 @@
     ]
   },
   {
-    "Id": "2c89099a108283da",
+    "Id": "4f06226fa8be6f86",
     "Name": "song of brilliance",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6778,7 +5758,7 @@
     ]
   },
   {
-    "Id": "1a5d7396f5fb926e",
+    "Id": "1df451326a24e319",
     "Name": "song of clumsiness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6795,7 +5775,7 @@
     ]
   },
   {
-    "Id": "014b3ad91b71d741",
+    "Id": "042035f078a6af5f",
     "Name": "song of dazzling",
     "Flags": "Confused",
     "RawFlagsHex": 2,
@@ -6866,7 +5846,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "87cd7b1fcf61bf06",
+    "Id": "135c75ef2f522d57",
     "Name": "song of enlightenment",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6900,7 +5880,7 @@
     ]
   },
   {
-    "Id": "18ca4664e39c1bc8",
+    "Id": "603e04db45c7975d",
     "Name": "song of foolishness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6917,7 +5897,7 @@
     ]
   },
   {
-    "Id": "5264663ca8d7db23",
+    "Id": "357b2fc3b8dcdb7b",
     "Name": "song of force",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6934,7 +5914,7 @@
     ]
   },
   {
-    "Id": "b2d6fe7eb3d9badc",
+    "Id": "20ad233341457e81",
     "Name": "song of heroism",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6951,7 +5931,7 @@
     ]
   },
   {
-    "Id": "0ae28b6af548eebd",
+    "Id": "b2aca2984a5ce946",
     "Name": "song of knowledge",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -6968,7 +5948,7 @@
     ]
   },
   {
-    "Id": "820ae2dc5ac7f74e",
+    "Id": "6cc691de30a2f534",
     "Name": "song of lethargy",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7004,7 +5984,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "b73fa30a6bfcb551",
+    "Id": "c7221a96a5ff80be",
     "Name": "song of might",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7021,7 +6001,7 @@
     ]
   },
   {
-    "Id": "e3e4083bf93a9c19",
+    "Id": "020207c4c51ece12",
     "Name": "song of misfortune",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7055,7 +6035,7 @@
     ]
   },
   {
-    "Id": "73aaccf4617167c9",
+    "Id": "9177e12a4c375eac",
     "Name": "song of quickness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7072,7 +6052,7 @@
     ]
   },
   {
-    "Id": "1458acb6b3537ac2",
+    "Id": "53851a6f8fcb6057",
     "Name": "song of sageness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7125,7 +6105,7 @@
     ]
   },
   {
-    "Id": "9717bde9e75c826a",
+    "Id": "3a842bf2664512f9",
     "Name": "song of silence",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7195,7 +6175,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "bc933e2d6c0c695b",
+    "Id": "32db4426e62ea0e2",
     "Name": "song of stupidity",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7229,7 +6209,7 @@
     ]
   },
   {
-    "Id": "0b3116a020fe4810",
+    "Id": "2eba78edc710d5ef",
     "Name": "song of swiftness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7265,7 +6245,7 @@
     "CastResponse": ""
   },
   {
-    "Id": "e9d2b41cd89e90f2",
+    "Id": "8c5a49fdf00ef725",
     "Name": "song of traveling",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7282,7 +6262,7 @@
     ]
   },
   {
-    "Id": "b7f18e9db4b3a369",
+    "Id": "b63cb2ee31ae9e07",
     "Name": "song of ugliness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7299,7 +6279,7 @@
     ]
   },
   {
-    "Id": "9ba036c12c84d44f",
+    "Id": "59e49f61f7805e3f",
     "Name": "song of valour",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7316,7 +6296,7 @@
     ]
   },
   {
-    "Id": "6dd6a0a09c9290fc",
+    "Id": "cc9a8c5c0f758d0c",
     "Name": "song of weakness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7333,7 +6313,7 @@
     ]
   },
   {
-    "Id": "d27bc195d440dac3",
+    "Id": "7f9af6be46acdd14",
     "Name": "song of wisdom",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7401,23 +6381,6 @@
     ]
   },
   {
-    "Id": "ff696c8957658e02",
-    "Name": "Soulwaste",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Hellfire burns {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1624
-      }
-    ]
-  },
-  {
     "Id": "bc66af49783af816",
     "Name": "Soulwaste",
     "Flags": "None",
@@ -7469,7 +6432,7 @@
     ]
   },
   {
-    "Id": "5d42b0419cbd0589",
+    "Id": "5cce53e49756ac0a",
     "Name": "speed",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7556,24 +6519,7 @@
     ]
   },
   {
-    "Id": "98ea80333fc1adce",
-    "Name": "spiritual warhammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1500
-      }
-    ]
-  },
-  {
-    "Id": "3f921ef283fcc8c1",
+    "Id": "a9e58447ef7a2c5b",
     "Name": "spits a stream of venom",
     "Flags": "Poisoned",
     "RawFlagsHex": 4,
@@ -7590,7 +6536,7 @@
     ]
   },
   {
-    "Id": "36a8e7b868afadc9",
+    "Id": "a5b620fc15d30548",
     "Name": "spore cloud",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7603,23 +6549,6 @@
       {
         "Table": "Spells",
         "Number": 1026
-      }
-    ]
-  },
-  {
-    "Id": "1d090e0638c02273",
-    "Name": "staff of the elements",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "An earthquake rocks {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 788
       }
     ]
   },
@@ -7675,24 +6604,7 @@
     ]
   },
   {
-    "Id": "ea644b19ebe02bdb",
-    "Name": "starhammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "A blazing comet strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1245
-      }
-    ]
-  },
-  {
-    "Id": "7db6fbffd7bfb4ac",
+    "Id": "9680591badefca93",
     "Name": "starlight",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7709,7 +6621,7 @@
     ]
   },
   {
-    "Id": "95ac3b1d42328190",
+    "Id": "53cf323998d72d2c",
     "Name": "stinking cloud",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -7739,23 +6651,6 @@
       {
         "Table": "Spells",
         "Number": 393
-      }
-    ]
-  },
-  {
-    "Id": "34acf8912c1243b3",
-    "Name": "stone warhammer",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Rocks shred {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1588
       }
     ]
   },
@@ -7794,23 +6689,6 @@
     ]
   },
   {
-    "Id": "50f3fc267827bb55",
-    "Name": "storm crown",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Forked lightning streaks out and fries {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1216
-      }
-    ]
-  },
-  {
     "Id": "163f90ff427f7eed",
     "Name": "stormhammer",
     "Flags": "None",
@@ -7824,23 +6702,6 @@
       {
         "Table": "Items",
         "Number": 877
-      }
-    ]
-  },
-  {
-    "Id": "fbf4cfd799dd5b61",
-    "Name": "stormmetal bracers",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "White lightning shoots out frying {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1215
       }
     ]
   },
@@ -8178,23 +7039,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "6386ce541c631fa9",
-    "Name": "thunderstaff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "Blue-white lightning strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 455
-      }
-    ]
-  },
-  {
     "Id": "00d87fa1cd5c7860",
     "Name": "thunderstaff",
     "Flags": "None",
@@ -8229,19 +7073,19 @@
     ]
   },
   {
-    "Id": "107bfb858457c69d",
-    "Name": "Titanfist",
+    "Id": "26546b22ee766530",
+    "Name": "energy shock",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "Celestial energy shocks {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
     "Links": [
       {
-        "Table": "Items",
-        "Number": 3511
+        "Table": "Spells",
+        "Number": 5127
       }
     ]
   },
@@ -8268,23 +7112,6 @@
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "{target} life is drained for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 687
-      }
-    ]
-  },
-  {
-    "Id": "b9b18e66c49474f5",
-    "Name": "twisted bone staff",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target}'s life is drained for {damage} damage!",
     "TargetMessage": "",
     "WitnessMessage": "",
     "AppliedMessage": "",
@@ -8331,7 +7158,7 @@
     ]
   },
   {
-    "Id": "5c6ecb1c849bd842",
+    "Id": "d97ac9b32dab7074",
     "Name": "unholy aura",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -8348,7 +7175,7 @@
     ]
   },
   {
-    "Id": "0cf3402208a0214f",
+    "Id": "6b9bd3104261ecb4",
     "Name": "unholy fanaticism",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -8501,7 +7328,7 @@
     ]
   },
   {
-    "Id": "0b24ec3f674792de",
+    "Id": "52f14bab197ff458",
     "Name": "vulnerability",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -8588,7 +7415,7 @@
     ]
   },
   {
-    "Id": "3733fad97a514851",
+    "Id": "3cdf10b79cdc1bc8",
     "Name": "way of the cat",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -8675,7 +7502,7 @@
     ]
   },
   {
-    "Id": "1c315b4e7c92de97",
+    "Id": "c5f8eaceb5deb72c",
     "Name": "way of the owl",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -8692,7 +7519,7 @@
     ]
   },
   {
-    "Id": "2fc26dc1ce430644",
+    "Id": "346deab3742bbb0a",
     "Name": "way of the rat",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -8709,7 +7536,7 @@
     ]
   },
   {
-    "Id": "68e3918cdc5d0332",
+    "Id": "801bfb5ba14807e5",
     "Name": "way of the tiger",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -8779,13 +7606,13 @@
     ]
   },
   {
-    "Id": "a8daed34bbe424a6",
+    "Id": "cb59bf9645dc2a9e",
     "Name": "weapon major bless",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "",
-    "TargetMessage": "",
-    "WitnessMessage": "",
+    "CasterMessage": "You raise your weapon into the air, summoning its power!",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
     "AppliedMessage": "Your weapon is blessed!",
     "AppliedEndsWith": "The effects of the blessing wear off!",
     "Links": [
@@ -8814,7 +7641,7 @@
     "ConfuseFumbleLine": "You fumble in confusion!"
   },
   {
-    "Id": "4e4b7c90cfe6f2dc",
+    "Id": "0bfd331270bacd46",
     "Name": "whip entangle",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -8844,23 +7671,6 @@
       {
         "Table": "Spells",
         "Number": 527
-      }
-    ]
-  },
-  {
-    "Id": "08694b7203758c0b",
-    "Name": "white gold flail",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1501
       }
     ]
   },
@@ -8902,23 +7712,6 @@
     "CastResponse": ""
   },
   {
-    "Id": "dc47921f662fbeeb",
-    "Name": "Windblade",
-    "Flags": "None",
-    "RawFlagsHex": 0,
-    "CasterMessage": "{target} takes {damage} damage from the cold!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
-    "Links": [
-      {
-        "Table": "Items",
-        "Number": 1590
-      }
-    ]
-  },
-  {
     "Id": "5bbfd5ea6eb3d030",
     "Name": "wing cut",
     "Flags": "None",
@@ -8936,19 +7729,19 @@
     ]
   },
   {
-    "Id": "96d6dbbb32ac1dae",
-    "Name": "witchblade",
+    "Id": "30d5ed0f0e55fc45",
+    "Name": "eldritch blast",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "A blast of eldritch power strikes {target} for {damage} damage!",
-    "TargetMessage": "",
-    "WitnessMessage": "",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "{null}",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
     "Links": [
       {
-        "Table": "Items",
-        "Number": 3706
+        "Table": "Spells",
+        "Number": 5622
       }
     ]
   },
@@ -8970,7 +7763,7 @@
     ]
   },
   {
-    "Id": "3571b84d3486016f",
+    "Id": "58705210de3f14da",
     "Name": "wrathful curse",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 16,
@@ -9021,7 +7814,7 @@
     ]
   },
   {
-    "Id": "ecc2927f14fc850e",
+    "Id": "eacc8f17f9b63429",
     "Name": "zeal",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -9089,7 +7882,7 @@
     ]
   },
   {
-    "Id": "06bdbe3f304ef270",
+    "Id": "35343c03b3b331fd",
     "Name": "resist fire",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -9106,7 +7899,7 @@
     ]
   },
   {
-    "Id": "02b82567c02561dc",
+    "Id": "86c8bcb8fd475aa7",
     "Name": "resist cold",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -9412,11 +8205,11 @@
     ]
   },
   {
-    "Id": "7184a4f372b9fc92",
+    "Id": "2165c1d1ef9e61d3",
     "Name": "flame hits",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "{spellname} takes {damage} fire damage!",
+    "CasterMessage": "{target} takes {damage} fire damage!",
     "TargetMessage": "You take {damage} fire damage!",
     "WitnessMessage": "{source} takes {spellname} fire damage!",
     "AppliedMessage": "{null}",
@@ -9633,11 +8426,11 @@
     ]
   },
   {
-    "Id": "6ce128a174c30570",
+    "Id": "72f7a03287115396",
     "Name": "dark fire",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Dark flame sears {spellname} for {damage} damage!",
+    "CasterMessage": "Dark flame sears {target} for {damage} damage!",
     "TargetMessage": "Dark flame sears you for {damage} damage!",
     "WitnessMessage": "Dark flame sears {source} for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -9701,11 +8494,11 @@
     ]
   },
   {
-    "Id": "212aca588ebe0ebd",
+    "Id": "1f284e5b06c376cc",
     "Name": "moonsword",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A brilliant beam zaps {spellname} for {damage} damage!",
+    "CasterMessage": "A brilliant beam zaps {target} for {damage} damage!",
     "TargetMessage": "A brilliant beam zaps you for {damage} damage!",
     "WitnessMessage": "A brilliant beam zaps {source} for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -9973,7 +8766,7 @@
     ]
   },
   {
-    "Id": "dd4e59d27e9be5ef",
+    "Id": "3c16f9522426afba",
     "Name": "paralyze",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
@@ -9990,7 +8783,7 @@
     ]
   },
   {
-    "Id": "ea9d2820f7e435fb",
+    "Id": "bf485fec8edfeab4",
     "Name": "black wind",
     "Flags": "Blinded",
     "RawFlagsHex": 0,
@@ -10381,11 +9174,11 @@
     ]
   },
   {
-    "Id": "e31ba85faa73db0f",
+    "Id": "8715bafe79205b38",
     "Name": "poison blade",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "{spellname} takes {damage} damage from the venom!",
+    "CasterMessage": "{target} takes {damage} damage from the venom!",
     "TargetMessage": "You take {damage} damage from the venom!",
     "WitnessMessage": "{source} takes {damage} damage from the venom!",
     "AppliedMessage": "{null}",
@@ -10415,11 +9208,11 @@
     ]
   },
   {
-    "Id": "c4e06df3937126d4",
+    "Id": "b08edddae88a6eb3",
     "Name": "drain life",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "{spellname}'s life is drained for {damage} damage!",
+    "CasterMessage": "{target}'s life is drained for {damage} damage!",
     "TargetMessage": "Your life is drained for {damage} damage!",
     "WitnessMessage": "{source}'s life is drained for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -10534,7 +9327,7 @@
     ]
   },
   {
-    "Id": "dd4a22b00df86134",
+    "Id": "e94c086257ec80f4",
     "Name": "hold person",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
@@ -10551,7 +9344,7 @@
     ]
   },
   {
-    "Id": "87587654eb9fa253",
+    "Id": "22918eeb1e078d8a",
     "Name": "slow",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -10568,7 +9361,7 @@
     ]
   },
   {
-    "Id": "6f03c574f593153e",
+    "Id": "7f7e0da5e5686114",
     "Name": "fear",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -10585,11 +9378,11 @@
     ]
   },
   {
-    "Id": "63827ac9844fab2e",
+    "Id": "70a81d03e4501318",
     "Name": "frost hits",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "{spellname} takes {damage} damage from the cold!",
+    "CasterMessage": "{target} takes {damage} damage from the cold!",
     "TargetMessage": "You take {damage} damage from the cold!",
     "WitnessMessage": "{source} takes {damage} damage from the cold!",
     "AppliedMessage": "{null}",
@@ -10619,11 +9412,11 @@
     ]
   },
   {
-    "Id": "7082d588dc769704",
+    "Id": "3d68a897cf657345",
     "Name": "blazing comet",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A blazing comet strikes {spellname} for {damage} damage!",
+    "CasterMessage": "A blazing comet strikes {target} for {damage} damage!",
     "TargetMessage": "A blazing comet strikes you for {damage} damage!",
     "WitnessMessage": "A blazing comet strikes {source} for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -11146,11 +9939,11 @@
     ]
   },
   {
-    "Id": "3f77c32fdc5ee343",
+    "Id": "b72e95fd72ae17d4",
     "Name": "skull-beam",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A vampiric beam springs from the sockets and hits {spellname} for {damage} damage!",
+    "CasterMessage": "A vampiric beam springs from the sockets and hits {target} for {damage} damage!",
     "TargetMessage": "A vampiric beam springs from the sockets and hits you for {damage} damage!",
     "WitnessMessage": "A vampiric beam springs from the sockets and hits {source} for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -11163,7 +9956,7 @@
     ]
   },
   {
-    "Id": "4305e343698a7546",
+    "Id": "0d87b504a81df922",
     "Name": "constriction",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
@@ -11265,7 +10058,7 @@
     ]
   },
   {
-    "Id": "24978fe84005fd2b",
+    "Id": "86c8bcb8fd475aa7",
     "Name": "resist cold",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -11282,7 +10075,7 @@
     ]
   },
   {
-    "Id": "678a969ae59ba6fe",
+    "Id": "35343c03b3b331fd",
     "Name": "resist fire",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -11299,7 +10092,7 @@
     ]
   },
   {
-    "Id": "fe1569edc980a947",
+    "Id": "8cdd30f43e9ecca9",
     "Name": "chant",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -11316,7 +10109,7 @@
     ]
   },
   {
-    "Id": "3dc94fbd963cb72f",
+    "Id": "02dad19b0dc3835b",
     "Name": "resist lightning",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -11333,7 +10126,7 @@
     ]
   },
   {
-    "Id": "e8180c517046c083",
+    "Id": "5cce53e49756ac0a",
     "Name": "speed",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -11350,7 +10143,7 @@
     ]
   },
   {
-    "Id": "2e2b23416ded903a",
+    "Id": "22918eeb1e078d8a",
     "Name": "slow",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -11367,7 +10160,7 @@
     ]
   },
   {
-    "Id": "13cb3bf544429e72",
+    "Id": "587cb246372510ef",
     "Name": "confusion",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -11384,7 +10177,7 @@
     ]
   },
   {
-    "Id": "be53d4edf46b9a67",
+    "Id": "a8e6d4ee829b32d3",
     "Name": "rapid healing",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -11401,7 +10194,7 @@
     ]
   },
   {
-    "Id": "7286f77a65b716e7",
+    "Id": "7cc37a079044c7fd",
     "Name": "frenzy",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -11861,11 +10654,11 @@
     ]
   },
   {
-    "Id": "85a6afc44c3b71ed",
+    "Id": "80ee366731f635ff",
     "Name": "rocks shred",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Rocks shred {spellname} for {damage} damage!",
+    "CasterMessage": "Rocks shred {target} for {damage} damage!",
     "TargetMessage": "Rocks shred you for {damage} damage!",
     "WitnessMessage": "Rocks shred {source} for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -11878,11 +10671,11 @@
     ]
   },
   {
-    "Id": "9b6065772d403d7b",
+    "Id": "81d40bd6d75b0311",
     "Name": "ice freezes",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Ice freezes {spellname} for {damage} damage!",
+    "CasterMessage": "Ice freezes {target} for {damage} damage!",
     "TargetMessage": "Ice freezes you for {damage} damage!",
     "WitnessMessage": "Ice freezes {source} for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -11895,11 +10688,11 @@
     ]
   },
   {
-    "Id": "d8e1dddadae08152",
+    "Id": "1a1c1928d17e5586",
     "Name": "fire burns",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Fire burns {spellname} for {damage} damage!",
+    "CasterMessage": "Fire burns {target} for {damage} damage!",
     "TargetMessage": "Fire burns you for {damage} damage!",
     "WitnessMessage": "Fire burns {source} for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -11929,11 +10722,11 @@
     ]
   },
   {
-    "Id": "26117ed8f3cc298e",
+    "Id": "5879b14ee6a047f1",
     "Name": "lightning shocks",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Lightning strikes {spellname} for {damage} damage!",
+    "CasterMessage": "Lightning strikes {target} for {damage} damage!",
     "TargetMessage": "Lightning strikes you for {damage} damage!",
     "WitnessMessage": "Lightning strikes {source} for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -11946,11 +10739,11 @@
     ]
   },
   {
-    "Id": "ce82e102d3c13da0",
+    "Id": "e76515ffdbcec4c6",
     "Name": "purified",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "{spellname} is purified with divine power for {damage} damage!",
+    "CasterMessage": "{target} is purified with divine power for {damage} damage!",
     "TargetMessage": "Purification burns you with divine power for {damage} damage!",
     "WitnessMessage": "{source} is purified with divine power for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -11980,11 +10773,11 @@
     ]
   },
   {
-    "Id": "eb00136eae890d3f",
+    "Id": "416a73487df7745c",
     "Name": "hellfire burns",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "Hellfire burns {spellname} for {damage} damage!",
+    "CasterMessage": "Hellfire burns {target} for {damage} damage!",
     "TargetMessage": "Hellfire burns you for {damage} damage!",
     "WitnessMessage": "Hellfire burns {source} for {damage} damage!",
     "AppliedMessage": "{null}",
@@ -12014,15 +10807,15 @@
     ]
   },
   {
-    "Id": "9d02b2ffecd27891",
+    "Id": "fd45fffd407771da",
     "Name": "plague",
     "Flags": "Diseased",
     "RawFlagsHex": 0,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
     "WitnessMessage": "A hideous plague fills the room!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "You are afflicted with a hideous plague",
+    "AppliedEndsWith": "The hideous plague wears off",
     "Links": [
       {
         "Table": "Spells",
@@ -12099,7 +10892,7 @@
     ]
   },
   {
-    "Id": "7e811897394c1141",
+    "Id": "02dad19b0dc3835b",
     "Name": "resist lightning",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -12218,7 +11011,7 @@
     ]
   },
   {
-    "Id": "8c2416ad9d016488",
+    "Id": "7f7e0da5e5686114",
     "Name": "fear",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -12593,7 +11386,7 @@
     ]
   },
   {
-    "Id": "a727aa34a2436bf9",
+    "Id": "fbf68a632ca3b850",
     "Name": "mass entangle",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
@@ -12627,7 +11420,7 @@
     ]
   },
   {
-    "Id": "d766e1b99d569c28",
+    "Id": "e78e700640c81dc9",
     "Name": "blur",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -12644,7 +11437,7 @@
     ]
   },
   {
-    "Id": "3cf6d3091dd22c30",
+    "Id": "035d75dfb339c9ac",
     "Name": "smite",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -12967,7 +11760,7 @@
     ]
   },
   {
-    "Id": "87ade01305e36c30",
+    "Id": "eee13e2286ed4d53",
     "Name": "partial petrification",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -12984,7 +11777,7 @@
     ]
   },
   {
-    "Id": "9f46528ccbaa56f3",
+    "Id": "6c22ec2de528169f",
     "Name": "ice storm",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -13018,7 +11811,7 @@
     ]
   },
   {
-    "Id": "4ed0de09c2bf07de",
+    "Id": "468acbb8c6d3bd2d",
     "Name": "ice shield",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -13035,7 +11828,7 @@
     ]
   },
   {
-    "Id": "9d911e88c95e4970",
+    "Id": "a1b8387a452fe32b",
     "Name": "fire shield",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -13375,7 +12168,7 @@
     ]
   },
   {
-    "Id": "b52ef4e0fe000a19",
+    "Id": "0cdb9e1ef249d138",
     "Name": "bladed sphere",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -13579,7 +12372,7 @@
     ]
   },
   {
-    "Id": "f07db9ece1d715e0",
+    "Id": "6c22ec2de528169f",
     "Name": "ice storm",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -13834,7 +12627,7 @@
     ]
   },
   {
-    "Id": "8e4265a52252065b",
+    "Id": "34cc59bc59056f72",
     "Name": "sandstorm",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -13868,7 +12661,7 @@
     ]
   },
   {
-    "Id": "4beca8bb099e62f1",
+    "Id": "e45ab747c2c3ad99",
     "Name": "divine disfavour",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -13936,15 +12729,15 @@
     ]
   },
   {
-    "Id": "9d02b2ffecd27891",
+    "Id": "fd45fffd407771da",
     "Name": "plague",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "A hideous plague consumes your foes!",
     "TargetMessage": "A hideous plague consumes you!",
     "WitnessMessage": "A hideous plague fills the room!",
-    "AppliedMessage": "",
-    "AppliedEndsWith": "",
+    "AppliedMessage": "You are afflicted with a hideous plague",
+    "AppliedEndsWith": "The hideous plague wears off",
     "Links": [
       {
         "Table": "Spells",
@@ -13953,7 +12746,7 @@
     ]
   },
   {
-    "Id": "6eeac572805d81fd",
+    "Id": "d3a8aea3e32c9ae3",
     "Name": "solid fog",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -13970,7 +12763,7 @@
     ]
   },
   {
-    "Id": "81599d4079466977",
+    "Id": "2a036836b831e67d",
     "Name": "globe of the elements",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14039,7 +12832,7 @@
     "ConfuseFumbleLine": ""
   },
   {
-    "Id": "60f7433a3c5cd318",
+    "Id": "f3246e40343077c8",
     "Name": "paralyzed",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14056,11 +12849,11 @@
     ]
   },
   {
-    "Id": "e31ba85faa73db0f",
+    "Id": "8715bafe79205b38",
     "Name": "poison blade",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "{spellname} takes {damage} damage from the venom!",
+    "CasterMessage": "{target} takes {damage} damage from the venom!",
     "TargetMessage": "You take {damage} damage from the venom!",
     "WitnessMessage": "{source} takes {damage} damage from the venom!",
     "AppliedMessage": "{null}",
@@ -14090,7 +12883,7 @@
     ]
   },
   {
-    "Id": "175933cc1529fafc",
+    "Id": "c898328309f6fd79",
     "Name": "disease",
     "Flags": "Diseased",
     "RawFlagsHex": 0,
@@ -14107,7 +12900,7 @@
     ]
   },
   {
-    "Id": "eb4c8b460f85d57d",
+    "Id": "cd17cd5b39c6b30b",
     "Name": "shriek",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14158,7 +12951,7 @@
     ]
   },
   {
-    "Id": "f1c8343a117a0935",
+    "Id": "9ae5bc2d8740bcd4",
     "Name": "powerless",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14226,7 +13019,7 @@
     ]
   },
   {
-    "Id": "205e842edb7fd3e9",
+    "Id": "9ae5bc2d8740bcd4",
     "Name": "powerless",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14328,7 +13121,7 @@
     ]
   },
   {
-    "Id": "d79b113ce313b9e0",
+    "Id": "80109b78b3b2bcc3",
     "Name": "chaos shield",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14362,7 +13155,7 @@
     ]
   },
   {
-    "Id": "03f1b18f2c401767",
+    "Id": "f28b88ce63d86936",
     "Name": "sleep",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14413,7 +13206,7 @@
     ]
   },
   {
-    "Id": "3379fb6412705d86",
+    "Id": "dd32b73126431282",
     "Name": "envelops",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14447,7 +13240,7 @@
     ]
   },
   {
-    "Id": "874e8a158354cf9b",
+    "Id": "48985b51c7868d2b",
     "Name": "engulf in flame",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14464,7 +13257,7 @@
     ]
   },
   {
-    "Id": "0bb172fbbc103787",
+    "Id": "ab472a14c0854026",
     "Name": "starlight",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -14481,7 +13274,7 @@
     ]
   },
   {
-    "Id": "aa30078bbf0d8827",
+    "Id": "f952e232ecff9bca",
     "Name": "roar",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
@@ -16011,15 +14804,15 @@
     ]
   },
   {
-    "Id": "9b2bcffc068e1140",
+    "Id": "6fbd1e5c22e24a60",
     "Name": "cosmos spell",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "Shimmering sparks of energy explode forth!",
     "TargetMessage": "{null}",
     "WitnessMessage": "Shimmering sparks of energy explode forth and cover {source}!",
-    "AppliedMessage": "You are filled with cosmic energy",
-    "AppliedEndsWith": "The cosmic energy fizzles out",
+    "AppliedMessage": "You are filled with cosmic energy!",
+    "AppliedEndsWith": "The cosmic energy fizzles out.",
     "Links": [
       {
         "Table": "Spells",
@@ -17643,7 +16436,7 @@
     ]
   },
   {
-    "Id": "58dfa78c5ce4f25c",
+    "Id": "7f7e0da5e5686114",
     "Name": "fear",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -17762,7 +16555,7 @@
     ]
   },
   {
-    "Id": "a07764276b3762ec",
+    "Id": "035d75dfb339c9ac",
     "Name": "smite",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -17779,7 +16572,7 @@
     ]
   },
   {
-    "Id": "8e20c1aac8e0ba2b",
+    "Id": "5cce53e49756ac0a",
     "Name": "speed",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -17813,7 +16606,7 @@
     ]
   },
   {
-    "Id": "aa4cd65f451ba51e",
+    "Id": "a8e6d4ee829b32d3",
     "Name": "rapid healing",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -18017,7 +16810,7 @@
     ]
   },
   {
-    "Id": "335c6c6398433622",
+    "Id": "c898328309f6fd79",
     "Name": "disease",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -18357,7 +17150,7 @@
     ]
   },
   {
-    "Id": "7c404ff45d32448e",
+    "Id": "8a253bab12f84be1",
     "Name": "chain",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -18799,7 +17592,7 @@
     ]
   },
   {
-    "Id": "69413224c83d5f87",
+    "Id": "5479c2b983db7bbd",
     "Name": "knockdown",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
@@ -19190,7 +17983,7 @@
     ]
   },
   {
-    "Id": "f7be4aa288c47799",
+    "Id": "34cc59bc59056f72",
     "Name": "sandstorm",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -19377,7 +18170,7 @@
     ]
   },
   {
-    "Id": "6c069d4827f5a708",
+    "Id": "4429f702d3621d70",
     "Name": "black orb",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -19394,13 +18187,13 @@
     ]
   },
   {
-    "Id": "3fa7127edf6f7792",
+    "Id": "f9063644e9baeabd",
     "Name": "sucks the life",
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "",
     "TargetMessage": "The {source} {spellname} out of the room for {damage} damage!",
-    "WitnessMessage": "",
+    "WitnessMessage": "{null}",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
@@ -19479,7 +18272,7 @@
     ]
   },
   {
-    "Id": "91c8e1fc920f1ea1",
+    "Id": "3ce0a9ca1ab57216",
     "Name": "divine intervention",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -19496,7 +18289,7 @@
     ]
   },
   {
-    "Id": "f03175a3c95f9c04",
+    "Id": "f952e232ecff9bca",
     "Name": "roar",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -19513,7 +18306,7 @@
     ]
   },
   {
-    "Id": "d8902cef622789a9",
+    "Id": "a849b698fa41cbd2",
     "Name": "gold dust",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -19649,7 +18442,7 @@
     ]
   },
   {
-    "Id": "bea570b7192ab0f9",
+    "Id": "8a253bab12f84be1",
     "Name": "chain",
     "Flags": "MovementPrevented",
     "RawFlagsHex": 0,
@@ -19734,7 +18527,7 @@
     ]
   },
   {
-    "Id": "54ce09ac7edf6b8d",
+    "Id": "cecf4c4be5eddf6d",
     "Name": "time distortion",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -21521,7 +20314,7 @@
     ]
   },
   {
-    "Id": "b266524730207b25",
+    "Id": "855a69694dbbc0de",
     "Name": "bloodstone bracers",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -21980,7 +20773,7 @@
     ]
   },
   {
-    "Id": "a2d75e3c51f66bcb",
+    "Id": "cd17cd5b39c6b30b",
     "Name": "shriek",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22048,7 +20841,7 @@
     ]
   },
   {
-    "Id": "3ee9b1e086a2688b",
+    "Id": "38a4b60288e314d7",
     "Name": "hydra head create",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22065,7 +20858,7 @@
     ]
   },
   {
-    "Id": "580f2e307569fd55",
+    "Id": "754da283b0f01502",
     "Name": "free",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22082,7 +20875,7 @@
     ]
   },
   {
-    "Id": "9a671c491e749fde",
+    "Id": "269b4c604f675f79",
     "Name": "raptor summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22099,7 +20892,7 @@
     ]
   },
   {
-    "Id": "0687d152b46d6140",
+    "Id": "fae08a3c6f8e538a",
     "Name": "remove engulfs",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22116,7 +20909,7 @@
     ]
   },
   {
-    "Id": "45227502fb6a8d67",
+    "Id": "96e0c0f235a27f0e",
     "Name": "summon twins",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22133,7 +20926,7 @@
     ]
   },
   {
-    "Id": "8439910c19fecf5f",
+    "Id": "fda0b819cd3d07e6",
     "Name": "negate magic",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22150,7 +20943,7 @@
     ]
   },
   {
-    "Id": "c388f19a2736e49d",
+    "Id": "f014ead51641e0ce",
     "Name": "medium divides",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22167,7 +20960,7 @@
     ]
   },
   {
-    "Id": "918610d68a0e4ee9",
+    "Id": "73776251fdf363f1",
     "Name": "large divides",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22201,7 +20994,7 @@
     ]
   },
   {
-    "Id": "f88b9f3269062800",
+    "Id": "1b6993fb3d35bfcc",
     "Name": "elemental fusion",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22218,7 +21011,7 @@
     ]
   },
   {
-    "Id": "d175546e69e77b06",
+    "Id": "d26771af11f9f3cf",
     "Name": "obsidian talisman teleport",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22235,7 +21028,7 @@
     ]
   },
   {
-    "Id": "578a88152f5cb18f",
+    "Id": "2ad6e02183ec957c",
     "Name": "sdf",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22252,7 +21045,7 @@
     ]
   },
   {
-    "Id": "e3ff64b253b1cdcb",
+    "Id": "d2ddf6dc86137673",
     "Name": "summon slaver leader",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22269,7 +21062,7 @@
     ]
   },
   {
-    "Id": "fad07502c68b18f5",
+    "Id": "00c0c5db52bb3da5",
     "Name": "portal teleport",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22303,7 +21096,7 @@
     ]
   },
   {
-    "Id": "1f99f84ecc17ec5d",
+    "Id": "69e693c506742bb6",
     "Name": "summon weaponmaster",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22320,7 +21113,7 @@
     ]
   },
   {
-    "Id": "848dccc7fa1d23a2",
+    "Id": "787142f53f2810f2",
     "Name": "wooden box",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22337,7 +21130,7 @@
     ]
   },
   {
-    "Id": "a825360499e88d51",
+    "Id": "397ceb77effe173d",
     "Name": "wooden box gems",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22354,7 +21147,7 @@
     ]
   },
   {
-    "Id": "9c8488e9977c847e",
+    "Id": "c794a6ad5d67bd48",
     "Name": "wooden box items",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22371,7 +21164,7 @@
     ]
   },
   {
-    "Id": "02aa9b77c84b797a",
+    "Id": "0718c59230bd7735",
     "Name": "oak chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22388,7 +21181,7 @@
     ]
   },
   {
-    "Id": "55e50569e5611813",
+    "Id": "d2b1abfaea94e410",
     "Name": "oak chest items",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22405,7 +21198,7 @@
     ]
   },
   {
-    "Id": "b8daa600eef0e95a",
+    "Id": "2b4bf51c2023328b",
     "Name": "massive wooden chest items",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22422,7 +21215,7 @@
     ]
   },
   {
-    "Id": "dddf1fc6d2832d5e",
+    "Id": "b970ad1c843af803",
     "Name": "massive wooden chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22439,7 +21232,7 @@
     ]
   },
   {
-    "Id": "86d538da37292f2f",
+    "Id": "d14082c06d44ad09",
     "Name": "silver box",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22456,7 +21249,7 @@
     ]
   },
   {
-    "Id": "0f1e53a4f092a660",
+    "Id": "4146cb1c513bc722",
     "Name": "silver box gems",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22473,7 +21266,7 @@
     ]
   },
   {
-    "Id": "93c5473ba048d444",
+    "Id": "b394066fa754fb8b",
     "Name": "silver box items",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22490,7 +21283,7 @@
     ]
   },
   {
-    "Id": "3f377b7aaac1dfc7",
+    "Id": "0e473c447a8a07b1",
     "Name": "iron-banded chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22507,7 +21300,7 @@
     ]
   },
   {
-    "Id": "39759bcafe2dca91",
+    "Id": "25fece781a34f297",
     "Name": "darkwood chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22524,7 +21317,7 @@
     ]
   },
   {
-    "Id": "394436ca863482e2",
+    "Id": "d080c388c7e6b1e2",
     "Name": "golden box",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22541,7 +21334,7 @@
     ]
   },
   {
-    "Id": "320c8f0c1d13c088",
+    "Id": "6b1d71b6527f1259",
     "Name": "golden box gems",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22558,7 +21351,7 @@
     ]
   },
   {
-    "Id": "56c2a62e6ce318f0",
+    "Id": "88ccff89e30aabc9",
     "Name": "golden box items",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22575,7 +21368,7 @@
     ]
   },
   {
-    "Id": "f207af1580ecc87e",
+    "Id": "2feea51bd06b640c",
     "Name": "steel chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22592,7 +21385,7 @@
     ]
   },
   {
-    "Id": "c602091c5bd42360",
+    "Id": "d1759313168f79eb",
     "Name": "silverwood chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22609,7 +21402,7 @@
     ]
   },
   {
-    "Id": "187972c5d178599c",
+    "Id": "fb221714fc044dc9",
     "Name": "wild dog pack",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22626,7 +21419,7 @@
     ]
   },
   {
-    "Id": "231ee2600d0e421c",
+    "Id": "d5daf64484f3f595",
     "Name": "warlock bandit summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22643,7 +21436,7 @@
     ]
   },
   {
-    "Id": "8493a251a48309bd",
+    "Id": "929f7eb4e1e1b21e",
     "Name": "bandit leader summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22660,7 +21453,7 @@
     ]
   },
   {
-    "Id": "63348e0d5354b030",
+    "Id": "9ae06af5da31f739",
     "Name": "bodyguard",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22694,7 +21487,7 @@
     ]
   },
   {
-    "Id": "5ce4f3a948e96cbc",
+    "Id": "77665c0ea2409475",
     "Name": "summon gypsy",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22762,7 +21555,7 @@
     ]
   },
   {
-    "Id": "e56dbb95d450bbab",
+    "Id": "ebb64f5c8fc6dcd4",
     "Name": "stop drowning",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22796,7 +21589,7 @@
     ]
   },
   {
-    "Id": "6838fbd3d52aaab5",
+    "Id": "29a1f17dd9623013",
     "Name": "summon kobold",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22813,7 +21606,7 @@
     ]
   },
   {
-    "Id": "8c2d3969aeedbad2",
+    "Id": "e9d487c5bb81723c",
     "Name": "deadly spores",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22830,7 +21623,7 @@
     ]
   },
   {
-    "Id": "c526773b329b183e",
+    "Id": "1d481421c84ec5a1",
     "Name": "king's summons",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22847,7 +21640,7 @@
     ]
   },
   {
-    "Id": "ff1bd6b5c7c44173",
+    "Id": "8f1cbe68ed3be877",
     "Name": "dragonfear",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22864,7 +21657,7 @@
     ]
   },
   {
-    "Id": "a60fe20d03eef984",
+    "Id": "2cab87cb41487ba7",
     "Name": "summon troglodytes",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22881,7 +21674,7 @@
     ]
   },
   {
-    "Id": "c32aa18627e23e92",
+    "Id": "40175052e7b0c874",
     "Name": "sweeps trigger",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22898,7 +21691,7 @@
     ]
   },
   {
-    "Id": "f25896a880d74837",
+    "Id": "6cd02aee0b16461b",
     "Name": "summon kai master",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22933,7 +21726,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "5b277e5af2840923",
+    "Id": "857e73f9331b4264",
     "Name": "summon brain eater",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22950,7 +21743,7 @@
     ]
   },
   {
-    "Id": "fa75129f5014ac17",
+    "Id": "72ce6c702ae6339c",
     "Name": "summon shapeshifter",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -22985,7 +21778,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "4d847d9598a14c20",
+    "Id": "e0eba84dce35d777",
     "Name": "spectral text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23019,7 +21812,7 @@
     ]
   },
   {
-    "Id": "b70865f28f230684",
+    "Id": "f26e3d3a87d086a7",
     "Name": "gulguthra portal",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23036,7 +21829,7 @@
     ]
   },
   {
-    "Id": "aa3500bedf175bf1",
+    "Id": "d88a72b97561272c",
     "Name": "golden chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23053,7 +21846,7 @@
     ]
   },
   {
-    "Id": "a2f0c1a0420e3600",
+    "Id": "8e7adfd4905ec94c",
     "Name": "adamantite chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23070,7 +21863,7 @@
     ]
   },
   {
-    "Id": "0d73bcc247fd3b06",
+    "Id": "0fd3b4d5de7575a6",
     "Name": "black iron chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23087,7 +21880,7 @@
     ]
   },
   {
-    "Id": "41d6c81dcaa92feb",
+    "Id": "3e30f8e6bac23792",
     "Name": "crimson chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23122,7 +21915,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "6a0236ea9eeb3ba2",
+    "Id": "2db7e1d920444017",
     "Name": "efreeti text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23157,7 +21950,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "a5bc63145d6787d9",
+    "Id": "f59db5b4e8de53d4",
     "Name": "gemstone text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23174,7 +21967,7 @@
     ]
   },
   {
-    "Id": "d0548a8d3ea52b4c",
+    "Id": "9fbd9ff30df84dbd",
     "Name": "kai master text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23191,7 +21984,7 @@
     ]
   },
   {
-    "Id": "6efc4ed4a82661b2",
+    "Id": "693dc25eb4e30fba",
     "Name": "small cloth pouch",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23225,7 +22018,7 @@
     ]
   },
   {
-    "Id": "d64e6d0b9283ffc2",
+    "Id": "653c53d56932a1d9",
     "Name": "kobold text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23260,7 +22053,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "aa559d06b93bdfb8",
+    "Id": "645c01f15c796710",
     "Name": "giant troll text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23295,7 +22088,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "57c6f59ebc0d0ea9",
+    "Id": "de1e869980ab9dfd",
     "Name": "obsidian golem text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23312,7 +22105,7 @@
     ]
   },
   {
-    "Id": "97af00c065606b85",
+    "Id": "6a65a0f057afea7b",
     "Name": "jail",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23346,7 +22139,7 @@
     ]
   },
   {
-    "Id": "ae765d122b452af6",
+    "Id": "8c7584abc4d70abd",
     "Name": "asylum",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23363,7 +22156,7 @@
     ]
   },
   {
-    "Id": "056ade0e6022cc0d",
+    "Id": "60098f60a7240237",
     "Name": "cell north",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23380,7 +22173,7 @@
     ]
   },
   {
-    "Id": "f6955b3140006405",
+    "Id": "9b3653b76e25b947",
     "Name": "cell south",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23397,7 +22190,7 @@
     ]
   },
   {
-    "Id": "20ffd72798f43349",
+    "Id": "c2fdf50a1feb717e",
     "Name": "cell east",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23414,7 +22207,7 @@
     ]
   },
   {
-    "Id": "d4a7ab20b1a487e6",
+    "Id": "42bd09bbec4009fb",
     "Name": "cell west",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23449,7 +22242,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "aea5b7eef6733737",
+    "Id": "04e154ad952a5645",
     "Name": "dread mystic text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23484,7 +22277,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "ec1f0f82c92cbd91",
+    "Id": "55939acb7157414b",
     "Name": "smuggler text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23501,7 +22294,7 @@
     ]
   },
   {
-    "Id": "e8f4625d32982b48",
+    "Id": "1e631f44a6ffb806",
     "Name": "potion of levitation",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23536,7 +22329,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "ea07174238c45238",
+    "Id": "29e170ecd63bb804",
     "Name": "white jelly text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23571,7 +22364,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "705ad826fe7a89e4",
+    "Id": "f16c7acabe1aa3f6",
     "Name": "ant queen text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23606,7 +22399,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "b66c9abaf3218df3",
+    "Id": "cde0c2404ff24bc6",
     "Name": "brigand lord text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23659,7 +22452,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "1488c90cc31ddb25",
+    "Id": "e97234d85ee5601c",
     "Name": "necromancer text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23694,7 +22487,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "70a0c0bcfecb6b3c",
+    "Id": "02d49072312461b5",
     "Name": "flesh golem text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23711,7 +22504,7 @@
     ]
   },
   {
-    "Id": "90c896c695bd2ca6",
+    "Id": "8e722ab22b7db4d8",
     "Name": "summon duergar",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23728,7 +22521,7 @@
     ]
   },
   {
-    "Id": "8e8c3e8ff825b282",
+    "Id": "37e40ef183bdc6f8",
     "Name": "house trap trigger",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23813,7 +22606,7 @@
     ]
   },
   {
-    "Id": "9d6de2a339abb62c",
+    "Id": "2f1e5e950fffee85",
     "Name": "portal dispel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23830,7 +22623,7 @@
     ]
   },
   {
-    "Id": "ee411fc3d11da7f7",
+    "Id": "3b84363815d50aaf",
     "Name": "flaming spawn",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23847,7 +22640,7 @@
     ]
   },
   {
-    "Id": "5933ba589c91c72c",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23864,7 +22657,7 @@
     ]
   },
   {
-    "Id": "10c421fc72571367",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23881,7 +22674,7 @@
     ]
   },
   {
-    "Id": "b7a13620ebe57e10",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23898,7 +22691,7 @@
     ]
   },
   {
-    "Id": "ebc5e745b07cde50",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23915,7 +22708,7 @@
     ]
   },
   {
-    "Id": "9d569a229a54f017",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23932,7 +22725,7 @@
     ]
   },
   {
-    "Id": "eddd0477355d57e5",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23949,7 +22742,7 @@
     ]
   },
   {
-    "Id": "c9cf4a7c8564d0d3",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23966,7 +22759,7 @@
     ]
   },
   {
-    "Id": "98ea9de8ad16d3cc",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -23983,7 +22776,7 @@
     ]
   },
   {
-    "Id": "e2cc881c10235db0",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24000,7 +22793,7 @@
     ]
   },
   {
-    "Id": "98d66aa01173d0d3",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24017,7 +22810,7 @@
     ]
   },
   {
-    "Id": "35ba9cc86a15e1ad",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24034,7 +22827,7 @@
     ]
   },
   {
-    "Id": "ee8118bcbb1178c6",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24051,7 +22844,7 @@
     ]
   },
   {
-    "Id": "458408da8e96ccf0",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24068,7 +22861,7 @@
     ]
   },
   {
-    "Id": "333c83c1b1933399",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24085,7 +22878,7 @@
     ]
   },
   {
-    "Id": "24726fa7e72f7ed7",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24102,7 +22895,7 @@
     ]
   },
   {
-    "Id": "74b89a40212b6bba",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24119,7 +22912,7 @@
     ]
   },
   {
-    "Id": "2942df8259251156",
+    "Id": "9e8c1df8214fd97e",
     "Name": "sil_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24136,7 +22929,7 @@
     ]
   },
   {
-    "Id": "19056c3cd4130a28",
+    "Id": "ad6a884301d756cc",
     "Name": "jail heal",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24153,7 +22946,7 @@
     ]
   },
   {
-    "Id": "37ed2dc642f9bc11",
+    "Id": "22af7e762b01886a",
     "Name": "darkwood_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24170,7 +22963,7 @@
     ]
   },
   {
-    "Id": "33e502c36d898d14",
+    "Id": "22af7e762b01886a",
     "Name": "darkwood_tel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24204,7 +22997,7 @@
     ]
   },
   {
-    "Id": "dd4786e7d2f11357",
+    "Id": "1011c2f4db8a57c7",
     "Name": "stop mud drown",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24221,7 +23014,7 @@
     ]
   },
   {
-    "Id": "8a4255d721f98e82",
+    "Id": "209f6f20ceaeecf8",
     "Name": "desert spell",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24238,7 +23031,7 @@
     ]
   },
   {
-    "Id": "e63369649f684981",
+    "Id": "fa93443ae526ab2f",
     "Name": "desert spell 2",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24255,7 +23048,7 @@
     ]
   },
   {
-    "Id": "217515d77c9021e1",
+    "Id": "0c42abdcb9255aaa",
     "Name": "pyramid 1 teleport",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24272,7 +23065,7 @@
     ]
   },
   {
-    "Id": "a155e32bc2f523f4",
+    "Id": "c69c4e33e487a445",
     "Name": "pyramid 1 exit",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24289,7 +23082,7 @@
     ]
   },
   {
-    "Id": "445450a91d2e1e61",
+    "Id": "2f9c85028f4b7c16",
     "Name": "pyramid 2 random",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24306,7 +23099,7 @@
     ]
   },
   {
-    "Id": "5ad4f8cb074df330",
+    "Id": "c22fc798749c7b44",
     "Name": "cleanup",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24323,7 +23116,7 @@
     ]
   },
   {
-    "Id": "395c8caf0afced9e",
+    "Id": "ecf9cc2e00987fa6",
     "Name": "cleanup 2",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24340,7 +23133,7 @@
     ]
   },
   {
-    "Id": "3884b475b9067020",
+    "Id": "6890884981b4d898",
     "Name": "pyramid 3 random",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24357,7 +23150,7 @@
     ]
   },
   {
-    "Id": "5f9783ee7877aa78",
+    "Id": "12209f7fec678ced",
     "Name": "cleanup 3",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24374,7 +23167,7 @@
     ]
   },
   {
-    "Id": "2b7b3b7556da87b8",
+    "Id": "a931cd8d843f99af",
     "Name": "pyramid 4 arch pass",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24408,7 +23201,7 @@
     ]
   },
   {
-    "Id": "4f10420678cfa7ac",
+    "Id": "d385faa5e90601e9",
     "Name": "devour",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24443,7 +23236,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "be37339a73b5f43f",
+    "Id": "5e4ff580f77d4f5d",
     "Name": "hydra head",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24478,7 +23271,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "094e039b6baa27e3",
+    "Id": "2878c86ce19cd0a0",
     "Name": "pharaoh death",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24512,7 +23305,7 @@
     ]
   },
   {
-    "Id": "5aa3eaecb66c569e",
+    "Id": "628ed8e51279c1b8",
     "Name": "spit up",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24547,7 +23340,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "6f253ae9c53fca8a",
+    "Id": "179e4d41c1f6d10a",
     "Name": "out archway check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24582,7 +23375,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "6032c0ad9ec109b5",
+    "Id": "dff4b83dafb74e65",
     "Name": "in archway check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24599,7 +23392,7 @@
     ]
   },
   {
-    "Id": "b43241fbb3f3b0ef",
+    "Id": "ad06f5d09bc953f3",
     "Name": "remove archway temp",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24635,7 +23428,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "19c378ab927c0501",
+    "Id": "f136d137e5779d59",
     "Name": "dao death",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24652,7 +23445,7 @@
     ]
   },
   {
-    "Id": "01e1b61af9f5197d",
+    "Id": "1235490f65c4591b",
     "Name": "dao scatter",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24687,7 +23480,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "cc547ead711bf665",
+    "Id": "1ad8d09f7c5ffc44",
     "Name": "island landing",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24704,7 +23497,7 @@
     ]
   },
   {
-    "Id": "9347ebac50136e68",
+    "Id": "77846749f118e1a4",
     "Name": "pastor box",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24721,7 +23514,7 @@
     ]
   },
   {
-    "Id": "f26705234a7d5008",
+    "Id": "05e14e02e8268832",
     "Name": "shock",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24738,7 +23531,7 @@
     ]
   },
   {
-    "Id": "972ce2e9190bfda8",
+    "Id": "a23e4a2c6e4d14de",
     "Name": "summon storm giant",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24755,7 +23548,7 @@
     ]
   },
   {
-    "Id": "d53371ea066f539d",
+    "Id": "68140501f7a3c5a5",
     "Name": "summon stone giant",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24772,7 +23565,7 @@
     ]
   },
   {
-    "Id": "688dd0f49334b37c",
+    "Id": "8c5a8740331d24f7",
     "Name": "tonfa spell",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24789,7 +23582,7 @@
     ]
   },
   {
-    "Id": "6dbcff1546cbf0ba",
+    "Id": "6bbaa826fe3965f6",
     "Name": "constrictor off",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24806,7 +23599,7 @@
     ]
   },
   {
-    "Id": "1da6c74162e7a62c",
+    "Id": "7f4d94f79f5f9438",
     "Name": "gorilla summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24823,7 +23616,7 @@
     ]
   },
   {
-    "Id": "856cce0d383ca4b8",
+    "Id": "c0f9f659b596643b",
     "Name": "jeweled viper bite",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24840,7 +23633,7 @@
     ]
   },
   {
-    "Id": "a023d600aa9733f1",
+    "Id": "35c96510641b6648",
     "Name": "mind flayer summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24857,7 +23650,7 @@
     ]
   },
   {
-    "Id": "b651867ad042a055",
+    "Id": "f663f8e0dce02054",
     "Name": "mamba fear spell",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24874,7 +23667,7 @@
     ]
   },
   {
-    "Id": "4e6c77073ce9f0b8",
+    "Id": "b95ccc7dc8eb9594",
     "Name": "snake summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24891,7 +23684,7 @@
     ]
   },
   {
-    "Id": "c5c056c06fa2a518",
+    "Id": "459dfcb10ca10b18",
     "Name": "bridge trigger spell",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24908,7 +23701,7 @@
     ]
   },
   {
-    "Id": "41862f46b82ea322",
+    "Id": "c617a827f0834b58",
     "Name": "web spell",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24925,7 +23718,7 @@
     ]
   },
   {
-    "Id": "9000271e5c797a2d",
+    "Id": "307ea84e61690cb9",
     "Name": "golden idol teleport",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24942,7 +23735,7 @@
     ]
   },
   {
-    "Id": "e5e119c47bd08fd7",
+    "Id": "aa5ece23c92a5375",
     "Name": "dark phoenix death",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24977,7 +23770,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "002ca652457e58b2",
+    "Id": "8ff46ab6240ca8e4",
     "Name": "remove forms",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -24994,7 +23787,7 @@
     ]
   },
   {
-    "Id": "8c42f0707b4b0ebe",
+    "Id": "15648f09d0159a4a",
     "Name": "alder chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25011,7 +23804,7 @@
     ]
   },
   {
-    "Id": "62c588419216f0dc",
+    "Id": "2cb547a33155bf17",
     "Name": "orc warlord summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25028,7 +23821,7 @@
     ]
   },
   {
-    "Id": "8eb6a646eed030ff",
+    "Id": "4a8b5aad824ef5e6",
     "Name": "orc captain summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25045,7 +23838,7 @@
     ]
   },
   {
-    "Id": "9f2a4d0161232adf",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25062,7 +23855,7 @@
     ]
   },
   {
-    "Id": "f6fd0ad5604fed6e",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25079,7 +23872,7 @@
     ]
   },
   {
-    "Id": "1012584055e92115",
+    "Id": "1a836153164d219e",
     "Name": "nanati dispel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25096,7 +23889,7 @@
     ]
   },
   {
-    "Id": "340b00fc182298ba",
+    "Id": "00c0c5db52bb3da5",
     "Name": "portal teleport",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25130,7 +23923,7 @@
     ]
   },
   {
-    "Id": "a64a1a4db9517d3b",
+    "Id": "f52279741675ebdc",
     "Name": "storm mountain",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25147,7 +23940,7 @@
     ]
   },
   {
-    "Id": "d961046ba55e7889",
+    "Id": "07d252d3043b15a5",
     "Name": "dying assassin",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25164,7 +23957,7 @@
     ]
   },
   {
-    "Id": "cdb8ec3dae8c5fb0",
+    "Id": "30763c1925f98e4c",
     "Name": "ice chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25181,7 +23974,7 @@
     ]
   },
   {
-    "Id": "8bfae73aebc36065",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25198,7 +23991,7 @@
     ]
   },
   {
-    "Id": "8606a9019ce2acc9",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25215,7 +24008,7 @@
     ]
   },
   {
-    "Id": "4771308fa3ff73db",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25232,7 +24025,7 @@
     ]
   },
   {
-    "Id": "058c4c742b7eaa45",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25249,7 +24042,7 @@
     ]
   },
   {
-    "Id": "c2d411f3a9cbb9ac",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25266,7 +24059,7 @@
     ]
   },
   {
-    "Id": "e630404a9fc0bc59",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25283,7 +24076,7 @@
     ]
   },
   {
-    "Id": "1f70330ca7a43cdb",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25300,7 +24093,7 @@
     ]
   },
   {
-    "Id": "f707bdea9ec88196",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25317,7 +24110,7 @@
     ]
   },
   {
-    "Id": "7a7084548ece776f",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25334,7 +24127,7 @@
     ]
   },
   {
-    "Id": "64f332825681b2f1",
+    "Id": "d4109f96883792c3",
     "Name": "darkwood forest spell",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25351,7 +24144,7 @@
     ]
   },
   {
-    "Id": "df50e7e3186a7f9e",
+    "Id": "a1b5db437d06eebf",
     "Name": "silvermere spell",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25368,7 +24161,7 @@
     ]
   },
   {
-    "Id": "2f4e7b33e69e0cee",
+    "Id": "43f6e70617b8940c",
     "Name": "smoking blackwood chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25385,7 +24178,7 @@
     ]
   },
   {
-    "Id": "ec97188dbb02eb57",
+    "Id": "5cc4b516dfaa0407",
     "Name": "stone chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25402,7 +24195,7 @@
     ]
   },
   {
-    "Id": "bb629ea117c1efeb",
+    "Id": "bc8212b17e5085a2",
     "Name": "frozen death",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25419,7 +24212,7 @@
     ]
   },
   {
-    "Id": "cf99328b072d7881",
+    "Id": "5fc4e68a7bbc40fc",
     "Name": "necro summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25436,7 +24229,7 @@
     ]
   },
   {
-    "Id": "b7dfa365efe3ae04",
+    "Id": "501ab6f66e2b944d",
     "Name": "glowing tunnel rgen",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25453,7 +24246,7 @@
     ]
   },
   {
-    "Id": "e8e0ba9e4682cb75",
+    "Id": "fcb53fe4cc8969b9",
     "Name": "temple noise",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25470,7 +24263,7 @@
     ]
   },
   {
-    "Id": "8ee2f19c805447c6",
+    "Id": "5fc4e68a7bbc40fc",
     "Name": "necro summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25504,7 +24297,7 @@
     ]
   },
   {
-    "Id": "ffcc476f0169e711",
+    "Id": "b3212df2250dfcc1",
     "Name": "sys j",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25521,7 +24314,7 @@
     ]
   },
   {
-    "Id": "9d0ce368b4c5e5be",
+    "Id": "4d0b25a969fd3358",
     "Name": "rosebush death",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25538,11 +24331,11 @@
     ]
   },
   {
-    "Id": "b146713ad51e7816",
+    "Id": "39e1fc3e9d190560",
     "Name": "random dmg",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "{null}",
+    "CasterMessage": "Acid sears {target} for {damage} damage!",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
     "AppliedMessage": "{null}",
@@ -25555,7 +24348,7 @@
     ]
   },
   {
-    "Id": "ab66d0384cac8e6f",
+    "Id": "813619968ea4c096",
     "Name": "vampire mist",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25572,7 +24365,7 @@
     ]
   },
   {
-    "Id": "c5e01fedbffc90e9",
+    "Id": "7e8a509b30959622",
     "Name": "lord mist",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25589,7 +24382,7 @@
     ]
   },
   {
-    "Id": "a8e99b4c301742b3",
+    "Id": "d7078b4ee5d2ad10",
     "Name": "vampire kill",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25606,7 +24399,7 @@
     ]
   },
   {
-    "Id": "ac628a0bc1973ab5",
+    "Id": "741f60dc2cb5259b",
     "Name": "blackwood chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25623,7 +24416,7 @@
     ]
   },
   {
-    "Id": "e5c86b130995d09c",
+    "Id": "8fd583fd15ba7729",
     "Name": "blank",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25640,7 +24433,7 @@
     ]
   },
   {
-    "Id": "e7df9b289866fdad",
+    "Id": "754da283b0f01502",
     "Name": "free",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25657,7 +24450,7 @@
     ]
   },
   {
-    "Id": "4fc651c3f7c549dc",
+    "Id": "cfa28d46215175fb",
     "Name": "zombie summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25674,7 +24467,7 @@
     ]
   },
   {
-    "Id": "fbe2f075ad46e492",
+    "Id": "cfa28d46215175fb",
     "Name": "zombie summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25691,7 +24484,7 @@
     ]
   },
   {
-    "Id": "fd2591c0071bfd0f",
+    "Id": "cfa28d46215175fb",
     "Name": "zombie summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25708,7 +24501,7 @@
     ]
   },
   {
-    "Id": "534053bd52cec0ca",
+    "Id": "f1b984f2c5eba8fc",
     "Name": "plant summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25725,7 +24518,7 @@
     ]
   },
   {
-    "Id": "1c3e07abab5e917b",
+    "Id": "0c588fb6ecd9dafb",
     "Name": "blackwood forest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25759,7 +24552,7 @@
     ]
   },
   {
-    "Id": "3001eb2e23f2e145",
+    "Id": "8fd583fd15ba7729",
     "Name": "blank",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25776,7 +24569,7 @@
     ]
   },
   {
-    "Id": "010c1c11948945f6",
+    "Id": "07837aaa8fb4db14",
     "Name": "gremlin summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25793,7 +24586,7 @@
     ]
   },
   {
-    "Id": "a34d9faeef2bd318",
+    "Id": "c4c7c1d296123a10",
     "Name": "pris effect",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25810,7 +24603,7 @@
     ]
   },
   {
-    "Id": "8ed49bdb711175f2",
+    "Id": "536b365053cb032c",
     "Name": "master summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25844,7 +24637,7 @@
     ]
   },
   {
-    "Id": "1eecb624f95350cf",
+    "Id": "c4c7c1d296123a10",
     "Name": "pris effect",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25861,7 +24654,7 @@
     ]
   },
   {
-    "Id": "1333f3e5f9a21c9f",
+    "Id": "b3f04093e88a868a",
     "Name": "sea 1",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25878,7 +24671,7 @@
     ]
   },
   {
-    "Id": "910b711ded821eff",
+    "Id": "dcf926bc034f1134",
     "Name": "sea 2",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25895,7 +24688,7 @@
     ]
   },
   {
-    "Id": "be1b10cf09410b27",
+    "Id": "7ed262f6b6b0f263",
     "Name": "sea 3",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25912,7 +24705,7 @@
     ]
   },
   {
-    "Id": "f0738ffc1bdd596a",
+    "Id": "d5c3b77bfc13130a",
     "Name": "white forest noise",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25929,7 +24722,7 @@
     ]
   },
   {
-    "Id": "86e878e873afc86c",
+    "Id": "dc70c8d8abdbd27f",
     "Name": "animated summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25946,7 +24739,7 @@
     ]
   },
   {
-    "Id": "71fcfb0dfa6196f4",
+    "Id": "5c4ca2eecf707bab",
     "Name": "sea trigger",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25963,7 +24756,7 @@
     ]
   },
   {
-    "Id": "d64d699bcfd9a3fa",
+    "Id": "71e02edae9130b80",
     "Name": "sea trigger 2",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25980,7 +24773,7 @@
     ]
   },
   {
-    "Id": "d4ed4694fa0a7988",
+    "Id": "85601fa6e912d72b",
     "Name": "sea trigger 3",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -25997,7 +24790,7 @@
     ]
   },
   {
-    "Id": "b984631ce3548377",
+    "Id": "85c320845bf40883",
     "Name": "sea tele 1",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26014,7 +24807,7 @@
     ]
   },
   {
-    "Id": "e1ab407377c9f7d6",
+    "Id": "1f563a8f292dbb25",
     "Name": "sea tele 2",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26031,7 +24824,7 @@
     ]
   },
   {
-    "Id": "7ce763f5db406461",
+    "Id": "a505c130dfe952eb",
     "Name": "sea tele 3",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26048,7 +24841,7 @@
     ]
   },
   {
-    "Id": "54d3ba78f89daf78",
+    "Id": "741f60dc2cb5259b",
     "Name": "blackwood chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26065,7 +24858,7 @@
     ]
   },
   {
-    "Id": "461aeb62ccf1dc1f",
+    "Id": "1b7ec4c26e45c857",
     "Name": "dragon summon tapestry",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26082,7 +24875,7 @@
     ]
   },
   {
-    "Id": "0ced7ed2803e239f",
+    "Id": "16a3e17e04576ef7",
     "Name": "summon steed",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26099,7 +24892,7 @@
     ]
   },
   {
-    "Id": "00a72e4e6e4bf850",
+    "Id": "44af44ad33f54977",
     "Name": "sabre",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26116,7 +24909,7 @@
     ]
   },
   {
-    "Id": "39e8003162c787fa",
+    "Id": "36fb47c806b4a86a",
     "Name": "draka tomb",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26133,7 +24926,7 @@
     ]
   },
   {
-    "Id": "0c35d8b218ff05ca",
+    "Id": "d16ded7f729883e2",
     "Name": "too far",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26184,7 +24977,7 @@
     ]
   },
   {
-    "Id": "21d64a79a9c53ccb",
+    "Id": "5dfb27274f6f61e2",
     "Name": "heart",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26218,7 +25011,7 @@
     ]
   },
   {
-    "Id": "d95915cb1dbd2b43",
+    "Id": "e7a08af48f543f86",
     "Name": "gem",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26235,7 +25028,7 @@
     ]
   },
   {
-    "Id": "ed74f6790f5f4794",
+    "Id": "9fc3eaafc7bde198",
     "Name": "graveyard",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26270,7 +25063,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "ae3bb8beb122ac43",
+    "Id": "07941898bb45ad60",
     "Name": "dark mage text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26287,7 +25080,7 @@
     ]
   },
   {
-    "Id": "7b1cfaddf587ad02",
+    "Id": "0927d637bc426fee",
     "Name": "card-draw",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26304,7 +25097,7 @@
     ]
   },
   {
-    "Id": "57025dfd17b7ca23",
+    "Id": "51943fdaccce75a6",
     "Name": "summon mayor",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26321,7 +25114,7 @@
     ]
   },
   {
-    "Id": "7fb47a1e1d0a8d50",
+    "Id": "70aad6ac2a9ee4c9",
     "Name": "ice fall",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26372,7 +25165,7 @@
     ]
   },
   {
-    "Id": "71eff75ad407ad10",
+    "Id": "06feeca3a62b28cb",
     "Name": "church check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26389,7 +25182,7 @@
     ]
   },
   {
-    "Id": "e2c4da01e050b3b9",
+    "Id": "845db9f00f9e1ba2",
     "Name": "mind flayer slay",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26406,7 +25199,7 @@
     ]
   },
   {
-    "Id": "c94740122cc0b279",
+    "Id": "196518d05f341eba",
     "Name": "mind flayer kill",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26423,7 +25216,7 @@
     ]
   },
   {
-    "Id": "aef80d3a927eaba2",
+    "Id": "c1cf249c653e03fe",
     "Name": "steak",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26440,7 +25233,7 @@
     ]
   },
   {
-    "Id": "bf3405e759bb5225",
+    "Id": "01b34a3d8f044381",
     "Name": "bone dock",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26457,7 +25250,7 @@
     ]
   },
   {
-    "Id": "68757a79fc550fdb",
+    "Id": "0bd54df82deb2005",
     "Name": "bloodwood chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26474,7 +25267,7 @@
     ]
   },
   {
-    "Id": "a1525dca3decca37",
+    "Id": "cd12e0875882b4f3",
     "Name": "burnt iron chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26491,7 +25284,7 @@
     ]
   },
   {
-    "Id": "1e1ccddada3e17eb",
+    "Id": "403809eba6df9a6d",
     "Name": "bone chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26508,7 +25301,7 @@
     ]
   },
   {
-    "Id": "878e57d63818d54c",
+    "Id": "094ad848b0ceca27",
     "Name": "frost giant summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26560,7 +25353,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "31f51f6dadfd6be3",
+    "Id": "1a242fcfdb416c4f",
     "Name": "enigma text",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26577,7 +25370,7 @@
     ]
   },
   {
-    "Id": "dd81965b5653fd29",
+    "Id": "f892eef9d716f837",
     "Name": "parrot",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26594,7 +25387,7 @@
     ]
   },
   {
-    "Id": "caf1c1afae5bee73",
+    "Id": "eef58ea71ebf5751",
     "Name": "fear trigger",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26611,7 +25404,7 @@
     ]
   },
   {
-    "Id": "2653620a26f5f0ec",
+    "Id": "107a5115fba5be13",
     "Name": "fear random",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26628,7 +25421,7 @@
     ]
   },
   {
-    "Id": "a34abcee24cde3d4",
+    "Id": "aa71d81e4297e84e",
     "Name": "fist death",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26645,7 +25438,7 @@
     ]
   },
   {
-    "Id": "d05e853b594c2391",
+    "Id": "0626243328371826",
     "Name": "dark mage exp",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26697,7 +25490,7 @@
     ]
   },
   {
-    "Id": "fd498d41e324af3e",
+    "Id": "331648161892d1ae",
     "Name": "cudgel random",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26714,7 +25507,7 @@
     ]
   },
   {
-    "Id": "e1c2a64aa8f45918",
+    "Id": "4b7614820b177ca7",
     "Name": "clean",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26731,7 +25524,7 @@
     ]
   },
   {
-    "Id": "5857e50a95897752",
+    "Id": "2b5b4c80a04b2d1e",
     "Name": "fungus spell",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26748,7 +25541,7 @@
     ]
   },
   {
-    "Id": "08549b07acf7bffa",
+    "Id": "a3954fe51a33e8f5",
     "Name": "tapestry summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26782,7 +25575,7 @@
     ]
   },
   {
-    "Id": "e5974a7b423bb16f",
+    "Id": "56968ed90e812b37",
     "Name": "summon demonling",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26799,7 +25592,7 @@
     ]
   },
   {
-    "Id": "1c9efd0839f53c30",
+    "Id": "077b8a0e459f3193",
     "Name": "summon astral shade",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26816,7 +25609,7 @@
     ]
   },
   {
-    "Id": "737de8a7fc90e7e3",
+    "Id": "8f1c12653835cb5f",
     "Name": "lich scatter",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26833,7 +25626,7 @@
     ]
   },
   {
-    "Id": "ef570ea2b8f625fa",
+    "Id": "8f2184c6eb788550",
     "Name": "summon bugbear",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26850,7 +25643,7 @@
     ]
   },
   {
-    "Id": "39780cb1d5330dab",
+    "Id": "36f69448c2d0a9eb",
     "Name": "enigma tele self",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26884,7 +25677,7 @@
     ]
   },
   {
-    "Id": "d7de496f20af97c3",
+    "Id": "ffe19e8fcf045161",
     "Name": "enigma summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26901,7 +25694,7 @@
     ]
   },
   {
-    "Id": "eff18d8a6618411c",
+    "Id": "4e395df8bffd18fd",
     "Name": "tapestry check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26918,7 +25711,7 @@
     ]
   },
   {
-    "Id": "a74912aab0986049",
+    "Id": "14f27f065a5b10e9",
     "Name": "tapestry fail",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26935,7 +25728,7 @@
     ]
   },
   {
-    "Id": "54eb7570482eab45",
+    "Id": "e6d5511860778989",
     "Name": "tapestry room",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26952,7 +25745,7 @@
     ]
   },
   {
-    "Id": "6f6d5b7907aefd6e",
+    "Id": "55c99239d2fb0993",
     "Name": "island spell",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26969,7 +25762,7 @@
     ]
   },
   {
-    "Id": "fa347c6dd032764a",
+    "Id": "e4fb5928fd8ea46b",
     "Name": "summon enigma lord",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -26986,7 +25779,7 @@
     ]
   },
   {
-    "Id": "5f1b6a4e410630b4",
+    "Id": "aba7508f380f5b66",
     "Name": "face rgen",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27020,7 +25813,7 @@
     ]
   },
   {
-    "Id": "f7068faf46728869",
+    "Id": "fcacc7bd5a29a5aa",
     "Name": "destroy magic",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27037,7 +25830,7 @@
     ]
   },
   {
-    "Id": "f0109ce4eeaccb4f",
+    "Id": "129ef2dccbedc0a3",
     "Name": "magma rock chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27054,7 +25847,7 @@
     ]
   },
   {
-    "Id": "607919cf487ec771",
+    "Id": "9a36a691ff17fe4d",
     "Name": "gloomy teleport",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27071,7 +25864,7 @@
     ]
   },
   {
-    "Id": "9da69f201545495b",
+    "Id": "afc3ba1a9d2aa9a9",
     "Name": "large chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27088,7 +25881,7 @@
     ]
   },
   {
-    "Id": "c9fde47b3908ae7e",
+    "Id": "c1ef4b53ef14a253",
     "Name": "massive chest",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27105,7 +25898,7 @@
     ]
   },
   {
-    "Id": "9668d5fc5536dfd2",
+    "Id": "5c5144f51a2dd812",
     "Name": "silver casket",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27122,7 +25915,7 @@
     ]
   },
   {
-    "Id": "c3ca9d31fdded2b1",
+    "Id": "66a3dadf5dbcc05e",
     "Name": "sandstone chest open",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27139,7 +25932,7 @@
     ]
   },
   {
-    "Id": "565ccde710dfd0e6",
+    "Id": "6a97da86ce0ad0e2",
     "Name": "fortress trigger",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27156,7 +25949,7 @@
     ]
   },
   {
-    "Id": "78a3b02b3fe6f125",
+    "Id": "4f6c0c27fffe5943",
     "Name": "tele out of pit",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27173,7 +25966,7 @@
     ]
   },
   {
-    "Id": "9978c3086f6411d7",
+    "Id": "9bb1c5d1ee4cd836",
     "Name": "meadow trigger",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27190,7 +25983,7 @@
     ]
   },
   {
-    "Id": "382d9697d2488d7d",
+    "Id": "b0adacea8fea6414",
     "Name": "cloud trigger",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27207,7 +26000,7 @@
     ]
   },
   {
-    "Id": "3b2b83262d690ae9",
+    "Id": "da1f61fccb2f8e37",
     "Name": "fire trigger",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27224,7 +26017,7 @@
     ]
   },
   {
-    "Id": "e2c1f22119035b47",
+    "Id": "bc5c12962183013b",
     "Name": "branch check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27241,7 +26034,7 @@
     ]
   },
   {
-    "Id": "e7ffe3a8838807db",
+    "Id": "8dfed1be6a841066",
     "Name": "great hydra head summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27258,7 +26051,7 @@
     ]
   },
   {
-    "Id": "1e5be7df25ce10c4",
+    "Id": "fe5c381d885b40e0",
     "Name": "thief  filter",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27275,7 +26068,7 @@
     ]
   },
   {
-    "Id": "2bc2cf815a82f48e",
+    "Id": "2450a3c04d6111db",
     "Name": "battle  filter",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27292,7 +26085,7 @@
     ]
   },
   {
-    "Id": "5fff6aac84b8b796",
+    "Id": "33732a2f831196d4",
     "Name": "magic filter",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27309,7 +26102,7 @@
     ]
   },
   {
-    "Id": "f8f0052f5ad67b87",
+    "Id": "6542e00a6ba46ead",
     "Name": "level 10 teleport",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27326,7 +26119,7 @@
     ]
   },
   {
-    "Id": "0f06da5781dd78c3",
+    "Id": "30b4556fde28de42",
     "Name": "summon diamond cloak",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27343,7 +26136,7 @@
     ]
   },
   {
-    "Id": "04be04fec58c00eb",
+    "Id": "5b5dc94aeb982cd3",
     "Name": "summon pearl cloak",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27360,7 +26153,7 @@
     ]
   },
   {
-    "Id": "1f7b7209326b5b11",
+    "Id": "47ffbd0d830b1467",
     "Name": "summon moonstone cloak",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27377,7 +26170,7 @@
     ]
   },
   {
-    "Id": "5cf6cd4066041c93",
+    "Id": "9ef3e130ab20a5d4",
     "Name": "summon marble cloak",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27394,7 +26187,7 @@
     ]
   },
   {
-    "Id": "789e82c732df4d54",
+    "Id": "0bb1101e40d41008",
     "Name": "thievry teleport",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27411,7 +26204,7 @@
     ]
   },
   {
-    "Id": "e99ef52fe1a2d685",
+    "Id": "b5de625088989050",
     "Name": "hallway teleport",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27428,7 +26221,7 @@
     ]
   },
   {
-    "Id": "dce911bbc004085a",
+    "Id": "bbf181f857789241",
     "Name": "spellcaster filter",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27445,7 +26238,7 @@
     ]
   },
   {
-    "Id": "66fd06c72384100d",
+    "Id": "d17f7f4fc75e7e01",
     "Name": "all ball summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27462,7 +26255,7 @@
     ]
   },
   {
-    "Id": "417371f11cc0a463",
+    "Id": "f804635da32fe356",
     "Name": "red ball summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27479,7 +26272,7 @@
     ]
   },
   {
-    "Id": "3ad9cd75d47780ee",
+    "Id": "b0f08b2e58df40de",
     "Name": "blue ball summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27496,7 +26289,7 @@
     ]
   },
   {
-    "Id": "1d663a4712edf103",
+    "Id": "5c5b20d7a8b78ad5",
     "Name": "green ball summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27513,7 +26306,7 @@
     ]
   },
   {
-    "Id": "86f52a5af62294fb",
+    "Id": "cca42dea4d2fca19",
     "Name": "yellow ball summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27530,7 +26323,7 @@
     ]
   },
   {
-    "Id": "7c58bbdcd4c44614",
+    "Id": "4f6c0c27fffe5943",
     "Name": "tele out of pit",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27547,7 +26340,7 @@
     ]
   },
   {
-    "Id": "f6018dd45dd1d582",
+    "Id": "453b41f28ffdbbe2",
     "Name": "final nahr summon",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27564,7 +26357,7 @@
     ]
   },
   {
-    "Id": "7aceb37d3cbb46c7",
+    "Id": "7d9dfb2c63a08028",
     "Name": "rock check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27581,7 +26374,7 @@
     ]
   },
   {
-    "Id": "0fc9825e3dbcbf50",
+    "Id": "da346f227a4f0def",
     "Name": "invoke staff",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27598,7 +26391,7 @@
     ]
   },
   {
-    "Id": "03eac4881dafff84",
+    "Id": "a8516dda03e55f66",
     "Name": "gather ore",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27615,7 +26408,7 @@
     ]
   },
   {
-    "Id": "441542783357cb39",
+    "Id": "74693f6f7d3ee643",
     "Name": "phoenix boss check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27632,7 +26425,7 @@
     ]
   },
   {
-    "Id": "0fb32d4416ec1e35",
+    "Id": "f1adf14f95aeb3b3",
     "Name": "hydra boss check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27649,7 +26442,7 @@
     ]
   },
   {
-    "Id": "beac38876925811f",
+    "Id": "4f6c0c27fffe5943",
     "Name": "tele out of pit",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27666,7 +26459,7 @@
     ]
   },
   {
-    "Id": "fed86cd4e9e54d92",
+    "Id": "902d559b9deed307",
     "Name": "roar cancel",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27683,7 +26476,7 @@
     ]
   },
   {
-    "Id": "2b3a09e65d312475",
+    "Id": "81c9dcf3dade3ee5",
     "Name": "demon lord boss check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27700,7 +26493,7 @@
     ]
   },
   {
-    "Id": "ebfb000a2872f624",
+    "Id": "b4c9b71dd1917866",
     "Name": "majestic boss check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27717,7 +26510,7 @@
     ]
   },
   {
-    "Id": "bb6ad240bdaccfcd",
+    "Id": "7958ebb40a242ace",
     "Name": "chess pieces",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27734,7 +26527,7 @@
     ]
   },
   {
-    "Id": "163bc763505e1c7d",
+    "Id": "93ea19b9eeb5309f",
     "Name": "solo trainer key check",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27751,7 +26544,7 @@
     ]
   },
   {
-    "Id": "c338a6fb7165899d",
+    "Id": "8c062af374e3cbfe",
     "Name": "solo mage scatter",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27768,7 +26561,7 @@
     ]
   },
   {
-    "Id": "eec3b25082dfc8e7",
+    "Id": "03a82a8691502c8b",
     "Name": "duergar",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27785,7 +26578,7 @@
     ]
   },
   {
-    "Id": "79b3c07c060739e4",
+    "Id": "d19c3346bf8dd31c",
     "Name": "keyring summoner",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27819,7 +26612,7 @@
     ]
   },
   {
-    "Id": "d2ae0fe597e0f000",
+    "Id": "d385faa5e90601e9",
     "Name": "devour",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27854,7 +26647,7 @@
     "CastResponse": "^M^M"
   },
   {
-    "Id": "1f66e11d13143cb7",
+    "Id": "628ed8e51279c1b8",
     "Name": "spit up",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27871,7 +26664,7 @@
     ]
   },
   {
-    "Id": "2d28a21e96eceed7",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27888,7 +26681,7 @@
     ]
   },
   {
-    "Id": "3b88fb8e3e895599",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27905,7 +26698,7 @@
     ]
   },
   {
-    "Id": "670c4827f68da0ce",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27922,7 +26715,7 @@
     ]
   },
   {
-    "Id": "f1063dddaaebcd6e",
+    "Id": "89431cadb53e99bb",
     "Name": "deed give",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27939,7 +26732,7 @@
     ]
   },
   {
-    "Id": "6bfb58c512481c53",
+    "Id": "d19c3346bf8dd31c",
     "Name": "keyring summoner",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27956,7 +26749,7 @@
     ]
   },
   {
-    "Id": "d3f7b2bf7724a4d4",
+    "Id": "d19c3346bf8dd31c",
     "Name": "keyring summoner",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -27973,7 +26766,7 @@
     ]
   },
   {
-    "Id": "ef0377eb95269ea4",
+    "Id": "6a65a0f057afea7b",
     "Name": "jail",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -28143,7 +26936,7 @@
     ]
   },
   {
-    "Id": "769f7e3970289bcd",
+    "Id": "9577bc39bab5aa0e",
     "Name": "river damage",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -28160,7 +26953,7 @@
     ]
   },
   {
-    "Id": "9018e6eff5adcb15",
+    "Id": "ac2204789020a711",
     "Name": "shredded tapestry summon",
     "Flags": "None",
     "RawFlagsHex": 0,

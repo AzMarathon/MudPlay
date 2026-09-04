@@ -10,50 +10,67 @@ using MudPlay.ViewModels.GameData.Edit;
 namespace MudPlay.Services;
 
 // Opens the on-use / proc message record for an item, modelessly, from the item
-// edit dialog's "Message" section. This is the Items-side mirror of
-// SpellRecordDialogService: a message anchored to an item (its Links carry an
-// Items#N back-reference) is authored/edited from the item, not from the Messages
-// tab — which now hides item-claimed records the same way it hides spell-claimed
-// ones. Finds the record linked to the item (or a fresh pre-linked one when the
-// item has none yet), builds the item's read-only facts as the dialog's Game Data
-// tab, opens the shared MessageEditDialogViewModel, and persists the edit back to
-// the store on Save. Single-instance: re-opening the shown item is a no-op; another
-// swaps.
+// edit dialog's "Message" section.
+//
+// An item that CASTS a spell (a CastsSp / Abil-43 slot — weapon use-bless, wand bolt,
+// proc weapon) carries its on-use / proc wording on the CAST SPELL's message record
+// (Spells#N), NOT the item: many weapons share one cast spell and therefore one set of
+// messages, so editing from any of them edits the same record. For those items this
+// service delegates straight to SpellRecordDialogService on the item's PrimaryCastSpell.
+//
+// An item that casts nothing (a worn trinket whose only "message" is a wield/remove
+// event) keeps the legacy item-anchored path: a record whose Links carry an Items#N
+// back-reference, edited from the item and hidden from the Messages tab. Single-instance:
+// re-opening the shown item is a no-op; another swaps.
 public sealed class ItemMessageDialogService
 {
     private readonly GameDataCache _cache;
     private readonly MessageStore _messages;
     private readonly DialogService _dialogs;
+    private readonly SpellRecordDialogService _spellRecords;
 
     private MessageEditDialogViewModel? _openVm;
     private int _openItem;
 
-    public ItemMessageDialogService(GameDataCache cache, MessageStore messages, DialogService dialogs)
+    public ItemMessageDialogService(
+        GameDataCache cache, MessageStore messages, DialogService dialogs,
+        SpellRecordDialogService spellRecords)
     {
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(messages);
         ArgumentNullException.ThrowIfNull(dialogs);
+        ArgumentNullException.ThrowIfNull(spellRecords);
         _cache = cache;
         _messages = messages;
         _dialogs = dialogs;
+        _spellRecords = spellRecords;
     }
 
-    // One-line preview of the item's currently-attached message (first populated
-    // perspective line), or "" when the item has no linked record. Drives the item
-    // dialog's "Message" section summary + Add/Edit button label.
+    // One-line preview of the item's on-use / proc message (first populated
+    // perspective/applied line), or "" when there is none. Drives the item dialog's
+    // "Message" section summary + Add/Edit button label. Resolves via the item's
+    // PrimaryCastSpell (the shared Spells#N record) when it casts a spell, else its
+    // legacy item-anchored record.
     public string SummaryFor(int itemNumber)
     {
+        if (ItemCastSpells.PrimaryCastSpell(_cache, itemNumber) is int spell)
+            return _spellRecords.SummaryFor(spell);
         MessageRecord? m = FindByItem(itemNumber);
         if (m is null) return string.Empty;
         return FirstNonEmpty(m.AppliedMessage, m.CasterMessage, m.TargetMessage, m.WitnessMessage);
     }
 
-    // Open the editor for the item's linked message. Returns the post-edit summary so
+    // Open the editor for the item's on-use / proc message. Returns the post-edit summary so
     // the item dialog's section refreshes in place. Null return only when the call is
     // rejected outright (bad number).
     public async Task<string?> OpenAsync(int itemNumber)
     {
         if (itemNumber <= 0) return null;
+
+        // A casting item's message lives on the cast SPELL's record — open that (shared
+        // across every item casting the same spell), not an item-anchored one.
+        if (ItemCastSpells.PrimaryCastSpell(_cache, itemNumber) is int spell)
+            return await _spellRecords.OpenAsync(spell);
 
         // Re-opening the item already showing is a no-op — don't tear down edits.
         if (_openVm is not null && _openItem == itemNumber) return SummaryFor(itemNumber);

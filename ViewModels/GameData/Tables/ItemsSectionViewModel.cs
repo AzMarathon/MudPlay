@@ -219,6 +219,7 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             shopSalesForCharm: ShopsForCharm,
             droppedBy:        mdb.DroppedBy,
             placedIn:         mdb.PlacedIn,
+            castsSpells:      mdb.CastsSpells,
             editAttachedMessage:    editMsg,
             attachedMessageSummary: msgSummary);
 
