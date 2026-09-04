@@ -2191,6 +2191,26 @@ named "go obtain the &lt;item&gt;" message rather than trying to fetch it.
   secondary = spell **742** → `12/335`. Earlier "begins to stiffen up!" wording was spell **#327
   "paralyzed"** (a beholder-type), NOT the undead priest's hold person #66.
 
+## Ailment identification — which spells cause disease / poison / blind / hold *([CONFIRMED] 2026-09-03, user + AbilityNames.cs)*
+
+To mark which spells inflict a curable condition (for the Messages seed's Effect flags), the
+identification differs by ailment because of how the engine models each:
+
+- **Disease has NO engine effect code** — it isn't an enumerated ability. So a *cure disease*
+  spell can't target "the disease effect"; it instead lists the specific spells it removes via
+  ability **122 (RemovesSpell)**, whose `AbilVal` is each removed Spell.Number. Disease-causing
+  spells are therefore found by unioning the RemovesSpell targets of *cure disease* and *cure
+  major disease* (the only two cures that enumerate). *cure major disease* is Paradigm-only.
+- **Poison / blind / hold-person ARE enumerated engine effects**, so their cures clear the
+  effect wholesale and the causing spells are found by the spell's own **inflict ability code**:
+  Poison = **19**, BlindUser = **107**, HoldPerson = **74**, Paralyze = **75** (74+75 →
+  "Movement prevented"). CurePoison is code 20; a cure poison spell also lists 794/798 explicitly
+  via RemovesSpell as special cases. (Ability 19 is the lingering-poison DoT; instant poison
+  *damage* spells like `poison bolt` use a different code and are not "poisoned"-condition.)
+
+The ailment→flag map: Diseased, Poisoned, Blinded, MovementPrevented. Both realm seeds are
+flagged from their own realm MDB (Euphoria-Stock-ish for stock, Paradigm-1.9.1 for paradigm).
+
 ## Attack spells: why one fails to damage a monster
 
 **Three independent mechanics** decide whether an attack spell damages a monster — do not
