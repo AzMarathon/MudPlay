@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.49.1**
-> - Monster record's **Override Pre-attack / Override Attack** now mirror the Settings → Combat spell slots: a spell **picker** (type-ahead over your castable spells) plus per-room **Max** casts and a **Mana** floor — aim a specific spell at a specific monster, gated on mana the same way the Combat tab is (% or absolute per its mana mode; below it the override holds and the normal flow takes the round). Override Attack still accepts a raw verb (e.g. `bash`), sent verbatim
+> - Monster record's **Override Pre-attack / Override Attack** now mirror the Settings → Combat spell slots — aim a specific spell at a specific monster. Each override is a spell **picker** (type-ahead over your castable spells) with **Max casts** + **Min mana to cast** stacked beneath, using the same controls as the Combat tab (Max casts spinner, blank = unlimited; Min mana spinner with the %↔value label, per the Combat mana mode). Below the mana floor the override holds and the normal flow takes the round. Override Attack still accepts a raw verb (e.g. `bash`), sent verbatim. Compact narrower layout
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -230,8 +230,8 @@ public sealed class MonsterEditDialogViewModelTests
             currentTier: SettingsTier.Character, mdbInfo: Array.Empty<MdbInfoRow>(),
             writableTiers: [SettingsTier.Character]);
 
-        Assert.Equal("30", vm.PreAttackMinMana);
-        Assert.Equal("40", vm.AttackMinMana);
+        Assert.Equal(30, vm.PreAttackMinMana);
+        Assert.Equal(40, vm.AttackMinMana);
     }
 
     [Fact]
@@ -239,11 +239,13 @@ public sealed class MonsterEditDialogViewModelTests
     {
         MonsterEditDialogViewModel vm = MakeVm(existing: null, installedDefaults: null);
         vm.PreAttackSpellId = "22";
-        vm.PreAttackMinMana = "30";
+        vm.PreAttackCount   = 3;
+        vm.PreAttackMinMana = 30;
         vm.AttackOverride   = "18";
-        vm.AttackMinMana    = "40";
+        vm.AttackMinMana    = 40;
 
         MonsterOverlay o = Save(vm).Overlay;
+        Assert.Equal(3,  o.OverridePreAttackCount);
         Assert.Equal(30, o.OverridePreAttackMinMana);
         Assert.Equal(40, o.OverrideAttackMinMana);
     }
