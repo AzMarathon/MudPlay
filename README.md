@@ -11,6 +11,7 @@
 > - The ganghouse **guardians, elite guardians, and spellbreakers** now default to **Friend**
 > - Monster record: every spell a monster references (spell-attacks, per-hit, create, death, between-rounds) links to its Spell record and shows the spell number
 > - Paradigm Messages seed back-fills the missing begin / wear-off lines on 8 buff/debuff spells and adds 7 more that had no record at all (horrid wound, stone temple poison, stone regeneration, clay flask, nightfall, sunder armour, diffusive blast), each tied to its Spell record, so those effects are recognized
+> - Paradigm Messages seed also ingests the cast / incantation lines from an older Paradigm export into empty caster/target/witness slots (46 across 30 records) + 6 new spell records, gated on the export's spell id **and** name matching the Paradigm-1.9.1 MDB
 > - Message **Effects** flags: **Disabled (don't use)** now works — a disabled record is ignored entirely; **Attack prevented** now holds all combat output (weapon, attack spells, debuffs) while a stun/petrify/bind line is active; the four inert effect bits (losing-HP, HP/mana regenerating, ends-combat) were retired
 > - Alias editor shows greyed example placeholders in its Name + Expansion boxes
 > - Game Data record overrides (Monsters & Items): the Use-tier picker adds **Installed defaults** to *reset* a record (wipes your Character/BBS/Global edits back to the seed, behind a confirm), and editing a record back to its defaults auto-clears the redundant override
