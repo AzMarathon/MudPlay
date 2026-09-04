@@ -9927,7 +9927,7 @@
     ]
   },
   {
-    "Id": "ee764ca6e567e321",
+    "Id": "f04c2a19ef30ee30",
     "Name": "darkness",
     "Flags": "None",
     "RawFlagsHex": 0,
@@ -9941,7 +9941,8 @@
         "Table": "Spells",
         "Number": 933
       }
-    ]
+    ],
+    "ConfuseFumbleLine": ""
   },
   {
     "Id": "a57789c3ae39744b",
@@ -10658,10 +10659,10 @@
     ]
   },
   {
-    "Id": "37878c1975d7c176",
+    "Id": "0cecc5363c0b84e8",
     "Name": "beholder death",
-    "Flags": "None",
-    "RawFlagsHex": 0,
+    "Flags": "Confused",
+    "RawFlagsHex": 2,
     "CasterMessage": "",
     "TargetMessage": "",
     "WitnessMessage": "",
@@ -10672,7 +10673,8 @@
         "Table": "Spells",
         "Number": 1111
       }
-    ]
+    ],
+    "ConfuseFumbleLine": "You retch uncontrollably!"
   },
   {
     "Id": "69604292fa2da198",
