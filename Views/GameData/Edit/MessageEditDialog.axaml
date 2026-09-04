@@ -163,7 +163,7 @@
                         BorderThickness="1" CornerRadius="3" Padding="10">
                     <StackPanel>
                         <TextBlock Classes="SectionHeader" Text="Links"/>
-                        <TextBlock Text="The spell / item / monster row(s) this message recognizes."
+                        <TextBlock Text="The spell record(s) this message provides text for."
                                    Classes="FieldLabel"
                                    TextWrapping="Wrap" Margin="0,0,0,8"/>
 
@@ -190,25 +190,61 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <!-- Add-link row: Table dropdown + Number textbox + Add. -->
+                        <!-- Add-link row: a message always attributes to a Spells row,
+                             so there's no table picker — just the spell Number + Add. -->
                         <Border Height="1" Margin="0,8"
                                 Background="{StaticResource ChromeBorderBrush}"/>
-                        <Grid ColumnDefinitions="*,80,Auto" ColumnSpacing="6">
-                            <ComboBox Grid.Column="0"
-                                      ItemsSource="{Binding LinkTables}"
-                                      SelectedItem="{Binding AddLinkTable, Mode=TwoWay}"
-                                      HorizontalAlignment="Stretch"/>
-                            <TextBox  Grid.Column="1"
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                            <TextBox  Grid.Column="0"
                                       Text="{Binding AddLinkNumber, Mode=TwoWay}"
-                                      PlaceholderText="Number"
+                                      PlaceholderText="Spell number"
                                       FontFamily="{StaticResource FontMono}"/>
-                            <Button   Grid.Column="2"
+                            <Button   Grid.Column="1"
                                       Content="Add"
                                       Command="{Binding AddLinkCommand}"/>
                         </Grid>
                         <TextBlock Text="{Binding AddLinkStatus}"
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
                                    FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                        <!-- Inline collision resolver: appears when the linked spell's
+                             record already has text that differs from the line being
+                             committed. Per field, keep the record's value (checked) or
+                             use the unrecognized line (unchecked), then Apply. -->
+                        <Border IsVisible="{Binding HasLinkFillConflicts}"
+                                Margin="0,10,0,0" Padding="10"
+                                Background="{StaticResource ChromeBgElevBrush}"
+                                BorderBrush="{StaticResource ChromeBorderBrush}"
+                                BorderThickness="1" CornerRadius="3">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="This spell's record already has different text. Pick which to keep for each field:"
+                                           Classes="FieldLabel" TextWrapping="Wrap"/>
+                                <ItemsControl ItemsSource="{Binding LinkFillConflicts}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:LinkFillConflict">
+                                            <StackPanel Margin="0,4" Spacing="2">
+                                                <TextBlock Text="{Binding FieldLabel}"
+                                                           FontWeight="SemiBold" FontSize="11"/>
+                                                <TextBlock Text="{Binding RecordValue, StringFormat='Record: {0}'}"
+                                                           Foreground="{StaticResource ChromeFgSecBrush}"
+                                                           FontFamily="{StaticResource FontMono}"
+                                                           FontSize="11" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding UnrecognizedValue, StringFormat='Unrecognized: {0}'}"
+                                                           Foreground="{StaticResource ChromeFgSecBrush}"
+                                                           FontFamily="{StaticResource FontMono}"
+                                                           FontSize="11" TextWrapping="Wrap"/>
+                                                <CheckBox IsChecked="{Binding UseRecord, Mode=TwoWay}"
+                                                          FontSize="11"
+                                                          Content="Keep the record's value (uncheck to use the unrecognized line)"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Content="Apply choices"
+                                        HorizontalAlignment="Right"
+                                        Command="{Binding ApplyLinkFillCommand}"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Border>
 

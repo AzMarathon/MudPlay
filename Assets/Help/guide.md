@@ -556,10 +556,10 @@ The top **Game Data** menu (in the menu bar) manages your data sets:
 The window is a sidebar plus a content pane:
 
 - The sidebar's **Search…** box filters the **section list**, not the rows — type "weapon" and unrelated sections drop away.
-- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Incomplete Messages**. (The macro/alias/trigger editors are covered in the **Automation** section.)
+- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Incomplete Messages, Unrecognized Lines**. (The macro/alias/trigger editors are covered in the **Automation** section.)
 - **Imported tables** (bottom group) holds the game data: **Monsters, Items, Spells, Rooms, Lairs, Shops, Races, Classes, TextBlocks, Info, Unobtainable, Quest Flags.**
 
-Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column — including the friendly labels, so on the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
+Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column — including the friendly labels, so on the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name. On the **Spells** tab it also understands ailment keywords: type `poison`, `confuse`, `blind`, or `hold` to list every spell that *applies* that effect (read from the spell's own ability codes, following the EndCast chain), not just spells with the word in their name. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
 
 The **Monsters** table carries a full column set for browsing and filtering monster stats: **Respawn** (respawn timer), **Exp** (the actual experience earned per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **Magic Res**, **Acc (typ/max)** (typical/highest attack accuracy), **Damage**, **Exp Eff** (an exp-per-effort efficiency score), **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**, **Mag-wpn req** (the HitMagic level a weapon must meet to land a hit), and **Undead**.
 
@@ -586,6 +586,8 @@ Every numeric filter is a **min / max range** — either box can be blank for no
 - The rest (Lairs, Races, Classes, and so on) are read-only reference.
 
 **Flavor Prefixes** is a small editor of its own in the *Tables + editors* list (not a double-click table). It's the vocabulary of adjectives the game prepends to a monster's name — *large*, *nasty*, *huge*, and so on. The room classifier strips a leading word in this list so "large giant rat" resolves to "giant rat" with no per-monster data. It starts from the built-in stock list and applies to the **active game-data set**, so a custom realm that uses different adjectives just adds them here (type a word → **Add**; **✕** removes one; **Reset to defaults** restores the built-ins). Edits save to that set immediately. If the classifier ever meets a prefixed name whose leading adjective isn't in the list, it flags a Program-Log row you can double-click to add the word in one click.
+
+**Unrecognized Lines** lists wire lines the Messages catalogue doesn't recognize, staged automatically by the **Capture unrecognized messages** diagnostic (Program Log window, on by default — see *Diagnostics / Log Pane*). Each row shows **Seen In** — the map and room (`map:room`) where that line was *first* noticed — and **Likely source** — the spells castable by the monsters (placed / assigned / lair) in that room, a shortlist of what might have produced the line so you can narrow it to a probable spell whose message you're missing. Double-click a row to open the same editor Messages uses, pre-filled with the raw text, and Save it in as a real record. That editor is spell-only — type the **spell number** the line belongs to and **Add**; if that spell's record already carries message text, its empty slots fill in for you, and any slot where your captured line *differs* pops an inline **picker** so you choose per field between the record's value and the captured line. For the selected row(s) you have three actions: **Dismiss** marks them decided and *frozen* — the row stays but the client then ignores every future recurrence of that text (no re-add, no re-count, no re-alert); **Remove** hard-deletes the row (if the line shows up again later it's captured fresh); and **Export** writes every *non-dismissed* line — with its Seen-In location, occurrence count, and Likely-source shortlist — to a timestamped file on your Desktop (the Program Log notes the path) so a batch can be handed off for attribution.
 
 ## Monster Intel
 
@@ -656,7 +658,8 @@ Press **F4** (or **Tools → Program Log…**) to open the **Program Log** — a
 - **INF / WRN / ERR** — severity filters; tick the ones you want to see.
 - **Search** filters the rows by source or message text; **Clear** empties the view; **Auto-scroll** keeps it pinned to the newest row.
 - **Debug** and **Combat** are *generation* toggles (not just filters): they turn the verbose cross-engine trace and the combat-decision channel on or off across the whole app, and show those rows here. Both are **on by default** and persist per character — leave them on for the richest diagnostics; turn one off to quiet the noise. (These are the same two channels you'll see in a bug report.)
-- **Auto-collect logs** writes the program, memory, and combat-trace files to the Logs folder for the session (off by default, so a normal run leaves nothing behind). **Hop timing** logs one line per confirmed room hop with its measured wall-clock time — used to tune the Auto-Lair travel-cost table. **Simulate Death button** reveals a test button on the Player Workshop's Death Recovery tab (off by default, and reset off every launch). **Simulate Chest button** does the same for the Chest Offload window (Bosses tab → Chest Offload) — it reveals a **Simulate Chest** button that seeds a few random containers so you can exercise the window without real boss chests.
+- **Auto-collect logs** writes the program, memory, and combat-trace files to the Logs folder for the session (off by default, so a normal run leaves nothing behind). **Hop timing** logs one line per confirmed room hop with its measured wall-clock time — used to tune the Auto-Lair travel-cost table.
+- **Simulate buttons** is a dropdown of test-only toggles, each revealing a hidden **Simulate …** button on its feature window (all off by default and reset off every launch, so a normal session never shows them): **Simulate Death button** (Player Workshop → Death Recovery tab), **Simulate Chest button** (Bosses tab → Chest Offload — seeds a few random containers so you can exercise the window without real chests), and **Simulate entry button** (Game Data → Unrecognized Lines — feeds a synthetic unknown line through the capture flow so a candidate appears, letting you see the feature work without waiting for the game to emit one).
 
 ## Backscroll (Alt+L)
 
@@ -1956,7 +1959,7 @@ Settings → Events. Lets you define per-character scheduled actions that fire o
 
 ## Diagnostics / Log Pane
 
-Not a Settings tab — these four toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine per-character saved preferences. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
+Not a Settings tab — these five toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine per-character saved preferences. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
 
 ### Debug channel
 
@@ -1979,6 +1982,12 @@ Not a Settings tab — these four toggles live in the **Program Log** window (de
 
 **Default:** Off
 **What it does:** Emits one log line per confirmed room-to-room movement, recording how long it actually took — useful for calibrating the Auto-Lair tab's "Encumbrance-gated" travel-time numbers against your own real movement speed.
+
+### Capture unrecognized messages
+
+**Default:** On
+**What it does:** Stages any wire line the Messages catalogue doesn't recognize (and no other known line type matches) as a review candidate — logging a Warn row the first time that exact text is seen, and tagging it with the map and room you were in so you can trace where it came from. Double-click the row to open the same editor the Messages tab uses, pre-filled with the raw text, so you can turn it into a real catalogue entry on the spot. Repeated candidates are also listed in Game Data → **Unrecognized Lines** (with a **Seen In** map:room column) for batch review later; dismissing one there is sticky, so it won't quietly resurface as "new" if it recurs.
+**Important notes:** On by default — the point of this toggle is catching the game's devs changing or adding message wording before it silently breaks something else (navigation, combat, condition tracking) that depends on recognizing that line.
 
 ---
 

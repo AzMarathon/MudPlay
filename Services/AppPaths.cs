@@ -279,6 +279,13 @@ public static class AppPaths
     public static string MonsterMessagesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "monster-messages.json");
 
+    // Per-set staged message candidates — raw wire lines MessageCandidateWatcher
+    // captured because they matched no MessagesFile record and no registered
+    // MessageRouter pattern. Pure runtime-observed state, not curated data, so
+    // unlike MessagesFile there is no seed-file fallback.
+    public static string MessageCandidatesFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), "message-candidates.json");
+
     // Per-set editable flavor-prefix vocabulary — the adjectives the game prepends
     // to a monster's base name ("large", "nasty", …). Sits beside the other per-set
     // parser data so the realm's vocabulary travels with it. No seed file: absent

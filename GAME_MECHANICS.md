@@ -3562,3 +3562,39 @@ every item that casts the same spell — never on the item (see `ItemCastSpells`
 from the seeds; the generic colour combat recognizer still tallies its damage. A proc
 that applies an ailment (poison/blind/hold/disease — `Dur>0`) keeps its record and its
 condition flag; an on-use cast always keeps its record.
+
+## Condition Effects flags derive from the linked spell's ability codes *([CONFIRMED] 2026-09-04, user + game-data, Paradigm 1.9.1 / Stock 1.11.p)*
+
+A Messages record's Effects flags (Blinded / Confused / Poisoned / MovementPrevented)
+come from the **linked Spell's** `Abil-N` ability codes — everything that inflicts a
+condition (monster cast, item proc, player spell) routes through a Spell record, so the
+spell's codes are the authoritative source. Ability code → flag:
+
+| Abil code | name | Effects flag | example spell |
+|---|---|---|---|
+| **19** | Poison | **Poisoned** | savagely bites #81 (direct); poison bolt #35 → **EndCast** → poison bite #1366 (chain) |
+| **107** | BlindUser | **Blinded** | blind book #200, blind #77, sand blind #539 |
+| **74** | HoldPerson | **MovementPrevented** | hold person #66 — "can't move, can still act" (Movement only, NOT Attack) |
+| **71** | Confusion | **Confused** | rose book confuse #199, convulsions #951, beholder death #1111 |
+
+Key nuances:
+- **Poison follows the `EndCast` (151) cast-chain** — a damage spell (poison bolt) does
+  its damage then EndCasts the actual DoT (poison bite), which carries the `19`. Only
+  EndCast is followed for condition-inflict; `GiveTempSpell` (160) GRANTS a castable spell
+  to the caster (its code confuses only when the player later casts it), so it is NOT
+  followed.
+- **`Confusion` (71) is shared with sleep / stun / paralyze** — those are code-71 too
+  (paralyze = `71` +100 = fumble 100% = full incapacitation). They carry NO distinct hold
+  code; their "can't move OR attack" is a manual Movement+Attack-prevented classification.
+  So Confused is added from code 71 **only when the record isn't already Movement/Attack-
+  prevented**, keeping the hand-authored full-holds as hold.
+- **`LastActionFailed`** is for spell/item-use FAILURES, *not* confusion — a record that
+  ends up Confused must not also carry it (stripped in the re-derivation).
+- **Mute** (`76`, prevents casting) has no Effects flag and is out of scope (rare, PVP-only
+  on a learned spell). **Diseased** is monster/trap-inflicted with no spell code — left
+  hand-authored.
+
+The flags are recomputed **additively** (add what the codes prove, never strip a
+hand-authored flag except the LastActionFailed-on-confuse cleanup). `SelfAilmentChipResponder` /
+`PartyAilmentTracker` / `ConditionTracker` all read these flags, so a missing flag silently
+breaks ailment + confuse-fumble recognition (the reason rose book #199 was invisible).

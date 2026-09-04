@@ -1,5 +1,21 @@
 # Version history
 
+## 3.50.0
+
+- New: the client now notices its own Messages-catalogue gaps. A wire line that matches no existing spell/buff/debuff/proc record and no known line pattern is staged as a **candidate** (deduped by exact text, occurrence-counted) instead of silently falling through — a Warn row appears in the Program Log the first time it's seen, and double-clicking it opens the same editor the Incomplete Messages tab uses, pre-filled with the raw text, to turn it into a real record on the spot
+- Each captured candidate is tagged with the **map and room** you were in when it was first seen — a **Seen In** locator so you can trace where an unattributed message came from
+- New **Unrecognized Lines** tab in the Game Data Browser lists every staged candidate for batch review (with the **Seen In** map:room column) — search, multi-select, and dismiss (sticky: a dismissed line won't quietly resurface as "new" if it recurs, though it keeps counting occurrences)
+- New **Capture unrecognized messages** diagnostic toggle (Program Log window), on by default; recognized confuse-fumble lines are no longer falsely staged as unrecognized
+- Bug reports now include a pending-candidate count
+- New **Simulate entry** test button (top-right of the Unrecognized Lines tab) feeds a synthetic unknown line through the capture flow so you can see it work; it, plus the Simulate Death / Simulate Chest test buttons, now share one **Simulate buttons** dropdown on the Program Log (was three separate checkboxes)
+- Ailment **Effects flags** (Blinded / Confused / Poisoned / Movement-prevented) on every message are now re-derived from its linked spell's game-data ability codes — so a confuse/poison/blind/hold spell whose flag was missing (e.g. rose book confuse) is now marked correctly; both realm seeds are re-seeded once on update
+- Spell Game Data view: a spell's **End cast** chain now shows as a clickable link to the cast spell (with its #id), e.g. poison bolt → poison bite
+- Unrecognized Lines tab gains a **Likely source** column — the spells castable by monsters (placed / assigned / lair) in the room where the line was captured, so an unattributed line can be narrowed to a probable spell
+- Spells tab filter now understands ailment keywords — type **poison / confuse / blind / hold** to list every spell that applies that effect (read from its ability codes, following the EndCast chain), not just spells with the word in their name
+- Unrecognized Lines tab now has distinct **Dismiss** / **Remove** / **Export** actions: Dismiss freezes a line and the client ignores every future recurrence of it (no re-add, no re-count, no re-alert); Remove hard-deletes the row; Export writes all non-dismissed lines (with location + likely source) to a Desktop file
+- Message editor's Links picker is spell-only now — a message always attributes to a Spells record (item on-use and monster abilities both resolve to a spell), so the Items/Monsters table options and the table dropdown are gone; just type the spell number
+- Message editor auto-fills from the linked spell's record: when you add a spell number whose record already has message text, its empty slots fill in automatically, and any slot where the line you're committing differs surfaces an inline per-field picker (keep the record's value, or use the unrecognized line)
+
 ## 3.49.1
 
 - Monster record's **Override Pre-attack / Override Attack** now mirror the Settings → Combat spell slots — aim a specific spell at a specific monster. Each override is a spell **picker** (type-ahead over your castable spells, commits the cast-code) with **Max casts** and **Min mana to cast** stacked beneath it, using the same controls as the Combat tab: Max casts is a spinner (blank = unlimited), Min mana to cast a spinner with the live %↔value label, read as % or absolute per the Combat tab's mana mode. Below the mana floor the override holds and the normal combat flow takes the round. Override Attack still accepts a raw verb (e.g. `bash`), sent verbatim with no gating. Compact two-column layout (narrower than before)

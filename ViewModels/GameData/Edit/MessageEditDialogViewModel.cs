@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -88,6 +89,13 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // death-spell recovery), '^M' = carriage return. Not part of the record identity.
     [ObservableProperty] private string _castResponse = string.Empty;
 
+    // Pending per-field collisions surfaced when a spell number is linked whose
+    // record already has content that differs from what's in the dialog (an
+    // unrecognized line being committed). The inline resolver panel binds these;
+    // empty when there are none (silent auto-fill only). See TryAutofillFromRecord.
+    public ObservableCollection<LinkFillConflict> LinkFillConflicts { get; } = new();
+    public bool HasLinkFillConflicts => LinkFillConflicts.Count > 0;
+
     public IReadOnlyList<TierOption> AvailableTiers { get; } = new[]
     {
         new TierOption(SettingsTier.Defaults,  "Defaults"),
@@ -99,9 +107,12 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // Editable Links list — see LinkRow for shape.
     public System.Collections.ObjectModel.ObservableCollection<LinkRow> LinkRows { get; } = new();
 
-    public IReadOnlyList<string> LinkTables { get; } = new[] { "Spells", "Items", "Monsters" };
-
-    [ObservableProperty] private string _addLinkTable = "Spells";
+    // A message always attributes to a Spells row — this dialog exists to author
+    // the message text a spell record lacks (the MDB imports every spell field
+    // EXCEPT its caster/target/witness/applied/wears-off lines). Item on-use and
+    // monster abilities both resolve to a spell in the Spells table, so the
+    // add-link table is a fixed "Spells" (no picker); AddLink builds its link from it.
+    private const string LinkTable = "Spells";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AddLinkStatus))]
@@ -111,12 +122,12 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     {
         get
         {
-            if (string.IsNullOrWhiteSpace(AddLinkNumber)) return "Pick a table + type a Number to add a link.";
+            if (string.IsNullOrWhiteSpace(AddLinkNumber)) return "Type a spell number to add a link.";
             if (!int.TryParse(AddLinkNumber, out int n)) return $"'{AddLinkNumber}' is not a number.";
-            string? name = _cache?.FindNameByNumber(AddLinkTable, n);
+            string? name = _cache?.FindNameByNumber(LinkTable, n);
             return name is null
-                ? $"{AddLinkTable}#{n} — no row with that Number in the active set."
-                : $"Will add: {AddLinkTable}#{n} — {name}";
+                ? $"{LinkTable}#{n} — no row with that Number in the active set."
+                : $"Will add: {LinkTable}#{n} — {name}";
         }
     }
 
@@ -260,14 +271,19 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         ConfuseFumbleLine = original.ConfuseFumbleLine;
         CastResponse      = original.CastResponse;
 
-        FlagBlinded           = original.Flags.HasFlag(MessageFlags.Blinded);
-        FlagConfused          = original.Flags.HasFlag(MessageFlags.Confused);
-        FlagPoisoned          = original.Flags.HasFlag(MessageFlags.Poisoned);
-        FlagMovementPrevented = original.Flags.HasFlag(MessageFlags.MovementPrevented);
-        FlagAttackPrevented   = original.Flags.HasFlag(MessageFlags.AttackPrevented);
-        FlagDiseased          = original.Flags.HasFlag(MessageFlags.Diseased);
-        FlagLastActionFailed  = original.Flags.HasFlag(MessageFlags.LastActionFailed);
-        FlagDisabled          = original.Flags.HasFlag(MessageFlags.Disabled);
+        LoadFlags(original.Flags);
+    }
+
+    private void LoadFlags(MessageFlags flags)
+    {
+        FlagBlinded           = flags.HasFlag(MessageFlags.Blinded);
+        FlagConfused          = flags.HasFlag(MessageFlags.Confused);
+        FlagPoisoned          = flags.HasFlag(MessageFlags.Poisoned);
+        FlagMovementPrevented = flags.HasFlag(MessageFlags.MovementPrevented);
+        FlagAttackPrevented   = flags.HasFlag(MessageFlags.AttackPrevented);
+        FlagDiseased          = flags.HasFlag(MessageFlags.Diseased);
+        FlagLastActionFailed  = flags.HasFlag(MessageFlags.LastActionFailed);
+        FlagDisabled          = flags.HasFlag(MessageFlags.Disabled);
     }
 
     [RelayCommand]
@@ -306,13 +322,66 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         if (!int.TryParse(AddLinkNumber, out int n)) return;
         foreach (LinkRow existing in LinkRows)
         {
-            if (string.Equals(existing.Table, AddLinkTable, StringComparison.Ordinal) &&
+            if (string.Equals(existing.Table, LinkTable, StringComparison.Ordinal) &&
                 existing.Number == n)
                 return;
         }
-        string? name = _cache?.FindNameByNumber(AddLinkTable, n);
-        LinkRows.Add(new LinkRow(AddLinkTable, n, name));
+        string? name = _cache?.FindNameByNumber(LinkTable, n);
+        LinkRows.Add(new LinkRow(LinkTable, n, name));
         AddLinkNumber = string.Empty;
+        TryAutofillFromRecord(n);
+    }
+
+    // When a spell number is linked whose record already carries message text,
+    // pull that text in: empty slots fill silently; a slot the dialog already
+    // holds (the unrecognized line being committed) that DIFFERS from the record
+    // surfaces as a per-field collision in the inline resolver. Name fills when
+    // blank; on a fresh commit the record's Effects flags are adopted (a candidate
+    // starts with none). No matching record ⇒ no-op.
+    private void TryAutofillFromRecord(int spellNumber)
+    {
+        MessageRecord? rec = _existingRecords.FirstOrDefault(r =>
+            !ReferenceEquals(r, _original)
+            && r.Links is { } ls
+            && ls.Any(l => string.Equals(l.Table, LinkTable, StringComparison.OrdinalIgnoreCase)
+                           && l.Number == spellNumber));
+        if (rec is null) return;
+
+        if (string.IsNullOrWhiteSpace(Name) && !string.IsNullOrWhiteSpace(rec.Name)) Name = rec.Name;
+        if (_isNew) LoadFlags(rec.Flags);
+
+        LinkFillConflicts.Clear();
+        MergeField("Caster",         rec.CasterMessage,   () => CasterMessage,   v => CasterMessage = v);
+        MergeField("Target",         rec.TargetMessage,   () => TargetMessage,   v => TargetMessage = v);
+        MergeField("Witness",        rec.WitnessMessage,  () => WitnessMessage,  v => WitnessMessage = v);
+        MergeField("Applied",        rec.AppliedMessage,  () => AppliedMessage,  v => AppliedMessage = v);
+        MergeField("Wears off",      rec.AppliedEndsWith, () => AppliedEndsWith, v => AppliedEndsWith = v);
+        MergeField("Confuse fumble", rec.ConfuseFumbleLine, () => ConfuseFumbleLine, v => ConfuseFumbleLine = v);
+        MergeField("Cast response",  rec.CastResponse,    () => CastResponse,    v => CastResponse = v);
+        OnPropertyChanged(nameof(HasLinkFillConflicts));
+    }
+
+    // Silent-fill when the dialog's slot is empty; skip when equal or when the
+    // record's value is empty (nothing to overwrite the unrecognized line with);
+    // otherwise record it as a collision for the user to resolve.
+    private void MergeField(string label, string? recordValue, Func<string> get, Action<string> set)
+    {
+        string current = get() ?? string.Empty;
+        string incoming = recordValue ?? string.Empty;
+        if (string.IsNullOrEmpty(current)) { if (incoming.Length > 0) set(incoming); return; }
+        if (string.Equals(current, incoming, StringComparison.Ordinal)) return;
+        if (incoming.Length == 0) return;
+        LinkFillConflicts.Add(new LinkFillConflict(label, incoming, current, set));
+    }
+
+    // Resolve every pending collision to its chosen source, then clear the panel.
+    [RelayCommand]
+    private void ApplyLinkFill()
+    {
+        foreach (LinkFillConflict c in LinkFillConflicts)
+            c.Apply(c.UseRecord ? c.RecordValue : c.UnrecognizedValue);
+        LinkFillConflicts.Clear();
+        OnPropertyChanged(nameof(HasLinkFillConflicts));
     }
 
     [RelayCommand]
@@ -369,4 +438,29 @@ public sealed record LinkRow(string Table, int Number, string? DisplayName)
     public string Label => DisplayName is null
         ? $"{Table}#{Number} (unknown)"
         : $"{Table}#{Number} — {DisplayName}";
+}
+
+// One field collision surfaced when a linked spell's record and the dialog (the
+// unrecognized line being committed) both have text for the same slot. UseRecord
+// (default true) is the user's per-field pick; Apply writes the chosen value back
+// into the dialog field via the captured setter.
+public sealed partial class LinkFillConflict : ObservableObject
+{
+    private readonly Action<string> _apply;
+
+    public string FieldLabel { get; }
+    public string RecordValue { get; }
+    public string UnrecognizedValue { get; }
+
+    [ObservableProperty] private bool _useRecord = true;
+
+    public LinkFillConflict(string fieldLabel, string recordValue, string unrecognizedValue, Action<string> apply)
+    {
+        FieldLabel        = fieldLabel;
+        RecordValue       = recordValue;
+        UnrecognizedValue = unrecognizedValue;
+        _apply            = apply;
+    }
+
+    public void Apply(string value) => _apply(value);
 }

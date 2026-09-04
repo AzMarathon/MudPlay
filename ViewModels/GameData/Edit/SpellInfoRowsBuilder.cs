@@ -203,6 +203,19 @@ public sealed class SpellInfoRowsBuilder
                     continue;
                 }
 
+                // EndCast (151) — the spell this one chain-casts at the end of its
+                // effect (e.g. poison bolt's damage then EndCasts the poison-bite DoT
+                // #1366). Render a clickable Spells link with its [#N] id, like
+                // Casts/Removes/Negate, instead of the generic "EndCast 1366 (…)" text.
+                if (code == 151)
+                {
+                    if (_cache.FindNameByNumber("Spells", val) is not null)
+                        rows.Add(BuildLinkRow("End cast", "Spells", new[] { val }));
+                    else if (val > 0)
+                        rows.Add(new GameDataInfoRow("End cast", val.ToString(CultureInfo.InvariantCulture)));
+                    continue;
+                }
+
                 // NegateAbility (124) — its value is the negated spell.
                 if (code == 124)
                 {

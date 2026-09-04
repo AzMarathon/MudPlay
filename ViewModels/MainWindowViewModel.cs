@@ -887,6 +887,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Messages record's AppliedMessage / AppliedEndsWith pair to
         // surface live ActiveFlags.
         AppServices.Current.Conditions.AttachLineExtractor(Lines);
+        // Stages lines neither the message catalogue above nor any registered
+        // Router pattern recognized, as review candidates for the catalogue.
+        AppServices.Current.MessageCandidateWatcher.AttachLineExtractor(Lines);
         // Pyramid solver watches lines for the sphinx "concealed passage" cue, the
         // golden-lion-key pickup, and the scatter room name.
         AppServices.Current.PyramidSolver.AttachLineExtractor(Lines);
@@ -3971,6 +3974,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Players,
             AppServices.Current.Macros,
             AppServices.Current.Messages,
+            AppServices.Current.MessageCandidates,
             AppServices.Current.FlavorPrefixes,
             AppServices.Current.MonsterOverlaySeed,
             AppServices.Current.ItemOverlaySeed,
