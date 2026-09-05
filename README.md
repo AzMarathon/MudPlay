@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.50.4**
-> - Help guide: documented the clickable **End cast** link in the Spell Game Data view (chains to the follow-up spell, e.g. poison bolt → poison bite) — the one recent Game Data feature the guide hadn't caught up with
-> - Help guide: the monster **Override Pre-attack / Override Attack** description now matches the type-ahead spell picker (with Max casts + Mana floor), not the old text box
+> **Version 3.50.6**
+> - Monster Intel: fixed the Hits-You-% sim reading your AC **1 too high** — item AC is stored in tenths, and a projected AC ending in .5 (e.g. 61.5) was being rounded up to 62 instead of floored to the game's actual 61. Now matches Character Info's Projected AC / your in-game AC
+> - Monster override editor: widened the **Max casts** spinner so a two-digit cap is fully visible (was squished to just the arrows)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

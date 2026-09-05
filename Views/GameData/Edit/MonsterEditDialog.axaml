@@ -154,7 +154,7 @@
                                             Orientation="Horizontal" Spacing="6" Margin="16,0,0,0">
                                     <TextBlock Classes="FieldLabel" Text="Max casts"/>
                                     <NumericUpDown Value="{Binding PreAttackCount, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="84"
+                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100"
                                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
                                     <TextBlock Classes="FieldLabel" Text="Min mana to cast" Margin="8,0,0,0"/>
                                     <NumericUpDown Value="{Binding PreAttackMinMana, Mode=TwoWay}"
@@ -176,7 +176,7 @@
                                             Orientation="Horizontal" Spacing="6" Margin="16,0,0,0">
                                     <TextBlock Classes="FieldLabel" Text="Max casts"/>
                                     <NumericUpDown Value="{Binding AttackCount, Mode=TwoWay}"
-                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="84"
+                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100"
                                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
                                     <TextBlock Classes="FieldLabel" Text="Min mana to cast" Margin="8,0,0,0"/>
                                     <NumericUpDown Value="{Binding AttackMinMana, Mode=TwoWay}"

@@ -2672,6 +2672,15 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
   evil**. The exact scale is unconfirmed (and it's unclear MME models it), so the client notes its
   **presence only** and never prints a magnitude.
 
+### Fractional AC — the integer combat AC is the FLOOR of the total *([CONFIRMED] 2026-09-04, user)*
+
+Item AC is stored **×10** in game data (`ArmourClass 615` = +61.5 AC), so a character's summed AC
+carries tenths. The integer AC the game uses for to-hit — the value the `stat` screen reports, and
+what Character Info's "Projected AC" reflects — is the **floor** (truncation) of that fractional
+total, **not** a round-half-up. A projected **61.5** is an in-game AC of **61**. Rounding the half up
+over-states AC by 1 (Monster Intel's Hits-You-% sim was seeding 62; `IncomingHitEstimator` truncates
+now). Buff/shadow/prot AC are integers, so they don't affect the fractional part.
+
 ### Blur AC (ability code 10) — encumbrance-scaled, NOT flat *([CONFIRMED] 2026-08-08, user)*
 
 Blur AC (ability code **10**, the item field shown as "AC Blur") is **fundamentally different from
