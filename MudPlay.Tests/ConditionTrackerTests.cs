@@ -311,6 +311,32 @@ public sealed class ConditionTrackerTests
     }
 
     [Fact]
+    public void FlagWideClear_GeneralizesBeyondConfused_ToAnySharedFlag()
+    {
+        // The exact real-world shape (report paradigm-20260904-214452): several
+        // records with UNRELATED applied lines all carry Blinded ("black curse" vs.
+        // the generic "You are blind." family). The alias-group clear can't reach
+        // across different applied lines, so only the flag-wide clear does. When the
+        // curse's own wear-off fires, the "blind" sibling — latched on a totally
+        // different applied line, with its own wear-off text that never arrives —
+        // must clear too, or Blinded (and any auto-cure loop reading it) sticks
+        // forever.
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("black curse", MessageFlags.Blinded,
+            applied: "A black curse is upon you", endsWith: "Your vision returns to normal"));
+        h.Messages.Messages.Add(MakeRecord("blind", MessageFlags.Blinded,
+            applied: "You are blind", endsWith: "You can see again"));
+
+        h.Feed("A black curse is upon you");   // curse latches Blinded
+        h.Feed("You are blind");               // ambiguous generic line co-latches Blinded
+        Assert.True(h.Tracker.IsBlinded);
+
+        h.Feed("Your vision returns to normal");   // only the curse's OWN wear-off fires
+
+        Assert.False(h.Tracker.IsBlinded);   // both Blinded sources cleared, not just the curse
+    }
+
+    [Fact]
     public void MultipleConditions_OrFlags()
     {
         using Harness h = new();

@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.50.6**
-> - Monster Intel: fixed the Hits-You-% sim reading your AC **1 too high** — item AC is stored in tenths, and a projected AC ending in .5 (e.g. 61.5) was being rounded up to 62 instead of floored to the game's actual 61. Now matches Character Info's Projected AC / your in-game AC
-> - Monster override editor: widened the **Max casts** spinner so a two-digit cap is fully visible (was squished to just the arrows)
+> **Version 3.50.8**
+> - Fixed a stuck-ailment loop: when several message records share one ambiguous applied line (e.g. many blindness sources all print "You are blind."), curing the one that actually landed now clears every co-latched sibling too, instead of leaving the ailment flag (and an auto-cure spell re-cast every combat round forever) stuck
+> - Per-monster attack-spell overrides now fire every eligible round regardless of the Combat tab's Action Order (Alternate / Custom Round Cycle) setting, matching how a per-monster attack-command override already behaved — previously an override sat out every physical-phase round even with casts still available, silently falling back to a plain weapon swing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
