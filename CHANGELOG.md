@@ -1,5 +1,9 @@
 # Version history
 
+## 3.50.3
+
+- Settings → Toolbar + Shortcuts: rebinding a key that another action already owns no longer blocks — it now **steals** the key. The dialog shows an amber "*X* is now unbound" warning and, on save, unbinds that action and moves the key to the one you're editing (its row drops to "unbound"). Macro and system-reserved collisions still block
+
 ## 3.50.2
 
 - Monster Intel → Attacks: a monster's **spell attack** now shows its **computed damage**, not just the spell number — the linked spell's formula scaled to the monster's assigned cast level (e.g. spits acid at level 11 → 12–40). It's a **single cast** figure (the monster's own attack energy governs how often it fires, so the spell's player-side energy cost isn't folded in); the same damage shows on between-round spells. Pure-effect casts (poison/blind/hold) show no damage
