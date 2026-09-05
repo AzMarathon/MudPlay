@@ -94,4 +94,39 @@ public sealed class MdbImporterTests
         // assert the cross-platform-safe cases only.
         Assert.Equal(expected, MdbImporter.MakeFilesystemSafe(input));
     }
+
+    // A zero-table import removes the freshly-created (empty) set folder so a broken
+    // MDB never leaves an empty set to switch to.
+    [Fact]
+    public void RemoveDirectoryIfEmpty_DeletesAnEmptyFolder()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-empty-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+
+        MdbImporter.RemoveDirectoryIfEmpty(dir);
+
+        Assert.False(Directory.Exists(dir));
+    }
+
+    // The safety guard: a failed re-import over an EXISTING populated set must never
+    // delete that set's files.
+    [Fact]
+    public void RemoveDirectoryIfEmpty_KeepsAPopulatedFolder()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-populated-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+        string keep = Path.Combine(dir, "Rooms.json");
+        File.WriteAllText(keep, "[]");
+        try
+        {
+            MdbImporter.RemoveDirectoryIfEmpty(dir);
+
+            Assert.True(Directory.Exists(dir), "an existing populated set must survive a failed re-import");
+            Assert.True(File.Exists(keep));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

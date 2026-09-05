@@ -101,6 +101,27 @@ public sealed class MdbImporter
             IReadOnlyList<string> tables = FilterUserTables(reader.ListTables());
             OnStatusChanged?.Invoke($"Found {tables.Count} user tables");
 
+            if (tables.Count == 0)
+            {
+                // The database opened but its catalog lists no importable game tables
+                // (only Access system / application objects). Typically an .mdb that was
+                // opened and saved in the Microsoft Access GUI, leaving its object catalog
+                // damaged or uncompacted so the game tables are physically present but
+                // detached from MSysObjects. Fail hard — never leave an empty set for the
+                // caller to switch to (an empty set blanks the map / monsters / items) —
+                // and surface both the fix and the reader's catalog scan for diagnosis.
+                RemoveDirectoryIfEmpty(outputPath);
+                return MdbImportResult.Failure(
+                    $"No game tables found in: {mdbFilePath}\n\n" +
+                    "The database opened, but its table catalog lists no game tables — only " +
+                    "Microsoft Access internal objects. This usually means the .mdb was opened " +
+                    "and edited in Microsoft Access and its catalog is damaged, or it was never " +
+                    "compacted (the tables can be physically present yet unreferenced).\n\n" +
+                    "Fix: open the file in Access and run Database Tools → \"Compact and Repair " +
+                    "Database\", or re-export a fresh MDB from Nightmare Redux, then import again.\n\n" +
+                    "Reader catalog scan:\n" + reader.LastDiagnostics);
+            }
+
             int tablesDone = 0;
             int totalRows = 0;
             List<string> imported = new();
@@ -126,6 +147,18 @@ public sealed class MdbImporter
 
                 tablesDone++;
                 OnProgressChanged?.Invoke(tablesDone, tables.Count);
+            }
+
+            if (imported.Count == 0)
+            {
+                // Tables were listed but every one failed to read (see the per-table
+                // errors above). Same rule as the no-tables case: don't switch to a set
+                // that got nothing written into it.
+                RemoveDirectoryIfEmpty(outputPath);
+                return MdbImportResult.Failure(
+                    $"No tables could be read from: {mdbFilePath}\n\n" +
+                    $"All {tables.Count} table(s) failed to import:\n" +
+                    string.Join("\n", skipped.Select(t => "  ⚠ " + t)));
             }
 
             string message =
@@ -270,6 +303,21 @@ public sealed class MdbImporter
         return string.IsNullOrEmpty(safe) ? "_unnamed" : safe;
     }
 
+    // Delete a freshly-created output folder when the import wrote nothing into it,
+    // so a failed import never leaves an empty game-data set behind (switching to an
+    // empty set poisons every engine — blank room graph, no items / monsters / spells).
+    // Only removes an EMPTY directory: a failed re-import over an existing populated set
+    // leaves that set's files untouched.
+    internal static void RemoveDirectoryIfEmpty(string dir)
+    {
+        try
+        {
+            if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+                Directory.Delete(dir);
+        }
+        catch { /* best-effort cleanup; a leftover empty dir is harmless */ }
+    }
+
     private static bool IsFileLockIOException(IOException ex)
     {
         string lower = ex.Message.ToLowerInvariant();
@@ -281,10 +329,13 @@ public sealed class MdbImporter
 
 // Outcome of one MdbImporter.ImportAsync invocation. The caller uses the counts
 // to compose status text and to recognise the MajorMUD MDB shape (9 user tables
-// = old realm format, 10 = new format; anything less is a malformed / truncated
-// MDB).
-//   Success        — true when the database opened and every reachable table
-//                    was at least attempted.
+// = old realm format, 10 = new format; extra tables beyond that are imported but
+// unused, not an error).
+//   Success        — true when the database opened AND at least one table was
+//                    imported. An import that yields zero tables is a FAILURE:
+//                    the caller must not switch to an empty set, so ImportAsync
+//                    returns Failure (with the reader's catalog scan) rather than
+//                    a "successful" empty import.
 //   Message        — multi-line summary safe for the Program Log.
 //   FolderName     — on-disk subfolder under AppPaths.GameDataRoot the JSON
 //                    landed in; empty on failure.

@@ -1,5 +1,12 @@
 # Version history
 
+## 3.50.13
+
+- MDB import that finds no game tables now fails cleanly instead of switching to an empty set (which blanked the map, monsters, and items); the error explains the likely cause — an Access-edited MDB needing Compact & Repair — and logs the catalog scan
+- Importing after launch dismisses the startup splash so import progress and errors show on the terminal
+- An MDB with more tables than expected is no longer flagged as an error (the extra tables are imported but unused)
+- bug reports addressed: stock-20260905-155917
+
 ## 3.50.12
 
 - Starter navigation loops & GOTO favourites now **update with the app**: they're embedded in the executable, and new ones added in a later release are added to your existing sets on launch — additively, and **never re-adding a loop or GOTO you deleted** (a per-set ledger tracks what's already been offered). Your own loops/favourites are untouched

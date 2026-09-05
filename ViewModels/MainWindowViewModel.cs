@@ -4246,12 +4246,17 @@ public partial class MainWindowViewModel : ObservableObject
         importer.OnStatusChanged += s => AppServices.Current.Log.Info("MDB", s);
         importer.OnError         += s => AppServices.Current.Log.Error("MDB", s);
 
+        // Importing after launch runs on the splash screen (no session yet), which
+        // overlays the terminal and hides the import's status / error lines. Dismiss
+        // it so the import output is actually visible on the terminal.
+        if (ShowSplash) ShowSplash = false;
+
         WriteTerminalStatus("[MDB IMPORT STARTED]", TerminalStatusKind.Notice);
         MdbImportResult result = await importer.ImportAsync(path);
-        AppServices.Current.Log.Info("MDB", result.Message);
 
         if (result.Success)
         {
+            AppServices.Current.Log.Info("MDB", result.Message);
             WriteTerminalStatus(BuildMdbCompleteStatus(result), TerminalStatusKindFor(result));
             // Seed base navigation loops + GOTO favourites for the realm before we
             // switch to the set, so the ensuing set-switch loads the seeded files.
@@ -4261,6 +4266,9 @@ public partial class MainWindowViewModel : ObservableObject
         }
         else
         {
+            // An empty / malformed MDB no longer swaps to a broken set — it fails here
+            // with the reason (and the reader's catalog scan) in the Program Log.
+            AppServices.Current.Log.Warn("MDB", result.Message);
             WriteTerminalStatus("[MDB IMPORT FAILED — see Program Log]", TerminalStatusKind.Error);
         }
     }
@@ -4268,8 +4276,10 @@ public partial class MainWindowViewModel : ObservableObject
     // Compose the terminal-status line for a successful MDB import.
     // Carries entry + table totals plus a format-tag derived from the
     // MajorMUD MDB shape: 9 user tables = old realm format, 10 = new
-    // format. Anything else (or any per-table skips) flips the line red so
-    // the user notices the structural drift.
+    // format. FEWER than 9 (a truncated MDB) flips the line red; MORE than
+    // 10 (a newer export with extra tables) is fine — the extras are
+    // imported but unused. A zero-table MDB never reaches here: ImportAsync
+    // now fails such an import outright rather than reporting success.
     private static string BuildMdbCompleteStatus(MdbImportResult r)
     {
         string entries = $"{r.RowsImported:N0} entries";
@@ -4280,21 +4290,23 @@ public partial class MainWindowViewModel : ObservableObject
 
         string formatTag = r.TablesFound switch
         {
-            9  => " (old format)",
-            10 => " (new format)",
-            _  => " — UNEXPECTED TABLE COUNT",   // < 9 or > 10
+            9    => " (old format)",
+            10   => " (new format)",
+            > 10 => $" ({r.TablesFound} tables)",   // extra tables: imported but unused, not an error
+            _    => " — UNEXPECTED TABLE COUNT",    // 1..8: fewer than a MajorMUD MDB should carry
         };
 
-        // The "see Program Log" hint fires whenever the user has reason
-        // to dig in — skipped tables OR a wrong-shape MDB.
-        bool needsLogPointer = r.TablesSkipped > 0 || r.TablesFound < 9 || r.TablesFound > 10;
+        // The "see Program Log" hint fires whenever the user has reason to dig
+        // in — skipped tables OR a suspiciously small MDB (fewer game tables
+        // than any MajorMUD export ships).
+        bool needsLogPointer = r.TablesSkipped > 0 || r.TablesFound < 9;
         string logHint = needsLogPointer ? " — see Program Log" : string.Empty;
 
         return $"[MDB IMPORT COMPLETE: {r.FolderName} — {tablesPart}{formatTag}, {entries}{logHint}]";
     }
 
     private static TerminalStatusKind TerminalStatusKindFor(MdbImportResult r)
-        => (r.TablesSkipped > 0 || r.TablesFound < 9 || r.TablesFound > 10)
+        => (r.TablesSkipped > 0 || r.TablesFound < 9)
            ? TerminalStatusKind.Error
            : TerminalStatusKind.Notice;
 
