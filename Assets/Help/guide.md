@@ -954,11 +954,12 @@ Every built-in action that has (or can have) a keyboard shortcut: connection tog
 ### How rebinding works
 
 **What it does:** Click **Capture**, then press the key combination you want — the dialog waits for you to release a non-modifier key (so you can hold Ctrl/Shift/Alt first, then land on the target key) to lock it in. Press **Esc** to cancel without changing anything. **Clear** removes the shortcut entirely, leaving that action with no keybind until you assign a new one.
-**Important notes:** A captured combo is checked live against several exclusion lists and shows a red error (blocking Save) if it collides with anything:
+**Important notes:** A captured combo is checked live. Some collisions show a red error and block Save:
 1. Reserved keys — Enter, Escape, Tab, Backspace, Delete, the lock and system keys (Caps Lock, Num Lock, etc.), and specifically the main-row period key (`.`), which MudPlay reserves because a leading period is MajorMUD's say-precursor. (The numpad period stays bindable.)
 2. System combos — Alt+F4, Ctrl+C, Ctrl+V can never be rebound.
-3. Another built-in shortcut already using that combo.
-4. A user-defined macro (see below) already using that combo — macros and keybinds share one conflict list; a combo can never be assigned to both.
+3. A user-defined macro (see below) already using that combo — macros and keybinds share one conflict list, and a macro isn't in this list to be re-pointed, so a combo can never be assigned to both.
+
+If the combo is already bound to **another built-in action**, that's *not* an error — the dialog shows an amber warning naming that action ("*X* is now unbound"), and saving **steals** the combo: it's unbound from that action and moved to the one you're editing. The stolen-from action's row drops to "unbound" in the list on the spot, so a key only ever drives one built-in action at a time (no need to manually clear the old one first).
 
 Rebinding takes effect **immediately** on Save — it doesn't wait for the Toolbar tab's own Apply button.
 
