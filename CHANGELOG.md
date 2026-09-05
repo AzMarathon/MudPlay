@@ -1,5 +1,10 @@
 # Version history
 
+## 3.50.1
+
+- Fixed a stuck-ailment loop: when several message records share one ambiguous applied line (e.g. many blindness sources all print "You are blind."), curing the one that actually landed now clears every co-latched sibling too, instead of leaving the ailment flag (and an auto-cure spell re-cast every combat round forever) stuck
+- bug reports addressed: paradigm-20260904-214452
+
 ## 3.50.0
 
 - New: the client now notices its own Messages-catalogue gaps. A wire line that matches no existing spell/buff/debuff/proc record and no known line pattern is staged as a **candidate** (deduped by exact text, occurrence-counted) instead of silently falling through — a Warn row appears in the Program Log the first time it's seen, and double-clicking it opens the same editor the Incomplete Messages tab uses, pre-filled with the raw text, to turn it into a real record on the spot

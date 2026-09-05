@@ -280,18 +280,26 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                     if (alias.Id != r.Id) _active.Remove(alias.Id);
             }
 
-            // Confusion is a single state: any confusion wear-off clears EVERY
-            // latched Confused source, not just this record's applied-line aliases.
-            // A source-specific wear-off (the death dog's shriek) thus also releases
-            // a co-latched generic "you fumble in confusion" — which carries Confused
-            // (so it can flag a confuse whose set-line we missed) but never emits its
-            // own wear-off — instead of leaving the flag, and the nav pause it drives,
-            // stuck. The fumble record keeps latching as that fallback indicator; this
-            // just guarantees the clear reaches it once any real confusion wears off.
-            if (r.Flags.HasFlag(MessageFlags.Confused))
+            // Every flag is a single toggle state, not a per-source stack: any
+            // wear-off clears EVERY other latched record sharing that flag, not
+            // just this record's applied-line aliases. A source-specific wear-off
+            // (e.g. "black curse"'s own "Your vision returns to normal.") thus
+            // also releases a co-latched sibling that shares the flag through a
+            // different, ambiguous applied line (the generic "You are blind."
+            // wording shared by several unrelated effects) whose own wear-off
+            // text never arrives this session — instead of leaving the flag, and
+            // whatever it gates (a nav pause, an auto-cure loop), stuck forever.
+            // Originally scoped to Confused only (report -092219: a monster
+            // confuse's death-dog-shriek wear-off had to also release a
+            // co-latched generic fumble record); generalized after the identical
+            // symptom reproduced for Blinded (report paradigm-20260904-214452:
+            // 8 "You are blind." aliases latched on one shaman's "black curse",
+            // only the curse's own wear-off matched, and the other 7 spent every
+            // remaining combat round re-casting cure blindness forever).
+            if (r.Flags != MessageFlags.None)
             {
                 foreach (MessageRecord other in _messages.Messages)
-                    if (other.Flags.HasFlag(MessageFlags.Confused)) _active.Remove(other.Id);
+                    if ((other.Flags & r.Flags) != MessageFlags.None) _active.Remove(other.Id);
             }
         }
 
