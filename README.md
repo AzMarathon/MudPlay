@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.50.3**
-> - Settings → Toolbar + Shortcuts: rebinding a key that another action already owns no longer blocks — it now **steals** the key. The dialog shows an amber "*X* is now unbound" warning and, on save, unbinds that action and moves the key to the one you're editing (its row drops to "unbound"). Macro and system-reserved collisions still block
+> **Version 3.50.4**
+> - Help guide: documented the clickable **End cast** link in the Spell Game Data view (chains to the follow-up spell, e.g. poison bolt → poison bite) — the one recent Game Data feature the guide hadn't caught up with
+> - Help guide: the monster **Override Pre-attack / Override Attack** description now matches the type-ahead spell picker (with Max casts + Mana floor), not the old text box
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
