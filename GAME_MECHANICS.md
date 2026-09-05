@@ -83,9 +83,12 @@ it isn't here and you're unsure, ask.
   (remaining % energy) + 1000`).
 - **No realm swing cap for monsters** — unlike the player's 5 (Stock) / 6 (Paradigm) ceiling,
   a monster is limited only by energy ÷ attack cost.
-- Damage-per-minute = `hit% × avg-dmg(after DR) × (Energy ÷ AttEnergy) × 12` (12 rounds/min, a
-  round being 5s). Monster Intel's per-attack incoming DPM + the melee threat line use this;
-  `MonsterMatchupCalculator.AverageMonsterSwingsPerRound` / `RoundsPerMinute`. Related:
+- **Spell mana efficiency** (Monster Intel's ranked attack spells): `damage-per-mana =
+  effective-damage-per-round ÷ mana-per-round`; `rounds-to-kill = ceil(monster HP ÷
+  effective-damage-per-round)`; `mana-to-kill = rounds-to-kill × mana-per-round`. Both the
+  per-round damage and per-round mana carry the same energy multiplier, so the ratio reads as
+  damage output per point of mana. `MonsterMatchupCalculatorSpells.RankAttackSpells` (takes a
+  `monsterHp`, sorts eligible spells most-efficient first). Related:
   [[project_monster_intel_matchup_arc_20260902]].
 
 ## Equipment & gear

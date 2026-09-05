@@ -1,5 +1,9 @@
 # Version history
 
+## 3.50.1
+
+- Monster Intel: replaced the damage-per-minute figures with a **mana-efficiency** read on the ranked attack spells — each spell now shows **damage per mana**, **rounds to kill**, and total **mana to kill** this monster, ranked most-efficient-first, so you can pick the cheapest kill for the mana. The incoming/outgoing "dmg/min" numbers are gone (melee lines now lead with rounds-to-kill + per-round damage)
+
 ## 3.50.0
 
 - New: the client now notices its own Messages-catalogue gaps. A wire line that matches no existing spell/buff/debuff/proc record and no known line pattern is staged as a **candidate** (deduped by exact text, occurrence-counted) instead of silently falling through — a Warn row appears in the Program Log the first time it's seen, and double-clicking it opens the same editor the Incomplete Messages tab uses, pre-filled with the raw text, to turn it into a real record on the spot
