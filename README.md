@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.50.13**
-> - MDB import that finds no game tables now fails cleanly instead of switching to an empty set (which blanked the map, monsters, and items); the error explains the likely cause — an Access-edited MDB needing Compact & Repair — and logs the catalog scan
-> - Importing after launch dismisses the startup splash so import progress and errors show on the terminal
-> - An MDB with more tables than expected is no longer flagged as an error (the extra tables are imported but unused)
+> **Version 3.51.0**
+> - New `--profile` launch argument opens a named profile at startup; passing several names (`--profile "A","B","C"`) opens one instance per profile, so a shortcut or script can bring up multiple characters at once
+> - A profile name can be bare when unique, or `BBS/Name` when the same character exists on two BBSes; `--profile` overrides Auto-load-last and honors the profile's auto-connect
+> - Debug log filenames now include the process id so concurrent instances don't collide on the same-second log file
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

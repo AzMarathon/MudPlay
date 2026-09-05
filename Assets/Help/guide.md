@@ -20,6 +20,14 @@ A **profile** is one character's workspace — its BBS login, macros, triggers, 
 - **New profile** (Ctrl+N) starts a blank draft; set up its BBS + credentials (below), then **Save** (Ctrl+S) to name it.
 - **Open profile** (Ctrl+O) loads a saved one.
 - **Auto-load last profile** (Settings → General) reopens the profile you used last on every launch.
+- **Launch straight into a profile** from the command line with `--profile`, so a shortcut or script can open you right where you want. Naming **more than one loads more than one** — each name opens its own window (one instance per profile), which is the easy way to run several characters at once:
+
+  ```
+  MudPlay --profile "Fujin"
+  MudPlay --profile "Fujin","Alt","Bob"
+  ```
+
+  A name can be **bare** (`Fujin`) when only one of your saved profiles uses it; if the same character name exists on two BBSes, qualify it as **`BBS/Name`** (e.g. `Playpen/Fujin`) since a profile is really the BBS + character pair. `--profile` overrides *Auto-load last profile* for that launch. If the profile's own auto-connect is on, it connects on its own — so `--profile` gets you all the way in. (Running several at once shares one data folder, so use a *different* character per instance; the game data and BBS setup are shared, only the character differs.)
 
 Settings live in four tiers — **Defaults → Global → BBS → Character** — so a profile only records what differs from the tier beneath it. (The Settings Menu section notes each setting's tier.)
 

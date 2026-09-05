@@ -17,6 +17,20 @@ internal static class Program
         // before the renderer starts churning text-shaping allocations.
         NativeHeapTuning.CapMallocArenas();
 
+        // --profile <name>[,<name>…]: this instance loads the first named profile;
+        // each extra name launches its own instance (one process per profile) so a
+        // single command can bring up several sessions. Each child is spawned with a
+        // SINGLE --profile, so it parses to one token and never re-spawns.
+        var profileTokens = StartupOptions.ParseProfileTokens(args);
+        if (profileTokens.Count > 0)
+        {
+            StartupOptions.RequestedProfileToken = profileTokens[0];
+            int spawned = 0;
+            for (int i = 1; i < profileTokens.Count; i++)
+                if (TryLaunchProfileInstance(profileTokens[i])) spawned++;
+            StartupOptions.SpawnedSiblings = spawned;
+        }
+
         // Install the crash net before anything can fault. CrashReporter.Guard
         // captures exceptions escaping the UI run loop; Install hooks the
         // out-of-band CLR failure channels. Either way a fatal error lands a
@@ -24,6 +38,28 @@ internal static class Program
         CrashReporter.Install();
         CrashReporter.Guard(() =>
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args));
+    }
+
+    // Spawn another copy of this executable bound to a single profile. Best-effort:
+    // a launch failure never blocks this instance's own startup (the user just sees
+    // one fewer window). Returns true when the child process started.
+    private static bool TryLaunchProfileInstance(string profileToken)
+    {
+        try
+        {
+            string? exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe)) return false;
+            var psi = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false };
+            psi.ArgumentList.Add("--profile");
+            psi.ArgumentList.Add(profileToken);
+            return System.Diagnostics.Process.Start(psi) is not null;
+        }
+        catch
+        {
+            // Sibling launch is a convenience; swallow so the primary instance
+            // still comes up. (No LogService yet — AppServices isn't built here.)
+            return false;
+        }
     }
 
     // Builds the Avalonia configuration. The XAML previewer in IDEs also
