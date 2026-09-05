@@ -892,7 +892,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         foreach (MonsterMidSpellSlot mid in m.MidSpells)
             AttackRows.Add(new AttackRowViewModel(
                 $"({mid.Percent}%) Between-rounds spell", $"Spell #{mid.SpellId}"
-                + (mid.Level > 0 ? $" lvl {mid.Level}" : string.Empty), string.Empty, string.Empty));
+                + (mid.Level > 0 ? $" lvl {mid.Level}" : string.Empty),
+                mid.DmgMax > 0 ? $"{FormatDamageRange(mid.DmgMin, mid.DmgMax)} dmg" : string.Empty,
+                string.Empty));
 
         RebuildAbilities(m);
         RebuildYourMatchup(m);
@@ -1102,14 +1104,28 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         string header = string.IsNullOrEmpty(a.Name) ? "Attack" : a.Name;
         string chance = $"({(a.TruePercent > 0 ? (int)Math.Round(a.TruePercent) : a.Percent)}%) {header}";
         if (a.Type == 2)
+        {
+            // A spell attack casts once when it lands, so lead its detail with the
+            // resolved single-cast damage (the linked spell scaled to this
+            // monster's cast level), then its cast-success chance — mirroring how a
+            // physical slot leads with its damage range.
+            string spellDetail = a.SpellDmgMax > 0
+                ? $"{FormatDamageRange(a.SpellDmgMin, a.SpellDmgMax)} dmg · Success {a.MinDamage}%"
+                : $"Success {a.MinDamage}%";
             return new AttackRowViewModel(chance, $"Spell #{a.Accuracy} lvl {a.MaxDamage}",
-                $"Success {a.MinDamage}%", a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
+                spellDetail, a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
+        }
         string kind = a.Type == 3 ? "Rob" : "Physical";
         string detail = $"{a.MinDamage}-{a.MaxDamage} dmg, acc {a.Accuracy}"
             + (hitYou is { } h ? $" → {h}% to hit you" : string.Empty);
         return new AttackRowViewModel(chance, kind, detail,
             a.Energy > 0 ? $"{a.Energy} energy" : string.Empty);
     }
+
+    // A damage range, collapsing an equal min/max to a single figure ("40" not
+    // "40-40").
+    private static string FormatDamageRange(int min, int max)
+        => min == max ? max.ToString() : $"{min}-{max}";
 }
 
 // One line of the Attacks panel — deliberately loose text fields (Header,

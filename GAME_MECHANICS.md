@@ -91,6 +91,21 @@ it isn't here and you're unsure, ask.
   `monsterHp`, sorts eligible spells most-efficient first). Related:
   [[project_monster_intel_matchup_arc_20260902]].
 
+**Monster spell-attack damage — single cast, monster-owned energy** *([CONFIRMED] 2026-09-04, user)*
+- A monster's spell attack (`AttType-N == 2`) stores the **spell number** in its `AttAcc-N` field
+  and the **cast level** in `AttMax-N`; the linked **Spells** record holds the scaling formula
+  (Min/MaxBase + per-level slope). The monster's own **`AttEnergy-N`** (shown as "N energy" in the
+  attack row) is its per-round attack-budget cost for that cast — a *monster-owned* value.
+- The spell record's own **`EnergyCost`** is a **player-cadence** field (how many times a *player*
+  fires it per round); it does **not** apply to a monster's cast. A monster casts the spell **once**
+  when the attack lands, so its per-cast damage is the **single cast** value: the formula's Min/Max
+  scaled to the monster's cast level with **no per-round energy multiplier**. (User anchor: spits
+  acid #325 at level 11 = **12–40**, exactly its MinBase..MaxBase — a naïve `MaxDamage` would double
+  a 500-energy spell like lightning bolt and 6× a 166-energy one.)
+- `SpellCalculator.SingleCastMin/MaxDamage` computes this (the player getters keep the multiplier);
+  `MonsterCatalog` resolves each spell-attack / mid-spell slot's damage range at build time
+  (`MonsterAttackSlot.SpellDmg*`, `MonsterMidSpellSlot.Dmg*`), shown in Monster Intel's Attacks panel.
+
 ## Equipment & gear
 
 **Equip / remove verbs** *(all [CONFIRMED])*
