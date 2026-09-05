@@ -911,6 +911,55 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void Buff_InCombat_HpAtCriticalTrigger_Suppressed()
+    {
+        // The buff picker has no HP awareness of its own — this is the gate that
+        // gives it one. Set HP into the critical band FIRST, before every other
+        // gate the buff needs (mirroring the ordering convention this file
+        // already uses so the LAST assignment is what completes/fires the
+        // reactive evaluate — here that's Ma, exactly like
+        // Buff_InCombat_DuringCombatOn_Casts). Even with everything else lined
+        // up for a normal buff cast, HP at/under MajorHealCombatTrigger must
+        // suppress it (report paradigm-20260904-214056).
+        using CureHarness h = new();
+        h.State.InCombat = true;
+        h.State.MaxHp = 100;
+        h.State.Hp = 40;                       // exactly at the trigger
+        h.Health.MajorHealCombatTrigger = 40;
+        h.Spells.SelfBlessDuringCombat = true;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_InCombat_HpAboveCriticalTrigger_StillCasts()
+    {
+        // Sanity check the gate is a floor, not a blanket combat suppression —
+        // with HP safely above the trigger, the identical setup still casts.
+        using CureHarness h = new();
+        h.State.InCombat = true;
+        h.State.MaxHp = 100;
+        h.State.Hp = 41;                       // just above the trigger
+        h.Health.MajorHealCombatTrigger = 40;
+        h.Spells.SelfBlessDuringCombat = true;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void Buff_IdleResting_CastsRegardlessOfWhileRestingFlag()
     {
         // Idle resting (Position=Resting but NOT a triggered recovery rest) is not

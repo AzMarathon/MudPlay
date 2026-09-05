@@ -1663,6 +1663,29 @@ public sealed class CastingDirector : IDisposable
     // behaviour.
     private CastCandidate? PickBuff(SpellsSettings spells, HealthSettings health, PartySettings? party)
     {
+        // HP-critical gate: unlike the heal pickers, nothing below ever looks at
+        // HP, so a due buff recast fires completely unconditionally regardless of
+        // how low HP has fallen. That's fine when a heal is genuinely not needed
+        // (the normal case — heals rank above Buffing and would have already won
+        // the round), but a heal candidate can be silently skipped THIS round for
+        // reasons unrelated to whether one is needed — insufficient mana
+        // (RunDecisionPass's affordability check), the stale-repeat guard, or the
+        // HealIfAboveMaCombat mana floor — and none of those make HP any less
+        // critical. Refuse to spend the round's one cast on a buff while HP sits
+        // at/under the same life-threat trigger MajorSelfHeal uses; an unused
+        // cast this round is harmless, a buff cast while critical is not.
+        // Combat-only — resting has its own HP trigger and no sudden-damage risk
+        // to guard against. (report paradigm-20260904-214056)
+        if (_state.InCombat && _state.MaxHp > 0)
+        {
+            int majorTrigger = ResolveHealHpTrigger(health.HpThresholdMode, health.MajorHealCombatTrigger);
+            if (_state.Hp <= majorTrigger)
+            {
+                _log?.Combat(LogCategory, "buff skipped — HP at/under the major-heal trigger.");
+                return null;
+            }
+        }
+
         // Stealth gate: any cast — or an item-cast's equip/use/re-equip — breaks
         // sneak / hide; suppress buffs entirely while stealthed so a backstab
         // window stays open.

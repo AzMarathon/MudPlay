@@ -1,5 +1,10 @@
 # Version history
 
+## 3.50.9
+
+- Buffing now refuses to spend the round's cast on a buff while HP sits at/under the major-heal trigger — closes a gap where a due buff could fire with zero regard for HP the moment a heal was skipped for an unrelated reason (unaffordable, stale-repeat guard, mana floor)
+- bug reports addressed: paradigm-20260904-214056
+
 ## 3.50.8
 
 - Fixed a stuck-ailment loop: when several message records share one ambiguous applied line (e.g. many blindness sources all print "You are blind."), curing the one that actually landed now clears every co-latched sibling too, instead of leaving the ailment flag (and an auto-cure spell re-cast every combat round forever) stuck

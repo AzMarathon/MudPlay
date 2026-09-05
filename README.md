@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.50.8**
-> - Fixed a stuck-ailment loop: when several message records share one ambiguous applied line (e.g. many blindness sources all print "You are blind."), curing the one that actually landed now clears every co-latched sibling too, instead of leaving the ailment flag (and an auto-cure spell re-cast every combat round forever) stuck
-> - Per-monster attack-spell overrides now fire every eligible round regardless of the Combat tab's Action Order (Alternate / Custom Round Cycle) setting, matching how a per-monster attack-command override already behaved — previously an override sat out every physical-phase round even with casts still available, silently falling back to a plain weapon swing
+> **Version 3.50.9**
+> - Buffing now refuses to spend the round's cast on a buff while HP sits at/under the major-heal trigger — closes a gap where a due buff could fire with zero regard for HP the moment a heal was skipped for an unrelated reason (unaffordable, stale-repeat guard, mana floor)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
