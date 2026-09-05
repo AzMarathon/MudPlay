@@ -1,9 +1,10 @@
 # Version history
 
-## 3.50.1
+## 3.50.2
 
 - Fixed a stuck-ailment loop: when several message records share one ambiguous applied line (e.g. many blindness sources all print "You are blind."), curing the one that actually landed now clears every co-latched sibling too, instead of leaving the ailment flag (and an auto-cure spell re-cast every combat round forever) stuck
-- bug reports addressed: paradigm-20260904-214452
+- Per-monster attack-spell overrides now fire every eligible round regardless of the Combat tab's Action Order (Alternate / Custom Round Cycle) setting, matching how a per-monster attack-command override already behaved — previously an override sat out every physical-phase round even with casts still available, silently falling back to a plain weapon swing
+- bug reports addressed: paradigm-20260904-214452, paradigm-20260904-220509
 
 ## 3.50.0
 
