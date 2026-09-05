@@ -83,10 +83,28 @@ it isn't here and you're unsure, ask.
   (remaining % energy) + 1000`).
 - **No realm swing cap for monsters** — unlike the player's 5 (Stock) / 6 (Paradigm) ceiling,
   a monster is limited only by energy ÷ attack cost.
-- Damage-per-minute = `hit% × avg-dmg(after DR) × (Energy ÷ AttEnergy) × 12` (12 rounds/min, a
-  round being 5s). Monster Intel's per-attack incoming DPM + the melee threat line use this;
-  `MonsterMatchupCalculator.AverageMonsterSwingsPerRound` / `RoundsPerMinute`. Related:
+- **Spell mana efficiency** (Monster Intel's ranked attack spells): `damage-per-mana =
+  effective-damage-per-round ÷ mana-per-round`; `rounds-to-kill = ceil(monster HP ÷
+  effective-damage-per-round)`; `mana-to-kill = rounds-to-kill × mana-per-round`. Both the
+  per-round damage and per-round mana carry the same energy multiplier, so the ratio reads as
+  damage output per point of mana. `MonsterMatchupCalculatorSpells.RankAttackSpells` (takes a
+  `monsterHp`, sorts eligible spells most-efficient first). Related:
   [[project_monster_intel_matchup_arc_20260902]].
+
+**Monster spell-attack damage — single cast, monster-owned energy** *([CONFIRMED] 2026-09-04, user)*
+- A monster's spell attack (`AttType-N == 2`) stores the **spell number** in its `AttAcc-N` field
+  and the **cast level** in `AttMax-N`; the linked **Spells** record holds the scaling formula
+  (Min/MaxBase + per-level slope). The monster's own **`AttEnergy-N`** (shown as "N energy" in the
+  attack row) is its per-round attack-budget cost for that cast — a *monster-owned* value.
+- The spell record's own **`EnergyCost`** is a **player-cadence** field (how many times a *player*
+  fires it per round); it does **not** apply to a monster's cast. A monster casts the spell **once**
+  when the attack lands, so its per-cast damage is the **single cast** value: the formula's Min/Max
+  scaled to the monster's cast level with **no per-round energy multiplier**. (User anchor: spits
+  acid #325 at level 11 = **12–40**, exactly its MinBase..MaxBase — a naïve `MaxDamage` would double
+  a 500-energy spell like lightning bolt and 6× a 166-energy one.)
+- `SpellCalculator.SingleCastMin/MaxDamage` computes this (the player getters keep the multiplier);
+  `MonsterCatalog` resolves each spell-attack / mid-spell slot's damage range at build time
+  (`MonsterAttackSlot.SpellDmg*`, `MonsterMidSpellSlot.Dmg*`), shown in Monster Intel's Attacks panel.
 
 ## Equipment & gear
 
@@ -2653,6 +2671,15 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 - **VileWard** (ability code **1113**) — an AC bonus whose **magnitude scales with the wearer's own
   evil**. The exact scale is unconfirmed (and it's unclear MME models it), so the client notes its
   **presence only** and never prints a magnitude.
+
+### Fractional AC — the integer combat AC is the FLOOR of the total *([CONFIRMED] 2026-09-04, user)*
+
+Item AC is stored **×10** in game data (`ArmourClass 615` = +61.5 AC), so a character's summed AC
+carries tenths. The integer AC the game uses for to-hit — the value the `stat` screen reports, and
+what Character Info's "Projected AC" reflects — is the **floor** (truncation) of that fractional
+total, **not** a round-half-up. A projected **61.5** is an in-game AC of **61**. Rounding the half up
+over-states AC by 1 (Monster Intel's Hits-You-% sim was seeding 62; `IncomingHitEstimator` truncates
+now). Buff/shadow/prot AC are integers, so they don't affect the fractional part.
 
 ### Blur AC (ability code 10) — encumbrance-scaled, NOT flat *([CONFIRMED] 2026-08-08, user)*
 

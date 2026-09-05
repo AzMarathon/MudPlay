@@ -1,10 +1,33 @@
 # Version history
 
-## 3.50.2
+## 3.50.8
 
 - Fixed a stuck-ailment loop: when several message records share one ambiguous applied line (e.g. many blindness sources all print "You are blind."), curing the one that actually landed now clears every co-latched sibling too, instead of leaving the ailment flag (and an auto-cure spell re-cast every combat round forever) stuck
 - Per-monster attack-spell overrides now fire every eligible round regardless of the Combat tab's Action Order (Alternate / Custom Round Cycle) setting, matching how a per-monster attack-command override already behaved — previously an override sat out every physical-phase round even with casts still available, silently falling back to a plain weapon swing
 - bug reports addressed: paradigm-20260904-214452, paradigm-20260904-220509
+
+## 3.50.6
+
+- Monster Intel: fixed the Hits-You-% sim reading your AC **1 too high** — item AC is stored in tenths, and a projected AC ending in .5 (e.g. 61.5) was being rounded up to 62 instead of floored to the game's actual 61. Now matches Character Info's Projected AC / your in-game AC
+- Monster override editor: widened the **Max casts** spinner so a two-digit cap is fully visible (was squished to just the arrows)
+
+## 3.50.4
+
+- Help guide: documented the clickable **End cast** link in the Spell Game Data view (chains to the follow-up spell, e.g. poison bolt → poison bite) — the one recent Game Data feature the guide hadn't caught up with
+- Help guide: the monster **Override Pre-attack / Override Attack** description now matches the type-ahead spell picker (with Max casts + Mana floor), not the old text box
+
+## 3.50.3
+
+- Settings → Toolbar + Shortcuts: rebinding a key that another action already owns no longer blocks — it now **steals** the key. The dialog shows an amber "*X* is now unbound" warning and, on save, unbinds that action and moves the key to the one you're editing (its row drops to "unbound"). Macro and system-reserved collisions still block
+
+## 3.50.2
+
+- Monster Intel → Attacks: a monster's **spell attack** now shows its **computed damage**, not just the spell number — the linked spell's formula scaled to the monster's assigned cast level (e.g. spits acid at level 11 → 12–40). It's a **single cast** figure (the monster's own attack energy governs how often it fires, so the spell's player-side energy cost isn't folded in); the same damage shows on between-round spells. Pure-effect casts (poison/blind/hold) show no damage
+- Fixed stale Help text that still described the removed per-attack damage/minute on the Attacks panel
+
+## 3.50.1
+
+- Monster Intel: replaced the damage-per-minute figures with a **mana-efficiency** read on the ranked attack spells — each spell now shows **damage per mana**, **rounds to kill**, and total **mana to kill** this monster, ranked most-efficient-first, so you can pick the cheapest kill for the mana. The incoming/outgoing "dmg/min" numbers are gone (melee lines now lead with rounds-to-kill + per-round damage)
 
 ## 3.50.0
 
