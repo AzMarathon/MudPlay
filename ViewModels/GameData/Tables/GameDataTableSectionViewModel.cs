@@ -59,9 +59,12 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // data facets can be surfaced without touching the underlying rows. Choices
     // persist per character (CharacterProfile.TableColumnLayouts, keyed by Title).
 
-    // Show the picker button on this table. On by default; a section overrides to
-    // hide it (a fixed single-column view has nothing to pick).
-    public virtual bool ShowColumnPicker => true;
+    // Show the picker button on this table. OFF here so the engine-backed utility
+    // tabs (Macros / Triggers / Aliases / Players / Messages / Unrecognized Lines /
+    // Quest Flags) keep their fixed columns; the MDB-derived tables turn it on (see
+    // JsonTableSectionViewModel) since those carry the rich record columns worth
+    // customising and the filter-only facets worth surfacing.
+    public virtual bool ShowColumnPicker => false;
 
     // Stable key the layout persists under. Title is unique per tab.
     protected virtual string ColumnLayoutKey => Title;
@@ -591,6 +594,11 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
 
     // JSON-backed sections all belong in the browser's MDB-derived tables group.
     public override bool ShowInTableGroup => true;
+
+    // MDB-derived tables carry the rich record columns (and filter-only facets like a
+    // monster's per-element resists) worth customising, so they get the column picker;
+    // engine-backed utility tabs keep it off.
+    public override bool ShowColumnPicker => true;
 
     // Underlying table name in the active set (e.g. "Monsters").
     protected abstract string TableName { get; }

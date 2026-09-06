@@ -2,7 +2,7 @@
 
 ## 3.52.0
 
-- Every Game Data Browser table now has a **Columns ▾** picker at its top-right — check/uncheck which columns show, per table
+- Game Data Browser record tables (Monsters, Items, Spells, Rooms, …) now have a **Columns ▾** picker at their top-right — check/uncheck which columns show, per table (the engine-backed utility tabs keep their fixed columns)
 - The picker also exposes columns that were previously filter-only, so e.g. a monster's per-element resists, spell-immunity, and dodge can be shown as grid columns
 - Column choices are saved per character; **Reset to defaults** restores a table's standard columns
 
