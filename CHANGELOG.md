@@ -1,5 +1,11 @@
 # Version history
 
+## 3.52.2
+
+- Unrecognized-line capture now holds off until you're in the realm — the startup splash, BBS login menu, and connect banners no longer stage candidates
+- It also skips the client's own bracketed status notices and the echo of a command you just typed, cutting the noise the queue was catching
+- Trimming that volume removes the brief input stutter the capture could cause while it staged and saved a long dump
+
 ## 3.52.1
 
 - Fixed the shipped `convulsions` message record so its onset (`You are in convulsions!`) is what actually latches the Confused condition, instead of one of its fumble wordings

@@ -4066,6 +4066,9 @@ public sealed class AppServices
         // suspended on the drop so nothing leaks into the login-menu nav.
         PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
         PromptScanner.PromptObserved += _ => PartyProbe.NotifyEnteredRealm();
+        // Same in-game gate arms unrecognized-line capture: nothing before the first
+        // realm prompt (splash / login menu / connect banner) stages a candidate.
+        PromptScanner.PromptObserved += _ => MessageCandidateWatcher.NotifyInGame();
         // Same in-game gate resumes frozen buff timers after an unexpected drop: the
         // disconnect handler paused them (kept the remaining), and this shifts each
         // forward by the offline gap so the recast clock picks up where it left off.

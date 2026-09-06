@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.52.1**
-> - Fixed the shipped `convulsions` message record so its onset (`You are in convulsions!`) is what actually latches the Confused condition, instead of one of its fumble wordings
-> - LoopRunner's confusion-aware recovery budget (added 2026-09-02) now actually engages during a real convulsions episode instead of silently never firing — no more loops permanently failing after 3 fumble-caused blocks in under 20 seconds
+> **Version 3.52.2**
+> - Unrecognized-line capture now holds off until you're in the realm — the startup splash, BBS login menu, and connect banners no longer stage candidates
+> - It also skips the client's own bracketed status notices and the echo of a command you just typed, cutting the noise the queue was catching
+> - Trimming that volume removes the brief input stutter the capture could cause while it staged and saved a long dump
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

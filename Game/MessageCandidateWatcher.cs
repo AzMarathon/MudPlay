@@ -69,9 +69,25 @@ public sealed class MessageCandidateWatcher : IDisposable
     private LineExtractor? _lines;
     private bool _disposed;
 
-    private DateTimeOffset _burstWindowStart;
+    // Burst suppression slides on the LAST line, not the window's first, so a long
+    // dump (stat screen / inventory listing) stays suppressed after the first few
+    // rather than leaking another BurstCap every BurstWindow.
+    private DateTimeOffset _lastBurstLine;
     private int _burstCount;
     private bool _burstSuppressedLogged;
+
+    // True once we're actually in the realm this session — set on the first game
+    // prompt (PromptScanner), reset when a new session's LineExtractor is attached.
+    // Gates out everything before the game: the startup splash, the BBS login menu /
+    // banner, and the client's own connect / import status lines.
+    private bool _inGame;
+
+    // Commands the user just sent, kept briefly so their echo (the server bounces
+    // typed input back on the prompt line) isn't staged as an "unrecognized" line.
+    // Fed by ObserveOutbound from the same SendUserInput path the other outbound
+    // observers use; pruned lazily on lookup.
+    private static readonly TimeSpan EchoWindow = TimeSpan.FromSeconds(3);
+    private readonly Dictionary<string, DateTimeOffset> _recentCommands = new(StringComparer.Ordinal);
 
     // Live gate mirroring LogDiagnosticState.CaptureUnrecognizedMessages —
     // AppServices pushes updates on Changed, matching HopTimingCalibrator's
@@ -110,6 +126,28 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = lines;
         _lines.LineEmitted += OnLine;
+        // A new session's extractor means we're back at the splash / login — hold
+        // capture until the first in-game prompt of this session (NotifyInGame).
+        _inGame = false;
+    }
+
+    // Set on the first game prompt this session (PromptScanner.PromptObserved, wired
+    // in AppServices). Gates capture on so the pre-game stream — splash, BBS login
+    // menu / banner, connect status — never stages candidates.
+    public void NotifyInGame() => _inGame = true;
+
+    // Note a command the user just sent so its echo (the server bounces typed input
+    // back) isn't staged as an unrecognized line. Called from SendUserInput next to
+    // the other outbound observers. Latin-1 to match the wire; each CR/LF-split piece
+    // is tagged with the send time.
+    public void ObserveOutbound(byte[] data)
+    {
+        if (data is null || data.Length == 0) return;
+        foreach (string part in System.Text.Encoding.Latin1.GetString(data).Split('\r', '\n'))
+        {
+            string cmd = part.Trim();
+            if (cmd.Length > 0) _recentCommands[cmd] = DateTimeOffset.UtcNow;
+        }
     }
 
     private void OnMessagesChanged(object? sender,
@@ -143,13 +181,44 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (!string.IsNullOrWhiteSpace(text)) set.Add(text.Trim());
     }
 
+    // A full-line "[ … ]" is the client's own WriteTerminalStatus notice
+    // ("[CONNECTING TO: …]", "[… Quest is Now Available]", "[MDB IMPORT …]") — never
+    // a server message, so drop it regardless of in-game state.
+    private static bool IsClientStatusLine(string text) =>
+        text.Length >= 2 && text[0] == '[' && text[^1] == ']';
+
+    // True when text is the echo of a command the user sent within EchoWindow.
+    // Prunes stale entries opportunistically (the set is tiny).
+    private bool IsRecentCommand(string text, DateTimeOffset now)
+    {
+        if (_recentCommands.Count == 0) return false;
+        if (_recentCommands.TryGetValue(text, out DateTimeOffset when) && now - when <= EchoWindow)
+            return true;
+        if (_recentCommands.Count > 32)
+        {
+            List<string> stale = new();
+            foreach (KeyValuePair<string, DateTimeOffset> kv in _recentCommands)
+                if (now - kv.Value > EchoWindow) stale.Add(kv.Key);
+            foreach (string k in stale) _recentCommands.Remove(k);
+        }
+        return false;
+    }
+
     private void OnLine(LineExtractor.EmittedLine line)
     {
         if (!Enabled) return;
         if (line.IsPromptLine) return;
+        // Before the game: splash animation, BBS login menu / banner, and the
+        // client's connect / import status. Nothing there is a server message.
+        if (!_inGame) return;
 
         string text = line.Text.Trim();
         if (text.Length < MinLineLength) return;
+        // Cheap own-output filters first, before the O(patterns) router scan:
+        //  - the client's own "[…]" status notices (WriteTerminalStatus)
+        //  - the echo of a command the user just sent
+        if (IsClientStatusLine(text)) return;
+        if (IsRecentCommand(text, line.Timestamp)) return;
         if (_knownLines.Contains(text)) return;
         if (_router.AnyPatternMatches(line)) return;
         // A dismissed candidate is a final verdict — drop every recurrence
@@ -160,15 +229,18 @@ public sealed class MessageCandidateWatcher : IDisposable
 
         // A repeat of an already-staged candidate is always let through —
         // dedup via RecordSighting is free and doesn't grow the catalogue —
-        // only a genuinely new candidate is subject to the burst cap.
+        // only a genuinely new candidate is subject to the burst cap. The window
+        // slides on the LAST line so a long dump (stat screen / inventory) stays
+        // suppressed after the first BurstCap, instead of leaking another every
+        // BurstWindow.
         if (!_candidates.Contains(text))
         {
-            if (now - _burstWindowStart > BurstWindow)
+            if (now - _lastBurstLine > BurstWindow)
             {
-                _burstWindowStart = now;
                 _burstCount = 0;
                 _burstSuppressedLogged = false;
             }
+            _lastBurstLine = now;
             _burstCount++;
             if (_burstCount > BurstCap)
             {
@@ -204,6 +276,7 @@ public sealed class MessageCandidateWatcher : IDisposable
     // line it injected. Wired to the tab's test-only "Simulate entry" button.
     public string SimulateCapture()
     {
+        _inGame = true;   // the test button stands in for a real in-game line
         string line = $"A shimmering test rune flickers and fades. [sim {++_simCounter}]";
         OnLine(new LineExtractor.EmittedLine(
             line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
