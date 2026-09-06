@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.51.0**
-> - New `--profile` launch argument opens a named profile at startup; passing several names (`--profile "A","B","C"`) opens one instance per profile, so a shortcut or script can bring up multiple characters at once
-> - A profile name can be bare when unique, or `BBS/Name` when the same character exists on two BBSes; `--profile` overrides Auto-load-last and honors the profile's auto-connect
-> - An unresolved `--profile` name (typo, or a bare name on more than one BBS) shows the reason on the terminal and opens a blank profile instead of silently loading a different character
-> - Debug log filenames now include the process id so concurrent instances don't collide on the same-second log file
+> **Version 3.51.1**
+> - Game Data Browser → Monsters table now shows a **Relationship** column (between the name and Respawn) — your set Enemy/Neutral/Friend/… for each monster, resolved the same way the combat engine reads it, so you can see it without opening the record
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
