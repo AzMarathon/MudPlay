@@ -2,7 +2,8 @@
 
 ## 3.52.3
 
-- Player Workshop now updates from a `stat` even when the command is typed while a full-screen form (e.g. `train stats`) still owns the keyboard — the stat sheet self-arms off its own header line, so your level and stats no longer get stranded at their old values
+- Leaving the `train stats` / character-creation form now returns to line-mode input the instant you're back in the room, instead of lingering in the form's character-mode until your next command — so a `stat` (or any command) typed right after training is no longer sent a byte at a time and silently mis-handled
+- As a safety net, the stat sheet also self-arms its parse off its own header line, so the Player Workshop still updates even if a stat screen ever arrives without a clean `stat` command behind it
 - bug reports addressed: paradigm-20260906-090057
 
 ## 3.52.2

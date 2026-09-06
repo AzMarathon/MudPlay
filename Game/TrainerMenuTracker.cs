@@ -39,6 +39,7 @@ public sealed class TrainerMenuTracker : IDisposable
     private readonly LogService? _log;
     private readonly IDisposable _markerSub;
     private readonly IDisposable _promptSub;
+    private readonly IDisposable _roomSub;
     private bool _disposed;
 
     // Window after observing outbound train stats during which a marker line
@@ -141,6 +142,7 @@ public sealed class TrainerMenuTracker : IDisposable
         _log   = log;
         _markerSub = router.Subscribe(KnownPatterns.MenuTrainerStatsMarker, OnMenuMarker);
         _promptSub = router.Subscribe(KnownPatterns.StatusLine,             OnPrompt);
+        _roomSub   = router.Subscribe(KnownPatterns.RoomExits,              OnRoomDisplay);
     }
 
     public void Dispose()
@@ -149,6 +151,7 @@ public sealed class TrainerMenuTracker : IDisposable
         _disposed = true;
         _markerSub.Dispose();
         _promptSub.Dispose();
+        _roomSub.Dispose();
     }
 
     // Called by the wire-send path so we can spot the user's own outbound
@@ -295,6 +298,23 @@ public sealed class TrainerMenuTracker : IDisposable
             _log?.Log(LogSeverity.Info, "TrainerMenu", "Exited trainer menu — firing MenuExited.");
             MenuExited?.Invoke();
         }
+    }
+
+    // A room display ("Obvious exits: …") is emitted the instant the trainer /
+    // creation form closes and you're back in the world. The returning `[HP=…]:`
+    // prompt, by contrast, only regen-redraws in place until you type — so it
+    // isn't committed as a line (and OnPrompt can't fire) until your NEXT
+    // command's Enter. Waiting for that means the command itself is typed while
+    // the form's character-mode still holds the keyboard: it goes out a byte at a
+    // time, and its outbound observers never see the whole token (StatParser's
+    // `stat` gate stayed shut, so the Player Workshop never updated — report
+    // paradigm-20260906-090057). The room display is the prompt "back in the
+    // world" signal, so release line-mode on it. No-op unless the keyboard is
+    // actually held, so a normal room display in play does nothing.
+    private void OnRoomDisplay(MatchResult _)
+    {
+        if (!MenuOwnsKeyboard) return;
+        ForceExit("room display observed — back in the world");
     }
 
     // Force the keyboard release when the normal exit-prompt detection is missed — the

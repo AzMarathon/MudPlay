@@ -255,6 +255,44 @@ public sealed class TrainerMenuTrackerTests
     }
 
     [Fact]
+    public void InputMenu_RoomDisplayReleasesKeyboard_WithoutWaitingForCommittedPrompt()
+    {
+        // Report paradigm-20260906-090057: after `train stats` closes, a room
+        // display is emitted immediately, but the returning `[HP=…]:` prompt only
+        // regen-redraws in place — it's never committed as a line until the user's
+        // NEXT command's Enter. Waiting for that prompt means the command is typed
+        // while the form's character-mode still holds the keyboard (sent byte-by-
+        // byte, so outbound observers miss it). The room display must resume
+        // line-mode on its own.
+        var (tracker, router, _) = Setup();
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        Dispatch(router, "[HP=213/MA=194]:Train stats");   // the command's own echo — swallowed
+        Assert.Equal(0, exited);
+        Assert.True(tracker.IsInputMenuActive);            // still owns the keyboard
+
+        Dispatch(router, "Obvious exits: north");          // form closed — back in the world
+
+        Assert.Equal(1, exited);
+        Assert.False(tracker.IsInputMenuActive);           // line-mode resumes
+    }
+
+    [Fact]
+    public void RoomDisplayWithoutMenu_DoesNotFireExit()
+    {
+        // A normal room display in play, with no trainer/creation form open, must
+        // not fire the exit teardown.
+        var (tracker, router, _) = Setup();
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        Dispatch(router, "Obvious exits: north");
+        Assert.Equal(0, exited);
+    }
+
+    [Fact]
     public void IsInputMenuActive_TracksArmThenExitLifecycle()
     {
         // The realm-independent "the stat box owns the keyboard" flag that the
