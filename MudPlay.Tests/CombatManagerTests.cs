@@ -2856,6 +2856,70 @@ public sealed class CombatManagerTests
         Assert.Equal(before, h.Sent.Count);
     }
 
+    // Report paradigm-20260905-205200: OnCombatTick's deterministic weapon resume
+    // (the routine per-round Off/Engaged toggle, NOT a between-round cast) is driven
+    // by the round's own DAMAGE line — which always lands BEFORE that round's own
+    // "dies." / "You gain N experience." when this round's swing is the killing
+    // blow. Firing the resume synchronously re-swung at the just-killed mob every
+    // single time ("You don't see X here!" / "Your command had no effect."),
+    // costing roughly a full round per kill. The resume is now deferred a short
+    // real-time window and re-validated; a kill landing in that window (same burst
+    // or an adjacent packet) is caught before anything reaches the wire.
+    [Fact]
+    public void DeterministicTickResume_KillLandsInDeferWindow_NoCorpseAttack()
+    {
+        using Harness h = new() { DeferUi = true };
+        h.AddMonster(1, "cave bear", killable: true);
+
+        h.Feed("Also here: cave bear.");
+        Assert.Equal("a cave bear", h.LastSent);
+        int sentAfterEngage = h.Sent.Count;
+
+        BackdateLastAttack(h.Combat);
+
+        // A routine per-round *Combat Off* — no between-round cast armed, no recent
+        // exp gain, so neither of OnCombatStatus's own kill-inference branches fire.
+        // _combatOff is simply true, same as every ordinary round's toggle.
+        h.Feed("*Combat Off*");
+
+        // The deterministic tick resume decides to re-swing, but the actual
+        // dispatch is deferred (queued), not run inline.
+        h.Combat.OnCombatTick();
+        Assert.Equal(sentAfterEngage, h.Sent.Count);
+
+        // The round's own swing turns out to have been the killing blow — its exp
+        // lands in the same burst / an adjacent packet, dropping the target.
+        h.Feed("You gain 100 experience.");
+
+        // The deferred resume re-validates, sees the target gone, and skips.
+        h.PumpUi();
+        Assert.Equal(sentAfterEngage, h.Sent.Count);
+    }
+
+    // The other side of the deferred resume: with the mob still alive when the
+    // window elapses (no kill this burst), the delayed dispatch re-validates fine
+    // and re-swings — the resume still fires, just a hair later than the old
+    // synchronous path, well within the round.
+    [Fact]
+    public void DeterministicTickResume_TargetAlive_DeferredDispatchResumes()
+    {
+        using Harness h = new() { DeferUi = true };
+        h.AddMonster(1, "cave bear", killable: true);
+
+        h.Feed("Also here: cave bear.");
+        Assert.Equal("a cave bear", h.LastSent);
+        int sentAfterEngage = h.Sent.Count;
+
+        BackdateLastAttack(h.Combat);
+        h.Feed("*Combat Off*");
+        h.Combat.OnCombatTick();
+        Assert.Equal(sentAfterEngage, h.Sent.Count);   // queued, not yet sent
+
+        h.PumpUi();   // no kill this burst → re-validates fine → resumes
+        Assert.Equal(sentAfterEngage + 1, h.Sent.Count);
+        Assert.Equal("a cave bear", h.LastSent);
+    }
+
     [Fact]
     public void BetweenRoundCast_AfterDeathReObserveReengaged_StillResumes()
     {

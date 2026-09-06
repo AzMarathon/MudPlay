@@ -1,5 +1,11 @@
 # Version history
 
+## 3.52.4
+
+- Fixed the round heartbeat re-attacking/re-casting at a mob the instant its own killing blow lands — every kill used to waste a round on "You don't see X here!" / "Your command had no effect." before the engine noticed and moved on
+- Applies to the routine per-round weapon resume and the Alternate/CustomRoundCycle spell-physical alternation; the existing spell cap-switch protection already handled its own case
+- bug reports addressed: paradigm-20260905-205200
+
 ## 3.52.3
 
 - Leaving the `train stats` / character-creation form now returns to line-mode input the instant the room or the game prompt comes back, instead of lingering in the form's character-mode until your next command — so a `stat` (or any command) typed right after training is no longer sent a byte at a time and silently mis-handled (even in a dark room with no room display)
