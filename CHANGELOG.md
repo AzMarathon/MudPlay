@@ -1,5 +1,11 @@
 # Version history
 
+## 3.52.3
+
+- Leaving the `train stats` / character-creation form now returns to line-mode input the instant the room or the game prompt comes back, instead of lingering in the form's character-mode until your next command — so a `stat` (or any command) typed right after training is no longer sent a byte at a time and silently mis-handled (even in a dark room with no room display)
+- As a safety net, the stat sheet also self-arms its parse off its own header line, so the Player Workshop still updates even if a stat screen ever arrives without a clean `stat` command behind it
+- bug reports addressed: paradigm-20260906-090057
+
 ## 3.52.2
 
 - Unrecognized-line capture now holds off until you're in the realm — the startup splash, BBS login menu, and connect banners no longer stage candidates

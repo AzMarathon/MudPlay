@@ -678,4 +678,52 @@ public sealed class StatParserTests
         Assert.Equal(0, stats.Hits);
         Assert.False(parser.HasParsed);
     }
+
+    // ===== Self-arm on the stat-screen header (outbound gate missed) =====
+
+    [Fact]
+    public void SelfArmsOnHeader_WhenOutboundGateNeverFired()
+    {
+        // Reproduces report paradigm-20260906-090057: `stat` was typed while the
+        // `train stats` form still owned the keyboard in character-mode, so the
+        // command went out a byte at a time and the outbound gate never armed.
+        // The screen must still parse off its own header line. NOTE: no TestArm().
+        PlayerStats stats = new();
+        StatParser parser = new(stats);   // deliberately un-armed
+        string[] lines =
+        {
+            "Name: Client Tester                    Lives/CP:      9/5",
+            "Race: Gaunt One   Exp: 54605302        Perception:    136",
+            "Class: Mage       Level: 25            Stealth:         0",
+            "Hits:   219/220   Armour Class:  61/4  Thievery:        0",
+            "Mana: * 204/204   Spellcasting: 180    Traps:           0",
+            "Strength:  50     Agility: 50          Tracking:        0",
+            "Intellect: 137    Health:  67          Martial Arts:   30",
+            "Willpower: 50     Charm:   31          MagicRes:       86",
+        };
+        foreach (string l in lines) parser.FeedTestLine(l);
+
+        Assert.True(parser.HasParsed);
+        Assert.Equal("Client Tester", stats.Name);
+        Assert.Equal(25,  stats.Level);          // the reported symptom
+        Assert.Equal(220, stats.MaxHits);
+        Assert.Equal(204, stats.MaxMana);
+        Assert.Equal(137, stats.Intellect);
+        Assert.Equal(9,   stats.Lives);
+        Assert.Equal(5,   stats.Cp);
+    }
+
+    [Fact]
+    public void ChatLineMimickingHeader_DoesNotSelfArm()
+    {
+        // A gossip embedding "Name: … Lives/CP: N/M" must NOT self-arm: the
+        // header regex is anchored at line start, and a chat line opens with
+        // "<who> <verb>:". Nothing may commit off it.
+        PlayerStats stats = new();
+        StatParser parser = new(stats);
+        parser.FeedTestLine("Villain gossips: Name: Loot Goblin  Lives/CP: 9/9 haha");
+        parser.FeedTestLine("Class: Mage       Level: 25            Stealth:         0");
+        Assert.False(parser.HasParsed);
+        Assert.Equal(0, stats.Level);
+    }
 }

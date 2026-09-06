@@ -306,6 +306,30 @@ public sealed partial class StatParser : IDisposable
             $"Observed outbound `{cmd}` — armed {ExpectingScreenWindow.TotalSeconds:0}s scan window.");
     }
 
+    // Open the scan window from the stat screen's own opening line when the
+    // outbound `stat` gate never fired. The gate misses the command whenever
+    // it doesn't reach ObserveOutbound as one whole token — most notably when
+    // it's typed a byte at a time in a full-screen form's character-mode (e.g.
+    // `train stats` right before `stat`), but also macros/paste/aliases. The
+    // header (`Name: … Lives/CP: N/M`) is unfakeable by chat, so seeing it is
+    // proof the real screen is arriving; we arm exactly as ObserveOutbound
+    // would, then the caller falls through and scans this same header line.
+    // No-op when a window is already open (the outbound path won the race), so
+    // an in-flight capture is never reset mid-screen.
+    private void MaybeSelfArmOnHeader(string text)
+    {
+        if (_windowOpenedAt is not null) return;
+        if (string.IsNullOrEmpty(text) || !StatHeaderRx().IsMatch(text)) return;
+        _windowOpenedAt = NowProvider();
+        _capturedThisArm = false;
+        _fieldsCapturedThisArm = 0;
+        _home = SynchronizationContext.Current;
+        _settleSession++;
+        _log?.Log(LogSeverity.Info, "StatParser",
+            "Stat-screen header seen — self-armed scan (outbound `stat` gate missed the "
+            + "command, e.g. typed in a full-screen form).");
+    }
+
     // ----- Test seam -----------------------------------------------------
     // Test seam — arm the scanner without going through the wire-observation
     // path.
@@ -324,6 +348,7 @@ public sealed partial class StatParser : IDisposable
         OnLivesRemainingLine(text);
         OnExperienceGainLine(text);
         TryHealthWindow(text);
+        MaybeSelfArmOnHeader(text);
         if (_windowOpenedAt is null) return;
         if (isPromptLine && _capturedThisArm)
         {
@@ -351,6 +376,11 @@ public sealed partial class StatParser : IDisposable
         // before the stat-screen scan (and before the stat gate's early-return
         // below, so a `health` poll re-anchors even with no stat window open).
         TryHealthWindow(line.Text);
+
+        // Self-arm on the stat screen's own header if the outbound gate missed
+        // the command — see MaybeSelfArmOnHeader. Runs before the null-gate
+        // return so the header line itself is then scanned in the block below.
+        MaybeSelfArmOnHeader(line.Text);
 
         if (_windowOpenedAt is null) return;
 
@@ -738,6 +768,16 @@ public sealed partial class StatParser : IDisposable
     // level, absolute next-level threshold, percent progress.
     [GeneratedRegex(@"^Exp:\s+(\d+)\s+Level:\s+(\d+)\s+Exp needed for next level:\s+(\d+)\s+\((\d+)\)\s+\[(\d+)%\]",
         RegexOptions.CultureInvariant)] private static partial Regex ExpLineRx();
+
+    // The stat screen's opening line — "Name: <name>  …  Lives/CP: N/M". Its
+    // self-arm safety comes from the pairing: `Name:` anchored at line start AND
+    // a `Lives/CP: N/M` column on the same line is unique to the stat sheet. A
+    // chat line opens with "<who> <verb>:" (never `Name:` at column 0), and no
+    // other server output pairs those two labels, so matching this is proof the
+    // real screen is arriving — even when the outbound `stat` gate missed the
+    // command (typed a byte at a time in a full-screen form's character-mode).
+    [GeneratedRegex(@"^\s*Name:\s+\S.*?\bLives/CP:\s+\d+/\d+", RegexOptions.CultureInvariant)]
+    private static partial Regex StatHeaderRx();
 
     // Always-on lives-update line — fires outside the stat-screen
     // window. MajorMUD emits this in two phrasings:

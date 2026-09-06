@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.52.2**
-> - Unrecognized-line capture now holds off until you're in the realm — the startup splash, BBS login menu, and connect banners no longer stage candidates
-> - It also skips the client's own bracketed status notices and the echo of a command you just typed, cutting the noise the queue was catching
-> - Trimming that volume removes the brief input stutter the capture could cause while it staged and saved a long dump
+> **Version 3.52.3**
+> - Leaving the `train stats` / character-creation form now returns to line-mode input the instant the room or the game prompt comes back, instead of lingering in the form's character-mode until your next command — so a `stat` (or any command) typed right after training is no longer sent a byte at a time and silently mis-handled (even in a dark room with no room display)
+> - As a safety net, the stat sheet also self-arms its parse off its own header line, so the Player Workshop still updates even if a stat screen ever arrives without a clean `stat` command behind it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
