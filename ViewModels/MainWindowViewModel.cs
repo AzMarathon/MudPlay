@@ -2995,6 +2995,9 @@ public partial class MainWindowViewModel : ObservableObject
         // conversation entry is attributed. Typed telepaths render on-screen
         // and are caught by the router's line sniff instead.
         AppServices.Current.Chat.ObserveOutbound(data);
+        // Unrecognized-line watcher — remember the command briefly so its server
+        // echo isn't staged as an unknown candidate line.
+        AppServices.Current.MessageCandidateWatcher.ObserveOutbound(data);
         var t = _telnet;
         if (t is not null) _ = FireSendAsync(t, data);
     }

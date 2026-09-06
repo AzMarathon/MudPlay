@@ -21,10 +21,13 @@ public sealed class MessageCandidateWatcherTests
         // Mutable so a test can point the watcher at a known room before feeding.
         public RoomKey? Room { get; set; }
 
-        public Harness()
+        // Default in-game so capture tests exercise the real path; a test that
+        // needs the pre-game gate passes inGame:false.
+        public Harness(bool inGame = true)
         {
             Watcher = new MessageCandidateWatcher(
                 Router, Messages, Candidates, currentRoom: () => Room, log: Log);
+            if (inGame) Watcher.NotifyInGame();
         }
 
         // The watcher subscribes to LineExtractor in real life; tests reflect into
@@ -239,5 +242,69 @@ public sealed class MessageCandidateWatcherTests
             h.Feed($"Group B line #{i}", t1.AddMilliseconds(i * 50));
 
         Assert.Equal(10, h.Candidates.Candidates.Count);
+    }
+
+    [Fact]
+    public void PreGameLine_IsNotStaged()
+    {
+        // Before the first in-game prompt (splash / login menu / connect banner),
+        // capture holds off entirely.
+        Harness h = new(inGame: false);
+
+        h.Feed("Welcome to the BBS! Press ENTER to continue.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void NotifyInGame_OpensCaptureAfterThePreGameGate()
+    {
+        Harness h = new(inGame: false);
+        h.Feed("Login menu junk that should be ignored.");
+        Assert.Empty(h.Candidates.Candidates);
+
+        h.Watcher.NotifyInGame();
+        h.Feed("A shimmering aura surrounds you!");
+
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void ClientStatusLine_IsNotStaged()
+    {
+        // The client's own bracketed WriteTerminalStatus notices are never server
+        // messages, so a full-line "[ … ]" is dropped.
+        Harness h = new();
+
+        h.Feed("[The Cleric's Quest is Now Available]");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void EchoedCommand_IsNotStaged()
+    {
+        // A command the user just sent bounces back as an echo; ObserveOutbound
+        // remembers it so the echo isn't staged as an unknown line.
+        Harness h = new();
+        h.Watcher.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("eq engraved warhorn\r\n"));
+
+        h.Feed("eq engraved warhorn");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void EchoedCommand_PastEchoWindow_IsStagedAgain()
+    {
+        // The echo suppression is time-bounded — a line matching an old command
+        // long after the fact is treated as a genuine unrecognized line.
+        Harness h = new();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        h.Watcher.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("wave banner\r\n"));
+
+        h.Feed("wave banner", t0.AddSeconds(30));   // well past the 3s echo window
+
+        Assert.Single(h.Candidates.Candidates);
     }
 }
