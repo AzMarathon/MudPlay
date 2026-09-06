@@ -139,10 +139,28 @@ public sealed class MdbImporter
                     totalRows += rowCount;
                     imported.Add($"{tableName} ({rowCount} rows)");
                 }
+                catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    OnError?.Invoke($"Error importing {tableName}: {ex.Message}");
-                    skipped.Add($"{tableName} ({ex.Message})");
+                    // Retry this ONE table once. A malformed / truncated write or a
+                    // transient read hiccup usually clears on a second pass; a
+                    // genuinely corrupt source keeps failing and is recorded as
+                    // skipped, so the completion line (red, "N skipped — see Program
+                    // Log") tells the user the table is unavailable. Other tables in
+                    // the set are unaffected.
+                    OnStatusChanged?.Invoke($"Retrying {tableName} after error: {ex.Message}");
+                    try
+                    {
+                        int rowCount = await ExportTableAsync(reader, tableName, outputPath, cancellationToken);
+                        totalRows += rowCount;
+                        imported.Add($"{tableName} ({rowCount} rows)");
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex2)
+                    {
+                        OnError?.Invoke($"Error importing {tableName} (failed after one retry): {ex2.Message}");
+                        skipped.Add($"{tableName} ({ex2.Message})");
+                    }
                 }
 
                 tablesDone++;
@@ -272,8 +290,31 @@ public sealed class MdbImporter
         string filePath = Path.Combine(outputPath, fileName);
         await File.WriteAllTextAsync(filePath, json, cancellationToken);
 
+        // Read the file back and confirm it parses. JsonSerializer always emits
+        // valid JSON, so this catches a bad WRITE — a truncated / partial file from
+        // a disk-full or interrupted flush — before it ships as a table that would
+        // crash (now: be dropped by) every consumer that loads it. The caller
+        // retries the whole table once on this throw; a persistent failure is then
+        // reported as skipped so the user is told the table is unavailable.
+        if (!TableJsonParses(filePath))
+            throw new InvalidDataException(
+                "written JSON did not parse back — the file may be truncated (disk full / interrupted write)");
+
         OnStatusChanged?.Invoke($"  Wrote {rows.Count} rows -> {fileName}");
         return rows.Count;
+    }
+
+    // Round-trip check for a just-written table file: true when it re-parses as
+    // JSON. Internal so a test can exercise it without a real MDB.
+    internal static bool TableJsonParses(string filePath)
+    {
+        try
+        {
+            using JsonDocument _ = JsonDocument.Parse(File.ReadAllBytes(filePath));
+            return true;
+        }
+        catch (JsonException) { return false; }
+        catch (IOException)   { return false; }
     }
 
     // Marshal Jet column types to JSON-friendly primitives. Most values

@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.52.4**
-> - Fixed the round heartbeat re-attacking/re-casting at a mob the instant its own killing blow lands — every kill used to waste a round on "You don't see X here!" / "Your command had no effect." before the engine noticed and moved on
-> - Applies to the routine per-round weapon resume and the Alternate/CustomRoundCycle spell-physical alternation; the existing spell cap-switch protection already handled its own case
+> **Version 3.52.6**
+> - Fixed a crash where a corrupted game-data table (e.g. from a bad or older MDB import) took down every feature that looked it up — the table is now logged and treated as unavailable instead, leaving the rest of the set working
+> - The MDB importer now re-reads each table it writes and retries that one table once if it didn't parse back, so a truncated/interrupted write is caught during import
+> - A corrupt table now raises a red terminal notice — on import and at load time — so you know some features will be missing data and can re-import the set
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

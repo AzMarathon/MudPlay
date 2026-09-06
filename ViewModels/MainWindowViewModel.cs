@@ -744,6 +744,17 @@ public partial class MainWindowViewModel : ObservableObject
         // a profile re-mutated (BBS rename), or a fresh profile loaded.
         RebuildGameDataSetsMenu();
         AppServices.Current.GameData.ActiveSetChanged += _ => RebuildGameDataSetsMenu();
+        // A game-data table whose on-disk JSON can't be parsed (a corrupt / truncated
+        // file from a bad or older MDB import) is dropped instead of crashing the
+        // lookup (see GameDataCache). Surface it loudly on the terminal — a silently
+        // missing table leaves the engines short of data with no obvious symptom.
+        // POST it: the lookup can fire from inside the emulator's message pump, and
+        // WriteTerminalStatus re-feeds the emulator — a synchronous call would re-enter
+        // Emulator.Feed and crash (same reason as the combat-profile echo below).
+        AppServices.Current.GameData.TableParseFailed += table =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
+                $"[GAME DATA: table '{table}' is corrupt and was not loaded — re-import the set; "
+                + "some features will be missing data]", TerminalStatusKind.Error));
         AppServices.Current.Profile.BbsPinApplied      += _ => RebuildGameDataSetsMenu();
         AppServices.Current.Profile.ProfileMutated     += _ => RebuildGameDataSetsMenu();
         AppServices.Current.Profile.ProfileLoaded      += _ => RebuildGameDataSetsMenu();

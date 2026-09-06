@@ -108,6 +108,37 @@ public sealed class MdbImporterTests
         Assert.False(Directory.Exists(dir));
     }
 
+    // The post-write round-trip check that gates the per-table import retry: a
+    // truncated / malformed file is rejected so the importer retries (and, if it
+    // stays bad, reports the table skipped instead of shipping a crasher).
+    [Fact]
+    public void TableJsonParses_TrueForValid_FalseForMalformedOrMissing()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-tjp-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            string good = Path.Combine(dir, "good.json");
+            File.WriteAllText(good, "[{\"Name\":\"Goblin\"}]");
+            Assert.True(MdbImporter.TableJsonParses(good));
+
+            string bad = Path.Combine(dir, "bad.json");
+            // A raw 0x1E mid-string — the exact corruption the crash report carried.
+            File.WriteAllText(bad, "[{\"Name\":\"Go" + (char)0x1E + "blin\"}]");
+            Assert.False(MdbImporter.TableJsonParses(bad));
+
+            string truncated = Path.Combine(dir, "truncated.json");
+            File.WriteAllText(truncated, "[{\"Name\":\"Gob");   // interrupted write
+            Assert.False(MdbImporter.TableJsonParses(truncated));
+
+            Assert.False(MdbImporter.TableJsonParses(Path.Combine(dir, "missing.json")));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
     // The safety guard: a failed re-import over an EXISTING populated set must never
     // delete that set's files.
     [Fact]
