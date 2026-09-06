@@ -79,6 +79,11 @@ public sealed class TrainerMenuTracker : IDisposable
     // the menu-exit prompt.
     private bool _inputMenuActive;
     private bool _skipNextInputPrompt;
+    // Same echo-swallow as _skipNextInputPrompt, but for the live-wire prompt
+    // path (NotifyLivePromptObserved). Kept separate so the committed-line and
+    // in-place-redraw release triggers each consume their own echo without
+    // fighting over one flag.
+    private bool _skipNextLivePrompt;
 
     // True while we believe the trainer-stats menu is the active screen
     // (marker-confirmed — never sets on a cursor-positioned menu whose marker
@@ -177,6 +182,7 @@ public sealed class TrainerMenuTracker : IDisposable
         if (cmd == "train stats")
         {
             _skipNextInputPrompt = true; // the command's own prompt echo isn't a menu exit
+            _skipNextLivePrompt  = true; // same, for the live-wire prompt path
             if (!_inputMenuActive)
             {
                 _inputMenuActive = true;
@@ -317,6 +323,26 @@ public sealed class TrainerMenuTracker : IDisposable
         ForceExit("room display observed — back in the world");
     }
 
+    // Fed by AppServices for every live statline WirePromptScanner sees off the
+    // raw wire — including the in-place redraws the committed StatusLine pattern
+    // never emits as a line. The returning `[HP=…]:` after a `train stats` form
+    // closes only regen-redraws in place (no CR), so OnPrompt (committed) can't
+    // fire until the user's NEXT command's Enter — by which point that command
+    // was typed in the form's character-mode and sent byte-by-byte (report
+    // paradigm-20260906-090057). This releases line-mode on the exit prompt the
+    // instant the form closes, even in a dark room with no "Obvious exits" line.
+    // Scoped to the char-mode (`train stats`) state; the marker-confirmed party
+    // flow stays on the committed OnPrompt. Skips the command's own echo statline
+    // first (the form emits no statline, so the very next live prompt is the
+    // exit). ForceExit tears both flags down before firing, preserving the
+    // send-gate ordering the loop-resume depends on.
+    public void NotifyLivePromptObserved()
+    {
+        if (!_inputMenuActive) return;
+        if (_skipNextLivePrompt) { _skipNextLivePrompt = false; return; }
+        ForceExit("in-place statline prompt observed — back in the world");
+    }
+
     // Force the keyboard release when the normal exit-prompt detection is missed — the
     // AutoTrainManager CP-replay ExitGrace fallback calls this. Mirrors OnPrompt's
     // teardown: clear BOTH keyboard-owning flags BEFORE firing the exit events, so the
@@ -337,6 +363,7 @@ public sealed class TrainerMenuTracker : IDisposable
         _inMenu = false;
         _expectingMenuSince = null;
         _skipNextInputPrompt = false;
+        _skipNextLivePrompt = false;
         if (fireInputExited) InputMenuExited?.Invoke();
         if (fireMenuExited) MenuExited?.Invoke();
     }

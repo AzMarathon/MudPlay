@@ -2,7 +2,7 @@
 
 ## 3.52.3
 
-- Leaving the `train stats` / character-creation form now returns to line-mode input the instant you're back in the room, instead of lingering in the form's character-mode until your next command — so a `stat` (or any command) typed right after training is no longer sent a byte at a time and silently mis-handled
+- Leaving the `train stats` / character-creation form now returns to line-mode input the instant the room or the game prompt comes back, instead of lingering in the form's character-mode until your next command — so a `stat` (or any command) typed right after training is no longer sent a byte at a time and silently mis-handled (even in a dark room with no room display)
 - As a safety net, the stat sheet also self-arms its parse off its own header line, so the Player Workshop still updates even if a stat screen ever arrives without a clean `stat` command behind it
 - bug reports addressed: paradigm-20260906-090057
 

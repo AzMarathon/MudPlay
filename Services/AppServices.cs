@@ -4066,6 +4066,12 @@ public sealed class AppServices
         // suspended on the drop so nothing leaks into the login-menu nav.
         PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
         PromptScanner.PromptObserved += _ => PartyProbe.NotifyEnteredRealm();
+        // Release the trainer/creation form's character-mode the instant the
+        // returning statline prompt lands off the wire — the committed StatusLine
+        // pattern can't see it (it redraws in place with no CR until the user
+        // types), so without this the keyboard stays captured and the next
+        // command is sent byte-by-byte (report paradigm-20260906-090057).
+        PromptScanner.PromptObserved += _ => TrainerMenu.NotifyLivePromptObserved();
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.
         PromptScanner.PromptObserved += _ => MessageCandidateWatcher.NotifyInGame();

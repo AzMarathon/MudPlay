@@ -293,6 +293,43 @@ public sealed class TrainerMenuTrackerTests
     }
 
     [Fact]
+    public void LivePrompt_ReleasesKeyboard_AfterSkippingEcho()
+    {
+        // The live-wire prompt path (WirePromptScanner) sees the in-place statline
+        // redraws the committed StatusLine pattern never emits. It swallows the
+        // command's own echo statline, then releases on the exit prompt the form's
+        // close produces — even in a dark room with no "Obvious exits" line.
+        var (tracker, _, _) = Setup();
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        Assert.True(tracker.IsInputMenuActive);
+
+        tracker.NotifyLivePromptObserved();   // command echo statline — swallowed
+        Assert.Equal(0, exited);
+        Assert.True(tracker.IsInputMenuActive);
+
+        tracker.NotifyLivePromptObserved();   // exit prompt — line-mode resumes
+        Assert.Equal(1, exited);
+        Assert.False(tracker.IsInputMenuActive);
+    }
+
+    [Fact]
+    public void LivePromptWithoutInputMenu_DoesNotFireExit()
+    {
+        // Every live prompt in normal play flows through here; with no `train
+        // stats` char-mode state armed it must be a no-op.
+        var (tracker, _, _) = Setup();
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        tracker.NotifyLivePromptObserved();
+        tracker.NotifyLivePromptObserved();
+        Assert.Equal(0, exited);
+    }
+
+    [Fact]
     public void IsInputMenuActive_TracksArmThenExitLifecycle()
     {
         // The realm-independent "the stat box owns the keyboard" flag that the
