@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.51.1**
-> - Game Data Browser → Monsters table now shows a **Relationship** column (between the name and Respawn) — your set Enemy/Neutral/Friend/… for each monster, resolved the same way the combat engine reads it, so you can see it without opening the record
+> **Version 3.52.0**
+> - Every Game Data Browser table now has a **Columns ▾** picker at its top-right — check/uncheck which columns show, per table
+> - The picker also exposes columns that were previously filter-only, so e.g. a monster's per-element resists, spell-immunity, and dodge can be shown as grid columns
+> - Column choices are saved per character; **Reset to defaults** restores a table's standard columns
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
