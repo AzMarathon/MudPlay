@@ -43,7 +43,7 @@ A **profile** is one character's workspace — its BBS login, macros, triggers, 
     MudPlay --profile "Fujin" --profile "Alt" --profile "Bob"
     ```
 
-  `--profile` overrides *Auto-load last profile* for that launch, and if the profile's own auto-connect is on it connects on its own — so `--profile` gets you all the way in. Running several at once shares one data folder, so use a *different* character per instance; the game data and BBS setup are shared, only the character differs.
+  `--profile` overrides *Auto-load last profile* for that launch, and if the profile's own auto-connect is on it connects on its own — so `--profile` gets you all the way in. If a name **doesn't resolve** — a typo, or a bare name that lives on more than one BBS — MudPlay shows the reason **right on the terminal** and opens a blank profile; it won't silently load a different character. (For the ambiguous case, re-launch with the `BBS/Name` form it suggests.) Running several at once shares one data folder, so use a *different* character per instance; the game data and BBS setup are shared, only the character differs.
 
 Settings live in four tiers — **Defaults → Global → BBS → Character** — so a profile only records what differs from the tier beneath it. (The Settings Menu section notes each setting's tier.)
 

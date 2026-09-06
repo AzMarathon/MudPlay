@@ -4,6 +4,7 @@
 
 - New `--profile` launch argument opens a named profile at startup; passing several names (`--profile "A","B","C"`) opens one instance per profile, so a shortcut or script can bring up multiple characters at once
 - A profile name can be bare when unique, or `BBS/Name` when the same character exists on two BBSes; `--profile` overrides Auto-load-last and honors the profile's auto-connect
+- An unresolved `--profile` name (typo, or a bare name on more than one BBS) shows the reason on the terminal and opens a blank profile instead of silently loading a different character
 - Debug log filenames now include the process id so concurrent instances don't collide on the same-second log file
 
 ## 3.50.13

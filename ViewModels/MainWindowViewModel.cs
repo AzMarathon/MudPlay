@@ -1310,6 +1310,20 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildToolbarItems();
         Toolbar.Layout.CollectionChanged += (_, _) => RebuildToolbarItems();
         PropertyChanged += SyncToolbarStateFlags;
+
+        // A --profile launch argument that didn't resolve (typo / ambiguous bare
+        // name) surfaces its reason on the terminal at startup — dismiss the splash
+        // so it's visible — instead of quietly coming up on a blank profile. Posted
+        // so it lands after the ctor unwinds and the window is showing.
+        if (StartupOptions.ProfileNotice is { } profileNotice)
+        {
+            StartupOptions.ProfileNotice = null;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (ShowSplash) ShowSplash = false;
+                WriteTerminalStatus($"[{profileNotice}]", TerminalStatusKind.Error);
+            });
+        }
     }
 
     // Enabler for view-handled toolbar buttons (no CommandName) — a command-less
