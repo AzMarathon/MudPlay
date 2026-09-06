@@ -1,5 +1,9 @@
 # Version history
 
+## 3.51.1
+
+- Game Data Browser → Monsters table now shows a **Relationship** column (between the name and Respawn) — your set Enemy/Neutral/Friend/… for each monster, resolved the same way the combat engine reads it, so you can see it without opening the record
+
 ## 3.51.0
 
 - New `--profile` launch argument opens a named profile at startup; passing several names (`--profile "A","B","C"`) opens one instance per profile, so a shortcut or script can bring up multiple characters at once
