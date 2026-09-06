@@ -66,6 +66,37 @@
                  code-behind via FindControl). The optional Export button
                  (e.g. Incomplete Messages' "Upload edits") docks far right. -->
             <DockPanel Grid.Row="2" LastChildFill="False">
+                <!-- Column picker: check/uncheck which columns this table shows.
+                     The pool is every column the table materialises (visible + the
+                     filter-only facets like monster resists). Choices persist per
+                     character. Docked far right so it sits at the tab's top-right. -->
+                <Button x:Name="ColumnsButton" DockPanel.Dock="Right"
+                        Content="Columns ▾"
+                        IsVisible="{Binding ShowColumnPicker}"
+                        ToolTip.Tip="Choose which columns this table shows">
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <StackPanel Spacing="6" MinWidth="200" MaxWidth="320">
+                                <TextBlock Text="Show columns" FontWeight="SemiBold"/>
+                                <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding ColumnChoices}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:TableColumnChoice">
+                                                <CheckBox Margin="0,1"
+                                                          IsChecked="{Binding IsVisible}"
+                                                          IsEnabled="{Binding !Pinned}"
+                                                          Content="{Binding Label}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                                <Button Content="Reset to defaults"
+                                        HorizontalAlignment="Stretch"
+                                        Command="{Binding ResetColumnsCommand}"/>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
                 <Button x:Name="ExportButton" DockPanel.Dock="Right" IsVisible="False"/>
                 <!-- Test-only "Simulate entry" (Unrecognized Lines tab); visibility
                      follows the section's live ShowSimulate flag, wired in code-behind. -->

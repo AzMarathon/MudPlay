@@ -195,6 +195,14 @@ public sealed class CharacterProfile
     // Navigation goto-button dropdown. null or empty = no history yet.
     public List<string>? GotoHistory { get; set; }
 
+    // Per-table column-visibility choices in the Game Data Browser, keyed by the
+    // table's Title (e.g. "Monsters"). Value = the ordered list of column keys the
+    // user wants shown for that table. A missing table entry = its built-in default
+    // columns. Lets each character tailor which columns each table surfaces (e.g.
+    // opt a monster's per-element resist columns into the grid). Maintained by the
+    // shared table view-model's column picker; null = every table at its defaults.
+    public Dictionary<string, List<string>>? TableColumnLayouts { get; set; }
+
     // Last room the character was known to be standing in. Hydrated from
     // Game.Map.RoomTracker on a successful manual or auto locate; saved with the
     // rest of the profile and used as the initial Navigation map origin on the

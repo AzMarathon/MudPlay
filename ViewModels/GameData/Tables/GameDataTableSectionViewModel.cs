@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -50,6 +51,175 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
 
     // Column the search box filters against by default (kept for status-bar display only).
     public abstract string SearchKeyColumn { get; }
+
+    // ----- Column picker (per-character visible-column choices) -----------------
+    // A dropdown at the tab's top-right lets the user check/uncheck which columns
+    // show. The pool is every column this table MATERIALISES (the shown columns
+    // plus the filter-only ones — e.g. a monster's per-element resists), so hidden
+    // data facets can be surfaced without touching the underlying rows. Choices
+    // persist per character (CharacterProfile.TableColumnLayouts, keyed by Title).
+
+    // Show the picker button on this table. OFF here so the engine-backed utility
+    // tabs (Macros / Triggers / Aliases / Players / Messages / Unrecognized Lines /
+    // Quest Flags) keep their fixed columns; the MDB-derived tables turn it on (see
+    // JsonTableSectionViewModel) since those carry the rich record columns worth
+    // customising and the filter-only facets worth surfacing.
+    public virtual bool ShowColumnPicker => false;
+
+    // Stable key the layout persists under. Title is unique per tab.
+    protected virtual string ColumnLayoutKey => Title;
+
+    // Raised when the visible set changes (a toggle or a reset) so the view rebuilds
+    // the DataGrid's columns.
+    public event Action? ColumnsChanged;
+
+    private ObservableCollection<TableColumnChoice>? _columnChoices;
+    private bool _profileHookInstalled;
+    // While a bulk update (reset / profile reload) sets many IsVisible values, the
+    // per-item toggle callback is suppressed so we persist + rebuild the grid ONCE
+    // at the end instead of once per column.
+    private bool _bulkUpdating;
+
+    // Picker items — one per materialised column, in canonical cell order (shown
+    // columns first, then filter-only). Lazily built so Title + the loaded profile
+    // are ready. The first data column is pinned (the row's identity) so the grid
+    // can never be emptied.
+    public ObservableCollection<TableColumnChoice> ColumnChoices
+    {
+        get
+        {
+            if (_columnChoices is null) BuildColumnChoices();
+            return _columnChoices!;
+        }
+    }
+
+    private void BuildColumnChoices()
+    {
+        HashSet<string> saved    = LoadSavedVisible();
+        HashSet<string> defaults = new(Columns, StringComparer.OrdinalIgnoreCase);
+        bool haveSaved = saved.Count > 0;
+
+        ObservableCollection<TableColumnChoice> choices = new();
+        bool first = true;
+        foreach (string key in ValueColumns)   // Columns first, then FilterOnlyColumns
+        {
+            bool pinned = first;
+            first = false;
+            bool visible = pinned || (haveSaved ? saved.Contains(key) : defaults.Contains(key));
+            choices.Add(new TableColumnChoice(key, HeaderLabel(key), pinned, visible, OnColumnToggled));
+        }
+        _columnChoices = choices;
+
+        if (!_profileHookInstalled && AppServices.Current is { } svc)
+        {
+            _profileHookInstalled = true;
+            svc.Profile.ProfileLoaded += OnProfileLoadedReloadColumns;
+        }
+    }
+
+    private string HeaderLabel(string key)
+        => ColumnHeaders is { } h && h.TryGetValue(key, out string? friendly) ? friendly : key;
+
+    // Columns to render, in canonical order, each paired with its index into the
+    // row's Cells (materialised in ValueColumns order). Drives the view's grid build.
+    public IReadOnlyList<VisibleColumn> BuildVisibleColumns()
+    {
+        List<VisibleColumn> result = new();
+        IReadOnlyList<string> value = ValueColumns;
+        foreach (TableColumnChoice c in ColumnChoices)
+        {
+            if (!c.IsVisible) continue;
+            int idx = IndexOfColumn(value, c.Key);
+            if (idx >= 0) result.Add(new VisibleColumn(c.Key, idx, HeaderLabel(c.Key)));
+        }
+        return result;
+    }
+
+    private static int IndexOfColumn(IReadOnlyList<string> list, string key)
+    {
+        for (int i = 0; i < list.Count; i++)
+            if (string.Equals(list[i], key, StringComparison.OrdinalIgnoreCase)) return i;
+        return -1;
+    }
+
+    private void OnColumnToggled()
+    {
+        if (_bulkUpdating) return;
+        PersistVisible();
+        ColumnsChanged?.Invoke();
+    }
+
+    // Restore this table to its built-in default columns and forget the saved layout
+    // so it tracks future default changes rather than pinning to today's set.
+    [RelayCommand]
+    private void ResetColumns()
+    {
+        if (_columnChoices is null) return;
+        HashSet<string> defaults = new(Columns, StringComparer.OrdinalIgnoreCase);
+        _bulkUpdating = true;
+        try
+        {
+            foreach (TableColumnChoice c in _columnChoices)
+                if (!c.Pinned) c.IsVisible = defaults.Contains(c.Key);
+        }
+        finally { _bulkUpdating = false; }
+        ClearSavedVisible();
+        ColumnsChanged?.Invoke();
+    }
+
+    private void OnProfileLoadedReloadColumns(Models.Profile.CharacterProfile _)
+    {
+        if (_columnChoices is null) return;
+        HashSet<string> saved    = LoadSavedVisible();
+        HashSet<string> defaults = new(Columns, StringComparer.OrdinalIgnoreCase);
+        bool haveSaved = saved.Count > 0;
+        _bulkUpdating = true;
+        try
+        {
+            foreach (TableColumnChoice c in _columnChoices)
+                if (!c.Pinned) c.IsVisible = haveSaved ? saved.Contains(c.Key) : defaults.Contains(c.Key);
+        }
+        finally { _bulkUpdating = false; }
+        // Reflecting the freshly-loaded profile — rebuild the grid but don't persist
+        // (nothing the user changed).
+        ColumnsChanged?.Invoke();
+    }
+
+    private HashSet<string> LoadSavedVisible()
+    {
+        HashSet<string> set = new(StringComparer.OrdinalIgnoreCase);
+        if (AppServices.Current?.Profile.Current?.TableColumnLayouts is { } map
+            && map.TryGetValue(ColumnLayoutKey, out List<string>? cols) && cols is not null)
+            foreach (string c in cols) set.Add(c);
+        return set;
+    }
+
+    private void PersistVisible()
+    {
+        if (AppServices.Current?.Profile is not { Current: { } profile } profileService) return;
+        List<string> visible = _columnChoices is null
+            ? new List<string>()
+            : _columnChoices.Where(c => c.IsVisible).Select(c => c.Key).ToList();
+        (profile.TableColumnLayouts ??= new())[ColumnLayoutKey] = visible;
+        profileService.Save();
+    }
+
+    private void ClearSavedVisible()
+    {
+        if (AppServices.Current?.Profile is not { Current: { } profile } profileService) return;
+        if (profile.TableColumnLayouts?.Remove(ColumnLayoutKey) == true)
+            profileService.Save();
+    }
+
+    public override void Dispose()
+    {
+        if (_profileHookInstalled && AppServices.Current is { } svc)
+        {
+            svc.Profile.ProfileLoaded -= OnProfileLoadedReloadColumns;
+            _profileHookInstalled = false;
+        }
+        base.Dispose();
+    }
 
     // Optional tooltip for the row-filter box — a section overrides it to advertise a
     // richer query it accepts (e.g. Items' auto-* / stash flag keywords). Null = no tip.
@@ -424,6 +594,11 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
 
     // JSON-backed sections all belong in the browser's MDB-derived tables group.
     public override bool ShowInTableGroup => true;
+
+    // MDB-derived tables carry the rich record columns (and filter-only facets like a
+    // monster's per-element resists) worth customising, so they get the column picker;
+    // engine-backed utility tabs keep it off.
+    public override bool ShowColumnPicker => true;
 
     // Underlying table name in the active set (e.g. "Monsters").
     protected abstract string TableName { get; }
