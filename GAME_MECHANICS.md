@@ -3207,6 +3207,24 @@ glass jug               5               2 gold crowns
   `SetConfusedCheck`) and doesn't charge an attempt against `MaxRecoverAttempts` while it's true — the
   reroute/resend still happens every time, it just isn't bounded by the same budget a real mapping
   problem is.
+- **[CONFIRMED] 2026-09-05, report `paradigm-20260905-183956`: the shipped `convulsions` message record's
+  `AppliedMessage` was wired to the wrong line, so the 2026-09-02 recovery-budget exemption above never
+  actually engaged for a real convulsions episode.** Both bundled seeds (`Messages.paradigm.seed.json` and
+  `Messages.stock.seed.json`) had `AppliedMessage: "You look around stupidly and do nothing!"` on the
+  merged `convulsions` record — that's one of the fumble wordings (correctly still listed in
+  `ConfuseFumbleLine`), not the condition's own onset line. Since that fumble text never actually appears
+  as ambient onset text in a session, the record's `AppliedMessage` never matched, `ConditionTracker`
+  never added it to `_active`, and `IsConfused` stayed false for the whole convulsions duration — so
+  `LoopRunner.EnterRecovery` charged every fumble-caused block against `MaxRecoverAttempts` same as a real
+  desync, burning the budget in under 20 seconds and permanently failing the loop. The correct onset is
+  `You are in convulsions!` (confirmed live in both this report and `paradigm-20260901-080223` above,
+  and previously found and hand-corrected by the user in a per-set `messages.json` override that predates
+  the realm-flavored split — `DataMigration.RetireLegacyMessagesOnce` retired that override to `.bak`
+  during the split since the shipped seed never carried the same correction, silently reintroducing the
+  bug). **Client encoding:** both bundled seeds' `convulsions` record now has
+  `AppliedMessage: "You are in convulsions!"`; `AppliedEndsWith` (`Your body returns to normal.`) was
+  already correct. No code change — `ConditionTracker` and `LoopRunner` already behaved exactly as
+  designed once fed the right onset text.
 - **[UNVERIFIED] 2026-09-02, cross-referenced from a messages.md export, not a live bug report:**
   `convulsions` may have a THIRD fumble wording alongside the generic fumble and its own `You convulse
   violently!` — `You look around stupidly and do nothing!`, flagged `LastActionFailed` in the source data.

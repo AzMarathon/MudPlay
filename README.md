@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.52.0**
-> - Game Data Browser record tables (Monsters, Items, Spells, Rooms, …) now have a **Columns ▾** picker at their top-right — check/uncheck which columns show, per table
-> - The picker also exposes columns that were previously filter-only, so e.g. a monster's per-element resists, spell-immunity, and dodge can be shown as grid columns
-> - Column choices are saved per character; **Reset to defaults** restores a table's standard columns
+> **Version 3.52.1**
+> - Fixed the shipped `convulsions` message record so its onset (`You are in convulsions!`) is what actually latches the Confused condition, instead of one of its fumble wordings
+> - LoopRunner's confusion-aware recovery budget (added 2026-09-02) now actually engages during a real convulsions episode instead of silently never firing — no more loops permanently failing after 3 fumble-caused blocks in under 20 seconds
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
