@@ -35,6 +35,13 @@ public sealed class GameDataCache
 {
     private readonly Dictionary<string, JsonDocument> _tables = new(StringComparer.OrdinalIgnoreCase);
 
+    // Tables whose on-disk JSON failed to parse for the active set (e.g. binary
+    // corruption from a pre-fix MDB import — see the multi-page LVAL memo reader
+    // history). Remembered so a broken file is reported once via Log rather than
+    // re-read and re-thrown on every lookup a caller makes against it; cleared
+    // alongside _tables whenever the set reloads, so a re-import gets picked up.
+    private readonly HashSet<string> _failedTables = new(StringComparer.OrdinalIgnoreCase);
+
     // Background-parsed tables for a set that ISN'T necessarily active yet — see
     // PrewarmAsync. Keyed on the exact (set, table) pair so a wrong guess just sits
     // here unclaimed instead of contaminating _tables for whatever set actually
@@ -200,6 +207,7 @@ public sealed class GameDataCache
         lock (_tables)
         {
             if (_tables.TryGetValue(tableName, out JsonDocument? cached)) return cached;
+            if (_failedTables.Contains(tableName)) return null;
 
             // A PrewarmAsync call already parsed this table for the set that's now
             // active, ahead of the switch — claim it instead of re-reading the file.
@@ -218,7 +226,25 @@ public sealed class GameDataCache
             // most and we don't want to hold a FileStream while Parse
             // walks the buffer.
             byte[] bytes = File.ReadAllBytes(path);
-            JsonDocument doc = JsonDocument.Parse(bytes);
+
+            JsonDocument doc;
+            try
+            {
+                doc = JsonDocument.Parse(bytes);
+            }
+            catch (JsonException ex)
+            {
+                // Malformed table JSON is an external-data-boundary failure (a bad
+                // MDB import, hand-edited file, etc.), not an app invariant — treat
+                // the table as unavailable rather than crash every consumer that
+                // happens to look it up.
+                _failedTables.Add(tableName);
+                Log?.Log(LogSeverity.Error, "GameData",
+                    $"'{tableName}' could not be parsed for set '{ActiveSet}' ({ex.Message}) — " +
+                    "treating it as unavailable until the set is reloaded or re-imported.");
+                return null;
+            }
+
             _tables[tableName] = doc;
             return doc;
         }
@@ -363,6 +389,7 @@ public sealed class GameDataCache
         ArgumentNullException.ThrowIfNull(tableName);
         lock (_tables)
         {
+            _failedTables.Remove(tableName);
             if (!_tables.Remove(tableName, out JsonDocument? doc)) return false;
             doc.Dispose();
             return true;
@@ -370,13 +397,16 @@ public sealed class GameDataCache
     }
 
     // Drop every cached table. Called implicitly by SwitchSet and Reload; callers
-    // can use it to free memory after a bulk-conversion pass too.
+    // can use it to free memory after a bulk-conversion pass too. Also clears
+    // remembered parse failures so a re-import that fixed a broken table gets
+    // re-read instead of staying marked unavailable.
     public void EvictAll()
     {
         lock (_tables)
         {
             foreach (JsonDocument doc in _tables.Values) doc.Dispose();
             _tables.Clear();
+            _failedTables.Clear();
         }
     }
 

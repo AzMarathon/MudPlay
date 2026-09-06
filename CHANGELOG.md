@@ -1,5 +1,11 @@
 # Version history
 
+## 3.52.5
+
+- Fixed a crash where a corrupted game-data table (e.g. from a bad MDB import) took down every feature that looked it up
+- The table is now logged and treated as unavailable instead, leaving the rest of the game data set unaffected
+- Reload or re-import the set to clear the failure once the underlying file is fixed
+
 ## 3.52.4
 
 - Fixed the round heartbeat re-attacking/re-casting at a mob the instant its own killing blow lands — every kill used to waste a round on "You don't see X here!" / "Your command had no effect." before the engine noticed and moved on

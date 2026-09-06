@@ -28,6 +28,12 @@ public sealed class GameDataCacheTests : IDisposable
         catch { /* best-effort cleanup */ }
     }
 
+    // A raw, unescaped 0x1E control byte inside a JSON string — the same shape of
+    // corruption a pre-fix MDB import (broken multi-page LVAL memo reader) wrote
+    // into real game-data tables. Invalid per the JSON spec; System.Text.Json
+    // throws JsonReaderException on it rather than silently accepting it.
+    private static readonly string MalformedJson = "[{\"Name\":\"Go" + (char)0x1E + "blin\"}]";
+
     private GameDataCache NewCache() => new GameDataCache(_root);
 
     private string SeedSet(string setName, params (string Table, string Json)[] tables)
@@ -165,6 +171,62 @@ public sealed class GameDataCacheTests : IDisposable
 
         Assert.NotNull(cache.GetRawTable("monsters"));
         Assert.NotNull(cache.GetRawTable("MONSTERS"));
+    }
+
+    // ----- Malformed table JSON (corrupted MDB import) ---------------------
+
+    [Fact]
+    public void GetRawTable_MalformedJson_ReturnsNullInsteadOfThrowing()
+    {
+        SeedSet("alpha", ("Monsters", MalformedJson));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+
+        Assert.Null(cache.GetRawTable("Monsters"));
+        Assert.Empty(cache.LoadedTables);
+    }
+
+    [Fact]
+    public void GetRawTable_MalformedJson_DoesNotReReadFileOnEachCall()
+    {
+        string dir = SeedSet("alpha", ("Monsters", MalformedJson));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+
+        Assert.Null(cache.GetRawTable("Monsters"));
+
+        // Fix the file on disk without reloading the set — the cache should keep
+        // reporting the earlier failure rather than transparently pick up the fix
+        // (that requires an explicit Reload / re-import, same as any other table).
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), "[{\"Name\":\"Goblin\"}]");
+        Assert.Null(cache.GetRawTable("Monsters"));
+    }
+
+    [Fact]
+    public void ReloadActiveSet_ClearsFailedTable_SoAFixedReimportIsPickedUp()
+    {
+        string dir = SeedSet("alpha", ("Monsters", MalformedJson));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        Assert.Null(cache.GetRawTable("Monsters"));
+
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), "[{\"Name\":\"Goblin\"}]");
+        cache.ReloadActiveSet();
+
+        Assert.Equal("Goblin", cache.GetRawTable("Monsters")!.RootElement[0].GetProperty("Name").GetString());
+    }
+
+    [Fact]
+    public void GetRawTable_OneMalformedTable_DoesNotAffectOthers()
+    {
+        SeedSet("alpha",
+            ("Monsters", MalformedJson),
+            ("Items",    "[{\"Name\":\"Sword\"}]"));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+
+        Assert.Null(cache.GetRawTable("Monsters"));
+        Assert.Equal("Sword", cache.GetRawTable("Items")!.RootElement[0].GetProperty("Name").GetString());
     }
 
     [Fact]
