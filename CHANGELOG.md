@@ -1,5 +1,10 @@
 # Version history
 
+## 3.52.3
+
+- Player Workshop now updates from a `stat` even when the command is typed while a full-screen form (e.g. `train stats`) still owns the keyboard — the stat sheet self-arms off its own header line, so your level and stats no longer get stranded at their old values
+- bug reports addressed: paradigm-20260906-090057
+
 ## 3.52.2
 
 - Unrecognized-line capture now holds off until you're in the realm — the startup splash, BBS login menu, and connect banners no longer stage candidates
