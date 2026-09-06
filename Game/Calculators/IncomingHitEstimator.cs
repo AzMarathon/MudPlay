@@ -18,7 +18,12 @@ namespace MudPlay.Game.Calculators;
 // it carries the same Fiend default Monster Intel seeds (a worn Vile Ward implies an
 // evil character).
 public readonly record struct PlayerDefenseProfile(
-    int Ac, int Dodge, int ProtEvil, int ProtGood, bool Shadow, int VileWard, EvilLevel Evil);
+    int Ac, int Dodge, int ProtEvil, int ProtGood, bool Shadow, int VileWard, EvilLevel Evil,
+    // The class's ArmourType (Classes table). It only affects the ParaMUD hit-chance
+    // FLOOR: light-armour classes (type 1..6 — Silk/Ninja/Leather) can be driven to a
+    // 1% minimum, everything else (and all of Stock) floors higher — see
+    // CombatCalculator.GetHitMin. 0 = unknown → the realm default floor.
+    int ArmourType = 0);
 
 // Shared source for "how likely is this monster to hit me right now" — the single
 // weighted incoming-hit figure Monster Intel's master list surfaces, extracted here
@@ -44,8 +49,14 @@ public static class IncomingHitEstimator
         EquipmentStatBreakdown gear = CharacterCalculator.AggregateEquipmentStats(worn, gameData);
         if (gameData.FindRowByName("Races", stats.Race) is JsonElement raceRow)
             CharacterCalculator.ApplyAbilityBonuses(gear, raceRow, stats.Race);
+        int armourType = 0;
         if (gameData.FindRowByName("Classes", stats.Class) is JsonElement classRow)
+        {
             CharacterCalculator.ApplyAbilityBonuses(gear, classRow, stats.Class);
+            if (classRow.TryGetProperty("ArmourType", out JsonElement atEl)
+                && atEl.ValueKind == JsonValueKind.Number && atEl.TryGetInt32(out int at))
+                armourType = at;
+        }
         if (questBonuses is not null)
             CharacterCalculator.ApplyQuestBonuses(gear, questBonuses, "Quests");
         EquipmentStatSummary totals = gear.Totals;
@@ -65,7 +76,7 @@ public static class IncomingHitEstimator
         int protEvil = totals.PlusProtEvil + buff.ProtEvil;
         bool shadow = totals.PlusShadowResist > 0 || buff.HasShadow;
         return new PlayerDefenseProfile(
-            ac, dodge, protEvil, totals.PlusProtGood, shadow, totals.PlusVileWard, evil);
+            ac, dodge, protEvil, totals.PlusProtGood, shadow, totals.PlusVileWard, evil, armourType);
     }
 
     // A monster's blended chance to land a hit on the player across ALL its physical
@@ -78,6 +89,6 @@ public static class IncomingHitEstimator
         return MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
             monster.PhysicalAttacks, accuracyDelta: 0, monster.Align,
             def.Ac, def.Dodge, def.ProtEvil, def.ProtGood,
-            realm, def.Shadow, def.VileWard, def.Evil);
+            realm, def.Shadow, def.VileWard, def.Evil, def.ArmourType);
     }
 }
