@@ -3340,10 +3340,17 @@ glass jug               5               2 gold crowns
   instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
   (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
   the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
-- **[user 2026-08-17 / 2026-08-28] Party-buff slots are party-only; scope splits whole-party vs
-  single-target; targeting is per-member (not class).**
-  The party-buff slots (`CharacterProfile.PartyBuffs`, configured in the Party window) are cast **only
-  while in a party** (`PartyState.IsInParty`); solo, none fire — self-buffs come from the self-bless slots.
+- **[user 2026-08-17 / 2026-08-28, corrected 2026-09-06] Buff-slot scope splits whole-party vs
+  single-target; targeting is per-member (not class); a whole-party cast still lands on a solo caster.**
+  (Superseded: this used to say party-buff slots — then a separate list, since folded into the one
+  unified `CharacterProfile.PartyBuffs` list, see `Models/Profile/BuffSettings.cs` — never fire solo.
+  **[CONFIRMED, user 2026-09-06]** that's wrong for a **whole-party** scope specifically: MajorMUD treats
+  a lone character as a party of one, so a whole-party cast/use still lands on yourself while solo — it
+  isn't refused or wasted. `CastingDirector.PickUnifiedBuff` now falls back to the self-bless timing
+  gates for a `WholePartyOn` slot when `!PartyState.IsInParty`, instead of holding it forever behind
+  "must be in a party" (report `paradigm-20260906-150624`: a whole-party item-cast buff, `platinum
+  sceptre`, never fired outside a party). A **single-target** slot genuinely still needs an actual party
+  member to aim at, so that branch is unaffected.)
   **Scope classification** (confirmed against stock + Paradigm data), gated first on **`EnergyCost == 0`**
   (a buff, not an attack):
   - **`Spells.Targets` = 2** (Self or User) → a **single-target** beneficial buff cast on ONE other member

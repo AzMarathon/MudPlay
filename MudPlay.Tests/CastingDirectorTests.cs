@@ -2900,6 +2900,56 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PartyBless_WholeParty_Solo_StillCasts()
+    {
+        // MajorMUD treats a lone character as a party of one — a whole-party cast
+        // still lands on us solo (confirmed, report paradigm-20260906-150624: a
+        // whole-party item-cast buff never fired outside a party). No members, no
+        // IsInParty — the self-bless timing gates apply instead of the party ones.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddWholePartySlot("chan");
+        h.Party.IsInParty = false;
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("chan", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyBless_WholeParty_Solo_ObeysSelfCombatGate()
+    {
+        // Solo, the fallback is the SELF-bless timing gate, not an unconditional
+        // allow — in combat without SelfBlessDuringCombat it's held, same as any
+        // other self-cast buff.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddWholePartySlot("chan");
+        h.Party.IsInParty = false;
+        h.State.InCombat = true;
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_WholeParty_Solo_SelfCombatGateOn_Casts()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddWholePartySlot("chan");
+        h.Party.IsInParty = false;
+        h.State.InCombat = true;
+        h.Spells.SelfBlessDuringCombat = true;
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+    }
+
+    [Fact]
     public void PartyBless_ConfirmStartsTimer_NoImmediateRecast()
     {
         using PartyBlessHarness h = new();

@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.53.0**
-> - Buff Panel now warns inline when two of your configured buffs would remove each other (e.g. a whole-party buff superseding a self-cast one) — hover the ⚠ for which buff is involved and in which direction
-> - Buff Watchdog shows the same warning on its live timer bars, without hiding the real timer — the buff is still genuinely being cast, this is a heads-up, not an automation change
-> - Sourced entirely from each spell's existing RemovesSpell data — no new game-data import needed
+> **Version 3.53.1**
+> - Fixed a whole-party buff (spell or item-cast, e.g. a party-wide "use" item) never firing while solo — it's now treated as a self-cast when you're not in a party, since a whole-party cast still lands on you alone
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
