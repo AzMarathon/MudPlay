@@ -90,6 +90,13 @@ public sealed class GameDataCache
     // cache.
     public event Action<string?>? ActiveSetChanged;
 
+    // Fires once (deduped via _failedTables) the first time a table's on-disk JSON
+    // fails to parse for the active set — carries the table name. A silently
+    // missing table leaves engines short of data with no obvious symptom, so
+    // production routes this to a red terminal notice (MainWindowViewModel) telling
+    // the user to re-import the set. Cleared with the failure on evict/reload.
+    public event Action<string>? TableParseFailed;
+
     // Optional log sink — when set (production wires AppServices.Log after
     // construction), every SwitchSet emits an Info entry naming the outgoing +
     // incoming set so the user can verify swap success in the program log. Tests
@@ -204,6 +211,8 @@ public sealed class GameDataCache
         if (ActiveSet is null) return null;
         ArgumentNullException.ThrowIfNull(tableName);
 
+        bool notifyParseFailed = false;
+        JsonDocument? result = null;
         lock (_tables)
         {
             if (_tables.TryGetValue(tableName, out JsonDocument? cached)) return cached;
@@ -227,10 +236,10 @@ public sealed class GameDataCache
             // walks the buffer.
             byte[] bytes = File.ReadAllBytes(path);
 
-            JsonDocument doc;
             try
             {
-                doc = JsonDocument.Parse(bytes);
+                result = JsonDocument.Parse(bytes);
+                _tables[tableName] = result;
             }
             catch (JsonException ex)
             {
@@ -242,12 +251,16 @@ public sealed class GameDataCache
                 Log?.Log(LogSeverity.Error, "GameData",
                     $"'{tableName}' could not be parsed for set '{ActiveSet}' ({ex.Message}) — " +
                     "treating it as unavailable until the set is reloaded or re-imported.");
-                return null;
+                notifyParseFailed = true;
             }
-
-            _tables[tableName] = doc;
-            return doc;
         }
+
+        // Fire the failure notice OUTSIDE the lock so a subscriber (production
+        // routes it to a Dispatcher.Post terminal notice) never runs while we hold
+        // _tables. Deduped by _failedTables: the next lookup short-circuits above,
+        // so this fires at most once per table per active set.
+        if (notifyParseFailed) TableParseFailed?.Invoke(tableName);
+        return result;
     }
 
     // Parse tableNames for setName on background threads, ahead of setName actually

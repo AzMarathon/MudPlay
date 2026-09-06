@@ -230,6 +230,22 @@ public sealed class GameDataCacheTests : IDisposable
     }
 
     [Fact]
+    public void GetRawTable_MalformedJson_FiresTableParseFailedOnce()
+    {
+        SeedSet("alpha", ("Monsters", MalformedJson));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+
+        List<string> failed = new();
+        cache.TableParseFailed += failed.Add;
+
+        Assert.Null(cache.GetRawTable("Monsters"));   // first lookup — parse fails → notifies
+        Assert.Null(cache.GetRawTable("Monsters"));   // second — short-circuits, no re-notify
+
+        Assert.Equal(new[] { "Monsters" }, failed);   // fired exactly once, with the table name
+    }
+
+    [Fact]
     public void EvictTable_DropsCachedDoc()
     {
         SeedSet("alpha", ("Monsters", "[]"));

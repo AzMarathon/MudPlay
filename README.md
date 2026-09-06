@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.52.5**
-> - Fixed a crash where a corrupted game-data table (e.g. from a bad MDB import) took down every feature that looked it up
-> - The table is now logged and treated as unavailable instead, leaving the rest of the game data set unaffected
-> - Reload or re-import the set to clear the failure once the underlying file is fixed
+> **Version 3.52.6**
+> - Fixed a crash where a corrupted game-data table (e.g. from a bad or older MDB import) took down every feature that looked it up — the table is now logged and treated as unavailable instead, leaving the rest of the set working
+> - The MDB importer now re-reads each table it writes and retries that one table once if it didn't parse back, so a truncated/interrupted write is caught during import
+> - A corrupt table now raises a red terminal notice — on import and at load time — so you know some features will be missing data and can re-import the set
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
