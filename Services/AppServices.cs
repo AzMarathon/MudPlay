@@ -5830,12 +5830,59 @@ public sealed class AppServices
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
             LoopRunner, AutoLair, PartyState, Party, Log);
 
-        // Startup profile: with Settings → General "Auto-load last profile" on,
-        // reopen the last session; otherwise (the default) open a blank draft and
+        // Startup profile priority: a --profile launch argument wins over the
+        // "Auto-load last profile" setting, which wins over a blank draft. The CLI
+        // token is resolved here (not in Program.Main) because resolving a bare
+        // name needs the saved-profile list, and Profile is live by now. An
+        // unresolved token logs a warning and falls through to the normal path
+        // rather than failing to launch.
+        bool cliRequested = StartupOptions.RequestedProfileToken is not null;
+        Models.Profile.ProfileRef? cliStartup = null;
+        if (StartupOptions.RequestedProfileToken is { } cliToken)
+        {
+            cliStartup = StartupOptions.ResolveToken(
+                cliToken, System.Linq.Enumerable.ToList(Profile.ListAll()), out string? cliError);
+            if (cliStartup is null)
+            {
+                // Token given but didn't resolve (typo / ambiguous bare name). Stash
+                // the reason for the main window to show on the terminal, and open a
+                // blank draft — deliberately NOT auto-load-last, so we never quietly
+                // launch a *different* character when the requested one didn't load.
+                StartupOptions.ProfileNotice = $"--profile \"{cliToken}\" did not load: {cliError}";
+                Log.Warn("Startup", StartupOptions.ProfileNotice + " Opened a blank profile instead.");
+            }
+            else
+                Log.Info("Startup",
+                    $"--profile: loading '{cliStartup.Name}' on '{cliStartup.Bbs}'" +
+                    (StartupOptions.SpawnedSiblings > 0 ? $" (+{StartupOptions.SpawnedSiblings} sibling instance(s) launched)" : ""));
+        }
+
+        if (cliStartup is { } cli)
+        {
+            try
+            {
+                Profile.Load(cli.Bbs, cli.Name);
+            }
+            catch (Exception ex)
+            {
+                Log.Info("Startup",
+                    $"--profile load of '{cli.Name}' on '{cli.Bbs}' failed " +
+                    $"({ex.GetType().Name}); loading the default profile instead.");
+                Profile.LoadDefaultProfile();
+            }
+        }
+        // A --profile was given but didn't resolve: blank draft (the notice is already
+        // stashed for the terminal), and we skip auto-load-last on purpose.
+        else if (cliRequested)
+        {
+            Profile.LoadDefaultProfile();
+        }
+        // Auto-load last profile: with Settings → General "Auto-load last profile"
+        // on, reopen the last session; otherwise (the default) open a blank draft and
         // let the user pick / build one via File → Open profile / Recent profiles.
         // A last-used profile that was since deleted / renamed throws on Load, so
         // fall back to the blank draft rather than failing startup.
-        if (Settings.Current.StartupProfile() is { } startup)
+        else if (Settings.Current.StartupProfile() is { } startup)
         {
             try
             {

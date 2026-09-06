@@ -731,8 +731,13 @@ public static class AppPaths
     // generated at call time so concurrent loggers don't collide.
     public static string NewDebugLogFile(string topic)
     {
+        // Include the process id: sibling instances launched together (e.g. via
+        // --profile a,b,c) start within the same second, so a timestamp alone
+        // would collide on the fixed-topic logs (program / memory) and the second
+        // opener would be denied the write lock. The pid makes every instance's
+        // file unique.
         string ts = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-        return Path.Combine(LogsDir, $"{ts}-{topic}.log");
+        return Path.Combine(LogsDir, $"{ts}-p{Environment.ProcessId}-{topic}.log");
     }
 
     private static bool TryReadPointerFile(string path, out string resolved)

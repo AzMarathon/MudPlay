@@ -20,6 +20,30 @@ A **profile** is one character's workspace — its BBS login, macros, triggers, 
 - **New profile** (Ctrl+N) starts a blank draft; set up its BBS + credentials (below), then **Save** (Ctrl+S) to name it.
 - **Open profile** (Ctrl+O) loads a saved one.
 - **Auto-load last profile** (Settings → General) reopens the profile you used last on every launch.
+- **Launch straight into a profile** from the command line with `--profile`, so a shortcut or script can open you right where you want. Naming **more than one loads more than one** — each name opens its own window (one instance per profile), which is the easy way to run several characters at once. A name can be **bare** (`Fujin`) when only one of your saved profiles uses it; if the same character name exists on two BBSes, qualify it as **`BBS/Name`** (e.g. `Playpen/Fujin`) since a profile is really the BBS + character pair.
+
+  The app reads the arguments the same way on every OS — only the shell's quoting differs, so quote each entry:
+
+  - **Linux / macOS terminal** (the binary is named `MudPlay`):
+    ```
+    ./MudPlay --profile "Playpen/Fujin"
+    ./MudPlay --profile "Playpen/Fujin,Playpen/Alt,RetroBBS/Bob"
+    ```
+  - **Windows — Command Prompt (`cmd.exe`):**
+    ```
+    MudPlay.exe --profile "Playpen/Fujin"
+    MudPlay.exe --profile "Playpen/Fujin,Playpen/Alt"
+    ```
+  - **Windows — PowerShell** (the quotes are **required** here — an unquoted comma is PowerShell's array operator and won't reach the app):
+    ```
+    .\MudPlay.exe --profile "Playpen/Fujin,Playpen/Alt"
+    ```
+  - **Works in any shell** — repeat the flag instead of a comma list, which sidesteps every quoting difference:
+    ```
+    MudPlay --profile "Fujin" --profile "Alt" --profile "Bob"
+    ```
+
+  `--profile` overrides *Auto-load last profile* for that launch, and if the profile's own auto-connect is on it connects on its own — so `--profile` gets you all the way in. If a name **doesn't resolve** — a typo, or a bare name that lives on more than one BBS — MudPlay shows the reason **right on the terminal** and opens a blank profile; it won't silently load a different character. (For the ambiguous case, re-launch with the `BBS/Name` form it suggests.) Running several at once shares one data folder, so use a *different* character per instance; the game data and BBS setup are shared, only the character differs.
 
 Settings live in four tiers — **Defaults → Global → BBS → Character** — so a profile only records what differs from the tier beneath it. (The Settings Menu section notes each setting's tier.)
 
