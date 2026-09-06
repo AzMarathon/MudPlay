@@ -49,6 +49,21 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // so the buff can't reach them until they reappear or we move.
     [ObservableProperty] private bool _isHidden;
 
+    // Set from AppServices.BuffSlotOverwritePairs each heartbeat: another configured
+    // slot's spell removes (or is removed by) this one's via RemovesSpell, whenever
+    // targeting allows them to land on the same character. Purely an annotation next
+    // to the row — unlike IsCovered/coveredBy above (the self+whole-party case that
+    // actually drives CastingDirector's skip-cast decision), this never touches the
+    // timer bar, since the buffs it warns about are still genuinely being cast.
+    [ObservableProperty] private bool _hasOverwriteWarning;
+    [ObservableProperty] private string? _overwriteWarningTooltip;
+
+    public void SetOverwriteWarning(string? tooltip)
+    {
+        OverwriteWarningTooltip = tooltip;
+        HasOverwriteWarning = tooltip is not null;
+    }
+
     private static GridLength Empty => new(0, GridUnitType.Star);
     private static GridLength Full => new(1, GridUnitType.Star);
     private static GridLength Star(double weight) => new(weight, GridUnitType.Star);

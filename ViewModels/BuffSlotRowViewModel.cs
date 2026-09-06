@@ -25,6 +25,7 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     private readonly BuffSlot _dto;
     private readonly Func<string?, BuffSlotScope> _resolveScope;
     private readonly Func<string?, string> _resolveName;
+    private readonly Func<BuffSlot, (string? RemovedBy, string? Removes)> _resolveOverwrite;
     private readonly Action _persist;
     private bool _suppress;
 
@@ -102,13 +103,29 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // target buff AND when there's actually a party to target — solo shows just Self.
     public bool ShowMemberTargets => IsSingleTarget && HasPartyMembers;
 
+    // Non-null when another configured slot's spell removes this one's (or this
+    // one's removes another's) via RemovesSpell — see AppServices.BuffSlotOverwritePairs.
+    // Combines both directions into one tooltip; the icon shows whenever either is set.
+    public bool HasOverwriteWarning => OverwriteWarningTooltip is not null;
+
+    public string? OverwriteWarningTooltip
+    {
+        get
+        {
+            (string? removedBy, string? removes) = _resolveOverwrite(_dto);
+            return Game.Spells.BuffConflictAnalyzer.FormatTooltip(removedBy, removes);
+        }
+    }
+
     public BuffSlotRowViewModel(
         BuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
-        Func<string?, string> resolveName, Action persist)
+        Func<string?, string> resolveName, Func<BuffSlot, (string? RemovedBy, string? Removes)> resolveOverwrite,
+        Action persist)
     {
         _dto = dto;
         _resolveScope = resolveScope;
         _resolveName = resolveName;
+        _resolveOverwrite = resolveOverwrite;
         _persist = persist;
         _suppress = true;
         _castOnSelf = dto.CastOnSelf;
@@ -131,6 +148,16 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsSelfOnly));
         OnPropertyChanged(nameof(ShowSelf));
         OnPropertyChanged(nameof(ShowMemberTargets));
+        RefreshOverwriteWarning();
+    }
+
+    // Re-derive the overwrite-conflict warning on its own — a conflict is a property
+    // of a slot PAIR, so every row needs this whenever ANY slot in the panel changes,
+    // not just when this row's own spell/recast/targeting changed.
+    public void RefreshOverwriteWarning()
+    {
+        OnPropertyChanged(nameof(HasOverwriteWarning));
+        OnPropertyChanged(nameof(OverwriteWarningTooltip));
     }
 
     partial void OnCastOnSelfChanged(bool value)

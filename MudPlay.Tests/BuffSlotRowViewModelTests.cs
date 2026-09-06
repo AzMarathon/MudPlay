@@ -12,7 +12,7 @@ namespace MudPlay.Tests;
 public sealed class BuffSlotRowViewModelTests
 {
     private static BuffSlotRowViewModel Row(BuffSlot dto, BuffSlotScope scope = BuffSlotScope.SingleTarget)
-        => new(dto, _ => scope, s => s ?? string.Empty, () => { });
+        => new(dto, _ => scope, s => s ?? string.Empty, _ => (null, null), () => { });
 
     private static IReadOnlyList<(string Display, string Given)> Party(params string[] given)
     {
@@ -94,5 +94,25 @@ public sealed class BuffSlotRowViewModelTests
         row.RebuildMemberTargets(Party("aragorn"));
         Assert.False(row.ShowMemberTargets);
         Assert.True(row.ShowSelf);
+    }
+
+    [Fact]
+    public void OverwriteWarning_NoConflict_HiddenAndNullTooltip()
+    {
+        var row = Row(new BuffSlot { Spell = "bless" });
+        Assert.False(row.HasOverwriteWarning);
+        Assert.Null(row.OverwriteWarningTooltip);
+    }
+
+    [Fact]
+    public void OverwriteWarning_BothDirections_CombinedIntoOneTooltip()
+    {
+        var dto = new BuffSlot { Spell = "bless" };
+        var row = new BuffSlotRowViewModel(
+            dto, _ => BuffSlotScope.SingleTarget, s => s ?? string.Empty,
+            _ => ("chant", "poison"), () => { });
+
+        Assert.True(row.HasOverwriteWarning);
+        Assert.Equal("Removed by: chant\nRemoves: poison", row.OverwriteWarningTooltip);
     }
 }

@@ -6387,6 +6387,48 @@ public sealed class AppServices
         return nums;
     }
 
+    // Every pair of configured, resolvable buff slots where one's spell removes the
+    // other's via RemovesSpell (Abil 122) and their targeting can land on the same
+    // character (self, a shared member, or anyone via a whole-party cast). Purely
+    // informational — feeds the Buff Panel's per-row warning and the Buff Watchdog's
+    // generalized "covered by" label. Does NOT drive CastingDirector's cast/skip
+    // decision; SelfBuffCoverage above is the one case (self superseded by a
+    // whole-party buff) proven safe to automate. #item-cast slots don't resolve to a
+    // KnownSpell and are skipped, same as SelfBuffCoverage's self-buff collection.
+    public IReadOnlyList<Game.Spells.BuffOverwritePair> BuffSlotOverwritePairs()
+    {
+        List<Game.Spells.BuffOverwritePair> pairs = new();
+        System.Collections.Generic.List<Models.Profile.BuffSlot>? slots = Profile.Current?.PartyBuffs?.Slots;
+        if (slots is null || slots.Count == 0) return pairs;
+
+        List<(Game.Spells.KnownSpell Spell, Game.Spells.BuffAffectSet Affect)> resolved = new();
+        foreach (Models.Profile.BuffSlot slot in slots)
+        {
+            if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
+            string code = slot.Spell.Trim();
+            if (Spellbook.FindByCastCode(code) is not { } spell) continue;
+            bool isWholeParty = IsPartyWideBuff(code);
+            Game.Spells.BuffAffectSet affect = Game.Spells.BuffAffectSet.From(
+                isWholeParty, slot.WholePartyOn, slot.CastOnSelf, slot.AllMembers, slot.Targets);
+            resolved.Add((spell, affect));
+        }
+
+        for (int i = 0; i < resolved.Count; i++)
+        {
+            HashSet<int> removes = RemovedSpellNumbers(resolved[i].Spell.Short);
+            if (removes.Count == 0) continue;
+            for (int j = 0; j < resolved.Count; j++)
+            {
+                if (i == j || !removes.Contains(resolved[j].Spell.Number)) continue;
+                if (!Game.Spells.BuffConflictAnalyzer.CanCoLand(resolved[i].Affect, resolved[j].Affect)) continue;
+                pairs.Add(new Game.Spells.BuffOverwritePair(
+                    resolved[i].Spell.Short, resolved[i].Spell.Name,
+                    resolved[j].Spell.Short, resolved[j].Spell.Name));
+            }
+        }
+        return pairs;
+    }
+
     // Build the cure-confirmation matchers
     // Game.Conditions.PartyAilmentTracker uses to clear a
     // member's ailment chip when OUR cure spell lands on them. Each

@@ -163,6 +163,13 @@
                                                                 CommandParameter="{Binding}"/>
                                                         <TextBlock Text="{Binding HeaderText}" FontWeight="SemiBold"
                                                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                        <!-- Warning marker: this buff and another configured slot remove
+                                                             each other via RemovesSpell whenever they can land on the
+                                                             same character — see AppServices.BuffSlotOverwritePairs. -->
+                                                        <TextBlock Text="⚠" VerticalAlignment="Center"
+                                                                   Foreground="{StaticResource AccentRedBrush}"
+                                                                   IsVisible="{Binding HasOverwriteWarning}"
+                                                                   ToolTip.Tip="{Binding OverwriteWarningTooltip}"/>
                                                     </StackPanel>
 
                                                     <!-- Self checkbox — shown for a self-only or single-target buff. -->
@@ -290,6 +297,13 @@
                                                                 </Border>
                                                                 <TextBlock Classes="BarTime" Classes.covered="{Binding IsCovered}"
                                                                            Text="{Binding TimeText}"/>
+                                                                <!-- Warning marker: another configured buff removes (or is
+                                                                     removed by) this one via RemovesSpell — informational
+                                                                     only, the bar above still reflects the real timer. -->
+                                                                <TextBlock Text="⚠" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                                           Foreground="{StaticResource AccentRedBrush}"
+                                                                           IsVisible="{Binding HasOverwriteWarning}"
+                                                                           ToolTip.Tip="{Binding OverwriteWarningTooltip}"/>
                                                             </StackPanel>
                                                         </Grid>
                                                         </Border>

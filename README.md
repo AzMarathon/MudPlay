@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.52.7**
-> - Monster Intel's "Hits You %" now floors at 1% for light-armour Paradigm classes (Silk/Ninja/Leather armour types the game lets drop that low), matching the engine's own minimum instead of stopping at 2%
-> - Its Hits-You-% filter gains a "≤1%" band in that case; other Paradigm classes still floor at 2% and Stock at 8%
+> **Version 3.53.0**
+> - Buff Panel now warns inline when two of your configured buffs would remove each other (e.g. a whole-party buff superseding a self-cast one) — hover the ⚠ for which buff is involved and in which direction
+> - Buff Watchdog shows the same warning on its live timer bars, without hiding the real timer — the buff is still genuinely being cast, this is a heads-up, not an automation change
+> - Sourced entirely from each spell's existing RemovesSpell data — no new game-data import needed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
