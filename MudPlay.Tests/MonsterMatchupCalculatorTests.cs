@@ -491,4 +491,28 @@ public sealed class MonsterMatchupCalculatorSpellsTests
         int? debuffed = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(attacks, 40, 3, 50, 0, 0, 0, RealmType.Stock);
         Assert.True(debuffed <= baseHit, "an accuracy debuff must not raise the hit chance");
     }
+
+    // The class ArmourType only moves the ParaMUD hit FLOOR: light-armour classes
+    // (1..6) drop to 1%, everyone else stays at 2%; Stock ignores it (flat 8%).
+    // A huge AC forces the raw chance far below the floor so only GetHitMin decides.
+    [Fact]
+    public void AttackHitPercent_ParaMudFloor_IsClassArmourTypeAware()
+    {
+        // Light-armour ParaMUD class (ArmourType 3 = Leather) → 1%.
+        Assert.Equal(1, MonsterMatchupCalculatorSpells.AttackHitPercent(
+            accuracy: 100, alignment: 3, defenderAc: 9999, defenderDodge: 0,
+            protEvil: 0, protGood: 0, realm: RealmType.ParaMud, defenderArmourType: 3));
+
+        // Heavy-armour ParaMUD class (ArmourType 9 = Platemail) → 2%.
+        Assert.Equal(2, MonsterMatchupCalculatorSpells.AttackHitPercent(
+            100, 3, 9999, 0, 0, 0, RealmType.ParaMud, defenderArmourType: 9));
+
+        // Unknown armour type (0) keeps the ParaMUD default floor of 2%.
+        Assert.Equal(2, MonsterMatchupCalculatorSpells.AttackHitPercent(
+            100, 3, 9999, 0, 0, 0, RealmType.ParaMud));
+
+        // Stock ignores ArmourType entirely — 8% floor for every class.
+        Assert.Equal(8, MonsterMatchupCalculatorSpells.AttackHitPercent(
+            100, 3, 9999, 0, 0, 0, RealmType.Stock, defenderArmourType: 3));
+    }
 }

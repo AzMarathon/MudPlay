@@ -1,5 +1,10 @@
 # Version history
 
+## 3.52.7
+
+- Monster Intel's "Hits You %" now floors at 1% for light-armour Paradigm classes (Silk/Ninja/Leather armour types the game lets drop that low), matching the engine's own minimum instead of stopping at 2%
+- Its Hits-You-% filter gains a "≤1%" band in that case; other Paradigm classes still floor at 2% and Stock at 8%
+
 ## 3.52.6
 
 - Fixed a crash where a corrupted game-data table (e.g. from a bad or older MDB import) took down every feature that looked it up — the table is now logged and treated as unavailable instead, leaving the rest of the set working

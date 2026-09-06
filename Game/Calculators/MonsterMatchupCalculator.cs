@@ -268,7 +268,8 @@ public static class MonsterMatchupCalculatorSpells
         int accuracy, int alignment,
         int defenderAc, int defenderDodge, int protEvil, int protGood,
         RealmType realm, bool hasShadow = false,
-        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint)
+        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint,
+        int defenderArmourType = 0)
     {
         bool isEvil = alignment is 1 or 2 or 5 or 6;
         bool isGood = alignment is 0 or 4;
@@ -285,6 +286,7 @@ public static class MonsterMatchupCalculatorSpells
             vileWard: isEvil ? vileWard : 0,
             evilLevel: defenderEvil,
             hasShadow: hasShadow,
+            defenderArmourType: defenderArmourType,
             realmType: realm).OverallHitPercent;
     }
 
@@ -301,7 +303,7 @@ public static class MonsterMatchupCalculatorSpells
         IReadOnlyList<(int Accuracy, double Weight)> physicalAttacks, int accuracyDelta,
         int alignment, int defenderAc, int defenderDodge, int protEvil, int protGood,
         RealmType realm, bool hasShadow = false,
-        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint)
+        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint, int defenderArmourType = 0)
     {
         if (physicalAttacks is null || physicalAttacks.Count == 0) return null;
         double totalWeight = 0, weightedHit = 0;
@@ -309,7 +311,8 @@ public static class MonsterMatchupCalculatorSpells
         {
             double w = weight > 0 ? weight : 0;
             int hit = AttackHitPercent(accuracy - accuracyDelta, alignment, defenderAc,
-                defenderDodge, protEvil, protGood, realm, hasShadow, vileWard, defenderEvil);
+                defenderDodge, protEvil, protGood, realm, hasShadow, vileWard, defenderEvil,
+                defenderArmourType);
             weightedHit += w * hit;
             totalWeight += w;
         }
@@ -320,7 +323,8 @@ public static class MonsterMatchupCalculatorSpells
             double sum = 0;
             foreach ((int accuracy, double _) in physicalAttacks)
                 sum += AttackHitPercent(accuracy - accuracyDelta, alignment, defenderAc,
-                    defenderDodge, protEvil, protGood, realm, hasShadow, vileWard, defenderEvil);
+                    defenderDodge, protEvil, protGood, realm, hasShadow, vileWard, defenderEvil,
+                    defenderArmourType);
             return (int)System.Math.Round(sum / physicalAttacks.Count);
         }
         return (int)System.Math.Round(weightedHit / totalWeight);

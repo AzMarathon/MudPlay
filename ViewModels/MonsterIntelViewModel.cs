@@ -66,6 +66,15 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private int _playerDodge;
     private int _playerProtEvil;
     private int _playerProtGood;
+    // The class's ArmourType (Classes table) — only affects the ParaMUD hit-chance
+    // floor: light-armour classes (1..6) floor at 1%, everything else at 2%
+    // (CombatCalculator.GetHitMin). Drives both the Hits-You-% figures and whether
+    // the filter dropdown gets a ≤1% band.
+    private int _playerArmourType;
+    // Whether the current Hits-You-% band set includes the ≤1% band — rebuilt only
+    // when this flips (a realm or qualifying-class change), so a gear/loot churn
+    // doesn't wipe the user's selected bands.
+    private bool _hitsBandsInclude1Pct;
     // Shadow (Abil 9) is a flat +10 AC that stacks only once no matter how
     // many worn sources carry it — a boolean gate, not the raw accumulated
     // PlusShadowResist total (see GAME_MECHANICS.md's Armour Class section).
@@ -269,8 +278,18 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     private static readonly int[] ParadigmHitBands =
         { 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
+    // Light-armour ParaMUD classes (ArmourType 1..6) floor at 1%, not 2%, so their
+    // dropdown gains a ≤1% band ahead of the standard set.
+    private static readonly int[] ParadigmHitBands1Pct =
+        { 1, 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
     private static readonly int[] StockHitBands =
         { 8, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
+
+    // The ≤1% band exists only on ParaMUD for a light-armour class (ArmourType
+    // 1..6) — the exact GetHitMin condition that drops the floor to 1%.
+    private bool HitsBandsShouldInclude1Pct() =>
+        _gameData.ActiveRealm == RealmType.ParaMud
+        && _playerArmourType is > 0 and <= 6;
 
     // The dropdown button's label — "all" when no band is selected, else the count.
     public string HitsFilterLabel
@@ -383,6 +402,13 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _playerProtEvil = def.ProtEvil;
         _playerProtGood = def.ProtGood;
         _playerHasShadow = def.Shadow;
+        _playerArmourType = def.ArmourType;
+        // A qualifying light-armour ParaMUD class floors incoming hits at 1% (not
+        // 2%), so its filter dropdown gains a ≤1% band. Rebuild only when that
+        // eligibility flips (class change) — never on a gear/loot recompute, which
+        // would clear the user's band selection.
+        if (HitsBandsShouldInclude1Pct() != _hitsBandsInclude1Pct)
+            RebuildHitsFilterBuckets();
 
         // Seed the editable defense simulator to the live loadout — but only when
         // the WORN set actually changed (first open + a real gear swap). Backpack
@@ -460,7 +486,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
                 entry.Source.PhysicalAttacks, accuracyDelta: 0, entry.Source.Align,
                 SimAc, _playerDodge, SimProtEvil, _playerProtGood,
-                _gameData.ActiveRealm, SimShadow, SimVileWard, evil) ?? -1;
+                _gameData.ActiveRealm, SimShadow, SimVileWard, evil, _playerArmourType) ?? -1;
     }
 
     // A defense-simulator input changed — recompute Hits-You-%, re-filter, and
@@ -763,12 +789,17 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     {
         foreach (HitsFilterBucket b in HitsFilterBuckets) b.PropertyChanged -= OnHitsFilterBucketChanged;
         HitsFilterBuckets.Clear();
-        int[] bands = _gameData.ActiveRealm == RealmType.ParaMud ? ParadigmHitBands : StockHitBands;
+        _hitsBandsInclude1Pct = HitsBandsShouldInclude1Pct();
+        int[] bands = _gameData.ActiveRealm != RealmType.ParaMud ? StockHitBands
+            : _hitsBandsInclude1Pct ? ParadigmHitBands1Pct
+            : ParadigmHitBands;
         int lo = 0;
         for (int i = 0; i < bands.Length; i++)
         {
             int hi = bands[i];
-            string label = i == 0 ? $"≤{hi}%" : $"{lo}–{hi}%";
+            // First band is a ceiling ("≤1%"); a single-value band collapses to that
+            // value ("2%"); the rest are ranges ("3–5%").
+            string label = i == 0 ? $"≤{hi}%" : lo == hi ? $"{hi}%" : $"{lo}–{hi}%";
             HitsFilterBucket bucket = new(label, lo, hi);
             bucket.PropertyChanged += OnHitsFilterBucketChanged;
             HitsFilterBuckets.Add(bucket);

@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.52.6**
-> - Fixed a crash where a corrupted game-data table (e.g. from a bad or older MDB import) took down every feature that looked it up — the table is now logged and treated as unavailable instead, leaving the rest of the set working
-> - The MDB importer now re-reads each table it writes and retries that one table once if it didn't parse back, so a truncated/interrupted write is caught during import
-> - A corrupt table now raises a red terminal notice — on import and at load time — so you know some features will be missing data and can re-import the set
+> **Version 3.52.7**
+> - Monster Intel's "Hits You %" now floors at 1% for light-armour Paradigm classes (Silk/Ninja/Leather armour types the game lets drop that low), matching the engine's own minimum instead of stopping at 2%
+> - Its Hits-You-% filter gains a "≤1%" band in that case; other Paradigm classes still floor at 2% and Stock at 8%
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
