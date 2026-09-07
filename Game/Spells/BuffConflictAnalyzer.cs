@@ -186,9 +186,14 @@ public static class BuffConflictAnalyzer
             if (preferred is { } p && !ClobbersExisting(p)) recommended.Add(p.Number);
         }
 
+        // Ordered by ReqLevel so the list reads low-level to high-level (a level-50
+        // pick doesn't land in the middle of a batch of level-5 ones just because
+        // its name sorts earlier); same-level ties break alphabetically for a
+        // stable, predictable order.
         return pool
             .Select(s => new SelfBlessPick(s, recommended.Contains(s.Number)))
-            .OrderBy(p => p.Candidate.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p.Candidate.ReqLevel)
+            .ThenBy(p => p.Candidate.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 }

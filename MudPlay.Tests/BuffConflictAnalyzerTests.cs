@@ -183,6 +183,35 @@ public sealed class BuffConflictAnalyzerTests
     }
 
     [Fact]
+    public void SelectSelfBlessCandidates_OrderedByReqLevel_NotAlphabetically()
+    {
+        // Report: a level-50 pick ("dark flagellation") landed alphabetically
+        // between two low-level ones instead of at the end where it belongs.
+        SelfBlessCandidate darkFlagellation = new("dfla", "dark flagellation", 900, ReqLevel: 50, ManaCost: 40, Removes: Array.Empty<int>());
+        SelfBlessCandidate bless = new("bles", "bless", 100, ReqLevel: 2, ManaCost: 4, Removes: Array.Empty<int>());
+        SelfBlessCandidate ironFaith = new("irfa", "iron faith", 200, ReqLevel: 20, ManaCost: 15, Removes: Array.Empty<int>());
+
+        List<SelfBlessPick> result = BuffConflictAnalyzer
+            .SelectSelfBlessCandidates(new[] { darkFlagellation, bless, ironFaith }, Array.Empty<ExistingBuffSlot>())
+            .ToList();
+
+        Assert.Equal(new[] { "bless", "iron faith", "dark flagellation" }, result.Select(p => p.Candidate.Name));
+    }
+
+    [Fact]
+    public void SelectSelfBlessCandidates_SameReqLevel_BreaksTieAlphabetically()
+    {
+        SelfBlessCandidate zeal = new("zeal", "zeal", 1, ReqLevel: 25, ManaCost: 20, Removes: Array.Empty<int>());
+        SelfBlessCandidate agony = new("agny", "agony", 2, ReqLevel: 25, ManaCost: 10, Removes: Array.Empty<int>());
+
+        List<SelfBlessPick> result = BuffConflictAnalyzer
+            .SelectSelfBlessCandidates(new[] { zeal, agony }, Array.Empty<ExistingBuffSlot>())
+            .ToList();
+
+        Assert.Equal(new[] { "agony", "zeal" }, result.Select(p => p.Candidate.Name));
+    }
+
+    [Fact]
     public void SelectSelfBlessCandidates_UnrelatedCandidates_BothRecommended()
     {
         SelfBlessCandidate other = new("bles", "bless", 100, ReqLevel: 5, ManaCost: 10, Removes: Array.Empty<int>());
