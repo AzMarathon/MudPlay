@@ -98,16 +98,6 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     [ObservableProperty] private double _requiredManaPerTick;
     [ObservableProperty] private double _requiredManaPerMinute;
 
-    // Typeahead filter for the spell picker — matches the typed text against the
-    // cast-code or the spell name (mirrors the Settings tab's picker).
-    public Func<string?, object?, bool> SpellSuggestionFilter { get; } = (text, item) =>
-    {
-        if (string.IsNullOrWhiteSpace(text)) return true;
-        if (item is not SpellPick p) return false;
-        return p.Short.Contains(text, StringComparison.OrdinalIgnoreCase)
-            || p.Name.Contains(text, StringComparison.OrdinalIgnoreCase);
-    };
-
     public BuffPanelViewModel(Game.PartyState party)
     {
         ArgumentNullException.ThrowIfNull(party);
@@ -170,7 +160,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     private BuffSlotRowViewModel MakeRow(BuffSlot dto) =>
-        new(dto, ResolveScope, ResolveName, ResolveOverwrite, Persist, OnSelfCastActivated, ResolveLearned, ResolveReqLevel);
+        new(dto, ResolveScope, ResolveName, ResolveOverwrite, Persist, OnSelfCastActivated, ResolveLearned);
 
     // Live mutual exclusion: the moment a row's Self box is CHECKED, turn off any
     // OTHER row's Self box for a spell it mutually removes (or is removed by) via
@@ -213,9 +203,9 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     // Resolve a slot's targeting scope live from the active set. A #item-cast slot is
-    // always whole-party (only whole-party items are offered — see AllBuffPicks); a
-    // spell splits self-only / single-target / whole-party by its Targets code. An
-    // unresolved code defaults to self-only (a plain "cast on me" row).
+    // whole-party or self-only per the item (both no-target kinds are offered — see
+    // EligibleBuffs); a spell splits self-only / single-target / whole-party by its
+    // Targets code. An unresolved code defaults to self-only (a plain "cast on me" row).
     private BuffSlotScope ResolveScope(string? code)
     {
         if (string.IsNullOrWhiteSpace(code)) return BuffSlotScope.SelfOnly;
@@ -238,12 +228,13 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         return _spellbook.FindByCastCode(c) is { } s ? s.Name : c;
     }
 
-    // Whether the character has actually learned this slot's spell — a row can now
-    // list (and be checked for) a buff from the class's full roster the player
-    // hasn't trained yet (see RefreshSelfBlessCandidates), so the row needs its own
-    // "unlearned" signal the way the read-only Buff Watchdog timer bars already
-    // show. A #item-cast token always reads learned — a carried item is available
-    // by definition, there's no separate "train" step for it.
+    // Whether the character has actually learned this slot's spell — drives the
+    // row's "unlearned" chip the way the read-only Buff Watchdog timer bars do.
+    // Add all blesses only ever adds LEARNED spells, so a fresh bulk-add row is
+    // always learned; this still flags the edge case of a slotted spell that later
+    // reads unlearned (a data-set renumber, or a hand-typed unknown code). A
+    // #item-cast token always reads learned — a carried item is available by
+    // definition, there's no separate "train" step for it.
     private bool ResolveLearned(string? code)
     {
         if (string.IsNullOrWhiteSpace(code)) return true;
@@ -252,37 +243,43 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         return _spellbook.FindByCastCode(c) is { } s && _spellbook.IsObtained(s.Number);
     }
 
-    // The spell's level requirement — the level it was (or will be) learned at —
-    // shown in the row header. Null for a #item-cast token (no ReqLevel concept)
-    // or an unresolved code.
-    private int? ResolveReqLevel(string? code)
-    {
-        if (string.IsNullOrWhiteSpace(code)) return null;
-        string c = code.Trim();
-        if (ItemCastToken.IsToken(c))
-            return ItemCastToken.TryResolve(c, _spellbook.GetCastItems(), out Game.Spells.ClassCastItem ci) && ci.MinLevel > 0
-                ? ci.MinLevel : null;
-        return _spellbook.FindByCastCode(c) is { } s ? s.ReqLevel : null;
-    }
-
-    // Every buff the character can slot, de-duplicated by cast value: learned buff
+    // Every buff the character can slot, de-duplicated by cast code: learned buff
     // spells the character can maintain on themselves, a member, or the whole party
     // (self / single-target / whole-party scopes), plus cast-on-use items whose
     // spell needs no target parameter — whole-party (blankets everyone in one use)
     // and self-only (a wielded item like a bless-casting crozier, which always
     // lands on the wielder). A single-target (Targets 2) item is excluded: `use
-    // <item>` can't be aimed at a specific party member.
-    private IEnumerable<SpellPick> AllBuffPicks()
+    // <item>` can't be aimed at a specific party member. Carries the learn-level so
+    // the dropdown can label and order by it. Shared by the pick count (AllBuffPicks
+    // → BuffPicks) and the Add-buff dropdown (BuildPickOptions).
+    private IEnumerable<(string Code, string Name, int Level)> EligibleBuffs()
     {
-        IEnumerable<SpellPick> spells = _spellbook.Available
+        IEnumerable<(string Code, string Name, int Level)> spells = _spellbook.Available
             .Where(s => BuffClassifier.IsAnyBuff(s) && _spellbook.IsObtained(s.Number))
-            .Select(s => new SpellPick(s.Short, s.Name));
-        IEnumerable<SpellPick> items = _spellbook.GetWholePartyCastItems()
+            .Select(s => (s.Short.Trim(), s.Name, s.ReqLevel));
+        IEnumerable<(string Code, string Name, int Level)> items = _spellbook.GetWholePartyCastItems()
             .Concat(_spellbook.GetSelfCastItems())
-            .Select(ci => new SpellPick(
+            .Select(ci => (
                 ItemCastToken.Format(ci.ItemName),
-                string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})"));
-        return spells.Concat(items).DistinctBy(p => p.Short, StringComparer.OrdinalIgnoreCase);
+                string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})",
+                ci.MinLevel));
+        return spells.Concat(items).DistinctBy(e => e.Code, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private IEnumerable<SpellPick> AllBuffPicks() =>
+        EligibleBuffs().Select(e => new SpellPick(e.Code, e.Name));
+
+    // The Add-buff dropdown's options: every eligible buff, each labelled with the
+    // level it's learned at ("bless (Lvl 2)"). `disabled` are the cast codes already
+    // held by another slot — they stay in the list but come back Enabled=false so
+    // they read as taken rather than vanishing. Ordered by level then name.
+    private List<BuffPickOption> BuildPickOptions(HashSet<string> disabled)
+    {
+        static string Label(string name, int level) => level > 0 ? $"{name} (Lvl {level})" : name;
+        return EligibleBuffs()
+            .OrderBy(e => e.Level).ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(e => new BuffPickOption(e.Code, Label(e.Name, e.Level), !disabled.Contains(e.Code)))
+            .ToList();
     }
 
     // The cast codes already held by a slot (a spell can't be slotted twice).
@@ -297,15 +294,13 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         RefreshSelfBlessCandidates(slotted);
     }
 
-    // EVERY buff the CLASS can ever cast on itself (self-only Targets, or single-
-    // target Targets castable on self) and — when we know it — is alignment-
-    // eligible for: not level-gated, and not gated on having actually learned it
-    // yet either — a theorycrafting roster, so the player can see (and check) a
-    // buff they haven't trained yet as well as one they have. Reduced to the
-    // BuffConflictAnalyzer pick: every candidate gets listed, but only the
-    // highest-ReqLevel OBTAINED member of each RemovesSpell family (e.g. greater
-    // zeal over zeal) comes pre-checked — an unlearned pick is never auto-checked,
-    // since the game would just refuse the cast.
+    // Every buff the character has actually LEARNED that can land on itself (self-
+    // only Targets, or single-target Targets castable on self) and — when we know
+    // it — is alignment-eligible for. Not level-gated (a learned buff you've
+    // out-levelled still lists), but obtained-gated: only spells in your spellbook,
+    // never the class's untrained roster. Reduced to the BuffConflictAnalyzer pick:
+    // every learned candidate gets listed, but only the highest-ReqLevel member of
+    // each RemovesSpell family (e.g. greater zeal over zeal) comes pre-checked.
     //
     // Alignment matters here specifically because a class's learnable list often
     // carries BOTH sides of a holy/unholy pair (e.g. "holy armour" needs non-evil,
@@ -324,6 +319,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         List<Game.Spells.SelfBlessCandidate> pool = _spellbook.Available
             .Where(s => BuffClassifier.IsAnyBuff(s)
                 && !BuffClassifier.IsWholeParty(s.Targets)
+                && _spellbook.IsObtained(s.Number)
                 && BuffClassifier.IsAlignmentEligible(s.Formula, alignment)
                 && !slotted.Contains(s.Short.Trim()))
             .Select(s => new Game.Spells.SelfBlessCandidate(
@@ -352,6 +348,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         List<Game.Spells.SelfBlessCandidate> partyPool = _spellbook.Available
             .Where(s => BuffClassifier.IsAnyBuff(s)
                 && BuffClassifier.IsWholeParty(s.Targets)
+                && _spellbook.IsObtained(s.Number)
                 && BuffClassifier.IsAlignmentEligible(s.Formula, alignment)
                 && !slotted.Contains(s.Short.Trim()))
             .Select(s => new Game.Spells.SelfBlessCandidate(
@@ -513,7 +510,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async System.Threading.Tasks.Task AddBuff()
     {
-        AddBuffDialogViewModel dlg = new(BuffPicks, SpellSuggestionFilter, IsLightSpell, IsRollSpell,
+        AddBuffDialogViewModel dlg = new(BuildPickOptions(SlottedSpells()), IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickRange);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
@@ -582,13 +579,13 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         if (row is null) return;
         HashSet<string> others = SlottedSpells();
         others.Remove((row.Spell ?? string.Empty).Trim());
-        var picks = AllBuffPicks().Where(p => !others.Contains(p.Short)).ToList();
+        var options = BuildPickOptions(others);
         BuffSlot d = row.Dto;
         AddBuffResult initial = new(
             d.Spell ?? string.Empty, d.RecastMarginSec, d.OnlyWhenHpFull, d.OnlyWhenMaFull,
             d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold);
         AddBuffDialogViewModel dlg = new(
-            picks, SpellSuggestionFilter, IsLightSpell, IsRollSpell,
+            options, IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickRange, initial);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);

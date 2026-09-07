@@ -53,12 +53,11 @@ public readonly record struct BuffOverwritePair(
 
 // A self-castable buff eligible for the Buff Panel's "Add all blesses" bulk add
 // — self-only or single-target-on-self, alignment-eligible, not already slotted.
-// Removes is its Abil-122 RemovesSpell target numbers. Neither level- nor
-// obtained-gated: the whole point is a browsable roster of every buff the class
-// could ever have, learned or not, so the player can theorycraft ahead of
-// actually training something. IsObtained still matters for which candidate gets
-// pre-checked (see SelectSelfBlessCandidates) — defaults true so existing callers
-// that only care about the RemovesSpell math don't have to plumb it through.
+// Removes is its Abil-122 RemovesSpell target numbers. This is a pure record; the
+// CALLER decides the pool (the Buff Panel supplies only spells actually learned).
+// IsObtained gates which candidate gets pre-checked (see SelectSelfBlessCandidates)
+// — defaults true so callers that only care about the RemovesSpell math don't have
+// to plumb it through.
 public readonly record struct SelfBlessCandidate(
     string CastCode, string Name, int Number, int ReqLevel, int ManaCost,
     IReadOnlyCollection<int> Removes, bool IsObtained = true);
@@ -130,13 +129,12 @@ public static class BuffConflictAnalyzer
         return string.Join("\n", lines);
     }
 
-    // The Buff Panel's "Add all blesses" pick: EVERY self-castable candidate gets a
-    // row — learned or not — so the whole roster of what the character could ever
-    // self-bless is browsable and any auto-pick can be swapped for another family
-    // member by hand — but only one per RemovesSpell family (typically a tiered
-    // pair like zeal / greater zeal, which mutually remove each other) comes
-    // pre-checked: the highest-ReqLevel OBTAINED member (an unlearned pick is
-    // never auto-checked — the game would just refuse the cast), and only when it
+    // The Buff Panel's "Add all blesses" pick: EVERY candidate in the pool gets a
+    // row so any auto-pick can be swapped for another family member by hand — but
+    // only one per RemovesSpell family (typically a tiered pair like zeal / greater
+    // zeal, which mutually remove each other) comes pre-checked: the highest-ReqLevel
+    // OBTAINED member (an unlearned pick — if the caller ever supplies one — is never
+    // auto-checked, since the game would just refuse the cast), and only when it
     // wouldn't immediately clobber — or be clobbered by — something already active
     // in an existing slot. A cluster with no obtained member recommends nothing. A
     // self candidate is always assumed able to co-land with itself, so CanCoLand

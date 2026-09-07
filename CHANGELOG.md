@@ -2,17 +2,18 @@
 
 ## 3.54.0
 
-- Buff Watchdog: new **Add all blesses** button — adds a row for every buff your class can ever cast, on yourself or the whole party, learned or not and regardless of level, in one click, no dialog, sorted by level requirement (not name); a not-yet-learned row shows an **unlearned** chip. Whole-party buffs are listed but never pre-checked — that's always your call, ticked per-row via Party Wide
-- Where two buffs would strip each other off (e.g. greater zeal removes zeal) both are listed but only the higher-level *learned* one is pre-checked, so you can swap to another family member by hand once you've trained it; anything that conflicts with a buff you've already configured yourself is listed but left unchecked, never auto-clobbering your existing setup
+- Buff Watchdog: new **Add all blesses** button — adds a row for every buff you've actually **learned**, on yourself or the whole party, in one click, no dialog, sorted by level requirement (not name). Whole-party buffs are listed but never pre-checked — that's always your call, ticked per-row via Party Wide
+- **＋ Add buff** now picks the buff from a **dropdown of your learned buffs** (each shown as its name and the level you learned it at, e.g. *bless (Lvl 2)*) instead of a text box — a buff already in another slot stays listed but greyed out so you can see it's taken
+- Where two learned buffs would strip each other off (e.g. greater zeal removes zeal) both are listed but only the higher-level one is pre-checked, so you can swap to another family member by hand; anything that conflicts with a buff you've already configured yourself is listed but left unchecked, never auto-clobbering your existing setup
 - Checking a buff that conflicts with another currently-checked one now auto-unchecks the other (and vice versa) — applies live to any row, not just ones "Add all blesses" added
-- Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt
+- Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt; it clears the *config*, not running buffs — any buff still up keeps its live timer bar
+- A buff that's actually up but no longer configured (cast by hand, or a slot you just removed) now shows a plain read-only timer bar, so clearing config never hides a running buff
 - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures (e.g. minor healing, cure poison) as if they were maintainable buffs — it now requires a real duration, not just zero energy cost and self/member targeting
 - Fixed **Add all blesses** recommending a buff your character's current alignment can't actually cast (e.g. an evil character being offered "protection from evil") and, worse, letting that dead pick crowd out the alignment-correct alternative (e.g. never offering "unholy armour" because "holy armour" won the tie-break) — it now reads your alignment from your own `who` observation and filters both directions
 - Buff Watchdog: new live **"Mana to maintain"** readout — total mana/second every currently-checked buff costs to keep recast, shown per 30s regen tick and per minute, updating as you check/uncheck boxes or the party changes
-- Buff Watchdog: every slot's row now shows its level requirement — `name (Lvl N) - recast` (an item-cast slot shows its use-level)
 - Fixed both **＋ Add buff** and **Add all blesses** offering only whole-party cast-on-use items (a #item slot) and silently dropping any self-cast one (e.g. a bless-casting crozier or sceptre) — a self-cast item needs no target any more than a whole-party one does, so it's offered the same way now; a previously-configured self-cast item slot is also now correctly weighed by the RemovesSpell conflict checks and the mana-upkeep readout, instead of being invisible to both
 - Buff Watchdog: item-cast (weapon/staff) buffs now group under their own **------- Weapons -------** heading below the ordinary spell rows, instead of being interleaved among them
-- Fixed a long buff name (worse once the level tag was added) painting through the Self checkbox instead of eliding with "…" — the name cell is now properly width-constrained
+- Fixed a long buff name painting through the Self checkbox instead of eliding with "…" — the name cell is now properly width-constrained
 - Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎ — including the reroll target for a mana-regen roll spell (profane link, nature tap, mana flux, …) that "Add all blesses" added without one configured
 
 ## 3.53.2

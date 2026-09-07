@@ -2,13 +2,14 @@
 
 <!-- current-version:start -->
 > **Version 3.54.0**
-> - Buff Watchdog: new **Add all blesses** button — adds a row for every buff your class can ever cast, on yourself or the whole party, learned or not and regardless of level, sorted by level requirement; whole-party buffs are listed but never pre-checked
-> - Where two buffs would strip each other off both are listed but only the higher-level *learned* one is pre-checked; checking a conflicting buff now auto-unchecks the other live, on any row
-> - Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt
+> - Buff Watchdog: new **Add all blesses** button — adds a row for every buff you've actually **learned**, on yourself or the whole party, sorted by level requirement; whole-party buffs are listed but never pre-checked
+> - **＋ Add buff** now picks from a **dropdown of your learned buffs** (each shown as name + level learned) instead of a text box — an already-slotted buff stays listed but greyed out
+> - Where two learned buffs would strip each other off both are listed but only the higher-level one is pre-checked; checking a conflicting buff now auto-unchecks the other live, on any row
+> - Buff Watchdog: new **Remove all** button — clears every configured slot in one click (gated behind "confirm deletes"); it clears the config, not running buffs — any buff still up keeps its live timer bar
+> - A buff that's up but no longer configured (cast by hand, or a slot you removed) now shows a read-only timer bar, so clearing config never hides a running buff
 > - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures as if they were maintainable buffs — it now requires a real duration
 > - Fixed **Add all blesses** recommending a spell your character's alignment can't cast and crowding out the alignment-correct alternative — it now reads your alignment from your own `who` observation
 > - Buff Watchdog: new live **"Mana to maintain"** readout — total mana/second every checked buff costs to keep recast, updating as you check/uncheck boxes
-> - Buff Watchdog: every slot's row now shows its level requirement
 > - Fixed **＋ Add buff** / **Add all blesses** silently dropping self-cast buff items (e.g. a bless-casting crozier) — only whole-party items were being offered before
 > - Buff Watchdog: item-cast buffs now group under their own **Weapons** heading; fixed a long buff name painting through the Self checkbox instead of truncating
 > - Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎, including reroll settings for mana-regen roll spells

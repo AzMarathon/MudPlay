@@ -379,6 +379,31 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
             }
         }
 
+        // Keep an active buff visible even after its slot is removed. Any live timer
+        // with no configured row yet gets a read-only bar under its target's section
+        // (yours for a self / whole-party cast, the member's otherwise), ticking down
+        // until it wears off. So Remove all — or deleting one row — clears the config
+        // without hiding a buff that's genuinely still up; the bar just isn't recast
+        // (nothing's configured to), so it drops off on its own when it expires.
+        HashSet<(string Code, string Target)> shown = new();
+        foreach (BuffWatchdogPlayerGroup g in Groups)
+            foreach (BuffWatchdogRowViewModel r in g.Rows)
+                shown.Add((r.CastCode.ToLowerInvariant(), r.MemberKey));
+        foreach (ActiveBuffTimer t in snap)
+        {
+            string key = t.Short.ToLowerInvariant();
+            if (!shown.Add((key, t.Target))) continue;
+            (string nm, bool lrn) = ResolveName(t.Short);
+            if (t.Target.Length == 0)
+                self.Rows.Add(new BuffWatchdogRowViewModel(t.Short, isParty: false, nm, "self", lrn));
+            else
+            {
+                string display = displayByGiven.TryGetValue(t.Target, out string? d) ? d : Capitalise(t.Target);
+                GetGroup(byName, display).Rows.Add(new BuffWatchdogRowViewModel(
+                    t.Short, isParty: true, nm, display, lrn, isWholeParty: false, memberKey: t.Target));
+            }
+        }
+
         // Drop seeded sections that ended up with no buffs.
         for (int i = Groups.Count - 1; i >= 0; i--)
             if (Groups[i].Rows.Count == 0) Groups.RemoveAt(i);
@@ -483,8 +508,11 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 sb.Append(string.Join(",", p.Targets)).Append('|');
             }
         sb.Append("||");
-        foreach (string k in snap.Where(t => t.Target.Length > 0)
-                                 .Select(t => t.Short + "@" + t.Target)
+        // Every live timer's identity (self-keyed "" and member-keyed alike), so a buff
+        // arming or wearing off reflows the rows — this is what lets an active-but-
+        // unconfigured buff (cast by hand, or a slot just removed) get a read-only bar
+        // and then drop off on its own when it expires (see the tail of RebuildRows).
+        foreach (string k in snap.Select(t => t.Short + "@" + t.Target)
                                  .OrderBy(k => k, StringComparer.Ordinal))
             sb.Append(k).Append(';');
         return sb.ToString();

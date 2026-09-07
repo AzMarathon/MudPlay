@@ -32,13 +32,9 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // in tests that don't exercise the cross-row exclusion.
     private readonly Action<BuffSlotRowViewModel>? _onSelfActivated;
     // Whether the character has actually learned this row's spell. Null in tests
-    // that don't care — IsLearned then defaults true, matching the pre-theorycraft
-    // behaviour where every listed row was already something the player had.
+    // that don't care — IsLearned then defaults true (every listed row is normally
+    // something the player has).
     private readonly Func<string?, bool>? _resolveLearned;
-    // The spell's level requirement (null for an unresolved code or a #item-cast
-    // token, which has no ReqLevel concept) — shown in HeaderText. Null in tests
-    // that don't care, which just omits the "(Lvl N)" tag.
-    private readonly Func<string?, int?>? _resolveReqLevel;
     private bool _suppress;
 
     // Editable targeting only — spell + recast are fixed at add time.
@@ -97,18 +93,15 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // this row under the Buff Watchdog's "Weapons" section instead of the main list.
     public bool IsItemCast => Game.Spells.ItemCastToken.IsToken(Spell);
 
-    // Row label — the buff's spell name (falls back to the cast code), its level
-    // requirement when resolvable (e.g. from Add all blesses's full class roster,
-    // where sort order alone doesn't say what level a pick actually needs), and
-    // its recast timer, e.g. "bless (Lvl 2) - 15s", with a trailing condition tag
-    // when set.
+    // Row label — the buff's spell name (falls back to the cast code) + its recast
+    // timer, e.g. "bless - 15s", with a trailing condition tag when set. No level
+    // requirement here: the level lives in the Add-buff dropdown where it helps you
+    // pick; on a configured row it only reads as confusing (it's not the recast).
     public string HeaderText
     {
         get
         {
-            string label = _resolveName(_dto.Spell);
-            if (_resolveReqLevel?.Invoke(_dto.Spell) is { } lvl) label += $" (Lvl {lvl})";
-            label += $" - {RecastMarginSec}s";
+            string label = $"{_resolveName(_dto.Spell)} - {RecastMarginSec}s";
             if (_dto.OnlyWhenHpFull) label += " · HP full";
             if (_dto.OnlyWhenMaFull) label += " · MA full";
             return label;
@@ -147,22 +140,22 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         }
     }
 
-    // False for a row the character hasn't actually learned yet — "Add all
-    // blesses" can now list (and pre-check nothing on) a buff from the class's
-    // full roster the player hasn't trained, so this drives the row's "unlearned"
-    // chip the way the read-only Buff Watchdog timer bars already show one.
+    // False for a row whose spell the character hasn't actually learned — drives the
+    // "unlearned" chip the way the read-only Buff Watchdog timer bars do. Add-buff /
+    // Add all blesses only ever offer learned spells, so this normally stays true;
+    // it still catches a slotted spell that later reads unlearned (a data-set
+    // renumber, a hand-typed unknown code).
     public bool IsLearned => _resolveLearned?.Invoke(Spell) ?? true;
 
     public BuffSlotRowViewModel(
         BuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
         Func<string?, string> resolveName, Func<BuffSlot, (string? RemovedBy, string? Removes)> resolveOverwrite,
         Action persist, Action<BuffSlotRowViewModel>? onSelfActivated = null,
-        Func<string?, bool>? resolveLearned = null, Func<string?, int?>? resolveReqLevel = null)
+        Func<string?, bool>? resolveLearned = null)
     {
         _dto = dto;
         _resolveScope = resolveScope;
         _resolveName = resolveName;
-        _resolveReqLevel = resolveReqLevel;
         _resolveOverwrite = resolveOverwrite;
         _persist = persist;
         _onSelfActivated = onSelfActivated;

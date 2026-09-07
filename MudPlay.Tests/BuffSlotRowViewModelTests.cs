@@ -177,24 +177,13 @@ public sealed class BuffSlotRowViewModelTests
     }
 
     [Fact]
-    public void HeaderText_NoReqLevelResolver_OmitsLevelTag()
+    public void HeaderText_IsNameAndRecast_NoLevelTag()
     {
-        // Every Row(...) helper call in this file omits the resolver — must not
-        // render a bogus "(Lvl )" or throw.
+        // The configured-row header is just name + recast — no "(Lvl N)" tag (that
+        // lives in the Add-buff dropdown, where it helps you pick; on a slotted row
+        // it only read as confusing).
         var row = Row(new BuffSlot { Spell = "bless", RecastMarginSec = 15 });
         Assert.Equal("bless - 15s", row.HeaderText);
-    }
-
-    [Fact]
-    public void HeaderText_ReqLevelResolved_InsertsLevelTagBeforeRecast()
-    {
-        var dto = new BuffSlot { Spell = "dfla", RecastMarginSec = 15 };
-        var row = new BuffSlotRowViewModel(
-            dto, _ => BuffSlotScope.SelfOnly, _ => "dark flagellation",
-            _ => (null, null), () => { }, onSelfActivated: null,
-            resolveLearned: null, resolveReqLevel: _ => 50);
-
-        Assert.Equal("dark flagellation (Lvl 50) - 15s", row.HeaderText);
     }
 
     [Theory]
