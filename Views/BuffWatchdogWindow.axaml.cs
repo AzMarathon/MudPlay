@@ -123,6 +123,15 @@ public partial class BuffWatchdogWindow : Window
         {
             _zoneSplitter.IsVisible = false;
             _zonesGrid.RowDefinitions.Add(new RowDefinition(GridLength.Star));
+            // Reset EVERY child to the single cell (0,0). The config zone and splitter
+            // keep whatever row/column they were assigned in the expanded layout (1, 2,
+            // …); collapsing to one cell leaves those indices pointing past the grid, and
+            // Avalonia's Grid.MeasureCellsGroup then indexes its definition arrays out of
+            // range and crashes — even though those two are IsVisible=false.
+            Grid.SetRow(_configZone, 0);
+            Grid.SetColumn(_configZone, 0);
+            Grid.SetRow(_zoneSplitter, 0);
+            Grid.SetColumn(_zoneSplitter, 0);
             Grid.SetRow(_barsZone, 0);
             Grid.SetColumn(_barsZone, 0);
             return;

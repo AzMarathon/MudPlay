@@ -59,6 +59,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     // arrange the two zones + the drag splitter. Reloaded live on profile load /
     // mutate so a Settings Apply reflows the open window at once.
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConfigToggleGlyph))]
     private BuffWatchdogLayout _layout = BuffWatchdogLayout.ConfigTop;
 
     // Whether the config panel is collapsed (bars-only), toggled by the button on the
@@ -69,9 +70,18 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     [NotifyPropertyChangedFor(nameof(ConfigToggleTooltip))]
     private bool _configCollapsed;
 
-    // ⊞ = expand (show), ⊟ = collapse (hide) — layout-agnostic so it reads the same
-    // whether the config sits top / bottom / left / right of the bars.
-    public string ConfigToggleGlyph => ConfigCollapsed ? "⊞" : "⊟";
+    // An arrow that points the direction the divider moves on the next click (same
+    // convention as the nav map's collapse chip): while the config panel is SHOWN the
+    // arrow points toward it (collapse it away); while COLLAPSED it points back toward
+    // where it'll reappear (expand it). Depends on which side the panel is on.
+    public string ConfigToggleGlyph => Layout switch
+    {
+        BuffWatchdogLayout.ConfigTop    => ConfigCollapsed ? "▼" : "▲",
+        BuffWatchdogLayout.ConfigBottom => ConfigCollapsed ? "▲" : "▼",
+        BuffWatchdogLayout.ConfigLeft   => ConfigCollapsed ? "▶" : "◀",
+        BuffWatchdogLayout.ConfigRight  => ConfigCollapsed ? "◀" : "▶",
+        _                               => ConfigCollapsed ? "▼" : "▲",
+    };
     public string ConfigToggleTooltip => ConfigCollapsed
         ? "Show the buff-config panel"
         : "Hide the buff-config panel (bars only)";

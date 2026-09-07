@@ -16,7 +16,7 @@
 > - Buff Watchdog: config list is one continuous order (aimed buffs → whole-party → item buffs), no "Weapons" separator; removing a buff no longer rebuilds the whole list (fixes the lag with many buffs); fixed a long buff name painting through the Self checkbox
 > - Buff Watchdog: whole-party toggle relabelled "Party"; config-row headers/labels are white to match the Solo checkbox
 > - Buff Watchdog: a buff clobbered by a later-cast one that removes it now reads "conflict" (⚠ moved to the front) instead of running a false countdown
-> - Buff Watchdog: a ⊟/⊞ button on the timer-bar side collapses/expands the config panel (sticky per character)
+> - Buff Watchdog: an arrow button (nav-chip style) on the timer-bar side collapses/expands the config panel (sticky per character)
 > - Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎, including reroll settings for mana-regen roll spells
 > - Fixed severe Buff Watchdog lag with many configured buffs, the config pane/splitter snapping back to default on every add/remove, and the unreadable grey-on-bright-yellow recast bar (now a dim amber)
 >

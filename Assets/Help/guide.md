@@ -751,7 +751,7 @@ A row shows a **⚠** next to its name when it conflicts with another configured
 
 ### Reading the timer bars
 
-A small **⊟ / ⊞ button at the top-right of the timer-bar side** collapses or expands the config panel — **⊟** hides it (bars fill the whole window), **⊞** brings it back. Handy once your buffs are set and you just want to watch the timers. The choice sticks per character, so the window reopens the way you left it. (The button only appears for a class that actually has buffs to configure.)
+A small **arrow button at the top-right of the timer-bar side** collapses or expands the config panel — one click hides it (bars fill the whole window), another brings it back. It's styled like the navigation map's collapse chip, and the arrow points the way the next click moves the divider (so it follows whichever side the config sits on). Handy once your buffs are set and you just want to watch the timers. The choice sticks per character, so the window reopens the way you left it. (The button only appears for a class that actually has buffs to configure.)
 
 The timer bars are grouped **by player**: **your own name first** (your self buffs and any whole-party buffs), then one section per party member with the buffs cast on them.
 
