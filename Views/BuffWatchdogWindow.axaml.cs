@@ -68,12 +68,33 @@ public partial class BuffWatchdogWindow : Window
     private bool EffectiveShowConfig =>
         (_vm?.Buffs?.ShowPanel ?? false) && !(_vm?.ConfigCollapsed ?? false);
 
+    // The splitter's fixed thickness (kept in step with ApplyZoneLayout's 4px splitter).
+    private const double SplitterThickness = 4;
+
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Layout (top/bottom/left/right) or the collapse toggle both reflow the zones.
-        if (e.PropertyName is nameof(BuffWatchdogViewModel.Layout)
-                           or nameof(BuffWatchdogViewModel.ConfigCollapsed))
+        if (e.PropertyName == nameof(BuffWatchdogViewModel.Layout))
             ApplyZoneLayout();
+        else if (e.PropertyName == nameof(BuffWatchdogViewModel.ConfigCollapsed))
+            ToggleConfigWithResize();
+    }
+
+    // Collapsing / expanding the config panel also resizes the WINDOW along the split
+    // axis, so the panel's space is handed back on collapse and reclaimed on expand —
+    // the divider edge lands where the separator was, no manual resize needed. Keeps
+    // the top-left corner fixed (the far edge moves), which is exactly right for the
+    // config-on-right / config-on-bottom layouts and harmless for the others.
+    private void ToggleConfigWithResize()
+    {
+        bool collapsing = !EffectiveShowConfig;
+        ApplyZoneLayout();   // captures the config extent on collapse, restores it on expand
+        bool vertical = _vm?.Layout is BuffWatchdogLayout.ConfigTop or BuffWatchdogLayout.ConfigBottom;
+        double extent = _configExtent > 0 ? _configExtent : (vertical ? 180 : 300);
+        double delta = extent + SplitterThickness;
+        if (vertical)
+            Height = collapsing ? System.Math.Max(MinHeight, Height - delta) : Height + delta;
+        else
+            Width = collapsing ? System.Math.Max(MinWidth, Width - delta) : Width + delta;
     }
 
     private void OnBuffsPropertyChanged(object? sender, PropertyChangedEventArgs e)

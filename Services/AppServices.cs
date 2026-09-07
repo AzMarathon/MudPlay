@@ -6403,9 +6403,16 @@ public sealed class AppServices
             string code = slot.Spell.Trim();
             if (Spellbook.FindByCastCode(code) is not { } spell) continue;
             bool isWholeParty = IsPartyWideBuff(code);
-            Game.Spells.BuffAffectSet affect = Game.Spells.BuffAffectSet.From(
-                isWholeParty, slot.WholePartyOn, slot.CastOnSelf, slot.AllMembers, slot.Targets,
-                castSolo: slot.CastSolo);
+            // Judge co-landing by SCOPE — what the slot COULD ever land on — not the live
+            // on/off toggles. The ⚠ is a heads-up about the configured PAIR: two buffs
+            // that remove each other still clobber whenever both are up, no matter which
+            // Self / Party / member boxes are ticked right now. (A whole-party buff can
+            // hit everyone; a self / single-target buff can hit you and/or any member.)
+            // The timer-side "conflict" call, by contrast, reads the live cast snapshot —
+            // so an un-cast buff never falsely marks another as clobbered.
+            Game.Spells.BuffAffectSet affect = isWholeParty
+                ? new Game.Spells.BuffAffectSet { Everyone = true, Members = System.Array.Empty<string>() }
+                : new Game.Spells.BuffAffectSet { Self = true, AllMembers = true, Members = System.Array.Empty<string>() };
             resolved.Add((spell, affect));
         }
 
