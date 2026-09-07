@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.53.3**
-> - Fixed the Narrow Precipice drawbridge winch (12/2123): the walker would pull it, watch it lower, then time out waiting for a gate-open signal that this exit never sends — now it also accepts the drawbridge's own "lowers with a heavy thud" line and crosses immediately
+> **Version 3.53.4**
+> - Help guide: audited the last several dozen releases against the in-app Help topics — found the content itself accurate throughout, but fixed three stale internal cross-references pointing at a "the Automation section" that doesn't exist (renamed a while back) to the real section names
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

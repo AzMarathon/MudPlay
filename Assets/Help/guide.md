@@ -81,7 +81,7 @@ The status bar along the bottom packs several live readouts:
 
 ## The toolbar and menus
 
-A customizable **toolbar** of icon buttons sits under the menu bar. The full bar is **File · View · Action · Game Data · Tools · Help · Bug Report** — **Action** is your in-play on/off surface for the auto-engines and the manual one-shots (see **Automation**), **Game Data** switches imported data sets, and **Bug Report** captures client state to a file on your Desktop. You choose which toolbar buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**.
+A customizable **toolbar** of icon buttons sits under the menu bar. The full bar is **File · View · Action · Game Data · Tools · Help · Bug Report** — **Action** is your in-play on/off surface for the auto-engines and the manual one-shots (see **The auto-engines** and **Manual one-shots and Reset States**), **Game Data** switches imported data sets, and **Bug Report** captures client state to a file on your Desktop. You choose which toolbar buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**.
 
 ### Customizing the terminal right-click menu
 
@@ -586,7 +586,7 @@ The top **Game Data** menu (in the menu bar) manages your data sets:
 The window is a sidebar plus a content pane:
 
 - The sidebar's **Search…** box filters the **section list**, not the rows — type "weapon" and unrelated sections drop away.
-- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Incomplete Messages, Unrecognized Lines**. (The macro/alias/trigger editors are covered in the **Automation** section.)
+- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Incomplete Messages, Unrecognized Lines**. (The macro/alias/trigger editors are covered in the **Macros, aliases, and triggers** section.)
 - **Imported tables** (bottom group) holds the game data: **Monsters, Items, Spells, Rooms, Lairs, Shops, Races, Classes, TextBlocks, Info, Unobtainable, Quest Flags.**
 
 Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column — including the friendly labels, so on the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name. On the **Spells** tab it also understands ailment keywords: type `poison`, `confuse`, `blind`, or `hold` to list every spell that *applies* that effect (read from the spell's own ability codes, following the EndCast chain), not just spells with the word in their name. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
@@ -1006,7 +1006,7 @@ Per-character, not global — each character can have entirely different shortcu
 
 ## Macros & Aliases
 
-Two per-character typing shortcuts, both managed in the **Game Data Browser** (F3), not the main Settings window, and saved the moment you change them — there's no separate Apply step, unlike most Settings tabs. **Macros** bind a key combination to a command; **aliases** expand a typed word into a longer command. Macros share the built-in keybindings' "can't double-book a key" check; aliases are instead checked against MajorMUD chat commands so they can't hijack your chat. (For the step-by-step of building either — plus triggers — see the **Automation** section.)
+Two per-character typing shortcuts, both managed in the **Game Data Browser** (F3), not the main Settings window, and saved the moment you change them — there's no separate Apply step, unlike most Settings tabs. **Macros** bind a key combination to a command; **aliases** expand a typed word into a longer command. Macros share the built-in keybindings' "can't double-book a key" check; aliases are instead checked against MajorMUD chat commands so they can't hijack your chat. (For the step-by-step of building either — plus triggers — see the **Macros, aliases, and triggers** section.)
 
 ### What a macro is
 
