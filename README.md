@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.54.1**
-> - Help guide: full audit against the current client — added the missing remote commands (`@relog`/`@hangup`/`@profile`), menu items (loop import, Reset layout, Report an issue, About), the Buff Watchdog window + its layout/snap settings, and Roomba / Flavor Prefixes / Bosses coverage
-> - Help guide: fixed stale text — the `--profile` CLI claim, the Auto-load-last-profile location, the renamed "Automation" cross-references, and flagged the non-functional sysop/goto-powers checkbox
+> **Version 3.54.2**
+> - Fixed keyboard input feeling delayed during play — the buff/heal decision pass (each combat round, ~1×/s idle) was re-scanning the entire Spells/Items/Classes tables from scratch on every lookup, stalling the UI thread; the worst offender was the equipment-stat aggregation scanning the whole Items table per worn item
+> - Game-data lookups by Number/Name are now indexed once per table load, and the class cast-item list is cached per class, instead of linear-scanned on every call
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
