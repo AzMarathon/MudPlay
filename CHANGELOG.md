@@ -1,5 +1,10 @@
 # Version history
 
+## 3.54.1
+
+- Help guide: full audit against the current client — added coverage that was missing for the `@relog` / `@hangup` / `@profile` remote commands, the Import loops (`.mp`) menu item, View → Reset layout, Help → Report an issue / About, the Buff Watchdog window and its layout + snap-windows settings, and the Roomba tab, Flavor Prefixes table, and Bosses Notes/Clear controls
+- Help guide: fixed stale text — the "no `--profile` CLI" claim (it exists), the Auto-load-last-profile location (File menu, not Settings → General), and the renamed "Automation section" cross-references; flagged the non-functional "sysop / goto powers" checkbox as such
+
 ## 3.54.0
 
 - Buff Watchdog: new **Add all blesses** button — adds a row for every buff you've actually **learned**, on yourself or the whole party, in one click, no dialog, sorted by level requirement (not name). Whole-party buffs are listed but never pre-checked — that's always your call, ticked per-row via Party Wide

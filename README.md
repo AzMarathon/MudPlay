@@ -1,28 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.54.0**
-> - Buff Watchdog: new **Add all blesses** button — adds a row for every buff you've actually **learned**, on yourself or the whole party, sorted by level requirement; whole-party buffs are listed but never pre-checked
-> - **＋ Add buff** now picks from a **dropdown of your learned buffs** (each shown as name + level learned) instead of a text box — an already-slotted buff stays listed but greyed out
-> - Where two learned buffs would strip each other off both are listed but only the higher-level one is pre-checked; checking a conflicting buff now auto-unchecks the other live, on any row
-> - Buff Watchdog: new **Remove all** button — clears every configured slot in one click (gated behind "confirm deletes"); it clears the config, not running buffs — any buff still up keeps its live timer bar
-> - A buff that's up but no longer configured (cast by hand, or a slot you removed) now shows a read-only timer bar that clears itself when the buff wears off; a still-configured buff persists as "not up"
-> - Fixed the ⚠ conflict marker not appearing on a whole-party buff set to Solo (Party Wide off) — a solo whole-party cast still lands on you
-> - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures as if they were maintainable buffs — it now requires a real duration
-> - Fixed **Add all blesses** recommending a spell your character's alignment can't cast and crowding out the alignment-correct alternative — it now reads your alignment from your own `who` observation
-> - Buff Watchdog: new live mana-budget readout — `Mana/Tick gained: N - Mana/Tick to maintain: N`, both per 30s regen tick so they compare directly (natural passive regen vs what every checked buff costs to keep recast), updating as you check/uncheck boxes or your roster/gear/level change
-> - Fixed **＋ Add buff** / **Add all blesses** silently dropping self-cast buff items (e.g. a bless-casting crozier) — only whole-party items were being offered before
-> - Weapon "on use" (#item) buffs are now offered only when you can use them — you meet the item's level and have it in your pack — instead of the whole class roster; refreshes on your next `i`
-> - Buff Watchdog: config list is one continuous order (aimed buffs → whole-party → item buffs), no "Weapons" separator; removing a buff no longer rebuilds the whole list (fixes the lag with many buffs); fixed a long buff name painting through the Self checkbox
-> - Buff Watchdog: whole-party toggle relabelled "Party"; config-row headers/labels are white to match the Solo checkbox
-> - Buff Watchdog: a buff clobbered by a later-cast one that removes it now reads "conflict" (⚠ moved to the front) instead of running a false countdown
-> - Buff Watchdog: an arrow button (nav-chip style) on the timer-bar side collapses/expands the config panel and resizes the window to match; the splitter position, collapse state, and window size all persist per character
-> - Buff Watchdog: new **Unlearned spells** button prints to the terminal every class spell you haven't learned yet that's within reach — trainable now, plus up to 5 levels ahead — each as `[Spell name - Unlearned, Requires Level XX]`
-> - Buff Watchdog: the config-side ⚠ conflict marker shows whenever two clashing buffs are both configured, regardless of which cast boxes are ticked
-> - Buff timers: fixed shared cast/wear-off messages between buffs that remove each other (e.g. bless removes chant, one "you feel lucky" matching several records) — casting one now refreshes its own timer (not a sibling's) and the following shared wear-off clears no one, so the survivor counts and the clobbered buff shows "conflict"
-> - Buff Watchdog: a "conflict" bar carries its explanation tooltip across the whole bar, not just the ⚠
-> - Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎, including reroll settings for mana-regen roll spells
-> - Fixed severe Buff Watchdog lag with many configured buffs, the config pane/splitter snapping back to default on every add/remove, and the unreadable grey-on-bright-yellow recast bar (now a dim amber)
+> **Version 3.54.1**
+> - Help guide: full audit against the current client — added the missing remote commands (`@relog`/`@hangup`/`@profile`), menu items (loop import, Reset layout, Report an issue, About), the Buff Watchdog window + its layout/snap settings, and Roomba / Flavor Prefixes / Bosses coverage
+> - Help guide: fixed stale text — the `--profile` CLI claim, the Auto-load-last-profile location, the renamed "Automation" cross-references, and flagged the non-functional sysop/goto-powers checkbox
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
