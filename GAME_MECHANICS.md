@@ -2408,6 +2408,23 @@ never the raw store value (a spell/effect showing "DR +10" really grants +1.0). 
 `SpellEffectFormatter` (the effect line) and the spell Game Data view. (Worn-DR on gear via the
 equipment stat path is a separate display not yet audited against this.)
 
+## Armour Class (AC) — stored at 10×, displayed to the tenth, floored for combat *([CONFIRMED] 2026-09-07, user + source: syntax53/MMUD-Explorer)*
+
+Item `ArmourClass` is stored **ten times** the AC it grants (raw 101 → +10.1 AC), same convention
+as `DR`. MMUD-Explorer displays every item and the character total as **`raw / 10` to one decimal**
+(`Round(sum, 1)` for the character stat), so **AC is a fractional value on screen — 10.1 is a valid,
+correct AC**. Show the summed worn+buff AC to the tenth, not floored.
+
+The **to-hit formula uses a WHOLE-number AC**, not the fraction. MMUD-Explorer's monster-attack sim
+holds `m_nUserAC As Long` and is fed `Round(displayedAC)`; the incoming-hit chance is
+`Round(1 − (AC²/100) / (acc²/140), 2) × 100` = `100 − AC²/(acc²/140)` (our `CombatCalculator`
+port matches this shape). MMUD-Explorer *rounds* the fractional AC to that whole number; the **real
+game floors** it (user-confirmed in-game: gear +61.5 → the game uses **61**, and rounding to 62
+over-stated hit odds by 1). So the client floors the AC into the hit-chance math — display the
+tenths, but the estimate consumes `floor(AC)`. The label may therefore read `10.1` while the
+Hits-You-% is computed on `10`; that's faithful to the game (display precise, combat whole), not a
+bug.
+
 ## The `spells` / `sp` command output *([CONFIRMED] 2026-08-13, user capture, Paradigm)*
 
 `sp` is the accepted abbreviation of `spells` and produces the identical listing of the character's

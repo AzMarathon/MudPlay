@@ -1,8 +1,9 @@
 # Version history
 
-## 3.54.3
+## 3.54.4
 
 - Unrecognized Lines capture no longer stages room-display titles (e.g. "River Street") — a room name is read by the room parser, not the message catalogue, so it's now matched against the Rooms table and excluded; genuine spell/monster lines that happen to share the room-name colour still capture
+- Monster Intel "AC vs Selected Target" now shows AC to the tenth (e.g. 10.1) instead of rounding — item AC is stored ×10 and the game displays it fractional; the Hits-You-% estimate still uses the whole-number AC the game's to-hit formula consumes
 
 ## 3.54.2
 

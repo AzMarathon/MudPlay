@@ -23,7 +23,12 @@ public readonly record struct PlayerDefenseProfile(
     // FLOOR: light-armour classes (type 1..6 — Silk/Ninja/Leather) can be driven to a
     // 1% minimum, everything else (and all of Stock) floors higher — see
     // CombatCalculator.GetHitMin. 0 = unknown → the realm default floor.
-    int ArmourType = 0);
+    int ArmourType = 0,
+    // The un-floored AC to the tenth (worn gear + buffs), for DISPLAY only — the game
+    // shows AC fractional (item AC is stored 10×, char AC rounded to 1 decimal). Ac
+    // above is this floored, the whole number the to-hit formula consumes. See the
+    // "Armour Class" note in GAME_MECHANICS.md.
+    double AcExact = 0);
 
 // Shared source for "how likely is this monster to hit me right now" — the single
 // weighted incoming-hit figure Monster Intel's master list surfaces, extracted here
@@ -69,7 +74,8 @@ public static class IncomingHitEstimator
         // integer, over-stating AC by 1 (user-confirmed: projected 61.5 = actual,
         // but the sim was seeding 62). buff.Ac is already an integer, so truncating
         // PlusAC alone floors the whole.
-        int ac = (int)totals.PlusAC + buff.Ac;
+        double acExact = totals.PlusAC + buff.Ac;   // un-floored, for the fractional display
+        int ac = (int)acExact;
         int dodge = CombatCalculator.CalcDodge(
             stats.Level, stats.Agility, stats.Charm, totals.PlusDodge,
             encum.CurrentWeight, encum.MaxWeight);

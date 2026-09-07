@@ -63,6 +63,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // master-list "Hits You %" column — recomputed alongside weapon/spell
     // capabilities in RebuildCharacterCapabilities whenever gear changes.
     private int _playerAc;
+    // Un-floored AC to the tenth — the game shows AC fractional (item AC ×10, char AC
+    // rounded to 1 decimal), so the "AC vs Selected Target" readout displays this while
+    // the hit-% math keeps the whole-number _playerAc. See GAME_MECHANICS "Armour Class".
+    private double _playerAcExact;
     private int _playerDodge;
     private int _playerProtEvil;
     private int _playerProtGood;
@@ -398,6 +402,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             _stats!, worn, encum, _gameData, _buffProvider?.Invoke(),
             _spellbook!.Available, QuestBonusesForCharacter());
         _playerAc = def.Ac;
+        _playerAcExact = def.AcExact;
         _playerDodge = def.Dodge;
         _playerProtEvil = def.ProtEvil;
         _playerProtGood = def.ProtGood;
@@ -523,7 +528,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 ac += CombatCalculator.AdjustVileWard(SimVileWard, SimEvilLevel);
         }
         if (isGood) ac += _playerProtGood;
-        AcVsTargetText = ac.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // Display to the tenth: the game shows AC fractional (SimAc is the whole number
+        // the hit-% math uses; the tenths come from worn gear). Carry the live gear
+        // fraction so a stock 10.1 reads 10.1, while the wards stay whole.
+        double fraction = _playerAcExact - _playerAc;
+        AcVsTargetText = (ac + fraction).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     partial void OnSimAcChanged(int value) => OnSimInputChanged();
