@@ -1,5 +1,10 @@
 # Version history
 
+## 3.53.3
+
+- Fixed the Narrow Precipice drawbridge winch (12/2123): the walker would pull it, watch it lower, then time out waiting for a gate-open signal that this exit never sends — now it also accepts the drawbridge's own "lowers with a heavy thud" line and crosses immediately
+- bug reports addressed: paradigm-20260906-202008
+
 ## 3.53.2
 
 - Whole-party buffs in the Buff Watchdog gain a per-slot **Solo** checkbox (on by default): cast it while alone as well as party-wide — untick to make a whole-party buff party-only

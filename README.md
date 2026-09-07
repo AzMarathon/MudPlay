@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.53.2**
-> - Whole-party buffs in the Buff Watchdog gain a per-slot **Solo** checkbox (on by default): cast it while alone as well as party-wide — untick to make a whole-party buff party-only
-> - Unified the buff casting engine — whole-party and self casts now share one path, so a slot's order in the Watchdog list is honoured, self is blessed before other members, and whole-party casts queue as before
+> **Version 3.53.3**
+> - Fixed the Narrow Precipice drawbridge winch (12/2123): the walker would pull it, watch it lower, then time out waiting for a gate-open signal that this exit never sends — now it also accepts the drawbridge's own "lowers with a heavy thud" line and crosses immediately
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
