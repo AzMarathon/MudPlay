@@ -748,6 +748,9 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.WinchWontBudge,
             @"\bwinch\b.*\bdoes(?:n'?t| not) budge\b",
             options: RegexOptions.IgnoreCase);
+        yield return new RegexPattern(KnownPatterns.WinchDrawbridgeLowered,
+            @"\bdrawbridge lowers\b",
+            options: RegexOptions.IgnoreCase);
 
         // "You see <name> attempt to bash the door to the <dir>." — another
         // player (possibly our party leader) failing to force a door. Name
