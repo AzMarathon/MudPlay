@@ -5,6 +5,8 @@ using System.Collections.Specialized;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game.Calculators;
+using MudPlay.Game.Inventory;
 using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -199,16 +201,31 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     // Every learned, level-gated buff not already slotted that the character can
-    // cast on themselves (self-only Targets, or single-target Targets castable on
-    // self), reduced to the BuffConflictAnalyzer pick: drop anything that would
-    // clobber — or be clobbered by — an already-configured slot, then keep only the
+    // ACTUALLY cast on themselves right now (self-only Targets, or single-target
+    // Targets castable on self, and — when we know it — alignment-eligible),
+    // reduced to the BuffConflictAnalyzer pick: drop anything that would clobber —
+    // or be clobbered by — an already-configured slot, then keep only the
     // highest-ReqLevel member of each RemovesSpell family (e.g. greater zeal over
     // zeal) among what's left.
+    //
+    // Alignment matters here specifically because a class's learnable list often
+    // carries BOTH sides of a holy/unholy pair (e.g. "holy armour" needs non-evil,
+    // "unholy armour" needs evil — Paradigm data, report paradigm-20260906-*): the
+    // character can have learned both over their career even though only one is
+    // castable right now, and each removes the other, so without this filter the
+    // RemovesSpell tie-break has no way to know which of the two is even usable.
     private void RefreshSelfBlessCandidates(HashSet<string> slotted)
     {
+        // Same source CharacterInfo/Equipment already trust for "what's my current
+        // alignment": our own `who` row. Null when we haven't been seen in a `who`
+        // yet — IsAlignmentEligible treats that as "don't know, don't filter".
+        AlignmentBucket? alignment = ItemEquipFilter.BucketForWord(
+            AppServices.Current.Players.Find(AppServices.Current.PlayerStats.Name)?.Alignment);
+
         List<Game.Spells.SelfBlessCandidate> pool = _spellbook.Available
             .Where(s => BuffClassifier.IsAnyBuff(s)
                 && !BuffClassifier.IsWholeParty(s.Targets)
+                && BuffClassifier.IsAlignmentEligible(s.Formula, alignment)
                 && s.ReqLevel <= _spellbook.Level
                 && _spellbook.IsObtained(s.Number)
                 && !slotted.Contains(s.Short.Trim()))

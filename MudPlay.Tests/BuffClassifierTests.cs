@@ -1,3 +1,4 @@
+using MudPlay.Game.Calculators;
 using MudPlay.Game.Spells;
 using Xunit;
 
@@ -68,5 +69,51 @@ public sealed class BuffClassifierTests
     public void HasDuration_AllZero_IsInstant()
     {
         Assert.False(BuffClassifier.HasDuration(new SpellFormulaInput()));
+    }
+
+    private static SpellFormulaInput Formula(params int[] abilCodes) =>
+        new() { Abilities = System.Array.ConvertAll(abilCodes, c => new SpellAbility(c, 0)) };
+
+    // Confirmed Paradigm data (report: user's evil Priest got recommended
+    // "protection from evil" — Abil 111, non-evil only — and never got offered
+    // "unholy armour", the Abil-98 evil-only spell that mutually removes
+    // "holy armour"). Abil 111 = "protection from evil"'s actual shape.
+    [Theory]
+    [InlineData(AlignmentBucket.Good, true)]
+    [InlineData(AlignmentBucket.Neutral, true)]
+    [InlineData(AlignmentBucket.Evil, false)]
+    [InlineData(null, true)]   // unknown alignment ⇒ don't guess, don't exclude
+    public void IsAlignmentEligible_NonEvilOnly_ProtectionFromEvilShape(AlignmentBucket? alignment, bool expected) =>
+        Assert.Equal(expected, BuffClassifier.IsAlignmentEligible(Formula(111), alignment));
+
+    // "unholy armour"'s actual shape — Abil 98, evil only.
+    [Theory]
+    [InlineData(AlignmentBucket.Good, false)]
+    [InlineData(AlignmentBucket.Neutral, false)]
+    [InlineData(AlignmentBucket.Evil, true)]
+    [InlineData(null, true)]
+    public void IsAlignmentEligible_EvilOnly_UnholyArmourShape(AlignmentBucket? alignment, bool expected) =>
+        Assert.Equal(expected, BuffClassifier.IsAlignmentEligible(Formula(98), alignment));
+
+    [Theory]
+    [InlineData(AlignmentBucket.Good, true)]
+    [InlineData(AlignmentBucket.Neutral, false)]
+    [InlineData(AlignmentBucket.Evil, false)]
+    public void IsAlignmentEligible_GoodOnly(AlignmentBucket? alignment, bool expected) =>
+        Assert.Equal(expected, BuffClassifier.IsAlignmentEligible(Formula(97), alignment));
+
+    [Theory]
+    [InlineData(AlignmentBucket.Good, false)]
+    [InlineData(AlignmentBucket.Neutral, true)]
+    [InlineData(AlignmentBucket.Evil, false)]
+    public void IsAlignmentEligible_NeutralOnly(AlignmentBucket? alignment, bool expected) =>
+        Assert.Equal(expected, BuffClassifier.IsAlignmentEligible(Formula(112), alignment));
+
+    [Fact]
+    public void IsAlignmentEligible_NoAlignmentAbility_AlwaysEligible()
+    {
+        SpellFormulaInput formula = Formula(4, 58, 22, 115, 122);   // "zeal"'s real ability set
+        Assert.True(BuffClassifier.IsAlignmentEligible(formula, AlignmentBucket.Good));
+        Assert.True(BuffClassifier.IsAlignmentEligible(formula, AlignmentBucket.Evil));
     }
 }

@@ -6,6 +6,7 @@
 > - It picks your level and spellbook's highest-tier version of each buff family (e.g. greater zeal over zeal, since casting one strips the other) and skips anything that would conflict with a buff you've already configured by hand
 > - Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt
 > - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures as if they were maintainable buffs — it now requires a real duration
+> - Fixed **Add all blesses** recommending a spell your character's alignment can't cast and crowding out the alignment-correct alternative — it now reads your alignment from your own `who` observation
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
