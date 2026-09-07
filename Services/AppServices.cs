@@ -114,6 +114,18 @@ public sealed class AppServices
         if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text);
     }
 
+    // Drop a bracketed yellow status line into the terminal scrollback — the same
+    // "[…]" notice cadence quest-availability / roomba-complete use. The text is
+    // written verbatim (no auto-bracketing): callers supply their own "[…]" so a
+    // multi-line report reads exactly as they compose it. No-op until the main VM
+    // binds it; the sink already marshals to the UI thread.
+    private Action<string>? _terminalNotice;
+    public void SetTerminalNotice(Action<string> sink) => _terminalNotice = sink;
+    public void WriteTerminalNotice(string text)
+    {
+        if (!string.IsNullOrWhiteSpace(text)) _terminalNotice?.Invoke(text);
+    }
+
     // Opens (or re-focuses) the single Navigation Management dialog. Both the map
     // window's "Navigation Management" button and the toolbar Start button route
     // here so there's only ever one instance — no two identical windows. The bool
@@ -3578,7 +3590,7 @@ public sealed class AppServices
         // duration (SpellCalculator.Duration at the live level);
         // ShortFromAppliedRecord maps a fired AppliedMessage record back
         // to the cast code so a confirmed self-buff starts its timer.
-        CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord);
+        CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord, RemovesShortsFor);
         // A fresh character starts with no buffs assumed — clear any timers carried over
         // (e.g. paused from a prior character's disconnect) so a character switch doesn't
         // resurrect the old character's buffs. A same-character reconnect does NOT reload
@@ -6377,15 +6389,10 @@ public sealed class AppServices
 
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
     // effect the Spell Book renders as "Removes <spell>").
-    private HashSet<int> RemovedSpellNumbers(string castCode)
-    {
-        const int RemovesSpellAbil = 122;
-        HashSet<int> nums = new();
-        if (Spellbook.FindByCastCode(castCode.Trim()) is { } s)
-            foreach (Game.Spells.SpellAbility a in s.Formula.Abilities)
-                if (a.Code == RemovesSpellAbil) nums.Add(a.Value);
-        return nums;
-    }
+    private HashSet<int> RemovedSpellNumbers(string castCode) =>
+        Spellbook.FindByCastCode(castCode.Trim()) is { } s
+            ? Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula)
+            : new HashSet<int>();
 
     // Every pair of configured, resolvable buff slots where one's spell removes the
     // other's via RemovesSpell (Abil 122) and their targeting can land on the same
@@ -6408,8 +6415,16 @@ public sealed class AppServices
             string code = slot.Spell.Trim();
             if (Spellbook.FindByCastCode(code) is not { } spell) continue;
             bool isWholeParty = IsPartyWideBuff(code);
-            Game.Spells.BuffAffectSet affect = Game.Spells.BuffAffectSet.From(
-                isWholeParty, slot.WholePartyOn, slot.CastOnSelf, slot.AllMembers, slot.Targets);
+            // Judge co-landing by SCOPE — what the slot COULD ever land on — not the live
+            // on/off toggles. The ⚠ is a heads-up about the configured PAIR: two buffs
+            // that remove each other still clobber whenever both are up, no matter which
+            // Self / Party / member boxes are ticked right now. (A whole-party buff can
+            // hit everyone; a self / single-target buff can hit you and/or any member.)
+            // The timer-side "conflict" call, by contrast, reads the live cast snapshot —
+            // so an un-cast buff never falsely marks another as clobbered.
+            Game.Spells.BuffAffectSet affect = isWholeParty
+                ? new Game.Spells.BuffAffectSet { Everyone = true, Members = System.Array.Empty<string>() }
+                : new Game.Spells.BuffAffectSet { Self = true, AllMembers = true, Members = System.Array.Empty<string>() };
             resolved.Add((spell, affect));
         }
 
@@ -6524,6 +6539,22 @@ public sealed class AppServices
             if (string.Equals(s.Name.Trim(), record.Name.Trim(), StringComparison.OrdinalIgnoreCase))
                 return s.Short;
         return null;
+    }
+
+    // The cast codes of the buffs a given cast code's spell REMOVES (RemovesSpell / Abil
+    // 122). Lets the CastingDirector re-attribute a wear-off that lands right after a
+    // clobbering cast to its victim rather than the just-cast survivor (bless & chant
+    // share the wear-off message, so the shared line can't disambiguate on its own).
+    private IReadOnlyCollection<string> RemovesShortsFor(string castShort)
+    {
+        if (string.IsNullOrWhiteSpace(castShort)
+            || Spellbook.FindByCastCode(castShort.Trim()) is not { } spell) return System.Array.Empty<string>();
+        HashSet<int> removed = Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(spell.Formula);
+        if (removed.Count == 0) return System.Array.Empty<string>();
+        List<string> shorts = new();
+        foreach (Game.Spells.KnownSpell s in Spellbook.Available)
+            if (removed.Contains(s.Number)) shorts.Add(s.Short);
+        return shorts;
     }
 
     // ----- Mana-regen reroll glue ---------------------------------------
@@ -6702,6 +6733,28 @@ public sealed class AppServices
         Game.Calculators.ManaRegenBreakpointCalculator.Result r =
             Game.Calculators.ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
         return (r.WorstTick, r.BestTick);
+    }
+
+    // The character's natural passive mana-regen per 30 s tick — level / stats /
+    // magery with worn +ManaRgn% folded in, NOT meditating — the "mana gained per
+    // tick" the Buff Watchdog shows against its per-tick maintenance cost so you can
+    // see at a glance whether a buff set is self-sustaining. Deliberately excludes any
+    // mana-regen roll spell (nature tap / flux): its magnitude is a variable roll, and
+    // the spell itself is already counted on the maintenance side. Uses the same
+    // engine formula (CharacterCalculator.CalcManaRegen) the Level Projection grid
+    // trusts. Null for a non-caster (mageryType 0) or before the first stat parse.
+    public int? PassiveManaRegenTick()
+    {
+        if (!Stats.HasParsed) return null;
+        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        int mageryType = RowInt(classRow, "MageryType");
+        if (mageryType == 0) return null;   // non-caster: no mana pool worth planning
+        int mageryLevel = RowInt(classRow, "MageryLVL");
+        int gearRegen = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
+        return Game.Calculators.CharacterCalculator.CalcManaRegen(
+            System.Math.Max(1, PlayerStats.Level), PlayerStats.Intellect, PlayerStats.Willpower,
+            PlayerStats.Charm, mageryType, mageryLevel, gearRegen, isMeditating: false, GameData.ActiveRealm);
     }
 
     private static int RowInt(System.Text.Json.JsonElement? row, string property)

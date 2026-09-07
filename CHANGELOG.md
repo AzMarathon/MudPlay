@@ -1,8 +1,37 @@
 # Version history
 
-## 3.53.4
+## 3.54.1
 
-- Help guide: audited the last several dozen releases against the in-app Help topics — found the content itself accurate throughout, but fixed three stale internal cross-references pointing at a "the Automation section" that doesn't exist (renamed a while back) to the real section names (**The auto-engines** / **Manual one-shots and Reset States**, **Macros, aliases, and triggers**)
+- Help guide: full pass over the in-app Help topics against the current client — fixed three stale internal cross-references pointing at a renamed "Automation section" (now **The auto-engines** / **Manual one-shots and Reset States**, **Macros, aliases, and triggers**)
+
+## 3.54.0
+
+- Buff Watchdog: new **Add all blesses** button — adds a row for every buff you've actually **learned**, on yourself or the whole party, in one click, no dialog, sorted by level requirement (not name). Whole-party buffs are listed but never pre-checked — that's always your call, ticked per-row via Party Wide
+- **＋ Add buff** now picks the buff from a **dropdown of your learned buffs** (each shown as its name and the level you learned it at, e.g. *bless (Lvl 2)*) instead of a text box — a buff already in another slot stays listed but greyed out so you can see it's taken
+- Where two learned buffs would strip each other off (e.g. greater zeal removes zeal) both are listed but only the higher-level one is pre-checked, so you can swap to another family member by hand; anything that conflicts with a buff you've already configured yourself is listed but left unchecked, never auto-clobbering your existing setup
+- Checking a buff that conflicts with another currently-checked one now auto-unchecks the other (and vice versa) — applies live to any row, not just ones "Add all blesses" added
+- Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt; it clears the *config*, not running buffs — any buff still up keeps its live timer bar
+- A buff that's actually up but no longer configured (cast by hand, or a slot you just removed) now shows a plain read-only timer bar, so clearing config never hides a running buff — and that bar clears itself once the buff wears off (a still-configured buff's row persists as "not up", since it's meant to be recast)
+- Fixed the ⚠ conflict marker not appearing on a whole-party buff set to Solo (Party Wide off) — a solo whole-party cast still lands on you, so it now flags a conflict with a clashing self buff just as Party Wide does
+- Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures (e.g. minor healing, cure poison) as if they were maintainable buffs — it now requires a real duration, not just zero energy cost and self/member targeting
+- Fixed **Add all blesses** recommending a buff your character's current alignment can't actually cast (e.g. an evil character being offered "protection from evil") and, worse, letting that dead pick crowd out the alignment-correct alternative (e.g. never offering "unholy armour" because "holy armour" won the tie-break) — it now reads your alignment from your own `who` observation and filters both directions
+- Buff Watchdog: new live mana-budget readout — `Mana/Tick gained: N - Mana/Tick to maintain: N`, both per 30s regen tick so they compare directly: your natural passive regen vs what every checked buff costs to keep recast (single-target counts per person, whole-party counts as one cast); updates on box toggles, roster/gear/level changes
+- Fixed both **＋ Add buff** and **Add all blesses** offering only whole-party cast-on-use items (a #item slot) and silently dropping any self-cast one (e.g. a bless-casting crozier or sceptre) — a self-cast item needs no target any more than a whole-party one does, so it's offered the same way now; a previously-configured self-cast item slot is also now correctly weighed by the RemovesSpell conflict checks and the mana-upkeep readout, instead of being invisible to both
+- Weapon "on use" (#item) buffs are now offered only when you can actually use them — you meet the item's level and the item is in your pack (carried or worn) — instead of the whole class roster; the list refreshes on your next `i`, and falls back to showing all until an inventory listing is seen
+- Buff Watchdog: the config list is now one continuous list ordered aimed (self/single-target) buffs → whole-party buffs → item ("on use") buffs, dropping the "Weapons" separator; removing a buff no longer rebuilds the whole list, so the lag with many buffs configured is gone
+- Buff Watchdog: the whole-party toggle is now labelled "Party" (was "Party Wide"), and the config-row headers/labels are white to match the Solo checkbox instead of dim grey
+- Buff Watchdog: when two clashing buffs are both up, the one cast last stripped the other — the clobbered buff's bar now stops counting and reads "conflict" with its ⚠ moved to the front, instead of running a false countdown (the game sends no "it faded" line, so it's inferred from cast order)
+- Buff Watchdog: an arrow button at the top-right of the timer-bar side collapses or expands the config panel (bars-only vs full), styled like the nav map's collapse chip; sticky per character. Collapsing/expanding also resizes the window along the split axis so the freed space is handed back / reclaimed automatically
+- Buff Watchdog: the config/bars splitter position is now saved per character (alongside the collapse state and the window size the layout store already persisted), so the window reopens exactly as you left it
+- Buff Watchdog: new **Unlearned spells** button (right of Remove all) prints to the terminal every class spell you haven't learned yet that's within reach — trainable now, plus up to 5 levels ahead — each as `[Spell name - Unlearned, Requires Level XX]`
+- Buff Watchdog: the config-side ⚠ conflict marker now shows whenever two clashing buffs are both *configured* (added), regardless of which cast boxes are ticked — a switched-off buff still clobbers the moment it's cast
+- Buff timers: fixed shared-message mix-ups between buffs that remove each other and share cast / wear-off messages (e.g. bless removes chant on Paradigm, where one "you feel lucky" line matches several buff records at once). Casting one now refreshes ITS OWN timer (keyed off the buff we sent, confirming only one buff per shared-line burst — it was refreshing a sibling buff and leaving the cast one "not up"), and the shared "wear off" that follows a clobbering cast clears no one, so the survivor keeps counting and the clobbered buff stays up to render as "conflict"
+- Buff Watchdog: a bar showing "conflict" now carries its explanation as a tooltip across the whole bar, not just on the ⚠
+- Fixed a long buff name painting through the Self checkbox instead of eliding with "…" — the name cell is now properly width-constrained
+- Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎ — including the reroll target for a mana-regen roll spell (profane link, nature tap, mana flux, …) that "Add all blesses" added without one configured
+- Fixed severe Buff Watchdog lag with many configured buffs (especially right after "Add all blesses") — maintained self-buffs cycling no longer rebuild every timer bar every second
+- Fixed the Buff Watchdog config pane / splitter snapping back to its default size on every add or remove — it now stays where you dragged it
+- The recast-due timer bar is now a dim amber instead of bright yellow, so the buff name and time remaining stay readable over it
 
 ## 3.53.3
 

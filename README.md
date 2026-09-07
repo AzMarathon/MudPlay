@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.53.4**
-> - Help guide: audited the last several dozen releases against the in-app Help topics — found the content itself accurate throughout, but fixed three stale internal cross-references pointing at a "the Automation section" that doesn't exist (renamed a while back) to the real section names
+> **Version 3.54.1**
+> - Help guide: full pass over the in-app Help topics against the current client — fixed three stale internal cross-references pointing at a renamed "Automation section"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

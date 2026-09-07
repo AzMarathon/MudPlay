@@ -22,6 +22,12 @@ public sealed record AddBuffResult(
     int RerollCount,
     int? RerollThreshold);
 
+// One entry in the Add-buff dropdown: the cast Code the game accepts, a Display
+// showing the buff's name + the level it's learned at ("bless (Lvl 2)"), and
+// whether it's selectable — Enabled is false for a buff already held by another
+// slot, so it shows greyed rather than vanishing (you can see it's taken).
+public sealed record BuffPickOption(string Code, string Display, bool Enabled);
+
 // Picker dialog for adding / editing a buff slot: choose a buff, set its recast
 // timer, and pick the per-slot conditions. The condition rows adapt to the spell —
 // a light spell offers "only when dark", a mana-regen roll spell offers the reroll
@@ -31,8 +37,10 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
 {
     public event Action<AddBuffResult?>? CloseRequested;
 
-    public IReadOnlyList<SpellPick> BuffPicks { get; }
-    public Func<string?, object?, bool> SpellSuggestionFilter { get; }
+    // Every learned buff the character could slot, as dropdown options — a buff
+    // already held by another slot is present but disabled (Enabled = false) so
+    // it reads as taken rather than silently missing.
+    public IReadOnlyList<BuffPickOption> PickOptions { get; }
     private readonly Func<string?, bool> _isLightSpell;
     private readonly Func<string?, bool> _isRollSpell;
     private readonly bool _isStockRealm;
@@ -56,6 +64,16 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
 
     partial void OnSpellChanged(string? value)
         => _range = _isStockRealm ? _tickRange?.Invoke(value) : null;
+
+    // The dropdown's selected option ↔ the stored cast code. Picking one drives
+    // Spell (which cascades the light / roll-spell detection); pre-set from
+    // `initial` when editing an existing slot. A disabled (already-slotted) option
+    // can't be selected, so Spell only ever lands on an addable buff.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAdd))]
+    private BuffPickOption? _selectedPick;
+
+    partial void OnSelectedPickChanged(BuffPickOption? value) => Spell = value?.Code;
 
     [ObservableProperty] private int _recastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
 
@@ -101,11 +119,9 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
 
     partial void OnRerollThresholdChanged(int? value) => OnPropertyChanged(nameof(RerollThresholdSlider));
 
-    // Enabled once the typed / picked value resolves to a real buff pick, so you
-    // can't add an empty or non-buff slot.
-    public bool CanAdd =>
-        BuffPicks.Any(p => string.Equals(p.Short, (Spell ?? string.Empty).Trim(),
-            StringComparison.OrdinalIgnoreCase));
+    // Enabled once a selectable (not already-slotted) buff is picked, so you can't
+    // add an empty slot or one that would duplicate an existing buff.
+    public bool CanAdd => SelectedPick is { Enabled: true };
 
     // Whether this dialog is editing an existing slot (vs adding a new one) —
     // drives the title + OK-button label.
@@ -114,15 +130,13 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     public string OkLabel => IsEditing ? "Save" : "OK";
 
     public AddBuffDialogViewModel(
-        IReadOnlyList<SpellPick> buffPicks, Func<string?, object?, bool> filter,
+        IReadOnlyList<BuffPickOption> pickOptions,
         Func<string?, bool> isLightSpell, Func<string?, bool> isRollSpell,
         bool isStockRealm = false, Func<string?, (int Worst, int Best)?>? tickRange = null,
         AddBuffResult? initial = null)
     {
-        ArgumentNullException.ThrowIfNull(buffPicks);
-        ArgumentNullException.ThrowIfNull(filter);
-        BuffPicks = buffPicks;
-        SpellSuggestionFilter = filter;
+        ArgumentNullException.ThrowIfNull(pickOptions);
+        PickOptions = pickOptions;
         _isLightSpell = isLightSpell;
         _isRollSpell = isRollSpell;
         _isStockRealm = isStockRealm;
@@ -131,6 +145,8 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         if (initial is { } i)
         {
             _spell = i.Spell;
+            _selectedPick = pickOptions.FirstOrDefault(
+                o => string.Equals(o.Code, i.Spell, StringComparison.OrdinalIgnoreCase));
             _recastMarginSec = i.RecastMarginSec;
             _onlyWhenHpFull = i.OnlyWhenHpFull;
             _onlyWhenMaFull = i.OnlyWhenMaFull;

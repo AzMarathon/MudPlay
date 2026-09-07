@@ -202,7 +202,27 @@ public sealed class CastingDirector : IDisposable
 
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
     private Func<MessageRecord, string?>? _shortFromAppliedRecord;
+    // Given a cast code, the cast codes of the buffs its spell removes (RemovesSpell).
+    // Used to re-attribute a wear-off that lands right after a clobbering cast to its
+    // VICTIM rather than the just-cast survivor (bless & chant share the wear-off line).
+    private Func<string, IReadOnlyCollection<string>>? _removesShortsFor;
     private Func<string, bool>? _isPartyWideBuff;
+
+    // The last buff we SUCCESSFULLY cast (identity known independent of any shared
+    // condition message) and when. A wear-off arriving within ClobberWindow of a cast
+    // that removes other buffs is that victim's wear-off, not the caster's.
+    private string? _lastCastShort;
+    private DateTime _lastCastAt;
+    private static readonly TimeSpan ClobberWindow = TimeSpan.FromSeconds(5);
+
+    // The self-buff last confirmed via an applied line, and when. The applied line is
+    // many-to-one — one "you feel lucky" matches several buff records (bless, chant,
+    // glass orb, …), so OnConditionApplied fires once PER record. We confirm exactly ONE
+    // buff per burst (records within AppliedBurstWindow) and ignore the rest, so casting
+    // bless doesn't also refresh chant's timer off the shared line.
+    private string? _appliedBurstShort;
+    private DateTime _appliedBurstAt;
+    private static readonly TimeSpan AppliedBurstWindow = TimeSpan.FromMilliseconds(400);
     // The character's party-buff plan (Party window). Null / no reader ⇒ no party
     // buffs. Read live each pass so an edit in the Party window takes effect at once.
     private Func<Models.Profile.BuffSettings?>? _readPartyBuffs;
@@ -530,14 +550,19 @@ public sealed class CastingDirector : IDisposable
     // a self-cast confirmed via its AppliedMessage starts / clears its duration
     // timer. Optional — until wired, no duration tracking runs and the buff pickers
     // fall back to the always-eligible path.
+    // removesShortsFor (optional): given a cast code, the cast codes of the buffs its
+    // spell removes (RemovesSpell) — lets a wear-off that lands right after a clobbering
+    // cast be attributed to its victim rather than the just-cast survivor.
     public void SetBuffDurationSources(
         Func<string, (string Caster, long DurationSec)?> buffInfoByShort,
-        Func<MessageRecord, string?> shortFromAppliedRecord)
+        Func<MessageRecord, string?> shortFromAppliedRecord,
+        Func<string, IReadOnlyCollection<string>>? removesShortsFor = null)
     {
         ArgumentNullException.ThrowIfNull(buffInfoByShort);
         ArgumentNullException.ThrowIfNull(shortFromAppliedRecord);
         _buffInfoByShort = buffInfoByShort;
         _shortFromAppliedRecord = shortFromAppliedRecord;
+        _removesShortsFor = removesShortsFor;
     }
 
     // Wire the party-buff plan source (CharacterProfile.PartyBuffs) so the party-buff
@@ -956,41 +981,106 @@ public sealed class CastingDirector : IDisposable
 
     private void OnConditionApplied(MessageRecord r)
     {
-        // A self-cast buff confirmed via its AppliedMessage — start (or
-        // refresh) its duration timer keyed to self so the recast window
-        // is honoured. Party-cast confirmation rides OnLine instead.
-        if (_shortFromAppliedRecord?.Invoke(r) is { } shortCode)
+        // A self-cast buff confirmed via its AppliedMessage — start (or refresh) its
+        // duration timer keyed to self so the recast window is honoured. Party-cast
+        // confirmation rides OnLine instead.
+        //
+        // The applied/condition line is SHARED and MANY-TO-ONE: a single "You feel lucky"
+        // matches several records (bless, chant, glass orb, dark blessing on Paradigm),
+        // so this handler fires once PER matched record. Only the buff we actually cast
+        // is really ours. While a fresh pending self-buff exists (armed on send, same
+        // staleness window OnSelfBuffRejected uses), attribute the WHOLE burst to it:
+        // refresh the pending buff and IGNORE every sibling record — otherwise casting
+        // bless also refreshes chant / glass orb off the shared line. With nothing fresh
+        // pending, trust the record map (e.g. the reactive HP-regen HoT has no pending).
+        bool pendingFresh = _pendingSelfBuffShort is not null
+            && _now() - _pendingSelfBuffArmedAt <= PendingSelfBuffRejectionWindow;
+
+        // The buff this event would confirm: the one we actually SENT (fresh pending)
+        // regardless of which shared record fired, else whatever the record maps to
+        // (e.g. the reactive HP-regen HoT, which has no pending).
+        string? shortCode = pendingFresh ? _pendingSelfBuffShort : _shortFromAppliedRecord?.Invoke(r);
+        if (shortCode is null) { Evaluate(); return; }
+
+        // One shared "you feel lucky" matches many records, firing this once per record.
+        // Confirm ONLY the first buff of the burst; a different short within the window is
+        // a sibling of the same line → ignore (so bless's line doesn't refresh chant too).
+        if (_appliedBurstShort is not null
+            && _now() - _appliedBurstAt <= AppliedBurstWindow
+            && !string.Equals(shortCode, _appliedBurstShort, StringComparison.OrdinalIgnoreCase))
         {
-            if (_buffInfoByShort?.Invoke(shortCode) is { } info)
-            {
-                // Preserve the recast lead armed on send (StartSelfBuffTimer ran
-                // first for a bless-slot cast); default it for anything confirmed
-                // without a prior optimistic timer (e.g. the HP-regen HoT).
-                int margin = _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec, int TotalSec) prev)
-                    ? prev.MarginSec
-                    : DefaultRecastMarginSec;
-                _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin, (int)info.DurationSec);
-                _log?.Combat(LogCategory,
-                    $"self-buff {shortCode} confirmed active (applied line) — "
-                    + $"duration {info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - margin)}s");
-            }
-            // Landed — the real duration timer is now authoritative, so the pending
-            // optimistic marker mustn't later be treated as an unlanded cast.
-            if (_pendingSelfBuffShort == shortCode) _pendingSelfBuffShort = null;
-            // NOTE: the mana-regen reroll engine is fed off the SEND path
-            // (StartSelfBuffTimer), NOT here — a roll spell confirms via the shared
-            // "mana regenerating" condition, which can't be mapped back to the specific
-            // spell, so this applied-confirm never fires for it (paradigm-20260830-110918).
+            Evaluate();
+            return;
         }
+
+        if (_buffInfoByShort?.Invoke(shortCode) is { } info)
+        {
+            // Preserve the recast lead armed on send (StartSelfBuffTimer ran first for a
+            // bless-slot cast); default it for anything confirmed without a prior
+            // optimistic timer (e.g. the HP-regen HoT).
+            int margin = _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec, int TotalSec) prev)
+                ? prev.MarginSec
+                : DefaultRecastMarginSec;
+            _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin, (int)info.DurationSec);
+            NoteSuccessfulCast(shortCode);
+            _appliedBurstShort = shortCode;
+            _appliedBurstAt = _now();
+            _log?.Combat(LogCategory,
+                $"self-buff {shortCode} confirmed active (applied line) — "
+                + $"duration {info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - margin)}s");
+        }
+        // Landed — the real duration timer is authoritative, so the optimistic pending
+        // marker mustn't later be treated as an unlanded cast (a subsequent cast failure
+        // must not drop THIS timer). Trailing siblings are handled by the burst guard.
+        if (_pendingSelfBuffShort == shortCode) _pendingSelfBuffShort = null;
+        // NOTE: the mana-regen reroll engine is fed off the SEND path (StartSelfBuffTimer),
+        // NOT here — a roll spell confirms via the shared "mana regenerating" condition,
+        // which can't be mapped back to the specific spell (paradigm-20260830-110918).
         Evaluate();
+    }
+
+    // Remember the buff we just SUCCESSFULLY cast, keyed off an identity we KNOW (the
+    // party-cast confirm names the spell, a self-buff carries its pending short) rather
+    // than a shared condition message. Lets OnConditionEnded tell a clobber victim's
+    // wear-off from the caster's own.
+    private void NoteSuccessfulCast(string shortCode)
+    {
+        if (string.IsNullOrEmpty(shortCode)) return;
+        _lastCastShort = shortCode;
+        _lastCastAt = _now();
     }
 
     private void OnConditionEnded(MessageRecord r)
     {
+        string? resolved = _shortFromAppliedRecord?.Invoke(r);
+
+        // A wear-off that lands right after a SUCCESSFUL clobbering cast is the shared,
+        // ambiguous side of that clobber: bless & chant share the wear-off message, so
+        // "the effects of bless wear off" here is really the buff bless REMOVED being
+        // stripped. Don't clear anyone off it — the just-cast survivor keeps its fresh
+        // timer, AND the clobbered victim keeps its timer so the watchdog can render it
+        // as "conflict" (it infers the clobber from RemovesSpell + cast order, and a
+        // cleared timer would just read "not up" instead). A genuine later wear-off
+        // falls outside the window and clears normally below.
+        if (resolved is not null
+            && _lastCastShort is { } caster
+            && _now() - _lastCastAt <= ClobberWindow
+            && _removesShortsFor?.Invoke(caster) is { Count: > 0 } victims)
+        {
+            HashSet<string> pair = new(victims, StringComparer.OrdinalIgnoreCase) { caster };
+            if (pair.Contains(resolved))
+            {
+                _log?.Combat(LogCategory,
+                    $"wear-off ({resolved}) ignored — shared clobber line from just-cast {caster}; "
+                    + "survivor + victim timers left intact for the conflict display");
+                Evaluate();
+                return;
+            }
+        }
+
         // Server-confirmed early wear-off — drop the self timer so the next
         // pass re-attempts immediately rather than waiting out a stale clock.
-        if (_shortFromAppliedRecord?.Invoke(r) is { } shortCode
-            && _activeUntil.Remove(("", shortCode)))
+        if (resolved is { } shortCode && _activeUntil.Remove(("", shortCode)))
             _log?.Combat(LogCategory,
                 $"self-buff {shortCode} wore off (wear-off line) — recast timer cleared");
         Evaluate();
@@ -1020,6 +1110,7 @@ public sealed class CastingDirector : IDisposable
 
         string key = p.Target.Trim().ToLowerInvariant();
         _activeUntil[(key, p.Short)] = (_now().AddSeconds(p.DurationSec), p.MarginSec, (int)p.DurationSec);
+        NoteSuccessfulCast(p.Short);   // the "You cast <spell> on …" confirm names it reliably
         // Info, not Combat: the user wants to confirm the recast timer actually
         // armed and see when it will re-fire, and the combat-diagnostics channel is
         // off in normal play. Surface both the effect duration and the recast lead
@@ -1041,6 +1132,7 @@ public sealed class CastingDirector : IDisposable
     {
         if (!man.Matcher.TryResolveTarget(lineText, man.Prefix, out string full)) return;
         _pendingManualCast = null;
+        NoteSuccessfulCast(man.Short);   // the resolved "You cast <spell> on …" names it reliably
 
         string given = GivenName(full).ToLowerInvariant();
         if (given.Length == 0) return;
