@@ -26,6 +26,13 @@ public partial class BuffWatchdogWindow : Window
     private BuffWatchdogViewModel? _vm;
     private INotifyPropertyChanged? _buffsNotifier;
 
+    // Last-applied zone state, so a reflow only happens when it genuinely needs to and
+    // preserves what the user dragged. _configExtent is the config pane's fixed size in
+    // the current orientation (a row Height when vertical, a column Width when not).
+    private bool _appliedShowConfig;
+    private bool _appliedVertical;
+    private double _configExtent;
+
     public BuffWatchdogWindow()
     {
         InitializeComponent();
@@ -64,8 +71,13 @@ public partial class BuffWatchdogWindow : Window
     private void OnBuffsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // ShowPanel toggles the config zone (a non-caster has no configurable buffs);
-        // re-run so the splitter + zone sizing collapse / restore to match.
-        if (e.PropertyName == nameof(ViewModels.BuffPanelViewModel.ShowPanel)) ApplyZoneLayout();
+        // reflow so the splitter + zone sizing collapse / restore to match — but ONLY
+        // when it actually flips. It re-raises on every add / remove / toggle even when
+        // the value is unchanged, and a reflow rebuilds the zone grid, which would snap
+        // the splitter back to its default division and undo wherever the user dragged it.
+        if (e.PropertyName == nameof(ViewModels.BuffPanelViewModel.ShowPanel)
+            && (_vm?.Buffs?.ShowPanel ?? false) != _appliedShowConfig)
+            ApplyZoneLayout();
     }
 
     // Rebuild the zone grid: config table + timer bars split by a draggable
@@ -76,10 +88,25 @@ public partial class BuffWatchdogWindow : Window
         if (_zonesGrid is null || _configZone is null || _zoneSplitter is null || _barsZone is null)
             return;
 
+        // Capture the size the user dragged the config pane to before we clear the grid,
+        // so a legitimate reflow (panel show/hide, layout orientation change) re-applies
+        // it instead of snapping back to the default division. Only meaningful when the
+        // pane was showing in the SAME orientation — a height can't carry to a width.
+        if (_appliedShowConfig)
+        {
+            int r = Grid.GetRow(_configZone);
+            int c = Grid.GetColumn(_configZone);
+            if (_appliedVertical && r >= 0 && r < _zonesGrid.RowDefinitions.Count)
+                _configExtent = _zonesGrid.RowDefinitions[r].Height.Value;
+            else if (!_appliedVertical && c >= 0 && c < _zonesGrid.ColumnDefinitions.Count)
+                _configExtent = _zonesGrid.ColumnDefinitions[c].Width.Value;
+        }
+
         _zonesGrid.RowDefinitions.Clear();
         _zonesGrid.ColumnDefinitions.Clear();
 
         bool showConfig = _vm?.Buffs?.ShowPanel ?? false;
+        _appliedShowConfig = showConfig;
         if (!showConfig)
         {
             _zoneSplitter.IsVisible = false;
@@ -93,6 +120,11 @@ public partial class BuffWatchdogWindow : Window
         bool vertical = layout is BuffWatchdogLayout.ConfigTop or BuffWatchdogLayout.ConfigBottom;
         bool configFirst = layout is BuffWatchdogLayout.ConfigTop or BuffWatchdogLayout.ConfigLeft;
 
+        // A preserved extent only applies within the same orientation; an orientation
+        // flip falls back to the default starting division for that axis.
+        double keptExtent = _appliedVertical == vertical && _configExtent > 0 ? _configExtent : 0;
+        _appliedVertical = vertical;
+
         _zoneSplitter.IsVisible = true;
 
         // The config table holds a FIXED size while the timer bars flex (star), so
@@ -102,7 +134,7 @@ public partial class BuffWatchdogWindow : Window
         // collapsing. Defaults below are just the starting division.
         if (vertical)
         {
-            var configDef = new RowDefinition(new GridLength(180)) { MinHeight = 70 };
+            var configDef = new RowDefinition(new GridLength(keptExtent > 0 ? keptExtent : 180)) { MinHeight = 70 };
             var barsDef = new RowDefinition(GridLength.Star) { MinHeight = 70 };
             var splitDef = new RowDefinition(GridLength.Auto);
             if (configFirst)
@@ -135,7 +167,7 @@ public partial class BuffWatchdogWindow : Window
         }
         else
         {
-            var configDef = new ColumnDefinition(new GridLength(300)) { MinWidth = 140 };
+            var configDef = new ColumnDefinition(new GridLength(keptExtent > 0 ? keptExtent : 300)) { MinWidth = 140 };
             var barsDef = new ColumnDefinition(GridLength.Star) { MinWidth = 120 };
             var splitDef = new ColumnDefinition(GridLength.Auto);
             if (configFirst)

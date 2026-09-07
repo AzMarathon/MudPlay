@@ -13,6 +13,7 @@
 > - Fixed **＋ Add buff** / **Add all blesses** silently dropping self-cast buff items (e.g. a bless-casting crozier) — only whole-party items were being offered before
 > - Buff Watchdog: item-cast buffs now group under their own **Weapons** heading; fixed a long buff name painting through the Self checkbox instead of truncating
 > - Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎, including reroll settings for mana-regen roll spells
+> - Fixed severe Buff Watchdog lag with many configured buffs, the config pane/splitter snapping back to default on every add/remove, and the unreadable grey-on-bright-yellow recast bar (now a dim amber)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

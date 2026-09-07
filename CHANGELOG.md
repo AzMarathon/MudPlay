@@ -15,6 +15,9 @@
 - Buff Watchdog: item-cast (weapon/staff) buffs now group under their own **------- Weapons -------** heading below the ordinary spell rows, instead of being interleaved among them
 - Fixed a long buff name painting through the Self checkbox instead of eliding with "…" — the name cell is now properly width-constrained
 - Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎ — including the reroll target for a mana-regen roll spell (profane link, nature tap, mana flux, …) that "Add all blesses" added without one configured
+- Fixed severe Buff Watchdog lag with many configured buffs (especially right after "Add all blesses") — maintained self-buffs cycling no longer rebuild every timer bar every second
+- Fixed the Buff Watchdog config pane / splitter snapping back to its default size on every add or remove — it now stays where you dragged it
+- The recast-due timer bar is now a dim amber instead of bright yellow, so the buff name and time remaining stay readable over it
 
 ## 3.53.2
 

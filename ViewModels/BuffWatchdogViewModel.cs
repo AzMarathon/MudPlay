@@ -507,13 +507,23 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                         sb.Append('#').Append(g);
                 sb.Append(string.Join(",", p.Targets)).Append('|');
             }
+        // A configured cast code already owns a row (self-cast or whole-party), so its
+        // timer arming / expiring is reflected in place by UpdateTimers (the row shows
+        // "not up") and must NOT churn the signature — otherwise a handful of maintained
+        // self buffs cycling would rebuild every bar, every second. Only an UNconfigured
+        // active buff (hand-cast, or a slot just removed) needs to fold in, so its
+        // read-only bar appears and then clears itself on expiry (see RebuildRows' tail).
+        // Member-keyed timers always fold, as before.
+        HashSet<string> configuredCodes = new(StringComparer.OrdinalIgnoreCase);
+        if (buffs is not null)
+            foreach (BuffSlot p in buffs.Slots)
+                if (!string.IsNullOrWhiteSpace(p.Spell)) configuredCodes.Add(p.Spell.Trim());
+
         sb.Append("||");
-        // Every live timer's identity (self-keyed "" and member-keyed alike), so a buff
-        // arming or wearing off reflows the rows — this is what lets an active-but-
-        // unconfigured buff (cast by hand, or a slot just removed) get a read-only bar
-        // and then drop off on its own when it expires (see the tail of RebuildRows).
-        foreach (string k in snap.Select(t => t.Short + "@" + t.Target)
-                                 .OrderBy(k => k, StringComparer.Ordinal))
+        foreach (string k in snap
+                     .Where(t => t.Target.Length > 0 || !configuredCodes.Contains(t.Short))
+                     .Select(t => t.Short + "@" + t.Target)
+                     .OrderBy(k => k, StringComparer.Ordinal))
             sb.Append(k).Append(';');
         return sb.ToString();
     }

@@ -126,12 +126,16 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <!-- The elapsed-time fill — a DARKER green than the outline, kept flat across the
-             whole bar (no bright fill); amber once the fill crosses the recast marker. -->
+             whole bar (no bright fill); a dark amber once the fill crosses the recast
+             marker. The "due" amber is deliberately DIM — the same darkness as the green,
+             not the bright AccentYellow it used to be — so the light name / grey time
+             overlaid on it stay readable (bright yellow made grey-on-yellow unreadable).
+             The bright accent still lives on the recast MARKER line, not the fill. -->
         <Style Selector="Border.BuffFill">
             <Setter Property="Background" Value="#FF456644"/>
         </Style>
         <Style Selector="Border.BuffFill.recast">
-            <Setter Property="Background" Value="{StaticResource AccentYellowBrush}"/>
+            <Setter Property="Background" Value="#FF6E5A2E"/>
         </Style>
 
         <!-- Remaining-time label inside the bar, offset after the name. -->
