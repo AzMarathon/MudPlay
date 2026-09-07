@@ -32,6 +32,9 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // Editable targeting only — spell + recast are fixed at add time.
     [ObservableProperty] private bool _castOnSelf;
     [ObservableProperty] private bool _wholePartyOn;
+    // Whole-party slots only: also cast it while solo (a lone character is a party
+    // of one, so the whole-party cast still lands on us). Surfaced as the "Solo" box.
+    [ObservableProperty] private bool _castSolo;
 
     // True once the party has at least one non-self member, so the per-member and
     // All/None targeting columns are worth showing. Solo → only the Self box shows.
@@ -103,6 +106,11 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // target buff AND when there's actually a party to target — solo shows just Self.
     public bool ShowMemberTargets => IsSingleTarget && HasPartyMembers;
 
+    // The "Solo" checkbox shows only for a whole-party buff — the one scope that
+    // otherwise fires only in a party. Self / single-target buffs already fire solo
+    // via CastOnSelf, so they don't need it.
+    public bool ShowSolo => IsWholeParty;
+
     // Non-null when another configured slot's spell removes this one's (or this
     // one's removes another's) via RemovesSpell — see AppServices.BuffSlotOverwritePairs.
     // Combines both directions into one tooltip; the icon shows whenever either is set.
@@ -130,6 +138,7 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         _suppress = true;
         _castOnSelf = dto.CastOnSelf;
         _wholePartyOn = dto.WholePartyOn;
+        _castSolo = dto.CastSolo;
         _suppress = false;
     }
 
@@ -148,6 +157,7 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsSelfOnly));
         OnPropertyChanged(nameof(ShowSelf));
         OnPropertyChanged(nameof(ShowMemberTargets));
+        OnPropertyChanged(nameof(ShowSolo));
         RefreshOverwriteWarning();
     }
 
@@ -171,6 +181,13 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     {
         if (_suppress) return;
         _dto.WholePartyOn = value;
+        _persist();
+    }
+
+    partial void OnCastSoloChanged(bool value)
+    {
+        if (_suppress) return;
+        _dto.CastSolo = value;
         _persist();
     }
 

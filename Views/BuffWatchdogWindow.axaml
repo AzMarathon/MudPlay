@@ -205,10 +205,19 @@
                                                             </DataTemplate>
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
-                                                    <TextBlock Grid.Column="3" Text="Party Wide"
-                                                               IsVisible="{Binding IsWholeParty}"
-                                                               VerticalAlignment="Center" Margin="4,0,0,0" FontSize="11"
-                                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="12"
+                                                                IsVisible="{Binding IsWholeParty}" VerticalAlignment="Center">
+                                                        <TextBlock Text="Party Wide" Margin="4,0,0,0" FontSize="11"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                        <!-- Solo: also cast this whole-party buff while alone. The
+                                                             on/off checkbox in the All-none column stays as the "cast it
+                                                             party-wide while in a party" toggle. -->
+                                                        <CheckBox Content="Solo" MinHeight="0" FontSize="11"
+                                                                  VerticalAlignment="Center"
+                                                                  IsChecked="{Binding CastSolo, Mode=TwoWay}"
+                                                                  ToolTip.Tip="Also cast this whole-party buff while you're solo — a lone character is a party of one, so it still lands on you."/>
+                                                    </StackPanel>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
