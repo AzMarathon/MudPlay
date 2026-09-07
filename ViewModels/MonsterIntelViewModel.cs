@@ -62,10 +62,22 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // Live player combat totals behind the Hits-You-% threshold checkboxes /
     // master-list "Hits You %" column — recomputed alongside weapon/spell
     // capabilities in RebuildCharacterCapabilities whenever gear changes.
-    private int _playerAc;
+    // AC is the live un-floored value to the tenth (item AC is stored ×10) — it seeds
+    // the editable SimAc, which the Hits-You-% figures read (floored for the to-hit
+    // formula, shown fractional). See GAME_MECHANICS "Armour Class".
+    private double _playerAcExact;
     private int _playerDodge;
     private int _playerProtEvil;
     private int _playerProtGood;
+    // The class's ArmourType (Classes table) — only affects the ParaMUD hit-chance
+    // floor: light-armour classes (1..6) floor at 1%, everything else at 2%
+    // (CombatCalculator.GetHitMin). Drives both the Hits-You-% figures and whether
+    // the filter dropdown gets a ≤1% band.
+    private int _playerArmourType;
+    // Whether the current Hits-You-% band set includes the ≤1% band — rebuilt only
+    // when this flips (a realm or qualifying-class change), so a gear/loot churn
+    // doesn't wipe the user's selected bands.
+    private bool _hitsBandsInclude1Pct;
     // Shadow (Abil 9) is a flat +10 AC that stacks only once no matter how
     // many worn sources carry it — a boolean gate, not the raw accumulated
     // PlusShadowResist total (see GAME_MECHANICS.md's Armour Class section).
@@ -232,8 +244,16 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // character's OWN evil tier — it scales how much raw Vile Ward converts to AC
     // (not evil 0% / outlaw-criminal 50% / villain-fiend 100%), matching
     // CombatCalculator's AdjustVileWard.
-    [ObservableProperty] private int _simAc;
+    // The what-if AC is fractional to the tenth (the game shows AC that way — item AC
+    // is stored ×10). Seeded to the live un-floored AC; the spinner steps by 0.1. The
+    // hit-% formula floors it (the whole number the game's to-hit consumes), so it's
+    // cast to int at each matchup call. See GAME_MECHANICS "Armour Class".
+    [ObservableProperty] private double _simAc;
     [ObservableProperty] private int _simProtEvil;
+    // Protection from Good (ability 25) — Stock-only. Paradigm dropped it for VileWard
+    // (its server ignores ability 25 and its gear carries none), so the ProtGood field
+    // is shown only on Stock and VileWard only on Paradigm. See GAME_MECHANICS.
+    [ObservableProperty] private int _simProtGood;
     [ObservableProperty] private int _simVileWard;
     [ObservableProperty] private bool _simShadow;
     // Default Villain/Fiend: worn Vile Ward implies an evil character, and with
@@ -250,6 +270,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         2 => EvilLevel.Fiend,
         _ => EvilLevel.Saint,
     };
+
+    // Realm-exclusive defense-sim fields: Paradigm shows Vile Ward (+ the evil-tier
+    // picker), Stock shows Prot Good. Only depends on the active realm, which doesn't
+    // change while the window is open, so no change-notification is needed.
+    public bool ShowVileWard => _gameData.ActiveRealm == RealmType.ParaMud;
+    public bool ShowProtGood => !ShowVileWard;
 
     // The effective AC the selected monster's attack actually rolls against —
     // base AC (worn + buffs) + Shadow (vs all) + the wards that apply to THAT
@@ -269,8 +295,18 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     private static readonly int[] ParadigmHitBands =
         { 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
+    // Light-armour ParaMUD classes (ArmourType 1..6) floor at 1%, not 2%, so their
+    // dropdown gains a ≤1% band ahead of the standard set.
+    private static readonly int[] ParadigmHitBands1Pct =
+        { 1, 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
     private static readonly int[] StockHitBands =
         { 8, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 };
+
+    // The ≤1% band exists only on ParaMUD for a light-armour class (ArmourType
+    // 1..6) — the exact GetHitMin condition that drops the floor to 1%.
+    private bool HitsBandsShouldInclude1Pct() =>
+        _gameData.ActiveRealm == RealmType.ParaMud
+        && _playerArmourType is > 0 and <= 6;
 
     // The dropdown button's label — "all" when no band is selected, else the count.
     public string HitsFilterLabel
@@ -378,11 +414,18 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         PlayerDefenseProfile def = IncomingHitEstimator.BuildLiveDefense(
             _stats!, worn, encum, _gameData, _buffProvider?.Invoke(),
             _spellbook!.Available, QuestBonusesForCharacter());
-        _playerAc = def.Ac;
+        _playerAcExact = def.AcExact;
         _playerDodge = def.Dodge;
         _playerProtEvil = def.ProtEvil;
         _playerProtGood = def.ProtGood;
         _playerHasShadow = def.Shadow;
+        _playerArmourType = def.ArmourType;
+        // A qualifying light-armour ParaMUD class floors incoming hits at 1% (not
+        // 2%), so its filter dropdown gains a ≤1% band. Rebuild only when that
+        // eligibility flips (class change) — never on a gear/loot recompute, which
+        // would clear the user's band selection.
+        if (HitsBandsShouldInclude1Pct() != _hitsBandsInclude1Pct)
+            RebuildHitsFilterBuckets();
 
         // Seed the editable defense simulator to the live loadout — but only when
         // the WORN set actually changed (first open + a real gear swap). Backpack
@@ -394,8 +437,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         {
             _lastWornSignature = wornSig;
             _suppressSimRecompute = true;
-            SimAc = _playerAc;                   // worn + buffs; Shadow is its own toggle
+            SimAc = _playerAcExact;              // fractional (worn + buffs); Shadow is its own toggle
             SimProtEvil = _playerProtEvil;
+            SimProtGood = _playerProtGood;
             SimVileWard = def.VileWard;
             SimShadow = _playerHasShadow;
             _suppressSimRecompute = false;
@@ -459,8 +503,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             // list — debuffs are a per-selected-monster what-if in the detail.
             entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
                 entry.Source.PhysicalAttacks, accuracyDelta: 0, entry.Source.Align,
-                SimAc, _playerDodge, SimProtEvil, _playerProtGood,
-                _gameData.ActiveRealm, SimShadow, SimVileWard, evil) ?? -1;
+                (int)SimAc, _playerDodge, SimProtEvil, SimProtGood,
+                _gameData.ActiveRealm, SimShadow, SimVileWard, evil, _playerArmourType) ?? -1;
     }
 
     // A defense-simulator input changed — recompute Hits-You-%, re-filter, and
@@ -488,7 +532,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         int align = sel.Source.Align;
         bool isEvil = align is 1 or 2 or 5 or 6;
         bool isGood = align is 0 or 4;
-        int ac = SimAc + (SimShadow ? 10 : 0);
+        // SimAc is fractional to the tenth; the wards are whole. Shown to the tenth
+        // (the game displays AC that way); the hit-% math floors SimAc separately.
+        double ac = SimAc + (SimShadow ? 10 : 0);
         if (isEvil)
         {
             ac += SimProtEvil;
@@ -496,12 +542,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             if (_gameData.ActiveRealm == RealmType.ParaMud)
                 ac += CombatCalculator.AdjustVileWard(SimVileWard, SimEvilLevel);
         }
-        if (isGood) ac += _playerProtGood;
-        AcVsTargetText = ac.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // ProtGood counts only on Stock (Paradigm dropped it for VileWard).
+        if (isGood && ShowProtGood) ac += SimProtGood;
+        AcVsTargetText = ac.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    partial void OnSimAcChanged(int value) => OnSimInputChanged();
+    partial void OnSimAcChanged(double value) => OnSimInputChanged();
     partial void OnSimProtEvilChanged(int value) => OnSimInputChanged();
+    partial void OnSimProtGoodChanged(int value) => OnSimInputChanged();
     partial void OnSimVileWardChanged(int value) => OnSimInputChanged();
     partial void OnSimShadowChanged(bool value) => OnSimInputChanged();
     partial void OnSimVileWardAlignIndexChanged(int value) => OnSimInputChanged();
@@ -763,12 +811,17 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     {
         foreach (HitsFilterBucket b in HitsFilterBuckets) b.PropertyChanged -= OnHitsFilterBucketChanged;
         HitsFilterBuckets.Clear();
-        int[] bands = _gameData.ActiveRealm == RealmType.ParaMud ? ParadigmHitBands : StockHitBands;
+        _hitsBandsInclude1Pct = HitsBandsShouldInclude1Pct();
+        int[] bands = _gameData.ActiveRealm != RealmType.ParaMud ? StockHitBands
+            : _hitsBandsInclude1Pct ? ParadigmHitBands1Pct
+            : ParadigmHitBands;
         int lo = 0;
         for (int i = 0; i < bands.Length; i++)
         {
             int hi = bands[i];
-            string label = i == 0 ? $"≤{hi}%" : $"{lo}–{hi}%";
+            // First band is a ceiling ("≤1%"); a single-value band collapses to that
+            // value ("2%"); the rest are ranges ("3–5%").
+            string label = i == 0 ? $"≤{hi}%" : lo == hi ? $"{hi}%" : $"{lo}–{hi}%";
             HitsFilterBucket bucket = new(label, lo, hi);
             bucket.PropertyChanged += OnHitsFilterBucketChanged;
             HitsFilterBuckets.Add(bucket);
@@ -1043,7 +1096,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             // weighted hit%.
             int hitYou = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
                 m.PhysicalAttacks, _monsterDebuff.AccDelta, m.Align,
-                SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+                (int)SimAc, _playerDodge, SimProtEvil, SimProtGood,
                 _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel) ?? threat.MonsterHitPercent;
             double dps = hitYou / 100.0 * threat.MonsterDamagePerHit * threat.MonsterSwingsPerRound;
             IncomingThreatLines.Insert(0,
@@ -1090,7 +1143,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (!_hasCharacterContext || (a.Type != 1 && a.Type != 3)) return null;
         return MonsterMatchupCalculatorSpells.AttackHitPercent(
             a.Accuracy - _monsterDebuff.AccDelta, m.Align,
-            SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+            (int)SimAc, _playerDodge, SimProtEvil, SimProtGood,
             _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel);
     }
 

@@ -2703,8 +2703,47 @@ public sealed partial class CombatManager : IDisposable
         if (!bypassAttackGuard && now - _lastAttackSentAt < ResumeAfterAttackGuard) return false;
         if (now - _lastInterruptResumeAt < ResumePacing) return false;
         _lastInterruptResumeAt = now;
-        ResumeEngage(live);
+        DeferResumeEngage(live);
         return true;
+    }
+
+    // Both TryResumeEngage callers (OnCombatLine's mob-swing resume, OnCombatTick's
+    // deterministic weapon resume) are driven by a DAMAGE line — which always lands
+    // BEFORE a round's own "dies." / "You gain N experience." when THIS round's
+    // attack is the killing blow. Firing ResumeEngage synchronously here re-swings
+    // at a target the SAME burst (or an adjacent packet) is about to reveal as dead
+    // — the death watcher hasn't nulled _currentTarget yet. Defer the actual
+    // re-engage by SwitchDispatchDelay (the window CombatManager.Spells'
+    // DeferSwitchDispatch already proved is enough for the kill's exp/Off to land)
+    // and re-validate the target before dispatching; a bare _post can't bridge a
+    // kill landing in a LATER network packet, only wall-clock can (see
+    // DeferSwitchDispatch). Report paradigm-20260905-205200: every kill wasted a
+    // full round on "You don't see X here!" / "Your command had no effect." before
+    // the engine noticed and moved on — 1s per mob, adding up over a session.
+    private void DeferResumeEngage(RoomEntitiesObservation live)
+    {
+        string? target = _currentTarget;
+
+        void Dispatch()
+        {
+            if (_disposed || !_isEnabled()) return;
+            if (target is not null
+                && (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase)
+                    || _classifier.Current is not { } fresh
+                    || !TargetPresent(fresh, target)))
+            {
+                _log?.Combat(LogCategory,
+                    $"resume skipped — target '{target}' gone before the deferred dispatch "
+                    + "(kill/leave landed first); no corpse-attack");
+                return;
+            }
+            ResumeEngage(_classifier.Current ?? live);
+        }
+
+        if (_scheduleSwitchDispatch is { } schedule)
+            schedule(SwitchDispatchDelay, Dispatch);
+        else
+            _post(Dispatch);
     }
 
     // Signal from Spells.CastingDirector.CastFired that a between-round cast

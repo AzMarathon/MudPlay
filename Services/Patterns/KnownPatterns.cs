@@ -385,6 +385,14 @@ public static class KnownPatterns
     // The "Enter the Realm" row is the universal main-menu signature.
     public const string MainMenuEnterRealm = "menu.enter-realm";   // "[E] . Enter the Realm" — universal main-menu line
 
+    // MajorMUD's realm-exit confirmation. Printed once the character is
+    // safely out of the game after an exit command, regardless of which BBS
+    // menu structure the door sits under — so it's a board-agnostic "we're
+    // out of the realm" signal where the "[E] Enter the Realm" main-menu row
+    // is not (boards that nest the realm behind extra door/games menus land
+    // on a menu that never shows that row).
+    public const string RealmExitSaved = "realm.exit-saved";      // "Your character has been saved." — realm-exit confirmation
+
     // ----- Trainer menu marker -------------------------------------------
     // The "train stats" trainer screen has a "Point Cost Chart" panel
     // header in the upper-right that doesn't appear in any other
@@ -438,9 +446,16 @@ public static class KnownPatterns
     // ----- Winch (gate-controlling) — drives WinchManager ----------------
     // A `pull winch` prerequisite that opens a gate a beat later. Success winds the
     // winch up (retry until it turns); the gate then opens on a delay with no line
-    // of its own, so WinchManager polls the room's open-gate exit to confirm.
+    // of its own, so WinchManager polls the room's open-gate exit to confirm. A
+    // drawbridge-type winch is the exception (CONFIRMED Paradigm 12/2123, report
+    // paradigm-20260906-202008) — its exit is phrased "lowered drawbridge <dir>" in
+    // the exits list, which never matches the door/gate open|closed wording the poll
+    // looks for, so it would poll forever. It broadcasts its own explicit
+    // confirmation line instead, which WinchManager treats as authoritative and
+    // skips the poll for.
     public const string WinchTurned           = "winch.turned";            // "You heave mightily on the winch, and it begins to turn!"
     public const string WinchWontBudge        = "winch.wontbudge";         // "You heave mightily on the winch, but it does not budge."
+    public const string WinchDrawbridgeLowered = "winch.drawbridge-lowered"; // "The wooden drawbridge lowers with a heavy thud!"
 
     // ----- Another player forcing a door (LeaderDoorAssistManager) -------
     // Observer-side line emitted when another in-room player fails to bash

@@ -36,6 +36,26 @@ public readonly record struct InventorySnapshot(
         System.Array.Empty<string>(),
         System.DateTimeOffset.MinValue);
 
+    // True when the pack currently holds — carried, worn, or on the key-ring — an item
+    // whose name contains itemName (case-insensitive), the same loose match @have uses
+    // (Remote.InventoryQueryHandler). Existence only, stack counts ignored. Meaningful
+    // only once a full 'i' dump has loaded the pack (InventoryManager.IsLoaded); an
+    // unloaded snapshot's lists are empty, so this reads false for everything — callers
+    // that must tell "don't have it" from "haven't looked yet" gate on IsLoaded first.
+    public bool Has(string itemName)
+    {
+        if (string.IsNullOrWhiteSpace(itemName)) return false;
+        string needle = itemName.Trim();
+        foreach (string c in CarriedItems)
+            if (c.Contains(needle, System.StringComparison.OrdinalIgnoreCase)) return true;
+        foreach (EquippedItem e in EquippedItems)
+            if (e.Name.Contains(needle, System.StringComparison.OrdinalIgnoreCase)) return true;
+        if (Keys is { } keys)
+            foreach (string k in keys)
+                if (k.Contains(needle, System.StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
     // Split a key-ring entry into its stack quantity and item name. The dump
     // stacks duplicate keys behind a leading count ("3 black star key") and
     // lists a lone key bare ("black star key"); a bare entry is quantity 1.

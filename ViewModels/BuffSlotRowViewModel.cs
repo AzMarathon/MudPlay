@@ -25,12 +25,24 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     private readonly BuffSlot _dto;
     private readonly Func<string?, BuffSlotScope> _resolveScope;
     private readonly Func<string?, string> _resolveName;
+    private readonly Func<BuffSlot, (string? RemovedBy, string? Removes)> _resolveOverwrite;
     private readonly Action _persist;
+    // Fires only when Self transitions OFF → ON (never on → off), so the panel can
+    // deactivate a conflicting row's Self box without looping back on itself. Null
+    // in tests that don't exercise the cross-row exclusion.
+    private readonly Action<BuffSlotRowViewModel>? _onSelfActivated;
+    // Whether the character has actually learned this row's spell. Null in tests
+    // that don't care — IsLearned then defaults true (every listed row is normally
+    // something the player has).
+    private readonly Func<string?, bool>? _resolveLearned;
     private bool _suppress;
 
     // Editable targeting only — spell + recast are fixed at add time.
     [ObservableProperty] private bool _castOnSelf;
     [ObservableProperty] private bool _wholePartyOn;
+    // Whole-party slots only: also cast it while solo (a lone character is a party
+    // of one, so the whole-party cast still lands on us). Surfaced as the "Solo" box.
+    [ObservableProperty] private bool _castSolo;
 
     // True once the party has at least one non-self member, so the per-member and
     // All/None targeting columns are worth showing. Solo → only the Self box shows.
@@ -76,8 +88,15 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
 
     public string? Spell => _dto.Spell;
     public int RecastMarginSec => _dto.RecastMarginSec;
+
+    // True for a #item-cast slot (a wielded weapon/staff buff) — drives grouping
+    // this row under the Buff Watchdog's "Weapons" section instead of the main list.
+    public bool IsItemCast => Game.Spells.ItemCastToken.IsToken(Spell);
+
     // Row label — the buff's spell name (falls back to the cast code) + its recast
-    // timer, e.g. "bless - 15s", with a trailing condition tag when set.
+    // timer, e.g. "bless - 15s", with a trailing condition tag when set. No level
+    // requirement here: the level lives in the Add-buff dropdown where it helps you
+    // pick; on a configured row it only reads as confusing (it's not the recast).
     public string HeaderText
     {
         get
@@ -102,17 +121,49 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // target buff AND when there's actually a party to target — solo shows just Self.
     public bool ShowMemberTargets => IsSingleTarget && HasPartyMembers;
 
+    // The "Solo" checkbox shows only for a whole-party buff — the one scope that
+    // otherwise fires only in a party. Self / single-target buffs already fire solo
+    // via CastOnSelf, so they don't need it.
+    public bool ShowSolo => IsWholeParty;
+
+    // Non-null when another configured slot's spell removes this one's (or this
+    // one's removes another's) via RemovesSpell — see AppServices.BuffSlotOverwritePairs.
+    // Combines both directions into one tooltip; the icon shows whenever either is set.
+    public bool HasOverwriteWarning => OverwriteWarningTooltip is not null;
+
+    public string? OverwriteWarningTooltip
+    {
+        get
+        {
+            (string? removedBy, string? removes) = _resolveOverwrite(_dto);
+            return Game.Spells.BuffConflictAnalyzer.FormatTooltip(removedBy, removes);
+        }
+    }
+
+    // False for a row whose spell the character hasn't actually learned — drives the
+    // "unlearned" chip the way the read-only Buff Watchdog timer bars do. Add-buff /
+    // Add all blesses only ever offer learned spells, so this normally stays true;
+    // it still catches a slotted spell that later reads unlearned (a data-set
+    // renumber, a hand-typed unknown code).
+    public bool IsLearned => _resolveLearned?.Invoke(Spell) ?? true;
+
     public BuffSlotRowViewModel(
         BuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
-        Func<string?, string> resolveName, Action persist)
+        Func<string?, string> resolveName, Func<BuffSlot, (string? RemovedBy, string? Removes)> resolveOverwrite,
+        Action persist, Action<BuffSlotRowViewModel>? onSelfActivated = null,
+        Func<string?, bool>? resolveLearned = null)
     {
         _dto = dto;
         _resolveScope = resolveScope;
         _resolveName = resolveName;
+        _resolveOverwrite = resolveOverwrite;
         _persist = persist;
+        _onSelfActivated = onSelfActivated;
+        _resolveLearned = resolveLearned;
         _suppress = true;
         _castOnSelf = dto.CastOnSelf;
         _wholePartyOn = dto.WholePartyOn;
+        _castSolo = dto.CastSolo;
         _suppress = false;
     }
 
@@ -131,6 +182,18 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsSelfOnly));
         OnPropertyChanged(nameof(ShowSelf));
         OnPropertyChanged(nameof(ShowMemberTargets));
+        OnPropertyChanged(nameof(ShowSolo));
+        OnPropertyChanged(nameof(IsLearned));
+        RefreshOverwriteWarning();
+    }
+
+    // Re-derive the overwrite-conflict warning on its own — a conflict is a property
+    // of a slot PAIR, so every row needs this whenever ANY slot in the panel changes,
+    // not just when this row's own spell/recast/targeting changed.
+    public void RefreshOverwriteWarning()
+    {
+        OnPropertyChanged(nameof(HasOverwriteWarning));
+        OnPropertyChanged(nameof(OverwriteWarningTooltip));
     }
 
     partial void OnCastOnSelfChanged(bool value)
@@ -138,12 +201,20 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         if (_suppress) return;
         _dto.CastOnSelf = value;
         _persist();
+        if (value) _onSelfActivated?.Invoke(this);
     }
 
     partial void OnWholePartyOnChanged(bool value)
     {
         if (_suppress) return;
         _dto.WholePartyOn = value;
+        _persist();
+    }
+
+    partial void OnCastSoloChanged(bool value)
+    {
+        if (_suppress) return;
+        _dto.CastSolo = value;
         _persist();
     }
 

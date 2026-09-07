@@ -1,6 +1,6 @@
 # Version history
 
-## 3.51.0
+## 3.55.0
 
 - New **Sysop powers** on Settings → BBS + Display: the old single "sysop / goto powers" checkbox is now a **Sysop map** / **Sysop status** / **Sysop god lives** set (per-character, per-BBS). None of them relate to `@goto`, which stays gated by the per-player Move-player permission
 - **Sysop status** reads the game's `sys st` room dump to recover the client's position when the walker gets lost, using its exact map/room number instead of walking backwards to work it out — and it now fires at **every point Paradigm's `rm` re-anchor does** (first mismatch, engine stall, the tier-3 give-up boundary, the terminal pre-Lost shot, the no-engine drift gap, `@where`, and a blocked loop/replan), throttled so the heavier dump doesn't flood the screen
@@ -10,6 +10,154 @@
 - Fixed a loop hanging forever when a move went out and never confirmed, and one sitting idle after recovery had already succeeded
 - Sysop status stays trusted once it has answered even once; before that, an unanswered probe backs off and retries rather than switching off for the session
 - Recovery attempts are spaced out, so a reroute that instantly re-blocks can't spend the whole retry budget in one second
+
+## 3.54.5
+
+- Prot Good and Vile Ward are now treated as realm-exclusive: Stock realms use Protection-from-Good (ability 25), Paradigm dropped it for Vile Ward (ability 1113) — a stray Prot-Good value no longer lowers a monster's hit chance on Paradigm, and Vile Ward stays Paradigm-only
+- Monster Intel's defense simulator now shows a **Prot Good** field on Stock realms and the **Vile Ward** field (with the evil-tier picker) on Paradigm, instead of always showing the Paradigm-only Vile Ward
+
+## 3.54.4
+
+- Unrecognized Lines capture no longer stages room-display titles (e.g. "River Street") — a room name is read by the room parser, not the message catalogue, so it's now matched against the Rooms table and excluded; genuine spell/monster lines that happen to share the room-name colour still capture
+- Monster Intel "AC vs Selected Target" now shows AC to the tenth (e.g. 10.1) instead of rounding, and the defense-simulator AC field steps by 0.1 to match — item AC is stored ×10 and the game displays it fractional; the Hits-You-% estimate still uses the whole-number AC the game's to-hit formula consumes
+
+## 3.54.2
+
+- Fixed keyboard input feeling delayed during play — the buff/heal decision pass (which runs each combat round and roughly once a second while idle) re-scanned the entire Spells/Items/Classes tables from scratch on every lookup, stalling the UI thread; the dominant cost was the equipment-stat aggregation doing a full Items scan for each worn item
+- Game-data lookups by Number/Name are now indexed once per table load instead of linearly scanned on every call, and the class cast-item list is cached per class instead of re-scanned on every decision pass
+
+## 3.54.1
+
+- Help guide: full audit against the current client — added coverage that was missing for the `@relog` / `@hangup` / `@profile` remote commands, the Import loops (`.mp`) menu item, View → Reset layout, Help → Report an issue / About, the Buff Watchdog window and its layout + snap-windows settings, and the Roomba tab, Flavor Prefixes table, and Bosses Notes/Clear controls
+- Help guide: fixed stale text — the "no `--profile` CLI" claim (it exists), the Auto-load-last-profile location (File menu, not Settings → General), and the renamed "Automation section" cross-references; flagged the non-functional "sysop / goto powers" checkbox as such
+
+## 3.54.0
+
+- Buff Watchdog: new **Add all blesses** button — adds a row for every buff you've actually **learned**, on yourself or the whole party, in one click, no dialog, sorted by level requirement (not name). Whole-party buffs are listed but never pre-checked — that's always your call, ticked per-row via Party Wide
+- **＋ Add buff** now picks the buff from a **dropdown of your learned buffs** (each shown as its name and the level you learned it at, e.g. *bless (Lvl 2)*) instead of a text box — a buff already in another slot stays listed but greyed out so you can see it's taken
+- Where two learned buffs would strip each other off (e.g. greater zeal removes zeal) both are listed but only the higher-level one is pre-checked, so you can swap to another family member by hand; anything that conflicts with a buff you've already configured yourself is listed but left unchecked, never auto-clobbering your existing setup
+- Checking a buff that conflicts with another currently-checked one now auto-unchecks the other (and vice versa) — applies live to any row, not just ones "Add all blesses" added
+- Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt; it clears the *config*, not running buffs — any buff still up keeps its live timer bar
+- A buff that's actually up but no longer configured (cast by hand, or a slot you just removed) now shows a plain read-only timer bar, so clearing config never hides a running buff — and that bar clears itself once the buff wears off (a still-configured buff's row persists as "not up", since it's meant to be recast)
+- Fixed the ⚠ conflict marker not appearing on a whole-party buff set to Solo (Party Wide off) — a solo whole-party cast still lands on you, so it now flags a conflict with a clashing self buff just as Party Wide does
+- Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures (e.g. minor healing, cure poison) as if they were maintainable buffs — it now requires a real duration, not just zero energy cost and self/member targeting
+- Fixed **Add all blesses** recommending a buff your character's current alignment can't actually cast (e.g. an evil character being offered "protection from evil") and, worse, letting that dead pick crowd out the alignment-correct alternative (e.g. never offering "unholy armour" because "holy armour" won the tie-break) — it now reads your alignment from your own `who` observation and filters both directions
+- Buff Watchdog: new live mana-budget readout — `Mana/Tick gained: N - Mana/Tick to maintain: N`, both per 30s regen tick so they compare directly: your natural passive regen vs what every checked buff costs to keep recast (single-target counts per person, whole-party counts as one cast); updates on box toggles, roster/gear/level changes
+- Fixed both **＋ Add buff** and **Add all blesses** offering only whole-party cast-on-use items (a #item slot) and silently dropping any self-cast one (e.g. a bless-casting crozier or sceptre) — a self-cast item needs no target any more than a whole-party one does, so it's offered the same way now; a previously-configured self-cast item slot is also now correctly weighed by the RemovesSpell conflict checks and the mana-upkeep readout, instead of being invisible to both
+- Weapon "on use" (#item) buffs are now offered only when you can actually use them — you meet the item's level and the item is in your pack (carried or worn) — instead of the whole class roster; the list refreshes on your next `i`, and falls back to showing all until an inventory listing is seen
+- Buff Watchdog: the config list is now one continuous list ordered aimed (self/single-target) buffs → whole-party buffs → item ("on use") buffs, dropping the "Weapons" separator; removing a buff no longer rebuilds the whole list, so the lag with many buffs configured is gone
+- Buff Watchdog: the whole-party toggle is now labelled "Party" (was "Party Wide"), and the config-row headers/labels are white to match the Solo checkbox instead of dim grey
+- Buff Watchdog: when two clashing buffs are both up, the one cast last stripped the other — the clobbered buff's bar now stops counting and reads "conflict" with its ⚠ moved to the front, instead of running a false countdown (the game sends no "it faded" line, so it's inferred from cast order)
+- Buff Watchdog: an arrow button at the top-right of the timer-bar side collapses or expands the config panel (bars-only vs full), styled like the nav map's collapse chip; sticky per character. Collapsing/expanding also resizes the window along the split axis so the freed space is handed back / reclaimed automatically
+- Buff Watchdog: the config/bars splitter position is now saved per character (alongside the collapse state and the window size the layout store already persisted), so the window reopens exactly as you left it
+- Buff Watchdog: new **Unlearned spells** button (right of Remove all) prints to the terminal every class spell you haven't learned yet that's within reach — trainable now, plus up to 5 levels ahead — each as `[Spell name - Unlearned, Requires Level XX]`
+- Buff Watchdog: the config-side ⚠ conflict marker now shows whenever two clashing buffs are both *configured* (added), regardless of which cast boxes are ticked — a switched-off buff still clobbers the moment it's cast
+- Buff timers: fixed shared-message mix-ups between buffs that remove each other and share cast / wear-off messages (e.g. bless removes chant on Paradigm, where one "you feel lucky" line matches several buff records at once). Casting one now refreshes ITS OWN timer (keyed off the buff we sent, confirming only one buff per shared-line burst — it was refreshing a sibling buff and leaving the cast one "not up"), and the shared "wear off" that follows a clobbering cast clears no one, so the survivor keeps counting and the clobbered buff stays up to render as "conflict"
+- Buff Watchdog: a bar showing "conflict" now carries its explanation as a tooltip across the whole bar, not just on the ⚠
+- Fixed a long buff name painting through the Self checkbox instead of eliding with "…" — the name cell is now properly width-constrained
+- Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎ — including the reroll target for a mana-regen roll spell (profane link, nature tap, mana flux, …) that "Add all blesses" added without one configured
+- Fixed severe Buff Watchdog lag with many configured buffs (especially right after "Add all blesses") — maintained self-buffs cycling no longer rebuild every timer bar every second
+- Fixed the Buff Watchdog config pane / splitter snapping back to its default size on every add or remove — it now stays where you dragged it
+- The recast-due timer bar is now a dim amber instead of bright yellow, so the buff name and time remaining stay readable over it
+
+## 3.53.3
+
+- Fixed the Narrow Precipice drawbridge winch (12/2123): the walker would pull it, watch it lower, then time out waiting for a gate-open signal that this exit never sends — now it also accepts the drawbridge's own "lowers with a heavy thud" line and crosses immediately
+- bug reports addressed: paradigm-20260906-202008
+
+## 3.53.2
+
+- Whole-party buffs in the Buff Watchdog gain a per-slot **Solo** checkbox (on by default): cast it while alone as well as party-wide — untick to make a whole-party buff party-only
+- Unified the buff casting engine — whole-party and self casts now share one path instead of separate self/party branches, so a slot's order in the Watchdog list is honoured, self is blessed before other members, and whole-party casts queue as before
+
+## 3.53.1
+
+- Fixed a whole-party buff (spell or item-cast, e.g. a party-wide "use" item) never firing while solo — it's now treated as a self-cast when you're not in a party, since a whole-party cast still lands on you alone
+- bug reports addressed: paradigm-20260906-150624
+
+## 3.53.0
+
+- Buff Panel now warns inline when two of your configured buffs would remove each other (e.g. a whole-party buff superseding a self-cast one) — hover the ⚠ for which buff is involved and in which direction
+- Buff Watchdog shows the same warning on its live timer bars, without hiding the real timer — the buff is still genuinely being cast, this is a heads-up, not an automation change
+- Sourced entirely from each spell's existing RemovesSpell data — no new game-data import needed
+
+## 3.52.7
+
+- Monster Intel's "Hits You %" now floors at 1% for light-armour Paradigm classes (Silk/Ninja/Leather armour types the game lets drop that low), matching the engine's own minimum instead of stopping at 2%
+- Its Hits-You-% filter gains a "≤1%" band in that case; other Paradigm classes still floor at 2% and Stock at 8%
+
+## 3.52.6
+
+- Fixed a crash where a corrupted game-data table (e.g. from a bad or older MDB import) took down every feature that looked it up — the table is now logged and treated as unavailable instead, leaving the rest of the set working
+- The MDB importer now re-reads each table it writes and retries that one table once if it didn't parse back, so a truncated/interrupted write is caught during import rather than surfacing as a crash later
+- A corrupt table now raises a red terminal notice — both on import (in the skipped-table summary) and at load time — so you know some features will be missing data and can re-import the set
+- bug reports addressed: Crash-20260906-081812
+
+## 3.52.4
+
+- Fixed the round heartbeat re-attacking/re-casting at a mob the instant its own killing blow lands — every kill used to waste a round on "You don't see X here!" / "Your command had no effect." before the engine noticed and moved on
+- Applies to the routine per-round weapon resume and the Alternate/CustomRoundCycle spell-physical alternation; the existing spell cap-switch protection already handled its own case
+- bug reports addressed: paradigm-20260905-205200
+
+## 3.52.3
+
+- Leaving the `train stats` / character-creation form now returns to line-mode input the instant the room or the game prompt comes back, instead of lingering in the form's character-mode until your next command — so a `stat` (or any command) typed right after training is no longer sent a byte at a time and silently mis-handled (even in a dark room with no room display)
+- As a safety net, the stat sheet also self-arms its parse off its own header line, so the Player Workshop still updates even if a stat screen ever arrives without a clean `stat` command behind it
+- bug reports addressed: paradigm-20260906-090057
+
+## 3.52.2
+
+- Unrecognized-line capture now holds off until you're in the realm — the startup splash, BBS login menu, and connect banners no longer stage candidates
+- It also skips the client's own bracketed status notices and the echo of a command you just typed, cutting the noise the queue was catching
+- Trimming that volume removes the brief input stutter the capture could cause while it staged and saved a long dump
+
+## 3.52.1
+
+- Fixed the shipped `convulsions` message record so its onset (`You are in convulsions!`) is what actually latches the Confused condition, instead of one of its fumble wordings
+- LoopRunner's confusion-aware recovery budget (added 2026-09-02) now actually engages during a real convulsions episode instead of silently never firing — no more loops permanently failing after 3 fumble-caused blocks in under 20 seconds
+- bug reports addressed: paradigm-20260905-183956
+
+## 3.52.0
+
+- Game Data Browser record tables (Monsters, Items, Spells, Rooms, …) now have a **Columns ▾** picker at their top-right — check/uncheck which columns show, per table (the engine-backed utility tabs keep their fixed columns)
+- The picker also exposes columns that were previously filter-only, so e.g. a monster's per-element resists, spell-immunity, and dodge can be shown as grid columns
+- Column choices are saved per character; **Reset to defaults** restores a table's standard columns
+
+## 3.51.1
+
+- Game Data Browser → Monsters table now shows a **Relationship** column (between the name and Respawn) — your set Enemy/Neutral/Friend/… for each monster, resolved the same way the combat engine reads it, so you can see it without opening the record
+
+## 3.51.0
+
+- New `--profile` launch argument opens a named profile at startup; passing several names (`--profile "A","B","C"`) opens one instance per profile, so a shortcut or script can bring up multiple characters at once
+- A profile name can be bare when unique, or `BBS/Name` when the same character exists on two BBSes; `--profile` overrides Auto-load-last and honors the profile's auto-connect
+- An unresolved `--profile` name (typo, or a bare name on more than one BBS) shows the reason on the terminal and opens a blank profile instead of silently loading a different character
+- Debug log filenames now include the process id so concurrent instances don't collide on the same-second log file
+
+## 3.50.13
+
+- MDB import that finds no game tables now fails cleanly instead of switching to an empty set (which blanked the map, monsters, and items); the error explains the likely cause — an Access-edited MDB needing Compact & Repair — and logs the catalog scan
+- Importing after launch dismisses the startup splash so import progress and errors show on the terminal
+- An MDB with more tables than expected is no longer flagged as an error (the extra tables are imported but unused)
+- bug reports addressed: stock-20260905-155917
+
+## 3.50.12
+
+- Starter navigation loops & GOTO favourites now **update with the app**: they're embedded in the executable, and new ones added in a later release are added to your existing sets on launch — additively, and **never re-adding a loop or GOTO you deleted** (a per-set ledger tracks what's already been offered). Your own loops/favourites are untouched
+
+## 3.50.11
+
+- Built-in game-data seeds (monster/item overlays, messages, boss & quest defs) now **refresh on update** — they're embedded in the executable and re-synced into your data folder on launch, so shipped fixes (e.g. a monster's default relationship) reach existing installs instead of being frozen at whatever first-launch wrote. Your own overrides and per-set edits are untouched (they resolve above the seed); user-defined triggers are never overwritten
+
+## 3.50.10
+
+- Fixed the between-round caster spending a round on a buff/cure/debuff right after a big hit instead of healing: a combat round's damage lands a beat before the prompt that reports your new HP, so a tick fired straight off the damage could act on stale HP and burn the round's one cast on a buff while you were actually critical. It now holds non-heal casts until your real HP is confirmed (heals are never held) — so a round that chunks you low heals instead of buffing
+- bug reports addressed: paradigm-20260904-214056
+
+## 3.50.9
+
+- Fixed the nightly-cleanup auto-logoff leaving you connected at the BBS menu instead of disconnecting: it now drops the carrier the moment the game confirms "Your character has been saved." rather than waiting to recognize a specific main-menu screen — so it disconnects cleanly on boards that nest the realm behind extra door/games menus (where the old "Enter the Realm" menu line never appears after you exit)
+- bug reports addressed: stock-20260904-230111
 
 ## 3.50.8
 

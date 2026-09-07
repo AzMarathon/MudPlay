@@ -74,7 +74,7 @@ public static class RegenSpellClassifier
     public static RegenSpellTraits Classify(in SpellFormulaInput formula)
     {
         RegenSpellTraits traits = RegenSpellTraits.None;
-        bool timed = HasDuration(formula);
+        bool timed = BuffClassifier.HasDuration(formula);
 
         foreach (SpellAbility a in formula.Abilities)
         {
@@ -104,10 +104,4 @@ public static class RegenSpellClassifier
     // Classify(...).HasFlag(...) chain.
     public static bool Has(in SpellFormulaInput formula, RegenSpellTraits wanted)
         => (Classify(formula) & wanted) != RegenSpellTraits.None;
-
-    // A spell counts as "timed" when its base duration is positive or it scales
-    // up with level — the signal that a Heal / HealMana slot ticks over rounds
-    // rather than firing once. Instant heals leave all three duration columns 0.
-    private static bool HasDuration(in SpellFormulaInput f)
-        => f.Dur > 0 || (f.DurInc != 0 && f.DurIncLVLs > 0);
 }
