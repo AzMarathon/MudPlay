@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.53.3**
-> - Fixed the Narrow Precipice drawbridge winch (12/2123): the walker would pull it, watch it lower, then time out waiting for a gate-open signal that this exit never sends — now it also accepts the drawbridge's own "lowers with a heavy thud" line and crosses immediately
+> **Version 3.53.4**
+> - Fixed keyboard input feeling delayed during play — the buff/heal decision engine and equipment-stat calculator were re-scanning the entire Spells/Items/Classes tables from scratch on every 100ms game tick, stalling the UI thread
+> - Game-data lookups by Number/Name are now indexed once per table load instead of linearly scanned on every call
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

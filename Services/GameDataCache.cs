@@ -35,6 +35,15 @@ public sealed class GameDataCache
 {
     private readonly Dictionary<string, JsonDocument> _tables = new(StringComparer.OrdinalIgnoreCase);
 
+    // Lazy per-table indexes backing FindRowByNumber / FindRowByName / RowNumbers —
+    // built once on first lookup against a table instead of re-walking
+    // EnumerateArray() on every call. A hot per-tick consumer (KnownSpellCatalog's
+    // buff/cast-item resolution) was re-scanning the Spells/Items tables from
+    // scratch on every TickEngine tick, stalling the UI thread; see GetNumberIndex.
+    // Cleared alongside _tables in EvictTable / EvictAll so a reload rebuilds them.
+    private readonly Dictionary<string, Dictionary<int, JsonElement>> _numberIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Dictionary<string, JsonElement>> _nameIndex = new(StringComparer.OrdinalIgnoreCase);
+
     // Tables whose on-disk JSON failed to parse for the active set (e.g. binary
     // corruption from a pre-fix MDB import — see the multi-page LVAL memo reader
     // history). Remembered so a broken file is reported once via Log rather than
@@ -326,17 +335,9 @@ public sealed class GameDataCache
     // to render GameDataLink back-references as human-readable labels.
     public string? FindNameByNumber(string tableName, int number)
     {
-        JsonDocument? doc = GetRawTable(tableName);
-        if (doc is null) return null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
-            if (numEl.ValueKind != JsonValueKind.Number) continue;
-            if (!numEl.TryGetInt32(out int rowNum) || rowNum != number) continue;
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)) return null;
-            return nameEl.GetString();
-        }
-        return null;
+        JsonElement? row = FindRowByNumber(tableName, number);
+        if (row is null) return null;
+        return row.Value.TryGetProperty("Name", out JsonElement nameEl) ? nameEl.GetString() : null;
     }
 
     // The set of Number values present in tableName for the active set (empty when the
@@ -344,15 +345,9 @@ public sealed class GameDataCache
     // scan per lookup — e.g. the Messages tab hiding records claimed by a real spell.
     public HashSet<int> RowNumbers(string tableName)
     {
-        HashSet<int> nums = new();
         JsonDocument? doc = GetRawTable(tableName);
-        if (doc is null) return nums;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-            if (row.TryGetProperty("Number", out JsonElement numEl)
-                && numEl.ValueKind == JsonValueKind.Number
-                && numEl.TryGetInt32(out int v))
-                nums.Add(v);
-        return nums;
+        if (doc is null) return new HashSet<int>();
+        return new HashSet<int>(GetNumberIndex(tableName, doc).Keys);
     }
 
     // Return the full row in tableName whose Number field equals number, or
@@ -365,13 +360,7 @@ public sealed class GameDataCache
     {
         JsonDocument? doc = GetRawTable(tableName);
         if (doc is null) return null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
-            if (numEl.ValueKind != JsonValueKind.Number) continue;
-            if (numEl.TryGetInt32(out int rowNum) && rowNum == number) return row;
-        }
-        return null;
+        return GetNumberIndex(tableName, doc).TryGetValue(number, out JsonElement row) ? row : null;
     }
 
     // Return the row in tableName whose Name field equals name (case-insensitive),
@@ -385,14 +374,50 @@ public sealed class GameDataCache
         ArgumentNullException.ThrowIfNull(name);
         JsonDocument? doc = GetRawTable(tableName);
         if (doc is null) return null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        return GetNameIndex(tableName, doc).TryGetValue(name, out JsonElement row) ? row : null;
+    }
+
+    // Build (or return the cached) Number → row index for tableName. Ties are
+    // resolved first-match-wins, matching the linear scan this replaced. Built
+    // once per table load; invalidated alongside _tables.
+    private Dictionary<int, JsonElement> GetNumberIndex(string tableName, JsonDocument doc)
+    {
+        lock (_tables)
         {
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
-            if (nameEl.ValueKind != JsonValueKind.String) continue;
-            if (string.Equals(nameEl.GetString(), name, StringComparison.OrdinalIgnoreCase))
-                return row;
+            if (_numberIndex.TryGetValue(tableName, out Dictionary<int, JsonElement>? index)) return index;
+
+            index = new Dictionary<int, JsonElement>();
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
+                if (numEl.ValueKind != JsonValueKind.Number) continue;
+                if (numEl.TryGetInt32(out int n)) index.TryAdd(n, row);
+            }
+            _numberIndex[tableName] = index;
+            return index;
         }
-        return null;
+    }
+
+    // Build (or return the cached) Name → row index for tableName, case-insensitive.
+    // Ties are resolved first-match-wins, matching the linear scan this replaced.
+    // Built once per table load; invalidated alongside _tables.
+    private Dictionary<string, JsonElement> GetNameIndex(string tableName, JsonDocument doc)
+    {
+        lock (_tables)
+        {
+            if (_nameIndex.TryGetValue(tableName, out Dictionary<string, JsonElement>? index)) return index;
+
+            index = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
+                if (nameEl.ValueKind != JsonValueKind.String) continue;
+                string? name = nameEl.GetString();
+                if (name is not null) index.TryAdd(name, row);
+            }
+            _nameIndex[tableName] = index;
+            return index;
+        }
     }
 
     // Drop the cached JsonDocument for one table. Used by per-tab consumers after
@@ -403,6 +428,8 @@ public sealed class GameDataCache
         lock (_tables)
         {
             _failedTables.Remove(tableName);
+            _numberIndex.Remove(tableName);
+            _nameIndex.Remove(tableName);
             if (!_tables.Remove(tableName, out JsonDocument? doc)) return false;
             doc.Dispose();
             return true;
@@ -420,6 +447,8 @@ public sealed class GameDataCache
             foreach (JsonDocument doc in _tables.Values) doc.Dispose();
             _tables.Clear();
             _failedTables.Clear();
+            _numberIndex.Clear();
+            _nameIndex.Clear();
         }
     }
 

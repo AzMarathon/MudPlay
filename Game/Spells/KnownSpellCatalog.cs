@@ -68,13 +68,8 @@ public sealed class KnownSpellCatalog
     public string? ResolveClassName(int classNumber)
     {
         if (classNumber < 1) return null;
-        JsonDocument? doc = _cache.GetRawTable("Classes");
-        if (doc is null) return null;
-
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-            if (ReadInt(row, "Number") == classNumber)
-                return ReadString(row, "Name");
-        return null;
+        JsonElement? row = _cache.FindRowByNumber("Classes", classNumber);
+        return row is null ? null : ReadString(row.Value, "Name");
     }
 
     // Returns the class's magery type (the Magery enum value) and emits its
@@ -83,16 +78,11 @@ public sealed class KnownSpellCatalog
     {
         mageryLvl = 0;
         if (classNumber < 1) return MageryNone;
-        JsonDocument? doc = _cache.GetRawTable("Classes");
-        if (doc is null) return MageryNone;
+        JsonElement? row = _cache.FindRowByNumber("Classes", classNumber);
+        if (row is null) return MageryNone;
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (ReadInt(row, "Number") != classNumber) continue;
-            mageryLvl = ReadInt(row, "MageryLVL");
-            return ReadInt(row, "MageryType");
-        }
-        return MageryNone;
+        mageryLvl = ReadInt(row.Value, "MageryLVL");
+        return ReadInt(row.Value, "MageryType");
     }
 
     // Every spell classNumber can learn, gated to level (pass 0 for the full
@@ -199,15 +189,8 @@ public sealed class KnownSpellCatalog
     public string? GetSpellNameByNumber(int spellNumber)
     {
         if (spellNumber < 1) return null;
-        JsonDocument? doc = _cache.GetRawTable("Spells");
-        if (doc is null) return null;
-
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (ReadInt(row, "Number") != spellNumber) continue;
-            return ReadString(row, "Name");
-        }
-        return null;
+        JsonElement? row = _cache.FindRowByNumber("Spells", spellNumber);
+        return row is null ? null : ReadString(row.Value, "Name");
     }
 
     // Resolve a Spells.Number to its raw Targets scope code across the entire Spells
@@ -218,15 +201,8 @@ public sealed class KnownSpellCatalog
     public int? GetTargetsByNumber(int spellNumber)
     {
         if (spellNumber < 1) return null;
-        JsonDocument? doc = _cache.GetRawTable("Spells");
-        if (doc is null) return null;
-
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (ReadInt(row, "Number") != spellNumber) continue;
-            return ReadInt(row, "Targets");
-        }
-        return null;
+        JsonElement? row = _cache.FindRowByNumber("Spells", spellNumber);
+        return row is null ? null : ReadInt(row.Value, "Targets");
     }
 
     // Resolve a Spells.Number to its SpellFormulaInput across the entire Spells
@@ -236,15 +212,8 @@ public sealed class KnownSpellCatalog
     public SpellFormulaInput? GetFormulaByNumber(int spellNumber)
     {
         if (spellNumber < 1) return null;
-        JsonDocument? doc = _cache.GetRawTable("Spells");
-        if (doc is null) return null;
-
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (ReadInt(row, "Number") != spellNumber) continue;
-            return ToFormula(row);
-        }
-        return null;
+        JsonElement? row = _cache.FindRowByNumber("Spells", spellNumber);
+        return row is null ? null : ToFormula(row.Value);
     }
 
     // Build the reverse index from a TBInfo textblock number to every spell
@@ -457,16 +426,10 @@ public sealed class KnownSpellCatalog
     public int GetTeachingNpcNumber(int spellNumber)
     {
         if (spellNumber <= 0) return 0;
-        JsonDocument? doc = _cache.GetRawTable("Spells");
-        if (doc is null) return 0;
-
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (ReadInt(row, "Number") != spellNumber) continue;
-            Match m = LearnedFromNpcRe.Match(ReadString(row, "Learned From") ?? string.Empty);
-            return m.Success && int.TryParse(m.Groups[1].Value, out int n) ? n : 0;
-        }
-        return 0;
+        JsonElement? row = _cache.FindRowByNumber("Spells", spellNumber);
+        if (row is null) return 0;
+        Match m = LearnedFromNpcRe.Match(ReadString(row.Value, "Learned From") ?? string.Empty);
+        return m.Success && int.TryParse(m.Groups[1].Value, out int n) ? n : 0;
     }
 
     // TBInfo teaching-script tokens: a line teaching a spell to a class reads e.g.
