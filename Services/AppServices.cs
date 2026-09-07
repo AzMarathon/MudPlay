@@ -6735,6 +6735,28 @@ public sealed class AppServices
         return (r.WorstTick, r.BestTick);
     }
 
+    // The character's natural passive mana-regen per 30 s tick — level / stats /
+    // magery with worn +ManaRgn% folded in, NOT meditating — the "mana gained per
+    // tick" the Buff Watchdog shows against its per-tick maintenance cost so you can
+    // see at a glance whether a buff set is self-sustaining. Deliberately excludes any
+    // mana-regen roll spell (nature tap / flux): its magnitude is a variable roll, and
+    // the spell itself is already counted on the maintenance side. Uses the same
+    // engine formula (CharacterCalculator.CalcManaRegen) the Level Projection grid
+    // trusts. Null for a non-caster (mageryType 0) or before the first stat parse.
+    public int? PassiveManaRegenTick()
+    {
+        if (!Stats.HasParsed) return null;
+        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        int mageryType = RowInt(classRow, "MageryType");
+        if (mageryType == 0) return null;   // non-caster: no mana pool worth planning
+        int mageryLevel = RowInt(classRow, "MageryLVL");
+        int gearRegen = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
+        return Game.Calculators.CharacterCalculator.CalcManaRegen(
+            System.Math.Max(1, PlayerStats.Level), PlayerStats.Intellect, PlayerStats.Willpower,
+            PlayerStats.Charm, mageryType, mageryLevel, gearRegen, isMeditating: false, GameData.ActiveRealm);
+    }
+
     private static int RowInt(System.Text.Json.JsonElement? row, string property)
     {
         if (row is not System.Text.Json.JsonElement el

@@ -749,7 +749,10 @@ A row shows a **⚠** next to its name when it conflicts with another configured
 
 > **Note:** the **HP-regen** spell is *not* a maintained buff and isn't set here — it's a reactive minor-heal that fires when your HP dips, and it stays on **Settings → Spells** as **HP Regen**. Everything else moved to this list.
 
-**Mana to maintain** is a live readout just under the buttons: how much mana per second every currently-**checked** buff costs to keep recast forever, added up across every self, party, and whole-party cast (a single-target buff blessing 3 members counts 3 casts). It updates the instant you check or uncheck a box, or the party roster changes. Shown two ways — per 30-second regen tick (the same cadence your own passive-regen readout uses, so it's directly comparable) and per minute — so you can theorycraft a buff loadout and see whether your regen can actually keep up with it before you commit to it in-game.
+**The mana budget** is a live readout just under the buttons — **`Mana/Tick gained: N - Mana/Tick to maintain: N`** — both sides measured per 30-second passive-regen tick (the "MP +N after ~30s" cadence) so they compare directly. The instant one number exceeds the other you know whether a buff loadout is self-sustaining before you commit to it in-game. It updates the moment you check or uncheck a box, the party roster changes, your gear changes (an `i`), or you level.
+
+- **Mana/Tick gained** is your **natural passive mana regen** per tick — from your level, casting stat, and worn **+ManaRgn%** gear. It does *not* fold in a mana-regen roll spell (nature tap / mana flux and kin): those roll a variable amount and the spell itself already shows up on the cost side. 0 for a non-caster.
+- **Mana/Tick to maintain** is what every currently-**checked** buff costs to keep recast forever: each buff's mana cost spread over its (level-scaled) duration, scaled to the 30-second tick, times how many casts it actually fires. A single-target buff counts one cast per person it's aimed at (yourself plus each targeted member — blessing 3 members is 3 casts); a **whole-party** buff counts as a **single** cast no matter how many are in the party, since one cast covers everyone (its cost only moves with your level, if its duration scales).
 
 ### Reading the timer bars
 

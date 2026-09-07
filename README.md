@@ -10,7 +10,7 @@
 > - Fixed the ⚠ conflict marker not appearing on a whole-party buff set to Solo (Party Wide off) — a solo whole-party cast still lands on you
 > - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures as if they were maintainable buffs — it now requires a real duration
 > - Fixed **Add all blesses** recommending a spell your character's alignment can't cast and crowding out the alignment-correct alternative — it now reads your alignment from your own `who` observation
-> - Buff Watchdog: new live **"Mana to maintain"** readout — total mana/second every checked buff costs to keep recast, updating as you check/uncheck boxes
+> - Buff Watchdog: new live mana-budget readout — `Mana/Tick gained: N - Mana/Tick to maintain: N`, both per 30s regen tick so they compare directly (natural passive regen vs what every checked buff costs to keep recast), updating as you check/uncheck boxes or your roster/gear/level change
 > - Fixed **＋ Add buff** / **Add all blesses** silently dropping self-cast buff items (e.g. a bless-casting crozier) — only whole-party items were being offered before
 > - Weapon "on use" (#item) buffs are now offered only when you can use them — you meet the item's level and have it in your pack — instead of the whole class roster; refreshes on your next `i`
 > - Buff Watchdog: config list is one continuous order (aimed buffs → whole-party → item buffs), no "Weapons" separator; removing a buff no longer rebuilds the whole list (fixes the lag with many buffs); fixed a long buff name painting through the Self checkbox

@@ -218,18 +218,18 @@
                                     ToolTip.Tip="Print to the terminal every spell your class hasn't learned yet that's within reach — castable now, plus everything up to 5 levels ahead — each as [Spell name - Unlearned, Requires Level XX]."/>
                         </StackPanel>
 
-                        <!-- Live mana-upkeep readout: how much mana/second every currently-
-                             CHECKED buff costs to keep recast, expressed per passive regen
-                             tick (30s — the same cadence the observed "MP +N after ~30s"
-                             readout and ManaRegenBreakpointCalculator use) and per minute.
-                             Recomputes on every checkbox toggle and party-roster change. -->
+                        <!-- Live mana-budget readout, both sides per passive regen tick
+                             (30s — the "MP +N after ~30s" cadence, so they compare directly):
+                             what the character gains per tick vs what every currently-CHECKED
+                             buff costs to keep recast. Recomputes on every checkbox toggle,
+                             party-roster change, inventory reload, and level change. -->
                         <TextBlock IsVisible="{Binding HasSlots}" Margin="8,0,8,6" FontSize="11"
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
-                                   ToolTip.Tip="Mana per second every currently-checked buff needs to stay recast, added up across self, party, and whole-party casts.">
+                                   ToolTip.Tip="Left: your natural passive mana regen per 30s tick (level, stats, and worn +ManaRgn%; not counting a mana-regen roll spell). Right: mana per tick every currently-checked buff needs to stay recast — its cost over its duration, scaled to 30s, times how many casts it fires (self + each targeted member; a whole-party buff counts as one cast whatever the party size).">
                             <TextBlock.Text>
-                                <MultiBinding StringFormat="{}Mana to maintain: {0:0.0} / 30s tick · {1:0.0} / min">
+                                <MultiBinding StringFormat="{}Mana/Tick gained: {0:0.#} - Mana/Tick to maintain: {1:0.#}">
+                                    <Binding Path="ManaGainedPerTick"/>
                                     <Binding Path="RequiredManaPerTick"/>
-                                    <Binding Path="RequiredManaPerMinute"/>
                                 </MultiBinding>
                             </TextBlock.Text>
                         </TextBlock>

@@ -90,15 +90,19 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // panel it can never use.
     public bool ShowPanel => BuffPicks.Count > 0 || Slots.Count > 0;
 
-    // Live "mana to maintain everything currently checked" readout — recomputed
-    // on every edit (Persist) and every party-roster change (RefreshMemberTargets),
-    // since a single-target slot's cast count depends on who's actually in the
-    // party right now. Expressed both per passive regen tick (the same 30s cadence
-    // ManaRegenBreakpointCalculator and the observed "MP +N after ~30s" readout
-    // already use, so it's directly comparable to a character's own regen) and
-    // per minute. 0 when nothing is configured or nothing is actually checked.
+    // Live mana-budget readout, both sides expressed per passive regen TICK (30 s —
+    // the "MP +N after ~30s" cadence, so the two numbers are directly comparable):
+    //   • RequiredManaPerTick — mana to maintain everything currently checked. Each
+    //     slot costs (manaCost / duration) × 30 per cast; a single-target slot
+    //     multiplies by how many members (plus self) it's cast on, a whole-party
+    //     slot always counts as one cast regardless of party size. Recomputed on
+    //     every edit (Persist) and party-roster change (a single-target slot's cast
+    //     count follows the roster). 0 when nothing is checked.
+    //   • ManaGainedPerTick — the character's natural passive regen per tick
+    //     (AppServices.PassiveManaRegenTick), so you can see whether the set is
+    //     self-sustaining. 0 for a non-caster or before the first stat parse.
     [ObservableProperty] private double _requiredManaPerTick;
-    [ObservableProperty] private double _requiredManaPerMinute;
+    [ObservableProperty] private double _manaGainedPerTick;
 
     public BuffPanelViewModel(Game.PartyState party)
     {
@@ -155,8 +159,10 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     private void OnInventoryReloaded()
     {
         if (_disposed) return;
-        if (Dispatcher.UIThread.CheckAccess()) RefreshBuffPicks();
-        else Dispatcher.UIThread.Post(() => { if (!_disposed) RefreshBuffPicks(); });
+        // Worn +ManaRgn% changes the "mana gained" side of the budget readout, so
+        // refresh that too — not just the owned-item pick gate.
+        if (Dispatcher.UIThread.CheckAccess()) { RefreshBuffPicks(); RefreshManaUpkeep(); }
+        else Dispatcher.UIThread.Post(() => { if (!_disposed) { RefreshBuffPicks(); RefreshManaUpkeep(); } });
     }
 
     private void OnProfileLoaded(CharacterProfile _) => Load();
@@ -166,6 +172,9 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         // A row's "unlearned" chip (see ResolveLearned) can flip live — training the
         // spell mid-session, or a reroll losing it — so every row needs to re-pull it.
         foreach (BuffSlotRowViewModel row in Slots) row.Refresh();
+        // Level drives both sides of the budget readout (spell duration, passive
+        // regen), and a reseed rides in on the same event.
+        RefreshManaUpkeep();
     }
     private void OnMembersChanged(object? _, NotifyCollectionChangedEventArgs __) => RefreshMemberTargets();
 
@@ -517,7 +526,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
         double perSecond = Game.Spells.BuffManaUpkeepCalculator.TotalManaPerSecond(upkeep);
         RequiredManaPerTick = perSecond * ManaRegenBreakpointCalculator.PassiveTickSeconds;
-        RequiredManaPerMinute = perSecond * 60;
+        ManaGainedPerTick = AppServices.Current.PassiveManaRegenTick() ?? 0;
     }
 
     private List<(string Display, string Given)> CurrentMembers() =>
