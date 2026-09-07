@@ -6377,15 +6377,10 @@ public sealed class AppServices
 
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
     // effect the Spell Book renders as "Removes <spell>").
-    private HashSet<int> RemovedSpellNumbers(string castCode)
-    {
-        const int RemovesSpellAbil = 122;
-        HashSet<int> nums = new();
-        if (Spellbook.FindByCastCode(castCode.Trim()) is { } s)
-            foreach (Game.Spells.SpellAbility a in s.Formula.Abilities)
-                if (a.Code == RemovesSpellAbil) nums.Add(a.Value);
-        return nums;
-    }
+    private HashSet<int> RemovedSpellNumbers(string castCode) =>
+        Spellbook.FindByCastCode(castCode.Trim()) is { } s
+            ? Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula)
+            : new HashSet<int>();
 
     // Every pair of configured, resolvable buff slots where one's spell removes the
     // other's via RemovesSpell (Abil 122) and their targeting can land on the same

@@ -54,6 +54,17 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // slotted leaves nothing to add.
     public bool CanAddBuff => BuffPicks.Count > 0;
 
+    // "Add all blesses" candidates — recomputed alongside the picker (see
+    // RefreshBuffPicks). Self-only and single-target-on-self buffs only: a
+    // whole-party buff also affects other players, a bigger decision than what
+    // this bulk action means by "on itself", so it's left for the user to add by
+    // hand via the normal picker.
+    private IReadOnlyList<Game.Spells.SelfBlessCandidate> _selfBlessCandidates =
+        Array.Empty<Game.Spells.SelfBlessCandidate>();
+
+    // Whether "Add all blesses" has anything to add.
+    public bool CanAddAllBlesses => _selfBlessCandidates.Count > 0;
+
     // Whether to show the buff panel at all: a class with no party-buff spells
     // (and no existing slots) hides it entirely, rather than showing an empty
     // panel it can never use.
@@ -184,6 +195,42 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     {
         HashSet<string> slotted = SlottedSpells();
         BuffPicks = AllBuffPicks().Where(p => !slotted.Contains(p.Short)).ToList();
+        RefreshSelfBlessCandidates(slotted);
+    }
+
+    // Every learned, level-gated buff not already slotted that the character can
+    // cast on themselves (self-only Targets, or single-target Targets castable on
+    // self), reduced to the BuffConflictAnalyzer pick: drop anything that would
+    // clobber — or be clobbered by — an already-configured slot, then keep only the
+    // highest-ReqLevel member of each RemovesSpell family (e.g. greater zeal over
+    // zeal) among what's left.
+    private void RefreshSelfBlessCandidates(HashSet<string> slotted)
+    {
+        List<Game.Spells.SelfBlessCandidate> pool = _spellbook.Available
+            .Where(s => s.Formula.EnergyCost == 0
+                && (BuffClassifier.IsSelfBuff(s.Targets) || BuffClassifier.IsSingleTargetBuff(s.Targets))
+                && s.ReqLevel <= _spellbook.Level
+                && _spellbook.IsObtained(s.Number)
+                && !slotted.Contains(s.Short.Trim()))
+            .Select(s => new Game.Spells.SelfBlessCandidate(
+                s.Short.Trim(), s.Name, s.Number, s.ReqLevel, s.Formula.ManaCost,
+                Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula)))
+            .ToList();
+
+        List<Game.Spells.ExistingBuffSlot> existing = new();
+        foreach (BuffSlot dto in _settings.Slots)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Spell)) continue;
+            if (_spellbook.FindByCastCode(dto.Spell.Trim()) is not { } es) continue;
+            bool wholeParty = BuffClassifier.IsWholeParty(es.Targets);
+            Game.Spells.BuffAffectSet affect = Game.Spells.BuffAffectSet.From(
+                wholeParty, dto.WholePartyOn, dto.CastOnSelf, dto.AllMembers, dto.Targets);
+            existing.Add(new Game.Spells.ExistingBuffSlot(
+                es.Number, affect, Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(es.Formula)));
+        }
+
+        _selfBlessCandidates = Game.Spells.BuffConflictAnalyzer.SelectSelfBlessCandidates(pool, existing);
+        OnPropertyChanged(nameof(CanAddAllBlesses));
     }
 
     // Rebuild every row's member checklist — and the shared column headers — from
@@ -261,6 +308,29 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         Slots.Add(row);
         row.RebuildMemberTargets(CurrentMembers());
         RefreshBuffPicks();   // the just-slotted spell drops out of the picker
+        OnPropertyChanged(nameof(HasSlots));
+        OnPropertyChanged(nameof(ShowPanel));
+        Persist();
+    }
+
+    // Bulk-add every self-bless candidate (see RefreshSelfBlessCandidates) as a new
+    // cast-on-self slot in one shot — no dialog, since there's nothing to choose:
+    // the candidate list has already resolved level, learned status, and RemovesSpell
+    // conflicts down to exactly one slot per buff family.
+    [RelayCommand]
+    private void AddAllBlesses()
+    {
+        if (_selfBlessCandidates.Count == 0) return;
+        List<(string Display, string Given)> members = CurrentMembers();
+        foreach (Game.Spells.SelfBlessCandidate cand in _selfBlessCandidates)
+        {
+            BuffSlot dto = new() { Spell = cand.CastCode, CastOnSelf = true };
+            _settings.Slots.Add(dto);
+            BuffSlotRowViewModel row = MakeRow(dto);
+            Slots.Add(row);
+            row.RebuildMemberTargets(members);
+        }
+        RefreshBuffPicks();   // drops the just-slotted spells from both pickers
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
         Persist();

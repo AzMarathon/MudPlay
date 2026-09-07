@@ -1,5 +1,10 @@
 # Version history
 
+## 3.54.0
+
+- Buff Watchdog: new **Add all blesses** button — bulk-adds every self-castable buff you've learned as a self slot in one click, no dialog
+- It picks your level and spellbook's highest-tier version of each buff family (e.g. greater zeal over zeal, since casting one strips the other) and skips anything that would conflict with a buff you've already configured by hand
+
 ## 3.53.2
 
 - Whole-party buffs in the Buff Watchdog gain a per-slot **Solo** checkbox (on by default): cast it while alone as well as party-wide — untick to make a whole-party buff party-only

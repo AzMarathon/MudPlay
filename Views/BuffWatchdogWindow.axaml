@@ -101,9 +101,15 @@
                 <Border Background="{StaticResource ChromeBgSunkenBrush}">
                     <StackPanel HorizontalAlignment="Stretch"
                                 DataContext="{Binding Buffs}" x:DataType="vm:BuffPanelViewModel">
-                        <Button Content="＋ Add buff" Padding="8,2" Margin="8,8,8,4"
-                                HorizontalAlignment="Left" IsEnabled="{Binding CanAddBuff}"
-                                Command="{Binding AddBuffCommand}"/>
+                        <StackPanel Orientation="Horizontal" Margin="8,8,8,4" Spacing="6">
+                            <Button Content="＋ Add buff" Padding="8,2"
+                                    IsEnabled="{Binding CanAddBuff}"
+                                    Command="{Binding AddBuffCommand}"/>
+                            <Button Content="Add all blesses" Padding="8,2"
+                                    IsEnabled="{Binding CanAddAllBlesses}"
+                                    Command="{Binding AddAllBlessesCommand}"
+                                    ToolTip.Tip="Add every learned buff you can cast on yourself, at its highest available tier — skips anything a family member (e.g. greater zeal over zeal) or an already-configured slot would immediately overwrite."/>
+                        </StackPanel>
 
                         <TextBlock IsVisible="{Binding !HasSlots}" Margin="8,4,8,6"
                                    Text="No buffs configured. Click “Add buff”, pick a spell, then set who receives it."

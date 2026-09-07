@@ -51,8 +51,32 @@ public readonly struct BuffAffectSet
 public readonly record struct BuffOverwritePair(
     string RemovingCode, string RemovingName, string RemovedCode, string RemovedName);
 
+// A learned, self-castable buff eligible for the Buff Panel's "Add all blesses"
+// bulk add — self-only or single-target-on-self, level-gated, not already slotted.
+// Removes is its Abil-122 RemovesSpell target numbers.
+public readonly record struct SelfBlessCandidate(
+    string CastCode, string Name, int Number, int ReqLevel, int ManaCost, IReadOnlyCollection<int> Removes);
+
+// An already-configured slot's spell identity + who it can land on + what it
+// removes — enough to tell whether a self-bless candidate would clobber it, or be
+// clobbered by it, without needing the slot DTO itself.
+public readonly record struct ExistingBuffSlot(
+    int Number, BuffAffectSet Affect, IReadOnlyCollection<int> Removes);
+
 public static class BuffConflictAnalyzer
 {
+    // The Abil code the Spells table uses for RemovesSpell.
+    public const int RemovesSpellAbil = 122;
+
+    // The Abil-122 (RemovesSpell) target spell numbers carried in a spell's formula.
+    public static HashSet<int> RemovedSpellNumbers(SpellFormulaInput formula)
+    {
+        HashSet<int> nums = new();
+        foreach (SpellAbility a in formula.Abilities)
+            if (a.Code == RemovesSpellAbil) nums.Add(a.Value);
+        return nums;
+    }
+
     // True when two slots' targeting could ever land on the same character — the
     // precondition for a RemovesSpell relation between their spells to matter.
     public static bool CanCoLand(in BuffAffectSet a, in BuffAffectSet b)
@@ -93,5 +117,53 @@ public static class BuffConflictAnalyzer
         if (removedBy is not null) lines.Add($"Removed by: {removedBy}");
         if (removes is not null) lines.Add($"Removes: {removes}");
         return string.Join("\n", lines);
+    }
+
+    // The Buff Panel's "Add all blesses" pick: from every self-castable candidate,
+    // drop one that would clobber (or be clobbered by) an already-configured slot,
+    // then — for whatever's left — cluster the RemovesSpell graph (typically a tiered
+    // family like zeal / greater zeal, which mutually remove each other) via
+    // union-find and keep only the highest-ReqLevel member of each cluster. A self
+    // candidate is always assumed able to co-land with itself, so CanCoLand only
+    // needs to gate against the EXISTING slot's own targeting (a single-target slot
+    // aimed at other members only, for instance, can never conflict with a self cast).
+    public static IReadOnlyList<SelfBlessCandidate> SelectSelfBlessCandidates(
+        IReadOnlyList<SelfBlessCandidate> pool, IReadOnlyList<ExistingBuffSlot> existing)
+    {
+        BuffAffectSet selfAffect = new() { Self = true, Members = Array.Empty<string>() };
+        List<SelfBlessCandidate> survivors = new();
+        foreach (SelfBlessCandidate cand in pool)
+        {
+            bool clobbers = false;
+            foreach (ExistingBuffSlot slot in existing)
+            {
+                if (!CanCoLand(selfAffect, slot.Affect)) continue;
+                if (cand.Removes.Contains(slot.Number) || slot.Removes.Contains(cand.Number))
+                {
+                    clobbers = true;
+                    break;
+                }
+            }
+            if (!clobbers) survivors.Add(cand);
+        }
+        if (survivors.Count == 0) return survivors;
+
+        Dictionary<int, int> parent = survivors.ToDictionary(s => s.Number, s => s.Number);
+        int Find(int x) => parent[x] == x ? x : (parent[x] = Find(parent[x]));
+        void Union(int a, int b)
+        {
+            int ra = Find(a), rb = Find(b);
+            if (ra != rb) parent[ra] = rb;
+        }
+        HashSet<int> survivorNumbers = survivors.Select(s => s.Number).ToHashSet();
+        foreach (SelfBlessCandidate cand in survivors)
+            foreach (int removed in cand.Removes)
+                if (survivorNumbers.Contains(removed)) Union(cand.Number, removed);
+
+        return survivors
+            .GroupBy(s => Find(s.Number))
+            .Select(g => g.OrderByDescending(s => s.ReqLevel).ThenByDescending(s => s.ManaCost).First())
+            .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }
