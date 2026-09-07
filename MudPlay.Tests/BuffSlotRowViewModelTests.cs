@@ -175,4 +175,25 @@ public sealed class BuffSlotRowViewModelTests
 
         Assert.False(row.IsLearned);
     }
+
+    [Fact]
+    public void HeaderText_NoReqLevelResolver_OmitsLevelTag()
+    {
+        // Every Row(...) helper call in this file omits the resolver — must not
+        // render a bogus "(Lvl )" or throw.
+        var row = Row(new BuffSlot { Spell = "bless", RecastMarginSec = 15 });
+        Assert.Equal("bless - 15s", row.HeaderText);
+    }
+
+    [Fact]
+    public void HeaderText_ReqLevelResolved_InsertsLevelTagBeforeRecast()
+    {
+        var dto = new BuffSlot { Spell = "dfla", RecastMarginSec = 15 };
+        var row = new BuffSlotRowViewModel(
+            dto, _ => BuffSlotScope.SelfOnly, _ => "dark flagellation",
+            _ => (null, null), () => { }, onSelfActivated: null,
+            resolveLearned: null, resolveReqLevel: _ => 50);
+
+        Assert.Equal("dark flagellation (Lvl 50) - 15s", row.HeaderText);
+    }
 }

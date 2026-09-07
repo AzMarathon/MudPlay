@@ -8,6 +8,8 @@
 > - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures as if they were maintainable buffs — it now requires a real duration
 > - Fixed **Add all blesses** recommending a spell your character's alignment can't cast and crowding out the alignment-correct alternative — it now reads your alignment from your own `who` observation
 > - Buff Watchdog: new live **"Mana to maintain"** readout — total mana/second every checked buff costs to keep recast, updating as you check/uncheck boxes
+> - Buff Watchdog: every slot's row now shows its level requirement
+> - Fixed **＋ Add buff** / **Add all blesses** silently dropping self-cast buff items (e.g. a bless-casting crozier) — only whole-party items were being offered before
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

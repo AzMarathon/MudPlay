@@ -35,6 +35,10 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // that don't care — IsLearned then defaults true, matching the pre-theorycraft
     // behaviour where every listed row was already something the player had.
     private readonly Func<string?, bool>? _resolveLearned;
+    // The spell's level requirement (null for an unresolved code or a #item-cast
+    // token, which has no ReqLevel concept) — shown in HeaderText. Null in tests
+    // that don't care, which just omits the "(Lvl N)" tag.
+    private readonly Func<string?, int?>? _resolveReqLevel;
     private bool _suppress;
 
     // Editable targeting only — spell + recast are fixed at add time.
@@ -88,13 +92,18 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
 
     public string? Spell => _dto.Spell;
     public int RecastMarginSec => _dto.RecastMarginSec;
-    // Row label — the buff's spell name (falls back to the cast code) + its recast
-    // timer, e.g. "bless - 15s", with a trailing condition tag when set.
+    // Row label — the buff's spell name (falls back to the cast code), its level
+    // requirement when resolvable (e.g. from Add all blesses's full class roster,
+    // where sort order alone doesn't say what level a pick actually needs), and
+    // its recast timer, e.g. "bless (Lvl 2) - 15s", with a trailing condition tag
+    // when set.
     public string HeaderText
     {
         get
         {
-            string label = $"{_resolveName(_dto.Spell)} - {RecastMarginSec}s";
+            string label = _resolveName(_dto.Spell);
+            if (_resolveReqLevel?.Invoke(_dto.Spell) is { } lvl) label += $" (Lvl {lvl})";
+            label += $" - {RecastMarginSec}s";
             if (_dto.OnlyWhenHpFull) label += " · HP full";
             if (_dto.OnlyWhenMaFull) label += " · MA full";
             return label;
@@ -143,11 +152,12 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         BuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
         Func<string?, string> resolveName, Func<BuffSlot, (string? RemovedBy, string? Removes)> resolveOverwrite,
         Action persist, Action<BuffSlotRowViewModel>? onSelfActivated = null,
-        Func<string?, bool>? resolveLearned = null)
+        Func<string?, bool>? resolveLearned = null, Func<string?, int?>? resolveReqLevel = null)
     {
         _dto = dto;
         _resolveScope = resolveScope;
         _resolveName = resolveName;
+        _resolveReqLevel = resolveReqLevel;
         _resolveOverwrite = resolveOverwrite;
         _persist = persist;
         _onSelfActivated = onSelfActivated;

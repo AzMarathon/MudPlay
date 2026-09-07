@@ -9,6 +9,8 @@
 - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures (e.g. minor healing, cure poison) as if they were maintainable buffs — it now requires a real duration, not just zero energy cost and self/member targeting
 - Fixed **Add all blesses** recommending a buff your character's current alignment can't actually cast (e.g. an evil character being offered "protection from evil") and, worse, letting that dead pick crowd out the alignment-correct alternative (e.g. never offering "unholy armour" because "holy armour" won the tie-break) — it now reads your alignment from your own `who` observation and filters both directions
 - Buff Watchdog: new live **"Mana to maintain"** readout — total mana/second every currently-checked buff costs to keep recast, shown per 30s regen tick and per minute, updating as you check/uncheck boxes or the party changes
+- Buff Watchdog: every slot's row now shows its level requirement — `name (Lvl N) - recast` (an item-cast slot shows its use-level)
+- Fixed both **＋ Add buff** and **Add all blesses** offering only whole-party cast-on-use items (a #item slot) and silently dropping any self-cast one (e.g. a bless-casting crozier or sceptre) — a self-cast item needs no target any more than a whole-party one does, so it's offered the same way now; a previously-configured self-cast item slot is also now correctly weighed by the RemovesSpell conflict checks and the mana-upkeep readout, instead of being invisible to both
 
 ## 3.53.2
 

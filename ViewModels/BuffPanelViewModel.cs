@@ -142,7 +142,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     private BuffSlotRowViewModel MakeRow(BuffSlot dto) =>
-        new(dto, ResolveScope, ResolveName, ResolveOverwrite, Persist, OnSelfCastActivated, ResolveLearned);
+        new(dto, ResolveScope, ResolveName, ResolveOverwrite, Persist, OnSelfCastActivated, ResolveLearned, ResolveReqLevel);
 
     // Live mutual exclusion: the moment a row's Self box is CHECKED, turn off any
     // OTHER row's Self box for a spell it mutually removes (or is removed by) via
@@ -154,13 +154,13 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     private void OnSelfCastActivated(BuffSlotRowViewModel activated)
     {
         if (string.IsNullOrWhiteSpace(activated.Spell)) return;
-        if (_spellbook.FindByCastCode(activated.Spell.Trim()) is not { } activatedSpell) return;
+        if (ResolveSpellOrItem(activated.Spell.Trim()) is not { } activatedSpell) return;
         HashSet<int> removes = Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(activatedSpell.Formula);
         foreach (BuffSlotRowViewModel other in Slots)
         {
             if (ReferenceEquals(other, activated) || !other.CastOnSelf) continue;
             if (string.IsNullOrWhiteSpace(other.Spell)) continue;
-            if (_spellbook.FindByCastCode(other.Spell.Trim()) is not { } otherSpell) continue;
+            if (ResolveSpellOrItem(other.Spell.Trim()) is not { } otherSpell) continue;
             bool conflict = removes.Contains(otherSpell.Number)
                 || Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(otherSpell.Formula).Contains(activatedSpell.Number);
             if (conflict) other.CastOnSelf = false;
@@ -224,17 +224,33 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         return _spellbook.FindByCastCode(c) is { } s && _spellbook.IsObtained(s.Number);
     }
 
+    // The spell's level requirement — the level it was (or will be) learned at —
+    // shown in the row header. Null for a #item-cast token (no ReqLevel concept)
+    // or an unresolved code.
+    private int? ResolveReqLevel(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        string c = code.Trim();
+        if (ItemCastToken.IsToken(c))
+            return ItemCastToken.TryResolve(c, _spellbook.GetCastItems(), out Game.Spells.ClassCastItem ci) && ci.MinLevel > 0
+                ? ci.MinLevel : null;
+        return _spellbook.FindByCastCode(c) is { } s ? s.ReqLevel : null;
+    }
+
     // Every buff the character can slot, de-duplicated by cast value: learned buff
     // spells the character can maintain on themselves, a member, or the whole party
-    // (self / single-target / whole-party scopes), plus whole-party cast-on-use items
-    // (a #item token). A single-target item can't be aimed via `use`, so only
-    // whole-party items qualify (GetWholePartyCastItems already filters to those).
+    // (self / single-target / whole-party scopes), plus cast-on-use items whose
+    // spell needs no target parameter — whole-party (blankets everyone in one use)
+    // and self-only (a wielded item like a bless-casting crozier, which always
+    // lands on the wielder). A single-target (Targets 2) item is excluded: `use
+    // <item>` can't be aimed at a specific party member.
     private IEnumerable<SpellPick> AllBuffPicks()
     {
         IEnumerable<SpellPick> spells = _spellbook.Available
             .Where(s => BuffClassifier.IsAnyBuff(s) && _spellbook.IsObtained(s.Number))
             .Select(s => new SpellPick(s.Short, s.Name));
         IEnumerable<SpellPick> items = _spellbook.GetWholePartyCastItems()
+            .Concat(_spellbook.GetSelfCastItems())
             .Select(ci => new SpellPick(
                 ItemCastToken.Format(ci.ItemName),
                 string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})"));
@@ -288,20 +304,57 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
                 IsObtained: _spellbook.IsObtained(s.Number)))
             .ToList();
 
+        // Self-cast items (a wielded crozier/staff whose "use" always lands on the
+        // wielder) get the same roster treatment as spells — see GetSelfCastItems.
+        // Always "obtained": a class-usable cast item has no separate "train" step.
+        foreach (Game.Spells.ClassCastItem ci in _spellbook.GetSelfCastItems())
+        {
+            string code = ItemCastToken.Format(ci.ItemName);
+            if (slotted.Contains(code)) continue;
+            if (_spellbook.GetFormulaByNumber(ci.SpellNumber) is not { } formula) continue;
+            if (!BuffClassifier.IsAlignmentEligible(formula, alignment)) continue;
+            string name = string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})";
+            pool.Add(new Game.Spells.SelfBlessCandidate(
+                code, name, ci.SpellNumber, ci.MinLevel, ci.ManaCost,
+                Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(formula), IsObtained: true));
+        }
+
         List<Game.Spells.ExistingBuffSlot> existing = new();
         foreach (BuffSlot dto in _settings.Slots)
         {
             if (string.IsNullOrWhiteSpace(dto.Spell)) continue;
-            if (_spellbook.FindByCastCode(dto.Spell.Trim()) is not { } es) continue;
-            bool wholeParty = BuffClassifier.IsWholeParty(es.Targets);
+            if (ResolveSpellOrItem(dto.Spell.Trim()) is not { } r) continue;
             Game.Spells.BuffAffectSet affect = Game.Spells.BuffAffectSet.From(
-                wholeParty, dto.WholePartyOn, dto.CastOnSelf, dto.AllMembers, dto.Targets);
+                BuffClassifier.IsWholeParty(r.Targets), dto.WholePartyOn, dto.CastOnSelf, dto.AllMembers, dto.Targets);
             existing.Add(new Game.Spells.ExistingBuffSlot(
-                es.Number, affect, Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(es.Formula)));
+                r.Number, affect, Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(r.Formula)));
         }
 
         _selfBlessCandidates = Game.Spells.BuffConflictAnalyzer.SelectSelfBlessCandidates(pool, existing);
         OnPropertyChanged(nameof(CanAddAllBlesses));
+    }
+
+    // Resolve a slot's cast code to its underlying spell identity — a learnable
+    // spell by cast code, or a #item-cast token's underlying cast spell by number
+    // — so a slot's scope, mana cost, and RemovesSpell conflicts are all read the
+    // same way whether it's a trained spell or a wielded item (a configured
+    // item-cast slot was previously invisible to all three, so a self-bless pick
+    // could get recommended even though it'd conflict with the item already
+    // active, and the item's own mana draw never counted toward the upkeep total).
+    // Item Targets isn't directly exposed by ClassCastItem, so it's inferred from
+    // IsTokenWholeParty (13 = whole-party) else 0 (self-only) — matching
+    // ResolveScope's existing fallback: a single-target item is never offered as a
+    // slot in the first place (see AllBuffPicks), so it never reaches here.
+    private (int Number, Game.Spells.SpellFormulaInput Formula, int Targets)? ResolveSpellOrItem(string code)
+    {
+        if (ItemCastToken.IsToken(code))
+        {
+            if (!ItemCastToken.TryResolve(code, _spellbook.GetCastItems(), out Game.Spells.ClassCastItem ci)) return null;
+            if (_spellbook.GetFormulaByNumber(ci.SpellNumber) is not { } formula) return null;
+            return (ci.SpellNumber, formula, _spellbook.IsTokenWholeParty(code) ? 13 : 0);
+        }
+        if (_spellbook.FindByCastCode(code) is not { } s) return null;
+        return (s.Number, s.Formula, s.Targets);
     }
 
     // Rebuild every row's member checklist — and the shared column headers — from
@@ -318,8 +371,10 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     // Sum every currently-active slot's mana-per-second cost (see
-    // BuffManaUpkeepCalculator) into the live "required to maintain" readout.
-    // #item-cast slots are skipped — they burn item charges, not the mana pool.
+    // BuffManaUpkeepCalculator) into the live "required to maintain" readout. A
+    // #item-cast slot counts too when its underlying spell actually costs mana
+    // (ClassCastItem.ManaCost / CostsMana — most charge wands are free, but a
+    // weapon like a bless-casting crozier draws from the same pool as a spell).
     private void RefreshManaUpkeep()
     {
         List<(string Display, string Given)> members = CurrentMembers();
@@ -330,17 +385,16 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         {
             if (string.IsNullOrWhiteSpace(dto.Spell)) continue;
             string code = dto.Spell.Trim();
-            if (ItemCastToken.IsToken(code)) continue;
-            if (_spellbook.FindByCastCode(code) is not { } spell) continue;
+            if (ResolveSpellOrItem(code) is not { } r) continue;
 
-            long manaCost = Game.Spells.SpellCalculator.ManaCost(spell.Formula);
-            double durationSeconds = Game.Spells.SpellCalculator.Duration(spell.Formula, _spellbook.Level)
+            long manaCost = Game.Spells.SpellCalculator.ManaCost(r.Formula);
+            double durationSeconds = Game.Spells.SpellCalculator.Duration(r.Formula, _spellbook.Level)
                 * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock;
 
             int casts;
-            if (BuffClassifier.IsWholeParty(spell.Targets))
+            if (BuffClassifier.IsWholeParty(r.Targets))
                 casts = dto.WholePartyOn && (hasParty || dto.CastSolo) ? 1 : 0;
-            else if (BuffClassifier.IsSingleTargetBuff(spell.Targets))
+            else if (BuffClassifier.IsSingleTargetBuff(r.Targets))
             {
                 int memberCasts = dto.AllMembers
                     ? members.Count
