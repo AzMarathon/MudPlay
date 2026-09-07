@@ -58,6 +58,7 @@ public sealed class WinchManagerTests
 
     private const string TurnLine = "You heave mightily on the winch, and it begins to turn!";
     private const string BudgeLine = "You heave mightily on the winch, but it does not budge.";
+    private const string DrawbridgeLine = "The wooden drawbridge lowers with a heavy thud!";
 
     [Fact]
     public void Pull_Turns_GateAlreadyOpen_ReportsTurnedImmediately()
@@ -136,6 +137,39 @@ public sealed class WinchManagerTests
         for (int i = 0; i < 20 && result is null && h.HasPending; i++) h.Fire();
 
         Assert.IsType<WinchResult.Failed>(result);
+    }
+
+    [Fact]
+    public void Pull_DrawbridgeLowersBeforeTurn_ReportsTurnedWithoutPollingGate()
+    {
+        // The drawbridge's exit never reads as "open" in the exits list (it's
+        // permanently phrased "lowered drawbridge <dir>"), so GateOpen stays false —
+        // the drawbridge's own broadcast line must be enough on its own.
+        using Harness h = new() { GateOpen = false };
+        WinchResult? result = null;
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "walker", r => result = r);
+
+        h.Line(DrawbridgeLine);            // arrives first, same reply burst
+        h.Line(TurnLine);
+
+        Assert.IsType<WinchResult.Turned>(result);
+        Assert.Equal(0, h.Count("l"));     // never polled — the broadcast was authoritative
+    }
+
+    [Fact]
+    public void Pull_DrawbridgeLowersAfterTurn_WhilePolling_ReportsTurned()
+    {
+        using Harness h = new() { GateOpen = false };
+        WinchResult? result = null;
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "walker", r => result = r);
+
+        h.Line(TurnLine);                  // turned, gate not open yet → starts polling
+        Assert.Null(result);
+        Assert.Equal(1, h.Count("l"));
+
+        h.Line(DrawbridgeLine);            // late broadcast still short-circuits the poll
+
+        Assert.IsType<WinchResult.Turned>(result);
     }
 
     [Fact]
