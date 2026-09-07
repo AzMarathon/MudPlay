@@ -355,6 +355,12 @@
                                                             </Grid>
                                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
                                                                         VerticalAlignment="Center" Margin="6,0,0,0">
+                                                                <!-- Clobbered by a later-cast buff that removes this one: the ⚠
+                                                                     sits at the FRONT and the bar reads "conflict" (see the row VM). -->
+                                                                <TextBlock Text="⚠" Margin="0,0,4,0" VerticalAlignment="Center"
+                                                                           Foreground="{StaticResource AccentRedBrush}"
+                                                                           IsVisible="{Binding IsConflicted}"
+                                                                           ToolTip.Tip="{Binding OverwriteWarningTooltip}"/>
                                                                 <TextBlock Classes="BarName" Classes.covered="{Binding IsCovered}"
                                                                            Text="{Binding Name}"/>
                                                                 <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">

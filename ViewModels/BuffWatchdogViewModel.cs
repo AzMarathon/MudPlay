@@ -245,11 +245,33 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         IReadOnlyList<Game.Spells.BuffOverwritePair> overwritePairs =
             AppServices.Current.BuffSlotOverwritePairs();
 
+        // A CLOBBERED buff: another live buff whose spell removes it was cast at/after it,
+        // so the game stripped it when that one landed — even though its own timer is
+        // still ticking here (we never saw a removal line). Keyed (cast-code, target); a
+        // whole-party remover and its self-keyed victim share target "". The later-cast
+        // survivor is left counting; the clobbered row reads "conflict" (see the row VM).
+        HashSet<(string Short, string Target)> clobbered = new();
+        foreach (Game.Spells.BuffOverwritePair p in overwritePairs)
+            foreach (ActiveBuffTimer removed in snap)
+            {
+                if (!string.Equals(removed.Short, p.RemovedCode, StringComparison.OrdinalIgnoreCase)) continue;
+                DateTime removedCast = removed.Until.AddSeconds(-removed.TotalSec);
+                foreach (ActiveBuffTimer remover in snap)
+                    if (string.Equals(remover.Short, p.RemovingCode, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(remover.Target, removed.Target, StringComparison.OrdinalIgnoreCase)
+                        && remover.Until.AddSeconds(-remover.TotalSec) > removedCast)
+                    {
+                        clobbered.Add((removed.Short.ToLowerInvariant(), removed.Target));
+                        break;
+                    }
+            }
+
         foreach (BuffWatchdogPlayerGroup group in Groups)
         foreach (BuffWatchdogRowViewModel row in group.Rows)
         {
             (string? removedBy, string? removes) = Game.Spells.BuffConflictAnalyzer.Resolve(overwritePairs, row.CastCode);
             row.SetOverwriteWarning(Game.Spells.BuffConflictAnalyzer.FormatTooltip(removedBy, removes));
+            bool isConflicted = clobbered.Contains((row.CastCode.ToLowerInvariant(), row.MemberKey));
 
             // Single-target member row (keyed by their given name). A member who's HIDING
             // (a cast came back "You do not see … here!") can't be reached — show that.
@@ -261,7 +283,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                     if (string.Equals(t.Short, row.CastCode, StringComparison.OrdinalIgnoreCase)
                         && string.Equals(t.Target, row.MemberKey, StringComparison.OrdinalIgnoreCase))
                     { match = t; break; }
-                row.Update(match, now);
+                row.Update(match, now, conflicted: isConflicted);
                 continue;
             }
 
@@ -282,7 +304,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 { entry = t; break; }
             string? coveredBy = null;
             if (!row.IsParty) coverage.TryGetValue(row.CastCode, out coveredBy);
-            row.Update(entry, now, coveredBy: coveredBy);
+            row.Update(entry, now, coveredBy: coveredBy, conflicted: isConflicted);
         }
     }
 

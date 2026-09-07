@@ -73,4 +73,35 @@ public sealed class BuffWatchdogRowViewModelTests
         Assert.False(row.IsActive);
         Assert.False(row.ShowRecastMarker);
     }
+
+    [Fact]
+    public void Update_Conflicted_StopsBar_ShowsConflict_MovesWarningToFront()
+    {
+        BuffWatchdogRowViewModel row = NewRow();
+        // A live timer, but a later-cast buff that removes this one clobbered it: the
+        // bar stops (no false countdown), reads "conflict", and the ⚠ moves to the front
+        // (the tail overwrite-warning clears so it isn't doubled; its tooltip survives).
+        row.SetOverwriteWarning("Removed by: chant");
+        row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(150), 20, 200), T0, conflicted: true);
+
+        Assert.True(row.IsConflicted);
+        Assert.Equal("conflict", row.TimeText);
+        Assert.Equal(0.0, row.FillStar.Value, 3);
+        Assert.False(row.ShowRecastMarker);
+        Assert.False(row.HasOverwriteWarning);
+        Assert.Equal("Removed by: chant", row.OverwriteWarningTooltip);
+    }
+
+    [Fact]
+    public void Update_NoLongerConflicted_ResumesCounting()
+    {
+        BuffWatchdogRowViewModel row = NewRow();
+        row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(150), 20, 200), T0, conflicted: true);
+        Assert.True(row.IsConflicted);
+        // Next pass it's no longer clobbered → back to a normal counting bar.
+        row.Update(new ActiveBuffTimer("", "mshi", T0.AddSeconds(150), 20, 200), T0);
+        Assert.False(row.IsConflicted);
+        Assert.True(row.IsActive);
+        Assert.Equal("2m 30s", row.TimeText);
+    }
 }

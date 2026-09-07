@@ -3389,6 +3389,21 @@ landed" and "the prompt parsed," the client's `PlayerState.Hp` still holds the *
   (fired when HP changes) then drives the real heal on fresh HP. The timer-fallback tick and out-of-combat
   heartbeat are HP-fresh, so they're unaffected.
 
+## RemovesSpell buffs clobber on cast, with no fade line *([CONFIRMED] 2026-09-07, user)*
+
+- A spell that carries a **RemovesSpell** ability (Abil 122 → a target spell number) **strips that
+  target buff off you the instant it lands**. Classic case: **chant removes bless** — casting chant while
+  bless is up removes bless immediately. So among a clashing set, **whichever was cast LAST is the one
+  actually on you**; the buffs it removes are gone.
+- **The game sends no "your bless fades" line** when a buff is stripped this way. So a client tracking
+  buff timers off cast-confirmations alone (like this one) keeps the stripped buff's timer **falsely
+  ticking** — it has no wire signal that the buff ended early. This is why the Buff Watchdog can't just
+  read timers; it **infers** the clobber from RemovesSpell + cast order (`Until − TotalSec` gives each
+  live buff's cast instant) and shows the clobbered bar as **"conflict"** instead of a bogus countdown.
+- Casting the *removed* buff again **after** the remover (e.g. bless after chant) simply re-applies it —
+  bless doesn't remove chant, so both read as up until the next clash. Only the remover's cast strips;
+  it's a one-time effect at cast, not a standing suppression.
+
 ## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
 
 The Settings → Combat **debuff slots** (single-target debuff + AoE debuff) hold *between-round*

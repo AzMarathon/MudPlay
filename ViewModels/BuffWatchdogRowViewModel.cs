@@ -48,6 +48,11 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // When set, this member is HIDING (a cast returned "You do not see <name> here!"),
     // so the buff can't reach them until they reappear or we move.
     [ObservableProperty] private bool _isHidden;
+    // When set, a later-cast buff that removes this one has stripped it in-game (we never
+    // saw a removal line, so its timer is still falsely ticking). The bar stops counting
+    // and reads "conflict", with the ⚠ moved to the FRONT (see the XAML). Distinct from
+    // IsCovered — that's the deliberate self-skip; this is an unexpected clobber.
+    [ObservableProperty] private bool _isConflicted;
 
     // Set from AppServices.BuffSlotOverwritePairs each heartbeat: another configured
     // slot's spell removes (or is removed by) this one's via RemovesSpell, whenever
@@ -85,8 +90,9 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // Recompute the bar from a live timer (null ⇒ the buff isn't up). now is UTC to
     // match CastingDirector's clock. A memberName (party rows) overrides TargetText;
     // coveredBy (self rows) names a party buff that supersedes this self-buff.
-    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null, bool hidden = false)
+    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null, bool hidden = false, bool conflicted = false)
     {
+        IsConflicted = false;
         if (hidden)
         {
             // Member is hiding — the buff can't target them. Empty bar, labelled so.
@@ -131,6 +137,28 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
             MarkerStar = Empty;
             MarkerRestStar = Full;
             TimeText = "not up";
+            return;
+        }
+
+        if (conflicted)
+        {
+            // A later-cast buff that removes this one stripped it in-game — the timer
+            // here is stale (no removal line was seen). Don't run a false countdown:
+            // stop the bar and label it "conflict", with the ⚠ moved to the front
+            // (HasOverwriteWarning is cleared so the tail ⚠ doesn't double up; the
+            // front marker reuses OverwriteWarningTooltip — "Removed by: …"). IsActive
+            // stays true so the ✕ is available to clear the stale timer by hand.
+            IsConflicted = true;
+            HasOverwriteWarning = false;
+            IsActive = true;
+            InRecastWindow = false;
+            FillStar = Empty;
+            FillRestStar = Full;
+            ShowRecastMarker = false;
+            MarkerStar = Empty;
+            MarkerRestStar = Full;
+            TimeText = "conflict";
+            if (memberName is { Length: > 0 }) TargetText = memberName;
             return;
         }
 
