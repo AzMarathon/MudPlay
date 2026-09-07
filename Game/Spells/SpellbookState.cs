@@ -32,6 +32,12 @@ public sealed class SpellbookState
     private readonly HashSet<int> _obtained = new();
     private List<KnownSpell> _available = new();
     private SpellPick[] _availablePicks = Array.Empty<SpellPick>();
+    // Cast-on-use items for the active class. GetClassCastItems is a full Items-table
+    // scan, and the casting decision pass hits GetCastItems several times per pass
+    // when an #item-cast buff token is configured — so cache the result on the same
+    // class-change / set-swap lifecycle as _available (see RebuildAvailable) instead
+    // of re-scanning every pass.
+    private IReadOnlyList<ClassCastItem> _castItems = Array.Empty<ClassCastItem>();
 
     public SpellbookState(KnownSpellCatalog catalog)
     {
@@ -101,7 +107,7 @@ public sealed class SpellbookState
     // The cast-on-use items the active class can use (wands / scrolls / potions
     // carrying an Items code-43 CastsSp ability). The Spell Book lists these
     // alongside learnable spells. Empty when no class is set yet.
-    public IReadOnlyList<ClassCastItem> GetCastItems() => _catalog.GetClassCastItems(ClassNumber);
+    public IReadOnlyList<ClassCastItem> GetCastItems() => _castItems;
 
     // Cast-on-use items whose spell is a WHOLE-PARTY buff (Targets 10 / 13) and which
     // are unlimited-use — the only items eligible as a party-buff slot. `use <item>`
@@ -204,6 +210,10 @@ public sealed class SpellbookState
     private void RebuildAvailable()
     {
         _available = new List<KnownSpell>(_catalog.Query(ClassNumber, level: 0, CharAlign));
+        // Class-scoped cast-item list is a full Items scan — resolve it once here,
+        // on the same class-change / set-swap trigger, so per-pass GetCastItems reads
+        // are free. GetClassCastItems keys only on class, so this is its full input.
+        _castItems = _catalog.GetClassCastItems(ClassNumber);
         ResolveObtainedFromNames();
         RebuildAvailablePicks();
     }
