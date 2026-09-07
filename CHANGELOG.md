@@ -1,5 +1,10 @@
 # Version history
 
+## 3.54.5
+
+- Prot Good and Vile Ward are now treated as realm-exclusive: Stock realms use Protection-from-Good (ability 25), Paradigm dropped it for Vile Ward (ability 1113) — a stray Prot-Good value no longer lowers a monster's hit chance on Paradigm, and Vile Ward stays Paradigm-only
+- Monster Intel's defense simulator now shows a **Prot Good** field on Stock realms and the **Vile Ward** field (with the evil-tier picker) on Paradigm, instead of always showing the Paradigm-only Vile Ward
+
 ## 3.54.4
 
 - Unrecognized Lines capture no longer stages room-display titles (e.g. "River Street") — a room name is read by the room parser, not the message catalogue, so it's now matched against the Rooms table and excluded; genuine spell/monster lines that happen to share the room-name colour still capture

@@ -222,17 +222,34 @@ public sealed class MonsterMatchupCalculatorSpellsTests
     [Theory]
     [InlineData(0)]
     [InlineData(4)]
-    public void IncomingHitPercent_GoodAlignment_AppliesProtGoodNotProtEvil(int goodAlign)
+    public void IncomingHitPercent_GoodAlignment_AppliesProtGoodNotProtEvil_OnStock(int goodAlign)
     {
+        // Prot-Good is a STOCK-only ward (ability 25). Against a good monster it
+        // lowers incoming hits; Prot-Evil (an evil-only ward) does nothing.
+        int withProtGood = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.Stock)!.Value;
+        int noWard = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.Stock)!.Value;
+        int protEvilOnly = MonsterMatchupCalculatorSpells.IncomingHitPercent(
+            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 20, protGood: 0, RealmType.Stock)!.Value;
+
+        Assert.True(withProtGood < noWard);
+        Assert.Equal(noWard, protEvilOnly);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    public void IncomingHitPercent_GoodAlignment_ProtGoodIgnoredOnParaMud(int goodAlign)
+    {
+        // Paradigm dropped Prot-Good for VileWard: a Prot-Good value must not
+        // change a good monster's hit chance on ParaMUD.
         int withProtGood = MonsterMatchupCalculatorSpells.IncomingHitPercent(
             (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.ParaMud)!.Value;
         int noWard = MonsterMatchupCalculatorSpells.IncomingHitPercent(
             (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud)!.Value;
-        int protEvilOnly = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 20, protGood: 0, RealmType.ParaMud)!.Value;
 
-        Assert.True(withProtGood < noWard);
-        Assert.Equal(noWard, protEvilOnly);
+        Assert.Equal(noWard, withProtGood);
     }
 
     [Fact]

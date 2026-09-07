@@ -2703,9 +2703,15 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 - **Prot-Evil / PREV** (ability code **24**) — **1 AC per point, but ONLY versus evil monsters**
   (the majority of monsters). Because it's conditional, it is surfaced as its own "+N vs evil" line
   rather than folded into a flat AC total.
-- **VileWard** (ability code **1113**) — an AC bonus whose **magnitude scales with the wearer's own
-  evil**. The exact scale is unconfirmed (and it's unclear MME models it), so the client notes its
-  **presence only** and never prints a magnitude.
+- **Prot-Good / PRGD** (ability code **25**, granted by spell #108 "protection from good") —
+  **1 AC per point, but ONLY versus GOOD monsters**, and **STOCK realms only** (see the
+  realm-exclusivity note below). The mirror of Prot-Evil.
+- **VileWard** (ability code **1113**) — a **Paradigm-only** AC bonus vs **evil** monsters whose
+  magnitude scales with the wearer's own evil. Confirmed formula (MMUD-Explorer `CalculateAttackDefense`):
+  when the target is evil, `wearer-evil ≤ Seedy → 0`, `≤ Criminal → halved`, then **`÷10`** and added to
+  secondary defense. The client applies exactly this (`CombatCalculator.AdjustVileWard`), gated to ParaMud.
+
+**ProtGood vs VileWard are realm-EXCLUSIVE** *([CONFIRMED] 2026-09-07, user + syntax53/MMUD-Explorer + Paradigm-1.9.1 item data)*: the ability *numbering* is shared across realms (25 = ProtGood, 1113 = VileWard in both — `bGreaterMUD` changes behavior, not numbers), but **Stock uses ProtGood and Paradigm uses VileWard**. Paradigm **dropped ProtGood**: its server does not honor ability 25, and its gear carries none (all moved to VileWard 1113). So the client counts **ProtGood only on Stock** and **VileWard only on Paradigm** — a stray ability-25 value on Paradigm must never add to defense. Monster Intel shows the Prot Good what-if field on Stock and the Vile Ward field (+ evil-tier picker) on Paradigm.
 
 ### Fractional AC — the integer combat AC is the FLOOR of the total *([CONFIRMED] 2026-09-04, user)*
 
