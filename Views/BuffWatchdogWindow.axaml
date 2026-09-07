@@ -271,21 +271,13 @@
                                     </ItemsControl>
                                 </Grid>
 
-                                <!-- Ordinary spell slots, then — when there are any — a
-                                     "Weapons" separator and the #item-cast slots (a
-                                     bless-casting crozier and the like) grouped below it,
-                                     out of the spell list they'd otherwise be interleaved
-                                     into by level sort. Both lists share BuffSlotRowTemplate
-                                     from Window.Resources so the row markup lives once. -->
-                                <ItemsControl ItemsSource="{Binding SpellSlots}"
-                                              ItemTemplate="{StaticResource BuffSlotRowTemplate}"/>
-
-                                <TextBlock IsVisible="{Binding HasWeaponSlots}"
-                                           Text="------- Weapons -------" FontSize="10"
-                                           HorizontalAlignment="Center" Margin="0,8,0,2"
-                                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                <ItemsControl IsVisible="{Binding HasWeaponSlots}"
-                                              ItemsSource="{Binding WeaponSlots}"
+                                <!-- The whole buff list in one ItemsControl, kept in a single
+                                     order (buffs you aim first, then whole-party, then item
+                                     "on use" buffs) inside Slots itself — see InsertSorted.
+                                     Bound straight to the ObservableCollection so a single
+                                     add / remove touches one row instead of rebuilding the
+                                     whole list. -->
+                                <ItemsControl ItemsSource="{Binding Slots}"
                                               ItemTemplate="{StaticResource BuffSlotRowTemplate}"/>
                             </StackPanel>
                         </ScrollViewer>

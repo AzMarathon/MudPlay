@@ -28,17 +28,12 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     private IReadOnlyList<Game.Spells.BuffOverwritePair> _overwritePairs = Array.Empty<Game.Spells.BuffOverwritePair>();
     private bool _disposed;
 
+    // Every configured buff row, bound STRAIGHT to the config ItemsControl (not through
+    // a computed view) so an add / remove touches a single container instead of forcing
+    // the whole list to rebuild — the source of the remove-a-buff lag when the list ran
+    // long. Kept in one category order — buffs you aim (self / single-target) first,
+    // then whole-party buffs, then item ("on use") buffs — via InsertSorted / ResortRow.
     public ObservableCollection<BuffSlotRowViewModel> Slots { get; } = new();
-
-    // Slots split into the two sections the config list renders: ordinary spell
-    // slots, and #item-cast ("Weapons") slots shown under their own separator
-    // header. Both are recomputed views over Slots (re-raised on every
-    // Slots.CollectionChanged — see the constructor) rather than separately
-    // maintained collections, so every existing Add/Remove/Clear call site stays
-    // untouched and can't let the two views drift out of sync with Slots itself.
-    public IEnumerable<BuffSlotRowViewModel> SpellSlots => Slots.Where(r => !r.IsItemCast);
-    public IEnumerable<BuffSlotRowViewModel> WeaponSlots => Slots.Where(r => r.IsItemCast);
-    public bool HasWeaponSlots => Slots.Any(r => r.IsItemCast);
 
     // Current party's non-self members as column headers (capitalised given names),
     // in the same order every row builds its target checkboxes — so the header
@@ -109,10 +104,40 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _party.Members.CollectionChanged += OnMembersChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
         _spellbook.Changed += OnSpellbookChanged;
-        Slots.CollectionChanged += OnSlotsChanged;
         AppServices.Current.Inventory.FullInventoryParsed += OnInventoryReloaded;
 
         Load();
+    }
+
+    // Config-list order: buffs you aim (self / single-target) first, then whole-party
+    // buffs, then item ("on use") buffs. Item wins over whole-party, so a whole-party
+    // ITEM still sorts into the item block.
+    private static int SlotCategory(BuffSlotRowViewModel r) =>
+        r.IsItemCast ? 2 : r.IsWholeParty ? 1 : 0;
+
+    // Add a row at the END of its category block, keeping the groups contiguous and
+    // order-within-group stable (Add all blesses adds level-sorted, so that survives).
+    private void InsertSorted(BuffSlotRowViewModel row)
+    {
+        int cat = SlotCategory(row);
+        int idx = 0;
+        while (idx < Slots.Count && SlotCategory(Slots[idx]) <= cat) idx++;
+        Slots.Insert(idx, row);
+    }
+
+    // After an edit that changed a row's spell — and so possibly its category (a self
+    // buff swapped for a whole-party one, say) — slide it back into the right block.
+    // No-op when it's already ordered, so an ordinary edit doesn't churn the container.
+    private void ResortRow(BuffSlotRowViewModel row)
+    {
+        int cur = Slots.IndexOf(row);
+        if (cur < 0) return;
+        int cat = SlotCategory(row);
+        bool ordered = (cur == 0 || SlotCategory(Slots[cur - 1]) <= cat)
+                    && (cur == Slots.Count - 1 || SlotCategory(Slots[cur + 1]) >= cat);
+        if (ordered) return;
+        Slots.RemoveAt(cur);
+        InsertSorted(row);
     }
 
     // A full `i` dump changes which cast-items we own, so the owned-item gate on
@@ -126,17 +151,6 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         if (Dispatcher.UIThread.CheckAccess()) RefreshBuffPicks();
         else Dispatcher.UIThread.Post(() => { if (!_disposed) RefreshBuffPicks(); });
-    }
-
-    // Any add/remove/clear on Slots can move a row between the spell/weapon
-    // sections, so both derived views (and the section-header visibility) need to
-    // re-read on every change — cheaper to do it once here than to touch every
-    // call site that mutates Slots.
-    private void OnSlotsChanged(object? _, NotifyCollectionChangedEventArgs __)
-    {
-        OnPropertyChanged(nameof(SpellSlots));
-        OnPropertyChanged(nameof(WeaponSlots));
-        OnPropertyChanged(nameof(HasWeaponSlots));
     }
 
     private void OnProfileLoaded(CharacterProfile _) => Load();
@@ -163,7 +177,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
         Slots.Clear();
         foreach (BuffSlot dto in _settings.Slots)
-            Slots.Add(MakeRow(dto));
+            InsertSorted(MakeRow(dto));
 
         RefreshBuffPicks();
         RefreshMemberTargets();
@@ -559,7 +573,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
                          || r.OnlyWhenDark || r.CastBeforeRestingForMana;
         _settings.Slots.Add(dto);
         BuffSlotRowViewModel row = MakeRow(dto);
-        Slots.Add(row);
+        InsertSorted(row);
         row.RebuildMemberTargets(CurrentMembers());
         RefreshBuffPicks();   // the just-slotted spell drops out of the picker
         OnPropertyChanged(nameof(HasSlots));
@@ -595,7 +609,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         {
             _settings.Slots.Add(dto);
             BuffSlotRowViewModel row = MakeRow(dto);
-            Slots.Add(row);
+            InsertSorted(row);
             row.RebuildMemberTargets(members);
         }
         RefreshBuffPicks();   // drops the just-slotted spells from both pickers
@@ -629,6 +643,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         RefreshBuffPicks();   // a changed spell frees/consumes picker entries
         row.Refresh();   // re-derive header + whole-party/single-target after a spell change
         row.RebuildMemberTargets(CurrentMembers());
+        ResortRow(row);   // a changed spell may have moved it to a different category block
         Persist();
     }
 
@@ -684,7 +699,6 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _party.Members.CollectionChanged -= OnMembersChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
         _spellbook.Changed -= OnSpellbookChanged;
-        Slots.CollectionChanged -= OnSlotsChanged;
         AppServices.Current.Inventory.FullInventoryParsed -= OnInventoryReloaded;
     }
 }
