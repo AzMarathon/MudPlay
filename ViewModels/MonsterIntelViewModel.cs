@@ -62,10 +62,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // Live player combat totals behind the Hits-You-% threshold checkboxes /
     // master-list "Hits You %" column — recomputed alongside weapon/spell
     // capabilities in RebuildCharacterCapabilities whenever gear changes.
-    private int _playerAc;
-    // Un-floored AC to the tenth — the game shows AC fractional (item AC ×10, char AC
-    // rounded to 1 decimal), so the "AC vs Selected Target" readout displays this while
-    // the hit-% math keeps the whole-number _playerAc. See GAME_MECHANICS "Armour Class".
+    // AC is the live un-floored value to the tenth (item AC is stored ×10) — it seeds
+    // the editable SimAc, which the Hits-You-% figures read (floored for the to-hit
+    // formula, shown fractional). See GAME_MECHANICS "Armour Class".
     private double _playerAcExact;
     private int _playerDodge;
     private int _playerProtEvil;
@@ -245,7 +244,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // character's OWN evil tier — it scales how much raw Vile Ward converts to AC
     // (not evil 0% / outlaw-criminal 50% / villain-fiend 100%), matching
     // CombatCalculator's AdjustVileWard.
-    [ObservableProperty] private int _simAc;
+    // The what-if AC is fractional to the tenth (the game shows AC that way — item AC
+    // is stored ×10). Seeded to the live un-floored AC; the spinner steps by 0.1. The
+    // hit-% formula floors it (the whole number the game's to-hit consumes), so it's
+    // cast to int at each matchup call. See GAME_MECHANICS "Armour Class".
+    [ObservableProperty] private double _simAc;
     [ObservableProperty] private int _simProtEvil;
     [ObservableProperty] private int _simVileWard;
     [ObservableProperty] private bool _simShadow;
@@ -401,7 +404,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         PlayerDefenseProfile def = IncomingHitEstimator.BuildLiveDefense(
             _stats!, worn, encum, _gameData, _buffProvider?.Invoke(),
             _spellbook!.Available, QuestBonusesForCharacter());
-        _playerAc = def.Ac;
         _playerAcExact = def.AcExact;
         _playerDodge = def.Dodge;
         _playerProtEvil = def.ProtEvil;
@@ -425,7 +427,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         {
             _lastWornSignature = wornSig;
             _suppressSimRecompute = true;
-            SimAc = _playerAc;                   // worn + buffs; Shadow is its own toggle
+            SimAc = _playerAcExact;              // fractional (worn + buffs); Shadow is its own toggle
             SimProtEvil = _playerProtEvil;
             SimVileWard = def.VileWard;
             SimShadow = _playerHasShadow;
@@ -490,7 +492,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             // list — debuffs are a per-selected-monster what-if in the detail.
             entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
                 entry.Source.PhysicalAttacks, accuracyDelta: 0, entry.Source.Align,
-                SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+                (int)SimAc, _playerDodge, SimProtEvil, _playerProtGood,
                 _gameData.ActiveRealm, SimShadow, SimVileWard, evil, _playerArmourType) ?? -1;
     }
 
@@ -519,7 +521,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         int align = sel.Source.Align;
         bool isEvil = align is 1 or 2 or 5 or 6;
         bool isGood = align is 0 or 4;
-        int ac = SimAc + (SimShadow ? 10 : 0);
+        // SimAc is fractional to the tenth; the wards are whole. Shown to the tenth
+        // (the game displays AC that way); the hit-% math floors SimAc separately.
+        double ac = SimAc + (SimShadow ? 10 : 0);
         if (isEvil)
         {
             ac += SimProtEvil;
@@ -528,14 +532,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                 ac += CombatCalculator.AdjustVileWard(SimVileWard, SimEvilLevel);
         }
         if (isGood) ac += _playerProtGood;
-        // Display to the tenth: the game shows AC fractional (SimAc is the whole number
-        // the hit-% math uses; the tenths come from worn gear). Carry the live gear
-        // fraction so a stock 10.1 reads 10.1, while the wards stay whole.
-        double fraction = _playerAcExact - _playerAc;
-        AcVsTargetText = (ac + fraction).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+        AcVsTargetText = ac.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    partial void OnSimAcChanged(int value) => OnSimInputChanged();
+    partial void OnSimAcChanged(double value) => OnSimInputChanged();
     partial void OnSimProtEvilChanged(int value) => OnSimInputChanged();
     partial void OnSimVileWardChanged(int value) => OnSimInputChanged();
     partial void OnSimShadowChanged(bool value) => OnSimInputChanged();
@@ -1083,7 +1083,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             // weighted hit%.
             int hitYou = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
                 m.PhysicalAttacks, _monsterDebuff.AccDelta, m.Align,
-                SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+                (int)SimAc, _playerDodge, SimProtEvil, _playerProtGood,
                 _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel) ?? threat.MonsterHitPercent;
             double dps = hitYou / 100.0 * threat.MonsterDamagePerHit * threat.MonsterSwingsPerRound;
             IncomingThreatLines.Insert(0,
@@ -1130,7 +1130,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (!_hasCharacterContext || (a.Type != 1 && a.Type != 3)) return null;
         return MonsterMatchupCalculatorSpells.AttackHitPercent(
             a.Accuracy - _monsterDebuff.AccDelta, m.Align,
-            SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+            (int)SimAc, _playerDodge, SimProtEvil, _playerProtGood,
             _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel);
     }
 

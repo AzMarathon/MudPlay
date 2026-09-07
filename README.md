@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.54.4**
 > - Unrecognized Lines capture no longer stages room-display titles (e.g. "River Street") — they're matched against the Rooms table and excluded, while genuine spell/monster lines that share the room-name colour still capture
-> - Monster Intel "AC vs Selected Target" now shows AC to the tenth (e.g. 10.1) rather than rounding it off
+> - Monster Intel "AC vs Selected Target" now shows AC to the tenth (e.g. 10.1) rather than rounding it off, and the defense-simulator AC field steps by 0.1 to match
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
