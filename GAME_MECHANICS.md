@@ -3389,20 +3389,23 @@ landed" and "the prompt parsed," the client's `PlayerState.Hp` still holds the *
   (fired when HP changes) then drives the real heal on fresh HP. The timer-fallback tick and out-of-combat
   heartbeat are HP-fresh, so they're unaffected.
 
-## RemovesSpell buffs clobber on cast, with no fade line *([CONFIRMED] 2026-09-07, user)*
+## RemovesSpell buffs clobber on cast; the wear-off line is SHARED, not per-spell *([CONFIRMED] 2026-09-07, user)*
 
 - A spell that carries a **RemovesSpell** ability (Abil 122 → a target spell number) **strips that
-  target buff off you the instant it lands**. Classic case: **chant removes bless** — casting chant while
-  bless is up removes bless immediately. So among a clashing set, **whichever was cast LAST is the one
-  actually on you**; the buffs it removes are gone.
-- **The game sends no "your bless fades" line** when a buff is stripped this way. So a client tracking
-  buff timers off cast-confirmations alone (like this one) keeps the stripped buff's timer **falsely
-  ticking** — it has no wire signal that the buff ended early. This is why the Buff Watchdog can't just
-  read timers; it **infers** the clobber from RemovesSpell + cast order (`Until − TotalSec` gives each
-  live buff's cast instant) and shows the clobbered bar as **"conflict"** instead of a bogus countdown.
-- Casting the *removed* buff again **after** the remover (e.g. bless after chant) simply re-applies it —
-  bless doesn't remove chant, so both read as up until the next clash. Only the remover's cast strips;
-  it's a one-time effect at cast, not a standing suppression.
+  target buff off you the instant it lands**. The direction is per the realm's data, so check it, don't
+  assume — on Paradigm 1.9.1 **bless removes chant** (confirmed 2026-09-07, user + game data). So among a
+  clashing set, **whichever was cast LAST is the one actually on you**; the buffs it removes are gone.
+- A wear-off line **does** fire when the buff is stripped — but bless and chant **share the same message
+  records** (both the cast/applied line "You feel lucky!" *and* the wear-off "The effects of bless wear
+  off!"), so the line **cannot be attributed to the right spell by text alone**: a chant-being-stripped
+  shows bless's wear-off text. A client keying timers off those shared lines mis-attributes — the cast
+  confirm refreshes the wrong buff, and the wear-off clears the wrong one. The reliable signal is **what
+  we actually sent** (the distinct "You cast <spell> on …" / the pending self-buff short), so the Buff
+  Watchdog keys the timer off that and, on a wear-off right after a clobbering cast, leaves both timers
+  alone and **infers** the clobber from RemovesSpell + cast order (`Until − TotalSec` = each buff's cast
+  instant), rendering the clobbered bar as **"conflict"** rather than a bogus countdown.
+- Casting a buff that the other removes, **after** it, simply re-applies — only the remover's cast strips,
+  a one-time effect at cast, not a standing suppression.
 
 ## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
 

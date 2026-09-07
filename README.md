@@ -18,7 +18,7 @@
 > - Buff Watchdog: a buff clobbered by a later-cast one that removes it now reads "conflict" (⚠ moved to the front) instead of running a false countdown
 > - Buff Watchdog: an arrow button (nav-chip style) on the timer-bar side collapses/expands the config panel and resizes the window to match (sticky per character)
 > - Buff Watchdog: the config-side ⚠ conflict marker shows whenever two clashing buffs are both configured, regardless of which cast boxes are ticked
-> - Buff timers: casting a buff that removes another (chant removes bless) that shares its wear-off message no longer clears the caster's own timer — the wear-off is re-attributed to the clobbered victim
+> - Buff timers: fixed shared cast/wear-off messages between buffs that remove each other (e.g. bless removes chant) — casting one now refreshes its own timer (not the other's) and the following shared wear-off clears no one, so the survivor counts and the clobbered buff shows "conflict"
 > - Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎, including reroll settings for mana-regen roll spells
 > - Fixed severe Buff Watchdog lag with many configured buffs, the config pane/splitter snapping back to default on every add/remove, and the unreadable grey-on-bright-yellow recast bar (now a dim amber)
 >

@@ -972,10 +972,21 @@ public sealed class CastingDirector : IDisposable
 
     private void OnConditionApplied(MessageRecord r)
     {
-        // A self-cast buff confirmed via its AppliedMessage — start (or
-        // refresh) its duration timer keyed to self so the recast window
-        // is honoured. Party-cast confirmation rides OnLine instead.
-        if (_shortFromAppliedRecord?.Invoke(r) is { } shortCode)
+        // A self-cast buff confirmed via its AppliedMessage — start (or refresh) its
+        // duration timer keyed to self so the recast window is honoured. Party-cast
+        // confirmation rides OnLine instead.
+        //
+        // The applied/condition line is SHARED between buffs (bless & chant both
+        // "You feel lucky!"), so mapping the record back to a spell can resolve to the
+        // WRONG one — casting bless was refreshing chant's timer and leaving bless
+        // "not up". We know what we just sent, so prefer the pending self-buff short
+        // (only while it's still FRESH, the same staleness window OnSelfBuffRejected
+        // uses, so a stale marker can't hijack an unrelated buff's applied line); fall
+        // back to the record map when nothing fresh is pending (e.g. the HP-regen HoT).
+        string? freshPending = _pendingSelfBuffShort is { } ps
+            && _now() - _pendingSelfBuffArmedAt <= PendingSelfBuffRejectionWindow ? ps : null;
+        string? shortCode = freshPending ?? _shortFromAppliedRecord?.Invoke(r);
+        if (shortCode is not null)
         {
             if (_buffInfoByShort?.Invoke(shortCode) is { } info)
             {
@@ -986,7 +997,7 @@ public sealed class CastingDirector : IDisposable
                     ? prev.MarginSec
                     : DefaultRecastMarginSec;
                 _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin, (int)info.DurationSec);
-                NoteSuccessfulCast(_pendingSelfBuffShort ?? shortCode);
+                NoteSuccessfulCast(shortCode);
                 _log?.Combat(LogCategory,
                     $"self-buff {shortCode} confirmed active (applied line) — "
                     + $"duration {info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - margin)}s");
@@ -1017,31 +1028,25 @@ public sealed class CastingDirector : IDisposable
     {
         string? resolved = _shortFromAppliedRecord?.Invoke(r);
 
-        // A buff we JUST cast successfully can't be the one wearing off this instant — a
-        // wear-off arriving right after is a buff IT clobbered (RemovesSpell fires at
-        // cast). bless & chant SHARE the wear-off message, so the shared line can mis-
-        // resolve to the just-cast survivor and wrongly clear its timer (user report:
-        // casting chant dropped chant's own bar). Key off the last successful cast: when
-        // it removes others and the wear-off is plausibly about that pair, clear the
-        // VICTIMS' timers (self- and member-keyed) and keep the caster's.
-        if (_lastCastShort is { } caster
+        // A wear-off that lands right after a SUCCESSFUL clobbering cast is the shared,
+        // ambiguous side of that clobber: bless & chant share the wear-off message, so
+        // "the effects of bless wear off" here is really the buff bless REMOVED being
+        // stripped. Don't clear anyone off it — the just-cast survivor keeps its fresh
+        // timer, AND the clobbered victim keeps its timer so the watchdog can render it
+        // as "conflict" (it infers the clobber from RemovesSpell + cast order, and a
+        // cleared timer would just read "not up" instead). A genuine later wear-off
+        // falls outside the window and clears normally below.
+        if (resolved is not null
+            && _lastCastShort is { } caster
             && _now() - _lastCastAt <= ClobberWindow
             && _removesShortsFor?.Invoke(caster) is { Count: > 0 } victims)
         {
-            HashSet<string> victimSet = new(victims, StringComparer.OrdinalIgnoreCase);
-            bool aboutThisPair = resolved is null
-                || string.Equals(resolved, caster, StringComparison.OrdinalIgnoreCase)
-                || victimSet.Contains(resolved);
-            if (aboutThisPair)
+            HashSet<string> pair = new(victims, StringComparer.OrdinalIgnoreCase) { caster };
+            if (pair.Contains(resolved))
             {
-                List<(string Target, string Short)>? doomed = null;
-                foreach ((string Target, string Short) key in _activeUntil.Keys)
-                    if (victimSet.Contains(key.Short)) (doomed ??= new()).Add(key);
-                if (doomed is not null)
-                    foreach ((string, string) key in doomed) _activeUntil.Remove(key);
                 _log?.Combat(LogCategory,
-                    $"wear-off reattributed to clobber victim(s) of just-cast {caster} "
-                    + $"(cleared {doomed?.Count ?? 0}) — kept the caster's timer");
+                    $"wear-off ({resolved}) ignored — shared clobber line from just-cast {caster}; "
+                    + "survivor + victim timers left intact for the conflict display");
                 Evaluate();
                 return;
             }
