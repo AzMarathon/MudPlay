@@ -12,6 +12,101 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
+    <Window.Resources>
+        <!-- One config-panel row, shared by the ordinary-spell list and the
+             "Weapons" (#item-cast) list below it — same columns as the header
+             Grid so both stay aligned. Column 0's name cell is itself a Grid
+             (Auto,Auto,*,Auto,Auto), not a StackPanel: a StackPanel never
+             constrains a child's width, so TextTrimming="CharacterEllipsis" on
+             the name TextBlock had nothing to trim against and a long name (esp.
+             once the "(Lvl N)" tag was added) painted straight through the Self
+             checkbox in the next column instead of eliding. The "*" column here
+             is what actually gives the name a bounded width to ellipsize into. -->
+        <DataTemplate x:Key="BuffSlotRowTemplate" x:DataType="vm:BuffSlotRowViewModel">
+            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                    BorderThickness="0,0,0,1" Padding="6,3" Cursor="Hand"
+                    ToolTip.Tip="Double-click to edit this buff's spell / recast / conditions"
+                    DoubleTapped="OnBuffRowDoubleTapped">
+                <Grid ColumnDefinitions="240,40,56,*">
+                    <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto,*,Auto,Auto"
+                          VerticalAlignment="Center" Margin="0,0,10,0">
+                        <Button Grid.Column="0" Content="✎" Width="20" Height="20" Padding="0" FontSize="11"
+                                ToolTip.Tip="Edit this buff / recast timer"
+                                Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).EditBuffCommand}"
+                                CommandParameter="{Binding}"/>
+                        <Button Grid.Column="1" Content="⨯" Width="20" Height="20" Padding="0" Margin="2,0,0,0"
+                                ToolTip.Tip="Remove this buff slot"
+                                Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).RemoveBuffCommand}"
+                                CommandParameter="{Binding}"/>
+                        <TextBlock Grid.Column="2" Text="{Binding HeaderText}" FontWeight="SemiBold" Margin="4,0,0,0"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        <!-- Warning marker: this buff and another configured slot remove
+                             each other via RemovesSpell whenever they can land on the
+                             same character — see AppServices.BuffSlotOverwritePairs. -->
+                        <TextBlock Grid.Column="3" Text="⚠" VerticalAlignment="Center" Margin="4,0,0,0"
+                                   Foreground="{StaticResource AccentRedBrush}"
+                                   IsVisible="{Binding HasOverwriteWarning}"
+                                   ToolTip.Tip="{Binding OverwriteWarningTooltip}"/>
+                        <!-- "Add all blesses" can list a buff the class can learn that
+                             this character hasn't trained yet — flag it the same way
+                             the read-only timer bars already do. -->
+                        <Border Grid.Column="4" Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}"
+                                ToolTip.Tip="Not learned yet — checking this won't cast until you've trained it.">
+                            <TextBlock Text="unlearned"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- Self checkbox — shown for a self-only or single-target buff. -->
+                    <CheckBox Grid.Column="1" MinHeight="0" HorizontalAlignment="Center"
+                              IsVisible="{Binding ShowSelf}"
+                              IsChecked="{Binding CastOnSelf, Mode=TwoWay}"
+                              ToolTip.Tip="Cast this buff on yourself."/>
+
+                    <!-- "All/None" master over the party MEMBERS only (independent of Self):
+                         ticked blesses every member incl. joiners; unticked blesses none.
+                         Hidden when solo (no party to target). -->
+                    <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
+                              IsVisible="{Binding ShowMemberTargets}"
+                              IsChecked="{Binding AllTargets, Mode=TwoWay}"
+                              ToolTip.Tip="Cast on every party member, auto-adapting as members join or leave. Untick for none. (Self is separate.)"/>
+                    <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
+                              IsVisible="{Binding IsWholeParty}"
+                              IsChecked="{Binding WholePartyOn, Mode=TwoWay}"
+                              ToolTip.Tip="Cast on the whole party in one go."/>
+
+                    <ItemsControl Grid.Column="3" ItemsSource="{Binding MemberTargets}"
+                                  IsVisible="{Binding ShowMemberTargets}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BuffMemberToggle">
+                                <Panel Width="56">
+                                    <CheckBox MinHeight="0" HorizontalAlignment="Center"
+                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                              ToolTip.Tip="{Binding DisplayName}"/>
+                                </Panel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="12"
+                                IsVisible="{Binding IsWholeParty}" VerticalAlignment="Center">
+                        <TextBlock Text="Party" Margin="4,0,0,0" FontSize="11"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <!-- Solo: also cast this whole-party buff while alone. The
+                             on/off checkbox in the All-none column stays as the "cast it
+                             party-wide while in a party" toggle. -->
+                        <CheckBox Content="Solo" MinHeight="0" FontSize="11"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding CastSolo, Mode=TwoWay}"
+                                  ToolTip.Tip="Also cast this whole-party buff while you're solo — a lone character is a party of one, so it still lands on you."/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
     <Window.Styles>
         <!-- Section header (Self buffs / Party buffs). -->
         <Style Selector="TextBlock.SectionHeader">
@@ -31,12 +126,16 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <!-- The elapsed-time fill — a DARKER green than the outline, kept flat across the
-             whole bar (no bright fill); amber once the fill crosses the recast marker. -->
+             whole bar (no bright fill); a dark amber once the fill crosses the recast
+             marker. The "due" amber is deliberately DIM — the same darkness as the green,
+             not the bright AccentYellow it used to be — so the light name / grey time
+             overlaid on it stay readable (bright yellow made grey-on-yellow unreadable).
+             The bright accent still lives on the recast MARKER line, not the fill. -->
         <Style Selector="Border.BuffFill">
             <Setter Property="Background" Value="#FF456644"/>
         </Style>
         <Style Selector="Border.BuffFill.recast">
-            <Setter Property="Background" Value="{StaticResource AccentYellowBrush}"/>
+            <Setter Property="Background" Value="#FF6E5A2E"/>
         </Style>
 
         <!-- Remaining-time label inside the bar, offset after the name. -->
@@ -90,7 +189,6 @@
     <Grid x:Name="ZonesGrid">
 
         <ScrollViewer x:Name="ConfigZone"
-                      IsVisible="{Binding Buffs.ShowPanel}"
                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
 
                 <!-- ===== Configure buffs =====
@@ -101,9 +199,40 @@
                 <Border Background="{StaticResource ChromeBgSunkenBrush}">
                     <StackPanel HorizontalAlignment="Stretch"
                                 DataContext="{Binding Buffs}" x:DataType="vm:BuffPanelViewModel">
-                        <Button Content="＋ Add buff" Padding="8,2" Margin="8,8,8,4"
-                                HorizontalAlignment="Left" IsEnabled="{Binding CanAddBuff}"
-                                Command="{Binding AddBuffCommand}"/>
+                        <StackPanel Orientation="Horizontal" Margin="8,8,8,4" Spacing="6">
+                            <Button Content="＋ Add buff" Padding="8,2"
+                                    IsEnabled="{Binding CanAddBuff}"
+                                    Command="{Binding AddBuffCommand}"/>
+                            <Button Content="Add all blesses" Padding="8,2"
+                                    IsEnabled="{Binding CanAddAllBlesses}"
+                                    Command="{Binding AddAllBlessesCommand}"
+                                    ToolTip.Tip="List every buff you or the party can cast, regardless of level. Where two self buffs would strip each other off (e.g. greater zeal / zeal), both are listed but only the higher-level one comes checked — checking the other unchecks it, and vice versa. Whole-party buffs are listed too but never pre-checked — tick Party Wide yourself to turn one on."/>
+                            <Button Content="Remove all" Padding="8,2"
+                                    IsEnabled="{Binding HasSlots}"
+                                    Command="{Binding RemoveAllBuffsCommand}"
+                                    Foreground="{StaticResource AccentRedBrush}"
+                                    ToolTip.Tip="Remove every configured buff slot — self, party, and whole-party alike. Asks to confirm first (unless confirm-deletes is off in Settings)."/>
+                            <Button Content="Unlearned spells" Padding="8,2"
+                                    IsEnabled="{Binding CanReportUnlearned}"
+                                    Command="{Binding ReportUnlearnedSpellsCommand}"
+                                    ToolTip.Tip="Print to the terminal every spell your class hasn't learned yet that's within reach — castable now, plus everything up to 5 levels ahead — each as [Spell name - Unlearned, Requires Level XX]."/>
+                        </StackPanel>
+
+                        <!-- Live mana-budget readout, both sides per passive regen tick
+                             (30s — the "MP +N after ~30s" cadence, so they compare directly):
+                             what the character gains per tick vs what every currently-CHECKED
+                             buff costs to keep recast. Recomputes on every checkbox toggle,
+                             party-roster change, inventory reload, and level change. -->
+                        <TextBlock IsVisible="{Binding HasSlots}" Margin="8,0,8,6" FontSize="11"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   ToolTip.Tip="Left: your natural passive mana regen per 30s tick (level, stats, and worn +ManaRgn%; not counting a mana-regen roll spell). Right: mana per tick every currently-checked buff needs to stay recast — its cost over its duration, scaled to 30s, times how many casts it fires (self + each targeted member; a whole-party buff counts as one cast whatever the party size).">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}Mana/Tick gained: {0:0.#} - Mana/Tick to maintain: {1:0.#}">
+                                    <Binding Path="ManaGainedPerTick"/>
+                                    <Binding Path="RequiredManaPerTick"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
 
                         <TextBlock IsVisible="{Binding !HasSlots}" Margin="8,4,8,6"
                                    Text="No buffs configured. Click “Add buff”, pick a spell, then set who receives it."
@@ -118,17 +247,17 @@
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Disabled">
                             <StackPanel>
-                                <Grid ColumnDefinitions="220,40,56,*" Margin="6,0,6,2">
+                                <Grid ColumnDefinitions="240,40,56,*" Margin="6,0,6,2">
                                     <TextBlock Grid.Column="0" Text="Buff" FontSize="10"
                                                VerticalAlignment="Bottom"
-                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
                                     <TextBlock Grid.Column="1" Text="Self" FontSize="10"
                                                HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
                                     <TextBlock Grid.Column="2" Text="All/None" FontSize="10"
                                                HorizontalAlignment="Center" VerticalAlignment="Bottom"
                                                IsVisible="{Binding ShowPartyColumns}"
-                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
                                     <ItemsControl Grid.Column="3" ItemsSource="{Binding Members}"
                                                   IsVisible="{Binding ShowPartyColumns}">
                                         <ItemsControl.ItemsPanel>
@@ -139,90 +268,20 @@
                                                 <TextBlock Text="{Binding}" Width="56" FontSize="10"
                                                            TextAlignment="Center" TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Bottom"
-                                                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                           Foreground="{StaticResource ChromeFgBrush}"/>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                 </Grid>
 
-                                <ItemsControl ItemsSource="{Binding Slots}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:BuffSlotRowViewModel">
-                                            <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
-                                                    BorderThickness="0,0,0,1" Padding="6,3">
-                                                <Grid ColumnDefinitions="220,40,56,*">
-                                                    <StackPanel Grid.Column="0" Orientation="Horizontal"
-                                                                VerticalAlignment="Center" Spacing="2" Margin="0,0,10,0">
-                                                        <Button Content="✎" Width="20" Height="20" Padding="0" FontSize="11"
-                                                                ToolTip.Tip="Edit this buff / recast timer"
-                                                                Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).EditBuffCommand}"
-                                                                CommandParameter="{Binding}"/>
-                                                        <Button Content="⨯" Width="20" Height="20" Padding="0"
-                                                                ToolTip.Tip="Remove this buff slot"
-                                                                Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).RemoveBuffCommand}"
-                                                                CommandParameter="{Binding}"/>
-                                                        <TextBlock Text="{Binding HeaderText}" FontWeight="SemiBold"
-                                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                                        <!-- Warning marker: this buff and another configured slot remove
-                                                             each other via RemovesSpell whenever they can land on the
-                                                             same character — see AppServices.BuffSlotOverwritePairs. -->
-                                                        <TextBlock Text="⚠" VerticalAlignment="Center"
-                                                                   Foreground="{StaticResource AccentRedBrush}"
-                                                                   IsVisible="{Binding HasOverwriteWarning}"
-                                                                   ToolTip.Tip="{Binding OverwriteWarningTooltip}"/>
-                                                    </StackPanel>
-
-                                                    <!-- Self checkbox — shown for a self-only or single-target buff. -->
-                                                    <CheckBox Grid.Column="1" MinHeight="0" HorizontalAlignment="Center"
-                                                              IsVisible="{Binding ShowSelf}"
-                                                              IsChecked="{Binding CastOnSelf, Mode=TwoWay}"
-                                                              ToolTip.Tip="Cast this buff on yourself."/>
-
-                                                    <!-- "All/None" master over the party MEMBERS only (independent of Self):
-                                                         ticked blesses every member incl. joiners; unticked blesses none.
-                                                         Hidden when solo (no party to target). -->
-                                                    <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
-                                                              IsVisible="{Binding ShowMemberTargets}"
-                                                              IsChecked="{Binding AllTargets, Mode=TwoWay}"
-                                                              ToolTip.Tip="Cast on every party member, auto-adapting as members join or leave. Untick for none. (Self is separate.)"/>
-                                                    <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
-                                                              IsVisible="{Binding IsWholeParty}"
-                                                              IsChecked="{Binding WholePartyOn, Mode=TwoWay}"
-                                                              ToolTip.Tip="Cast on the whole party in one go."/>
-
-                                                    <ItemsControl Grid.Column="3" ItemsSource="{Binding MemberTargets}"
-                                                                  IsVisible="{Binding ShowMemberTargets}">
-                                                        <ItemsControl.ItemsPanel>
-                                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                                                        </ItemsControl.ItemsPanel>
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate x:DataType="vm:BuffMemberToggle">
-                                                                <Panel Width="56">
-                                                                    <CheckBox MinHeight="0" HorizontalAlignment="Center"
-                                                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                                              ToolTip.Tip="{Binding DisplayName}"/>
-                                                                </Panel>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-                                                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="12"
-                                                                IsVisible="{Binding IsWholeParty}" VerticalAlignment="Center">
-                                                        <TextBlock Text="Party Wide" Margin="4,0,0,0" FontSize="11"
-                                                                   VerticalAlignment="Center"
-                                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                                        <!-- Solo: also cast this whole-party buff while alone. The
-                                                             on/off checkbox in the All-none column stays as the "cast it
-                                                             party-wide while in a party" toggle. -->
-                                                        <CheckBox Content="Solo" MinHeight="0" FontSize="11"
-                                                                  VerticalAlignment="Center"
-                                                                  IsChecked="{Binding CastSolo, Mode=TwoWay}"
-                                                                  ToolTip.Tip="Also cast this whole-party buff while you're solo — a lone character is a party of one, so it still lands on you."/>
-                                                    </StackPanel>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <!-- The whole buff list in one ItemsControl, kept in a single
+                                     order (buffs you aim first, then whole-party, then item
+                                     "on use" buffs) inside Slots itself — see InsertSorted.
+                                     Bound straight to the ObservableCollection so a single
+                                     add / remove touches one row instead of rebuilding the
+                                     whole list. -->
+                                <ItemsControl ItemsSource="{Binding Slots}"
+                                              ItemTemplate="{StaticResource BuffSlotRowTemplate}"/>
                             </StackPanel>
                         </ScrollViewer>
                     </StackPanel>
@@ -232,11 +291,12 @@
         <!-- Drag to re-divide the two zones. The code-behind sets its orientation
              (rows vs columns) + position from the chosen layout. -->
         <GridSplitter x:Name="ZoneSplitter"
-                      IsVisible="{Binding Buffs.ShowPanel}"
                       Background="{StaticResource ChromeBorderBrush}"/>
 
-        <!-- Timer bars fill whatever space the config table doesn't take. -->
-        <ScrollViewer x:Name="BarsZone">
+        <!-- Timer bars fill whatever space the config table doesn't take. A Grid so the
+             collapse/expand toggle can float over the top-right corner, above the scroll. -->
+        <Grid x:Name="BarsZone">
+            <ScrollViewer>
                 <StackPanel>
 
                 <TextBlock Margin="10,12,10,10"
@@ -266,7 +326,10 @@
                                             <!-- No row divider — each bar's own green frame
                                                  separates it; a full-width line would just
                                                  stretch across the blended pane background. -->
-                                            <Border Padding="6,4">
+                                            <!-- ToolTip on the whole row so a "conflict" bar carries its
+                                                 explanation everywhere, not just on the ⚠ (null = normal
+                                                 bar, no tooltip). -->
+                                            <Border Padding="6,4" ToolTip.Tip="{Binding ConflictTooltip}">
                                                 <!-- ✕ clears this timer (only while up); then the
                                                      width-capped bar: light-green frame, star-weighted
                                                      elapsed fill, recast marker on the fill/rest boundary,
@@ -299,6 +362,12 @@
                                                             </Grid>
                                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"
                                                                         VerticalAlignment="Center" Margin="6,0,0,0">
+                                                                <!-- Clobbered by a later-cast buff that removes this one: the ⚠
+                                                                     sits at the FRONT and the bar reads "conflict" (see the row VM). -->
+                                                                <TextBlock Text="⚠" Margin="0,0,4,0" VerticalAlignment="Center"
+                                                                           Foreground="{StaticResource AccentRedBrush}"
+                                                                           IsVisible="{Binding IsConflicted}"
+                                                                           ToolTip.Tip="{Binding OverwriteWarningTooltip}"/>
                                                                 <TextBlock Classes="BarName" Classes.covered="{Binding IsCovered}"
                                                                            Text="{Binding Name}"/>
                                                                 <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">
@@ -334,6 +403,25 @@
                 </ItemsControl>
 
                 </StackPanel>
-        </ScrollViewer>
+            </ScrollViewer>
+
+            <!-- Collapse / expand the config panel. Floats over the bars' top-right
+                 corner; only shown when the class actually HAS a config panel. Styled
+                 like the navigation map's collapse chip (elevated, bordered, rounded);
+                 the arrow points the direction the next click moves the divider. -->
+            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
+                    IsVisible="{Binding Buffs.ShowPanel}"
+                    Command="{Binding ToggleConfigCommand}"
+                    Content="{Binding ConfigToggleGlyph}"
+                    ToolTip.Tip="{Binding ConfigToggleTooltip}"
+                    Background="{StaticResource ChromeBgElevBrush}"
+                    BorderBrush="{StaticResource ChromeBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Padding="8,2"
+                    MinHeight="24"
+                    Height="24"
+                    FontSize="11"/>
+        </Grid>
     </Grid>
 </Window>

@@ -13,7 +13,7 @@
         WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
-        <DataTemplate x:Key="BuffPickItem" x:DataType="spells:SpellPick">
+        <DataTemplate x:Key="BuffPickItem" x:DataType="vm:BuffPickOption">
             <TextBlock Text="{Binding Display}"/>
         </DataTemplate>
     </Window.Resources>
@@ -27,15 +27,19 @@
         <Grid Grid.Row="1" ColumnDefinitions="70,*" ColumnSpacing="8">
             <TextBlock Grid.Column="0" Text="Buff" VerticalAlignment="Center"
                        Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"/>
-            <AutoCompleteBox Grid.Column="1"
-                             Text="{Binding Spell, Mode=TwoWay}"
-                             ItemsSource="{Binding BuffPicks}"
-                             ValueMemberBinding="{ReflectionBinding Short}"
-                             ItemFilter="{Binding SpellSuggestionFilter}"
-                             ItemTemplate="{StaticResource BuffPickItem}"
-                             FilterMode="Contains"
-                             MinimumPrefixLength="0"
-                             PlaceholderText="Buff spell…"/>
+            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding PickOptions}"
+                      SelectedItem="{Binding SelectedPick, Mode=TwoWay}"
+                      ItemTemplate="{StaticResource BuffPickItem}"
+                      PlaceholderText="Pick a buff…">
+                <ComboBox.Styles>
+                    <!-- A buff already held by another slot is disabled (greyed) so
+                         it reads as taken rather than silently missing. -->
+                    <Style Selector="ComboBoxItem" x:DataType="vm:BuffPickOption">
+                        <Setter Property="IsEnabled" Value="{Binding Enabled}"/>
+                    </Style>
+                </ComboBox.Styles>
+            </ComboBox>
         </Grid>
 
         <Grid Grid.Row="2" ColumnDefinitions="70,*" ColumnSpacing="8">
