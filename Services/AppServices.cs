@@ -6404,7 +6404,8 @@ public sealed class AppServices
             if (Spellbook.FindByCastCode(code) is not { } spell) continue;
             bool isWholeParty = IsPartyWideBuff(code);
             Game.Spells.BuffAffectSet affect = Game.Spells.BuffAffectSet.From(
-                isWholeParty, slot.WholePartyOn, slot.CastOnSelf, slot.AllMembers, slot.Targets);
+                isWholeParty, slot.WholePartyOn, slot.CastOnSelf, slot.AllMembers, slot.Targets,
+                castSolo: slot.CastSolo);
             resolved.Add((spell, affect));
         }
 

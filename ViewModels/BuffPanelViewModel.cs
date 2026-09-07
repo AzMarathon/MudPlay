@@ -377,7 +377,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             if (string.IsNullOrWhiteSpace(dto.Spell)) continue;
             if (ResolveSpellOrItem(dto.Spell.Trim()) is not { } r) continue;
             Game.Spells.BuffAffectSet affect = Game.Spells.BuffAffectSet.From(
-                BuffClassifier.IsWholeParty(r.Targets), dto.WholePartyOn, dto.CastOnSelf, dto.AllMembers, dto.Targets);
+                BuffClassifier.IsWholeParty(r.Targets), dto.WholePartyOn, dto.CastOnSelf, dto.AllMembers, dto.Targets,
+                castSolo: dto.CastSolo);
             existing.Add(new Game.Spells.ExistingBuffSlot(
                 r.Number, affect, Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(r.Formula)));
         }

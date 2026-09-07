@@ -22,16 +22,27 @@ public readonly struct BuffAffectSet
     public bool IsEmpty => !Everyone && !Self && !AllMembers && Members.Count == 0;
 
     // isWholePartySpell: the slot's spell has Targets 10/13 (BuffClassifier.IsWholeParty).
-    // wholePartyOn: the slot's all-on/all-off toggle for a whole-party spell.
+    // wholePartyOn: the slot's Party-Wide toggle — cast it party-wide while in a party.
+    // castSolo: the slot's Solo toggle — also cast it while alone. A whole-party cast
+    //   lands on the CASTER in EITHER mode (party-wide blankets everyone including you;
+    //   solo is a party of one), so a whole-party slot that's on in either mode can
+    //   co-land with — and thus conflict with — a self buff. Party-wide is the wider
+    //   set (everyone), so it wins when both are on; solo alone lands on self only.
+    //   Defaults false for the non-whole-party callers/tests that never set it.
     // castOnSelf/allMembers/targets: BuffSlot's targeting flags, meaningful only when
     // the spell isn't whole-party (a whole-party cast always includes self and needs
     // no member list).
     public static BuffAffectSet From(
         bool isWholePartySpell, bool wholePartyOn,
-        bool castOnSelf, bool allMembers, IReadOnlyCollection<string> targets)
+        bool castOnSelf, bool allMembers, IReadOnlyCollection<string> targets,
+        bool castSolo = false)
     {
         if (isWholePartySpell)
-            return wholePartyOn ? new BuffAffectSet { Everyone = true, Members = Array.Empty<string>() } : None;
+        {
+            if (wholePartyOn) return new BuffAffectSet { Everyone = true, Members = Array.Empty<string>() };
+            if (castSolo) return new BuffAffectSet { Self = true, Members = Array.Empty<string>() };
+            return None;
+        }
 
         return new BuffAffectSet
         {

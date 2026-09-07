@@ -26,6 +26,12 @@ public sealed class BuffConflictAnalyzerTests
     private static BuffAffectSet Inert() =>
         BuffAffectSet.From(isWholePartySpell: false, wholePartyOn: false, castOnSelf: false, allMembers: false, targets: System.Array.Empty<string>());
 
+    // Party-Wide OFF but Solo ON: a whole-party cast on a lone character still lands on
+    // the caster (a party of one).
+    private static BuffAffectSet WholePartySoloOnly() =>
+        BuffAffectSet.From(isWholePartySpell: true, wholePartyOn: false, castOnSelf: false,
+            allMembers: false, targets: System.Array.Empty<string>(), castSolo: true);
+
     [Fact]
     public void TwoSelfCastSlots_CoLand()
     {
@@ -43,6 +49,16 @@ public sealed class BuffConflictAnalyzerTests
     public void ToggledOffWholeParty_NeverCoLands()
     {
         Assert.False(BuffConflictAnalyzer.CanCoLand(SelfOnly(), WholeParty(on: false)));
+    }
+
+    [Fact]
+    public void SoloOnlyWholeParty_CoLandsWithSelfBuff()
+    {
+        // chant with Party-Wide OFF but Solo ON still lands on you when you cast it
+        // alone (a party of one), so it must co-land with — and thus conflict with —
+        // a self buff it removes, exactly as Party-Wide does.
+        Assert.True(BuffConflictAnalyzer.CanCoLand(SelfOnly(), WholePartySoloOnly()));
+        Assert.True(BuffConflictAnalyzer.CanCoLand(WholePartySoloOnly(), SelfOnly()));
     }
 
     [Fact]

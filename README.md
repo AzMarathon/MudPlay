@@ -6,7 +6,8 @@
 > - **＋ Add buff** now picks from a **dropdown of your learned buffs** (each shown as name + level learned) instead of a text box — an already-slotted buff stays listed but greyed out
 > - Where two learned buffs would strip each other off both are listed but only the higher-level one is pre-checked; checking a conflicting buff now auto-unchecks the other live, on any row
 > - Buff Watchdog: new **Remove all** button — clears every configured slot in one click (gated behind "confirm deletes"); it clears the config, not running buffs — any buff still up keeps its live timer bar
-> - A buff that's up but no longer configured (cast by hand, or a slot you removed) now shows a read-only timer bar, so clearing config never hides a running buff
+> - A buff that's up but no longer configured (cast by hand, or a slot you removed) now shows a read-only timer bar that clears itself when the buff wears off; a still-configured buff persists as "not up"
+> - Fixed the ⚠ conflict marker not appearing on a whole-party buff set to Solo (Party Wide off) — a solo whole-party cast still lands on you
 > - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures as if they were maintainable buffs — it now requires a real duration
 > - Fixed **Add all blesses** recommending a spell your character's alignment can't cast and crowding out the alignment-correct alternative — it now reads your alignment from your own `who` observation
 > - Buff Watchdog: new live **"Mana to maintain"** readout — total mana/second every checked buff costs to keep recast, updating as you check/uncheck boxes
