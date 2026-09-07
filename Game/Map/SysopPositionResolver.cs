@@ -178,20 +178,23 @@ public sealed class SysopPositionResolver : IDisposable
         return true;
     }
 
-    // One-shot for a caller that wants a single answer rather than a standing
-    // subscription — LoopRunner's "blocked at source" recovery, which needs to know
-    // where it really is before rerouting. Mirrors
-    // ParadigmPositionResolver.RequestResyncOnce so the two are interchangeable
-    // behind the recovery gate's hook: whichever of PositionResolved /
-    // LocateFailed lands first invokes the matching callback exactly once and
-    // detaches both. False means no locate could start, so the caller falls back
-    // immediately. UI-thread confined like the rest, so subscribe-then-detach needs
-    // no locking.
-    public bool RequestLocateOnce(string reason, Action<RoomKey> onResolved, Action onFailed)
+    // One-shot variant that mirrors ParadigmPositionResolver.RequestResyncOnce: a
+    // caller (a loop blocked at source, an @where re-fix) gets its OWN onResolved /
+    // onFailed invoked exactly once for this locate, on top of the gate's global
+    // re-anchor consumers. Returns false when no locate can start (capability off /
+    // throttled / suppressed) so the caller falls back immediately. UI-thread
+    // confined like the rest, so subscribe-then-detach needs no locking.
+    //
+    // Throttled by default — the heavier `sys st` shouldn't fire as freely as
+    // Paradigm's one-line `rm`, and a convenience caller like `@where` can wait.
+    // A caller that is itself a recovery escalation must pass forRecovery: true;
+    // see TryRequestLocate for why the throttle is wrong for those.
+    public bool RequestLocateOnce(string reason, Action<RoomKey> onResolved, Action onFailed,
+        bool forRecovery = false)
     {
         ArgumentNullException.ThrowIfNull(onResolved);
         ArgumentNullException.ThrowIfNull(onFailed);
-        if (!TryRequestLocate(reason, forRecovery: true)) return false;
+        if (!TryRequestLocate(reason, forRecovery)) return false;
 
         Action<RoomKey>? resolved = null;
         Action? failed = null;

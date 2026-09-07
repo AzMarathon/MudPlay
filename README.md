@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.50.0**
+> **Version 3.52.0**
 > - An interrupted sweep no longer dumps its load on you: what Roomba was carrying and what it still had to do are remembered per character, verified against a real inventory read, and picked up next time
 > - New **Resume** button on the Roomba tab — carries on from a stopped sweep without re-walking the whole circuit, and survives closing the client
-> - A loop blocked because it lost track of where it is now asks the game for its position on stock realms too, not just on Paradigm
+> - A loop blocked because it lost track of where it is asks the game for its position without waiting out the repeat-ask delay, so the retry isn't denied every time
 > - Recovery attempts are spaced out, so a reroute that instantly re-blocks can't spend the whole retry budget in one second
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
