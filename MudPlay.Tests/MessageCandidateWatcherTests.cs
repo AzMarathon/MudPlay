@@ -21,12 +21,17 @@ public sealed class MessageCandidateWatcherTests
         // Mutable so a test can point the watcher at a known room before feeding.
         public RoomKey? Room { get; set; }
 
+        // Stand-in for the active set's Rooms-table name index — a test adds a
+        // room name here to prove a room-display title line isn't staged.
+        public HashSet<string> RoomNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         // Default in-game so capture tests exercise the real path; a test that
         // needs the pre-game gate passes inGame:false.
         public Harness(bool inGame = true)
         {
             Watcher = new MessageCandidateWatcher(
-                Router, Messages, Candidates, currentRoom: () => Room, log: Log);
+                Router, Messages, Candidates, currentRoom: () => Room, log: Log,
+                isKnownRoomName: RoomNames.Contains);
             if (inGame) Watcher.NotifyInGame();
         }
 
@@ -265,6 +270,34 @@ public sealed class MessageCandidateWatcherTests
 
         h.Watcher.NotifyInGame();
         h.Feed("A shimmering aura surrounds you!");
+
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void KnownRoomName_IsNotStaged()
+    {
+        // A room-display title line is read directly by the room-display parser and
+        // registers no router pattern, so without the Rooms-table exclusion it would
+        // stage as unrecognized. A known room name is dropped...
+        Harness h = new();
+        h.RoomNames.Add("Intersection of Guild St. & River St.");
+
+        h.Feed("Intersection of Guild St. & River St.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void SpellLineSharingRoomNameColour_IsStillStaged()
+    {
+        // ...but a genuine unrecognized spell/monster line that is NOT a room name
+        // still stages, even though it can share the room-name colour on some
+        // palettes — the exclusion keys off the Rooms table, never the colour.
+        Harness h = new();
+        h.RoomNames.Add("River Street");
+
+        h.Feed("The goblin shaman chants a guttural incantation!");
 
         Assert.Single(h.Candidates.Candidates);
     }

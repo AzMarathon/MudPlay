@@ -57,6 +57,7 @@ public sealed class MessageCandidateWatcher : IDisposable
     private readonly MessageStore _messages;
     private readonly MessageCandidateStore _candidates;
     private readonly Func<RoomKey?>? _currentRoom;
+    private readonly Func<string, bool>? _isKnownRoomName;
     private readonly LogService? _log;
 
     // Built from MessageStore on every CollectionChanged — trimmed text of
@@ -101,7 +102,7 @@ public sealed class MessageCandidateWatcher : IDisposable
     // known) simply stages the candidate without a location.
     public MessageCandidateWatcher(MessageRouter router, MessageStore messages,
         MessageCandidateStore candidates, Func<RoomKey?>? currentRoom = null,
-        LogService? log = null)
+        LogService? log = null, Func<string, bool>? isKnownRoomName = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(messages);
@@ -110,6 +111,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         _messages = messages;
         _candidates = candidates;
         _currentRoom = currentRoom;
+        _isKnownRoomName = isKnownRoomName;
         _log = log;
 
         RebuildIndex();
@@ -187,6 +189,18 @@ public sealed class MessageCandidateWatcher : IDisposable
     private static bool IsClientStatusLine(string text) =>
         text.Length >= 2 && text[0] == '[' && text[^1] == ']';
 
+    // The bright-cyan title line of a room display. RoomDisplayParser reads room
+    // displays straight off the wire and registers no MessageRouter pattern, so a
+    // room name looks like "never seen, no pattern matched" and gets staged (the
+    // description lines that follow are caught by the burst cap, which is why only
+    // the title leaks). We key off the Rooms table, NOT the colour: player- and
+    // monster-spell lines can share the room-name colour depending on the user's
+    // palette, so a colour test would suppress the very unrecognized spell messages
+    // this watcher exists to catch — whereas a real spell message is never a Rooms
+    // row. Predicate keeps the watcher decoupled from GameDataCache; null / no data
+    // → no skip (unchanged behaviour before a set is imported).
+    private bool IsKnownRoomName(string text) => _isKnownRoomName?.Invoke(text) ?? false;
+
     // True when text is the echo of a command the user sent within EchoWindow.
     // Prunes stale entries opportunistically (the set is tiny).
     private bool IsRecentCommand(string text, DateTimeOffset now)
@@ -220,6 +234,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (IsClientStatusLine(text)) return;
         if (IsRecentCommand(text, line.Timestamp)) return;
         if (_knownLines.Contains(text)) return;
+        if (IsKnownRoomName(text)) return;
         if (_router.AnyPatternMatches(line)) return;
         // A dismissed candidate is a final verdict — drop every recurrence
         // outright: no re-add, no occurrence bump, no re-alert.

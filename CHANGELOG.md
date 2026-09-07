@@ -1,5 +1,9 @@
 # Version history
 
+## 3.54.3
+
+- Unrecognized Lines capture no longer stages room-display titles (e.g. "River Street") — a room name is read by the room parser, not the message catalogue, so it's now matched against the Rooms table and excluded; genuine spell/monster lines that happen to share the room-name colour still capture
+
 ## 3.54.2
 
 - Fixed keyboard input feeling delayed during play — the buff/heal decision pass (which runs each combat round and roughly once a second while idle) re-scanned the entire Spells/Items/Classes tables from scratch on every lookup, stalling the UI thread; the dominant cost was the equipment-stat aggregation doing a full Items scan for each worn item
