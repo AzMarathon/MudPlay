@@ -52,7 +52,16 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // saw a removal line, so its timer is still falsely ticking). The bar stops counting
     // and reads "conflict", with the ⚠ moved to the FRONT (see the XAML). Distinct from
     // IsCovered — that's the deliberate self-skip; this is an unexpected clobber.
-    [ObservableProperty] private bool _isConflicted;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConflictTooltip))]
+    private bool _isConflicted;
+
+    // Tooltip for the WHOLE conflict bar (not just the ⚠) — names what clobbered it, or
+    // a generic line if the pairing tooltip isn't set. Null unless the bar is in conflict,
+    // so a normal bar carries no tooltip.
+    public string? ConflictTooltip => IsConflicted
+        ? (OverwriteWarningTooltip ?? "Clobbered by a later-cast buff that removes this one.")
+        : null;
 
     // Set from AppServices.BuffSlotOverwritePairs each heartbeat: another configured
     // slot's spell removes (or is removed by) this one's via RemovesSpell, whenever
@@ -61,7 +70,9 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // actually drives CastingDirector's skip-cast decision), this never touches the
     // timer bar, since the buffs it warns about are still genuinely being cast.
     [ObservableProperty] private bool _hasOverwriteWarning;
-    [ObservableProperty] private string? _overwriteWarningTooltip;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConflictTooltip))]
+    private string? _overwriteWarningTooltip;
 
     public void SetOverwriteWarning(string? tooltip)
     {

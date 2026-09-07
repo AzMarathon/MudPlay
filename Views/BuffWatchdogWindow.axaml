@@ -322,7 +322,10 @@
                                             <!-- No row divider — each bar's own green frame
                                                  separates it; a full-width line would just
                                                  stretch across the blended pane background. -->
-                                            <Border Padding="6,4">
+                                            <!-- ToolTip on the whole row so a "conflict" bar carries its
+                                                 explanation everywhere, not just on the ⚠ (null = normal
+                                                 bar, no tooltip). -->
+                                            <Border Padding="6,4" ToolTip.Tip="{Binding ConflictTooltip}">
                                                 <!-- ✕ clears this timer (only while up); then the
                                                      width-capped bar: light-green frame, star-weighted
                                                      elapsed fill, recast marker on the fill/rest boundary,

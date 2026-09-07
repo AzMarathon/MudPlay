@@ -214,6 +214,15 @@ public sealed class CastingDirector : IDisposable
     private string? _lastCastShort;
     private DateTime _lastCastAt;
     private static readonly TimeSpan ClobberWindow = TimeSpan.FromSeconds(5);
+
+    // The self-buff last confirmed via an applied line, and when. The applied line is
+    // many-to-one — one "you feel lucky" matches several buff records (bless, chant,
+    // glass orb, …), so OnConditionApplied fires once PER record. We confirm exactly ONE
+    // buff per burst (records within AppliedBurstWindow) and ignore the rest, so casting
+    // bless doesn't also refresh chant's timer off the shared line.
+    private string? _appliedBurstShort;
+    private DateTime _appliedBurstAt;
+    private static readonly TimeSpan AppliedBurstWindow = TimeSpan.FromMilliseconds(400);
     // The character's party-buff plan (Party window). Null / no reader ⇒ no party
     // buffs. Read live each pass so an edit in the Party window takes effect at once.
     private Func<Models.Profile.BuffSettings?>? _readPartyBuffs;
@@ -976,40 +985,57 @@ public sealed class CastingDirector : IDisposable
         // duration timer keyed to self so the recast window is honoured. Party-cast
         // confirmation rides OnLine instead.
         //
-        // The applied/condition line is SHARED between buffs (bless & chant both
-        // "You feel lucky!"), so mapping the record back to a spell can resolve to the
-        // WRONG one — casting bless was refreshing chant's timer and leaving bless
-        // "not up". We know what we just sent, so prefer the pending self-buff short
-        // (only while it's still FRESH, the same staleness window OnSelfBuffRejected
-        // uses, so a stale marker can't hijack an unrelated buff's applied line); fall
-        // back to the record map when nothing fresh is pending (e.g. the HP-regen HoT).
-        string? freshPending = _pendingSelfBuffShort is { } ps
-            && _now() - _pendingSelfBuffArmedAt <= PendingSelfBuffRejectionWindow ? ps : null;
-        string? shortCode = freshPending ?? _shortFromAppliedRecord?.Invoke(r);
-        if (shortCode is not null)
+        // The applied/condition line is SHARED and MANY-TO-ONE: a single "You feel lucky"
+        // matches several records (bless, chant, glass orb, dark blessing on Paradigm),
+        // so this handler fires once PER matched record. Only the buff we actually cast
+        // is really ours. While a fresh pending self-buff exists (armed on send, same
+        // staleness window OnSelfBuffRejected uses), attribute the WHOLE burst to it:
+        // refresh the pending buff and IGNORE every sibling record — otherwise casting
+        // bless also refreshes chant / glass orb off the shared line. With nothing fresh
+        // pending, trust the record map (e.g. the reactive HP-regen HoT has no pending).
+        bool pendingFresh = _pendingSelfBuffShort is not null
+            && _now() - _pendingSelfBuffArmedAt <= PendingSelfBuffRejectionWindow;
+
+        // The buff this event would confirm: the one we actually SENT (fresh pending)
+        // regardless of which shared record fired, else whatever the record maps to
+        // (e.g. the reactive HP-regen HoT, which has no pending).
+        string? shortCode = pendingFresh ? _pendingSelfBuffShort : _shortFromAppliedRecord?.Invoke(r);
+        if (shortCode is null) { Evaluate(); return; }
+
+        // One shared "you feel lucky" matches many records, firing this once per record.
+        // Confirm ONLY the first buff of the burst; a different short within the window is
+        // a sibling of the same line → ignore (so bless's line doesn't refresh chant too).
+        if (_appliedBurstShort is not null
+            && _now() - _appliedBurstAt <= AppliedBurstWindow
+            && !string.Equals(shortCode, _appliedBurstShort, StringComparison.OrdinalIgnoreCase))
         {
-            if (_buffInfoByShort?.Invoke(shortCode) is { } info)
-            {
-                // Preserve the recast lead armed on send (StartSelfBuffTimer ran
-                // first for a bless-slot cast); default it for anything confirmed
-                // without a prior optimistic timer (e.g. the HP-regen HoT).
-                int margin = _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec, int TotalSec) prev)
-                    ? prev.MarginSec
-                    : DefaultRecastMarginSec;
-                _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin, (int)info.DurationSec);
-                NoteSuccessfulCast(shortCode);
-                _log?.Combat(LogCategory,
-                    $"self-buff {shortCode} confirmed active (applied line) — "
-                    + $"duration {info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - margin)}s");
-            }
-            // Landed — the real duration timer is now authoritative, so the pending
-            // optimistic marker mustn't later be treated as an unlanded cast.
-            if (_pendingSelfBuffShort == shortCode) _pendingSelfBuffShort = null;
-            // NOTE: the mana-regen reroll engine is fed off the SEND path
-            // (StartSelfBuffTimer), NOT here — a roll spell confirms via the shared
-            // "mana regenerating" condition, which can't be mapped back to the specific
-            // spell, so this applied-confirm never fires for it (paradigm-20260830-110918).
+            Evaluate();
+            return;
         }
+
+        if (_buffInfoByShort?.Invoke(shortCode) is { } info)
+        {
+            // Preserve the recast lead armed on send (StartSelfBuffTimer ran first for a
+            // bless-slot cast); default it for anything confirmed without a prior
+            // optimistic timer (e.g. the HP-regen HoT).
+            int margin = _activeUntil.TryGetValue(("", shortCode), out (DateTime Until, int MarginSec, int TotalSec) prev)
+                ? prev.MarginSec
+                : DefaultRecastMarginSec;
+            _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin, (int)info.DurationSec);
+            NoteSuccessfulCast(shortCode);
+            _appliedBurstShort = shortCode;
+            _appliedBurstAt = _now();
+            _log?.Combat(LogCategory,
+                $"self-buff {shortCode} confirmed active (applied line) — "
+                + $"duration {info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - margin)}s");
+        }
+        // Landed — the real duration timer is authoritative, so the optimistic pending
+        // marker mustn't later be treated as an unlanded cast (a subsequent cast failure
+        // must not drop THIS timer). Trailing siblings are handled by the burst guard.
+        if (_pendingSelfBuffShort == shortCode) _pendingSelfBuffShort = null;
+        // NOTE: the mana-regen reroll engine is fed off the SEND path (StartSelfBuffTimer),
+        // NOT here — a roll spell confirms via the shared "mana regenerating" condition,
+        // which can't be mapped back to the specific spell (paradigm-20260830-110918).
         Evaluate();
     }
 
