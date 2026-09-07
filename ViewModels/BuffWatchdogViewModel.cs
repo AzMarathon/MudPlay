@@ -237,9 +237,20 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         IReadOnlyDictionary<string, string> coverage = _castDirector.CurrentSelfBuffCoverage();
         IReadOnlyCollection<string> hidden = _castDirector.HiddenPartyTargets;
 
+        // Generalized RemovesSpell conflict pairing across ALL slot shapes (self-self,
+        // whole-party-vs-whole-party, member-vs-whole-party, member-vs-member) — unlike
+        // `coverage` above, this never replaces the timer bar (those buffs are still
+        // genuinely being cast); it only annotates the row so the player knows why a
+        // buff might be flaky. See AppServices.BuffSlotOverwritePairs.
+        IReadOnlyList<Game.Spells.BuffOverwritePair> overwritePairs =
+            AppServices.Current.BuffSlotOverwritePairs();
+
         foreach (BuffWatchdogPlayerGroup group in Groups)
         foreach (BuffWatchdogRowViewModel row in group.Rows)
         {
+            (string? removedBy, string? removes) = Game.Spells.BuffConflictAnalyzer.Resolve(overwritePairs, row.CastCode);
+            row.SetOverwriteWarning(Game.Spells.BuffConflictAnalyzer.FormatTooltip(removedBy, removes));
+
             // Single-target member row (keyed by their given name). A member who's HIDING
             // (a cast came back "You do not see … here!") can't be reached — show that.
             if (row.IsParty && !row.IsWholeParty && row.MemberKey.Length > 0)

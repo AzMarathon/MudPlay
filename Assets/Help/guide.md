@@ -737,6 +737,8 @@ Each slot is a **row** with an **✎** (edit — reopens the dialog) and an **�
 
 A given spell is **one slot** — once it's slotted it drops out of the Add dialog, so you can't double up. Everything saves as you edit it; there's no Save button. Existing setups from before the unification are migrated into this list automatically.
 
+A row shows a **⚠** next to its name when it conflicts with another configured slot — some buffs remove others when both land on the same character (e.g. **chant removes bless**). Hover it to see which buff and in which direction: **"Removed by: …"** means that other buff strips this one, **"Removes: …"** means this one strips that other buff. It's purely a heads-up so you can see the cause and effect of your setup before it surprises you in play — it doesn't change what gets cast.
+
 > **Note:** the **HP-regen** spell is *not* a maintained buff and isn't set here — it's a reactive minor-heal that fires when your HP dips, and it stays on **Settings → Spells** as **HP Regen**. Everything else moved to this list.
 
 ### Reading the timer bars
@@ -751,6 +753,7 @@ The timer bars are grouped **by player**: **your own name first** (your self buf
 - A configured buff your character **hasn't learned** is flagged **unlearned**.
 - A **single-target** buff gets **one bar per member** it's cast on (each member is blessed individually, so each has its own recast timer). If you untick a member you've already blessed, their bar **stays until the buff actually expires** — unticking just stops future recasts, it doesn't cancel the running buff.
 - A **whole-party** buff blankets everyone in the party **at the moment you cast it**, so it shows a bar under **your own section and each member who was present** — all reading the one recast timer (recast is driven by *your* timer). If a member **swaps out and someone new joins**, the newcomer shows **not up** under their section: they didn't get the party buff and won't until your next recast, which re-covers whoever's in the party then. So a glance tells you who's actually covered.
+- A bar shows the same **⚠** conflict marker as the config row (see *Building the buff list*) whenever another configured buff removes it or it removes another — the timer keeps reading the real state either way, this is only a warning that the two are fighting each other.
 
 A **drag bar** sits between the config table and the timer bars — grab it to re-divide the space between the two. It stays where you leave it as you resize the window: the config table keeps its size and the timer bars flex to fill the rest. Where the config table sits relative to the bars — **above / below / left / right** — is set on **Settings → General → "Buff Watchdog layout"**; changing it reflows an open Buff Watchdog at once.
 
@@ -1548,7 +1551,7 @@ Settings → Party.
 
 **Party-only, and targeting:** party buffs are cast **only while you're actually in a party** — solo, none fire (your self-bless slots still do). A **whole-party** spell (chant and the like) is sent once with no target and blankets the party, including you. A **single-target** spell is cast on each selected member individually with its own recast timer, is **not** cast on your own character (self comes from the self-bless slots), and only fires for a member who's both in your party and in the room.
 
-**Supersession:** if a whole-party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer.
+**Supersession:** if a whole-party buff *removes* a spell you have in a self-bless slot (the Spell Book shows it as "Removes …" — e.g. **chant removes bless**), then in a party the client stops self-casting the removed spell and lets the party buff cover you. The Buff Watchdog shows that self-buff row as **"covered by"** the party buff instead of a timer. Any OTHER pair of configured buffs that remove each other this way — two self-cast buffs, two whole-party buffs, a whole-party buff removing a member's buff, and so on — aren't auto-resolved like this one case is; they instead get the **⚠** warning described in the **Buff Watchdog** section, so you know about the conflict without the client silently changing what it casts.
 
 ### Bless party while resting / Bless party during combat
 

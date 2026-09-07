@@ -22,6 +22,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     private readonly ProfileService _profile;
     private readonly SpellbookState _spellbook;
     private BuffSettings _settings = new();
+    private IReadOnlyList<Game.Spells.BuffOverwritePair> _overwritePairs = Array.Empty<Game.Spells.BuffOverwritePair>();
     private bool _disposed;
 
     public ObservableCollection<BuffSlotRowViewModel> Slots { get; } = new();
@@ -104,6 +105,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
         RefreshBuffPicks();
         RefreshMemberTargets();
+        RefreshOverwriteWarnings();
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
 
@@ -111,7 +113,24 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     private BuffSlotRowViewModel MakeRow(BuffSlot dto) =>
-        new(dto, ResolveScope, ResolveName, Persist);
+        new(dto, ResolveScope, ResolveName, ResolveOverwrite, Persist);
+
+    // Looks up dto's cast code in the last-computed conflict pairing (see
+    // RefreshOverwriteWarnings) — both directions, since the player needs to see
+    // both "this gets removed" and "this removes something else" cause/effect.
+    private (string? RemovedBy, string? Removes) ResolveOverwrite(BuffSlot dto) =>
+        string.IsNullOrWhiteSpace(dto.Spell)
+            ? (null, null)
+            : Game.Spells.BuffConflictAnalyzer.Resolve(_overwritePairs, dto.Spell.Trim());
+
+    // Recompute the slot-vs-slot conflict pairing and push it to every row — a
+    // conflict is a property of a PAIR, so any add/edit/remove/targeting change
+    // anywhere in the panel can change another row's warning, not just its own.
+    private void RefreshOverwriteWarnings()
+    {
+        _overwritePairs = AppServices.Current.BuffSlotOverwritePairs();
+        foreach (BuffSlotRowViewModel row in Slots) row.RefreshOverwriteWarning();
+    }
 
     // Resolve a slot's targeting scope live from the active set. A #item-cast slot is
     // always whole-party (only whole-party items are offered — see AllBuffPicks); a
@@ -296,6 +315,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         // (assume-uncast → due) instead of waiting for the next idle heartbeat. No-op
         // in combat, where the combat tick owns the cadence.
         AppServices.Current.CastDirector.OnIdleHeartbeat();
+        RefreshOverwriteWarnings();
     }
 
     public void Dispose()
