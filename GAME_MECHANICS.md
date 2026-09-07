@@ -2698,6 +2698,31 @@ total, **not** a round-half-up. A projected **61.5** is an in-game AC of **61**.
 over-states AC by 1 (Monster Intel's Hits-You-% sim was seeding 62; `IncomingHitEstimator` truncates
 now). Buff/shadow/prot AC are integers, so they don't affect the fractional part.
 
+### To-hit floor — the minimum chance a monster can ever land, by realm and armour type *([CONFIRMED] 2026-09-06, MMUD-Explorer `modMMudFunc.bas` `CalculateAttackDefense`)*
+
+No matter how high a defender's AC/Dodge climbs, an attacker's chance to land a physical hit is
+**clamped to a floor** — it never reaches 0%. The floor is realm-dependent, and on ParaMUD it also
+depends on the **defender's class armour type**:
+
+- **Stock: 8%.** Flat, regardless of armour type.
+- **ParaMUD: 2%** normally, **dropping to 1% when the defender's class `ArmourType` is 1..6** — the
+  light-armour tiers **Silk (1), Ninja (2), Leather (3–6)**. Heavier classes — **Chainmail (7),
+  Scalemail (8), Platemail (9)** — and **Natural (0)** stay at the 2% floor. (Mirrors
+  `CombatCalculator.GetHitMin`: ParaMUD base `PARAMUD_HIT_MIN = 2`, minus 1 when `ArmourType` is in
+  1..6; Stock `STOCK_HIT_MIN = 8`.)
+
+`ArmourType` is a **per-class** field (Classes table), so it's the *character's* class armour tier
+that lowers the floor, not the gear currently worn. The value→name map (LookupEnums): 0 = Natural,
+1 = Silk, 2 = Ninja, 3–6 = Leather, 7 = Chainmail, 8 = Scalemail, 9 = Platemail.
+
+This is why Monster Intel's Hits-You-% column can read **1%** for a light-armour ParaMUD class and
+its filter dropdown grows a leading `≤1%` band there — the estimator threads the class `ArmourType`
+into the hit-chance calc so the shown number matches the engine's real minimum (PR #503, v3.52.7).
+
+For completeness, the sibling **dodge caps** (also in `CombatCalculator`): Stock hard-caps dodge at
+**95%**; ParaMUD applies a **soft cap at 55%** (diminishing returns above it) then a **hard cap at
+98%**.
+
 ### Blur AC (ability code 10) — encumbrance-scaled, NOT flat *([CONFIRMED] 2026-08-08, user)*
 
 Blur AC (ability code **10**, the item field shown as "AC Blur") is **fundamentally different from
