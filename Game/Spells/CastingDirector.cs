@@ -1858,31 +1858,25 @@ public sealed class CastingDirector : IDisposable
                 ? (_isManaRestActive?.Invoke() ?? false)
                 : selfAllowed;
 
-            // Whole-party buff — one cast blankets the party (and us). Recast keyed to
-            // self ("") since it confirms under its own cast code. An item-cast buff
-            // can only be whole-party (`use` takes no target). Solo, a whole-party cast
-            // still lands on us alone (a lone character is a party of one in-game) —
-            // gate it like a self-cast instead of holding it forever behind "must be in
-            // a party" (report paradigm-20260906-150624: a whole-party item-cast buff
-            // never fired outside a party).
-            if (partyWide)
-            {
-                if (!slot.WholePartyOn) continue;
-                if (!(inParty ? partyAllowed : selfEligible)) continue;
-                if (!IsRecastDue("", slot.Spell)) continue;
-                return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
-            }
-
-            // Self target (CastOnSelf) — self-gated, keyed "". Works for a spell OR a
-            // self item-cast (`use <item>`, whose buff lands on us).
-            if (slot.CastOnSelf && selfEligible
-                && (covered is null || !covered.ContainsKey(slot.Spell))
-                && IsRecastDue("", slot.Spell))
+            // One untargeted, self-landing cast covers a whole-party buff AND a plain
+            // self-cast — they're the same command (no target, keyed "" since it confirms
+            // under its own cast code), so a single path decides both. A whole-party spell
+            // fires party-wide while in a party (WholePartyOn) and, solo, as a self-cast
+            // when CastSolo is set — a lone character is a party of one, so a whole-party
+            // cast still lands on us alone (GAME_MECHANICS.md). A self / single-target
+            // spell fires on CastOnSelf. The `covered` supersession skip applies only to a
+            // self-cast (a whole-party cast IS the covering buff, never superseded). Self is
+            // resolved BEFORE the per-member loop below, so we always bless ourselves first.
+            bool wantSelfCast = partyWide
+                ? (inParty ? slot.WholePartyOn && partyAllowed : slot.CastSolo && selfEligible)
+                : slot.CastOnSelf && selfEligible && (covered is null || !covered.ContainsKey(slot.Spell));
+            if (wantSelfCast && IsRecastDue("", slot.Spell))
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
 
-            // Member targets (single-target spell) — party-gated, one per pass. An item
-            // token can't be aimed at a member (`use` takes no target), so skip it here.
-            if (!isItem && partyAllowed && _party is not null)
+            // Member targets (single-target spell) — party-gated, one per pass. Skipped for
+            // a whole-party spell (no aimed form — it only casts untargeted, above) and for
+            // an item token (`use` takes no target).
+            if (!partyWide && !isItem && partyAllowed && _party is not null)
             {
                 foreach (PartyMember m in _party.Members)
                 {

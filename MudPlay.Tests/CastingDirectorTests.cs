@@ -2950,6 +2950,40 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PartyBless_WholeParty_Solo_CastSoloOff_Held()
+    {
+        // The "Solo" per-slot flag gates the solo fallback: unticked, a whole-party
+        // buff is party-only again and stays held while solo even though the self-bless
+        // gate would otherwise allow it.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddWholePartySlot("chan");
+        slot.CastSolo = false;
+        h.Party.IsInParty = false;
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_WholeParty_InParty_CastSoloOff_StillCasts()
+    {
+        // CastSolo only governs the SOLO case. In a party the whole-party cast rides
+        // WholePartyOn + the party gate, so an unticked Solo box doesn't hold it.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddWholePartySlot("chan");
+        slot.CastSolo = false;
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Single(h.CastsSent);
+        Assert.Equal("chan", h.CastsSent[0]);
+    }
+
+    [Fact]
     public void PartyBless_ConfirmStartsTimer_NoImmediateRecast()
     {
         using PartyBlessHarness h = new();
