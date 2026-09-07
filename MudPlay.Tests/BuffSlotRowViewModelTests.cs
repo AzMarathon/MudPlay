@@ -196,4 +196,14 @@ public sealed class BuffSlotRowViewModelTests
 
         Assert.Equal("dark flagellation (Lvl 50) - 15s", row.HeaderText);
     }
+
+    [Theory]
+    [InlineData("#emerald-tipped crozier", true)]
+    [InlineData("bless", false)]
+    [InlineData(null, false)]
+    public void IsItemCast_ReflectsSpellToken(string? spell, bool expected)
+    {
+        var row = Row(new BuffSlot { Spell = spell });
+        Assert.Equal(expected, row.IsItemCast);
+    }
 }

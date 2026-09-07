@@ -29,6 +29,16 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<BuffSlotRowViewModel> Slots { get; } = new();
 
+    // Slots split into the two sections the config list renders: ordinary spell
+    // slots, and #item-cast ("Weapons") slots shown under their own separator
+    // header. Both are recomputed views over Slots (re-raised on every
+    // Slots.CollectionChanged — see the constructor) rather than separately
+    // maintained collections, so every existing Add/Remove/Clear call site stays
+    // untouched and can't let the two views drift out of sync with Slots itself.
+    public IEnumerable<BuffSlotRowViewModel> SpellSlots => Slots.Where(r => !r.IsItemCast);
+    public IEnumerable<BuffSlotRowViewModel> WeaponSlots => Slots.Where(r => r.IsItemCast);
+    public bool HasWeaponSlots => Slots.Any(r => r.IsItemCast);
+
     // Current party's non-self members as column headers (capitalised given names),
     // in the same order every row builds its target checkboxes — so the header
     // names line up over the per-row checkbox columns in the grid.
@@ -108,8 +118,20 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _party.Members.CollectionChanged += OnMembersChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
         _spellbook.Changed += OnSpellbookChanged;
+        Slots.CollectionChanged += OnSlotsChanged;
 
         Load();
+    }
+
+    // Any add/remove/clear on Slots can move a row between the spell/weapon
+    // sections, so both derived views (and the section-header visibility) need to
+    // re-read on every change — cheaper to do it once here than to touch every
+    // call site that mutates Slots.
+    private void OnSlotsChanged(object? _, NotifyCollectionChangedEventArgs __)
+    {
+        OnPropertyChanged(nameof(SpellSlots));
+        OnPropertyChanged(nameof(WeaponSlots));
+        OnPropertyChanged(nameof(HasWeaponSlots));
     }
 
     private void OnProfileLoaded(CharacterProfile _) => Load();
@@ -631,5 +653,6 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _party.Members.CollectionChanged -= OnMembersChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
         _spellbook.Changed -= OnSpellbookChanged;
+        Slots.CollectionChanged -= OnSlotsChanged;
     }
 }

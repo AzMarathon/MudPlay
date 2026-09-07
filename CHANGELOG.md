@@ -11,6 +11,8 @@
 - Buff Watchdog: new live **"Mana to maintain"** readout — total mana/second every currently-checked buff costs to keep recast, shown per 30s regen tick and per minute, updating as you check/uncheck boxes or the party changes
 - Buff Watchdog: every slot's row now shows its level requirement — `name (Lvl N) - recast` (an item-cast slot shows its use-level)
 - Fixed both **＋ Add buff** and **Add all blesses** offering only whole-party cast-on-use items (a #item slot) and silently dropping any self-cast one (e.g. a bless-casting crozier or sceptre) — a self-cast item needs no target any more than a whole-party one does, so it's offered the same way now; a previously-configured self-cast item slot is also now correctly weighed by the RemovesSpell conflict checks and the mana-upkeep readout, instead of being invisible to both
+- Buff Watchdog: item-cast (weapon/staff) buffs now group under their own **------- Weapons -------** heading below the ordinary spell rows, instead of being interleaved among them
+- Fixed a long buff name (worse once the level tag was added) painting through the Self checkbox instead of eliding with "…" — the name cell is now properly width-constrained
 
 ## 3.53.2
 

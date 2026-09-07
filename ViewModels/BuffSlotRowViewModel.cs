@@ -92,6 +92,11 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
 
     public string? Spell => _dto.Spell;
     public int RecastMarginSec => _dto.RecastMarginSec;
+
+    // True for a #item-cast slot (a wielded weapon/staff buff) — drives grouping
+    // this row under the Buff Watchdog's "Weapons" section instead of the main list.
+    public bool IsItemCast => Game.Spells.ItemCastToken.IsToken(Spell);
+
     // Row label — the buff's spell name (falls back to the cast code), its level
     // requirement when resolvable (e.g. from Add all blesses's full class roster,
     // where sort order alone doesn't say what level a pick actually needs), and
