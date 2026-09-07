@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using MudPlay.Models.Profile;
@@ -165,6 +166,15 @@ public partial class BuffWatchdogWindow : Window
             _zoneSplitter.HorizontalAlignment = HorizontalAlignment.Center;
             _zoneSplitter.ResizeDirection = GridResizeDirection.Columns;
         }
+    }
+
+    // Double-click a buff row → open the same edit dialog the ✎ button opens
+    // (spell, recast, and — for a mana-regen roll spell like profane link — its
+    // reroll target), without needing to hit the small button precisely.
+    private void OnBuffRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is Control { DataContext: BuffSlotRowViewModel row } && _vm?.Buffs is { } buffs)
+            buffs.EditBuffCommand.Execute(row);
     }
 
     private void DetachVm()

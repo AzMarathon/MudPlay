@@ -13,6 +13,7 @@
 - Fixed both **＋ Add buff** and **Add all blesses** offering only whole-party cast-on-use items (a #item slot) and silently dropping any self-cast one (e.g. a bless-casting crozier or sceptre) — a self-cast item needs no target any more than a whole-party one does, so it's offered the same way now; a previously-configured self-cast item slot is also now correctly weighed by the RemovesSpell conflict checks and the mana-upkeep readout, instead of being invisible to both
 - Buff Watchdog: item-cast (weapon/staff) buffs now group under their own **------- Weapons -------** heading below the ordinary spell rows, instead of being interleaved among them
 - Fixed a long buff name (worse once the level tag was added) painting through the Self checkbox instead of eliding with "…" — the name cell is now properly width-constrained
+- Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎ — including the reroll target for a mana-regen roll spell (profane link, nature tap, mana flux, …) that "Add all blesses" added without one configured
 
 ## 3.53.2
 

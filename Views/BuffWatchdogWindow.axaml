@@ -24,7 +24,9 @@
              is what actually gives the name a bounded width to ellipsize into. -->
         <DataTemplate x:Key="BuffSlotRowTemplate" x:DataType="vm:BuffSlotRowViewModel">
             <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"
-                    BorderThickness="0,0,0,1" Padding="6,3">
+                    BorderThickness="0,0,0,1" Padding="6,3" Cursor="Hand"
+                    ToolTip.Tip="Double-click to edit this buff's spell / recast / conditions"
+                    DoubleTapped="OnBuffRowDoubleTapped">
                 <Grid ColumnDefinitions="240,40,56,*">
                     <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto,*,Auto,Auto"
                           VerticalAlignment="Center" Margin="0,0,10,0">

@@ -11,6 +11,7 @@
 > - Buff Watchdog: every slot's row now shows its level requirement
 > - Fixed **＋ Add buff** / **Add all blesses** silently dropping self-cast buff items (e.g. a bless-casting crozier) — only whole-party items were being offered before
 > - Buff Watchdog: item-cast buffs now group under their own **Weapons** heading; fixed a long buff name painting through the Self checkbox instead of truncating
+> - Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎, including reroll settings for mana-regen roll spells
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
