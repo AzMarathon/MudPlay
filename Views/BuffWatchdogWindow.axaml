@@ -91,9 +91,9 @@
                     </ItemsControl>
                     <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="12"
                                 IsVisible="{Binding IsWholeParty}" VerticalAlignment="Center">
-                        <TextBlock Text="Party Wide" Margin="4,0,0,0" FontSize="11"
+                        <TextBlock Text="Party" Margin="4,0,0,0" FontSize="11"
                                    VerticalAlignment="Center"
-                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
                         <!-- Solo: also cast this whole-party buff while alone. The
                              on/off checkbox in the All-none column stays as the "cast it
                              party-wide while in a party" toggle. -->
@@ -247,14 +247,14 @@
                                 <Grid ColumnDefinitions="240,40,56,*" Margin="6,0,6,2">
                                     <TextBlock Grid.Column="0" Text="Buff" FontSize="10"
                                                VerticalAlignment="Bottom"
-                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
                                     <TextBlock Grid.Column="1" Text="Self" FontSize="10"
                                                HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
                                     <TextBlock Grid.Column="2" Text="All/None" FontSize="10"
                                                HorizontalAlignment="Center" VerticalAlignment="Bottom"
                                                IsVisible="{Binding ShowPartyColumns}"
-                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
                                     <ItemsControl Grid.Column="3" ItemsSource="{Binding Members}"
                                                   IsVisible="{Binding ShowPartyColumns}">
                                         <ItemsControl.ItemsPanel>
@@ -265,7 +265,7 @@
                                                 <TextBlock Text="{Binding}" Width="56" FontSize="10"
                                                            TextAlignment="Center" TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Bottom"
-                                                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                           Foreground="{StaticResource ChromeFgBrush}"/>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
