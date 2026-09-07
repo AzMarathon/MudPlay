@@ -202,7 +202,18 @@ public sealed class CastingDirector : IDisposable
 
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
     private Func<MessageRecord, string?>? _shortFromAppliedRecord;
+    // Given a cast code, the cast codes of the buffs its spell removes (RemovesSpell).
+    // Used to re-attribute a wear-off that lands right after a clobbering cast to its
+    // VICTIM rather than the just-cast survivor (bless & chant share the wear-off line).
+    private Func<string, IReadOnlyCollection<string>>? _removesShortsFor;
     private Func<string, bool>? _isPartyWideBuff;
+
+    // The last buff we SUCCESSFULLY cast (identity known independent of any shared
+    // condition message) and when. A wear-off arriving within ClobberWindow of a cast
+    // that removes other buffs is that victim's wear-off, not the caster's.
+    private string? _lastCastShort;
+    private DateTime _lastCastAt;
+    private static readonly TimeSpan ClobberWindow = TimeSpan.FromSeconds(5);
     // The character's party-buff plan (Party window). Null / no reader ⇒ no party
     // buffs. Read live each pass so an edit in the Party window takes effect at once.
     private Func<Models.Profile.BuffSettings?>? _readPartyBuffs;
@@ -530,14 +541,19 @@ public sealed class CastingDirector : IDisposable
     // a self-cast confirmed via its AppliedMessage starts / clears its duration
     // timer. Optional — until wired, no duration tracking runs and the buff pickers
     // fall back to the always-eligible path.
+    // removesShortsFor (optional): given a cast code, the cast codes of the buffs its
+    // spell removes (RemovesSpell) — lets a wear-off that lands right after a clobbering
+    // cast be attributed to its victim rather than the just-cast survivor.
     public void SetBuffDurationSources(
         Func<string, (string Caster, long DurationSec)?> buffInfoByShort,
-        Func<MessageRecord, string?> shortFromAppliedRecord)
+        Func<MessageRecord, string?> shortFromAppliedRecord,
+        Func<string, IReadOnlyCollection<string>>? removesShortsFor = null)
     {
         ArgumentNullException.ThrowIfNull(buffInfoByShort);
         ArgumentNullException.ThrowIfNull(shortFromAppliedRecord);
         _buffInfoByShort = buffInfoByShort;
         _shortFromAppliedRecord = shortFromAppliedRecord;
+        _removesShortsFor = removesShortsFor;
     }
 
     // Wire the party-buff plan source (CharacterProfile.PartyBuffs) so the party-buff
@@ -970,6 +986,7 @@ public sealed class CastingDirector : IDisposable
                     ? prev.MarginSec
                     : DefaultRecastMarginSec;
                 _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin, (int)info.DurationSec);
+                NoteSuccessfulCast(_pendingSelfBuffShort ?? shortCode);
                 _log?.Combat(LogCategory,
                     $"self-buff {shortCode} confirmed active (applied line) — "
                     + $"duration {info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - margin)}s");
@@ -985,12 +1002,54 @@ public sealed class CastingDirector : IDisposable
         Evaluate();
     }
 
+    // Remember the buff we just SUCCESSFULLY cast, keyed off an identity we KNOW (the
+    // party-cast confirm names the spell, a self-buff carries its pending short) rather
+    // than a shared condition message. Lets OnConditionEnded tell a clobber victim's
+    // wear-off from the caster's own.
+    private void NoteSuccessfulCast(string shortCode)
+    {
+        if (string.IsNullOrEmpty(shortCode)) return;
+        _lastCastShort = shortCode;
+        _lastCastAt = _now();
+    }
+
     private void OnConditionEnded(MessageRecord r)
     {
+        string? resolved = _shortFromAppliedRecord?.Invoke(r);
+
+        // A buff we JUST cast successfully can't be the one wearing off this instant — a
+        // wear-off arriving right after is a buff IT clobbered (RemovesSpell fires at
+        // cast). bless & chant SHARE the wear-off message, so the shared line can mis-
+        // resolve to the just-cast survivor and wrongly clear its timer (user report:
+        // casting chant dropped chant's own bar). Key off the last successful cast: when
+        // it removes others and the wear-off is plausibly about that pair, clear the
+        // VICTIMS' timers (self- and member-keyed) and keep the caster's.
+        if (_lastCastShort is { } caster
+            && _now() - _lastCastAt <= ClobberWindow
+            && _removesShortsFor?.Invoke(caster) is { Count: > 0 } victims)
+        {
+            HashSet<string> victimSet = new(victims, StringComparer.OrdinalIgnoreCase);
+            bool aboutThisPair = resolved is null
+                || string.Equals(resolved, caster, StringComparison.OrdinalIgnoreCase)
+                || victimSet.Contains(resolved);
+            if (aboutThisPair)
+            {
+                List<(string Target, string Short)>? doomed = null;
+                foreach ((string Target, string Short) key in _activeUntil.Keys)
+                    if (victimSet.Contains(key.Short)) (doomed ??= new()).Add(key);
+                if (doomed is not null)
+                    foreach ((string, string) key in doomed) _activeUntil.Remove(key);
+                _log?.Combat(LogCategory,
+                    $"wear-off reattributed to clobber victim(s) of just-cast {caster} "
+                    + $"(cleared {doomed?.Count ?? 0}) — kept the caster's timer");
+                Evaluate();
+                return;
+            }
+        }
+
         // Server-confirmed early wear-off — drop the self timer so the next
         // pass re-attempts immediately rather than waiting out a stale clock.
-        if (_shortFromAppliedRecord?.Invoke(r) is { } shortCode
-            && _activeUntil.Remove(("", shortCode)))
+        if (resolved is { } shortCode && _activeUntil.Remove(("", shortCode)))
             _log?.Combat(LogCategory,
                 $"self-buff {shortCode} wore off (wear-off line) — recast timer cleared");
         Evaluate();
@@ -1020,6 +1079,7 @@ public sealed class CastingDirector : IDisposable
 
         string key = p.Target.Trim().ToLowerInvariant();
         _activeUntil[(key, p.Short)] = (_now().AddSeconds(p.DurationSec), p.MarginSec, (int)p.DurationSec);
+        NoteSuccessfulCast(p.Short);   // the "You cast <spell> on …" confirm names it reliably
         // Info, not Combat: the user wants to confirm the recast timer actually
         // armed and see when it will re-fire, and the combat-diagnostics channel is
         // off in normal play. Surface both the effect duration and the recast lead
@@ -1041,6 +1101,7 @@ public sealed class CastingDirector : IDisposable
     {
         if (!man.Matcher.TryResolveTarget(lineText, man.Prefix, out string full)) return;
         _pendingManualCast = null;
+        NoteSuccessfulCast(man.Short);   // the resolved "You cast <spell> on …" names it reliably
 
         string given = GivenName(full).ToLowerInvariant();
         if (given.Length == 0) return;

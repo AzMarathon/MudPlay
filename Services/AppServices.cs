@@ -3578,7 +3578,7 @@ public sealed class AppServices
         // duration (SpellCalculator.Duration at the live level);
         // ShortFromAppliedRecord maps a fired AppliedMessage record back
         // to the cast code so a confirmed self-buff starts its timer.
-        CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord);
+        CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord, RemovesShortsFor);
         // A fresh character starts with no buffs assumed — clear any timers carried over
         // (e.g. paused from a prior character's disconnect) so a character switch doesn't
         // resurrect the old character's buffs. A same-character reconnect does NOT reload
@@ -6527,6 +6527,22 @@ public sealed class AppServices
             if (string.Equals(s.Name.Trim(), record.Name.Trim(), StringComparison.OrdinalIgnoreCase))
                 return s.Short;
         return null;
+    }
+
+    // The cast codes of the buffs a given cast code's spell REMOVES (RemovesSpell / Abil
+    // 122). Lets the CastingDirector re-attribute a wear-off that lands right after a
+    // clobbering cast to its victim rather than the just-cast survivor (bless & chant
+    // share the wear-off message, so the shared line can't disambiguate on its own).
+    private IReadOnlyCollection<string> RemovesShortsFor(string castShort)
+    {
+        if (string.IsNullOrWhiteSpace(castShort)
+            || Spellbook.FindByCastCode(castShort.Trim()) is not { } spell) return System.Array.Empty<string>();
+        HashSet<int> removed = Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(spell.Formula);
+        if (removed.Count == 0) return System.Array.Empty<string>();
+        List<string> shorts = new();
+        foreach (Game.Spells.KnownSpell s in Spellbook.Available)
+            if (removed.Contains(s.Number)) shorts.Add(s.Short);
+        return shorts;
     }
 
     // ----- Mana-regen reroll glue ---------------------------------------
