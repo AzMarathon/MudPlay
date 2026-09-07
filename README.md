@@ -12,6 +12,7 @@
 > - Fixed **Add all blesses** recommending a spell your character's alignment can't cast and crowding out the alignment-correct alternative — it now reads your alignment from your own `who` observation
 > - Buff Watchdog: new live **"Mana to maintain"** readout — total mana/second every checked buff costs to keep recast, updating as you check/uncheck boxes
 > - Fixed **＋ Add buff** / **Add all blesses** silently dropping self-cast buff items (e.g. a bless-casting crozier) — only whole-party items were being offered before
+> - Weapon "on use" (#item) buffs are now offered only when you can use them — you meet the item's level and have it in your pack — instead of the whole class roster; refreshes on your next `i`
 > - Buff Watchdog: item-cast buffs now group under their own **Weapons** heading; fixed a long buff name painting through the Self checkbox instead of truncating
 > - Buff Watchdog: double-clicking a row now opens the same edit dialog as ✎, including reroll settings for mana-regen roll spells
 > - Fixed severe Buff Watchdog lag with many configured buffs, the config pane/splitter snapping back to default on every add/remove, and the unreadable grey-on-bright-yellow recast bar (now a dim amber)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Calculators;
@@ -109,8 +110,22 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _profile.ProfileLoaded += OnProfileLoaded;
         _spellbook.Changed += OnSpellbookChanged;
         Slots.CollectionChanged += OnSlotsChanged;
+        AppServices.Current.Inventory.FullInventoryParsed += OnInventoryReloaded;
 
         Load();
+    }
+
+    // A full `i` dump changes which cast-items we own, so the owned-item gate on
+    // weapon buffs (see CanUseCastItem) needs the pick / Add-all lists rebuilt — an
+    // item we just acquired becomes offerable, a dropped one drops out. Marshalled:
+    // the inventory parse runs on the line pump and RefreshBuffPicks touches observable
+    // state. Per-line pickups aren't followed (that would churn every loot); an `i`
+    // dump is the refresh point, same as the rest of the app treats the snapshot.
+    private void OnInventoryReloaded()
+    {
+        if (_disposed) return;
+        if (Dispatcher.UIThread.CheckAccess()) RefreshBuffPicks();
+        else Dispatcher.UIThread.Post(() => { if (!_disposed) RefreshBuffPicks(); });
     }
 
     // Any add/remove/clear on Slots can move a row between the spell/weapon
@@ -259,6 +274,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             .Select(s => (s.Short.Trim(), s.Name, s.ReqLevel));
         IEnumerable<(string Code, string Name, int Level)> items = _spellbook.GetWholePartyCastItems()
             .Concat(_spellbook.GetSelfCastItems())
+            .Where(CanUseCastItem)
             .Select(ci => (
                 ItemCastToken.Format(ci.ItemName),
                 string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})",
@@ -268,6 +284,21 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
     private IEnumerable<SpellPick> AllBuffPicks() =>
         EligibleBuffs().Select(e => new SpellPick(e.Code, e.Name));
+
+    // A class cast-item (a weapon/staff "on use" buff) is only worth offering if the
+    // character can actually use it right now: it must meet the item's level and be in
+    // the pack — carried or worn. Each gate is SKIPPED while its source is still unknown
+    // (no `stat` parsed yet for level, no `i` dump yet for the pack), so the list
+    // degrades to "unfiltered" rather than empty until the data lands (and refreshes on
+    // the next full `i` — see OnInventoryReloaded). Spells have no such gate: a learned
+    // spell needs no item and its level is already baked into being learned.
+    private static bool CanUseCastItem(ClassCastItem ci)
+    {
+        AppServices svc = AppServices.Current;
+        if (svc.Stats.HasParsed && ci.MinLevel > 0 && svc.PlayerStats.Level < ci.MinLevel) return false;
+        if (svc.Inventory.IsLoaded && !svc.Inventory.Snapshot.Has(ci.ItemName)) return false;
+        return true;
+    }
 
     // The Add-buff dropdown's options: every eligible buff, each labelled with the
     // level it's learned at ("bless (Lvl 2)"). `disabled` are the cast codes already
@@ -335,6 +366,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         {
             string code = ItemCastToken.Format(ci.ItemName);
             if (slotted.Contains(code)) continue;
+            if (!CanUseCastItem(ci)) continue;   // level + owned-item gate
             if (_spellbook.GetFormulaByNumber(ci.SpellNumber) is not { } formula) continue;
             if (!BuffClassifier.IsAlignmentEligible(formula, alignment)) continue;
             string name = string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})";
@@ -360,6 +392,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         {
             string code = ItemCastToken.Format(ci.ItemName);
             if (slotted.Contains(code)) continue;
+            if (!CanUseCastItem(ci)) continue;   // level + owned-item gate
             if (_spellbook.GetFormulaByNumber(ci.SpellNumber) is not { } formula) continue;
             if (!BuffClassifier.IsAlignmentEligible(formula, alignment)) continue;
             string name = string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})";
@@ -652,5 +685,6 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _profile.ProfileLoaded -= OnProfileLoaded;
         _spellbook.Changed -= OnSpellbookChanged;
         Slots.CollectionChanged -= OnSlotsChanged;
+        AppServices.Current.Inventory.FullInventoryParsed -= OnInventoryReloaded;
     }
 }
