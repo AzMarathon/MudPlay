@@ -82,7 +82,8 @@ public static class IncomingHitEstimator
         int protEvil = totals.PlusProtEvil + buff.ProtEvil;
         bool shadow = totals.PlusShadowResist > 0 || buff.HasShadow;
         return new PlayerDefenseProfile(
-            ac, dodge, protEvil, totals.PlusProtGood, shadow, totals.PlusVileWard, evil, armourType);
+            ac, dodge, protEvil, totals.PlusProtGood, shadow, totals.PlusVileWard, evil, armourType,
+            AcExact: acExact);
     }
 
     // A monster's blended chance to land a hit on the player across ALL its physical
