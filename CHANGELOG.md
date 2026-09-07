@@ -1,5 +1,10 @@
 # Version history
 
+## 3.53.1
+
+- Fixed a whole-party buff (spell or item-cast, e.g. a party-wide "use" item) never firing while solo — it's now treated as a self-cast when you're not in a party, since a whole-party cast still lands on you alone
+- bug reports addressed: paradigm-20260906-150624
+
 ## 3.53.0
 
 - Buff Panel now warns inline when two of your configured buffs would remove each other (e.g. a whole-party buff superseding a self-cast one) — hover the ⚠ for which buff is involved and in which direction

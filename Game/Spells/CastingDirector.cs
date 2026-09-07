@@ -1847,17 +1847,6 @@ public sealed class CastingDirector : IDisposable
             bool isItem = ItemCastToken.IsToken(slot.Spell);
             bool partyWide = _isPartyWideBuff?.Invoke(slot.Spell) == true;
 
-            // Whole-party buff — one cast blankets the party (and us). Recast keyed to
-            // self ("") since it confirms under its own cast code. An item-cast buff
-            // can only be whole-party (`use` takes no target).
-            if (partyWide)
-            {
-                if (!slot.WholePartyOn) continue;
-                if (!partyAllowed) continue;
-                if (!IsRecastDue("", slot.Spell)) continue;
-                return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
-            }
-
             // "Cast before resting for mana": keep the regen buff up (recast on expiry)
             // only while the mana-rest lock is held — from when mana drops below its rest
             // trigger until it tops back up to rest-max — so the buff boosts the rest and
@@ -1868,6 +1857,21 @@ public sealed class CastingDirector : IDisposable
             bool selfEligible = slot.CastBeforeRestingForMana
                 ? (_isManaRestActive?.Invoke() ?? false)
                 : selfAllowed;
+
+            // Whole-party buff — one cast blankets the party (and us). Recast keyed to
+            // self ("") since it confirms under its own cast code. An item-cast buff
+            // can only be whole-party (`use` takes no target). Solo, a whole-party cast
+            // still lands on us alone (a lone character is a party of one in-game) —
+            // gate it like a self-cast instead of holding it forever behind "must be in
+            // a party" (report paradigm-20260906-150624: a whole-party item-cast buff
+            // never fired outside a party).
+            if (partyWide)
+            {
+                if (!slot.WholePartyOn) continue;
+                if (!(inParty ? partyAllowed : selfEligible)) continue;
+                if (!IsRecastDue("", slot.Spell)) continue;
+                return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);
+            }
 
             // Self target (CastOnSelf) — self-gated, keyed "". Works for a spell OR a
             // self item-cast (`use <item>`, whose buff lands on us).
