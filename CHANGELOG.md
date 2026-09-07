@@ -2,7 +2,8 @@
 
 ## 3.54.1
 
-- Help guide: full pass over the in-app Help topics against the current client — fixed three stale internal cross-references pointing at a renamed "Automation section" (now **The auto-engines** / **Manual one-shots and Reset States**, **Macros, aliases, and triggers**)
+- Help guide: full audit against the current client — added coverage that was missing for the `@relog` / `@hangup` / `@profile` remote commands, the Import loops (`.mp`) menu item, View → Reset layout, Help → Report an issue / About, the Buff Watchdog window and its layout + snap-windows settings, and the Roomba tab, Flavor Prefixes table, and Bosses Notes/Clear controls
+- Help guide: fixed stale text — the "no `--profile` CLI" claim (it exists), the Auto-load-last-profile location (File menu, not Settings → General), and the renamed "Automation section" cross-references; flagged the non-functional "sysop / goto powers" checkbox as such
 
 ## 3.54.0
 

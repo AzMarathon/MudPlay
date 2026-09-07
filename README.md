@@ -2,7 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.54.1**
-> - Help guide: full pass over the in-app Help topics against the current client — fixed three stale internal cross-references pointing at a renamed "Automation section"
+> - Help guide: full audit against the current client — added the missing remote commands (`@relog`/`@hangup`/`@profile`), menu items (loop import, Reset layout, Report an issue, About), the Buff Watchdog window + its layout/snap settings, and Roomba / Flavor Prefixes / Bosses coverage
+> - Help guide: fixed stale text — the `--profile` CLI claim, the Auto-load-last-profile location, the renamed "Automation" cross-references, and flagged the non-functional sysop/goto-powers checkbox
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

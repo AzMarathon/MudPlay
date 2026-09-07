@@ -19,7 +19,7 @@ A **profile** is one character's workspace — its BBS login, macros, triggers, 
 
 - **New profile** (Ctrl+N) starts a blank draft; set up its BBS + credentials (below), then **Save** (Ctrl+S) to name it.
 - **Open profile** (Ctrl+O) loads a saved one.
-- **Auto-load last profile** (Settings → General) reopens the profile you used last on every launch.
+- **Auto-load last profile** (File menu — *Auto-load last profile on startup*) reopens the profile you used last on every launch.
 - **Launch straight into a profile** from the command line with `--profile`, so a shortcut or script can open you right where you want. Naming **more than one loads more than one** — each name opens its own window (one instance per profile), which is the easy way to run several characters at once. A name can be **bare** (`Fujin`) when only one of your saved profiles uses it; if the same character name exists on two BBSes, qualify it as **`BBS/Name`** (e.g. `Playpen/Fujin`) since a profile is really the BBS + character pair.
 
   The app reads the arguments the same way on every OS — only the shell's quoting differs, so quote each entry:
@@ -109,11 +109,12 @@ Each is modeless and toggles closed on its own key. Default hotkeys are shown; a
 - **Program Log** (F4) — a running diagnostic of what the engines are doing; the first place to look when something automated didn't behave. See **Tools & Diagnostics** for its filters and toggles.
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
+- **Buff Watchdog** (View → Buff Watchdog, or a toolbar button — no default hotkey) — the one place you configure every automated buff and watch each one's live recast timer. See the **Buff Watchdog** section for how to use it.
 - **Spell Book** (F2), **Monster Intel** (View menu, or the toolbar's *Monster Intel* button — no default hotkey), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, a monster reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Monster Intel under **Game Data**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
 
 The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
 
-**Snapping windows together.** As you drag the panel windows — Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, and Session Stats — they **snap flush to each other's edges** when you bring one within about a finger's width of another, so you can build a tidy layout without lining anything up by hand. Dragging the **main window** then carries the whole snapped cluster with it, keeping your arrangement intact; grab any of the other panels and it **pulls off freely**. Turn this off with **Settings → General → "Snap windows together"** if you'd rather every window float on its own. (Windows opened from *inside* a panel — editors and dialogs — don't snap.)
+**Snapping windows together.** As you drag the panel windows — Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, and Session Stats — they **snap flush to each other's edges** when you bring one within about a finger's width of another, so you can build a tidy layout without lining anything up by hand. Dragging the **main window** then carries the whole snapped cluster with it, keeping your arrangement intact; grab any of the other panels and it **pulls off freely**. Turn this off with **Settings → General → "Snap windows together"** if you'd rather every window float on its own. (Windows opened from *inside* a panel — editors and dialogs — don't snap.) If a panel ever drifts off-screen or the layout gets untidy, **View → Reset layout** returns every window to its default position and size.
 
 ---
 
@@ -351,6 +352,7 @@ Active party members get a few things for free regardless of the grid: the party
 - `@atkprio` — Target Priority: bare reports it; `1` Default, `2` follow-leader, `3 <name>` attack-what-player.
 - `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after.
 - `@divert <player>` — forwards your incoming telepaths to another player; bare `@divert` stops.
+- `@profile <n|name>` — swaps your active casting-spell profile; bare `@profile` reports the roster (see **Casting spell profiles** under Settings → Combat).
 - `@reset` — zeroes your Session Stats counters.
 
 ### Do something on my behalf
@@ -363,6 +365,7 @@ Active party members get a few things for free regardless of the grid: the party
 - `@equip-<set>` — wears one of your saved gear sets by keyword (e.g. `@equip-backstab`; `@equip-all` applies the Default set).
 - `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin.
 - `@invite` / `@join` — ask you to invite the sender into your party, or to join theirs.
+- `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant, and both are silenced while the toolbar's *Disable hangups* toggle is on.
 
 ### Party coordination — any active party member, no grant needed
 
@@ -448,7 +451,7 @@ Gear is organized into named equipment sets in the **Player Workshop** — a Def
 
 # Player Workshop
 
-Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a tabbed window for managing your character: gear, leveling, quests, bosses, and deaths. There are no Save buttons anywhere in it; every edit auto-saves to your profile. Its tabs, most-used first:
+Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a tabbed window for managing your character: gear, leveling, quests, bosses, deaths, your character sheet and calculators, and gang-house item sorting (**Roomba**). There are no Save buttons anywhere in it; every edit auto-saves to your profile. Its tabs, most-used first:
 
 ## Equipment Manager — gear sets
 
@@ -489,7 +492,7 @@ A read-only what-if table: pick a level **from–to** range (and optionally any 
 ## Quests, Bosses, and Deaths
 
 - **Quest Status** — a journal of the realm's quests. Expand a card for its requirements, reward, and step checklist; tick every step (or the **Complete** box) to fold its permanent bonus into your character. Inside a step, two kinds of token are **clickable**: a `(map/room)` coordinate (cyan) walks you there, and a single-quoted `'command'` (green) is typed at the game for you, exactly as if you'd entered it in the terminal — so annotate a step with `'ask jorah transport'` and clicking it sends that line. **Edit Quests…** lets you name, hide, or annotate them — and for the handful of quests that are class-locked in a way the crawler can't see (Magebane, Tarl), its **Restrict to classes** dropdown (a checklist of every class) pins the quest to the ticked class(es), so any other class is marked *Cannot complete*. **Quests you can't complete — wrong class, race, or alignment, or a class restriction — are hidden from the journal by default;** tick **Show in quest journal** for one in the editor to keep it visible anyway (that choice is saved per character, since eligibility is per character). The **Announce available quests** checkbox at the top (on by default, saved per character) prints `[<quest> Quest is Now Available]` to the terminal the moment you train past a quest's minimum level — including a several-level jump, which announces every quest whose gate you crossed — and dumps the full list of quests you can now start once at login (after the stat/inventory/who sequence). That dump only lists quests your class/race can do and that you haven't already completed, and never includes a cannot-complete quest even if you've chosen to show it in the journal. Alignment quests are gated separately: the three **Evil / Neutral / Good** checkboxes on the second header row (off by default, saved per character) declare which alignment chain(s) you're committed to — an alignment-gated quest only counts as available when its matching box is ticked, since in-game you're locked to one alignment chain once you start it regardless of your live alignment.
-- **Bosses** — a respawn-timer tracker. **Mark** or **Now** stamps a boss's kill time and the **100%** column counts down to its respawn; on Paradigm the **-5% / -10% / -20%** columns count down to each early-spawn window (how far before 100% the boss can appear), and on Stock a single **87.5%** column does the same. A **Last Killed** column shows when each boss's timer was last set — by a Mark / Now button, a back-dated Mark, or an auto-detected kill. The tab **opens sorted by the 100% timer with running timers on top**, so a fresh open surfaces what's active instead of a name-ordered list that looks empty. Sorting by any timer column — or by **Boss**, **Respawn**, or **Last Killed** — groups cleanup spawns first, then bosses with a running timer, then idle ones, ordering by that column within each group (so your live timers stay at the top). **Manage Bosses…** edits the list, and you can **Import / Export** a shared table. Tick **Stop before** to halt automation ahead of a boss. Tick **Grab All** (default off) to blindly grab a boss's loot the instant it's available — a "throw a get at everything" spray straight from game data, never a corpse scan. What it does depends on what the boss's name resolves to:
+- **Bosses** — a respawn-timer tracker. **Mark** or **Now** stamps a boss's kill time and the **100%** column counts down to its respawn; on Paradigm the **-5% / -10% / -20%** columns count down to each early-spawn window (how far before 100% the boss can appear), and on Stock a single **87.5%** column does the same. A **Last Killed** column shows when each boss's timer was last set — by a Mark / Now button, a back-dated Mark, or an auto-detected kill; a **Clear** button in the Timer column wipes a running timer, and a **Notes** column holds your own per-boss annotations. The tab **opens sorted by the 100% timer with running timers on top**, so a fresh open surfaces what's active instead of a name-ordered list that looks empty. Sorting by any timer column — or by **Boss**, **Respawn**, or **Last Killed** — groups cleanup spawns first, then bosses with a running timer, then idle ones, ordering by that column within each group (so your live timers stay at the top). **Manage Bosses…** edits the list, and you can **Import / Export** a shared table. Tick **Stop before** to halt automation ahead of a boss. Tick **Grab All** (default off) to blindly grab a boss's loot the instant it's available — a "throw a get at everything" spray straight from game data, never a corpse scan. What it does depends on what the boss's name resolves to:
   - a **monster** — the instant it dies, `get` every item in its drop table (one `get <item>` per item it could drop, percentages ignored); works for cleanup bosses too (no timer needed).
   - an **item** that just sits in the room (a box, e.g. a bogwood box or Pastor Landor's box) — `get` it every time you **walk into** the room.
   - **neither** (an unresolvable name — a touch-to-awaken mechanic like Iceforge, where you `touch` a statue to spawn the boss) — Grab All doesn't apply, so its cell shows a muted dash; hover it and it reads *"Cannot resolve to a specific monster or item"*.
@@ -519,6 +522,10 @@ A read-only what-if table: pick a level **from–to** range (and optionally any 
 - **Follow% stickiness** — how tightly the mob holds one target before re-spreading (a high-Follow% mob is hard to peel; a passive-aligned mob you provoked never lets go).
 
 Reach it from the Calculators tab, or wire it to the terminal right-click menu / a toolbar deep-link like any calculator.
+
+## Roomba
+
+The Workshop's last tab, **Roomba**, automates sorting gang-house loot into labelled rooms and backs a shared item-location log you can query in-game with `@roomba`. It's involved enough to have its own writeup — see the **Roomba (Player Workshop)** section further down for the full walkthrough.
 
 ---
 
@@ -577,6 +584,7 @@ The top **Game Data** menu (in the menu bar) manages your data sets:
 
 - **Import .mdb…** — pick a MajorMUD `.MDB` file; MudPlay imports it as a new named set and switches to it. This populates the tables the engines read from — the terminal itself works without it. If you import after launch, the startup splash is dismissed so the import's progress and any errors show on the terminal. If the import reports **no game tables found**, the MDB's internal catalog is damaged — usually from being opened and edited in Microsoft Access without a *Compact and Repair* afterward, which detaches the game tables from the database's object list. MudPlay won't switch to an empty set; to fix the file, open it in Access and run **Database Tools → Compact and Repair Database**, or re-export a fresh MDB from Nightmare Redux, then import again. (The Program Log records the catalog scan so you can confirm what the database reported.) Each table is re-read after it's written and retried once if it didn't come back as valid JSON, so a truncated or interrupted write is caught during the import; a table that still can't be read — or one that's already corrupt on disk from an older import — is reported as **unavailable** on the terminal (in red) rather than crashing, and the engines that rely on it will be missing data until you re-import the set.
 - **The set list** — every imported set appears at the top of the menu with a checkmark on the active one; click another to switch. The Browser's status bar shows *Set: <name>*.
+- **Import loops (MegaMUD .mp)…** — pull loops out of a MegaMUD `.mp` file into the active set, so a circuit you already built in MegaMUD comes across without re-walking it.
 - **Manage Game Data…** — copy or move a set's saved loops and lairs into another set, or delete a set.
 - **Modify Blacklist…** — hide specific rooms (by map/room number) from the map and room search, and mark ones the walker should treat as unreachable. You can also blacklist a room straight off the map — **right-click it → Add this room to Blacklist**. A room blacklisted from the map stays drawn (and selected) until you click a **different** room, so you can confirm you hid the right one before it disappears — handy for pruning rooms that aren't really reachable or that you'd rather not see on the map or in the search box.
 - **Modify avoid/stash rooms…** — a staged editor over your character's **avoid rooms** and **stash rooms** together. Each row is tagged by type (*Avoid Room* / *Stash Room*) with its map/room number and name. Avoid rooms are your personal no-go list — the walker, loops, and auto-lair route around them; stash rooms are the drop-off points the cash/item engines use. Quick-add a room by picking a type, typing its map and room number (the name fills in from the active set), and clicking **Add room**; select one or more rows and **Remove selected** to clear them. **Save** commits every change and redraws the map; **Cancel** or the title-bar X discards. (You can still mark either kind straight off the map with a right-click — this editor is for reviewing and bulk-editing the whole list.) The two sets are independent, so a room flagged as both appears once per type.
@@ -586,7 +594,7 @@ The top **Game Data** menu (in the menu bar) manages your data sets:
 The window is a sidebar plus a content pane:
 
 - The sidebar's **Search…** box filters the **section list**, not the rows — type "weapon" and unrelated sections drop away.
-- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Incomplete Messages, Unrecognized Lines**. (The macro/alias/trigger editors are covered in the **Macros, aliases, and triggers** section.)
+- **Tables + editors** (top group) holds what you build: **Players, Macros, Triggers, Aliases, Incomplete Messages, Unrecognized Lines, Flavor Prefixes**. (The macro/alias/trigger editors are covered in the **Macros, aliases, and triggers** section; Flavor Prefixes has its own note below.)
 - **Imported tables** (bottom group) holds the game data: **Monsters, Items, Spells, Rooms, Lairs, Shops, Races, Classes, TextBlocks, Info, Unobtainable, Quest Flags.**
 
 Click a section to open it. Each table has its own **Filter…** box (this one filters *rows*), sortable and resizable columns, and a row-count line at the bottom. The Filter… box matches the **visible cell text** across every column — including the friendly labels, so on the **Items** tab you can type `weapon`, `feet`, or `plate` to narrow by item type, worn slot, or weapon / armour type, not just by name. On the **Spells** tab it also understands ailment keywords: type `poison`, `confuse`, `blind`, or `hold` to list every spell that *applies* that effect (read from the spell's own ability codes, following the EndCast chain), not just spells with the word in their name. The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
@@ -857,6 +865,19 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **Default:** On
 **What it does:** Plays a small animated splash on the terminal while MudPlay is starting up, before you've connected or loaded a profile. Turning it off shows just a static title/byline instead.
 **Important notes:** This is actually an install-wide preference (not per-character) even though it's edited from this character's tab — it's stored on the app's default profile so it survives switching characters. Applies immediately; a splash already playing stops the moment you turn it off.
+
+### Snap windows together
+
+**Default:** On
+**What it does:** As you drag the panel windows (Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats) they snap flush to each other's edges when brought close, and dragging the main window carries the whole snapped cluster with it. Turn it off to let every window float independently. See **The windows → Snapping windows together** for the full behavior.
+**Important notes:** Applies live. Editors and dialogs opened from inside a panel don't snap.
+
+### Buff Watchdog layout
+
+**Default:** Config above bars
+**Available options:** Config above / below / left of / right of the timer bars.
+**What it does:** Chooses where the Buff Watchdog's config panel sits relative to its timer-bar side. Changing it reflows an open Buff Watchdog immediately.
+**Important notes:** Per-character. The splitter position, collapse state, and window size are remembered separately (see the **Buff Watchdog** section).
 
 ### Navigation line appearance (color + thickness)
 
@@ -1133,10 +1154,10 @@ Settings → "BBS + Display" — despite the plain "BBS" name in some places, th
 **What it does:** Shows the MajorMUD suicide password MudPlay has on file for this character — and only appears when one is stored. This row is **read-only**: the client captures the password passively when you run `set suicide` in the game, then keeps an encrypted copy so the `@suicide` remote command can supply it automatically. Click **Show** to reveal it.
 **Important notes:** Saved per-character (encrypted at rest), even though it sits on the BBS tab. You can't type into it — to change the password, run `set suicide` in-game again; to clear it, run `pro` in-game and observe "You do not have a suicide password set." and MudPlay drops its stored copy.
 
-### I have sysop / goto powers on this BBS
+### I have sysop / goto powers on this BBS ⚠️ Not currently functional
 
 **Default:** Off
-**What it does:** Marks this character as having elevated privileges on this specific board — e.g. lets the `@goto <player>` remote command skip a permission check that would otherwise apply.
+**What it does:** Nothing today. The checkbox saves, but no part of the client reads it — it was intended to flag a character as having elevated board privileges, and doesn't yet. In particular it does **not** gate `@goto`: that remote command is controlled solely by the **Move player** permission in the Talk → per-player grid, independent of this box. Leave it as-is; it'll be wired to a real effect in a later release.
 
 ### Automated Logon Menu Navigation
 
@@ -2084,7 +2105,7 @@ Not a Settings-window tab. Your character's gear loadouts — the four fixed set
 
 ## Command-Line / Environment
 
-MudPlay has essentially no command-line interface — no custom flags like `--profile` or `--data-dir` exist; the app receives standard startup arguments and does nothing further with them.
+MudPlay has a small command-line interface. The one custom flag is **`--profile`**, which launches straight into one or more saved profiles (see *Launch straight into a profile* under **Profiles** for the full syntax, quoting, and multi-instance behavior). There is **no** `--data-dir` flag — to relocate the data folder use the `MUDPLAY_DATA_ROOT` environment variable below. Any other startup arguments are the standard ones Avalonia consumes; the app does nothing further with them.
 
 ### MUDPLAY_DATA_ROOT (environment variable)
 
@@ -2275,7 +2296,7 @@ This section is a compact, technical lookup table for every setting documented a
 
 ### Not user-configurable (confirmed, for completeness)
 
-The following were traced and confirmed to have **no** exposed setting — listed so it's clear they were checked, not missed: Telnet terminal-type string (fixed `"ansi-bbs"`), the Telnet option negotiation whitelist, TCP keepalive probe interval/retry count, outgoing text encoding (fixed Latin-1), IAC byte-escaping, and command-line argument parsing (none exists beyond what Avalonia's framework startup consumes internally).
+The following were traced and confirmed to have **no** exposed setting — listed so it's clear they were checked, not missed: Telnet terminal-type string (fixed `"ansi-bbs"`), the Telnet option negotiation whitelist, TCP keepalive probe interval/retry count, outgoing text encoding (fixed Latin-1), and IAC byte-escaping. (The one command-line flag that *does* exist, `--profile`, is documented under **Profiles** and **Command-Line / Environment**.)
 
 ---
 
@@ -2298,3 +2319,5 @@ Open the **Program Log** (F4) — it records what the engines decided and why. T
 ## Filing a bug report
 
 Use the menu-bar **Bug Report** button, or right-click the terminal → **Bug report…**. It writes a Markdown snapshot of your current state — movement, player, settings, program log, and scrollback — to your Desktop, ready to attach to a GitHub issue, so a problem can be diagnosed from the exact moment it happened.
+
+**Help → Report an issue…** opens the project's GitHub issues page in your browser, where you file the report and attach that snapshot. **Help → About MudPlay** shows the version, license, and bundled-component credits — handy when a report needs the exact build you're on.
