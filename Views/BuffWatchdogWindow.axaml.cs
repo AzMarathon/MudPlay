@@ -27,11 +27,14 @@ public partial class BuffWatchdogWindow : Window
     private INotifyPropertyChanged? _buffsNotifier;
 
     // Last-applied zone state, so a reflow only happens when it genuinely needs to and
-    // preserves what the user dragged. _configExtent is the config pane's fixed size in
-    // the current orientation (a row Height when vertical, a column Width when not).
+    // preserves what the user dragged. _configExtent is the config pane's fixed size (a
+    // row Height when vertical, a column Width when not); _configExtentVertical is the
+    // orientation it's for, so a persisted height isn't reused as a width after a layout
+    // change. Seeded from the profile on open, saved back on close (per character).
     private bool _appliedShowConfig;
     private bool _appliedVertical;
     private double _configExtent;
+    private bool _configExtentVertical;
 
     public BuffWatchdogWindow()
     {
@@ -59,6 +62,10 @@ public partial class BuffWatchdogWindow : Window
                 _buffsNotifier = buffs;
                 buffs.PropertyChanged += OnBuffsPropertyChanged;
             }
+            // Seed the splitter position from the character's saved value so the window
+            // reopens at the same division the user last dragged it to.
+            _configExtent = vm.ConfigExtent;
+            _configExtentVertical = vm.ConfigExtentVertical;
         }
         ApplyZoneLayout();
     }
@@ -123,12 +130,8 @@ public partial class BuffWatchdogWindow : Window
         // pane was showing in the SAME orientation — a height can't carry to a width.
         if (_appliedShowConfig)
         {
-            int r = Grid.GetRow(_configZone);
-            int c = Grid.GetColumn(_configZone);
-            if (_appliedVertical && r >= 0 && r < _zonesGrid.RowDefinitions.Count)
-                _configExtent = _zonesGrid.RowDefinitions[r].Height.Value;
-            else if (!_appliedVertical && c >= 0 && c < _zonesGrid.ColumnDefinitions.Count)
-                _configExtent = _zonesGrid.ColumnDefinitions[c].Width.Value;
+            double cur = CurrentConfigExtent();
+            if (cur > 0) { _configExtent = cur; _configExtentVertical = _appliedVertical; }
         }
 
         _zonesGrid.RowDefinitions.Clear();
@@ -162,9 +165,10 @@ public partial class BuffWatchdogWindow : Window
         bool vertical = layout is BuffWatchdogLayout.ConfigTop or BuffWatchdogLayout.ConfigBottom;
         bool configFirst = layout is BuffWatchdogLayout.ConfigTop or BuffWatchdogLayout.ConfigLeft;
 
-        // A preserved extent only applies within the same orientation; an orientation
-        // flip falls back to the default starting division for that axis.
-        double keptExtent = _appliedVertical == vertical && _configExtent > 0 ? _configExtent : 0;
+        // A preserved extent (dragged this session or restored from the profile) only
+        // applies within the same orientation; an orientation flip falls back to the
+        // default starting division for that axis.
+        double keptExtent = _configExtentVertical == vertical && _configExtent > 0 ? _configExtent : 0;
         _appliedVertical = vertical;
 
         _zoneSplitter.IsVisible = true;
@@ -242,6 +246,21 @@ public partial class BuffWatchdogWindow : Window
         }
     }
 
+    // The config pane's current fixed extent (row height when vertical, column width
+    // when not), or 0 when the config zone isn't laid out right now. Read live so a
+    // splitter drag — which doesn't reflow the grid — is still captured (e.g. on close).
+    private double CurrentConfigExtent()
+    {
+        if (_zonesGrid is null || _configZone is null || !_appliedShowConfig) return 0;
+        if (_appliedVertical)
+        {
+            int r = Grid.GetRow(_configZone);
+            return r >= 0 && r < _zonesGrid.RowDefinitions.Count ? _zonesGrid.RowDefinitions[r].Height.Value : 0;
+        }
+        int c = Grid.GetColumn(_configZone);
+        return c >= 0 && c < _zonesGrid.ColumnDefinitions.Count ? _zonesGrid.ColumnDefinitions[c].Width.Value : 0;
+    }
+
     // Double-click a buff row → open the same edit dialog the ✎ button opens
     // (spell, recast, and — for a mana-regen roll spell like profane link — its
     // reroll target), without needing to hit the small button precisely.
@@ -261,8 +280,16 @@ public partial class BuffWatchdogWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        // Persist the splitter position (a live drag doesn't reflow, so read it now).
+        // Collapsed → no live def, and _configExtent already holds the last-shown value.
+        if (_vm is { } vm)
+        {
+            double cur = CurrentConfigExtent();
+            if (cur > 0) { _configExtent = cur; _configExtentVertical = _appliedVertical; }
+            vm.SaveConfigExtent(_configExtent, _configExtentVertical);
+        }
         DetachVm();
-        if (DataContext is ViewModels.BuffWatchdogViewModel vm) vm.Dispose();
+        if (DataContext is ViewModels.BuffWatchdogViewModel dvm) dvm.Dispose();
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

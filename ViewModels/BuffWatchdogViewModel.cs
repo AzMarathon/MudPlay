@@ -98,6 +98,27 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         }
     }
 
+    // Where the user last dragged the config/bars splitter (the config pane's fixed
+    // extent in DIPs) and which orientation it was for — loaded from the character so the
+    // window reopens at the same division. The code-behind reads these on open and writes
+    // them back via SaveConfigExtent on close. 0 = never dragged (use the layout default).
+    public double ConfigExtent { get; private set; }
+    public bool ConfigExtentVertical { get; private set; }
+
+    // Persist the splitter position (called by the code-behind on window close). No-op
+    // when unchanged so a close without a drag doesn't rewrite the profile.
+    public void SaveConfigExtent(double extent, bool vertical)
+    {
+        if (extent <= 0) return;
+        if (_profile.Current is not { } p) return;
+        if (p.BuffWatchdogConfigExtent == extent && p.BuffWatchdogConfigExtentVertical == vertical) return;
+        ConfigExtent = extent;
+        ConfigExtentVertical = vertical;
+        p.BuffWatchdogConfigExtent = extent;
+        p.BuffWatchdogConfigExtentVertical = vertical;
+        _profile.Save();
+    }
+
     // The editable buff-config panel (add / edit / remove / target). It lives in this
     // window now — the Buff Watchdog is the single place to both SEE and CONFIGURE
     // buffs. Null on the test ctor (no live services).
@@ -139,6 +160,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
         _layout = _profile.Current?.BuffWatchdogLayout ?? BuffWatchdogLayout.ConfigTop;
         _configCollapsed = _profile.Current?.BuffWatchdogConfigCollapsed ?? false;
+        ConfigExtent = _profile.Current?.BuffWatchdogConfigExtent ?? 0;
+        ConfigExtentVertical = _profile.Current?.BuffWatchdogConfigExtentVertical ?? false;
         Refresh();
     }
 

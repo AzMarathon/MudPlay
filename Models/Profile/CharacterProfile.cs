@@ -321,6 +321,13 @@ public sealed class CharacterProfile
     // way it was left.
     public bool BuffWatchdogConfigCollapsed { get; set; }
 
+    // Where the user dragged the Buff Watchdog's config/bars splitter — the config pane's
+    // fixed extent in DIPs, plus whether it was a vertical (config top/bottom → a height)
+    // or horizontal (config left/right → a width) split, so a persisted height isn't
+    // applied as a width after a layout change. 0 = never dragged (use the default).
+    public double BuffWatchdogConfigExtent { get; set; }
+    public bool BuffWatchdogConfigExtentVertical { get; set; }
+
     // Given name of the party leader we were following, remembered so a
     // follower can auto-rejoin after an unexpected drop. Written through by
     // PartyRejoinCoordinator whenever follower membership changes (set on
