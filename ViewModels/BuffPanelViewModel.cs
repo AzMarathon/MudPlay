@@ -207,8 +207,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     private void RefreshSelfBlessCandidates(HashSet<string> slotted)
     {
         List<Game.Spells.SelfBlessCandidate> pool = _spellbook.Available
-            .Where(s => s.Formula.EnergyCost == 0
-                && (BuffClassifier.IsSelfBuff(s.Targets) || BuffClassifier.IsSingleTargetBuff(s.Targets))
+            .Where(s => BuffClassifier.IsAnyBuff(s)
+                && !BuffClassifier.IsWholeParty(s.Targets)
                 && s.ReqLevel <= _spellbook.Level
                 && _spellbook.IsObtained(s.Number)
                 && !slotted.Contains(s.Short.Trim()))
