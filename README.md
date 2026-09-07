@@ -17,6 +17,7 @@
 > - Buff Watchdog: whole-party toggle relabelled "Party"; config-row headers/labels are white to match the Solo checkbox
 > - Buff Watchdog: a buff clobbered by a later-cast one that removes it now reads "conflict" (⚠ moved to the front) instead of running a false countdown
 > - Buff Watchdog: an arrow button (nav-chip style) on the timer-bar side collapses/expands the config panel and resizes the window to match; the splitter position, collapse state, and window size all persist per character
+> - Buff Watchdog: new **Unlearned spells** button prints to the terminal every class spell you haven't learned yet that's within reach — trainable now, plus up to 5 levels ahead — each as `[Spell name - Unlearned, Requires Level XX]`
 > - Buff Watchdog: the config-side ⚠ conflict marker shows whenever two clashing buffs are both configured, regardless of which cast boxes are ticked
 > - Buff timers: fixed shared cast/wear-off messages between buffs that remove each other (e.g. bless removes chant, one "you feel lucky" matching several records) — casting one now refreshes its own timer (not a sibling's) and the following shared wear-off clears no one, so the survivor counts and the clobbered buff shows "conflict"
 > - Buff Watchdog: a "conflict" bar carries its explanation tooltip across the whole bar, not just the ⚠

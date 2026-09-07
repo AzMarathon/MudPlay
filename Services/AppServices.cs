@@ -114,6 +114,18 @@ public sealed class AppServices
         if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text);
     }
 
+    // Drop a bracketed yellow status line into the terminal scrollback — the same
+    // "[…]" notice cadence quest-availability / roomba-complete use. The text is
+    // written verbatim (no auto-bracketing): callers supply their own "[…]" so a
+    // multi-line report reads exactly as they compose it. No-op until the main VM
+    // binds it; the sink already marshals to the UI thread.
+    private Action<string>? _terminalNotice;
+    public void SetTerminalNotice(Action<string> sink) => _terminalNotice = sink;
+    public void WriteTerminalNotice(string text)
+    {
+        if (!string.IsNullOrWhiteSpace(text)) _terminalNotice?.Invoke(text);
+    }
+
     // Opens (or re-focuses) the single Navigation Management dialog. Both the map
     // window's "Navigation Management" button and the toolbar Start button route
     // here so there's only ever one instance — no two identical windows. The bool

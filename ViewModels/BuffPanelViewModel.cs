@@ -79,6 +79,12 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // Whether "Add all blesses" has anything to add.
     public bool CanAddAllBlesses => _selfBlessCandidates.Count > 0 || _partyBlessCandidates.Count > 0;
 
+    // Whether the "Unlearned spells" report can run — the class has a learnable
+    // spell roster at all (empty for non-magery classes). It reports the whole
+    // class roster, not just buffs, so it keys off Available rather than the pick
+    // lists above.
+    public bool CanReportUnlearned => _spellbook.Available.Count > 0;
+
     // Whether to show the buff panel at all: a class with no party-buff spells
     // (and no existing slots) hides it entirely, rather than showing an empty
     // panel it can never use.
@@ -432,6 +438,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
         _selfBlessCandidates = Game.Spells.BuffConflictAnalyzer.SelectSelfBlessCandidates(pool, existing);
         OnPropertyChanged(nameof(CanAddAllBlesses));
+        OnPropertyChanged(nameof(CanReportUnlearned));
     }
 
     // Resolve a slot's cast code to its underlying spell identity — a learnable
@@ -616,6 +623,42 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
         Persist();
+    }
+
+    // "Unlearned spells" — dumps into the terminal (yellow "[…]" notices, the same
+    // cadence the quest-availability announcer uses) every class spell the character
+    // hasn't learned yet that's within reach: castable at the current level, plus
+    // everything up to five levels ahead. Each line reads
+    // "[<spell> - Unlearned, Requires Level XX]", low levels first. Read-only — it
+    // reports the spellbook, never touches config. Reports on the FULL class roster
+    // (all spells, not just buffs), so it reads Available directly.
+    [RelayCommand]
+    private void ReportUnlearnedSpells()
+    {
+        AppServices svc = AppServices.Current;
+        // No stat screen yet → no level to gate the 5-level look-ahead against.
+        if (!svc.Stats.HasParsed)
+        {
+            svc.WriteTerminalNotice("[Unlearned spells: read your stats first so I know your level]");
+            return;
+        }
+        int ceiling = svc.PlayerStats.Level + 5;
+
+        List<Game.Spells.KnownSpell> unlearned = _spellbook.Available
+            .Where(s => !_spellbook.IsObtained(s.Number) && s.ReqLevel <= ceiling)
+            .OrderBy(s => s.ReqLevel)
+            .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        svc.Log.Info("Spells",
+            $"Unlearned-spells report: {unlearned.Count} within reach (level {svc.PlayerStats.Level}, ceiling {ceiling}).");
+        if (unlearned.Count == 0)
+        {
+            svc.WriteTerminalNotice("[No unlearned spells within 5 levels]");
+            return;
+        }
+        foreach (Game.Spells.KnownSpell s in unlearned)
+            svc.WriteTerminalNotice($"[{s.Name} - Unlearned, Requires Level {s.ReqLevel}]");
     }
 
     // Edit an existing slot — reopens the dialog pre-filled, so the buff / recast /

@@ -212,6 +212,10 @@
                                     Command="{Binding RemoveAllBuffsCommand}"
                                     Foreground="{StaticResource AccentRedBrush}"
                                     ToolTip.Tip="Remove every configured buff slot — self, party, and whole-party alike. Asks to confirm first (unless confirm-deletes is off in Settings)."/>
+                            <Button Content="Unlearned spells" Padding="8,2"
+                                    IsEnabled="{Binding CanReportUnlearned}"
+                                    Command="{Binding ReportUnlearnedSpellsCommand}"
+                                    ToolTip.Tip="Print to the terminal every spell your class hasn't learned yet that's within reach — castable now, plus everything up to 5 levels ahead — each as [Spell name - Unlearned, Requires Level XX]."/>
                         </StackPanel>
 
                         <!-- Live mana-upkeep readout: how much mana/second every currently-

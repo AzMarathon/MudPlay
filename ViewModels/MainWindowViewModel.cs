@@ -785,6 +785,11 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.CombatProfiles.Announce =
             report => Avalonia.Threading.Dispatcher.UIThread.Post(
                 () => WriteTerminalStatus($"[{report}]", TerminalStatusKind.Notice));
+        // Generic terminal-notice sink (e.g. the Buff Watchdog "Unlearned spells"
+        // dump): text arrives already bracketed, so pass it through verbatim.
+        AppServices.Current.SetTerminalNotice(
+            text => Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => WriteTerminalStatus(text, TerminalStatusKind.Notice)));
         RebuildCombatProfilesMenu();
         AppServices.Current.CombatProfiles.Changed += RebuildCombatProfilesMenu;
 
