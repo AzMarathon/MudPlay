@@ -27,6 +27,14 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     private readonly Func<string?, string> _resolveName;
     private readonly Func<BuffSlot, (string? RemovedBy, string? Removes)> _resolveOverwrite;
     private readonly Action _persist;
+    // Fires only when Self transitions OFF → ON (never on → off), so the panel can
+    // deactivate a conflicting row's Self box without looping back on itself. Null
+    // in tests that don't exercise the cross-row exclusion.
+    private readonly Action<BuffSlotRowViewModel>? _onSelfActivated;
+    // Whether the character has actually learned this row's spell. Null in tests
+    // that don't care — IsLearned then defaults true (every listed row is normally
+    // something the player has).
+    private readonly Func<string?, bool>? _resolveLearned;
     private bool _suppress;
 
     // Editable targeting only — spell + recast are fixed at add time.
@@ -80,8 +88,15 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
 
     public string? Spell => _dto.Spell;
     public int RecastMarginSec => _dto.RecastMarginSec;
+
+    // True for a #item-cast slot (a wielded weapon/staff buff) — drives grouping
+    // this row under the Buff Watchdog's "Weapons" section instead of the main list.
+    public bool IsItemCast => Game.Spells.ItemCastToken.IsToken(Spell);
+
     // Row label — the buff's spell name (falls back to the cast code) + its recast
-    // timer, e.g. "bless - 15s", with a trailing condition tag when set.
+    // timer, e.g. "bless - 15s", with a trailing condition tag when set. No level
+    // requirement here: the level lives in the Add-buff dropdown where it helps you
+    // pick; on a configured row it only reads as confusing (it's not the recast).
     public string HeaderText
     {
         get
@@ -125,16 +140,26 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         }
     }
 
+    // False for a row whose spell the character hasn't actually learned — drives the
+    // "unlearned" chip the way the read-only Buff Watchdog timer bars do. Add-buff /
+    // Add all blesses only ever offer learned spells, so this normally stays true;
+    // it still catches a slotted spell that later reads unlearned (a data-set
+    // renumber, a hand-typed unknown code).
+    public bool IsLearned => _resolveLearned?.Invoke(Spell) ?? true;
+
     public BuffSlotRowViewModel(
         BuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
         Func<string?, string> resolveName, Func<BuffSlot, (string? RemovedBy, string? Removes)> resolveOverwrite,
-        Action persist)
+        Action persist, Action<BuffSlotRowViewModel>? onSelfActivated = null,
+        Func<string?, bool>? resolveLearned = null)
     {
         _dto = dto;
         _resolveScope = resolveScope;
         _resolveName = resolveName;
         _resolveOverwrite = resolveOverwrite;
         _persist = persist;
+        _onSelfActivated = onSelfActivated;
+        _resolveLearned = resolveLearned;
         _suppress = true;
         _castOnSelf = dto.CastOnSelf;
         _wholePartyOn = dto.WholePartyOn;
@@ -158,6 +183,7 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowSelf));
         OnPropertyChanged(nameof(ShowMemberTargets));
         OnPropertyChanged(nameof(ShowSolo));
+        OnPropertyChanged(nameof(IsLearned));
         RefreshOverwriteWarning();
     }
 
@@ -175,6 +201,7 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         if (_suppress) return;
         _dto.CastOnSelf = value;
         _persist();
+        if (value) _onSelfActivated?.Invoke(this);
     }
 
     partial void OnWholePartyOnChanged(bool value)

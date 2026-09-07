@@ -3390,6 +3390,24 @@ landed" and "the prompt parsed," the client's `PlayerState.Hp` still holds the *
   (fired when HP changes) then drives the real heal on fresh HP. The timer-fallback tick and out-of-combat
   heartbeat are HP-fresh, so they're unaffected.
 
+## RemovesSpell buffs clobber on cast; the wear-off line is SHARED, not per-spell *([CONFIRMED] 2026-09-07, user)*
+
+- A spell that carries a **RemovesSpell** ability (Abil 122 → a target spell number) **strips that
+  target buff off you the instant it lands**. The direction is per the realm's data, so check it, don't
+  assume — on Paradigm 1.9.1 **bless removes chant** (confirmed 2026-09-07, user + game data). So among a
+  clashing set, **whichever was cast LAST is the one actually on you**; the buffs it removes are gone.
+- A wear-off line **does** fire when the buff is stripped — but bless and chant **share the same message
+  records** (both the cast/applied line "You feel lucky!" *and* the wear-off "The effects of bless wear
+  off!"), so the line **cannot be attributed to the right spell by text alone**: a chant-being-stripped
+  shows bless's wear-off text. A client keying timers off those shared lines mis-attributes — the cast
+  confirm refreshes the wrong buff, and the wear-off clears the wrong one. The reliable signal is **what
+  we actually sent** (the distinct "You cast <spell> on …" / the pending self-buff short), so the Buff
+  Watchdog keys the timer off that and, on a wear-off right after a clobbering cast, leaves both timers
+  alone and **infers** the clobber from RemovesSpell + cast order (`Until − TotalSec` = each buff's cast
+  instant), rendering the clobbered bar as **"conflict"** rather than a bogus countdown.
+- Casting a buff that the other removes, **after** it, simply re-applies — only the remover's cast strips,
+  a one-time effect at cast, not a standing suppression.
+
 ## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
 
 The Settings → Combat **debuff slots** (single-target debuff + AoE debuff) hold *between-round*

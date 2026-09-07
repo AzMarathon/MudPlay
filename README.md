@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.53.4**
-> - Fixed keyboard input feeling delayed during play — the buff/heal decision engine and equipment-stat calculator were re-scanning the entire Spells/Items/Classes tables from scratch on every 100ms game tick, stalling the UI thread
-> - Game-data lookups by Number/Name are now indexed once per table load instead of linearly scanned on every call
+> **Version 3.54.2**
+> - Fixed keyboard input feeling delayed during play — the buff/heal decision pass (each combat round, ~1×/s idle) was re-scanning the entire Spells/Items/Classes tables from scratch on every lookup, stalling the UI thread; the worst offender was the equipment-stat aggregation scanning the whole Items table per worn item
+> - Game-data lookups by Number/Name are now indexed once per table load, and the class cast-item list is cached per class, instead of linear-scanned on every call
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

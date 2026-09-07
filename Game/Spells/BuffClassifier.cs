@@ -1,3 +1,5 @@
+using MudPlay.Game.Calculators;
+
 namespace MudPlay.Game.Spells;
 
 // Classifies a spell as a party buff for the Party-window picker and the casting
@@ -22,17 +24,53 @@ public static class BuffClassifier
     // A self-only beneficial buff (bless, troll skin, and kin) — only castable on us.
     public static bool IsSelfBuff(int targets) => targets is 0 or 1;
 
-    // True when the spell belongs in the party-buff picker: a zero-energy buff
-    // whose scope targets another player or the whole party.
+    // A spell actually persists — has a duration, base or level-scaled — rather
+    // than firing once. An instant heal, cure, or utility spell (identify, and
+    // the like) leaves all three duration columns 0, same signal
+    // RegenSpellClassifier uses to split a HoT from an instant heal. Zero-energy,
+    // self/single-target scope alone isn't enough to call something a "buff" —
+    // cure poison and minor healing share that exact shape and are not buffs;
+    // only something with a real timer to maintain belongs in the Buff Watchdog.
+    public static bool HasDuration(in SpellFormulaInput formula) =>
+        formula.Dur > 0 || (formula.DurInc != 0 && formula.DurIncLVLs > 0);
+
+    // Abil codes 97/98/112 gate a spell to ONLY good/evil/neutral respectively;
+    // 110/111/113 gate it to NOT good/evil/neutral (KnownSpellCatalog.IsUsable
+    // applies the same six codes against its own raw-row alignment check —
+    // duplicated here rather than shared because that path reads straight off the
+    // pre-conversion JsonElement row, before a SpellFormulaInput exists to hand
+    // it). Unknown alignment (no `who` observation of ourselves yet) never
+    // excludes — the caller doesn't get to guess wrong, it just doesn't filter.
+    public static bool IsAlignmentEligible(in SpellFormulaInput formula, AlignmentBucket? alignment)
+    {
+        if (alignment is not { } a) return true;
+        foreach (SpellAbility ability in formula.Abilities)
+        {
+            switch (ability.Code)
+            {
+                case 97: if (a != AlignmentBucket.Good) return false; break;
+                case 98: if (a != AlignmentBucket.Evil) return false; break;
+                case 112: if (a != AlignmentBucket.Neutral) return false; break;
+                case 110: if (a == AlignmentBucket.Good) return false; break;
+                case 111: if (a == AlignmentBucket.Evil) return false; break;
+                case 113: if (a == AlignmentBucket.Neutral) return false; break;
+            }
+        }
+        return true;
+    }
+
+    // True when the spell belongs in the party-buff picker: a zero-energy,
+    // maintained buff whose scope targets another player or the whole party.
     public static bool IsPartyBuff(in KnownSpell spell) =>
-        spell.Formula.EnergyCost == 0
+        spell.Formula.EnergyCost == 0 && HasDuration(spell.Formula)
         && (IsSingleTargetBuff(spell.Targets) || IsWholeParty(spell.Targets));
 
-    // True when the spell belongs in the UNIFIED buff picker: a zero-energy buff we
-    // can maintain on ourselves, a member, or the whole party (self / single-target /
-    // whole-party scopes). Attacks (energy > 0), enemy / area / item-target scopes
-    // are excluded.
+    // True when the spell belongs in the UNIFIED buff picker: a zero-energy,
+    // maintained buff we can keep up on ourselves, a member, or the whole party
+    // (self / single-target / whole-party scopes). Attacks (energy > 0), enemy /
+    // area / item-target scopes, and instant effects with nothing to maintain
+    // (heals, cures, utility spells) are excluded.
     public static bool IsAnyBuff(in KnownSpell spell) =>
-        spell.Formula.EnergyCost == 0
+        spell.Formula.EnergyCost == 0 && HasDuration(spell.Formula)
         && (IsSelfBuff(spell.Targets) || IsSingleTargetBuff(spell.Targets) || IsWholeParty(spell.Targets));
 }
