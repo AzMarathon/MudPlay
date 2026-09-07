@@ -7,6 +7,7 @@
 > - Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt
 > - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures as if they were maintainable buffs — it now requires a real duration
 > - Fixed **Add all blesses** recommending a spell your character's alignment can't cast and crowding out the alignment-correct alternative — it now reads your alignment from your own `who` observation
+> - Buff Watchdog: new live **"Mana to maintain"** readout — total mana/second every checked buff costs to keep recast, updating as you check/uncheck boxes
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

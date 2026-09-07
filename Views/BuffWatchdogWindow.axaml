@@ -116,6 +116,22 @@
                                     ToolTip.Tip="Remove every configured buff slot — self, party, and whole-party alike. Asks to confirm first (unless confirm-deletes is off in Settings)."/>
                         </StackPanel>
 
+                        <!-- Live mana-upkeep readout: how much mana/second every currently-
+                             CHECKED buff costs to keep recast, expressed per passive regen
+                             tick (30s — the same cadence the observed "MP +N after ~30s"
+                             readout and ManaRegenBreakpointCalculator use) and per minute.
+                             Recomputes on every checkbox toggle and party-roster change. -->
+                        <TextBlock IsVisible="{Binding HasSlots}" Margin="8,0,8,6" FontSize="11"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   ToolTip.Tip="Mana per second every currently-checked buff needs to stay recast, added up across self, party, and whole-party casts.">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}Mana to maintain: {0:0.0} / 30s tick · {1:0.0} / min">
+                                    <Binding Path="RequiredManaPerTick"/>
+                                    <Binding Path="RequiredManaPerMinute"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+
                         <TextBlock IsVisible="{Binding !HasSlots}" Margin="8,4,8,6"
                                    Text="No buffs configured. Click “Add buff”, pick a spell, then set who receives it."
                                    Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"

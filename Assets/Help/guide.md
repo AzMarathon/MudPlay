@@ -747,6 +747,8 @@ A row shows a **⚠** next to its name when it conflicts with another configured
 
 > **Note:** the **HP-regen** spell is *not* a maintained buff and isn't set here — it's a reactive minor-heal that fires when your HP dips, and it stays on **Settings → Spells** as **HP Regen**. Everything else moved to this list.
 
+**Mana to maintain** is a live readout just under the buttons: how much mana per second every currently-**checked** buff costs to keep recast forever, added up across every self, party, and whole-party cast (a single-target buff blessing 3 members counts 3 casts). It updates the instant you check or uncheck a box, or the party roster changes. Shown two ways — per 30-second regen tick (the same cadence your own passive-regen readout uses, so it's directly comparable) and per minute — so you can theorycraft a buff loadout and see whether your regen can actually keep up with it before you commit to it in-game.
+
 ### Reading the timer bars
 
 The timer bars are grouped **by player**: **your own name first** (your self buffs and any whole-party buffs), then one section per party member with the buffs cast on them.

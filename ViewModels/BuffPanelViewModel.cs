@@ -72,6 +72,16 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // panel it can never use.
     public bool ShowPanel => BuffPicks.Count > 0 || Slots.Count > 0;
 
+    // Live "mana to maintain everything currently checked" readout — recomputed
+    // on every edit (Persist) and every party-roster change (RefreshMemberTargets),
+    // since a single-target slot's cast count depends on who's actually in the
+    // party right now. Expressed both per passive regen tick (the same 30s cadence
+    // ManaRegenBreakpointCalculator and the observed "MP +N after ~30s" readout
+    // already use, so it's directly comparable to a character's own regen) and
+    // per minute. 0 when nothing is configured or nothing is actually checked.
+    [ObservableProperty] private double _requiredManaPerTick;
+    [ObservableProperty] private double _requiredManaPerMinute;
+
     // Typeahead filter for the spell picker — matches the typed text against the
     // cast-code or the spell name (mirrors the Settings tab's picker).
     public Func<string?, object?, bool> SpellSuggestionFilter { get; } = (text, item) =>
@@ -283,6 +293,49 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         ShowPartyColumns = members.Count > 0;
         foreach (BuffSlotRowViewModel row in Slots)
             row.RebuildMemberTargets(members);
+        RefreshManaUpkeep();   // a single-target slot's cast count follows the roster
+    }
+
+    // Sum every currently-active slot's mana-per-second cost (see
+    // BuffManaUpkeepCalculator) into the live "required to maintain" readout.
+    // #item-cast slots are skipped — they burn item charges, not the mana pool.
+    private void RefreshManaUpkeep()
+    {
+        List<(string Display, string Given)> members = CurrentMembers();
+        bool hasParty = members.Count > 0;
+        List<Game.Spells.BuffManaUpkeepCalculator.SlotUpkeep> upkeep = new();
+
+        foreach (BuffSlot dto in _settings.Slots)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Spell)) continue;
+            string code = dto.Spell.Trim();
+            if (ItemCastToken.IsToken(code)) continue;
+            if (_spellbook.FindByCastCode(code) is not { } spell) continue;
+
+            long manaCost = Game.Spells.SpellCalculator.ManaCost(spell.Formula);
+            double durationSeconds = Game.Spells.SpellCalculator.Duration(spell.Formula, _spellbook.Level)
+                * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock;
+
+            int casts;
+            if (BuffClassifier.IsWholeParty(spell.Targets))
+                casts = dto.WholePartyOn && (hasParty || dto.CastSolo) ? 1 : 0;
+            else if (BuffClassifier.IsSingleTargetBuff(spell.Targets))
+            {
+                int memberCasts = dto.AllMembers
+                    ? members.Count
+                    : dto.Targets.Count(t => members.Any(m => string.Equals(m.Given, t, StringComparison.OrdinalIgnoreCase)));
+                casts = (dto.CastOnSelf ? 1 : 0) + memberCasts;
+            }
+            else
+                casts = dto.CastOnSelf ? 1 : 0;
+
+            if (casts == 0) continue;
+            upkeep.Add(new Game.Spells.BuffManaUpkeepCalculator.SlotUpkeep(manaCost, durationSeconds, casts));
+        }
+
+        double perSecond = Game.Spells.BuffManaUpkeepCalculator.TotalManaPerSecond(upkeep);
+        RequiredManaPerTick = perSecond * ManaRegenBreakpointCalculator.PassiveTickSeconds;
+        RequiredManaPerMinute = perSecond * 60;
     }
 
     private List<(string Display, string Given)> CurrentMembers() =>
@@ -449,6 +502,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         // in combat, where the combat tick owns the cadence.
         AppServices.Current.CastDirector.OnIdleHeartbeat();
         RefreshOverwriteWarnings();
+        RefreshManaUpkeep();
     }
 
     public void Dispose()
