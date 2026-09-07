@@ -197,6 +197,13 @@
                                                                    Foreground="{StaticResource AccentRedBrush}"
                                                                    IsVisible="{Binding HasOverwriteWarning}"
                                                                    ToolTip.Tip="{Binding OverwriteWarningTooltip}"/>
+                                                        <!-- "Add all blesses" can list a buff the class can learn that
+                                                             this character hasn't trained yet — flag it the same way
+                                                             the read-only timer bars already do. -->
+                                                        <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}"
+                                                                ToolTip.Tip="Not learned yet — checking this won't cast until you've trained it.">
+                                                            <TextBlock Text="unlearned"/>
+                                                        </Border>
                                                     </StackPanel>
 
                                                     <!-- Self checkbox — shown for a self-only or single-target buff. -->

@@ -154,4 +154,25 @@ public sealed class BuffSlotRowViewModelTests
         row.CastOnSelf = true;   // would NRE if the default wasn't null-safe
         Assert.True(row.CastOnSelf);
     }
+
+    [Fact]
+    public void IsLearned_NoResolver_DefaultsTrue()
+    {
+        // Every Row(...) helper call in this file omits the resolver — a row must
+        // not spuriously show "unlearned" when nothing wired the concept up.
+        var row = Row(new BuffSlot { Spell = "bles" });
+        Assert.True(row.IsLearned);
+    }
+
+    [Fact]
+    public void IsLearned_ReflectsResolver()
+    {
+        var dto = new BuffSlot { Spell = "grze" };
+        var row = new BuffSlotRowViewModel(
+            dto, _ => BuffSlotScope.SelfOnly, s => s ?? string.Empty,
+            _ => (null, null), () => { }, onSelfActivated: null,
+            resolveLearned: code => code != "grze");
+
+        Assert.False(row.IsLearned);
+    }
 }

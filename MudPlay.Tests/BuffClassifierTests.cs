@@ -95,6 +95,17 @@ public sealed class BuffClassifierTests
     public void IsAlignmentEligible_EvilOnly_UnholyArmourShape(AlignmentBucket? alignment, bool expected) =>
         Assert.Equal(expected, BuffClassifier.IsAlignmentEligible(Formula(98), alignment));
 
+    // "vile ward"'s actual shape — Abil 110, NOT-good only (i.e. Neutral or Evil;
+    // report: user flagged this as the opposite direction from NotEvil — a
+    // "Not Good"-restricted spell is exactly what an Evil character CAN cast).
+    [Theory]
+    [InlineData(AlignmentBucket.Good, false)]
+    [InlineData(AlignmentBucket.Neutral, true)]
+    [InlineData(AlignmentBucket.Evil, true)]
+    [InlineData(null, true)]
+    public void IsAlignmentEligible_NotGoodOnly_VileWardShape(AlignmentBucket? alignment, bool expected) =>
+        Assert.Equal(expected, BuffClassifier.IsAlignmentEligible(Formula(110), alignment));
+
     [Theory]
     [InlineData(AlignmentBucket.Good, true)]
     [InlineData(AlignmentBucket.Neutral, false)]

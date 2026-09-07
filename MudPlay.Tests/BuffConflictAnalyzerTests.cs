@@ -151,6 +151,38 @@ public sealed class BuffConflictAnalyzerTests
     }
 
     [Fact]
+    public void SelectSelfBlessCandidates_UnlearnedHigherReqLevelMember_NeverRecommended()
+    {
+        // The class's full roster is browsable regardless of what's actually been
+        // trained — but the tie-break must never auto-check something the game
+        // would refuse to cast. Greater zeal isn't learned; zeal is.
+        SelfBlessCandidate unlearnedGreaterZeal = GreaterZeal() with { IsObtained = false };
+        SelfBlessCandidate learnedZeal = Zeal() with { IsObtained = true };
+
+        List<SelfBlessPick> result = BuffConflictAnalyzer
+            .SelectSelfBlessCandidates(new[] { learnedZeal, unlearnedGreaterZeal }, Array.Empty<ExistingBuffSlot>())
+            .ToList();
+
+        Assert.Equal(2, result.Count);
+        Assert.True(result.Single(p => p.Candidate.Name == "zeal").Recommended);
+        Assert.False(result.Single(p => p.Candidate.Name == "greater zeal").Recommended);
+    }
+
+    [Fact]
+    public void SelectSelfBlessCandidates_NoObtainedMemberInFamily_ListedButNoneRecommended()
+    {
+        SelfBlessCandidate unlearnedZeal = Zeal() with { IsObtained = false };
+        SelfBlessCandidate unlearnedGreaterZeal = GreaterZeal() with { IsObtained = false };
+
+        List<SelfBlessPick> result = BuffConflictAnalyzer
+            .SelectSelfBlessCandidates(new[] { unlearnedZeal, unlearnedGreaterZeal }, Array.Empty<ExistingBuffSlot>())
+            .ToList();
+
+        Assert.Equal(2, result.Count);
+        Assert.All(result, p => Assert.False(p.Recommended));
+    }
+
+    [Fact]
     public void SelectSelfBlessCandidates_UnrelatedCandidates_BothRecommended()
     {
         SelfBlessCandidate other = new("bles", "bless", 100, ReqLevel: 5, ManaCost: 10, Removes: Array.Empty<int>());

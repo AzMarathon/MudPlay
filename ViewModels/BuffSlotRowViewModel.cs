@@ -31,6 +31,10 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // deactivate a conflicting row's Self box without looping back on itself. Null
     // in tests that don't exercise the cross-row exclusion.
     private readonly Action<BuffSlotRowViewModel>? _onSelfActivated;
+    // Whether the character has actually learned this row's spell. Null in tests
+    // that don't care — IsLearned then defaults true, matching the pre-theorycraft
+    // behaviour where every listed row was already something the player had.
+    private readonly Func<string?, bool>? _resolveLearned;
     private bool _suppress;
 
     // Editable targeting only — spell + recast are fixed at add time.
@@ -129,10 +133,17 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         }
     }
 
+    // False for a row the character hasn't actually learned yet — "Add all
+    // blesses" can now list (and pre-check nothing on) a buff from the class's
+    // full roster the player hasn't trained, so this drives the row's "unlearned"
+    // chip the way the read-only Buff Watchdog timer bars already show one.
+    public bool IsLearned => _resolveLearned?.Invoke(Spell) ?? true;
+
     public BuffSlotRowViewModel(
         BuffSlot dto, Func<string?, BuffSlotScope> resolveScope,
         Func<string?, string> resolveName, Func<BuffSlot, (string? RemovedBy, string? Removes)> resolveOverwrite,
-        Action persist, Action<BuffSlotRowViewModel>? onSelfActivated = null)
+        Action persist, Action<BuffSlotRowViewModel>? onSelfActivated = null,
+        Func<string?, bool>? resolveLearned = null)
     {
         _dto = dto;
         _resolveScope = resolveScope;
@@ -140,6 +151,7 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         _resolveOverwrite = resolveOverwrite;
         _persist = persist;
         _onSelfActivated = onSelfActivated;
+        _resolveLearned = resolveLearned;
         _suppress = true;
         _castOnSelf = dto.CastOnSelf;
         _wholePartyOn = dto.WholePartyOn;
@@ -163,6 +175,7 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowSelf));
         OnPropertyChanged(nameof(ShowMemberTargets));
         OnPropertyChanged(nameof(ShowSolo));
+        OnPropertyChanged(nameof(IsLearned));
         RefreshOverwriteWarning();
     }
 

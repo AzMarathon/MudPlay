@@ -107,7 +107,13 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     private void OnProfileLoaded(CharacterProfile _) => Load();
-    private void OnSpellbookChanged() => RefreshBuffPicks();
+    private void OnSpellbookChanged()
+    {
+        RefreshBuffPicks();
+        // A row's "unlearned" chip (see ResolveLearned) can flip live — training the
+        // spell mid-session, or a reroll losing it — so every row needs to re-pull it.
+        foreach (BuffSlotRowViewModel row in Slots) row.Refresh();
+    }
     private void OnMembersChanged(object? _, NotifyCollectionChangedEventArgs __) => RefreshMemberTargets();
 
     private void Load()
@@ -136,7 +142,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     private BuffSlotRowViewModel MakeRow(BuffSlot dto) =>
-        new(dto, ResolveScope, ResolveName, ResolveOverwrite, Persist, OnSelfCastActivated);
+        new(dto, ResolveScope, ResolveName, ResolveOverwrite, Persist, OnSelfCastActivated, ResolveLearned);
 
     // Live mutual exclusion: the moment a row's Self box is CHECKED, turn off any
     // OTHER row's Self box for a spell it mutually removes (or is removed by) via
@@ -204,6 +210,20 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         return _spellbook.FindByCastCode(c) is { } s ? s.Name : c;
     }
 
+    // Whether the character has actually learned this slot's spell — a row can now
+    // list (and be checked for) a buff from the class's full roster the player
+    // hasn't trained yet (see RefreshSelfBlessCandidates), so the row needs its own
+    // "unlearned" signal the way the read-only Buff Watchdog timer bars already
+    // show. A #item-cast token always reads learned — a carried item is available
+    // by definition, there's no separate "train" step for it.
+    private bool ResolveLearned(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return true;
+        string c = code.Trim();
+        if (ItemCastToken.IsToken(c)) return true;
+        return _spellbook.FindByCastCode(c) is { } s && _spellbook.IsObtained(s.Number);
+    }
+
     // Every buff the character can slot, de-duplicated by cast value: learned buff
     // spells the character can maintain on themselves, a member, or the whole party
     // (self / single-target / whole-party scopes), plus whole-party cast-on-use items
@@ -233,14 +253,15 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         RefreshSelfBlessCandidates(slotted);
     }
 
-    // Every LEARNED buff not already slotted that the character can cast on
-    // themselves (self-only Targets, or single-target Targets castable on self)
-    // and — when we know it — is alignment-eligible for. Deliberately NOT
-    // level-gated: the point of "Add all blesses" listing every possible pick is
-    // to let the player pre-stage a slot they can't use yet and swap into it later,
-    // not just what's usable this exact moment. Reduced to the BuffConflictAnalyzer
-    // pick: every candidate gets listed, but only the highest-ReqLevel member of
-    // each RemovesSpell family (e.g. greater zeal over zeal) comes pre-checked.
+    // EVERY buff the CLASS can ever cast on itself (self-only Targets, or single-
+    // target Targets castable on self) and — when we know it — is alignment-
+    // eligible for: not level-gated, and not gated on having actually learned it
+    // yet either — a theorycrafting roster, so the player can see (and check) a
+    // buff they haven't trained yet as well as one they have. Reduced to the
+    // BuffConflictAnalyzer pick: every candidate gets listed, but only the
+    // highest-ReqLevel OBTAINED member of each RemovesSpell family (e.g. greater
+    // zeal over zeal) comes pre-checked — an unlearned pick is never auto-checked,
+    // since the game would just refuse the cast.
     //
     // Alignment matters here specifically because a class's learnable list often
     // carries BOTH sides of a holy/unholy pair (e.g. "holy armour" needs non-evil,
@@ -260,11 +281,11 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             .Where(s => BuffClassifier.IsAnyBuff(s)
                 && !BuffClassifier.IsWholeParty(s.Targets)
                 && BuffClassifier.IsAlignmentEligible(s.Formula, alignment)
-                && _spellbook.IsObtained(s.Number)
                 && !slotted.Contains(s.Short.Trim()))
             .Select(s => new Game.Spells.SelfBlessCandidate(
                 s.Short.Trim(), s.Name, s.Number, s.ReqLevel, s.Formula.ManaCost,
-                Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula)))
+                Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula),
+                IsObtained: _spellbook.IsObtained(s.Number)))
             .ToList();
 
         List<Game.Spells.ExistingBuffSlot> existing = new();

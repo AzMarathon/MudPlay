@@ -2,8 +2,8 @@
 
 ## 3.54.0
 
-- Buff Watchdog: new **Add all blesses** button — adds a row for every self-castable buff you've learned, regardless of level, in one click, no dialog
-- Where two buffs would strip each other off (e.g. greater zeal removes zeal) both are listed but only the higher-level one is pre-checked, so you can swap to the other by hand; anything that conflicts with a buff you've already configured yourself is listed but left unchecked, never auto-clobbering your existing setup
+- Buff Watchdog: new **Add all blesses** button — adds a row for every self-castable buff your class can ever cast, learned or not and regardless of level, in one click, no dialog; a not-yet-learned row shows an **unlearned** chip
+- Where two buffs would strip each other off (e.g. greater zeal removes zeal) both are listed but only the higher-level *learned* one is pre-checked, so you can swap to another family member by hand once you've trained it; anything that conflicts with a buff you've already configured yourself is listed but left unchecked, never auto-clobbering your existing setup
 - Checking a buff that conflicts with another currently-checked one now auto-unchecks the other (and vice versa) — applies live to any row, not just ones "Add all blesses" added
 - Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt
 - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures (e.g. minor healing, cure poison) as if they were maintainable buffs — it now requires a real duration, not just zero energy cost and self/member targeting

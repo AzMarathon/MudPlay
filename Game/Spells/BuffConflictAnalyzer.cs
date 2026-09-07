@@ -51,14 +51,17 @@ public readonly struct BuffAffectSet
 public readonly record struct BuffOverwritePair(
     string RemovingCode, string RemovingName, string RemovedCode, string RemovedName);
 
-// A learned, self-castable buff eligible for the Buff Panel's "Add all blesses"
-// bulk add — self-only or single-target-on-self, alignment-eligible, not already
-// slotted. Removes is its Abil-122 RemovesSpell target numbers. Level-independent
-// by design — obtained already implies the character could learn it, and the
-// point of listing everything is to let the player swap in a not-yet-usable pick
-// ahead of time.
+// A self-castable buff eligible for the Buff Panel's "Add all blesses" bulk add
+// — self-only or single-target-on-self, alignment-eligible, not already slotted.
+// Removes is its Abil-122 RemovesSpell target numbers. Neither level- nor
+// obtained-gated: the whole point is a browsable roster of every buff the class
+// could ever have, learned or not, so the player can theorycraft ahead of
+// actually training something. IsObtained still matters for which candidate gets
+// pre-checked (see SelectSelfBlessCandidates) — defaults true so existing callers
+// that only care about the RemovesSpell math don't have to plumb it through.
 public readonly record struct SelfBlessCandidate(
-    string CastCode, string Name, int Number, int ReqLevel, int ManaCost, IReadOnlyCollection<int> Removes);
+    string CastCode, string Name, int Number, int ReqLevel, int ManaCost,
+    IReadOnlyCollection<int> Removes, bool IsObtained = true);
 
 // One SelfBlessCandidate as "Add all blesses" presents it: always added as a row,
 // but only Recommended candidates come pre-checked (Self ticked) — the rest are
@@ -128,15 +131,18 @@ public static class BuffConflictAnalyzer
     }
 
     // The Buff Panel's "Add all blesses" pick: EVERY self-castable candidate gets a
-    // row — so the whole roster of what the character could ever self-bless is
-    // browsable and any auto-pick can be swapped for another family member by hand
-    // — but only one per RemovesSpell family (typically a tiered pair like zeal /
-    // greater zeal, which mutually remove each other) comes pre-checked: the
-    // highest-ReqLevel member, and only when it wouldn't immediately clobber — or
-    // be clobbered by — something already active in an existing slot. A self
-    // candidate is always assumed able to co-land with itself, so CanCoLand only
-    // needs to gate against the EXISTING slot's own targeting (a single-target slot
-    // aimed at other members only, for instance, can never conflict with a self cast).
+    // row — learned or not — so the whole roster of what the character could ever
+    // self-bless is browsable and any auto-pick can be swapped for another family
+    // member by hand — but only one per RemovesSpell family (typically a tiered
+    // pair like zeal / greater zeal, which mutually remove each other) comes
+    // pre-checked: the highest-ReqLevel OBTAINED member (an unlearned pick is
+    // never auto-checked — the game would just refuse the cast), and only when it
+    // wouldn't immediately clobber — or be clobbered by — something already active
+    // in an existing slot. A cluster with no obtained member recommends nothing. A
+    // self candidate is always assumed able to co-land with itself, so CanCoLand
+    // only needs to gate against the EXISTING slot's own targeting (a single-target
+    // slot aimed at other members only, for instance, can never conflict with a
+    // self cast).
     public static IReadOnlyList<SelfBlessPick> SelectSelfBlessCandidates(
         IReadOnlyList<SelfBlessCandidate> pool, IReadOnlyList<ExistingBuffSlot> existing)
     {
@@ -165,12 +171,20 @@ public static class BuffConflictAnalyzer
             foreach (int removed in cand.Removes)
                 if (poolNumbers.Contains(removed)) Union(cand.Number, removed);
 
-        HashSet<int> recommended = pool
-            .GroupBy(s => Find(s.Number))
-            .Select(g => g.OrderByDescending(s => s.ReqLevel).ThenByDescending(s => s.ManaCost).First())
-            .Where(preferred => !ClobbersExisting(preferred))
-            .Select(s => s.Number)
-            .ToHashSet();
+        HashSet<int> recommended = new();
+        foreach (IGrouping<int, SelfBlessCandidate> cluster in pool.GroupBy(s => Find(s.Number)))
+        {
+            SelfBlessCandidate? preferred = null;
+            foreach (SelfBlessCandidate cand in cluster)
+            {
+                if (!cand.IsObtained) continue;
+                if (preferred is not { } cur
+                    || cand.ReqLevel > cur.ReqLevel
+                    || (cand.ReqLevel == cur.ReqLevel && cand.ManaCost > cur.ManaCost))
+                    preferred = cand;
+            }
+            if (preferred is { } p && !ClobbersExisting(p)) recommended.Add(p.Number);
+        }
 
         return pool
             .Select(s => new SelfBlessPick(s, recommended.Contains(s.Number)))
