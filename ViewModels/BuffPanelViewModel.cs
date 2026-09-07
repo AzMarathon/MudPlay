@@ -61,8 +61,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // whole-party buff also affects other players, a bigger decision than what
     // this bulk action means by "on itself", so it's left for the user to add by
     // hand via the normal picker.
-    private IReadOnlyList<Game.Spells.SelfBlessCandidate> _selfBlessCandidates =
-        Array.Empty<Game.Spells.SelfBlessCandidate>();
+    private IReadOnlyList<Game.Spells.SelfBlessPick> _selfBlessCandidates =
+        Array.Empty<Game.Spells.SelfBlessPick>();
 
     // Whether "Add all blesses" has anything to add.
     public bool CanAddAllBlesses => _selfBlessCandidates.Count > 0;
@@ -126,7 +126,30 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     private BuffSlotRowViewModel MakeRow(BuffSlot dto) =>
-        new(dto, ResolveScope, ResolveName, ResolveOverwrite, Persist);
+        new(dto, ResolveScope, ResolveName, ResolveOverwrite, Persist, OnSelfCastActivated);
+
+    // Live mutual exclusion: the moment a row's Self box is CHECKED, turn off any
+    // OTHER row's Self box for a spell it mutually removes (or is removed by) via
+    // RemovesSpell — e.g. checking "blood ritual" unchecks "zeal", and checking
+    // "zeal" back later unchecks "blood ritual" in turn (both directions fall out
+    // of only ever reacting to a fresh Self-check, never a Self-uncheck, so there's
+    // no feedback loop). Scoped to Self-vs-Self only — party/whole-party targeting
+    // already has its own explicit checklist and isn't force-exclusive here.
+    private void OnSelfCastActivated(BuffSlotRowViewModel activated)
+    {
+        if (string.IsNullOrWhiteSpace(activated.Spell)) return;
+        if (_spellbook.FindByCastCode(activated.Spell.Trim()) is not { } activatedSpell) return;
+        HashSet<int> removes = Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(activatedSpell.Formula);
+        foreach (BuffSlotRowViewModel other in Slots)
+        {
+            if (ReferenceEquals(other, activated) || !other.CastOnSelf) continue;
+            if (string.IsNullOrWhiteSpace(other.Spell)) continue;
+            if (_spellbook.FindByCastCode(other.Spell.Trim()) is not { } otherSpell) continue;
+            bool conflict = removes.Contains(otherSpell.Number)
+                || Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(otherSpell.Formula).Contains(activatedSpell.Number);
+            if (conflict) other.CastOnSelf = false;
+        }
+    }
 
     // Looks up dto's cast code in the last-computed conflict pairing (see
     // RefreshOverwriteWarnings) — both directions, since the player needs to see
@@ -200,13 +223,14 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         RefreshSelfBlessCandidates(slotted);
     }
 
-    // Every learned, level-gated buff not already slotted that the character can
-    // ACTUALLY cast on themselves right now (self-only Targets, or single-target
-    // Targets castable on self, and — when we know it — alignment-eligible),
-    // reduced to the BuffConflictAnalyzer pick: drop anything that would clobber —
-    // or be clobbered by — an already-configured slot, then keep only the
-    // highest-ReqLevel member of each RemovesSpell family (e.g. greater zeal over
-    // zeal) among what's left.
+    // Every LEARNED buff not already slotted that the character can cast on
+    // themselves (self-only Targets, or single-target Targets castable on self)
+    // and — when we know it — is alignment-eligible for. Deliberately NOT
+    // level-gated: the point of "Add all blesses" listing every possible pick is
+    // to let the player pre-stage a slot they can't use yet and swap into it later,
+    // not just what's usable this exact moment. Reduced to the BuffConflictAnalyzer
+    // pick: every candidate gets listed, but only the highest-ReqLevel member of
+    // each RemovesSpell family (e.g. greater zeal over zeal) comes pre-checked.
     //
     // Alignment matters here specifically because a class's learnable list often
     // carries BOTH sides of a holy/unholy pair (e.g. "holy armour" needs non-evil,
@@ -226,7 +250,6 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             .Where(s => BuffClassifier.IsAnyBuff(s)
                 && !BuffClassifier.IsWholeParty(s.Targets)
                 && BuffClassifier.IsAlignmentEligible(s.Formula, alignment)
-                && s.ReqLevel <= _spellbook.Level
                 && _spellbook.IsObtained(s.Number)
                 && !slotted.Contains(s.Short.Trim()))
             .Select(s => new Game.Spells.SelfBlessCandidate(
@@ -330,18 +353,21 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         Persist();
     }
 
-    // Bulk-add every self-bless candidate (see RefreshSelfBlessCandidates) as a new
-    // cast-on-self slot in one shot — no dialog, since there's nothing to choose:
-    // the candidate list has already resolved level, learned status, and RemovesSpell
-    // conflicts down to exactly one slot per buff family.
+    // Bulk-add EVERY self-bless candidate (see RefreshSelfBlessCandidates) as a new
+    // slot in one shot — no dialog. Every learned, alignment-eligible self-castable
+    // buff gets a row so the whole roster is browsable; only the Recommended pick
+    // per RemovesSpell family comes pre-checked (Self ticked) — the rest are added
+    // unchecked so the player can swap a different family member in by hand
+    // (unchecking one and checking another triggers the same live mutual-exclusion
+    // as any other row — see OnSelfCastActivated).
     [RelayCommand]
     private void AddAllBlesses()
     {
         if (_selfBlessCandidates.Count == 0) return;
         List<(string Display, string Given)> members = CurrentMembers();
-        foreach (Game.Spells.SelfBlessCandidate cand in _selfBlessCandidates)
+        foreach (Game.Spells.SelfBlessPick pick in _selfBlessCandidates)
         {
-            BuffSlot dto = new() { Spell = cand.CastCode, CastOnSelf = true };
+            BuffSlot dto = new() { Spell = pick.Candidate.CastCode, CastOnSelf = pick.Recommended };
             _settings.Slots.Add(dto);
             BuffSlotRowViewModel row = MakeRow(dto);
             Slots.Add(row);

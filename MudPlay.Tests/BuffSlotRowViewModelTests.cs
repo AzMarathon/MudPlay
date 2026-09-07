@@ -115,4 +115,43 @@ public sealed class BuffSlotRowViewModelTests
         Assert.True(row.HasOverwriteWarning);
         Assert.Equal("Removed by: chant\nRemoves: poison", row.OverwriteWarningTooltip);
     }
+
+    // The live cross-row mutual-exclusion hook (BuffPanelViewModel.OnSelfCastActivated)
+    // only reacts to a fresh Self CHECK, never an uncheck — otherwise unchecking a row
+    // to let its conflict win would immediately re-fire and fight the user's own click.
+    [Fact]
+    public void CastOnSelf_CheckedOn_FiresOnSelfActivated()
+    {
+        int fired = 0;
+        var dto = new BuffSlot { Spell = "grze" };
+        var row = new BuffSlotRowViewModel(
+            dto, _ => BuffSlotScope.SelfOnly, s => s ?? string.Empty,
+            _ => (null, null), () => { }, _ => fired++);
+
+        row.CastOnSelf = true;
+        Assert.Equal(1, fired);
+    }
+
+    [Fact]
+    public void CastOnSelf_CheckedOff_DoesNotFireOnSelfActivated()
+    {
+        int fired = 0;
+        var dto = new BuffSlot { Spell = "grze", CastOnSelf = true };
+        var row = new BuffSlotRowViewModel(
+            dto, _ => BuffSlotScope.SelfOnly, s => s ?? string.Empty,
+            _ => (null, null), () => { }, _ => fired++);
+
+        row.CastOnSelf = false;
+        Assert.Equal(0, fired);
+    }
+
+    [Fact]
+    public void CastOnSelf_NullActivationCallback_DoesNotThrow()
+    {
+        // Every existing Row(...) helper call in this file omits the callback —
+        // it must default to a no-op, not a required parameter.
+        var row = Row(new BuffSlot { Spell = "bles" }, BuffSlotScope.SelfOnly);
+        row.CastOnSelf = true;   // would NRE if the default wasn't null-safe
+        Assert.True(row.CastOnSelf);
+    }
 }

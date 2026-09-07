@@ -108,7 +108,7 @@
                             <Button Content="Add all blesses" Padding="8,2"
                                     IsEnabled="{Binding CanAddAllBlesses}"
                                     Command="{Binding AddAllBlessesCommand}"
-                                    ToolTip.Tip="Add every learned buff you can cast on yourself, at its highest available tier — skips anything a family member (e.g. greater zeal over zeal) or an already-configured slot would immediately overwrite."/>
+                                    ToolTip.Tip="List every learned buff you can cast on yourself, regardless of level. Where two would strip each other off (e.g. greater zeal / zeal), both are listed but only the higher-level one comes checked — checking the other unchecks it, and vice versa."/>
                             <Button Content="Remove all" Padding="8,2"
                                     IsEnabled="{Binding HasSlots}"
                                     Command="{Binding RemoveAllBuffsCommand}"

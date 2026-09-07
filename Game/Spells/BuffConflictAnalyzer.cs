@@ -52,10 +52,18 @@ public readonly record struct BuffOverwritePair(
     string RemovingCode, string RemovingName, string RemovedCode, string RemovedName);
 
 // A learned, self-castable buff eligible for the Buff Panel's "Add all blesses"
-// bulk add — self-only or single-target-on-self, level-gated, not already slotted.
-// Removes is its Abil-122 RemovesSpell target numbers.
+// bulk add — self-only or single-target-on-self, alignment-eligible, not already
+// slotted. Removes is its Abil-122 RemovesSpell target numbers. Level-independent
+// by design — obtained already implies the character could learn it, and the
+// point of listing everything is to let the player swap in a not-yet-usable pick
+// ahead of time.
 public readonly record struct SelfBlessCandidate(
     string CastCode, string Name, int Number, int ReqLevel, int ManaCost, IReadOnlyCollection<int> Removes);
+
+// One SelfBlessCandidate as "Add all blesses" presents it: always added as a row,
+// but only Recommended candidates come pre-checked (Self ticked) — the rest are
+// listed unchecked so the player can swap one in by hand.
+public readonly record struct SelfBlessPick(SelfBlessCandidate Candidate, bool Recommended);
 
 // An already-configured slot's spell identity + who it can land on + what it
 // removes — enough to tell whether a self-bless candidate would clobber it, or be
@@ -119,51 +127,54 @@ public static class BuffConflictAnalyzer
         return string.Join("\n", lines);
     }
 
-    // The Buff Panel's "Add all blesses" pick: from every self-castable candidate,
-    // drop one that would clobber (or be clobbered by) an already-configured slot,
-    // then — for whatever's left — cluster the RemovesSpell graph (typically a tiered
-    // family like zeal / greater zeal, which mutually remove each other) via
-    // union-find and keep only the highest-ReqLevel member of each cluster. A self
+    // The Buff Panel's "Add all blesses" pick: EVERY self-castable candidate gets a
+    // row — so the whole roster of what the character could ever self-bless is
+    // browsable and any auto-pick can be swapped for another family member by hand
+    // — but only one per RemovesSpell family (typically a tiered pair like zeal /
+    // greater zeal, which mutually remove each other) comes pre-checked: the
+    // highest-ReqLevel member, and only when it wouldn't immediately clobber — or
+    // be clobbered by — something already active in an existing slot. A self
     // candidate is always assumed able to co-land with itself, so CanCoLand only
     // needs to gate against the EXISTING slot's own targeting (a single-target slot
     // aimed at other members only, for instance, can never conflict with a self cast).
-    public static IReadOnlyList<SelfBlessCandidate> SelectSelfBlessCandidates(
+    public static IReadOnlyList<SelfBlessPick> SelectSelfBlessCandidates(
         IReadOnlyList<SelfBlessCandidate> pool, IReadOnlyList<ExistingBuffSlot> existing)
     {
+        if (pool.Count == 0) return Array.Empty<SelfBlessPick>();
+
         BuffAffectSet selfAffect = new() { Self = true, Members = Array.Empty<string>() };
-        List<SelfBlessCandidate> survivors = new();
-        foreach (SelfBlessCandidate cand in pool)
+        bool ClobbersExisting(SelfBlessCandidate cand)
         {
-            bool clobbers = false;
             foreach (ExistingBuffSlot slot in existing)
             {
                 if (!CanCoLand(selfAffect, slot.Affect)) continue;
-                if (cand.Removes.Contains(slot.Number) || slot.Removes.Contains(cand.Number))
-                {
-                    clobbers = true;
-                    break;
-                }
+                if (cand.Removes.Contains(slot.Number) || slot.Removes.Contains(cand.Number)) return true;
             }
-            if (!clobbers) survivors.Add(cand);
+            return false;
         }
-        if (survivors.Count == 0) return survivors;
 
-        Dictionary<int, int> parent = survivors.ToDictionary(s => s.Number, s => s.Number);
+        Dictionary<int, int> parent = pool.ToDictionary(s => s.Number, s => s.Number);
         int Find(int x) => parent[x] == x ? x : (parent[x] = Find(parent[x]));
         void Union(int a, int b)
         {
             int ra = Find(a), rb = Find(b);
             if (ra != rb) parent[ra] = rb;
         }
-        HashSet<int> survivorNumbers = survivors.Select(s => s.Number).ToHashSet();
-        foreach (SelfBlessCandidate cand in survivors)
+        HashSet<int> poolNumbers = pool.Select(s => s.Number).ToHashSet();
+        foreach (SelfBlessCandidate cand in pool)
             foreach (int removed in cand.Removes)
-                if (survivorNumbers.Contains(removed)) Union(cand.Number, removed);
+                if (poolNumbers.Contains(removed)) Union(cand.Number, removed);
 
-        return survivors
+        HashSet<int> recommended = pool
             .GroupBy(s => Find(s.Number))
             .Select(g => g.OrderByDescending(s => s.ReqLevel).ThenByDescending(s => s.ManaCost).First())
-            .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(preferred => !ClobbersExisting(preferred))
+            .Select(s => s.Number)
+            .ToHashSet();
+
+        return pool
+            .Select(s => new SelfBlessPick(s, recommended.Contains(s.Number)))
+            .OrderBy(p => p.Candidate.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 }

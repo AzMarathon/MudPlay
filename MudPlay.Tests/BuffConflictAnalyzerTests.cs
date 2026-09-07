@@ -136,55 +136,62 @@ public sealed class BuffConflictAnalyzerTests
     private static SelfBlessCandidate GreaterZeal() => new("grze", "greater zeal", 5581, ReqLevel: 44, ManaCost: 28, Removes: new[] { 304 });
 
     [Fact]
-    public void SelectSelfBlessCandidates_MutualFamily_KeepsOnlyHighestReqLevel()
+    public void SelectSelfBlessCandidates_MutualFamily_BothListed_OnlyHighestReqLevelRecommended()
     {
-        List<SelfBlessCandidate> result = BuffConflictAnalyzer
+        List<SelfBlessPick> result = BuffConflictAnalyzer
             .SelectSelfBlessCandidates(new[] { Zeal(), GreaterZeal() }, Array.Empty<ExistingBuffSlot>())
             .ToList();
 
-        SelfBlessCandidate kept = Assert.Single(result);
-        Assert.Equal("greater zeal", kept.Name);
+        // Every family member gets a row — nothing is dropped — but only the
+        // highest-ReqLevel one is pre-checked, so the player can still switch to
+        // the other by hand.
+        Assert.Equal(2, result.Count);
+        Assert.True(result.Single(p => p.Candidate.Name == "greater zeal").Recommended);
+        Assert.False(result.Single(p => p.Candidate.Name == "zeal").Recommended);
     }
 
     [Fact]
-    public void SelectSelfBlessCandidates_UnrelatedCandidates_KeepsBoth()
+    public void SelectSelfBlessCandidates_UnrelatedCandidates_BothRecommended()
     {
         SelfBlessCandidate other = new("bles", "bless", 100, ReqLevel: 5, ManaCost: 10, Removes: Array.Empty<int>());
-        List<SelfBlessCandidate> result = BuffConflictAnalyzer
+        List<SelfBlessPick> result = BuffConflictAnalyzer
             .SelectSelfBlessCandidates(new[] { Zeal(), other }, Array.Empty<ExistingBuffSlot>())
             .ToList();
 
         Assert.Equal(2, result.Count);
+        Assert.All(result, p => Assert.True(p.Recommended));
     }
 
     [Fact]
-    public void SelectSelfBlessCandidates_ExistingSlotAlreadyRemovesCandidate_CandidateDropped()
+    public void SelectSelfBlessCandidates_ExistingSlotAlreadyRemovesCandidate_ListedButNotRecommended()
     {
-        // An existing self-cast slot for greater zeal already covers this — adding
-        // zeal on top would just get overwritten every recast.
+        // An existing self-cast slot for greater zeal already covers this — zeal is
+        // still listed (so the player can swap to it deliberately) but doesn't come
+        // pre-checked, since adding it on top would just get overwritten every recast.
         ExistingBuffSlot existingGreaterZeal = new(5581, SelfAffect(), Removes: new[] { 304 });
-        List<SelfBlessCandidate> result = BuffConflictAnalyzer
-            .SelectSelfBlessCandidates(new[] { Zeal() }, new[] { existingGreaterZeal })
-            .ToList();
+        SelfBlessPick result = Assert.Single(BuffConflictAnalyzer
+            .SelectSelfBlessCandidates(new[] { Zeal() }, new[] { existingGreaterZeal }));
 
-        Assert.Empty(result);
+        Assert.Equal("zeal", result.Candidate.Name);
+        Assert.False(result.Recommended);
     }
 
     [Fact]
-    public void SelectSelfBlessCandidates_CandidateWouldRemoveExistingSlot_CandidateDropped()
+    public void SelectSelfBlessCandidates_CandidateWouldRemoveExistingSlot_ListedButNotRecommended()
     {
         // The reverse direction: an existing manually-configured zeal slot would be
-        // clobbered by adding greater zeal — don't touch the user's existing config.
+        // clobbered by checking greater zeal — don't auto-touch the user's existing
+        // config, but still list it so they can make that swap themselves.
         ExistingBuffSlot existingZeal = new(304, SelfAffect(), Removes: new[] { 5581 });
-        List<SelfBlessCandidate> result = BuffConflictAnalyzer
-            .SelectSelfBlessCandidates(new[] { GreaterZeal() }, new[] { existingZeal })
-            .ToList();
+        SelfBlessPick result = Assert.Single(BuffConflictAnalyzer
+            .SelectSelfBlessCandidates(new[] { GreaterZeal() }, new[] { existingZeal }));
 
-        Assert.Empty(result);
+        Assert.Equal("greater zeal", result.Candidate.Name);
+        Assert.False(result.Recommended);
     }
 
     [Fact]
-    public void SelectSelfBlessCandidates_ExistingSlotCannotCoLandWithSelf_DoesNotFilter()
+    public void SelectSelfBlessCandidates_ExistingSlotCannotCoLandWithSelf_StillRecommended()
     {
         // An existing slot aimed only at other party members (never self) can't
         // conflict with a self-cast candidate, even if the spell numbers overlap.
@@ -192,12 +199,11 @@ public sealed class BuffConflictAnalyzerTests
             isWholePartySpell: false, wholePartyOn: false, castOnSelf: false, allMembers: false,
             targets: new[] { "legolas" });
         ExistingBuffSlot existingMemberSlot = new(5581, membersOnly, Removes: new[] { 304 });
-        List<SelfBlessCandidate> result = BuffConflictAnalyzer
-            .SelectSelfBlessCandidates(new[] { Zeal() }, new[] { existingMemberSlot })
-            .ToList();
+        SelfBlessPick result = Assert.Single(BuffConflictAnalyzer
+            .SelectSelfBlessCandidates(new[] { Zeal() }, new[] { existingMemberSlot }));
 
-        SelfBlessCandidate kept = Assert.Single(result);
-        Assert.Equal("zeal", kept.Name);
+        Assert.Equal("zeal", result.Candidate.Name);
+        Assert.True(result.Recommended);
     }
 
     [Fact]
