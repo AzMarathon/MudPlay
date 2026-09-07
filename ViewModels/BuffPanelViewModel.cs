@@ -376,6 +376,26 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         Persist();
     }
 
+    // Wipe every configured slot in one shot — self, party, and whole-party alike.
+    // Routed through the same ConfirmDeleteAsync gate every other list-row delete in
+    // the app uses (Settings → confirm-deletes), since this is a much bigger blast
+    // radius than removing one row.
+    [RelayCommand]
+    private async System.Threading.Tasks.Task RemoveAllBuffs()
+    {
+        if (Slots.Count == 0) return;
+        string what = Slots.Count == 1 ? "your 1 configured buff" : $"all {Slots.Count} configured buffs";
+        bool ok = await AppServices.Current.Confirm.ConfirmDeleteAsync(what);
+        if (!ok) return;
+
+        _settings.Slots.Clear();
+        Slots.Clear();
+        RefreshBuffPicks();   // every freed spell returns to both pickers
+        OnPropertyChanged(nameof(HasSlots));
+        OnPropertyChanged(nameof(ShowPanel));
+        Persist();
+    }
+
     private void Persist()
     {
         if (_profile.Current is not { } p) return;

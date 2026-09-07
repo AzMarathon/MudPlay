@@ -109,6 +109,11 @@
                                     IsEnabled="{Binding CanAddAllBlesses}"
                                     Command="{Binding AddAllBlessesCommand}"
                                     ToolTip.Tip="Add every learned buff you can cast on yourself, at its highest available tier — skips anything a family member (e.g. greater zeal over zeal) or an already-configured slot would immediately overwrite."/>
+                            <Button Content="Remove all" Padding="8,2"
+                                    IsEnabled="{Binding HasSlots}"
+                                    Command="{Binding RemoveAllBuffsCommand}"
+                                    Foreground="{StaticResource AccentRedBrush}"
+                                    ToolTip.Tip="Remove every configured buff slot — self, party, and whole-party alike. Asks to confirm first (unless confirm-deletes is off in Settings)."/>
                         </StackPanel>
 
                         <TextBlock IsVisible="{Binding !HasSlots}" Margin="8,4,8,6"

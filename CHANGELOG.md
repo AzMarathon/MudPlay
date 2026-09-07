@@ -4,6 +4,7 @@
 
 - Buff Watchdog: new **Add all blesses** button — bulk-adds every self-castable buff you've learned as a self slot in one click, no dialog
 - It picks your level and spellbook's highest-tier version of each buff family (e.g. greater zeal over zeal, since casting one strips the other) and skips anything that would conflict with a buff you've already configured by hand
+- Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt
 
 ## 3.53.2
 
