@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.54.2**
-> - Fixed keyboard input feeling delayed during play — the buff/heal decision pass (each combat round, ~1×/s idle) was re-scanning the entire Spells/Items/Classes tables from scratch on every lookup, stalling the UI thread; the worst offender was the equipment-stat aggregation scanning the whole Items table per worn item
-> - Game-data lookups by Number/Name are now indexed once per table load, and the class cast-item list is cached per class, instead of linear-scanned on every call
+> **Version 3.54.4**
+> - Unrecognized Lines capture no longer stages room-display titles (e.g. "River Street") — they're matched against the Rooms table and excluded, while genuine spell/monster lines that share the room-name colour still capture
+> - Monster Intel "AC vs Selected Target" now shows AC to the tenth (e.g. 10.1) rather than rounding it off, and the defense-simulator AC field steps by 0.1 to match
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

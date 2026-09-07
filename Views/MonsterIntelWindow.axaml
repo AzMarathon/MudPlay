@@ -107,9 +107,9 @@
                                        ToolTip.Tip="A defense simulator — tweak these to see how each monster's chance to hit you changes. It seeds to your current worn gear + configured buffs when the window opens, and re-seeds if you swap gear."/>
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,16,0">
                                 <TextBlock Classes="FieldLabel" Text="AC" VerticalAlignment="Center"/>
-                                <NumericUpDown Value="{Binding SimAc, Mode=TwoWay}" Minimum="0" Maximum="9999" Increment="1"
-                                               FormatString="0" ShowButtonSpinner="True" Width="124" MinWidth="124"
-                                               ToolTip.Tip="Armour Class vs every attacker (worn gear + buffs). Seeded from your live loadout."/>
+                                <NumericUpDown Value="{Binding SimAc, Mode=TwoWay}" Minimum="0" Maximum="9999" Increment="0.1"
+                                               FormatString="0.0" ShowButtonSpinner="True" Width="124" MinWidth="124"
+                                               ToolTip.Tip="Armour Class vs every attacker (worn gear + buffs), to the tenth. Seeded from your live loadout; the hit-% math uses the whole number the game's to-hit consumes."/>
                             </StackPanel>
                             <CheckBox Content="Shadow AC" IsChecked="{Binding SimShadow, Mode=TwoWay}"
                                       VerticalAlignment="Center" Margin="0,0,16,0"

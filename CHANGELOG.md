@@ -1,5 +1,10 @@
 # Version history
 
+## 3.54.4
+
+- Unrecognized Lines capture no longer stages room-display titles (e.g. "River Street") — a room name is read by the room parser, not the message catalogue, so it's now matched against the Rooms table and excluded; genuine spell/monster lines that happen to share the room-name colour still capture
+- Monster Intel "AC vs Selected Target" now shows AC to the tenth (e.g. 10.1) instead of rounding, and the defense-simulator AC field steps by 0.1 to match — item AC is stored ×10 and the game displays it fractional; the Hits-You-% estimate still uses the whole-number AC the game's to-hit formula consumes
+
 ## 3.54.2
 
 - Fixed keyboard input feeling delayed during play — the buff/heal decision pass (which runs each combat round and roughly once a second while idle) re-scanned the entire Spells/Items/Classes tables from scratch on every lookup, stalling the UI thread; the dominant cost was the equipment-stat aggregation doing a full Items scan for each worn item

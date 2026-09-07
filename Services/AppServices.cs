@@ -3489,7 +3489,11 @@ public sealed class AppServices
         // where it was first seen — a locator hint for tracking down the source.
         MessageCandidateWatcher = new Game.MessageCandidateWatcher(
             Router, Messages, MessageCandidates,
-            currentRoom: () => RoomTracker.State.CurrentRoom?.Key, log: Log);
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key, log: Log,
+            // A room-display title line is not a server message — the room-display
+            // parser reads it directly and registers no router pattern, so exclude
+            // any line that's a known room name in the active set (O(1) name index).
+            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null);
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a
         // curable ailment (or being held) it announces ".@poisoned" /
