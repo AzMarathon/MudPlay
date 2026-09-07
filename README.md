@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.49.6**
+> **Version 3.51.6**
 > - Roomba reroutes around a destination room that's full, to the next room labelled for the same category and then the catch-all, instead of re-sending refused drops every lap
 > - Multiple catch-all rooms work as an overflow chain, and full rooms are re-checked each lap so space that frees up gets used
 > - Roomba paces its get/drop commands past the game's rate limit rather than flooding it and losing the whole batch
