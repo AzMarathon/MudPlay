@@ -108,7 +108,7 @@
                             <Button Content="Add all blesses" Padding="8,2"
                                     IsEnabled="{Binding CanAddAllBlesses}"
                                     Command="{Binding AddAllBlessesCommand}"
-                                    ToolTip.Tip="List every learned buff you can cast on yourself, regardless of level. Where two would strip each other off (e.g. greater zeal / zeal), both are listed but only the higher-level one comes checked — checking the other unchecks it, and vice versa."/>
+                                    ToolTip.Tip="List every buff you or the party can cast, regardless of level. Where two self buffs would strip each other off (e.g. greater zeal / zeal), both are listed but only the higher-level one comes checked — checking the other unchecks it, and vice versa. Whole-party buffs are listed too but never pre-checked — tick Party Wide yourself to turn one on."/>
                             <Button Content="Remove all" Padding="8,2"
                                     IsEnabled="{Binding HasSlots}"
                                     Command="{Binding RemoveAllBuffsCommand}"

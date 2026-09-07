@@ -57,15 +57,21 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     public bool CanAddBuff => BuffPicks.Count > 0;
 
     // "Add all blesses" candidates — recomputed alongside the picker (see
-    // RefreshBuffPicks). Self-only and single-target-on-self buffs only: a
-    // whole-party buff also affects other players, a bigger decision than what
-    // this bulk action means by "on itself", so it's left for the user to add by
-    // hand via the normal picker.
+    // RefreshBuffPicks). Self-only and single-target-on-self buffs, with the full
+    // RemovesSpell-family recommendation treatment (see SelectSelfBlessCandidates).
     private IReadOnlyList<Game.Spells.SelfBlessPick> _selfBlessCandidates =
         Array.Empty<Game.Spells.SelfBlessPick>();
 
+    // Whole-party buff candidates for the same button — listed alongside the self
+    // picks (merged + sorted together, see AddAllBlesses) but NEVER pre-checked:
+    // a whole-party cast affects other players, a bigger decision than what a bulk
+    // "add my blesses" click should make on someone's behalf, so the player always
+    // opts in per-buff by hand via the row's own Party Wide toggle.
+    private IReadOnlyList<Game.Spells.SelfBlessCandidate> _partyBlessCandidates =
+        Array.Empty<Game.Spells.SelfBlessCandidate>();
+
     // Whether "Add all blesses" has anything to add.
-    public bool CanAddAllBlesses => _selfBlessCandidates.Count > 0;
+    public bool CanAddAllBlesses => _selfBlessCandidates.Count > 0 || _partyBlessCandidates.Count > 0;
 
     // Whether to show the buff panel at all: a class with no party-buff spells
     // (and no existing slots) hides it entirely, rather than showing an empty
@@ -319,6 +325,33 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
                 Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(formula), IsObtained: true));
         }
 
+        // Whole-party candidates: same "list everything eligible" roster as self,
+        // but never auto-checked — see the field doc on _partyBlessCandidates.
+        List<Game.Spells.SelfBlessCandidate> partyPool = _spellbook.Available
+            .Where(s => BuffClassifier.IsAnyBuff(s)
+                && BuffClassifier.IsWholeParty(s.Targets)
+                && BuffClassifier.IsAlignmentEligible(s.Formula, alignment)
+                && !slotted.Contains(s.Short.Trim()))
+            .Select(s => new Game.Spells.SelfBlessCandidate(
+                s.Short.Trim(), s.Name, s.Number, s.ReqLevel, s.Formula.ManaCost,
+                Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula),
+                IsObtained: _spellbook.IsObtained(s.Number)))
+            .ToList();
+        foreach (Game.Spells.ClassCastItem ci in _spellbook.GetWholePartyCastItems())
+        {
+            string code = ItemCastToken.Format(ci.ItemName);
+            if (slotted.Contains(code)) continue;
+            if (_spellbook.GetFormulaByNumber(ci.SpellNumber) is not { } formula) continue;
+            if (!BuffClassifier.IsAlignmentEligible(formula, alignment)) continue;
+            string name = string.IsNullOrWhiteSpace(ci.SpellName) ? ci.ItemName : $"{ci.ItemName} ({ci.SpellName})";
+            partyPool.Add(new Game.Spells.SelfBlessCandidate(
+                code, name, ci.SpellNumber, ci.MinLevel, ci.ManaCost,
+                Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(formula), IsObtained: true));
+        }
+        _partyBlessCandidates = partyPool
+            .OrderBy(c => c.ReqLevel).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         List<Game.Spells.ExistingBuffSlot> existing = new();
         foreach (BuffSlot dto in _settings.Slots)
         {
@@ -481,21 +514,32 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         Persist();
     }
 
-    // Bulk-add EVERY self-bless candidate (see RefreshSelfBlessCandidates) as a new
-    // slot in one shot — no dialog. Every learned, alignment-eligible self-castable
-    // buff gets a row so the whole roster is browsable; only the Recommended pick
-    // per RemovesSpell family comes pre-checked (Self ticked) — the rest are added
-    // unchecked so the player can swap a different family member in by hand
-    // (unchecking one and checking another triggers the same live mutual-exclusion
-    // as any other row — see OnSelfCastActivated).
+    // Bulk-add EVERY bless candidate — self and whole-party alike (see
+    // RefreshSelfBlessCandidates) — as a new slot in one shot, no dialog, merged
+    // and inserted in one level-sorted order. Every learned, alignment-eligible
+    // buff gets a row so the whole roster is browsable. Self picks: only the
+    // Recommended one per RemovesSpell family comes pre-checked (Self ticked) —
+    // the rest are added unchecked so the player can swap a different family
+    // member in by hand (unchecking one and checking another triggers the same
+    // live mutual-exclusion as any other row — see OnSelfCastActivated). Party
+    // picks are ALWAYS added unchecked (Party Wide off) — a whole-party cast
+    // affects other players, so the player opts into each one explicitly.
     [RelayCommand]
     private void AddAllBlesses()
     {
-        if (_selfBlessCandidates.Count == 0) return;
+        if (_selfBlessCandidates.Count == 0 && _partyBlessCandidates.Count == 0) return;
         List<(string Display, string Given)> members = CurrentMembers();
+
+        List<(BuffSlot Dto, int ReqLevel, string Name)> toAdd = new();
         foreach (Game.Spells.SelfBlessPick pick in _selfBlessCandidates)
+            toAdd.Add((new BuffSlot { Spell = pick.Candidate.CastCode, CastOnSelf = pick.Recommended },
+                pick.Candidate.ReqLevel, pick.Candidate.Name));
+        foreach (Game.Spells.SelfBlessCandidate cand in _partyBlessCandidates)
+            toAdd.Add((new BuffSlot { Spell = cand.CastCode, WholePartyOn = false },
+                cand.ReqLevel, cand.Name));
+
+        foreach ((BuffSlot dto, _, _) in toAdd.OrderBy(x => x.ReqLevel).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
         {
-            BuffSlot dto = new() { Spell = pick.Candidate.CastCode, CastOnSelf = pick.Recommended };
             _settings.Slots.Add(dto);
             BuffSlotRowViewModel row = MakeRow(dto);
             Slots.Add(row);

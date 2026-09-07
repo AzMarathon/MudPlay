@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.54.0**
-> - Buff Watchdog: new **Add all blesses** button — adds a row for every self-castable buff your class can ever cast, learned or not and regardless of level, in one click, no dialog, sorted by level requirement
+> - Buff Watchdog: new **Add all blesses** button — adds a row for every buff your class can ever cast, on yourself or the whole party, learned or not and regardless of level, sorted by level requirement; whole-party buffs are listed but never pre-checked
 > - Where two buffs would strip each other off both are listed but only the higher-level *learned* one is pre-checked; checking a conflicting buff now auto-unchecks the other live, on any row
 > - Buff Watchdog: new **Remove all** button — clears every configured slot in one click, gated behind the "confirm deletes" prompt
 > - Fixed the buff picker (both **＋ Add buff** and **Add all blesses**) offering instant heals/cures as if they were maintainable buffs — it now requires a real duration
