@@ -101,7 +101,14 @@ public static class CombatCalculator
         }
         else
         {
-            int secondaryDef = protEvil + protGood + (hasShadow ? 10 : 0);
+            // ProtGood and VileWard are realm-EXCLUSIVE (user-confirmed): Stock uses
+            // Protection-from-Good (ability 25); Paradigm dropped it and uses VileWard
+            // (ability 1113) instead — its server ignores ProtGood, and its gear carries
+            // none, so ProtGood must never count on Paradigm even if a stray value leaks
+            // in. VileWard is already Paradigm-only below. See GAME_MECHANICS "ProtGood
+            // vs VileWard".
+            int realmProtGood = realmType == RealmType.ParaMud ? 0 : protGood;
+            int secondaryDef = protEvil + realmProtGood + (hasShadow ? 10 : 0);
             if (realmType == RealmType.ParaMud && vileWard > 0 && evilLevel > EvilLevel.Saint)
             {
                 secondaryDef += AdjustVileWard(vileWard, evilLevel);

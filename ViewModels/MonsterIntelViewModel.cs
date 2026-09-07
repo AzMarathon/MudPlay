@@ -250,6 +250,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // cast to int at each matchup call. See GAME_MECHANICS "Armour Class".
     [ObservableProperty] private double _simAc;
     [ObservableProperty] private int _simProtEvil;
+    // Protection from Good (ability 25) — Stock-only. Paradigm dropped it for VileWard
+    // (its server ignores ability 25 and its gear carries none), so the ProtGood field
+    // is shown only on Stock and VileWard only on Paradigm. See GAME_MECHANICS.
+    [ObservableProperty] private int _simProtGood;
     [ObservableProperty] private int _simVileWard;
     [ObservableProperty] private bool _simShadow;
     // Default Villain/Fiend: worn Vile Ward implies an evil character, and with
@@ -266,6 +270,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         2 => EvilLevel.Fiend,
         _ => EvilLevel.Saint,
     };
+
+    // Realm-exclusive defense-sim fields: Paradigm shows Vile Ward (+ the evil-tier
+    // picker), Stock shows Prot Good. Only depends on the active realm, which doesn't
+    // change while the window is open, so no change-notification is needed.
+    public bool ShowVileWard => _gameData.ActiveRealm == RealmType.ParaMud;
+    public bool ShowProtGood => !ShowVileWard;
 
     // The effective AC the selected monster's attack actually rolls against —
     // base AC (worn + buffs) + Shadow (vs all) + the wards that apply to THAT
@@ -429,6 +439,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             _suppressSimRecompute = true;
             SimAc = _playerAcExact;              // fractional (worn + buffs); Shadow is its own toggle
             SimProtEvil = _playerProtEvil;
+            SimProtGood = _playerProtGood;
             SimVileWard = def.VileWard;
             SimShadow = _playerHasShadow;
             _suppressSimRecompute = false;
@@ -492,7 +503,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             // list — debuffs are a per-selected-monster what-if in the detail.
             entry.IncomingHitPercent = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
                 entry.Source.PhysicalAttacks, accuracyDelta: 0, entry.Source.Align,
-                (int)SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+                (int)SimAc, _playerDodge, SimProtEvil, SimProtGood,
                 _gameData.ActiveRealm, SimShadow, SimVileWard, evil, _playerArmourType) ?? -1;
     }
 
@@ -531,12 +542,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             if (_gameData.ActiveRealm == RealmType.ParaMud)
                 ac += CombatCalculator.AdjustVileWard(SimVileWard, SimEvilLevel);
         }
-        if (isGood) ac += _playerProtGood;
+        // ProtGood counts only on Stock (Paradigm dropped it for VileWard).
+        if (isGood && ShowProtGood) ac += SimProtGood;
         AcVsTargetText = ac.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     partial void OnSimAcChanged(double value) => OnSimInputChanged();
     partial void OnSimProtEvilChanged(int value) => OnSimInputChanged();
+    partial void OnSimProtGoodChanged(int value) => OnSimInputChanged();
     partial void OnSimVileWardChanged(int value) => OnSimInputChanged();
     partial void OnSimShadowChanged(bool value) => OnSimInputChanged();
     partial void OnSimVileWardAlignIndexChanged(int value) => OnSimInputChanged();
@@ -1083,7 +1096,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             // weighted hit%.
             int hitYou = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
                 m.PhysicalAttacks, _monsterDebuff.AccDelta, m.Align,
-                (int)SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+                (int)SimAc, _playerDodge, SimProtEvil, SimProtGood,
                 _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel) ?? threat.MonsterHitPercent;
             double dps = hitYou / 100.0 * threat.MonsterDamagePerHit * threat.MonsterSwingsPerRound;
             IncomingThreatLines.Insert(0,
@@ -1130,7 +1143,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (!_hasCharacterContext || (a.Type != 1 && a.Type != 3)) return null;
         return MonsterMatchupCalculatorSpells.AttackHitPercent(
             a.Accuracy - _monsterDebuff.AccDelta, m.Align,
-            (int)SimAc, _playerDodge, SimProtEvil, _playerProtGood,
+            (int)SimAc, _playerDodge, SimProtEvil, SimProtGood,
             _gameData.ActiveRealm, SimShadow, SimVileWard, SimEvilLevel);
     }
 

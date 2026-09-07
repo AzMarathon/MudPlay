@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.54.4**
-> - Unrecognized Lines capture no longer stages room-display titles (e.g. "River Street") — they're matched against the Rooms table and excluded, while genuine spell/monster lines that share the room-name colour still capture
-> - Monster Intel "AC vs Selected Target" now shows AC to the tenth (e.g. 10.1) rather than rounding it off, and the defense-simulator AC field steps by 0.1 to match
+> **Version 3.54.5**
+> - Prot Good and Vile Ward are now realm-exclusive: Stock realms use Protection-from-Good, Paradigm dropped it for Vile Ward — a stray Prot-Good value no longer lowers a monster's hit chance on Paradigm, and Vile Ward stays Paradigm-only
+> - Monster Intel's defense simulator shows a **Prot Good** field on Stock realms and the **Vile Ward** field (with the evil-tier picker) on Paradigm
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
