@@ -63,20 +63,28 @@ public partial class BuffWatchdogWindow : Window
         ApplyZoneLayout();
     }
 
+    // The config zone shows only when the class HAS configurable buffs (ShowPanel) and
+    // the user hasn't collapsed it with the timer-bar-side toggle (ConfigCollapsed).
+    private bool EffectiveShowConfig =>
+        (_vm?.Buffs?.ShowPanel ?? false) && !(_vm?.ConfigCollapsed ?? false);
+
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(BuffWatchdogViewModel.Layout)) ApplyZoneLayout();
+        // Layout (top/bottom/left/right) or the collapse toggle both reflow the zones.
+        if (e.PropertyName is nameof(BuffWatchdogViewModel.Layout)
+                           or nameof(BuffWatchdogViewModel.ConfigCollapsed))
+            ApplyZoneLayout();
     }
 
     private void OnBuffsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // ShowPanel toggles the config zone (a non-caster has no configurable buffs);
         // reflow so the splitter + zone sizing collapse / restore to match — but ONLY
-        // when it actually flips. It re-raises on every add / remove / toggle even when
-        // the value is unchanged, and a reflow rebuilds the zone grid, which would snap
-        // the splitter back to its default division and undo wherever the user dragged it.
+        // when the effective visibility actually flips. It re-raises on every add /
+        // remove / toggle even when unchanged, and a reflow rebuilds the zone grid, which
+        // would snap the splitter back to its default division and undo the user's drag.
         if (e.PropertyName == nameof(ViewModels.BuffPanelViewModel.ShowPanel)
-            && (_vm?.Buffs?.ShowPanel ?? false) != _appliedShowConfig)
+            && EffectiveShowConfig != _appliedShowConfig)
             ApplyZoneLayout();
     }
 
@@ -105,8 +113,12 @@ public partial class BuffWatchdogWindow : Window
         _zonesGrid.RowDefinitions.Clear();
         _zonesGrid.ColumnDefinitions.Clear();
 
-        bool showConfig = _vm?.Buffs?.ShowPanel ?? false;
+        // Config shows only when the class has buffs to configure AND the user hasn't
+        // collapsed the panel with the bar-side toggle. Own the zone + splitter visibility
+        // here (no XAML IsVisible binding) so the two can't fight this reflow.
+        bool showConfig = EffectiveShowConfig;
         _appliedShowConfig = showConfig;
+        _configZone.IsVisible = showConfig;
         if (!showConfig)
         {
             _zoneSplitter.IsVisible = false;

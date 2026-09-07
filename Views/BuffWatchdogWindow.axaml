@@ -189,7 +189,6 @@
     <Grid x:Name="ZonesGrid">
 
         <ScrollViewer x:Name="ConfigZone"
-                      IsVisible="{Binding Buffs.ShowPanel}"
                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
 
                 <!-- ===== Configure buffs =====
@@ -288,11 +287,12 @@
         <!-- Drag to re-divide the two zones. The code-behind sets its orientation
              (rows vs columns) + position from the chosen layout. -->
         <GridSplitter x:Name="ZoneSplitter"
-                      IsVisible="{Binding Buffs.ShowPanel}"
                       Background="{StaticResource ChromeBorderBrush}"/>
 
-        <!-- Timer bars fill whatever space the config table doesn't take. -->
-        <ScrollViewer x:Name="BarsZone">
+        <!-- Timer bars fill whatever space the config table doesn't take. A Grid so the
+             collapse/expand toggle can float over the top-right corner, above the scroll. -->
+        <Grid x:Name="BarsZone">
+            <ScrollViewer>
                 <StackPanel>
 
                 <TextBlock Margin="10,12,10,10"
@@ -396,6 +396,16 @@
                 </ItemsControl>
 
                 </StackPanel>
-        </ScrollViewer>
+            </ScrollViewer>
+
+            <!-- Collapse / expand the config panel. Floats over the bars' top-right
+                 corner; only shown when the class actually HAS a config panel. -->
+            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
+                    Width="22" Height="22" Padding="0" FontSize="13"
+                    IsVisible="{Binding Buffs.ShowPanel}"
+                    Command="{Binding ToggleConfigCommand}"
+                    Content="{Binding ConfigToggleGlyph}"
+                    ToolTip.Tip="{Binding ConfigToggleTooltip}"/>
+        </Grid>
     </Grid>
 </Window>

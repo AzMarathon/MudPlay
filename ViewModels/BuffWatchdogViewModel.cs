@@ -61,6 +61,33 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     [ObservableProperty]
     private BuffWatchdogLayout _layout = BuffWatchdogLayout.ConfigTop;
 
+    // Whether the config panel is collapsed (bars-only), toggled by the button on the
+    // timer-bar side. The code-behind watches this to reflow the zones; persisted per
+    // character (CharacterProfile.BuffWatchdogConfigCollapsed) so it reopens as left.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConfigToggleGlyph))]
+    [NotifyPropertyChangedFor(nameof(ConfigToggleTooltip))]
+    private bool _configCollapsed;
+
+    // ⊞ = expand (show), ⊟ = collapse (hide) — layout-agnostic so it reads the same
+    // whether the config sits top / bottom / left / right of the bars.
+    public string ConfigToggleGlyph => ConfigCollapsed ? "⊞" : "⊟";
+    public string ConfigToggleTooltip => ConfigCollapsed
+        ? "Show the buff-config panel"
+        : "Hide the buff-config panel (bars only)";
+
+    // Flip the config panel's collapsed state and remember it on the character.
+    [RelayCommand]
+    private void ToggleConfig()
+    {
+        ConfigCollapsed = !ConfigCollapsed;
+        if (_profile.Current is { } p && p.BuffWatchdogConfigCollapsed != ConfigCollapsed)
+        {
+            p.BuffWatchdogConfigCollapsed = ConfigCollapsed;
+            _profile.Save();
+        }
+    }
+
     // The editable buff-config panel (add / edit / remove / target). It lives in this
     // window now — the Buff Watchdog is the single place to both SEE and CONFIGURE
     // buffs. Null on the test ctor (no live services).
@@ -101,6 +128,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         if (_party is not null) _party.Members.CollectionChanged += OnPartyMembersChanged;
 
         _layout = _profile.Current?.BuffWatchdogLayout ?? BuffWatchdogLayout.ConfigTop;
+        _configCollapsed = _profile.Current?.BuffWatchdogConfigCollapsed ?? false;
         Refresh();
     }
 
@@ -128,6 +156,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     private void OnProfileLoaded(CharacterProfile p)
     {
         Layout = p.BuffWatchdogLayout;
+        ConfigCollapsed = p.BuffWatchdogConfigCollapsed;
         _wholePartyCoverage.Clear();   // a new character starts with no tracked coverage
         MarkRebuildAndRefresh();
     }

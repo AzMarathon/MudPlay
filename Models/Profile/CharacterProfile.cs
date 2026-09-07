@@ -316,6 +316,11 @@ public sealed class CharacterProfile
     // stacked (config top / bottom) or side-by-side (config left / right).
     public BuffWatchdogLayout BuffWatchdogLayout { get; set; } = BuffWatchdogLayout.ConfigTop;
 
+    // Whether the Buff Watchdog's config panel is collapsed (hidden, bars-only), toggled
+    // by the button on the timer-bar side. Sticky per character so the window reopens the
+    // way it was left.
+    public bool BuffWatchdogConfigCollapsed { get; set; }
+
     // Given name of the party leader we were following, remembered so a
     // follower can auto-rejoin after an unexpected drop. Written through by
     // PartyRejoinCoordinator whenever follower membership changes (set on
