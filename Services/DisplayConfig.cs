@@ -70,4 +70,10 @@ public sealed partial class DisplayConfig : ObservableObject
     // spot instead of only on the next open.
     [ObservableProperty] private string _convoFontFamily = "";
     [ObservableProperty] private double _convoFontSize;
+
+    // Conversation per-channel colour overrides, sourced from TalkSettings.ChannelColors
+    // (keyed by the seven filter-toggle groups; null / a missing entry means "theme
+    // default"). The window observes this and re-resolves its brush maps + rebuilds
+    // its rows on a Settings -> Talk Apply, same live-effect path as the font above.
+    [ObservableProperty] private Dictionary<string, Models.Profile.ChannelColor>? _convoChannelColors;
 }

@@ -29,8 +29,10 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // Two brushes per channel: the accent (channel tag / speaker / toolbar
     // toggle) and the message-body text colour. Both start from the theme
     // defaults and are overlaid with the character's per-channel Talk overrides.
-    private readonly Dictionary<ChatChannel, IBrush> _channelBrushes;
-    private readonly Dictionary<ChatChannel, IBrush> _textBrushes;
+    // Re-resolved (fresh maps) whenever Display's ConvoChannelColors changes so a
+    // Settings → Talk Apply re-colours the open window.
+    private Dictionary<ChatChannel, IBrush> _channelBrushes;
+    private Dictionary<ChatChannel, IBrush> _textBrushes;
     private bool _disposed;
 
     // Guards OnInputTextChanged so a recall-driven InputText set (Up/Down
@@ -113,7 +115,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         _display = display;
         _channelBrushes = BuildChannelBrushMap(app);
         _textBrushes = BuildTextBrushMap(app);
-        ApplyColorOverrides(talk.ChannelColors);
+        ApplyColorOverrides(_display.ConvoChannelColors);
 
         ApplyFontFromDisplay();
         _display.PropertyChanged += OnDisplayChanged;
@@ -316,12 +318,35 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(MetaFontSize));
     }
 
+    // Re-resolve the accent + text brush maps from theme defaults + the live
+    // per-channel overrides, then repaint. The toolbar toggle brushes are computed
+    // getters (notified below); the per-row brushes are captured when a row is
+    // built, so a Rebuild re-runs them against the new maps.
+    private void ApplyColorsFromDisplay()
+    {
+        _channelBrushes = BuildChannelBrushMap(_app);
+        _textBrushes = BuildTextBrushMap(_app);
+        ApplyColorOverrides(_display.ConvoChannelColors);
+        OnPropertyChanged(nameof(GossipBrush));
+        OnPropertyChanged(nameof(LocalBrush));
+        OnPropertyChanged(nameof(TelepathBrush));
+        OnPropertyChanged(nameof(GangpathBrush));
+        OnPropertyChanged(nameof(BroadcastBrush));
+        OnPropertyChanged(nameof(YellBrush));
+        OnPropertyChanged(nameof(RealmBrush));
+        Rebuild();
+    }
+
     private void OnDisplayChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(DisplayConfig.ConvoFontFamily)
                            or nameof(DisplayConfig.ConvoFontSize))
         {
             ApplyFontFromDisplay();
+        }
+        else if (e.PropertyName == nameof(DisplayConfig.ConvoChannelColors))
+        {
+            ApplyColorsFromDisplay();
         }
     }
 

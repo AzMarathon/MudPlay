@@ -1,8 +1,9 @@
 # Version history
 
-## 3.57.2
+## 3.57.3
 
 - Conversation window font/size now applies live on Settings → Talk Apply — an already-open window re-fonts on the spot instead of only on the next open
+- Conversation per-channel colors now apply live the same way — an already-open window recolors on Apply
 
 ## 3.57.1
 

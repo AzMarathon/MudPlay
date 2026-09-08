@@ -8468,6 +8468,7 @@ public sealed class AppServices
             ReadSection<Models.Profile.TalkSettings>(Profile.Current, "Talk");
         Display.ConvoFontFamily = talk.ConvoFont ?? "";
         Display.ConvoFontSize = talk.ConvoFontSize;
+        Display.ConvoChannelColors = talk.ChannelColors;
         // SplashAnimate is deliberately NOT seeded here: it's an install-global
         // attract-screen preference, sourced once at startup from the Global default
         // profile (see the seed after the startup profile load). Re-seeding it per
@@ -8498,6 +8499,7 @@ public sealed class AppServices
         Display.NavTooltipFontSize = DisplayConfig.DefaultNavTooltipFontSize;
         Display.ConvoFontFamily = "";
         Display.ConvoFontSize = 0;
+        Display.ConvoChannelColors = null;
         // SplashAnimate is intentionally left untouched — it's install-global (seeded
         // once at startup from the Global default profile), so a profile close/swap
         // must not reset it back on.
