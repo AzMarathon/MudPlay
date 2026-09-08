@@ -66,6 +66,21 @@ public static class RouteChoicePrompt
             return;
         }
 
+        // Avoid-override fork: the destination is reachable only through a room the
+        // user marked "avoid" (sole), or a much shorter route runs through one
+        // (two-route). Surface it so the user can override their own avoid list for
+        // this walk rather than the walk silently failing with "blocked by your
+        // avoid". Checked before the item-gate fork: a route walled purely by an
+        // avoid makes Evaluate return null anyway, and overriding a deliberate avoid
+        // is a decision the user should see explicitly.
+        RouteChoice? avoidOverride = RouteChoicePlanner.EvaluateAvoidOverride(
+            services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
+        if (avoidOverride is not null)
+        {
+            await RunPickerAsync(services, destination, source.Key, avoidOverride, previewSink);
+            return;
+        }
+
         RouteChoice? choice = RouteChoicePlanner.Evaluate(
             services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
         if (choice is null)
@@ -159,6 +174,10 @@ public static class RouteChoicePrompt
         List<int> floorCounters = new();     // grabbed in place with a `get`
         List<int> detourCounters = new();    // sourced via the give/shop/drop pipeline
         List<string> hazardSources = new();
+        // Counters the run would BUY (item + shop room) and the items to ask the
+        // party about — feed the pick-time economy probe (own bank + @wealth/@have).
+        List<(int ItemId, RoomKey ShopRoom)> buys = new();
+        List<(int ItemId, string Name)> neededItems = new();
         // The specific counter resolved per hazard requirement (which item, and how) —
         // so the picker's requirement line names the exact one it'll obtain ("log raft
         // (buy at Pier)") instead of the whole any-of list.
@@ -179,11 +198,40 @@ public static class RouteChoicePrompt
                     if (!bucket.Contains(r.ItemId)) bucket.Add(r.ItemId);
                     if (!hazardSources.Contains(r.Source)) hazardSources.Add(r.Source);
                     resolvedCounters[req] = (r.ItemId, r.Source);
+                    // A shop-sourced counter is a money question — collect it (and the
+                    // item name) for the pick-time economy probe below.
+                    if (r.ShopRoom is { } shopRoom)
+                    {
+                        buys.Add((r.ItemId, shopRoom));
+                        if (services.ItemNames.GetName(r.ItemId) is { Length: > 0 } bn)
+                            neededItems.Add((r.ItemId, bn));
+                    }
                 }
             }
         string? hazardCounterSource = hazardSources.Count > 0
             ? string.Join("; ", hazardSources) : null;
         bool hazardObtain = hazardCounterSource is not null;
+
+        // The run would BUY a counter → check the money BEFORE surfacing (the user's
+        // "check own bank, send @wealth to the party, then surface based on
+        // availability"): refresh own bank and, in a party, probe members' on-hand
+        // cash + whether a member already holds a needed item. Drives the card note
+        // and — when the leader can't pay from cash / the configured bank — redirects
+        // Go to walk to the shop and pause for manual provisioning.
+        Game.Map.RouteBuyEconomy? economy = buys.Count > 0
+            ? await services.AssessRouteBuyAsync(buys, neededItems, source)
+            : null;
+        string? economyNote = economy is { } eco
+            ? (eco.PartyItemHolder is { } holder
+                ? $"{holder} in your party has it — will hand it over on the way"
+                : eco.Affordability.Note)
+            : null;
+        // Leader can't pay from cash / configured bank, and no party member holds
+        // the item outright → don't arm an auto-buy that would stall; walk to the
+        // shop and pause so the user provisions the party by hand.
+        RoomKey? buyPauseRoom = economy is { PartyItemHolder: null } e2 && !e2.AutoPayable
+            ? e2.ShopRoom
+            : null;
 
         // For a mixed route with no sourceable counter, the base card walks to the
         // hazard's edge and stops (the user then fetches a counter / clears the hard
@@ -217,7 +265,8 @@ public static class RouteChoicePrompt
             // "buy at Pier" / "ask X" / …), so its requirement clause names that one
             // rather than the whole any-of set.
             req => resolvedCounters.TryGetValue(req, out (int ItemId, string Source) v)
-                ? v : ((int, string)?)null);
+                ? v : ((int, string)?)null,
+            economyNote);
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and
@@ -301,6 +350,25 @@ public static class RouteChoicePrompt
             return;
         }
 
+        if (choice.Kind == RouteChoiceKind.AvoidOverride)
+        {
+            switch (result)
+            {
+                case RouteChoiceResult.Free:
+                    // "Respect my avoids" (two-route case) — the longer route that
+                    // honours the avoid list, planned normally.
+                    CommitWalk(services, destination, gated: false);
+                    break;
+                case RouteChoiceResult.Gated:
+                    // "Route through avoided rooms" — override the avoid list for this
+                    // one walk. Avoids stay set; only this walk crosses them.
+                    CommitWalk(services, destination, gated: false, ignoreAvoids: true);
+                    break;
+                // null → cancelled: walk nothing.
+            }
+            return;
+        }
+
         switch (result)
         {
             case RouteChoiceResult.Free:
@@ -312,6 +380,14 @@ public static class RouteChoicePrompt
                 // short of the river), so the user can fetch a counter / clear the
                 // hard gate by hand from there — rather than crossing blindly.
                 CommitWalk(services, edge, gated: false);
+                break;
+            case RouteChoiceResult.Gated when buyPauseRoom is { } shopStop:
+                // The counter must be bought but the leader can't pay from cash or the
+                // configured bank (the money's at another bank or spread across the
+                // party). Don't arm an auto-buy that would stall — walk to the shop
+                // and stop, so the user withdraws / pools cash / provisions the party
+                // by hand from there (the card names where the money is).
+                CommitWalk(services, shopStop, gated: false);
                 break;
             case RouteChoiceResult.Gated:
                 // Hazard "obtain then cross". A counter already on the floor is
@@ -348,7 +424,8 @@ public static class RouteChoicePrompt
     // rest / party) are left asserted and re-pause on their own if still relevant.
     private static void CommitWalk(
         AppServices services, RoomKey destination, bool gated,
-        bool armAcquisition = true, bool avoidTeleports = false, bool avoidTraps = false)
+        bool armAcquisition = true, bool avoidTeleports = false, bool avoidTraps = false,
+        bool ignoreAvoids = false)
     {
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
@@ -365,7 +442,8 @@ public static class RouteChoicePrompt
             planThroughAcquirableGates: gated,
             armItemAcquisition: armAcquisition,
             avoidTeleports: avoidTeleports,
-            avoidTraps: avoidTraps);
+            avoidTraps: avoidTraps,
+            ignoreAvoids: ignoreAvoids);
     }
 
     private static string DestinationLabel(AppServices services, RoomKey destination) =>

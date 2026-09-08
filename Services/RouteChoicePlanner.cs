@@ -34,6 +34,10 @@ public enum RouteChoiceKind
                // because the walker would otherwise disarm at step time, and the user
                // may prefer the longer clean route to risking the disarm.
     Blocked,   // no route at all — offer to walk as far as possible, up to the block.
+    AvoidOverride, // the destination is reachable ONLY by routing through a room the user
+               // marked "avoid" (sole case), or a much shorter route exists through one
+               // (two-route case). Offered so the user can override their own avoid list
+               // for this one walk, warned about which/how many avoided rooms it crosses.
 }
 
 // A "run to the blocked room anyway" plan: the furthest room the walker can
@@ -72,7 +76,11 @@ public sealed record RouteChoice(
     // the real counts rather than claiming "trap-free" when it isn't. Zero for every
     // other kind.
     int FreeTrapCount = 0,
-    int GatedTrapCount = 0)
+    int GatedTrapCount = 0,
+    // For an AvoidOverride choice: how many rooms the user marked "avoid" the gated
+    // (override) route passes through, so the card can warn ("routes through N rooms
+    // you marked Avoid"). Zero for every other kind.
+    int AvoidedRoomCount = 0)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -103,6 +111,13 @@ public static class RouteChoicePlanner
     // interrupting the walk to weigh against its danger; below this the walker
     // just takes it (unchanged silent behavior).
     private const int MinTeleportSavings = 2;
+
+    // Minimum rooms an avoid-crossing route must save before the picker offers the
+    // TWO-ROUTE avoid override (an avoid-honouring route ALSO exists but is longer).
+    // Below this, the user's marked avoid is worth keeping — a one-room saving isn't
+    // worth routing through a room they deliberately excluded. The SOLE case (no
+    // avoid-honouring route at all) ignores this floor: it's the only way there.
+    private const int MinAvoidOverrideSavings = 2;
 
     public static RouteChoice? Evaluate(
         BfsMapper bfs,
@@ -281,6 +296,82 @@ public static class RouteChoicePlanner
             RouteChoiceKind.TrapAvoid,
             FreeTrapCount: fewestTraps,
             GatedTrapCount: shortestTraps);
+    }
+
+    // Compares the route honouring the user's "avoid this room" list against the
+    // route that lifts ONLY those avoids (every real gate — level / toll / class /
+    // item / ticket / key / hazard — still honoured). Returns an AvoidOverride
+    // RouteChoice in two shapes:
+    //   • SOLE — no avoid-honouring route exists at all, but lifting the avoids opens
+    //     one: the destination is reachable ONLY through a marked-avoid room. The free
+    //     side renders as a disabled "no route that respects your avoids" note; the
+    //     override route is the sole option, warned by its avoided-room count.
+    //   • TWO-ROUTE — an avoid-honouring route exists but a route through avoided
+    //     rooms is meaningfully shorter (>= MinAvoidOverrideSavings). The avoid-
+    //     honouring route is the pre-selected "free" side; the shorter avoid-crossing
+    //     route is the "gated" side. The user can keep their avoid or override it.
+    // Null when lifting avoids opens nothing new (the block is a real gate / genuine
+    // disconnect — Evaluate / PlanBlocked handle those), or the shorter avoid route
+    // doesn't save enough to be worth crossing a deliberately-excluded room. Never
+    // fires when the avoid-honouring route is already the shortest (no avoided room
+    // on it → nothing to override).
+    public static RouteChoice? EvaluateAvoidOverride(
+        BfsMapper bfs,
+        MovementFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+
+        // Route lifting ONLY the avoids (every real gate stays honoured). If even
+        // that finds nothing, an avoid isn't the wall — bail so Evaluate / PlanBlocked
+        // can name the real gate or disconnect.
+        IReadOnlyList<Direction>? overrideRoute =
+            bfs.FindPath(source, destination, filter, ignoreAvoids: true);
+        if (overrideRoute is null || overrideRoute.Count == 0) return null;
+
+        IReadOnlyList<RoomKey> overrideKeys = BuildKeyPath(graph, source, overrideRoute);
+        int avoidedCrossed = CountAvoidedOnPath(filter, overrideKeys);
+        if (avoidedCrossed == 0) return null;   // route doesn't touch an avoided room — no override story
+
+        // Route honouring the avoids. Null → the SOLE case (only way there crosses an
+        // avoided room).
+        IReadOnlyList<Direction>? free = bfs.FindPath(source, destination, filter);
+        bool hasFree = free is { Count: > 0 };
+
+        if (!hasFree)
+            return new RouteChoice(
+                0, overrideRoute.Count,
+                Array.Empty<RouteRequirement>(),
+                Array.Empty<RoomKey>(),
+                overrideKeys,
+                RouteChoiceKind.AvoidOverride,
+                AvoidedRoomCount: avoidedCrossed);
+
+        // TWO-ROUTE: an avoid-honouring route exists — only offer the override when
+        // it's meaningfully shorter, or the user's deliberate avoid stands.
+        if (free!.Count - overrideRoute.Count < MinAvoidOverrideSavings) return null;
+
+        return new RouteChoice(
+            free.Count, overrideRoute.Count,
+            Array.Empty<RouteRequirement>(),
+            BuildKeyPath(graph, source, free),
+            overrideKeys,
+            RouteChoiceKind.AvoidOverride,
+            AvoidedRoomCount: avoidedCrossed);
+    }
+
+    // How many rooms on a key path (excluding the source the walker already stands
+    // in) the user marked "avoid" — the count the override card warns with.
+    private static int CountAvoidedOnPath(MovementFilter filter, IReadOnlyList<RoomKey> keys)
+    {
+        int n = 0;
+        for (int i = 1; i < keys.Count; i++)   // skip source
+            if (filter.IsAvoided(keys[i])) n++;
+        return n;
     }
 
     // When every route to the destination is blocked — no gate-free route, and

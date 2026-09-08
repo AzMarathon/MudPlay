@@ -1,5 +1,14 @@
 # Version history
 
+## 3.56.0
+
+- Route picker: when a destination is reachable only through a room you marked **Avoid**, it now offers to route through anyway (warning how many avoided rooms it crosses) instead of failing; when a much shorter route runs through an avoided room, a two-card "respect your avoids / shorter through avoided" fork is offered. Your avoid list is never changed — only that one walk ignores it
+- Route picker: "buy at X" for a hazard/gate counter now reveals the bank-withdraw it would do when coin on hand is short, and warns when you can't cover it
+- Route picker is now economy-aware in a party: before offering a buy you can't afford from cash, it checks your own **bank** deposits and the party's carried cash (`@wealth`) and whether a member already **has** the item (`@have`), and tells you where the money/item is. When the money is at another bank or spread across the party, Go walks you to the shop and pauses so you can provision the party by hand
+- Reads the `bank` command's per-bank deposit listing (self-only, all banks you've used) and maps each bank to its room via the bank-shop catalogue
+- Search-en-route now actually works: a route counter revealed on the floor by an en-route `sea` is collected by the obtain pipeline itself, no longer dependent on the Auto-Get engine being on and the item flagged auto-collect
+- Follow-up: an explicit "search en route" route-picker card (force-search regardless of the Settings toggle) is deferred
+
 ## 3.55.0
 
 - New **Sysop powers** on Settings → BBS + Display: the old single "sysop / goto powers" checkbox is now a **Sysop map** / **Sysop status** / **Sysop god lives** set (per-character, per-BBS). None of them relate to `@goto`, which stays gated by the per-player Move-player permission

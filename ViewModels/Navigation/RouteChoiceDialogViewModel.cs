@@ -60,12 +60,17 @@ public sealed partial class RouteChoiceDialogViewModel
     // for the other forks.
     public string TrapCaveat { get; }
 
+    // The caveat shown under the override route in an avoid-override choice — that it
+    // routes through room(s) the user marked "avoid". Empty for the other forks.
+    public string AvoidCaveat { get; }
+
     // The sub-line under the shorter route's card: the item requirements for an
     // item-gate choice, the teleport caveat for a teleport choice, the trap caveat
-    // for a trap-avoid choice.
+    // for a trap-avoid choice, the avoided-rooms caveat for an avoid-override choice.
     public string GatedDetail =>
         IsTeleportChoice ? TeleportCaveat :
         IsTrapAvoidChoice ? TrapCaveat :
+        IsAvoidOverrideChoice ? AvoidCaveat :
         RequirementSummary;
 
     // The footnote under the cards, explaining the fork's options — different
@@ -82,6 +87,13 @@ public sealed partial class RouteChoiceDialogViewModel
     // send-it split. The trap-free route is pre-selected so the safe route is the
     // default (the user can still pick the shortcut).
     public bool IsTrapAvoidChoice { get; }
+
+    // True when this is the avoid-override fork: the destination is reachable only
+    // through a room the user marked "avoid" (sole), or a much shorter route runs
+    // through one (two-route). A plain two-way choice (respect avoids / override), no
+    // acquire / send-it split. In the two-route case the avoid-honouring route is
+    // pre-selected so respecting the user's own avoid is the default.
+    public bool IsAvoidOverrideChoice { get; }
 
     // False when there's no gate-free route — the direct (hazard-crossing) route
     // is the only way there. The Free card renders as a disabled "why you can't
@@ -100,7 +112,7 @@ public sealed partial class RouteChoiceDialogViewModel
     // A teleport / trap-avoid choice has no send-it split.
     public bool ShowSendItCard =>
         (HasFreeRoute || _crossesSurvivableHazard)
-        && !IsTeleportChoice && !IsTrapAvoidChoice;
+        && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice;
 
     // The primary route / "obtain then cross" / "walk to the hazard and stop" card.
     // Hidden only in the one case where it would duplicate the cross-unprotected
@@ -148,19 +160,24 @@ public sealed partial class RouteChoiceDialogViewModel
         string destinationLabel,
         Func<int, string?> itemName,
         Func<int, string?>? giveNameForItem = null,
-        Func<int, string?>? shopNameForItem = null,
+        Func<int, string?>? shopBuyPhraseForItem = null,
         Func<int, string?>? dropNameForItem = null,
         TimeSpan freeEta = default,
         TimeSpan gatedEta = default,
         string? hazardCounterSource = null,
         bool hazardSurvivable = false,
-        Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null)
+        Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null,
+        // Pick-time economy read for a buy: where the money is (own bank / party) or
+        // that a party member holds the item. Appended under the obtain card so a
+        // broke leader sees whether it's payable and from where before committing.
+        string? economyNote = null)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
 
         IsTeleportChoice = choice.Kind == RouteChoiceKind.Teleport;
         IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;
+        IsAvoidOverrideChoice = choice.Kind == RouteChoiceKind.AvoidOverride;
         HasFreeRoute = choice.HasFreeRoute;
 
         // A fully-blocked route: no way through at all, but the destination is
@@ -177,6 +194,7 @@ public sealed partial class RouteChoiceDialogViewModel
             RequirementSummary = string.Empty;
             TeleportCaveat = string.Empty;
             TrapCaveat = string.Empty;
+            AvoidCaveat = string.Empty;
             Footnote = "Click the route to preview it on the map, then Go to walk as far as you "
                 + $"can toward {destinationLabel} and stop at the block — clear it by hand to continue.";
             return;
@@ -187,7 +205,8 @@ public sealed partial class RouteChoiceDialogViewModel
         // damage escape. `hazardSurvivable` (the caller's crossesSurvivableHazard) is
         // true for both a SOLE hazard route and a MIXED one (hazard + a hard gate past
         // it); the mixed case also stops at that gate.
-        bool soleHazardOnly = !HasFreeRoute && !IsTeleportChoice
+        bool soleHazardOnly = !HasFreeRoute && !IsTeleportChoice && !IsAvoidOverrideChoice
+            && choice.Requirements.Count > 0
             && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
         _soleHazardOnly = soleHazardOnly;
         _crossesSurvivableHazard = hazardSurvivable;
@@ -213,6 +232,7 @@ public sealed partial class RouteChoiceDialogViewModel
                 + "depends on your character, so the call is yours.";
             RequirementSummary = string.Empty;
             TrapCaveat = string.Empty;
+            AvoidCaveat = string.Empty;
             Footnote = "Click a route to preview it on the map, then Go to walk it. "
                 + "The teleport is much shorter but can be lethal — take the walk if you're unsure.";
         }
@@ -236,12 +256,46 @@ public sealed partial class RouteChoiceDialogViewModel
                     + "disarm can fail, so fewer traps is the safer bet.";
             RequirementSummary = string.Empty;
             TeleportCaveat = string.Empty;
+            AvoidCaveat = string.Empty;
             Footnote = "Click a route to preview it on the map, then Go to walk it. "
                 + "The fewest-traps route is pre-selected — \"shortest\" is quicker but crosses more "
                 + "traps (disarmed en route).";
             // Default to the safer route so a plain Go dodges what it can; the user
             // can still click the shortcut. Previewed on open via RaiseSelectionPreview.
             SelectedRoute = RouteChoiceResult.Free;
+        }
+        else if (IsAvoidOverrideChoice)
+        {
+            string avoidedWord = choice.AvoidedRoomCount == 1
+                ? "1 room you marked Avoid"
+                : $"{choice.AvoidedRoomCount} rooms you marked Avoid";
+            if (HasFreeRoute)
+            {
+                // TWO-ROUTE: an avoid-honouring route also exists, but a shorter one
+                // runs through avoided rooms.
+                Heading = $"Two routes to {destinationLabel}";
+                FreeSummary = $"Respect your avoids — {StepsEta(choice.FreeStepCount, freeEta)}";
+                GatedSummary = $"Shorter — through {avoidedWord} — {StepsEta(choice.GatedStepCount, gatedEta)}";
+                Footnote = "Click a route to preview it on the map, then Go to walk it. "
+                    + "The avoid-respecting route is pre-selected; the shorter route runs through "
+                    + "rooms you deliberately marked Avoid.";
+                // Default to respecting the user's own avoid list; they can still override.
+                SelectedRoute = RouteChoiceResult.Free;
+            }
+            else
+            {
+                // SOLE: the only way there crosses an avoided room.
+                Heading = $"Only route to {destinationLabel} crosses a room you marked Avoid";
+                FreeSummary = $"No route that respects your avoids — every path there crosses {avoidedWord}";
+                GatedSummary = $"Route through {avoidedWord} — {StepsEta(choice.GatedStepCount, gatedEta)}";
+                Footnote = "Click the route to preview it on the map, then Go to walk it. "
+                    + "This is the only way there — it runs through rooms you marked Avoid.";
+            }
+            AvoidCaveat = $"Routes through {avoidedWord}. Your avoid list stays set — only this "
+                + "walk crosses them; unmark the room(s) if you want it gone for good.";
+            RequirementSummary = string.Empty;
+            TeleportCaveat = string.Empty;
+            TrapCaveat = string.Empty;
         }
         else
         {
@@ -324,10 +378,12 @@ public sealed partial class RouteChoiceDialogViewModel
 
             RequirementSummary = "Requires "
                 + DescribeRequirements(
-                    choice.Requirements, itemName, giveNameForItem, shopNameForItem,
-                    dropNameForItem, resolvedHazardCounter);
+                    choice.Requirements, itemName, giveNameForItem, shopBuyPhraseForItem,
+                    dropNameForItem, resolvedHazardCounter)
+                + (string.IsNullOrEmpty(economyNote) ? "" : $" — {economyNote}");
             TeleportCaveat = string.Empty;
             TrapCaveat = string.Empty;
+            AvoidCaveat = string.Empty;
         }
     }
 
@@ -367,7 +423,7 @@ public sealed partial class RouteChoiceDialogViewModel
         IReadOnlyList<RouteRequirement> reqs,
         Func<int, string?> itemName,
         Func<int, string?>? giveNameForItem,
-        Func<int, string?>? shopNameForItem,
+        Func<int, string?>? shopBuyPhraseForItem,
         Func<int, string?>? dropNameForItem,
         Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null)
     {
@@ -387,8 +443,10 @@ public sealed partial class RouteChoiceDialogViewModel
                 return items;
             if (giveNameForItem?.Invoke(r.ItemIds[0]) is { Length: > 0 } giver)
                 return $"{items} (ask {giver})";
-            if (shopNameForItem?.Invoke(r.ItemIds[0]) is { Length: > 0 } shop)
-                return $"{items} (buy at {shop})";
+            // The shop helper returns the full "buy at <shop>" clause (with any
+            // withdraw-at-bank / shortfall note already folded in), so wrap it as-is.
+            if (shopBuyPhraseForItem?.Invoke(r.ItemIds[0]) is { Length: > 0 } buyPhrase)
+                return $"{items} ({buyPhrase})";
             if (dropNameForItem?.Invoke(r.ItemIds[0]) is { Length: > 0 } monster)
                 return $"{items} (dropped by {monster})";
             return items;

@@ -921,6 +921,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Sysop room-status parser — reads the `sys st` block. Inert until an
         // outbound sysop status arms it.
         AppServices.Current.SysRoomStatus.AttachLineExtractor(Lines);
+        // Self bank-balance listing — parses the `bank` command's per-bank
+        // "On deposit: N copper farthings" blocks so the route picker can weigh a
+        // buy the purse can't cover against money on deposit.
+        AppServices.Current.BankBalance.AttachLineExtractor(Lines);
         // Inbound ailment chip-clear — PartyAilmentTracker watches server
         // lines for OUR cure spell landing on a party member (matched by the
         // cure spell's CasterMessage template) and clears that member's

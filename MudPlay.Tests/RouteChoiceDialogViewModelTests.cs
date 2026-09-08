@@ -35,7 +35,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Bank (1/9)", id => id == 5 ? "a raft" : null,
-            shopNameForItem: id => id == 5 ? "General Store" : null);
+            shopBuyPhraseForItem: id => id == 5 ? "buy at General Store" : null);
 
         Assert.Equal("Requires a raft (buy at General Store)", vm.RequirementSummary);
     }
@@ -47,7 +47,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Docks (1/9)", id => id == 7 ? "a ferry ticket" : null,
-            shopNameForItem: id => id == 7 ? "Ticket Booth" : null);
+            shopBuyPhraseForItem: id => id == 7 ? "buy at Ticket Booth" : null);
 
         Assert.Equal("Requires a ferry ticket (buy at Ticket Booth)", vm.RequirementSummary);
     }
@@ -61,7 +61,7 @@ public sealed class RouteChoiceDialogViewModelTests
         // giver or shop must be ignored for the DoorKey kind.
         var vm = new RouteChoiceDialogViewModel(
             choice, "Vault (1/9)", id => "the iron key",
-            giveNameForItem: id => "a gatekeeper", shopNameForItem: id => "Locksmith");
+            giveNameForItem: id => "a gatekeeper", shopBuyPhraseForItem: id => "buy at Locksmith");
 
         Assert.Equal("Requires the iron key", vm.RequirementSummary);
     }
@@ -91,7 +91,7 @@ public sealed class RouteChoiceDialogViewModelTests
         var vm = new RouteChoiceDialogViewModel(
             choice, "Sunbaked dune (1/9)",
             id => id == 42 ? "a waterskin" : null,
-            shopNameForItem: id => null,          // no shop stocks it
+            shopBuyPhraseForItem: id => null,          // no shop stocks it
             dropNameForItem: id => id == 42 ? "a sand nomad" : null);
 
         Assert.Equal("Requires a waterskin (dropped by a sand nomad)", vm.RequirementSummary);
@@ -144,7 +144,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Bank (1/9)", id => "a raft",
-            shopNameForItem: id => "General Store",
+            shopBuyPhraseForItem: id => "buy at General Store",
             dropNameForItem: id => "a river troll");
 
         Assert.Equal("Requires a raft (buy at General Store)", vm.RequirementSummary);
@@ -175,7 +175,7 @@ public sealed class RouteChoiceDialogViewModelTests
         var vm = new RouteChoiceDialogViewModel(
             choice, "Bank (1/9)", id => "a bloodstone orb",
             giveNameForItem: id => "Gnome Commander",
-            shopNameForItem: id => "General Store",
+            shopBuyPhraseForItem: id => "buy at General Store",
             dropNameForItem: id => "a river troll");
 
         Assert.Equal("Requires a bloodstone orb (ask Gnome Commander)", vm.RequirementSummary);
@@ -192,7 +192,7 @@ public sealed class RouteChoiceDialogViewModelTests
         var vm = new RouteChoiceDialogViewModel(
             choice, "Flooded hall (1/9)",
             id => id == 11 ? "a fish-helm" : "a waterskin",
-            shopNameForItem: id => null,
+            shopBuyPhraseForItem: id => null,
             dropNameForItem: id => "a deep one");
 
         Assert.Equal("Requires a fish-helm or a waterskin", vm.RequirementSummary);
