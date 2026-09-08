@@ -201,22 +201,35 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // table is kept as a choice so the user still sees what's configured.
     private void RefreshWimpyGoto()
     {
-        WimpyGotoChoices.Clear();
-        // Prefer the BBS tab's LIVE locations when wired (so the picker fills the
-        // moment a row is added there), else the persisted set.
+        // Build the desired keyword set — the BBS tab's LIVE locations when wired (so
+        // the picker fills the moment a row is added there), else the persisted set —
+        // always including any stored selection so it stays visible / selectable even
+        // if its row was removed.
+        List<string> desired = new();
         if (_liveSysGotoLocations is { } live)
         {
             foreach (string name in live())
-                if (!string.IsNullOrWhiteSpace(name)) WimpyGotoChoices.Add(name);
+                if (!string.IsNullOrWhiteSpace(name) && !desired.Contains(name)) desired.Add(name);
         }
         else if (AppServices.CurrentOrNull is { } svc)
         {
             foreach (Models.Profile.SysopGotoLocation loc in svc.SysopGoto.UsableNow)
-                WimpyGotoChoices.Add(loc.Name);
+                if (!desired.Contains(loc.Name)) desired.Add(loc.Name);
         }
-        if (!string.IsNullOrEmpty(SysGotoWimpyLocation)
-            && !WimpyGotoChoices.Contains(SysGotoWimpyLocation!))
-            WimpyGotoChoices.Add(SysGotoWimpyLocation!);
+        if (!string.IsNullOrEmpty(SysGotoWimpyLocation) && !desired.Contains(SysGotoWimpyLocation!))
+            desired.Add(SysGotoWimpyLocation!);
+
+        // Reconcile the bound collection IN PLACE — never Clear(). A Clear blanks the
+        // ComboBox's SelectedItem, and the two-way binding then writes null back to
+        // SysGotoWimpyLocation; when a refresh fires mid-Apply (the BBS section's Apply
+        // raises ProfileMutated before this section's own Apply runs) that null gets
+        // persisted, silently dropping the just-picked location. Remove departed rows,
+        // append new ones, leave the rest (and the selection) untouched.
+        for (int i = WimpyGotoChoices.Count - 1; i >= 0; i--)
+            if (!desired.Contains(WimpyGotoChoices[i])) WimpyGotoChoices.RemoveAt(i);
+        foreach (string name in desired)
+            if (!WimpyGotoChoices.Contains(name)) WimpyGotoChoices.Add(name);
+
         OnPropertyChanged(nameof(SysGotoAvailable));
     }
 
