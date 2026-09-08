@@ -1,5 +1,10 @@
 # Version history
 
+## 3.55.1
+
+- Fixed the LOOK header not parsing when it carries a trailing `-- Immortal !` or `(gang)` suffix — on a realm where everyone's in a gang, every look block was skipped, so a player's race/class/equipment was never recorded and the trap-delegation probe re-`look`ed the same member on every party join
+- A LOOK now also records a player's gang (like a WHO row does), filling one in without erasing a gang already known
+
 ## 3.55.0
 
 - New **Sysop powers** on Settings → BBS + Display: the old single "sysop / goto powers" checkbox is now a **Sysop map** / **Sysop status** / **Sysop god lives** set (per-character, per-BBS). None of them relate to `@goto`, which stays gated by the per-player Move-player permission
