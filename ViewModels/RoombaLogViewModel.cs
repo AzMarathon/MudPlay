@@ -71,10 +71,17 @@ public sealed partial class RoombaLogViewModel : ObservableObject, IDisposable
         Summary = sb.ToString().TrimEnd();
     }
 
+    // Every reason spelled out. A catch-all default would silently relabel each
+    // new GhLeftReason as "no matching room" — which reads as "go label a room
+    // for this", the one action that would not help when the real reason is a
+    // full house or an item auto-discard is about to bin.
     private static string DescribeReason(GhLeftReason reason) => reason switch
     {
         GhLeftReason.TooHeavy => "too heavy to carry",
         GhLeftReason.GoneBySortTime => "gone by sort time",
+        GhLeftReason.AllDestinationsFull => "every room that takes it is full",
+        GhLeftReason.NotActuallyCarried => "not in inventory — the pickup never landed",
+        GhLeftReason.AutoDiscarded => "auto-discard would bin it anyway",
         _ => "no matching room",
     };
 

@@ -21,6 +21,12 @@ namespace MudPlay.Game.Map;
 //     _isGateOpen probe reads), THEN report Turned. Moving before then just bonks
 //     "The gate is closed!" — which MovementRefusalDetector already reverts, but
 //     that would thrash pull↔move, so we wait for the gate instead.
+//   - A drawbridge-type winch breaks that poll: its exit is phrased "lowered
+//     drawbridge <dir>" in the exits list (report paradigm-20260906-202008), which
+//     never matches the door/gate open|closed wording _isGateOpen looks for, so the
+//     poll would exhaust its cap and fail even though the bridge is down. It does
+//     broadcast its own explicit line though ("The wooden drawbridge lowers with a
+//     heavy thud!") — we treat that as authoritative and skip the poll entirely.
 //
 // The move itself is sent by the engine (walker / loop) in its OnWinchReply, exactly
 // as it sends the cardinal after a door opens.
@@ -39,6 +45,7 @@ public sealed class WinchManager : IDisposable
     private readonly LogService? _log;
     private readonly IDisposable _turnedSub;
     private readonly IDisposable _budgeSub;
+    private readonly IDisposable _drawbridgeSub;
     private readonly WireSender _wire = new();
     private bool _disposed;
 
@@ -47,6 +54,9 @@ public sealed class WinchManager : IDisposable
     private WinchState _state = WinchState.Idle;
     private int _pullAttempts;
     private int _gatePolls;
+    // Set when the drawbridge's own open-confirmation line arrives for the current
+    // pull attempt — lets OnWinchTurned skip the gate poll entirely for it.
+    private bool _drawbridgeLowered;
     private IDisposable? _timer;
 
     // A winch may need several pulls before it winds up; cap so a genuinely stuck
@@ -78,6 +88,7 @@ public sealed class WinchManager : IDisposable
 
         _turnedSub = _router.Subscribe(KnownPatterns.WinchTurned, OnWinchTurned);
         _budgeSub = _router.Subscribe(KnownPatterns.WinchWontBudge, OnWinchWontBudge);
+        _drawbridgeSub = _router.Subscribe(KnownPatterns.WinchDrawbridgeLowered, OnDrawbridgeLowered);
     }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
@@ -162,6 +173,7 @@ public sealed class WinchManager : IDisposable
     {
         if (_current is not { } cur) return;
         _pullAttempts++;
+        _drawbridgeLowered = false;
         _state = WinchState.WaitingPull;
         _wire.Send(cur.PullCommand);
         _log?.Info(LogCategory, $"'{cur.PullCommand}' (attempt {_pullAttempts}/{PullAttemptCap}).");
@@ -194,10 +206,36 @@ public sealed class WinchManager : IDisposable
             SucceedCurrent();
             return;
         }
+        // A drawbridge-type winch already told us it's down — its exit never reads
+        // as "open" in the exits list, so the poll below would just exhaust its cap.
+        if (_drawbridgeLowered)
+        {
+            _log?.Info(LogCategory, "winch began to turn — drawbridge already confirmed lowered, skipping gate poll.");
+            SucceedCurrent();
+            return;
+        }
         _log?.Info(LogCategory, "winch began to turn — waiting for the gate to open.");
         _state = WinchState.WaitingGateOpen;
         _gatePolls = 0;
         PollGate();
+    }
+
+    // The drawbridge's own broadcast can arrive before or after the "begins to
+    // turn" line, so handle both orderings: stash it while still WaitingPull (read
+    // by OnWinchTurned above), or succeed immediately if we're already polling.
+    private void OnDrawbridgeLowered(MatchResult _)
+    {
+        if (_current is null) return;
+        if (_state == WinchState.WaitingPull)
+        {
+            _drawbridgeLowered = true;
+            return;
+        }
+        if (_state == WinchState.WaitingGateOpen && _current.WaitForGate)
+        {
+            _log?.Info(LogCategory, "drawbridge lowered — gate confirmed open, skipping remaining polls.");
+            SucceedCurrent();
+        }
     }
 
     // The gate opens a beat after the winch turns and only shows in a room
@@ -259,6 +297,7 @@ public sealed class WinchManager : IDisposable
         _state = WinchState.Idle;
         _pullAttempts = 0;
         _gatePolls = 0;
+        _drawbridgeLowered = false;
         TryStartNext();
     }
 
@@ -290,6 +329,7 @@ public sealed class WinchManager : IDisposable
         CancelTimer();
         _turnedSub.Dispose();
         _budgeSub.Dispose();
+        _drawbridgeSub.Dispose();
     }
 
     internal static string DirectionShort(Direction d) => d switch

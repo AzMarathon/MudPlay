@@ -444,6 +444,59 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("mmis giant rat", h.LastSent);
     }
 
+    // Report paradigm-20260905-205200: the AlternateSpellPhysical/AlternatePhysicalSpell/
+    // CustomRoundCycle heartbeat branches force a fresh dispatch every round (they can't
+    // lean on the server's auto-repeat) and — like the cap-switch above — decide on the
+    // round's own DAMAGE line, ahead of that round's "dies." / "You gain N experience."
+    // when the swing that just landed was the killing blow. Dispatching synchronously
+    // re-announced the phase's action at the corpse every time. Now deferred the same
+    // short window and re-validated before actually sending.
+    [Fact]
+    public void AlternateSpellPhysical_KillLandsInDeferWindow_NoCorpseCast()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.ActionOrder = CombatActionOrder.AlternateSpellPhysical;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("harm giant rat", h.LastSent);   // round 0 = spell phase
+
+        // Round 1 flips to physical — the continuation is deferred, not dispatched inline.
+        h.Tick();
+        Assert.Single(h.Posted);
+        Assert.DoesNotContain("a giant rat", h.AllSent);
+
+        // The prior round's own damage turns out to have killed the rat — its exp
+        // lands in the same burst / an adjacent packet.
+        h.Feed("You gain 100 experience.");
+
+        // Re-validated: target is gone. No corpse-swing.
+        h.DrainPosted();
+        Assert.DoesNotContain("a giant rat", h.AllSent);
+    }
+
+    // The other side of the delay: the mob is still alive when the window elapses, so
+    // the deferred continuation re-validates fine and flips phase as normal — a hair
+    // later than the old synchronous path, well within the round.
+    [Fact]
+    public void AlternateSpellPhysical_TargetAlive_DeferredContinuationDispatches()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.ActionOrder = CombatActionOrder.AlternateSpellPhysical;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("harm giant rat", h.LastSent);
+
+        h.Tick();
+        Assert.Single(h.Posted);
+
+        h.DrainPosted();   // no kill this burst → re-validates fine → flips to physical
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
     // Reports paradigm-20260819-121003 / -142147: after lbol caps and the switch to
     // mmis is DEFERRED, a second tick during the delay window recomputed the switch
     // (the announce is still the stale lbol, so sameSpell=false takes the ungated

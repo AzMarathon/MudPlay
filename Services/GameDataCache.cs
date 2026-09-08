@@ -35,6 +35,22 @@ public sealed class GameDataCache
 {
     private readonly Dictionary<string, JsonDocument> _tables = new(StringComparer.OrdinalIgnoreCase);
 
+    // Lazy per-table indexes backing FindRowByNumber / FindRowByName / RowNumbers —
+    // built once on first lookup against a table instead of re-walking
+    // EnumerateArray() on every call. A hot per-tick consumer (KnownSpellCatalog's
+    // buff/cast-item resolution) was re-scanning the Spells/Items tables from
+    // scratch on every TickEngine tick, stalling the UI thread; see GetNumberIndex.
+    // Cleared alongside _tables in EvictTable / EvictAll so a reload rebuilds them.
+    private readonly Dictionary<string, Dictionary<int, JsonElement>> _numberIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Dictionary<string, JsonElement>> _nameIndex = new(StringComparer.OrdinalIgnoreCase);
+
+    // Tables whose on-disk JSON failed to parse for the active set (e.g. binary
+    // corruption from a pre-fix MDB import — see the multi-page LVAL memo reader
+    // history). Remembered so a broken file is reported once via Log rather than
+    // re-read and re-thrown on every lookup a caller makes against it; cleared
+    // alongside _tables whenever the set reloads, so a re-import gets picked up.
+    private readonly HashSet<string> _failedTables = new(StringComparer.OrdinalIgnoreCase);
+
     // Background-parsed tables for a set that ISN'T necessarily active yet — see
     // PrewarmAsync. Keyed on the exact (set, table) pair so a wrong guess just sits
     // here unclaimed instead of contaminating _tables for whatever set actually
@@ -82,6 +98,13 @@ public sealed class GameDataCache
     // any per-set state they had cached and re-pull whatever they need from the
     // cache.
     public event Action<string?>? ActiveSetChanged;
+
+    // Fires once (deduped via _failedTables) the first time a table's on-disk JSON
+    // fails to parse for the active set — carries the table name. A silently
+    // missing table leaves engines short of data with no obvious symptom, so
+    // production routes this to a red terminal notice (MainWindowViewModel) telling
+    // the user to re-import the set. Cleared with the failure on evict/reload.
+    public event Action<string>? TableParseFailed;
 
     // Optional log sink — when set (production wires AppServices.Log after
     // construction), every SwitchSet emits an Info entry naming the outgoing +
@@ -197,9 +220,12 @@ public sealed class GameDataCache
         if (ActiveSet is null) return null;
         ArgumentNullException.ThrowIfNull(tableName);
 
+        bool notifyParseFailed = false;
+        JsonDocument? result = null;
         lock (_tables)
         {
             if (_tables.TryGetValue(tableName, out JsonDocument? cached)) return cached;
+            if (_failedTables.Contains(tableName)) return null;
 
             // A PrewarmAsync call already parsed this table for the set that's now
             // active, ahead of the switch — claim it instead of re-reading the file.
@@ -218,10 +244,32 @@ public sealed class GameDataCache
             // most and we don't want to hold a FileStream while Parse
             // walks the buffer.
             byte[] bytes = File.ReadAllBytes(path);
-            JsonDocument doc = JsonDocument.Parse(bytes);
-            _tables[tableName] = doc;
-            return doc;
+
+            try
+            {
+                result = JsonDocument.Parse(bytes);
+                _tables[tableName] = result;
+            }
+            catch (JsonException ex)
+            {
+                // Malformed table JSON is an external-data-boundary failure (a bad
+                // MDB import, hand-edited file, etc.), not an app invariant — treat
+                // the table as unavailable rather than crash every consumer that
+                // happens to look it up.
+                _failedTables.Add(tableName);
+                Log?.Log(LogSeverity.Error, "GameData",
+                    $"'{tableName}' could not be parsed for set '{ActiveSet}' ({ex.Message}) — " +
+                    "treating it as unavailable until the set is reloaded or re-imported.");
+                notifyParseFailed = true;
+            }
         }
+
+        // Fire the failure notice OUTSIDE the lock so a subscriber (production
+        // routes it to a Dispatcher.Post terminal notice) never runs while we hold
+        // _tables. Deduped by _failedTables: the next lookup short-circuits above,
+        // so this fires at most once per table per active set.
+        if (notifyParseFailed) TableParseFailed?.Invoke(tableName);
+        return result;
     }
 
     // Parse tableNames for setName on background threads, ahead of setName actually
@@ -287,17 +335,9 @@ public sealed class GameDataCache
     // to render GameDataLink back-references as human-readable labels.
     public string? FindNameByNumber(string tableName, int number)
     {
-        JsonDocument? doc = GetRawTable(tableName);
-        if (doc is null) return null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
-            if (numEl.ValueKind != JsonValueKind.Number) continue;
-            if (!numEl.TryGetInt32(out int rowNum) || rowNum != number) continue;
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)) return null;
-            return nameEl.GetString();
-        }
-        return null;
+        JsonElement? row = FindRowByNumber(tableName, number);
+        if (row is null) return null;
+        return row.Value.TryGetProperty("Name", out JsonElement nameEl) ? nameEl.GetString() : null;
     }
 
     // The set of Number values present in tableName for the active set (empty when the
@@ -305,15 +345,9 @@ public sealed class GameDataCache
     // scan per lookup — e.g. the Messages tab hiding records claimed by a real spell.
     public HashSet<int> RowNumbers(string tableName)
     {
-        HashSet<int> nums = new();
         JsonDocument? doc = GetRawTable(tableName);
-        if (doc is null) return nums;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-            if (row.TryGetProperty("Number", out JsonElement numEl)
-                && numEl.ValueKind == JsonValueKind.Number
-                && numEl.TryGetInt32(out int v))
-                nums.Add(v);
-        return nums;
+        if (doc is null) return new HashSet<int>();
+        return new HashSet<int>(GetNumberIndex(tableName, doc).Keys);
     }
 
     // Return the full row in tableName whose Number field equals number, or
@@ -326,13 +360,7 @@ public sealed class GameDataCache
     {
         JsonDocument? doc = GetRawTable(tableName);
         if (doc is null) return null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
-            if (numEl.ValueKind != JsonValueKind.Number) continue;
-            if (numEl.TryGetInt32(out int rowNum) && rowNum == number) return row;
-        }
-        return null;
+        return GetNumberIndex(tableName, doc).TryGetValue(number, out JsonElement row) ? row : null;
     }
 
     // Return the row in tableName whose Name field equals name (case-insensitive),
@@ -346,14 +374,50 @@ public sealed class GameDataCache
         ArgumentNullException.ThrowIfNull(name);
         JsonDocument? doc = GetRawTable(tableName);
         if (doc is null) return null;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        return GetNameIndex(tableName, doc).TryGetValue(name, out JsonElement row) ? row : null;
+    }
+
+    // Build (or return the cached) Number → row index for tableName. Ties are
+    // resolved first-match-wins, matching the linear scan this replaced. Built
+    // once per table load; invalidated alongside _tables.
+    private Dictionary<int, JsonElement> GetNumberIndex(string tableName, JsonDocument doc)
+    {
+        lock (_tables)
         {
-            if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
-            if (nameEl.ValueKind != JsonValueKind.String) continue;
-            if (string.Equals(nameEl.GetString(), name, StringComparison.OrdinalIgnoreCase))
-                return row;
+            if (_numberIndex.TryGetValue(tableName, out Dictionary<int, JsonElement>? index)) return index;
+
+            index = new Dictionary<int, JsonElement>();
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                if (!row.TryGetProperty("Number", out JsonElement numEl)) continue;
+                if (numEl.ValueKind != JsonValueKind.Number) continue;
+                if (numEl.TryGetInt32(out int n)) index.TryAdd(n, row);
+            }
+            _numberIndex[tableName] = index;
+            return index;
         }
-        return null;
+    }
+
+    // Build (or return the cached) Name → row index for tableName, case-insensitive.
+    // Ties are resolved first-match-wins, matching the linear scan this replaced.
+    // Built once per table load; invalidated alongside _tables.
+    private Dictionary<string, JsonElement> GetNameIndex(string tableName, JsonDocument doc)
+    {
+        lock (_tables)
+        {
+            if (_nameIndex.TryGetValue(tableName, out Dictionary<string, JsonElement>? index)) return index;
+
+            index = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            {
+                if (!row.TryGetProperty("Name", out JsonElement nameEl)) continue;
+                if (nameEl.ValueKind != JsonValueKind.String) continue;
+                string? name = nameEl.GetString();
+                if (name is not null) index.TryAdd(name, row);
+            }
+            _nameIndex[tableName] = index;
+            return index;
+        }
     }
 
     // Drop the cached JsonDocument for one table. Used by per-tab consumers after
@@ -363,6 +427,9 @@ public sealed class GameDataCache
         ArgumentNullException.ThrowIfNull(tableName);
         lock (_tables)
         {
+            _failedTables.Remove(tableName);
+            _numberIndex.Remove(tableName);
+            _nameIndex.Remove(tableName);
             if (!_tables.Remove(tableName, out JsonDocument? doc)) return false;
             doc.Dispose();
             return true;
@@ -370,13 +437,18 @@ public sealed class GameDataCache
     }
 
     // Drop every cached table. Called implicitly by SwitchSet and Reload; callers
-    // can use it to free memory after a bulk-conversion pass too.
+    // can use it to free memory after a bulk-conversion pass too. Also clears
+    // remembered parse failures so a re-import that fixed a broken table gets
+    // re-read instead of staying marked unavailable.
     public void EvictAll()
     {
         lock (_tables)
         {
             foreach (JsonDocument doc in _tables.Values) doc.Dispose();
             _tables.Clear();
+            _failedTables.Clear();
+            _numberIndex.Clear();
+            _nameIndex.Clear();
         }
     }
 

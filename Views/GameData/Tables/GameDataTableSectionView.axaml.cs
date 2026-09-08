@@ -45,6 +45,10 @@ public partial class GameDataTableSectionView : UserControl
     // re-bind unhooks the old section cleanly.
     private GameDataTableSectionViewModel? _simulateVisibilityTarget;
 
+    // The section whose ColumnsChanged we watch to rebuild the DataGrid's columns
+    // when the user toggles the column picker. Tracked so a re-bind unhooks cleanly.
+    private GameDataTableSectionViewModel? _columnsChangedTarget;
+
     public GameDataTableSectionView()
     {
         InitializeComponent();
@@ -52,8 +56,8 @@ public partial class GameDataTableSectionView : UserControl
         // guard via _columnsBuilt so the second is a no-op.
         // A DataContext swap means a different section — drop any captured
         // sort so it can't be reapplied to an unrelated table's columns.
-        DataContextChanged   += (_, _) => { _sortSnapshot.Clear(); TryBuildColumns(); WireAddRemoveButtons(); WireScrollHook(); };
-        AttachedToVisualTree += (_, _) => { TryBuildColumns(); WireAddRemoveButtons(); WireScrollHook(); };
+        DataContextChanged   += (_, _) => { _sortSnapshot.Clear(); WireColumnPicker(); TryBuildColumns(); WireAddRemoveButtons(); WireScrollHook(); };
+        AttachedToVisualTree += (_, _) => { WireColumnPicker(); TryBuildColumns(); WireAddRemoveButtons(); WireScrollHook(); };
 
         // Double-click any row → invoke the section's OpenEditCommand
         // with the row as the argument. Sections that don't expose an
@@ -252,35 +256,47 @@ public partial class GameDataTableSectionView : UserControl
             SimulateButton.IsVisible = editable.ShowSimulate;
     }
 
+    // Watch the section's column picker so a toggle rebuilds the DataGrid's columns.
+    // Re-binds cleanly across DataContext swaps (each tab is a different section VM).
+    private void WireColumnPicker()
+    {
+        GameDataTableSectionViewModel? vm = DataContext as GameDataTableSectionViewModel;
+        if (ReferenceEquals(vm, _columnsChangedTarget)) return;
+        if (_columnsChangedTarget is not null)
+            _columnsChangedTarget.ColumnsChanged -= OnColumnsChanged;
+        _columnsChangedTarget = vm;
+        if (vm is not null)
+            vm.ColumnsChanged += OnColumnsChanged;
+    }
+
+    private void OnColumnsChanged()
+    {
+        _columnsBuilt = false;
+        RowsGrid?.Columns.Clear();
+        TryBuildColumns();
+    }
+
     private void TryBuildColumns()
     {
         if (_columnsBuilt) return;
         if (DataContext is not GameDataTableSectionViewModel vm) return;
 
         RowsGrid.Columns.Clear();
-        int index = 0;
-        foreach (string column in vm.Columns)
+        // Build only the columns the picker has visible, each bound to its cell's
+        // index on the row (GameDataRow.Cells is materialised in ValueColumns order,
+        // so a hidden/shown column never misaligns a cell from its header). The VM
+        // supplies the friendly header per column. CustomSortComparer handles numeric
+        // columns properly (cell values are strings, so the DataGrid's default sort
+        // would treat EXP as "0, 1, 10, 100, 11, 2…").
+        foreach (VisibleColumn vc in vm.BuildVisibleColumns())
         {
-            // Bind each data column to its positional cell on the row —
-            // GameDataRow.Cells is ordered to match Columns, so the
-            // indexer round-trip is stable. CustomSortComparer handles
-            // numeric columns properly (cell values are strings, so the
-            // DataGrid's default sort would treat EXP as
-            // "0, 1, 10, 100, 11, 2…").
-            // Friendly header when the VM maps one (e.g. "AC" for the
-            // ArmourClass key); raw column name otherwise.
-            string header = vm.ColumnHeaders is { } headers
-                && headers.TryGetValue(column, out string? friendly)
-                    ? friendly
-                    : column;
             RowsGrid.Columns.Add(new DataGridTextColumn
             {
-                Header             = header,
-                Binding            = new Binding($"Cells[{index}].Value"),
+                Header             = vc.Header,
+                Binding            = new Binding($"Cells[{vc.CellIndex}].Value"),
                 Width              = DataGridLength.Auto,
-                CustomSortComparer = new NumericAwareCellComparer(index),
+                CustomSortComparer = new NumericAwareCellComparer(vc.CellIndex),
             });
-            index++;
         }
         // Trailing virtual "Use" column — shows which tier (Def / Glob /
         // BBS / Char) owns the row's current values. Bound to the

@@ -63,4 +63,17 @@ public sealed class IncomingHitEstimatorTests : IDisposable
     [Fact]
     public void Ac_WholeNumber_Unchanged()
         => Assert.Equal(40, Defense(CacheWithItemAc(400)).Ac);
+
+    // AcExact carries the UN-floored AC to the tenth for display (615/10 = 61.5),
+    // while Ac stays the floored whole number the hit-chance formula consumes. The
+    // constructor must actually pass acExact through: leaving it defaulted to 0 made
+    // Monster Intel's "AC vs Selected Target" compute AC + (0 − AC) = 0.0 (report
+    // paradigm-20260907-154641, in-game AC 78 shown as 0.0).
+    [Fact]
+    public void AcExact_CarriesUnflooredTenths_ForDisplay()
+    {
+        PlayerDefenseProfile def = Defense(CacheWithItemAc(615));
+        Assert.Equal(61.5, def.AcExact, 3);
+        Assert.Equal(61, def.Ac);
+    }
 }

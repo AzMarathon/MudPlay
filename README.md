@@ -1,13 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.51.6**
+> **Version 3.55.6**
 > - Roomba reroutes around a destination room that's full, to the next room labelled for the same category and then the catch-all, instead of re-sending refused drops every lap
 > - Multiple catch-all rooms work as an overflow chain, and full rooms are re-checked each lap so space that frees up gets used
 > - Roomba paces its get/drop commands past the game's rate limit rather than flooding it and losing the whole batch
 > - Roomba leaves alone what auto-discard would bin, and no longer loses track of items it is carrying
 > - The carry budget no longer writes off heavy items because the pack was temporarily full, and a pack too full to sort stops with an explanation
-> - The Roomba Log and the map now show which rooms ran out of space and what couldn't be placed
+> - The Roomba Log now names why each item was left behind — a full house reads as such instead of "no matching room"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

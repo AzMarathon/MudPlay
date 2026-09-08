@@ -59,7 +59,65 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     // arrange the two zones + the drag splitter. Reloaded live on profile load /
     // mutate so a Settings Apply reflows the open window at once.
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConfigToggleGlyph))]
     private BuffWatchdogLayout _layout = BuffWatchdogLayout.ConfigTop;
+
+    // Whether the config panel is collapsed (bars-only), toggled by the button on the
+    // timer-bar side. The code-behind watches this to reflow the zones; persisted per
+    // character (CharacterProfile.BuffWatchdogConfigCollapsed) so it reopens as left.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConfigToggleGlyph))]
+    [NotifyPropertyChangedFor(nameof(ConfigToggleTooltip))]
+    private bool _configCollapsed;
+
+    // An arrow that points the direction the divider moves on the next click (same
+    // convention as the nav map's collapse chip): while the config panel is SHOWN the
+    // arrow points toward it (collapse it away); while COLLAPSED it points back toward
+    // where it'll reappear (expand it). Depends on which side the panel is on.
+    public string ConfigToggleGlyph => Layout switch
+    {
+        BuffWatchdogLayout.ConfigTop    => ConfigCollapsed ? "▼" : "▲",
+        BuffWatchdogLayout.ConfigBottom => ConfigCollapsed ? "▲" : "▼",
+        BuffWatchdogLayout.ConfigLeft   => ConfigCollapsed ? "▶" : "◀",
+        BuffWatchdogLayout.ConfigRight  => ConfigCollapsed ? "◀" : "▶",
+        _                               => ConfigCollapsed ? "▼" : "▲",
+    };
+    public string ConfigToggleTooltip => ConfigCollapsed
+        ? "Show the buff-config panel"
+        : "Hide the buff-config panel (bars only)";
+
+    // Flip the config panel's collapsed state and remember it on the character.
+    [RelayCommand]
+    private void ToggleConfig()
+    {
+        ConfigCollapsed = !ConfigCollapsed;
+        if (_profile.Current is { } p && p.BuffWatchdogConfigCollapsed != ConfigCollapsed)
+        {
+            p.BuffWatchdogConfigCollapsed = ConfigCollapsed;
+            _profile.Save();
+        }
+    }
+
+    // Where the user last dragged the config/bars splitter (the config pane's fixed
+    // extent in DIPs) and which orientation it was for — loaded from the character so the
+    // window reopens at the same division. The code-behind reads these on open and writes
+    // them back via SaveConfigExtent on close. 0 = never dragged (use the layout default).
+    public double ConfigExtent { get; private set; }
+    public bool ConfigExtentVertical { get; private set; }
+
+    // Persist the splitter position (called by the code-behind on window close). No-op
+    // when unchanged so a close without a drag doesn't rewrite the profile.
+    public void SaveConfigExtent(double extent, bool vertical)
+    {
+        if (extent <= 0) return;
+        if (_profile.Current is not { } p) return;
+        if (p.BuffWatchdogConfigExtent == extent && p.BuffWatchdogConfigExtentVertical == vertical) return;
+        ConfigExtent = extent;
+        ConfigExtentVertical = vertical;
+        p.BuffWatchdogConfigExtent = extent;
+        p.BuffWatchdogConfigExtentVertical = vertical;
+        _profile.Save();
+    }
 
     // The editable buff-config panel (add / edit / remove / target). It lives in this
     // window now — the Buff Watchdog is the single place to both SEE and CONFIGURE
@@ -101,6 +159,9 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         if (_party is not null) _party.Members.CollectionChanged += OnPartyMembersChanged;
 
         _layout = _profile.Current?.BuffWatchdogLayout ?? BuffWatchdogLayout.ConfigTop;
+        _configCollapsed = _profile.Current?.BuffWatchdogConfigCollapsed ?? false;
+        ConfigExtent = _profile.Current?.BuffWatchdogConfigExtent ?? 0;
+        ConfigExtentVertical = _profile.Current?.BuffWatchdogConfigExtentVertical ?? false;
         Refresh();
     }
 
@@ -128,6 +189,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     private void OnProfileLoaded(CharacterProfile p)
     {
         Layout = p.BuffWatchdogLayout;
+        ConfigCollapsed = p.BuffWatchdogConfigCollapsed;
         _wholePartyCoverage.Clear();   // a new character starts with no tracked coverage
         MarkRebuildAndRefresh();
     }
@@ -237,9 +299,42 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         IReadOnlyDictionary<string, string> coverage = _castDirector.CurrentSelfBuffCoverage();
         IReadOnlyCollection<string> hidden = _castDirector.HiddenPartyTargets;
 
+        // Generalized RemovesSpell conflict pairing across ALL slot shapes (self-self,
+        // whole-party-vs-whole-party, member-vs-whole-party, member-vs-member) — unlike
+        // `coverage` above, this never replaces the timer bar (those buffs are still
+        // genuinely being cast); it only annotates the row so the player knows why a
+        // buff might be flaky. See AppServices.BuffSlotOverwritePairs.
+        IReadOnlyList<Game.Spells.BuffOverwritePair> overwritePairs =
+            AppServices.Current.BuffSlotOverwritePairs();
+
+        // A CLOBBERED buff: another live buff whose spell removes it was cast at/after it,
+        // so the game stripped it when that one landed — even though its own timer is
+        // still ticking here (we never saw a removal line). Keyed (cast-code, target); a
+        // whole-party remover and its self-keyed victim share target "". The later-cast
+        // survivor is left counting; the clobbered row reads "conflict" (see the row VM).
+        HashSet<(string Short, string Target)> clobbered = new();
+        foreach (Game.Spells.BuffOverwritePair p in overwritePairs)
+            foreach (ActiveBuffTimer removed in snap)
+            {
+                if (!string.Equals(removed.Short, p.RemovedCode, StringComparison.OrdinalIgnoreCase)) continue;
+                DateTime removedCast = removed.Until.AddSeconds(-removed.TotalSec);
+                foreach (ActiveBuffTimer remover in snap)
+                    if (string.Equals(remover.Short, p.RemovingCode, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(remover.Target, removed.Target, StringComparison.OrdinalIgnoreCase)
+                        && remover.Until.AddSeconds(-remover.TotalSec) > removedCast)
+                    {
+                        clobbered.Add((removed.Short.ToLowerInvariant(), removed.Target));
+                        break;
+                    }
+            }
+
         foreach (BuffWatchdogPlayerGroup group in Groups)
         foreach (BuffWatchdogRowViewModel row in group.Rows)
         {
+            (string? removedBy, string? removes) = Game.Spells.BuffConflictAnalyzer.Resolve(overwritePairs, row.CastCode);
+            row.SetOverwriteWarning(Game.Spells.BuffConflictAnalyzer.FormatTooltip(removedBy, removes));
+            bool isConflicted = clobbered.Contains((row.CastCode.ToLowerInvariant(), row.MemberKey));
+
             // Single-target member row (keyed by their given name). A member who's HIDING
             // (a cast came back "You do not see … here!") can't be reached — show that.
             if (row.IsParty && !row.IsWholeParty && row.MemberKey.Length > 0)
@@ -250,7 +345,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                     if (string.Equals(t.Short, row.CastCode, StringComparison.OrdinalIgnoreCase)
                         && string.Equals(t.Target, row.MemberKey, StringComparison.OrdinalIgnoreCase))
                     { match = t; break; }
-                row.Update(match, now);
+                row.Update(match, now, conflicted: isConflicted);
                 continue;
             }
 
@@ -271,7 +366,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 { entry = t; break; }
             string? coveredBy = null;
             if (!row.IsParty) coverage.TryGetValue(row.CastCode, out coveredBy);
-            row.Update(entry, now, coveredBy: coveredBy);
+            row.Update(entry, now, coveredBy: coveredBy, conflicted: isConflicted);
         }
     }
 
@@ -365,6 +460,35 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                     GetGroup(byName, display).Rows.Add(new BuffWatchdogRowViewModel(
                         code, isParty: true, name, display, learned, isWholeParty: false, memberKey: given));
                 }
+            }
+        }
+
+        // Keep an active buff visible even after its slot is removed. A live timer with
+        // no configured row yet gets a read-only bar under its target's section (yours
+        // for a self / whole-party cast, the member's otherwise), ticking down until it
+        // wears off. So Remove all — or deleting one row — clears the config without
+        // hiding a buff that's genuinely still up. Once it EXPIRES it clears itself:
+        // nothing recasts an unconfigured buff, so an expired one earns no bar (unlike a
+        // configured buff, whose row persists as "not up" because it's config-driven,
+        // not snapshot-driven — the caster may just not have recast it yet).
+        DateTime now = _castDirector.PausedAtUtc ?? DateTime.UtcNow;
+        HashSet<(string Code, string Target)> shown = new();
+        foreach (BuffWatchdogPlayerGroup g in Groups)
+            foreach (BuffWatchdogRowViewModel r in g.Rows)
+                shown.Add((r.CastCode.ToLowerInvariant(), r.MemberKey));
+        foreach (ActiveBuffTimer t in snap)
+        {
+            if (t.Until <= now) continue;   // ran out + unconfigured → no bar
+            string key = t.Short.ToLowerInvariant();
+            if (!shown.Add((key, t.Target))) continue;
+            (string nm, bool lrn) = ResolveName(t.Short);
+            if (t.Target.Length == 0)
+                self.Rows.Add(new BuffWatchdogRowViewModel(t.Short, isParty: false, nm, "self", lrn));
+            else
+            {
+                string display = displayByGiven.TryGetValue(t.Target, out string? d) ? d : Capitalise(t.Target);
+                GetGroup(byName, display).Rows.Add(new BuffWatchdogRowViewModel(
+                    t.Short, isParty: true, nm, display, lrn, isWholeParty: false, memberKey: t.Target));
             }
         }
 
@@ -471,10 +595,26 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                         sb.Append('#').Append(g);
                 sb.Append(string.Join(",", p.Targets)).Append('|');
             }
+        // A configured cast code already owns a row (self-cast or whole-party), so its
+        // timer arming / expiring is reflected in place by UpdateTimers (the row shows
+        // "not up") and must NOT churn the signature — otherwise a handful of maintained
+        // self buffs cycling would rebuild every bar, every second. Only a LIVE
+        // UNconfigured active buff (hand-cast, or a slot just removed) folds in, so its
+        // read-only bar appears; keying on liveness means the signature flips the moment
+        // it expires, so RebuildRows re-runs and drops the row (see RebuildRows' tail).
+        // Member-keyed timers always fold, as before.
+        HashSet<string> configuredCodes = new(StringComparer.OrdinalIgnoreCase);
+        if (buffs is not null)
+            foreach (BuffSlot p in buffs.Slots)
+                if (!string.IsNullOrWhiteSpace(p.Spell)) configuredCodes.Add(p.Spell.Trim());
+
+        DateTime sigNow = _castDirector.PausedAtUtc ?? DateTime.UtcNow;
         sb.Append("||");
-        foreach (string k in snap.Where(t => t.Target.Length > 0)
-                                 .Select(t => t.Short + "@" + t.Target)
-                                 .OrderBy(k => k, StringComparer.Ordinal))
+        foreach (string k in snap
+                     .Where(t => t.Target.Length > 0
+                         || (!configuredCodes.Contains(t.Short) && t.Until > sigNow))
+                     .Select(t => t.Short + "@" + t.Target)
+                     .OrderBy(k => k, StringComparer.Ordinal))
             sb.Append(k).Append(';');
         return sb.ToString();
     }

@@ -1371,6 +1371,7 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
 - **Same-room vs cross-room.** Most winches sit in the same room as the gate they open. But a winch can `remoteaction` a gate in a **different** room (in Paradigm 1.9.1, the winch in `12/2118` opens the gate off `12/2122`). Then the gate exit is a cross-room remote-action detour, not a same-room exit.
 - Client handling: **same-room** → `WinchManager` (walker + loop) sends the pull, retries on "does not budge", and on "begins to turn" polls a look until the gate reads open, THEN moves — never fires the move blindly. **Cross-room** → the `RemoteActionPathExpander` detour's `pull winch` step is flagged `IsWinchPull` and routed through `WinchManager` pull-only (retry until it turns, no gate poll — the walk back to the gate room covers the open delay).
 - **Paradigm 1.9.1 winches (3):** `12/2099` (Entrance Hall, same-room), `12/2123` (Narrow Precipice, same-room), and `12/2118`→gate off `12/2122` (cross-room).
+- **`12/2123` (Narrow Precipice) is a drawbridge, not a door/gate, and breaks the "no open line" assumption above** *([CONFIRMED] 2026-09-06, user — report `paradigm-20260906-202008`)*. Its exit is permanently phrased `lowered drawbridge <dir>` in the exits list — the wording never flips to `open`/`closed`, so the room-redisplay poll can never see it as open. It DOES broadcast its own explicit line on success, though: `The wooden drawbridge lowers with a heavy thud!` — `WinchManager` treats that as authoritative and skips the poll for it (whichever order it arrives relative to "begins to turn").
 
 - **[CONFIRMED — user, 2026-07-22] Per-hop movement speed is realm-specific, and the two realms
   differ enough that no single fixed movement timer can be right for both.**
@@ -2447,6 +2448,23 @@ never the raw store value (a spell/effect showing "DR +10" really grants +1.0). 
 `SpellEffectFormatter` (the effect line) and the spell Game Data view. (Worn-DR on gear via the
 equipment stat path is a separate display not yet audited against this.)
 
+## Armour Class (AC) — stored at 10×, displayed to the tenth, floored for combat *([CONFIRMED] 2026-09-07, user + source: syntax53/MMUD-Explorer)*
+
+Item `ArmourClass` is stored **ten times** the AC it grants (raw 101 → +10.1 AC), same convention
+as `DR`. MMUD-Explorer displays every item and the character total as **`raw / 10` to one decimal**
+(`Round(sum, 1)` for the character stat), so **AC is a fractional value on screen — 10.1 is a valid,
+correct AC**. Show the summed worn+buff AC to the tenth, not floored.
+
+The **to-hit formula uses a WHOLE-number AC**, not the fraction. MMUD-Explorer's monster-attack sim
+holds `m_nUserAC As Long` and is fed `Round(displayedAC)`; the incoming-hit chance is
+`Round(1 − (AC²/100) / (acc²/140), 2) × 100` = `100 − AC²/(acc²/140)` (our `CombatCalculator`
+port matches this shape). MMUD-Explorer *rounds* the fractional AC to that whole number; the **real
+game floors** it (user-confirmed in-game: gear +61.5 → the game uses **61**, and rounding to 62
+over-stated hit odds by 1). So the client floors the AC into the hit-chance math — display the
+tenths, but the estimate consumes `floor(AC)`. The label may therefore read `10.1` while the
+Hits-You-% is computed on `10`; that's faithful to the game (display precise, combat whole), not a
+bug.
+
 ## The `spells` / `sp` command output *([CONFIRMED] 2026-08-13, user capture, Paradigm)*
 
 `sp` is the accepted abbreviation of `spells` and produces the identical listing of the character's
@@ -2493,6 +2511,23 @@ alongside Strength / Agility / etc.). The two `Health:` labels collide, so the h
 is parsed on its own outbound gate (`health` observed) and never through the stat-screen field scan.
 (HP/MA **regen** — `HP Regen` / `MA Regen` — only appears in Paradigm's `stat all`, which the client
 does NOT parse; regen is computed from stats in the Player Workshop.) (StatParser.TryHealthCommandLine.)
+
+## Realm exit / logoff sequence *([CONFIRMED] 2026-09-05, user + report `stock-20260904-230111`)*
+
+Exiting the realm from inside the game is the exit command (the user's board: a bare `x`):
+
+- `x` → **"You will exit after a period of silent meditation."** → a few seconds later
+  **"Your character has been saved."** (the trailing "leave comments in E-mail to Sysop" text is
+  board-customised) — at which point the character is safely out of the game. **No Y/N confirm
+  prompt** fires on the exit path.
+- Where you land AFTER that is board-specific: some boards drop straight to MajorMUD's own entry menu
+  (`[E] . Enter the Realm`), others nest the realm under extra door/games menus so a second `x` is
+  needed to walk back out (e.g. the door post-game screen with a `[MAJORMUD]:` prompt → the BBS
+  games menu `[M]...MajorMUD! …` with a `Fujin, your selection or ? for help:` prompt). The entry-menu
+  row does NOT appear on the nested boards.
+- So **"Your character has been saved." is the board-agnostic "we're out of the realm" signal**, not
+  the entry menu. The cleanup-logoff orchestrator keys its carrier-drop on that line
+  (`KnownPatterns.RealmExitSaved`); the entry-menu row and a wait-timeout remain secondary fallbacks.
 
 ## BBS actions / emotes (the `action list` socials) *([CONFIRMED] 2026-08-14, user + live capture)*
 
@@ -2717,9 +2752,15 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
 - **Prot-Evil / PREV** (ability code **24**) — **1 AC per point, but ONLY versus evil monsters**
   (the majority of monsters). Because it's conditional, it is surfaced as its own "+N vs evil" line
   rather than folded into a flat AC total.
-- **VileWard** (ability code **1113**) — an AC bonus whose **magnitude scales with the wearer's own
-  evil**. The exact scale is unconfirmed (and it's unclear MME models it), so the client notes its
-  **presence only** and never prints a magnitude.
+- **Prot-Good / PRGD** (ability code **25**, granted by spell #108 "protection from good") —
+  **1 AC per point, but ONLY versus GOOD monsters**, and **STOCK realms only** (see the
+  realm-exclusivity note below). The mirror of Prot-Evil.
+- **VileWard** (ability code **1113**) — a **Paradigm-only** AC bonus vs **evil** monsters whose
+  magnitude scales with the wearer's own evil. Confirmed formula (MMUD-Explorer `CalculateAttackDefense`):
+  when the target is evil, `wearer-evil ≤ Seedy → 0`, `≤ Criminal → halved`, then **`÷10`** and added to
+  secondary defense. The client applies exactly this (`CombatCalculator.AdjustVileWard`), gated to ParaMud.
+
+**ProtGood vs VileWard are realm-EXCLUSIVE** *([CONFIRMED] 2026-09-07, user + syntax53/MMUD-Explorer + Paradigm-1.9.1 item data)*: the ability *numbering* is shared across realms (25 = ProtGood, 1113 = VileWard in both — `bGreaterMUD` changes behavior, not numbers), but **Stock uses ProtGood and Paradigm uses VileWard**. Paradigm **dropped ProtGood**: its server does not honor ability 25, and its gear carries none (all moved to VileWard 1113). So the client counts **ProtGood only on Stock** and **VileWard only on Paradigm** — a stray ability-25 value on Paradigm must never add to defense. Monster Intel shows the Prot Good what-if field on Stock and the Vile Ward field (+ evil-tier picker) on Paradigm.
 
 ### Fractional AC — the integer combat AC is the FLOOR of the total *([CONFIRMED] 2026-09-04, user)*
 
@@ -2729,6 +2770,31 @@ what Character Info's "Projected AC" reflects — is the **floor** (truncation) 
 total, **not** a round-half-up. A projected **61.5** is an in-game AC of **61**. Rounding the half up
 over-states AC by 1 (Monster Intel's Hits-You-% sim was seeding 62; `IncomingHitEstimator` truncates
 now). Buff/shadow/prot AC are integers, so they don't affect the fractional part.
+
+### To-hit floor — the minimum chance a monster can ever land, by realm and armour type *([CONFIRMED] 2026-09-06, MMUD-Explorer `modMMudFunc.bas` `CalculateAttackDefense`)*
+
+No matter how high a defender's AC/Dodge climbs, an attacker's chance to land a physical hit is
+**clamped to a floor** — it never reaches 0%. The floor is realm-dependent, and on ParaMUD it also
+depends on the **defender's class armour type**:
+
+- **Stock: 8%.** Flat, regardless of armour type.
+- **ParaMUD: 2%** normally, **dropping to 1% when the defender's class `ArmourType` is 1..6** — the
+  light-armour tiers **Silk (1), Ninja (2), Leather (3–6)**. Heavier classes — **Chainmail (7),
+  Scalemail (8), Platemail (9)** — and **Natural (0)** stay at the 2% floor. (Mirrors
+  `CombatCalculator.GetHitMin`: ParaMUD base `PARAMUD_HIT_MIN = 2`, minus 1 when `ArmourType` is in
+  1..6; Stock `STOCK_HIT_MIN = 8`.)
+
+`ArmourType` is a **per-class** field (Classes table), so it's the *character's* class armour tier
+that lowers the floor, not the gear currently worn. The value→name map (LookupEnums): 0 = Natural,
+1 = Silk, 2 = Ninja, 3–6 = Leather, 7 = Chainmail, 8 = Scalemail, 9 = Platemail.
+
+This is why Monster Intel's Hits-You-% column can read **1%** for a light-armour ParaMUD class and
+its filter dropdown grows a leading `≤1%` band there — the estimator threads the class `ArmourType`
+into the hit-chance calc so the shown number matches the engine's real minimum (PR #503, v3.52.7).
+
+For completeness, the sibling **dodge caps** (also in `CombatCalculator`): Stock hard-caps dodge at
+**95%**; ParaMUD applies a **soft cap at 55%** (diminishing returns above it) then a **hard cap at
+98%**.
 
 ### Blur AC (ability code 10) — encumbrance-scaled, NOT flat *([CONFIRMED] 2026-08-08, user)*
 
@@ -3239,6 +3305,24 @@ glass jug               5               2 gold crowns
   `SetConfusedCheck`) and doesn't charge an attempt against `MaxRecoverAttempts` while it's true — the
   reroute/resend still happens every time, it just isn't bounded by the same budget a real mapping
   problem is.
+- **[CONFIRMED] 2026-09-05, report `paradigm-20260905-183956`: the shipped `convulsions` message record's
+  `AppliedMessage` was wired to the wrong line, so the 2026-09-02 recovery-budget exemption above never
+  actually engaged for a real convulsions episode.** Both bundled seeds (`Messages.paradigm.seed.json` and
+  `Messages.stock.seed.json`) had `AppliedMessage: "You look around stupidly and do nothing!"` on the
+  merged `convulsions` record — that's one of the fumble wordings (correctly still listed in
+  `ConfuseFumbleLine`), not the condition's own onset line. Since that fumble text never actually appears
+  as ambient onset text in a session, the record's `AppliedMessage` never matched, `ConditionTracker`
+  never added it to `_active`, and `IsConfused` stayed false for the whole convulsions duration — so
+  `LoopRunner.EnterRecovery` charged every fumble-caused block against `MaxRecoverAttempts` same as a real
+  desync, burning the budget in under 20 seconds and permanently failing the loop. The correct onset is
+  `You are in convulsions!` (confirmed live in both this report and `paradigm-20260901-080223` above,
+  and previously found and hand-corrected by the user in a per-set `messages.json` override that predates
+  the realm-flavored split — `DataMigration.RetireLegacyMessagesOnce` retired that override to `.bak`
+  during the split since the shipped seed never carried the same correction, silently reintroducing the
+  bug). **Client encoding:** both bundled seeds' `convulsions` record now has
+  `AppliedMessage: "You are in convulsions!"`; `AppliedEndsWith` (`Your body returns to normal.`) was
+  already correct. No code change — `ConditionTracker` and `LoopRunner` already behaved exactly as
+  designed once fed the right onset text.
 - **[UNVERIFIED] 2026-09-02, cross-referenced from a messages.md export, not a live bug report:**
   `convulsions` may have a THIRD fumble wording alongside the generic fumble and its own `You convulse
   violently!` — `You look around stupidly and do nothing!`, flagged `LastActionFailed` in the source data.
@@ -3329,10 +3413,17 @@ glass jug               5               2 gold crowns
   instead of clearing and recasting from full. Clearing (no buffs assumed) happens only on a **fresh character**
   (ProfileLoaded — a same-character reconnect does not reload the profile, so its paused timers survive) or when
   the offline gap exceeds the longest armed buff's full duration (they're surely gone by then).
-- **[user 2026-08-17 / 2026-08-28] Party-buff slots are party-only; scope splits whole-party vs
-  single-target; targeting is per-member (not class).**
-  The party-buff slots (`CharacterProfile.PartyBuffs`, configured in the Party window) are cast **only
-  while in a party** (`PartyState.IsInParty`); solo, none fire — self-buffs come from the self-bless slots.
+- **[user 2026-08-17 / 2026-08-28, corrected 2026-09-06] Buff-slot scope splits whole-party vs
+  single-target; targeting is per-member (not class); a whole-party cast still lands on a solo caster.**
+  (Superseded: this used to say party-buff slots — then a separate list, since folded into the one
+  unified `CharacterProfile.PartyBuffs` list, see `Models/Profile/BuffSettings.cs` — never fire solo.
+  **[CONFIRMED, user 2026-09-06]** that's wrong for a **whole-party** scope specifically: MajorMUD treats
+  a lone character as a party of one, so a whole-party cast/use still lands on yourself while solo — it
+  isn't refused or wasted. `CastingDirector.PickUnifiedBuff` now falls back to the self-bless timing
+  gates for a `WholePartyOn` slot when `!PartyState.IsInParty`, instead of holding it forever behind
+  "must be in a party" (report `paradigm-20260906-150624`: a whole-party item-cast buff, `platinum
+  sceptre`, never fired outside a party). A **single-target** slot genuinely still needs an actual party
+  member to aim at, so that branch is unaffected.)
   **Scope classification** (confirmed against stock + Paradigm data), gated first on **`EnergyCost == 0`**
   (a buff, not an attack):
   - **`Spells.Targets` = 2** (Self or User) → a **single-target** beneficial buff cast on ONE other member
@@ -3348,6 +3439,46 @@ glass jug               5               2 gold crowns
     **chant removes bless**), in a party we stop self-casting the removed one and let the party buff cover us —
     the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a
     single-target party buff can't cover self).
+
+### Combat round output order — damage lines precede the prompt, so HP lags a round *([CONFIRMED] 2026-09-05, user + report `paradigm-20260904-214056`)*
+
+A combat round's server output arrives as a burst: the **damage / hit / miss lines first**, then the round's
+**prompt** (`[HP=.../MA=...]`) — and **only the prompt carries the post-round HP/MA**. So between "the hit
+landed" and "the prompt parsed," the client's `PlayerState.Hp` still holds the *previous* round's value.
+
+- **Client encoding (load-bearing).** The between-round cast heartbeat, `TickEngine.CombatTickElapsed`, is
+  fired *by the damage lines themselves* (`RecordCombatTick`, debounced to the round's first combat line) as
+  well as by the 5 s timer fallback. So a damage-line-driven tick runs `CastingDirector.OnCombatTick` →
+  `Evaluate` **during the burst, before the round's prompt refreshes HP** — the between-round decision sees
+  stale HP. Report `paradigm-20260904-214056`: a round chunked the player 254 → 117, but the tick fired the
+  between-round decision while HP still read 254, so it spent the round's one slot on a due **armour buff**
+  (looked safe at "254") instead of a heal; the player died two rounds later. The program log's
+  `Buffing fired ... hp=254/257` is the *stale* read — matching the pre-burst prompt — while the wire shows
+  the buff landing at `[HP=117/MA=286]`.
+- **Fix (v3.50.10).** `TickEngine` now flags whether the tick in flight is damage-line-driven
+  (`LastCombatTickWasDamageDriven`); on such a tick `CastingDirector` **holds the non-heal survival categories
+  (cure / buff / debuff)** so the round's slot isn't spent on unconfirmed HP. Heals stay eligible — they're
+  safe on the stale read (a stale-high read simply doesn't fire) and the prompt's own reactive `Evaluate`
+  (fired when HP changes) then drives the real heal on fresh HP. The timer-fallback tick and out-of-combat
+  heartbeat are HP-fresh, so they're unaffected.
+
+## RemovesSpell buffs clobber on cast; the wear-off line is SHARED, not per-spell *([CONFIRMED] 2026-09-07, user)*
+
+- A spell that carries a **RemovesSpell** ability (Abil 122 → a target spell number) **strips that
+  target buff off you the instant it lands**. The direction is per the realm's data, so check it, don't
+  assume — on Paradigm 1.9.1 **bless removes chant** (confirmed 2026-09-07, user + game data). So among a
+  clashing set, **whichever was cast LAST is the one actually on you**; the buffs it removes are gone.
+- A wear-off line **does** fire when the buff is stripped — but bless and chant **share the same message
+  records** (both the cast/applied line "You feel lucky!" *and* the wear-off "The effects of bless wear
+  off!"), so the line **cannot be attributed to the right spell by text alone**: a chant-being-stripped
+  shows bless's wear-off text. A client keying timers off those shared lines mis-attributes — the cast
+  confirm refreshes the wrong buff, and the wear-off clears the wrong one. The reliable signal is **what
+  we actually sent** (the distinct "You cast <spell> on …" / the pending self-buff short), so the Buff
+  Watchdog keys the timer off that and, on a wear-off right after a clobbering cast, leaves both timers
+  alone and **infers** the clobber from RemovesSpell + cast order (`Until − TotalSec` = each buff's cast
+  instant), rendering the clobbered bar as **"conflict"** rather than a bogus countdown.
+- Casting a buff that the other removes, **after** it, simply re-applies — only the remover's cast strips,
+  a one-time effect at cast, not a standing suppression.
 
 ## Debuff slot spells — energy + targeting *([CONFIRMED] 2026-08-17, user + game-data trace, Paradigm 1.9.1)*
 

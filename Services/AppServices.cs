@@ -114,6 +114,18 @@ public sealed class AppServices
         if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text);
     }
 
+    // Drop a bracketed yellow status line into the terminal scrollback — the same
+    // "[…]" notice cadence quest-availability / roomba-complete use. The text is
+    // written verbatim (no auto-bracketing): callers supply their own "[…]" so a
+    // multi-line report reads exactly as they compose it. No-op until the main VM
+    // binds it; the sink already marshals to the UI thread.
+    private Action<string>? _terminalNotice;
+    public void SetTerminalNotice(Action<string> sink) => _terminalNotice = sink;
+    public void WriteTerminalNotice(string text)
+    {
+        if (!string.IsNullOrWhiteSpace(text)) _terminalNotice?.Invoke(text);
+    }
+
     // Opens (or re-focuses) the single Navigation Management dialog. Both the map
     // window's "Navigation Management" button and the toolbar Start button route
     // here so there's only ever one instance — no two identical windows. The bool
@@ -2216,6 +2228,18 @@ public sealed class AppServices
         // the renumber — no need to re-apply the profile's persisted names here.
         GameData.ActiveSetChanged += _ => SeedSpellbook(Profile.Current?.LastKnownStats, reseed: true);
 
+        // Nav-seed additive apply on set-activate: starter loops / GOTO favourites
+        // added in a LATER build reach an already-imported set on launch, never
+        // re-adding ones the user deleted (per-set ledger in NavSeedBootstrapper).
+        // Off the UI thread — it enumerates the bundle + set folder — and a no-op
+        // (nothing new) touches no disk. Import still seeds a fresh set synchronously.
+        GameData.ActiveSetChanged += _ =>
+        {
+            string? set = GameData.ActiveSet;
+            if (!string.IsNullOrWhiteSpace(set))
+                System.Threading.Tasks.Task.Run(() => NavSeedBootstrapper.SeedIfNeeded(set, Log));
+        };
+
         // Persist the learned-spell set with the rest of the profile. Snapshot
         // only when the book has a resolved class — with no class the obtained
         // set is empty for lack of a spell list, and blindly writing that would
@@ -3489,7 +3513,11 @@ public sealed class AppServices
         // where it was first seen — a locator hint for tracking down the source.
         MessageCandidateWatcher = new Game.MessageCandidateWatcher(
             Router, Messages, MessageCandidates,
-            currentRoom: () => RoomTracker.State.CurrentRoom?.Key, log: Log);
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key, log: Log,
+            // A room-display title line is not a server message — the room-display
+            // parser reads it directly and registers no router pattern, so exclude
+            // any line that's a known room name in the active set (O(1) name index).
+            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null);
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a
         // curable ailment (or being held) it announces ".@poisoned" /
@@ -3590,7 +3618,7 @@ public sealed class AppServices
         // duration (SpellCalculator.Duration at the live level);
         // ShortFromAppliedRecord maps a fired AppliedMessage record back
         // to the cast code so a confirmed self-buff starts its timer.
-        CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord);
+        CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord, RemovesShortsFor);
         // A fresh character starts with no buffs assumed — clear any timers carried over
         // (e.g. paused from a prior character's disconnect) so a character switch doesn't
         // resurrect the old character's buffs. A same-character reconnect does NOT reload
@@ -3623,6 +3651,10 @@ public sealed class AppServices
         // round cadence. Subscribed BEFORE CastDirector.OnCombatTick below so the slot
         // is freed before this round's between-round evaluation runs.
         Tick.CombatTickElapsed += CastDirector.NotifyRoundComplete;
+        // Tell CastDirector whether the tick it's handling was fired by a server combat
+        // line (HP not yet refreshed by the round's prompt) vs the 5s timer fallback, so
+        // it can hold its non-heal casts on a stale-HP tick (report paradigm-20260904-214056).
+        CastDirector.SetCombatTickSource(() => Tick.LastCombatTickWasDamageDriven);
         Tick.CombatTickElapsed += CastDirector.OnCombatTick;
         // Out of combat the combat tick doesn't free-run (it's only anchored once a
         // combat line lands), so drive the between-round loop off the 1 s heartbeat
@@ -4116,6 +4148,15 @@ public sealed class AppServices
         // suspended on the drop so nothing leaks into the login-menu nav.
         PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
         PromptScanner.PromptObserved += _ => PartyProbe.NotifyEnteredRealm();
+        // Release the trainer/creation form's character-mode the instant the
+        // returning statline prompt lands off the wire — the committed StatusLine
+        // pattern can't see it (it redraws in place with no CR until the user
+        // types), so without this the keyboard stays captured and the next
+        // command is sent byte-by-byte (report paradigm-20260906-090057).
+        PromptScanner.PromptObserved += _ => TrainerMenu.NotifyLivePromptObserved();
+        // Same in-game gate arms unrecognized-line capture: nothing before the first
+        // realm prompt (splash / login menu / connect banner) stages a candidate.
+        PromptScanner.PromptObserved += _ => MessageCandidateWatcher.NotifyInGame();
         // Same in-game gate resumes frozen buff timers after an unexpected drop: the
         // disconnect handler paused them (kept the remaining), and this shifts each
         // forward by the offline gap so the recast clock picks up where it left off.
@@ -5893,12 +5934,59 @@ public sealed class AppServices
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
             LoopRunner, AutoLair, PartyState, Party, Log);
 
-        // Startup profile: with Settings → General "Auto-load last profile" on,
-        // reopen the last session; otherwise (the default) open a blank draft and
+        // Startup profile priority: a --profile launch argument wins over the
+        // "Auto-load last profile" setting, which wins over a blank draft. The CLI
+        // token is resolved here (not in Program.Main) because resolving a bare
+        // name needs the saved-profile list, and Profile is live by now. An
+        // unresolved token logs a warning and falls through to the normal path
+        // rather than failing to launch.
+        bool cliRequested = StartupOptions.RequestedProfileToken is not null;
+        Models.Profile.ProfileRef? cliStartup = null;
+        if (StartupOptions.RequestedProfileToken is { } cliToken)
+        {
+            cliStartup = StartupOptions.ResolveToken(
+                cliToken, System.Linq.Enumerable.ToList(Profile.ListAll()), out string? cliError);
+            if (cliStartup is null)
+            {
+                // Token given but didn't resolve (typo / ambiguous bare name). Stash
+                // the reason for the main window to show on the terminal, and open a
+                // blank draft — deliberately NOT auto-load-last, so we never quietly
+                // launch a *different* character when the requested one didn't load.
+                StartupOptions.ProfileNotice = $"--profile \"{cliToken}\" did not load: {cliError}";
+                Log.Warn("Startup", StartupOptions.ProfileNotice + " Opened a blank profile instead.");
+            }
+            else
+                Log.Info("Startup",
+                    $"--profile: loading '{cliStartup.Name}' on '{cliStartup.Bbs}'" +
+                    (StartupOptions.SpawnedSiblings > 0 ? $" (+{StartupOptions.SpawnedSiblings} sibling instance(s) launched)" : ""));
+        }
+
+        if (cliStartup is { } cli)
+        {
+            try
+            {
+                Profile.Load(cli.Bbs, cli.Name);
+            }
+            catch (Exception ex)
+            {
+                Log.Info("Startup",
+                    $"--profile load of '{cli.Name}' on '{cli.Bbs}' failed " +
+                    $"({ex.GetType().Name}); loading the default profile instead.");
+                Profile.LoadDefaultProfile();
+            }
+        }
+        // A --profile was given but didn't resolve: blank draft (the notice is already
+        // stashed for the terminal), and we skip auto-load-last on purpose.
+        else if (cliRequested)
+        {
+            Profile.LoadDefaultProfile();
+        }
+        // Auto-load last profile: with Settings → General "Auto-load last profile"
+        // on, reopen the last session; otherwise (the default) open a blank draft and
         // let the user pick / build one via File → Open profile / Recent profiles.
         // A last-used profile that was since deleted / renamed throws on Load, so
         // fall back to the blank draft rather than failing startup.
-        if (Settings.Current.StartupProfile() is { } startup)
+        else if (Settings.Current.StartupProfile() is { } startup)
         {
             try
             {
@@ -6384,14 +6472,59 @@ public sealed class AppServices
 
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
     // effect the Spell Book renders as "Removes <spell>").
-    private HashSet<int> RemovedSpellNumbers(string castCode)
+    private HashSet<int> RemovedSpellNumbers(string castCode) =>
+        Spellbook.FindByCastCode(castCode.Trim()) is { } s
+            ? Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula)
+            : new HashSet<int>();
+
+    // Every pair of configured, resolvable buff slots where one's spell removes the
+    // other's via RemovesSpell (Abil 122) and their targeting can land on the same
+    // character (self, a shared member, or anyone via a whole-party cast). Purely
+    // informational — feeds the Buff Panel's per-row warning and the Buff Watchdog's
+    // generalized "covered by" label. Does NOT drive CastingDirector's cast/skip
+    // decision; SelfBuffCoverage above is the one case (self superseded by a
+    // whole-party buff) proven safe to automate. #item-cast slots don't resolve to a
+    // KnownSpell and are skipped, same as SelfBuffCoverage's self-buff collection.
+    public IReadOnlyList<Game.Spells.BuffOverwritePair> BuffSlotOverwritePairs()
     {
-        const int RemovesSpellAbil = 122;
-        HashSet<int> nums = new();
-        if (Spellbook.FindByCastCode(castCode.Trim()) is { } s)
-            foreach (Game.Spells.SpellAbility a in s.Formula.Abilities)
-                if (a.Code == RemovesSpellAbil) nums.Add(a.Value);
-        return nums;
+        List<Game.Spells.BuffOverwritePair> pairs = new();
+        System.Collections.Generic.List<Models.Profile.BuffSlot>? slots = Profile.Current?.PartyBuffs?.Slots;
+        if (slots is null || slots.Count == 0) return pairs;
+
+        List<(Game.Spells.KnownSpell Spell, Game.Spells.BuffAffectSet Affect)> resolved = new();
+        foreach (Models.Profile.BuffSlot slot in slots)
+        {
+            if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
+            string code = slot.Spell.Trim();
+            if (Spellbook.FindByCastCode(code) is not { } spell) continue;
+            bool isWholeParty = IsPartyWideBuff(code);
+            // Judge co-landing by SCOPE — what the slot COULD ever land on — not the live
+            // on/off toggles. The ⚠ is a heads-up about the configured PAIR: two buffs
+            // that remove each other still clobber whenever both are up, no matter which
+            // Self / Party / member boxes are ticked right now. (A whole-party buff can
+            // hit everyone; a self / single-target buff can hit you and/or any member.)
+            // The timer-side "conflict" call, by contrast, reads the live cast snapshot —
+            // so an un-cast buff never falsely marks another as clobbered.
+            Game.Spells.BuffAffectSet affect = isWholeParty
+                ? new Game.Spells.BuffAffectSet { Everyone = true, Members = System.Array.Empty<string>() }
+                : new Game.Spells.BuffAffectSet { Self = true, AllMembers = true, Members = System.Array.Empty<string>() };
+            resolved.Add((spell, affect));
+        }
+
+        for (int i = 0; i < resolved.Count; i++)
+        {
+            HashSet<int> removes = RemovedSpellNumbers(resolved[i].Spell.Short);
+            if (removes.Count == 0) continue;
+            for (int j = 0; j < resolved.Count; j++)
+            {
+                if (i == j || !removes.Contains(resolved[j].Spell.Number)) continue;
+                if (!Game.Spells.BuffConflictAnalyzer.CanCoLand(resolved[i].Affect, resolved[j].Affect)) continue;
+                pairs.Add(new Game.Spells.BuffOverwritePair(
+                    resolved[i].Spell.Short, resolved[i].Spell.Name,
+                    resolved[j].Spell.Short, resolved[j].Spell.Name));
+            }
+        }
+        return pairs;
     }
 
     // Build the cure-confirmation matchers
@@ -6489,6 +6622,22 @@ public sealed class AppServices
             if (string.Equals(s.Name.Trim(), record.Name.Trim(), StringComparison.OrdinalIgnoreCase))
                 return s.Short;
         return null;
+    }
+
+    // The cast codes of the buffs a given cast code's spell REMOVES (RemovesSpell / Abil
+    // 122). Lets the CastingDirector re-attribute a wear-off that lands right after a
+    // clobbering cast to its victim rather than the just-cast survivor (bless & chant
+    // share the wear-off message, so the shared line can't disambiguate on its own).
+    private IReadOnlyCollection<string> RemovesShortsFor(string castShort)
+    {
+        if (string.IsNullOrWhiteSpace(castShort)
+            || Spellbook.FindByCastCode(castShort.Trim()) is not { } spell) return System.Array.Empty<string>();
+        HashSet<int> removed = Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(spell.Formula);
+        if (removed.Count == 0) return System.Array.Empty<string>();
+        List<string> shorts = new();
+        foreach (Game.Spells.KnownSpell s in Spellbook.Available)
+            if (removed.Contains(s.Number)) shorts.Add(s.Short);
+        return shorts;
     }
 
     // ----- Mana-regen reroll glue ---------------------------------------
@@ -6667,6 +6816,28 @@ public sealed class AppServices
         Game.Calculators.ManaRegenBreakpointCalculator.Result r =
             Game.Calculators.ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
         return (r.WorstTick, r.BestTick);
+    }
+
+    // The character's natural passive mana-regen per 30 s tick — level / stats /
+    // magery with worn +ManaRgn% folded in, NOT meditating — the "mana gained per
+    // tick" the Buff Watchdog shows against its per-tick maintenance cost so you can
+    // see at a glance whether a buff set is self-sustaining. Deliberately excludes any
+    // mana-regen roll spell (nature tap / flux): its magnitude is a variable roll, and
+    // the spell itself is already counted on the maintenance side. Uses the same
+    // engine formula (CharacterCalculator.CalcManaRegen) the Level Projection grid
+    // trusts. Null for a non-caster (mageryType 0) or before the first stat parse.
+    public int? PassiveManaRegenTick()
+    {
+        if (!Stats.HasParsed) return null;
+        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        int mageryType = RowInt(classRow, "MageryType");
+        if (mageryType == 0) return null;   // non-caster: no mana pool worth planning
+        int mageryLevel = RowInt(classRow, "MageryLVL");
+        int gearRegen = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
+        return Game.Calculators.CharacterCalculator.CalcManaRegen(
+            System.Math.Max(1, PlayerStats.Level), PlayerStats.Intellect, PlayerStats.Willpower,
+            PlayerStats.Charm, mageryType, mageryLevel, gearRegen, isMeditating: false, GameData.ActiveRealm);
     }
 
     private static int RowInt(System.Text.Json.JsonElement? row, string property)

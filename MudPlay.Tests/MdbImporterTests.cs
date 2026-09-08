@@ -94,4 +94,70 @@ public sealed class MdbImporterTests
         // assert the cross-platform-safe cases only.
         Assert.Equal(expected, MdbImporter.MakeFilesystemSafe(input));
     }
+
+    // A zero-table import removes the freshly-created (empty) set folder so a broken
+    // MDB never leaves an empty set to switch to.
+    [Fact]
+    public void RemoveDirectoryIfEmpty_DeletesAnEmptyFolder()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-empty-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+
+        MdbImporter.RemoveDirectoryIfEmpty(dir);
+
+        Assert.False(Directory.Exists(dir));
+    }
+
+    // The post-write round-trip check that gates the per-table import retry: a
+    // truncated / malformed file is rejected so the importer retries (and, if it
+    // stays bad, reports the table skipped instead of shipping a crasher).
+    [Fact]
+    public void TableJsonParses_TrueForValid_FalseForMalformedOrMissing()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-tjp-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            string good = Path.Combine(dir, "good.json");
+            File.WriteAllText(good, "[{\"Name\":\"Goblin\"}]");
+            Assert.True(MdbImporter.TableJsonParses(good));
+
+            string bad = Path.Combine(dir, "bad.json");
+            // A raw 0x1E mid-string — the exact corruption the crash report carried.
+            File.WriteAllText(bad, "[{\"Name\":\"Go" + (char)0x1E + "blin\"}]");
+            Assert.False(MdbImporter.TableJsonParses(bad));
+
+            string truncated = Path.Combine(dir, "truncated.json");
+            File.WriteAllText(truncated, "[{\"Name\":\"Gob");   // interrupted write
+            Assert.False(MdbImporter.TableJsonParses(truncated));
+
+            Assert.False(MdbImporter.TableJsonParses(Path.Combine(dir, "missing.json")));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    // The safety guard: a failed re-import over an EXISTING populated set must never
+    // delete that set's files.
+    [Fact]
+    public void RemoveDirectoryIfEmpty_KeepsAPopulatedFolder()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-populated-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+        string keep = Path.Combine(dir, "Rooms.json");
+        File.WriteAllText(keep, "[]");
+        try
+        {
+            MdbImporter.RemoveDirectoryIfEmpty(dir);
+
+            Assert.True(Directory.Exists(dir), "an existing populated set must survive a failed re-import");
+            Assert.True(File.Exists(keep));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

@@ -32,6 +32,12 @@ public sealed class SpellbookState
     private readonly HashSet<int> _obtained = new();
     private List<KnownSpell> _available = new();
     private SpellPick[] _availablePicks = Array.Empty<SpellPick>();
+    // Cast-on-use items for the active class. GetClassCastItems is a full Items-table
+    // scan, and the casting decision pass hits GetCastItems several times per pass
+    // when an #item-cast buff token is configured — so cache the result on the same
+    // class-change / set-swap lifecycle as _available (see RebuildAvailable) instead
+    // of re-scanning every pass.
+    private IReadOnlyList<ClassCastItem> _castItems = Array.Empty<ClassCastItem>();
 
     public SpellbookState(KnownSpellCatalog catalog)
     {
@@ -101,18 +107,32 @@ public sealed class SpellbookState
     // The cast-on-use items the active class can use (wands / scrolls / potions
     // carrying an Items code-43 CastsSp ability). The Spell Book lists these
     // alongside learnable spells. Empty when no class is set yet.
-    public IReadOnlyList<ClassCastItem> GetCastItems() => _catalog.GetClassCastItems(ClassNumber);
+    public IReadOnlyList<ClassCastItem> GetCastItems() => _castItems;
 
     // Cast-on-use items whose spell is a WHOLE-PARTY buff (Targets 10 / 13) and which
-    // are unlimited-use — the only items eligible as a party-buff slot. `use <item>`
-    // takes no target, so a single-target item spell can't be aimed at a party member;
-    // only a party-wide item cast (which blankets everyone in one use) works as a party
-    // buff. Limited-charge items are excluded (they'd burn out on a recast loop).
+    // are unlimited-use. `use <item>` takes no target, so a single-target (Targets 2)
+    // item spell can't be aimed at a specific party member — only a party-wide item
+    // cast (which blankets everyone in one use, see GetSelfCastItems for the other
+    // untargeted case) works without that ambiguity. Limited-charge items are
+    // excluded (they'd burn out on a recast loop).
     public IReadOnlyList<ClassCastItem> GetWholePartyCastItems()
     {
         List<ClassCastItem> result = new();
         foreach (ClassCastItem item in GetCastItems())
             if (item.Unlimited && IsWholePartySpellNumber(item.SpellNumber))
+                result.Add(item);
+        return result;
+    }
+
+    // Cast-on-use items whose spell is a SELF-ONLY buff (Targets 0 / 1) and which
+    // are unlimited-use — a wielded weapon/staff whose "use" always lands on the
+    // wielder (e.g. a crozier that casts a bless on you), so it needs no target
+    // parameter any more than a whole-party cast does.
+    public IReadOnlyList<ClassCastItem> GetSelfCastItems()
+    {
+        List<ClassCastItem> result = new();
+        foreach (ClassCastItem item in GetCastItems())
+            if (item.Unlimited && IsSelfCastSpellNumber(item.SpellNumber))
                 result.Add(item);
         return result;
     }
@@ -125,6 +145,14 @@ public sealed class SpellbookState
 
     private bool IsWholePartySpellNumber(int spellNumber) =>
         _catalog.GetTargetsByNumber(spellNumber) is { } targets && BuffClassifier.IsWholeParty(targets);
+
+    private bool IsSelfCastSpellNumber(int spellNumber) =>
+        _catalog.GetTargetsByNumber(spellNumber) is { } targets && BuffClassifier.IsSelfBuff(targets);
+
+    // The item-cast spell's full formula (for RemovesSpell / duration lookups),
+    // across the whole Spells table — independent of the active class, since an
+    // item's cast spell need not be one the class could ever learn directly.
+    public SpellFormulaInput? GetFormulaByNumber(int spellNumber) => _catalog.GetFormulaByNumber(spellNumber);
 
     // Items.Number of the first item that teaches the given spell (LearnSp), or 0
     // when none does. Backs the Spell Book's double-click-to-item-record.
@@ -204,6 +232,10 @@ public sealed class SpellbookState
     private void RebuildAvailable()
     {
         _available = new List<KnownSpell>(_catalog.Query(ClassNumber, level: 0, CharAlign));
+        // Class-scoped cast-item list is a full Items scan — resolve it once here,
+        // on the same class-change / set-swap trigger, so per-pass GetCastItems reads
+        // are free. GetClassCastItems keys only on class, so this is its full input.
+        _castItems = _catalog.GetClassCastItems(ClassNumber);
         ResolveObtainedFromNames();
         RebuildAvailablePicks();
     }
