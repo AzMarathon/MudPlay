@@ -3747,8 +3747,12 @@ public sealed class AppServices
             inCombat: () => PlayerState.InCombat,
             knownLevel: () => Stats.HasParsed ? PlayerStats.Level : (int?)null,
             roomName: key => RoomGraph.GetRoom(key)?.Name,
-            send: cmd => SendGameCommand(cmd),
-            forceRoomDisplay: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("\r")),
+            // Raw (gate-piercing) wire for BOTH the `sys goto` command and the bare
+            // Enter: sys commands are honoured at any HP, so they must survive the
+            // mortally-wounded send-gate hold (the wimpy escape fires while bleeding
+            // out). The gated SendGameCommand would drop them at HP <= 0.
+            send: cmd => SendGameCommandRaw(cmd),
+            forceRoomDisplay: () => _rawWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("\r")),
             writeStatus: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
             commitLocated: key => RoomTracker.SetLocated(key),
             log: Log);
@@ -6705,6 +6709,28 @@ public sealed class AppServices
     {
         ArgumentNullException.ThrowIfNull(send);
         _engineWireSend = send;
+    }
+
+    // Un-wrapped wire sender that pierces the EngineSendGate — bound to the same raw
+    // SendUserInput the emergency hangup uses (NOT the gate-wrapped engine sender).
+    // `sys` commands ride this because they're honoured at ANY HP, mortally-wounded
+    // included (confirmed mechanic), so they must survive the HP <= 0 send-gate hold
+    // rather than being dropped like ordinary engine sends. Null until first connect.
+    private Action<byte[]>? _rawWireSend;
+
+    public void SetRawWireSender(Action<byte[]> send)
+    {
+        ArgumentNullException.ThrowIfNull(send);
+        _rawWireSend = send;
+    }
+
+    // Send a command line on the raw (gate-piercing) wire, CR appended. Used for the
+    // `sys goto` power so it fires at any HP. Returns false when no sender is bound.
+    private bool SendGameCommandRaw(string command)
+    {
+        if (_rawWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
+        _rawWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
+        return true;
     }
 
     // Send a command line to the server as if the user typed it (CR appended),

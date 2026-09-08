@@ -1898,11 +1898,11 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
-    public void WimpyGoto_MortallyWounded_DoesNotAttempt_AndHangsUp()
+    public void WimpyGoto_MortallyWounded_StillFires_NoHangup()
     {
-        // At or below 0 HP the character is mortally wounded — the game rejects a
-        // `sys goto` and the send-gate would swallow it. So the wimpy is skipped and
-        // the hangup (the only escape that works there) fires instead.
+        // `sys` commands aren't gated by the mortally-wounded state (confirmed
+        // mechanic), so the wimpy escape fires even below 0 HP — the jump is sent on
+        // a gate-piercing wire. No fallback hangup when it dispatches.
         HealthSettings s = new()
         {
             SysGotoWimpyInsteadOfHanging = true,
@@ -1912,8 +1912,9 @@ public sealed class HealthManagerTests
 
         h.SetPrompt(hp: -2, maxHp: 200);   // below 0 — mortally wounded, still in-window
 
-        Assert.Null(h.WimpyFiredWith);       // never attempted
-        Assert.Contains("=x", h.SentLines);  // hung up instead
+        Assert.Equal("lostcity", h.WimpyFiredWith);   // fired despite being dropped
+        Assert.DoesNotContain("=x", h.SentLines);      // no hangup
+        Assert.Equal(0, h.HangupDisconnectCount);
     }
 
     [Fact]

@@ -1166,13 +1166,11 @@ public sealed class HealthManager : IDisposable
         // table). A refused / unwired jump falls through to the normal hangup below,
         // so a mis-set escape never leaves a low-HP character sitting in the fight.
         //
-        // Gated on HP > 0: at or below 0 the character is mortally wounded, the game
-        // rejects every action command ("You may not do that while you are mortally
-        // wounded!"), and PlayerDroppedGate holds the EngineSendGate — so a `sys goto`
-        // can neither be sent nor honoured. There the hangup is the only escape that
-        // works (closing the carrier needs no game action), so fall through to it.
+        // Fires at ANY HP in the window, bleeding-out included: `sys` commands aren't
+        // subject to the mortally-wounded restriction (confirmed mechanic), so the
+        // jump works even below 0 HP — the delegate sends it on a wire that pierces
+        // the mortally-wounded send-gate hold (see SysopGotoManager wiring).
         if (s.SysGotoWimpyInsteadOfHanging
-            && _state.Hp > 0
             && !string.IsNullOrWhiteSpace(s.SysGotoWimpyLocation)
             && _tryWimpyGoto?.Invoke(s.SysGotoWimpyLocation.Trim()) == true)
         {

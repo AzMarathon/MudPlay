@@ -3878,6 +3878,15 @@ location table (keyword → map/room + optional min-level), stored per-character
   an unknown keyword) and of the `break`-then-goto success path is not pinned down. Nothing
   depends on it: the client gates on its own per-BBS power flag + the location table, and the
   landing resync is name-match-or-timeout, not a string match on any reply.
+- **`sys` commands are NOT gated by the mortally-wounded (HP ≤ 0) state** *([CONFIRMED]
+  2026-09-08, user)*. Ordinary action commands are refused while mortally wounded ("You may not
+  do that while you are mortally wounded!"), which is why the client holds its EngineSendGate at
+  HP ≤ 0 (PlayerDroppedGate). Sysop powers bypass that entirely — `sys goto` (and the other `sys`
+  commands) can be sent and are honoured at **any** HP, bleeding-out included. So the client must
+  send a `sys goto` on a sender that pierces the mortally-wounded hold (the raw un-wrapped wire,
+  like the emergency hangup uses), NOT the gate-wrapped engine sender that drops sends at HP ≤ 0.
+  Consequence: the "sys goto wimpy instead of hanging" escape fires at any HP in its window,
+  including deep in the bleeding-out band.
 
 ## MegaMUD `messages.md` format *([CONFIRMED] 2026-08-17, user + decode of both stock/paramud files)*
 

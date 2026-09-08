@@ -1123,6 +1123,11 @@ public partial class MainWindowViewModel : ObservableObject
         // After the exit command goes out, close the carrier ourselves rather
         // than waiting on the server to notice — see RequestHangupDisconnect.
         AppServices.Current.Health.SetHangupDisconnect(RequestHangupDisconnect);
+        // The raw, gate-piercing wire for `sys goto` (SysopGotoManager). Sys commands
+        // are honoured at any HP — mortally-wounded included — so the jump (and the
+        // wimpy escape built on it) must survive the EngineSendGate hold, exactly like
+        // the emergency hangup above. Same un-wrapped SendUserInput.
+        AppServices.Current.SetRawWireSender(SendUserInput);
         // CastCoordinator's `c <spell> [target]` emits still respect the
         // suicide-password / trainer-menu lockouts (gate-wrapped), but ride
         // the raw send, NOT engineSend — engineSend funnels through
