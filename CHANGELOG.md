@@ -15,7 +15,8 @@
 - Route picker pops faster: it only checks your **bank** (and the party) when cash on hand can't cover a buy — plenty of cash on hand skips the round-trips entirely — and the shared pathfinds each fork needs are now computed once and reused instead of re-run per fork
 - Route picker also offers **"route through your avoided rooms"** as an extra card beside the obtain/cross options when that avoid-crossing route needs no counter — so you can plow through instead of fetching a raft
 - Route picker tints the risky cards **red** (cross unprotected / route through avoided rooms), orders the safe cards first and the red ones last, brightens the card subtext for legibility, and sizes the window to show every card
-- Route picker opens instantly showing **"Calculating…"** when a route needs a buy — the window pops up with the From/To heading while it checks your funds (bank / party), then swaps the cards in, instead of the window appearing only once the check finishes
+- Route picker footnote simplified to a single line — "Click a route to preview it on the map or click Details… to show routing information" — replacing the per-case guidance paragraph
+- Route planning for a walk-to now runs off the UI thread when you're standing still, so the app no longer freezes for up to ~1s while it computes a route on a big map; if planning takes a beat, the picker window pops up immediately showing **"Calculating…"** and swaps the cards in when it's done (a quick plan skips the window and opens the picker fully-built). Planning stays on the UI thread if a walk is already in progress
 - bug reports addressed: stock-20260907-175035, paradigm-20260907-212758, paradigm-20260907-215048
 
 ## 3.55.8

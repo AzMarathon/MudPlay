@@ -35,13 +35,8 @@ public static class RouteChoicePrompt
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Yield once before the route planning runs. The planner's BFS passes are
-        // synchronous and, on a large graph (Paradigm), can take up to ~1s — long
-        // enough that the nav-map right-click menu that launched this walk can't even
-        // close, since the UI thread is blocked before any await. Yielding lets that
-        // click finish and the context menu dismiss first; the picker then opens when
-        // planning is done. (The planning itself still runs on the UI thread — moving
-        // the BFS off-thread is a separate change.)
+        // Let the nav-map right-click menu that launched this walk close before we do
+        // anything heavy.
         await Task.Yield();
 
         Room? source = services.RoomTracker.State.CurrentRoom;
@@ -56,14 +51,80 @@ public static class RouteChoicePrompt
 
         RoomKey src = source.Key;
 
-        // The forks below each need the same two full-graph pathfinds: the plain
-        // default route (gates + avoids on, teleports allowed) — used by teleport /
-        // trap-avoid / avoid-override / item-gate alike — and the avoids-lifted route,
-        // used by avoid-override AND the avoid-alt card. On a large graph each BFS is a
-        // chunk of the planning cost, so compute each ONCE here and hand the evaluators
-        // a memoized closure (caches the result, null included) instead of letting each
-        // re-run it. Cuts the plain route from ~4 BFS to 1 and the avoids-lifted from 2
-        // to 1.
+        // Plan the route (which fork, if any, to surface). The BFS passes are
+        // synchronous and, on a large graph (Paradigm), can take up to ~1s. When the
+        // walker is IDLE, run them on a background thread so the UI thread stays live —
+        // and if planning drags past a short threshold, surface the picker window in a
+        // "Calculating…" state that paints while planning finishes. When a walk is
+        // already IN PROGRESS, the live walker shares the movement filter the planner
+        // briefly toggles (SuspendAcquirableGates), so plan on the UI thread instead
+        // (no calc window that time) to avoid racing it.
+        RouteChoiceDialogViewModel? calcVm = null;
+        Task<RouteChoiceResult?>? calcDialogTask = null;
+        RoutePlan plan;
+        if (services.Walker.State == WalkState.Idle)
+        {
+            Task<RoutePlan> planTask = Task.Run(() => PlanRouteChoice(services, src, destination));
+            // Only pop the "Calculating…" window if planning takes long enough to
+            // notice — a fast plan (most walk-tos) wins the race and never flashes a
+            // window; the picker, if any, is then built fully-populated below.
+            if (await Task.WhenAny(planTask, Task.Delay(RouteCalcRevealDelayMs)) != planTask)
+            {
+                calcVm = new RouteChoiceDialogViewModel(
+                    DestinationLabel(services, destination), DestinationLabel(services, src));
+                calcDialogTask = services.Dialogs
+                    .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(calcVm);
+            }
+            plan = await planTask;
+        }
+        else
+        {
+            plan = PlanRouteChoice(services, src, destination);
+        }
+
+        // Nav lifecycle stays Info for a fork that surfaces; a plain no-fork walk is
+        // Debug so an ordinary GOTO doesn't spam the log.
+        if (plan.Kind == RoutePlanKind.PlainWalk)
+            services.Log.Debug(LogCat, plan.LogMessage);
+        else
+            services.Log.Info(LogCat, plan.LogMessage);
+
+        switch (plan.Kind)
+        {
+            case RoutePlanKind.PlainWalk:
+                calcVm?.Close();   // no picker to show — dismiss any "Calculating…" window
+                CommitWalk(services, destination, gated: false);
+                return;
+            case RoutePlanKind.AutoObtainSole:
+                calcVm?.Close();
+                CommitWalk(services, destination, gated: true);
+                return;
+            default:
+                await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask);
+                return;
+        }
+    }
+
+    // The delay before a slow plan surfaces the "Calculating…" window. A fast plan
+    // (well under this) finishes first and never shows it, so an ordinary quick
+    // walk-to doesn't flash a window; a plan that drags gets the feedback.
+    private const int RouteCalcRevealDelayMs = 150;
+
+    private enum RoutePlanKind { Teleport, TrapAvoid, AvoidOverride, ItemGate, Blocked, AutoObtainSole, PlainWalk }
+
+    // The outcome of route planning: which fork (if any) to surface, the resolved
+    // choice for the picker, and the ready-to-log decision line. Pure computation —
+    // no UI, no logging, no network — so WalkAsync can run it off the UI thread.
+    private readonly record struct RoutePlan(RoutePlanKind Kind, RouteChoice? Choice, string LogMessage);
+
+    // Run the fork evaluations in priority order and decide the outcome. The forks
+    // each need the same two full-graph pathfinds — the plain default route (gates +
+    // avoids on, teleports allowed) and the avoids-lifted route — so compute each ONCE
+    // behind a memoized closure (caches the result, null included) rather than
+    // re-running per fork. Reads the graph / movement filter and settings only; does
+    // no UI or logging, so it's safe to call from a background thread.
+    private static RoutePlan PlanRouteChoice(AppServices services, RoomKey src, RoomKey destination)
+    {
         IReadOnlyList<Direction>? baseCache = null; bool baseDone = false;
         IReadOnlyList<Direction>? BaseRoute()
         {
@@ -82,132 +143,92 @@ public static class RouteChoicePrompt
         }
 
         // Walk-vs-teleport fork takes precedence over the item-gate fork: if the
-        // shortest route teleports and a pure-walking route also exists, let the
-        // user weigh the teleport's shortcut against its danger. A teleport can
-        // drop the crosser somewhere lethal (a damaging plane, water with no
-        // boat), survivable or not depending on the character — a call the client
-        // can't make, so we surface it rather than silently taking the shortcut.
+        // shortest route teleports and a pure-walking route also exists, let the user
+        // weigh the teleport's shortcut against its danger — a teleport can drop the
+        // crosser somewhere lethal, a call the client can't make.
         RouteChoice? teleport = RouteChoicePlanner.EvaluateTeleport(
             services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
         if (teleport is not null)
-        {
-            services.Log.Info(LogCat,
-                $"route pick {source.Key} -> {destination}: teleport fork — walk {teleport.FreeStepCount} "
+            return new(RoutePlanKind.Teleport, teleport,
+                $"route pick {src} -> {destination}: teleport fork — walk {teleport.FreeStepCount} "
                 + $"vs teleport {teleport.GatedStepCount} hop(s) via {teleport.TeleportLanding}; showing picker");
-            await RunPickerAsync(services, destination, source.Key, teleport, previewSink);
-            return;
-        }
 
         // Trap-avoid fork: the shortest route crosses a trap and a trap-free route to
-        // the same room exists. Surface the clean detour so the user can take it
-        // instead of trusting the step-time disarm — a disarm can fail (no picks, no
-        // party disarmer) and some traps aren't worth the hit even when disarmable.
+        // the same room exists — surface the clean detour vs. trusting the step-time
+        // disarm (which can fail).
         RouteChoice? trapAvoid = RouteChoicePlanner.EvaluateTrapAvoid(
             services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
         if (trapAvoid is not null)
-        {
-            services.Log.Info(LogCat,
-                $"route pick {source.Key} -> {destination}: trap-avoid fork — fewest-traps route crosses "
+            return new(RoutePlanKind.TrapAvoid, trapAvoid,
+                $"route pick {src} -> {destination}: trap-avoid fork — fewest-traps route crosses "
                 + $"{trapAvoid.FreeTrapCount} trap(s) vs {trapAvoid.GatedTrapCount} on the shortest; showing picker");
-            await RunPickerAsync(services, destination, source.Key, trapAvoid, previewSink);
-            return;
-        }
 
-        // Avoid-override fork: the destination is reachable only through a room the
-        // user marked "avoid" (sole), or a much shorter route runs through one
-        // (two-route). Surface it so the user can override their own avoid list for
-        // this walk rather than the walk silently failing with "blocked by your
-        // avoid". Checked before the item-gate fork, but EvaluateAvoidOverride defers
-        // (returns null) when suspending the acquirable gates opens an avoid-
-        // respecting route — that's a route the user CAN take without overriding, so
-        // the item-gate fork below surfaces its obtain / cross options instead.
+        // Avoid-override fork: the destination is reachable only through a room the user
+        // marked "avoid" (sole), or a much shorter route runs through one (two-route).
+        // EvaluateAvoidOverride defers (null) when suspending the acquirable gates opens
+        // an avoid-respecting route — the item-gate fork below surfaces obtain / cross
+        // options for that instead of asking the user to override their own avoid.
         RouteChoice? avoidOverride = RouteChoicePlanner.EvaluateAvoidOverride(
             services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute, AvoidLiftedRoute);
         if (avoidOverride is not null)
-        {
-            services.Log.Info(LogCat,
-                $"route pick {source.Key} -> {destination}: avoid-override fork — "
+            return new(RoutePlanKind.AvoidOverride, avoidOverride,
+                $"route pick {src} -> {destination}: avoid-override fork — "
                 + $"{(avoidOverride.HasFreeRoute ? $"a shorter route saves {avoidOverride.FreeStepCount - avoidOverride.GatedStepCount} step(s)" : "the only route")} "
                 + $"crosses {avoidOverride.AvoidedRoomCount} room(s) you marked Avoid; showing picker");
-            await RunPickerAsync(services, destination, source.Key, avoidOverride, previewSink);
-            return;
-        }
 
         RouteChoice? choice = RouteChoicePlanner.Evaluate(
             services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
         if (choice is null)
         {
-            // No shorter gated route. If instead the route is fully blocked but the
-            // destination is physically reachable up to an obstacle, offer to run to
-            // the blocked room; otherwise walk the free route (which reports its own
-            // failure if it can't).
+            // No shorter gated route. If the route is fully blocked but the destination
+            // is physically reachable up to an obstacle, offer to run to the block;
+            // otherwise walk the free route (which reports its own failure if it can't).
             if (RouteChoicePlanner.PlanBlocked(
-                    services.Bfs, services.Movement, services.RoomGraph, source.Key, destination)
+                    services.Bfs, services.Movement, services.RoomGraph, src, destination)
                 is { } blocked)
-            {
-                services.Log.Info(LogCat,
-                    $"route pick {source.Key} -> {destination}: blocked — no full route; can run as far as "
+                return new(RoutePlanKind.Blocked,
+                    BuildBlockedChoice(services, src, destination, blocked),
+                    $"route pick {src} -> {destination}: blocked — no full route; can run as far as "
                     + $"{blocked.StopRoom} ({blocked.BlockDir} is {blocked.BlockExit.Hint}); showing picker");
-                await RunPickerAsync(services, destination, source.Key,
-                    BuildBlockedChoice(services, source.Key, destination, blocked), previewSink);
-                return;
-            }
-            services.Log.Debug(LogCat,
-                $"route pick {source.Key} -> {destination}: no fork (free route needs nothing acquirable); plain walk");
-            CommitWalk(services, destination, gated: false);
-            return;
+            return new(RoutePlanKind.PlainWalk, null,
+                $"route pick {src} -> {destination}: no fork (free route needs nothing acquirable); plain walk");
         }
 
-        // This choice's routes all respect the avoids (Evaluate never lifts them). If
-        // a route that DOES cross an avoided room also exists — one that needs no
-        // counter to obtain — attach it as an extra card so the user can pick "plow
-        // through my avoided rooms" instead of fetching a raft (report
-        // paradigm-20260907-212758 follow-up: surface it as a co-option, not hidden).
+        // This choice's routes all respect the avoids (Evaluate never lifts them). If a
+        // route that DOES cross an avoided room also exists — one that needs no counter
+        // to obtain — attach it as an extra card so the user can pick "plow through my
+        // avoided rooms" instead of fetching a raft (report paradigm-20260907-212758).
+        string avoidAltNote = "";
         if (RouteChoicePlanner.AvoidAlternative(
                 services.Bfs, services.Movement, services.RoomGraph, src, destination, AvoidLiftedRoute) is { } alt)
         {
             choice = choice with { AvoidAlternativePath = alt.Path, AvoidAlternativeCount = alt.AvoidedCount };
-            services.Log.Info(LogCat,
-                $"route pick {source.Key} -> {destination}: also offering an avoid-crossing alternative "
-                + $"({alt.AvoidedCount} room(s) you marked Avoid, no counter needed)");
+            avoidAltNote = $" (+avoid-crossing alt: {alt.AvoidedCount} room(s), no counter)";
         }
 
         string reqSummary = string.Join(", ", choice.Requirements.Select(r => $"{r.Kind}[{string.Join("/", r.ItemIds)}]"));
 
-        // Sole route (no gate-free alternative) whose gates are item/ticket/key,
-        // not a hazard. When every gate is a single item/ticket the user flagged
-        // AutoObtainForPath, the acquisition pipeline can source it all: arm and
-        // cross, no prompt. Otherwise a gate the client can't auto-source is on the
-        // route — a door key (never auto-sourced), or an unflagged item — so
-        // surface the picker rather than silently walking a plain route that fails
-        // in place. The user SEES the requirement and chooses: Go walks the route
-        // and halts at the gate so they clear it by hand (open the door, summon /
-        // kill for the key), Cancel walks nothing. Any auto-sourceable item on the
-        // same route is still fetched en route (Go arms acquisition), leaving only
-        // the manual gate. Hazard-only sole routes skip this and fall through to the
-        // picker below (carry / buy / use a counter).
+        // Sole route (no gate-free alternative) whose gates are item/ticket/key, not a
+        // hazard. When every gate is a single item/ticket the user flagged
+        // AutoObtainForPath, the acquisition pipeline sources it all: arm and cross, no
+        // prompt. Otherwise a gate the client can't auto-source is on the route (a door
+        // key, or an unflagged item) — surface the picker so the user sees it and
+        // chooses. Hazard-only sole routes fall through to the item-gate picker below.
         if (!choice.HasFreeRoute
             && choice.Requirements.Any(r => r.Kind != RouteRequirementKind.HazardProtection))
         {
             if (services.ShouldAutoObtainSoleRoute(choice.Requirements))
-            {
-                services.Log.Info(LogCat,
-                    $"route pick {source.Key} -> {destination}: sole route needs {reqSummary}, all auto-obtainable "
+                return new(RoutePlanKind.AutoObtainSole, choice,
+                    $"route pick {src} -> {destination}: sole route needs {reqSummary}, all auto-obtainable "
                     + "— arming acquisition and walking, no prompt");
-                CommitWalk(services, destination, gated: true);
-                return;
-            }
-            services.Log.Info(LogCat,
-                $"route pick {source.Key} -> {destination}: sole route needs {reqSummary} (not auto-obtainable); showing picker");
-            await RunPickerAsync(services, destination, source.Key, choice, previewSink);
-            return;
+            return new(RoutePlanKind.ItemGate, choice,
+                $"route pick {src} -> {destination}: sole route needs {reqSummary} (not auto-obtainable); showing picker{avoidAltNote}");
         }
 
-        services.Log.Info(LogCat,
-            $"route pick {source.Key} -> {destination}: item-gate fork — "
+        return new(RoutePlanKind.ItemGate, choice,
+            $"route pick {src} -> {destination}: item-gate fork — "
             + $"{(choice.HasFreeRoute ? $"direct route saves {choice.FreeStepCount - choice.GatedStepCount} step(s)" : "sole route")} "
-            + $"needing {reqSummary}; showing picker");
-        await RunPickerAsync(services, destination, source.Key, choice, previewSink);
+            + $"needing {reqSummary}; showing picker{avoidAltNote}");
     }
 
     // Build the picker, draw the previewed route while it's open, and commit the
@@ -219,7 +240,13 @@ public static class RouteChoicePrompt
         RoomKey destination,
         RoomKey source,
         RouteChoice choice,
-        Action<IReadOnlyList<RoomKey>?>? previewSink)
+        Action<IReadOnlyList<RoomKey>?>? previewSink,
+        // When the idle path pre-opened a "Calculating…" window (planning ran long),
+        // it's passed here to populate in place; calcDialogTask is that window's
+        // close-result task. Both null when planning was fast (or a walk was in
+        // progress) — then this builds the fully-populated window and shows it.
+        RouteChoiceDialogViewModel? calcVm = null,
+        Task<RouteChoiceResult?>? calcDialogTask = null)
     {
         // Approximate arrival ETA for each route — realm-aware per-hop travel plus
         // a lair-fight dwell for each lair the walker steps into when auto-combat is
@@ -316,60 +343,52 @@ public static class RouteChoicePrompt
             req => resolvedCounters.TryGetValue(req, out (int ItemId, string Source) v) ? v : ((int, string)?)null;
 
         string destLabel = DestinationLabel(services, destination);
-        string srcLabel = DestinationLabel(services, source);
 
         // For a mixed route with no sourceable counter, the base card walks to the
         // hazard's edge and stops (the user then fetches a counter / clears the hard
-        // gate themselves), rather than crossing the hazard blindly. Economy-
-        // independent, so it's the same for both build paths.
+        // gate themselves), rather than crossing the hazard blindly.
         RoomKey? hazardEdge = mixedHazard && !hazardObtain
             ? services.HazardApproachRoom(choice.GatedPath)
             : null;
 
+        // The run would BUY a counter → check the money BEFORE surfacing (the user's
+        // "check own bank, send @wealth to the party, then surface by availability"):
+        // refresh own bank and, in a party, members' on-hand cash + whether a member
+        // already holds a needed item. Drives the card note and — when the leader can't
+        // pay from cash / the configured bank — redirects Go to walk to the shop and
+        // pause for manual provisioning.
+        Game.Map.RouteBuyEconomy? economy = buys.Count > 0
+            ? await services.AssessRouteBuyAsync(buys, neededItems, source)
+            : null;
+        string? economyNote = economy is { } eco
+            ? (eco.PartyItemHolder is { } holder
+                ? $"{holder} in your party has it — will hand it over on the way"
+                : eco.Affordability.Note)
+            : null;
+        RoomKey? buyPauseRoom = economy is { PartyItemHolder: null } e2 && !e2.AutoPayable
+            ? e2.ShopRoom
+            : null;
+
         RouteChoiceDialogViewModel vm;
         Task<RouteChoiceResult?> dialogTask;
-        // Leader can't pay from cash / configured bank, and no party member holds the
-        // item outright → don't arm an auto-buy that would stall; walk to the shop and
-        // pause so the user provisions the party by hand. Only the buy path sets it.
-        RoomKey? buyPauseRoom = null;
-
-        if (buys.Count > 0)
+        if (calcVm is not null && calcDialogTask is not null)
         {
-            // The run would BUY a counter → a pick-time economy probe is coming (the
-            // user's "check own bank, send @wealth to the party, then surface by
-            // availability"): refresh own bank and, in a party, members' on-hand cash +
-            // whether a member already holds a needed item. Those are server round-trips
-            // that take a beat, so surface the picker NOW in a "Calculating…" state — the
-            // From/To heading, no cards — then swap the cards in once the probe returns.
-            // Awaiting the probe lets the window paint before the (synchronous) card
-            // build. Only this path has a real async wait; every other fork builds
-            // fully-populated and never shows the calculating state.
-            vm = new RouteChoiceDialogViewModel(destLabel, srcLabel);
-            dialogTask = services.Dialogs
-                .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
-            services.Log.Debug(LogCat,
-                $"route pick {source} -> {destination}: probing funds for {buys.Count} buy(s); picker shows Calculating…");
-
-            Game.Map.RouteBuyEconomy? economy = await services.AssessRouteBuyAsync(buys, neededItems, source);
-            string? economyNote = economy is { } eco
-                ? (eco.PartyItemHolder is { } holder
-                    ? $"{holder} in your party has it — will hand it over on the way"
-                    : eco.Affordability.Note)
-                : null;
-            buyPauseRoom = economy is { PartyItemHolder: null } e2 && !e2.AutoPayable ? e2.ShopRoom : null;
-
+            // Idle path: the "Calculating…" window is already open and painted — fill
+            // its cards in place (Populate flips it out of the calculating state).
+            vm = calcVm;
+            dialogTask = calcDialogTask;
             vm.Populate(
-                choice, destLabel, services.ItemNames.GetName, giveName, shopName, dropName,
+                choice, services.ItemNames.GetName, giveName, shopName, dropName,
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote);
         }
         else
         {
-            // No buy → no economy probe, nothing to wait on: build the fully-populated
-            // VM and show it straight away (no calculating state to flicker through).
+            // Fast plan / walk-in-progress: no calc window was opened — build the
+            // fully-populated VM and show it (nothing to morph, no flicker).
             vm = new RouteChoiceDialogViewModel(
                 choice, destLabel, services.ItemNames.GetName, giveName, shopName, dropName,
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter,
-                economyNote: null, sourceLabel: srcLabel);
+                economyNote, sourceLabel: DestinationLabel(services, source));
             dialogTask = services.Dialogs
                 .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
         }
@@ -399,7 +418,7 @@ public static class RouteChoicePrompt
         // route's polyline — the same window the CURRENT NAV panel uses, with each
         // room's monsters, hazards, and item gates linked to their records. Both
         // direct choices trace the same physical gated line.
-        string detailsTitle = $"Route → {DestinationLabel(services, destination)}";
+        string detailsTitle = $"Route → {destLabel}";
         vm.ShowDetailsRequested += r => RouteDetailsLauncher.Open(
             services, detailsTitle,
             r switch
@@ -409,8 +428,6 @@ public static class RouteChoicePrompt
                 _ => choice.GatedPath,
             });
 
-        // The window is already open (both build paths showed it above); await its
-        // close for the picked route.
         RouteChoiceResult? result;
         try
         {

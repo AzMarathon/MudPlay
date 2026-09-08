@@ -49,9 +49,9 @@ public sealed partial class RouteChoiceDialogViewModel
     // it just forwards which route is selected and lets the prompt resolve it.
     public event Action<RouteChoiceResult>? ShowDetailsRequested;
 
-    // Set once in a constructor (Heading) or by Populate (the rest). The picker
-    // can open in a "Calculating…" state before Populate runs (see IsCalculating),
-    // so these carry a "" default and become settable rather than init-only.
+    // Set once by the constructor (Heading) or by Populate (the rest). Populate is
+    // a method (not the ctor), so these are settable rather than init-only; the ""
+    // default keeps them non-null before Populate assigns the fork's wording.
     public string Heading { get; private set; } = "";
     public string FreeSummary { get; private set; } = "";
     public string GatedSummary { get; private set; } = "";
@@ -81,9 +81,14 @@ public sealed partial class RouteChoiceDialogViewModel
         IsAvoidOverrideChoice ? AvoidCaveat :
         RequirementSummary;
 
-    // The footnote under the cards, explaining the fork's options — different
-    // wording for the teleport choice (no acquire / send-it split there).
-    public string Footnote { get; private set; } = "";
+    // The footnote under the cards. One uniform line across every fork — the
+    // per-case guidance lived in the card summaries anyway, and a plain "click a
+    // route / Details…" line reads cleaner than a paragraph restating them (user
+    // request, same spirit as the uniform heading).
+    public string Footnote => PickFootnote;
+
+    private const string PickFootnote =
+        "Click a route to preview it on the map or click Details… to show routing information.";
 
     // True when this is the walk-vs-teleport fork: the shorter route takes a
     // teleport the walking route avoids. Reworders the cards (Walk / Teleport) and
@@ -190,13 +195,12 @@ public sealed partial class RouteChoiceDialogViewModel
     public bool SendItIsDanger => true;                   // "cross unprotected" / "send it direct"
     public bool AvoidAltIsDanger => true;                 // always crosses avoided rooms
 
-    // True while the picker is up but its options are still being computed — a
-    // pick-time economy probe (own bank + party @wealth / @have, server round-trips)
-    // is in flight. The window shows the From/To heading and a centered
-    // "Calculating…" line with no cards; when the probe returns, Populate fills the
-    // cards and flips this false. Only the buy path opens in this state (the only
-    // fork with a real async wait); every other fork constructs fully-populated and
-    // never shows it, so the cards don't flicker.
+    // True while the picker is up but its options are still being computed — the
+    // route planning (BFS) is running on a background thread. The window shows the
+    // From/To heading and a centered "Calculating…" line with no cards; when
+    // planning returns, Populate fills the cards and flips this false. Only the
+    // off-thread (idle) path opens in this state; if a walk is already in progress
+    // planning stays on the UI thread and the picker is built fully before showing.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOptions))]
     private bool _isCalculating;
@@ -246,15 +250,15 @@ public sealed partial class RouteChoiceDialogViewModel
     {
         Heading = ComposeHeading(destinationLabel, sourceLabel);
         Populate(
-            choice, destinationLabel, itemName, giveNameForItem, shopBuyPhraseForItem,
+            choice, itemName, giveNameForItem, shopBuyPhraseForItem,
             dropNameForItem, freeEta, gatedEta, hazardCounterSource, hazardSurvivable,
             resolvedHazardCounter, economyNote);
     }
 
-    // "Calculating…" construction: the buy path opens the picker with only the
-    // From/To heading while a pick-time economy probe runs, then calls Populate once
-    // it returns. Leaves every card empty and IsCalculating true, so ShowOptions
-    // hides the (empty) card list until Populate flips it.
+    // "Calculating…" construction: the idle (off-thread) path opens the picker with
+    // only the From/To heading while route planning runs on a background thread, then
+    // calls Populate once it returns. Leaves every card empty and IsCalculating true,
+    // so ShowOptions hides the (empty) card list until Populate flips it.
     public RouteChoiceDialogViewModel(string destinationLabel, string sourceLabel)
     {
         Heading = ComposeHeading(destinationLabel, sourceLabel);
@@ -270,12 +274,11 @@ public sealed partial class RouteChoiceDialogViewModel
             : $"From {sourceLabel} to {destinationLabel}";
 
     // Fill the card data from the resolved choice + the caller's name/economy helpers,
-    // then reveal the options (IsCalculating → false, and refresh every card binding).
-    // Called synchronously from the full constructor, or from the buy path once its
-    // economy probe returns and the "Calculating…" window is already up.
+    // then reveal the options (IsCalculating → false, refreshing every card binding).
+    // Called synchronously from the full constructor, or from the idle path once its
+    // off-thread planning returns and the "Calculating…" window is already up.
     public void Populate(
         RouteChoice choice,
-        string destinationLabel,
         Func<int, string?> itemName,
         Func<int, string?>? giveNameForItem = null,
         Func<int, string?>? shopBuyPhraseForItem = null,
@@ -320,8 +323,6 @@ public sealed partial class RouteChoiceDialogViewModel
             TeleportCaveat = string.Empty;
             TrapCaveat = string.Empty;
             AvoidCaveat = string.Empty;
-            Footnote = "Click the route to preview it on the map, then Go to walk as far as you "
-                + $"can toward {destinationLabel} and stop at the block — clear it by hand to continue.";
             return;
         }
 
@@ -361,8 +362,6 @@ public sealed partial class RouteChoiceDialogViewModel
             RequirementSummary = string.Empty;
             TrapCaveat = string.Empty;
             AvoidCaveat = string.Empty;
-            Footnote = "Click a route to preview it on the map, then Go to walk it. "
-                + "The teleport is much shorter but can be lethal — take the walk if you're unsure.";
         }
         else if (IsTrapAvoidChoice)
         {
@@ -384,9 +383,6 @@ public sealed partial class RouteChoiceDialogViewModel
             RequirementSummary = string.Empty;
             TeleportCaveat = string.Empty;
             AvoidCaveat = string.Empty;
-            Footnote = "Click a route to preview it on the map, then Go to walk it. "
-                + "The fewest-traps route is pre-selected — \"shortest\" is quicker but crosses more "
-                + "traps (disarmed en route).";
             // Default to the safer route so a plain Go dodges what it can; the user
             // can still click the shortcut. Previewed on open via RaiseSelectionPreview.
             SelectedRoute = RouteChoiceResult.Free;
@@ -402,9 +398,6 @@ public sealed partial class RouteChoiceDialogViewModel
                 // runs through avoided rooms.
                 FreeSummary = $"Respect your avoids — {StepsEta(choice.FreeStepCount, freeEta)}";
                 GatedSummary = $"Shorter — through {avoidedWord} — {StepsEta(choice.GatedStepCount, gatedEta)}";
-                Footnote = "Click a route to preview it on the map, then Go to walk it. "
-                    + "The avoid-respecting route is pre-selected; the shorter route runs through "
-                    + "rooms you deliberately marked Avoid.";
                 // Default to respecting the user's own avoid list; they can still override.
                 SelectedRoute = RouteChoiceResult.Free;
             }
@@ -413,8 +406,6 @@ public sealed partial class RouteChoiceDialogViewModel
                 // SOLE: the only way there crosses an avoided room.
                 FreeSummary = $"No route that respects your avoids — every path there crosses {avoidedWord}";
                 GatedSummary = $"Route through {avoidedWord} — {StepsEta(choice.GatedStepCount, gatedEta)}";
-                Footnote = "Click the route to preview it on the map, then Go to walk it. "
-                    + "This is the only way there — it runs through rooms you marked Avoid.";
             }
             AvoidCaveat = $"Routes through {avoidedWord}. Your avoid list stays set — only this "
                 + "walk crosses them; unmark the room(s) if you want it gone for good.";
@@ -433,9 +424,6 @@ public sealed partial class RouteChoiceDialogViewModel
             {
                 FreeSummary = $"Free route — {StepsEta(choice.FreeStepCount, freeEta)}, no items needed";
                 GatedSummary = $"Direct — acquire then go — {StepsEta(choice.GatedStepCount, gatedEta)}";
-                Footnote = "Click a route to preview it on the map, then Go to walk it. "
-                    + "\"Acquire then go\" sources any missing gate items first; \"send it\" walks "
-                    + "straight through without them.";
             }
             else if (soleHazardOnly)
             {
@@ -443,9 +431,6 @@ public sealed partial class RouteChoiceDialogViewModel
                 if (HazardObtain)
                 {
                     GatedSummary = $"Obtain, then cross — {StepsEta(choice.GatedStepCount, gatedEta)}";
-                    Footnote = "Click a route to preview it on the map, then Go to walk it. "
-                        + $"Go fetches a counter ({hazardCounterSource}) then crosses; "
-                        + "\"cross unprotected\" walks straight through and takes the damage.";
                 }
                 else if (hazardSurvivable)
                 {
@@ -453,16 +438,10 @@ public sealed partial class RouteChoiceDialogViewModel
                     // only card shown is "cross unprotected" (the Gated card is hidden
                     // by ShowGatedCard, so its summary is unused).
                     GatedSummary = string.Empty;
-                    Footnote = "Click the route to preview it on the map, then Go to cross it. "
-                        + "This is the only way there and there's no counter to fetch nearby — "
-                        + "Go walks straight through and takes the damage; carry a counter yourself to avoid it.";
                 }
                 else
                 {
                     GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
-                    Footnote = "Click the route to preview it on the map, then Go to walk it. "
-                        + "This is the only way there — Go walks it and stops at the hazard; "
-                        + "carry, buy, or use a counter to cross.";
                 }
             }
             else if (_mixedHazard)
@@ -475,26 +454,16 @@ public sealed partial class RouteChoiceDialogViewModel
                 if (HazardObtain)
                 {
                     GatedSummary = $"Obtain, then cross — {StepsEta(choice.GatedStepCount, gatedEta)}";
-                    Footnote = "Click a route to preview it on the map, then Go to walk it. "
-                        + $"Go fetches a counter ({hazardCounterSource}), crosses, then stops at the "
-                        + "gate you must clear yourself; \"cross unprotected\" takes the damage instead.";
                 }
                 else
                 {
                     GatedSummary = $"Walk to the hazard and stop — {StepsEta(choice.GatedStepCount, gatedEta)}";
-                    Footnote = "Click a route to preview it on the map, then Go. "
-                        + "There's no counter to fetch nearby — Go walks you to the hazard's edge and "
-                        + "stops; \"cross unprotected\" takes the damage and pushes on to the gate you "
-                        + "must clear yourself.";
                 }
             }
             else
             {
                 FreeSummary = "No open detour — the only way there crosses a gate you must clear yourself";
                 GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
-                Footnote = "Click the route to preview it on the map, then Go to walk it. "
-                    + "This is the only way there — Go walks it and stops at the gate; "
-                    + "clear what's shown to continue.";
             }
 
             RequirementSummary = "Requires "
@@ -508,11 +477,10 @@ public sealed partial class RouteChoiceDialogViewModel
         }
 
         // Options are ready: drop the "Calculating…" state and refresh every card
-        // binding at once (a blank name signals "all properties changed"), so the
-        // cards the buy path deferred appear now. The full-constructor path runs this
-        // before the window exists — a harmless no-op there. (The Blocked branch
-        // returns above; it's only ever built via the full constructor, never the buy
-        // path, so it never lingers in the calculating state.)
+        // binding at once (a blank name signals "all properties changed"). The
+        // full-constructor path runs this before the window exists — a harmless no-op
+        // there. (The Blocked branch returns above; it's only ever built via the full
+        // constructor, so it never lingers in the calculating state.)
         IsCalculating = false;
         OnPropertyChanged(string.Empty);
     }
@@ -643,4 +611,10 @@ public sealed partial class RouteChoiceDialogViewModel
 
     [RelayCommand]
     private void Cancel() => CloseRequested?.Invoke(null);
+
+    // Dismiss the picker without a pick — used when it was opened in the
+    // "Calculating…" state up front but off-thread planning found no fork to show (a
+    // plain / auto-obtain walk), so there are no cards to reveal. Same as a Cancel
+    // (walk nothing here; the caller commits the walk itself).
+    public void Close() => CloseRequested?.Invoke(null);
 }

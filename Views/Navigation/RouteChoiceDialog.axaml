@@ -40,10 +40,10 @@
                        FontSize="13" FontWeight="SemiBold"
                        Foreground="{StaticResource ChromeFgBrush}"/>
 
-            <!-- While a pick-time economy probe runs (the buy path), the window is up
-                 but its options aren't computed yet — show a centered "Calculating…"
-                 in place of the card list so it doesn't feel like nothing's happening;
-                 Populate swaps the cards in when the probe returns. -->
+            <!-- While route planning runs on a background thread (the idle path), the
+                 window is up but its options aren't computed yet — show a centered
+                 "Calculating…" in place of the card list so it doesn't feel like
+                 nothing's happening; Populate swaps the cards in when planning returns. -->
             <TextBlock Grid.Row="1"
                        Text="Calculating…"
                        VerticalAlignment="Center" HorizontalAlignment="Center"
@@ -159,6 +159,7 @@
 
             <TextBlock Grid.Row="2"
                        Text="{Binding Footnote}"
+                       IsVisible="{Binding ShowOptions}"
                        FontSize="10"
                        TextWrapping="Wrap"
                        Foreground="{StaticResource ChromeFgSecBrush}"/>

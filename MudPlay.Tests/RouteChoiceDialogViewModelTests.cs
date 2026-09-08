@@ -113,7 +113,9 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(vm.HazardObtain);
         Assert.True(vm.ShowSendItCard);
         Assert.Contains("Obtain, then cross", vm.GatedSummary);
-        Assert.Contains("grab from the floor here", vm.Footnote);
+        // The footnote is now one uniform line (the counter source it used to name
+        // lives on the cards / Details… now).
+        Assert.Contains("Details", vm.Footnote);
         Assert.Contains("take the damage", vm.SendItSummary);
         Assert.Equal("Requires rope and grapple or climbing harness", vm.RequirementSummary);
     }
@@ -132,7 +134,9 @@ public sealed class RouteChoiceDialogViewModelTests
 
         Assert.False(vm.HazardObtain);
         Assert.False(vm.ShowSendItCard);
-        Assert.Contains("carry, buy, or use a counter", vm.Footnote);
+        // The manual-counter wording now lives on the Free card ("a hazard you must
+        // counter"); the footnote is the uniform preview/Details line.
+        Assert.Contains("you must counter", vm.FreeSummary);
     }
 
     [Fact]
@@ -668,10 +672,10 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Contains("Cross unprotected", vm.SendItSummary);
     }
 
-    // The buy path opens the picker in a "Calculating…" state (From/To heading, no
-    // cards) while its economy probe runs, then Populate fills the cards. Pin that
-    // the calculating constructor hides the options and the heading is right, and
-    // that Populate reveals them with the choice's card content.
+    // The idle path opens the picker in a "Calculating…" state (From/To heading, no
+    // cards) while route planning runs off-thread, then calls Populate to fill the
+    // cards. Pin that the calculating constructor hides the options with the right
+    // heading, and that Populate reveals them with the choice's card content.
     [Fact]
     public void CalculatingConstructor_HidesOptions_ThenPopulateReveals()
     {
@@ -684,7 +688,7 @@ public sealed class RouteChoiceDialogViewModelTests
         var choice = SoleChoice(
             new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690 }));
         vm.Populate(
-            choice, "The Iceforge (3/632)", id => "a raft",
+            choice, id => "a raft",
             hazardCounterSource: "buy at Pier", hazardSurvivable: true);
 
         Assert.False(vm.IsCalculating);
