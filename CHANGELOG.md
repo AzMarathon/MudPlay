@@ -1,5 +1,10 @@
 # Version history
 
+## 3.58.6
+
+- Fixed the Conversation window's outgoing-telepath text drifting onto the wrong, unrelated exchange over a long session (e.g. a `@roomba` answer showing up hours later attached to someone else's unrelated question) — an engine-fired reply was being captured twice (once from the raw send, once from its own on-screen echo), leaving one stale entry queued per reply that permanently desynced every later pairing; captures now dedupe against the send still awaiting its own confirmation
+- bug reports addressed: paradigm-20260908-134645
+
 ## 3.58.5
 
 - Backstab no longer opens a fight in a room that qualifies for room-spelling — the "don't backstab if room-spelling" setting is now honored (it was previously ignored)
