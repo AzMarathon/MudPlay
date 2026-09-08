@@ -260,6 +260,52 @@ public sealed class PlayerDatabase
         SaveObservations();
     }
 
+    // When PlayerLookManager last auto-looked at this player (UTC), or null if
+    // never. Same shape as GetLastGreetedUtc, and read the same way: the
+    // manager compares it against the local-calendar day.
+    public DateTime? GetLastLookedUtc(string givenName)
+    {
+        if (string.IsNullOrWhiteSpace(givenName)) return null;
+        (string given, _) = PlayerObservation.SplitName(givenName);
+        if (string.IsNullOrEmpty(given)) return null;
+        return _observations.TryGetValue(given, out PlayerObservation? o) ? o.LastLookedUtc : null;
+    }
+
+    // Stamp the auto-look time for one player. Creates a minimal row when the
+    // player is unknown, otherwise updates LastLookedUtc in place and leaves
+    // every other field alone -- sending a look is not itself an observation,
+    // so it must not overwrite class / race / equipment / LastSeen. Called by
+    // PlayerLookManager right after it writes the look to the wire.
+    public void RecordLooked(string name, DateTime whenUtc)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        (string given, string family) = PlayerObservation.SplitName(name);
+        if (string.IsNullOrEmpty(given)) return;
+
+        if (_observations.TryGetValue(given, out PlayerObservation? existing))
+        {
+            _observations[given] = existing with { LastLookedUtc = whenUtc };
+        }
+        else
+        {
+            _observations[given] = new PlayerObservation(
+                GivenName:      given,
+                FamilyName:     family,
+                Class:          null,
+                Race:           null,
+                Alignment:      null,
+                Title:          null,
+                Gang:           null,
+                Role:           null,
+                FirstSeenUtc:   whenUtc,
+                LastSeenUtc:    whenUtc,
+                LastLookedUtc:  whenUtc);
+        }
+
+        Rebuild();
+        SaveObservations();
+    }
+
     // Record one player's exact character level, as learned from an @level
     // probe reply ("Level N, X exp, …"). This is the authoritative source for
     // a player's level — it supersedes the 5-level band the game's title
@@ -642,6 +688,7 @@ public sealed class PlayerDatabase
             // later of the two so a duplicate-row collapse never re-opens a
             // greet / party-probe we already did today.
             LastGreetedUtc = LaterUtc(newer.LastGreetedUtc, older.LastGreetedUtc),
+            LastLookedUtc  = LaterUtc(newer.LastLookedUtc,  older.LastLookedUtc),
             LastPartiedUtc = LaterUtc(newer.LastPartiedUtc, older.LastPartiedUtc),
         };
     }
