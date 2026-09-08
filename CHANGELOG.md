@@ -1,5 +1,10 @@
 # Version history
 
+## 3.57.1
+
+- Fixed a burst of outgoing telepaths (e.g. a `@roomba` reply with several items) logging only the last message's text in the Conversation window, with the rest blank — sends and their server confirmations now pair up in order instead of racing on a single shared slot
+- bug reports addressed: paradigm-20260908-061546
+
 ## 3.57.0
 
 - New **Sysop goto** power (fourth per-BBS sysop checkbox): jump to a curated location with the game's `sys goto <name>` command

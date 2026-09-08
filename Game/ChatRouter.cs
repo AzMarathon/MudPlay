@@ -24,14 +24,24 @@ public sealed class ChatRouter : IDisposable
     private readonly List<IDisposable> _subs = new();
     private bool _disposed;
 
-    // Most recent `/recipient message` line the user typed. Outgoing telepath
-    // confirmations from the server don't echo the message text, so we have to
-    // correlate with the typed command on the line above. Cleared after each
-    // consume so we don't re-attribute it to a later telepath.
-    private string? _pendingTelepathMessage;
+    // FIFO of `/recipient message` lines sent but not yet confirmed. Outgoing
+    // telepath confirmations from the server don't echo the message text, so we
+    // have to correlate with the typed/sent command. A queue (not a single slot)
+    // because an engine can fire several sends back-to-back before any
+    // confirmation arrives — e.g. a @roomba reply answering with one telepath per
+    // item — and the server's generic "--- Telepath Sent to X ---" lines then
+    // arrive as their own burst with no way to tell them apart; each confirmation
+    // dequeues the next pending message in send order.
+    private readonly Queue<string> _pendingTelepathMessages = new();
     // Same pairing for an outgoing directed say: the typed `>Target message` carries
     // the message, the server's `--- Message Directed to X ---` confirmation the target.
-    private string? _pendingDirectedMessage;
+    private readonly Queue<string> _pendingDirectedMessages = new();
+    // Hard cap on either pending queue. A captured `/`-line that never yields a
+    // confirmation (some other slash-command) leaves a stale entry the next real
+    // confirmation wrongly consumes — the pairing drifts off-by-one and stays that
+    // way. Bounding drop-oldest keeps a runaway of unconfirmed captures from growing
+    // without limit; a real burst is a handful of lines, so 16 never trims live work.
+    private const int MaxPendingChatCaptures = 16;
 
     // Board-specific disconnect line, for the conversation window's realm
     // category. Returns the active BBS's raw DisconnectPattern ({name}/* syntax,
@@ -90,8 +100,7 @@ public sealed class ChatRouter : IDisposable
         _subs.Add(router.Subscribe(KnownPatterns.ConversationDirectedSayOut, result =>
         {
             string? target = SafeGroup(result, 0);
-            string message = _pendingDirectedMessage ?? string.Empty;
-            _pendingDirectedMessage = null;
+            string message = _pendingDirectedMessages.TryDequeue(out string? m) ? m : string.Empty;
             EntryClassified?.Invoke(new ChatLogEntry(
                 result.Line.Timestamp,
                 ChatChannel.Local,
@@ -108,8 +117,7 @@ public sealed class ChatRouter : IDisposable
         _subs.Add(_router.Subscribe(KnownPatterns.ConversationTelepathOut, result =>
         {
             string? recipient = SafeGroup(result, 0);
-            string message = _pendingTelepathMessage ?? string.Empty;
-            _pendingTelepathMessage = null;
+            string message = _pendingTelepathMessages.TryDequeue(out string? m) ? m : string.Empty;
 
             EntryClassified?.Invoke(new ChatLogEntry(
                 result.Line.Timestamp,
@@ -264,29 +272,39 @@ public sealed class ChatRouter : IDisposable
 
     // Form is "/<prefix> <message>" — the slash-shortcut for sending a telepath.
     // Match conservatively: leading slash + at least one word char, then space,
-    // then any message text. Anything that looks like that becomes the pending
-    // message; if no telepath confirmation follows, it's stale and gets
-    // overwritten by the next /-line. The game has other slash-commands, so a
-    // /-line that turns out not to produce a telepath just gets overwritten or
-    // dropped on the next one.
+    // then any message text. Anything that looks like that gets queued as a
+    // pending message, consumed FIFO by the next confirmation(s) — see
+    // _pendingTelepathMessages. The game has other slash-commands, so a /-line
+    // that turns out not to produce a telepath leaves a stale queued entry the
+    // next real confirmation wrongly consumes — the pairing then drifts off-by-one
+    // and stays that way; rare in practice. The MaxPendingChatCaptures cap only
+    // bounds a runaway (drop-oldest), it doesn't undo an established drift.
     private void TryCaptureTelepath(string text)
     {
         if (text.Length < 3 || text[0] != '/') return;
         int sp = text.IndexOf(' ');
         if (sp <= 1 || sp == text.Length - 1) return;
-        _pendingTelepathMessage = text[(sp + 1)..];
+        EnqueueBounded(_pendingTelepathMessages, text[(sp + 1)..]);
     }
 
     // Form is ">Target message" — the directed-say verb. Same pairing rationale as
     // TryCaptureTelepath: the typed line carries the message, the server's later
     // "--- Message Directed to X ---" confirmation supplies the target + fires the
-    // conversation entry. Overwritten by the next `>`-line if no confirmation follows.
+    // conversation entry, dequeued FIFO.
     private void TryCaptureDirectedSay(string text)
     {
         if (text.Length < 3 || text[0] != '>') return;
         int sp = text.IndexOf(' ');
         if (sp <= 1 || sp == text.Length - 1) return;
-        _pendingDirectedMessage = text[(sp + 1)..];
+        EnqueueBounded(_pendingDirectedMessages, text[(sp + 1)..]);
+    }
+
+    // Enqueue with a hard cap: once a pending queue reaches MaxPendingChatCaptures,
+    // drop the oldest so a stream of unconfirmed captures can't grow without bound.
+    private static void EnqueueBounded(Queue<string> queue, string message)
+    {
+        if (queue.Count >= MaxPendingChatCaptures) queue.Dequeue();
+        queue.Enqueue(message);
     }
 
     private void Subscribe(
