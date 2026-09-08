@@ -22,15 +22,17 @@ public enum RouteChoiceResult
 }
 
 // Route picker, shown when RouteChoicePlanner found a fork worth a user decision.
-// Two flavors share this VM: the item-gate fork (a shorter direct route crosses
-// an acquirable gate) and the teleport fork (a shorter route teleports where a
-// walking route also exists). Clicking a route selects it and previews its line
-// on the map (no walk yet); the Go button commits the selected route. The
-// item-gate direct route splits in two when a gate-free detour exists: "acquire
-// then go" arms the acquisition pipeline for the missing items, while "send it"
-// crosses the gates as-is on the user's say-so. The teleport fork is a plain
-// two-way choice — walk it (safe, longer) or teleport (shorter, maybe lethal),
-// no send-it split. Cancel / X walks nothing.
+// One VM serves every fork — item-gate (a shorter direct route crosses an
+// acquirable gate), teleport (a shorter route teleports where a walking route
+// also exists), trap-avoid (fewest-traps vs shortest), avoid-override (route
+// through a room you marked Avoid), and the fully-blocked "run to the block"
+// offer — with the card set and wording branching per kind (see Populate).
+// Clicking a route selects it and previews its line on the map (no walk yet); Go
+// commits the selected route. The item-gate direct route can further split into
+// "acquire then go" (arm the acquisition pipeline), "send it" (cross as-is),
+// "search en route", and a "route through avoided rooms" alternative. It can also
+// open in a "Calculating…" state (IsCalculating) while off-thread planning runs,
+// then Populate fills the cards. Cancel / X walks nothing.
 public sealed partial class RouteChoiceDialogViewModel
     : ObservableObject, IDialogViewModel<RouteChoiceResult?>
 {
@@ -142,9 +144,8 @@ public sealed partial class RouteChoiceDialogViewModel
     public bool HazardObtain { get; private set; }
 
     // The route crosses a survivable hazard the player can't currently pass, whether
-    // that's the only gate (_soleHazardOnly) or there's also a hard gate past it
-    // (_mixedHazard). Both gate the card-visibility rules above.
-    private bool _soleHazardOnly;
+    // that's the only gate or there's also a hard gate past it (_mixedHazard). Both
+    // gate the card-visibility rules above.
     private bool _crossesSurvivableHazard;
     private bool _mixedHazard;
     // The route needs a hazard counter the player lacks — so "search en route" is a
@@ -323,6 +324,12 @@ public sealed partial class RouteChoiceDialogViewModel
             TeleportCaveat = string.Empty;
             TrapCaveat = string.Empty;
             AvoidCaveat = string.Empty;
+            // Reveal before the early return — a blocked plan CAN reach here through the
+            // idle path's pre-opened "Calculating…" window (WalkAsync routes Blocked into
+            // Populate), so it must leave the calculating state or the picker stays stuck
+            // on "Calculating…" with the "run to the block" card never shown.
+            IsCalculating = false;
+            OnPropertyChanged(string.Empty);
             return;
         }
 
@@ -334,7 +341,6 @@ public sealed partial class RouteChoiceDialogViewModel
         bool soleHazardOnly = !HasFreeRoute && !IsTeleportChoice && !IsAvoidOverrideChoice
             && choice.Requirements.Count > 0
             && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
-        _soleHazardOnly = soleHazardOnly;
         _crossesSurvivableHazard = hazardSurvivable;
         _mixedHazard = hazardSurvivable && !soleHazardOnly;
         _hazardCounterNeeded = choice.Requirements.Any(r => r.Kind == RouteRequirementKind.HazardProtection);
@@ -479,8 +485,8 @@ public sealed partial class RouteChoiceDialogViewModel
         // Options are ready: drop the "Calculating…" state and refresh every card
         // binding at once (a blank name signals "all properties changed"). The
         // full-constructor path runs this before the window exists — a harmless no-op
-        // there. (The Blocked branch returns above; it's only ever built via the full
-        // constructor, so it never lingers in the calculating state.)
+        // there. (The Blocked branch returns early above, but clears the state itself
+        // for the same reason.)
         IsCalculating = false;
         OnPropertyChanged(string.Empty);
     }

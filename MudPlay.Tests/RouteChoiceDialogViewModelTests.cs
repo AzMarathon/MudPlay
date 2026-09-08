@@ -698,4 +698,26 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Contains("Obtain, then cross", vm.GatedSummary);
         Assert.Contains("Cross unprotected", vm.SendItSummary);
     }
+
+    // Regression: a Blocked choice returns early inside Populate. The idle path can
+    // route Blocked through Populate onto a pre-opened calc-state VM, so that early
+    // return must still leave the calculating state — otherwise the picker sticks on
+    // "Calculating…" and the "run to the block" card never appears (Go stays disabled).
+    [Fact]
+    public void Blocked_Populate_LeavesCalculatingState()
+    {
+        var vm = new RouteChoiceDialogViewModel("Dest (1/9)", "Src (1/1)");
+        Assert.True(vm.IsCalculating);
+
+        var blocked = Choice() with
+        {
+            Kind = RouteChoiceKind.Blocked,
+            BlockedReason = "a locked door",
+        };
+        vm.Populate(blocked, id => null);
+
+        Assert.False(vm.IsCalculating);
+        Assert.True(vm.ShowOptions);
+        Assert.Contains("Run to the blocked room", vm.GatedSummary);
+    }
 }

@@ -10,13 +10,16 @@ namespace MudPlay.ViewModels.Navigation;
 // comeback, trainer routing) bypass this and call Walker.WalkTo directly — they
 // default to the free-preferring, teleport-allowed route with no prompt.
 //
-// The flow: resolve the current room, then check two forks in priority order.
-// First the walk-vs-teleport fork — a shorter route that teleports where a
-// walking route also exists — because a teleport can drop the crosser somewhere
-// lethal only the user's character knowledge can judge. Failing that, the
-// free-vs-direct item-gate fork — a shorter route that crosses an acquirable
-// gate. Neither fork → plain walk. The picker's answer commits the chosen route;
-// cancel walks nothing.
+// The flow: resolve the current room, then plan (PlanRouteChoice) — the forks in
+// priority order are walk-vs-teleport, trap-avoid, avoid-override, then the
+// free-vs-direct item-gate fork; failing all, a fully-blocked "run to the block"
+// offer or a plain walk. A sole route whose gates are all auto-obtainable arms
+// acquisition and walks with no prompt. Anything else surfaces the picker, whose
+// answer commits the chosen route; cancel walks nothing.
+//
+// Planning runs off the UI thread when the walker is idle (so a big-graph plan
+// doesn't freeze the app), and a slow plan surfaces a "Calculating…" window while
+// it runs; see WalkAsync.
 public static class RouteChoicePrompt
 {
     // Program-log category for the route-pick decision trace. Nav lifecycle → Info
@@ -75,7 +78,22 @@ public static class RouteChoicePrompt
                 calcDialogTask = services.Dialogs
                     .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(calcVm);
             }
-            plan = await planTask;
+            try
+            {
+                plan = await planTask;
+            }
+            catch (Exception ex)
+            {
+                // The off-thread plan reads the room graph + movement filter, which a
+                // RARE concurrent UI-thread mutation (a game-data reload / reconnect, an
+                // avoid-list edit) can disturb mid-read. The idle gate excludes the live
+                // walker, not those. Rather than let such a race surface as a crash, log
+                // it and re-plan inline on the UI thread (safe; just a one-off brief
+                // freeze). Not silent — the walk still proceeds from the re-plan.
+                services.Log.Warn(LogCat,
+                    $"route pick {src} -> {destination}: off-thread plan faulted ({ex.GetType().Name}: {ex.Message}); re-planning on the UI thread");
+                plan = PlanRouteChoice(services, src, destination);
+            }
         }
         else
         {
@@ -232,9 +250,11 @@ public static class RouteChoicePrompt
     }
 
     // Build the picker, draw the previewed route while it's open, and commit the
-    // chosen route. Shared by the item-gate and teleport forks — the commit
-    // branches on the choice kind: an item-gate choice picks free / acquire / send
-    // it, a teleport choice picks walk (refuse teleports) / teleport (allow them).
+    // chosen route. Shared by every fork that surfaces a choice (teleport,
+    // trap-avoid, avoid-override, item-gate, and the fully-blocked "run to the
+    // block" offer); the commit switch at the end branches on the choice kind, and
+    // an item-gate choice further splits into free / acquire / send-it / search /
+    // route-through-avoided.
     private static async Task RunPickerAsync(
         AppServices services,
         RoomKey destination,
