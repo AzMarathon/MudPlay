@@ -7465,9 +7465,24 @@ public sealed class AppServices
             }
         }
 
-        // Own money: refresh the bank listing, then read purse + deposits.
-        try { await BankBalance.QueryAsync(); } catch { /* degrade to last-known */ }
+        // Cash on hand is live (parsed inventory — no round-trip). If it already
+        // covers the buy, there's nothing to look up: skip the `bank` query AND the
+        // party @wealth/@have probes entirely. Those round-trips were making the
+        // route picker wait on the network before it could pop, even with a full
+        // purse — only reach for the bank/party when cash actually falls short.
         long ownCash = PathItemCashOnHand();
+        if (ownCash >= cost)
+        {
+            Log.Info("RouteBuy",
+                $"buy cost ~{cost:N0}c covered by cash on hand ({ownCash:N0}c) — no bank/party probe");
+            return new Game.Map.RouteBuyEconomy(
+                Game.Map.RouteBuyAffordabilityCalculator.Classify(
+                    cost, ownCash, 0, new List<(string Name, long Deposit)>(), 0),
+                nearestShop, null);
+        }
+
+        // Cash falls short → find the rest: refresh the bank listing, then read deposits.
+        try { await BankBalance.QueryAsync(); } catch { /* degrade to last-known */ }
         Game.Map.RoomKey? configured = PathItemBankRoom();
         long configuredDeposit = ConfiguredBankDepositCopper();
         List<(string Name, long Deposit)> otherBanks = ReachableUsedBankDeposits(source, configured);

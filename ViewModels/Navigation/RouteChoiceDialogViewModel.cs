@@ -16,6 +16,9 @@ public enum RouteChoiceResult
     GatedNoAcquire, // the shorter gated route — "send it": cross as-is, no acquisition
     SearchEnRoute,  // walk toward the hazard searching each room; cross if a counter
                     // turns up (the floor collector grabs it), else halt at the edge.
+    AvoidOverrideAlt, // the extra "route through rooms you marked Avoid" card offered
+                      // alongside a hazard/gate route that respects the avoids — the
+                      // avoid-crossing way needs no counter, so it's a real alternative.
 }
 
 // Route picker, shown when RouteChoicePlanner found a fork worth a user decision.
@@ -159,6 +162,31 @@ public sealed partial class RouteChoiceDialogViewModel
         ? "Walks straight through the hazard and takes the damage — no counter fetched."
         : "Crosses the gates as-is — nothing acquired; you must already carry what's needed.";
 
+    // The extra "route through your avoided rooms" card, offered beside a hazard/gate
+    // route that respects the avoids — the avoid-crossing way needs no counter, so
+    // it's a genuine alternative. Path kept for preview/commit; summary built in ctor.
+    private readonly IReadOnlyList<RoomKey>? _avoidAltPath;
+    public bool ShowAvoidAltCard => _avoidAltPath is { Count: > 0 };
+    public string AvoidAltSummary { get; }
+    public string AvoidAltDetail =>
+        "Skips the counter and plows through rooms you marked Avoid. Your avoid list stays "
+        + "set — only this one walk crosses them.";
+    public bool IsAvoidAltSelected => SelectedRoute == RouteChoiceResult.AvoidOverrideAlt;
+
+    // The Free card is a real, selectable route only when a gate-free route exists.
+    // On a sole route it used to render as a disabled "why you can't walk it" note;
+    // that's now dropped (the heading + option cards carry it), so hide it entirely
+    // when there's no free route to pick.
+    public bool ShowFreeCard => HasFreeRoute;
+
+    // Danger tint (a soft-red card) on the routes that skip the safe prep: the
+    // avoid-crossing cards (the AvoidOverride fork's own override card, and the extra
+    // avoid-alt card) and the "cross unprotected / send it" card. Makes the risky
+    // option read as risky at a glance; the green/amber selection still layers on top.
+    public bool GatedIsDanger => IsAvoidOverrideChoice;   // Gated card = "route through avoided"
+    public bool SendItIsDanger => true;                   // "cross unprotected" / "send it direct"
+    public bool AvoidAltIsDanger => true;                 // always crosses avoided rooms
+
     // Which route the user has selected to preview. Null until they click one —
     // Go stays disabled until then, forcing the click-to-preview-then-Go flow.
     [ObservableProperty]
@@ -166,6 +194,7 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(IsGatedSelected))]
     [NotifyPropertyChangedFor(nameof(IsSendItSelected))]
     [NotifyPropertyChangedFor(nameof(IsSearchSelected))]
+    [NotifyPropertyChangedFor(nameof(IsAvoidAltSelected))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
     [NotifyCanExecuteChangedFor(nameof(ShowDetailsCommand))]
     private RouteChoiceResult? _selectedRoute;
@@ -190,7 +219,11 @@ public sealed partial class RouteChoiceDialogViewModel
         // Pick-time economy read for a buy: where the money is (own bank / party) or
         // that a party member holds the item. Appended under the obtain card so a
         // broke leader sees whether it's payable and from where before committing.
-        string? economyNote = null)
+        string? economyNote = null,
+        // The room the walk starts from, for the "From X to Y" title. Optional (defaults
+        // empty → a plain "Route to Y") so the picker's many unit tests, which don't
+        // exercise the heading, construct the VM without it.
+        string sourceLabel = "")
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -199,6 +232,22 @@ public sealed partial class RouteChoiceDialogViewModel
         IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;
         IsAvoidOverrideChoice = choice.Kind == RouteChoiceKind.AvoidOverride;
         HasFreeRoute = choice.HasFreeRoute;
+
+        // One uniform title across every fork — the per-case wording lived in the
+        // card summaries anyway, and a plain "From X to Y" over the option list reads
+        // cleaner than a heading that restated the sole card (user request).
+        Heading = string.IsNullOrEmpty(sourceLabel)
+            ? $"Route to {destinationLabel}"
+            : $"From {sourceLabel} to {destinationLabel}";
+
+        // The extra avoid-crossing card (offered beside a hazard/gate route that
+        // respects the avoids): the ignore-avoids route needs no counter.
+        _avoidAltPath = choice.AvoidAlternativePath;
+        int avoidAltCount = choice.AvoidAlternativeCount;
+        AvoidAltSummary = _avoidAltPath is { Count: > 0 }
+            ? $"Route through {(avoidAltCount == 1 ? "1 room" : $"{avoidAltCount} rooms")} you marked Avoid — "
+                + $"{StepsEta(Math.Max(0, _avoidAltPath.Count - 1), default)}, no counter needed"
+            : string.Empty;
 
         // A fully-blocked route: no way through at all, but the destination is
         // physically reachable up to an obstacle. Offer to walk as far as possible
@@ -209,7 +258,6 @@ public sealed partial class RouteChoiceDialogViewModel
             _hazardCounterNeeded = false;
             SearchSummary = string.Empty;
             string reason = choice.BlockedReason ?? "a blocked exit";
-            Heading = $"Only route to {destinationLabel} is blocked";
             FreeSummary = $"No open route — blocked by {reason}";
             GatedSummary = $"Run to the blocked room anyway — {StepsEta(choice.GatedStepCount, gatedEta)}";
             SendItSummary = string.Empty;
@@ -249,7 +297,6 @@ public sealed partial class RouteChoiceDialogViewModel
 
         if (IsTeleportChoice)
         {
-            Heading = $"Walk or teleport to {destinationLabel}?";
             FreeSummary = $"Walk it — {StepsEta(choice.FreeStepCount, freeEta)}, no teleport";
             GatedSummary = $"Teleport — {StepsEta(choice.GatedStepCount, gatedEta)} — much shorter";
             TeleportCaveat =
@@ -266,7 +313,6 @@ public sealed partial class RouteChoiceDialogViewModel
         {
             int freeTraps = choice.FreeTrapCount;
             int gatedTraps = choice.GatedTrapCount;
-            Heading = $"Avoid traps to {destinationLabel}?";
             // The fewest-traps route isn't always fully clean — it may still cross an
             // unavoidable trap — so state the real counts instead of claiming "trap-free".
             FreeSummary = freeTraps == 0
@@ -299,7 +345,6 @@ public sealed partial class RouteChoiceDialogViewModel
             {
                 // TWO-ROUTE: an avoid-honouring route also exists, but a shorter one
                 // runs through avoided rooms.
-                Heading = $"Two routes to {destinationLabel}";
                 FreeSummary = $"Respect your avoids — {StepsEta(choice.FreeStepCount, freeEta)}";
                 GatedSummary = $"Shorter — through {avoidedWord} — {StepsEta(choice.GatedStepCount, gatedEta)}";
                 Footnote = "Click a route to preview it on the map, then Go to walk it. "
@@ -311,7 +356,6 @@ public sealed partial class RouteChoiceDialogViewModel
             else
             {
                 // SOLE: the only way there crosses an avoided room.
-                Heading = $"Only route to {destinationLabel} crosses a room you marked Avoid";
                 FreeSummary = $"No route that respects your avoids — every path there crosses {avoidedWord}";
                 GatedSummary = $"Route through {avoidedWord} — {StepsEta(choice.GatedStepCount, gatedEta)}";
                 Footnote = "Click the route to preview it on the map, then Go to walk it. "
@@ -332,7 +376,6 @@ public sealed partial class RouteChoiceDialogViewModel
             // counter", it's a gate you clear by hand, so don't mislabel it.
             if (HasFreeRoute)
             {
-                Heading = $"Two routes to {destinationLabel}";
                 FreeSummary = $"Free route — {StepsEta(choice.FreeStepCount, freeEta)}, no items needed";
                 GatedSummary = $"Direct — acquire then go — {StepsEta(choice.GatedStepCount, gatedEta)}";
                 Footnote = "Click a route to preview it on the map, then Go to walk it. "
@@ -341,7 +384,6 @@ public sealed partial class RouteChoiceDialogViewModel
             }
             else if (soleHazardOnly)
             {
-                Heading = $"Only route to {destinationLabel} crosses a hazard";
                 FreeSummary = "No hazard-free route — every path there crosses a hazard you must counter";
                 if (HazardObtain)
                 {
@@ -373,7 +415,6 @@ public sealed partial class RouteChoiceDialogViewModel
                 // The route crosses a survivable hazard AND a hard gate past it (a
                 // keyed door): offer to obtain-then-cross / cross-unprotected, but
                 // note the walk still stops at the gate you must clear yourself.
-                Heading = $"Only route to {destinationLabel} crosses a hazard, then a gate";
                 FreeSummary = "No hazard-free route — every path there crosses a hazard, "
                     + "then a gate you must clear yourself";
                 if (HazardObtain)
@@ -394,7 +435,6 @@ public sealed partial class RouteChoiceDialogViewModel
             }
             else
             {
-                Heading = $"Only route to {destinationLabel} is gated";
                 FreeSummary = "No open detour — the only way there crosses a gate you must clear yourself";
                 GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
                 Footnote = "Click the route to preview it on the map, then Go to walk it. "
@@ -511,6 +551,14 @@ public sealed partial class RouteChoiceDialogViewModel
         SelectedRoute = RouteChoiceResult.SearchEnRoute;
         // Same physical route as the gated crossing — preview its line.
         PreviewRequested?.Invoke(RouteChoiceResult.SearchEnRoute);
+    }
+
+    [RelayCommand]
+    private void SelectAvoidAlt()
+    {
+        if (!ShowAvoidAltCard) return;
+        SelectedRoute = RouteChoiceResult.AvoidOverrideAlt;
+        PreviewRequested?.Invoke(RouteChoiceResult.AvoidOverrideAlt);
     }
 
     // The Details… button lights up once a route is picked: it opens the shared

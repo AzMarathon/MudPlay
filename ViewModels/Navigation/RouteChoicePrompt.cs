@@ -122,6 +122,20 @@ public static class RouteChoicePrompt
             return;
         }
 
+        // This choice's routes all respect the avoids (Evaluate never lifts them). If
+        // a route that DOES cross an avoided room also exists — one that needs no
+        // counter to obtain — attach it as an extra card so the user can pick "plow
+        // through my avoided rooms" instead of fetching a raft (report
+        // paradigm-20260907-212758 follow-up: surface it as a co-option, not hidden).
+        if (RouteChoicePlanner.AvoidAlternative(
+                services.Bfs, services.Movement, services.RoomGraph, source.Key, destination) is { } alt)
+        {
+            choice = choice with { AvoidAlternativePath = alt.Path, AvoidAlternativeCount = alt.AvoidedCount };
+            services.Log.Info(LogCat,
+                $"route pick {source.Key} -> {destination}: also offering an avoid-crossing alternative "
+                + $"({alt.AvoidedCount} room(s) you marked Avoid, no counter needed)");
+        }
+
         string reqSummary = string.Join(", ", choice.Requirements.Select(r => $"{r.Kind}[{string.Join("/", r.ItemIds)}]"));
 
         // Sole route (no gate-free alternative) whose gates are item/ticket/key,
@@ -304,7 +318,8 @@ public static class RouteChoicePrompt
             // rather than the whole any-of set.
             req => resolvedCounters.TryGetValue(req, out (int ItemId, string Source) v)
                 ? v : ((int, string)?)null,
-            economyNote);
+            economyNote,
+            sourceLabel: DestinationLabel(services, source));
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and
@@ -319,6 +334,7 @@ public static class RouteChoicePrompt
                 RouteChoiceResult.Gated => choice.GatedPath,
                 RouteChoiceResult.GatedNoAcquire => choice.GatedPath,
                 RouteChoiceResult.SearchEnRoute => choice.GatedPath,
+                RouteChoiceResult.AvoidOverrideAlt => choice.AvoidAlternativePath,
                 _ => null,
             });
             // A pre-selected route (trap-avoid defaults to the trap-free line) draws
@@ -333,7 +349,12 @@ public static class RouteChoicePrompt
         string detailsTitle = $"Route → {DestinationLabel(services, destination)}";
         vm.ShowDetailsRequested += r => RouteDetailsLauncher.Open(
             services, detailsTitle,
-            r == RouteChoiceResult.Free ? choice.FreePath : choice.GatedPath);
+            r switch
+            {
+                RouteChoiceResult.Free => choice.FreePath,
+                RouteChoiceResult.AvoidOverrideAlt when choice.AvoidAlternativePath is { } ap => ap,
+                _ => choice.GatedPath,
+            });
 
         RouteChoiceResult? result;
         try
@@ -460,6 +481,12 @@ public static class RouteChoicePrompt
                 if (hazardCounterIds.Count > 0)
                     services.ForcePathObtain(hazardCounterIds);
                 CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
+                break;
+            case RouteChoiceResult.AvoidOverrideAlt:
+                // "Route through my avoided rooms" — the extra card: override the avoid
+                // list for this one walk (needs no counter). Avoids stay set; only this
+                // walk crosses them, same as the avoid-override fork's commit.
+                CommitWalk(services, destination, gated: false, ignoreAvoids: true);
                 break;
             // null → cancelled: walk nothing (and leave any manual pause intact —
             // the user backed out, so nothing changed).

@@ -398,8 +398,8 @@ public sealed class RouteChoiceDialogViewModelTests
 
         Assert.False(vm.HasFreeRoute);
         Assert.False(vm.ShowSendItCard);
-        Assert.Contains("gated", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("hazard", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        // Heading is now the uniform "Route to …"; the gate-not-hazard distinction
+        // lives in the card wording (FreeSummary), asserted below.
         Assert.DoesNotContain("hazard", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
         Assert.Contains("gate", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
         // The key names itself with no source tail (keys aren't sourced).
@@ -414,7 +414,7 @@ public sealed class RouteChoiceDialogViewModelTests
             "Sunbaked dune (1/9)", id => "a waterskin");
 
         Assert.False(vm.HasFreeRoute);
-        Assert.Contains("hazard", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        // Hazard wording moved from the (now-uniform) heading into the card text.
         Assert.Contains("hazard", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
     }
 
@@ -487,7 +487,7 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(vm.IsTeleportChoice);
         Assert.True(vm.HasFreeRoute);
         Assert.False(vm.ShowSendItCard);            // no acquisition to skip
-        Assert.Contains("teleport", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        // Teleport wording is on the cards now, not the uniform heading.
         Assert.Contains("Walk it", vm.FreeSummary);
         Assert.Contains("Teleport", vm.GatedSummary);
         Assert.Empty(vm.RequirementSummary);
@@ -643,7 +643,7 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(vm.ShowSendItCard);
         Assert.Contains("Walk to the hazard and stop", vm.GatedSummary);
         Assert.Contains("Cross unprotected", vm.SendItSummary);
-        Assert.Contains("crosses a hazard, then a gate", vm.Heading);
+        Assert.Contains("crosses a hazard, then a gate", vm.FreeSummary);
         Assert.Contains("the dragon key", vm.RequirementSummary);
     }
 

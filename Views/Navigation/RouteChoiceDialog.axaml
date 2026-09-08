@@ -4,10 +4,22 @@
         x:Class="MudPlay.Views.Navigation.RouteChoiceDialog"
         x:DataType="vm:RouteChoiceDialogViewModel"
         Title="Choose a route"
-        Width="480" Height="360"
+        Width="480" MinHeight="240" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>
+        <!-- A "danger" card (skip the safe prep: cross unprotected / send it, or
+             plow through rooms you marked Avoid) reads as a soft-red tint so the
+             risky option is obvious at a glance. Defined BEFORE the selected style
+             so a picked danger card still shows the amber selection over the red. -->
+        <Style Selector="Button.route.danger">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="Background" Value="{StaticResource AccentRedSoftBrush}"/>
+        </Style>
+        <Style Selector="Button.route.danger:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentRedSoftBrush}"/>
+        </Style>
+
         <!-- A selected route card reads as the amber brand accent: an amber
              border over a soft-amber fill, so the previewed route stands out
              from the unselected one. -->
@@ -29,10 +41,13 @@
                        Foreground="{StaticResource ChromeFgBrush}"/>
 
             <StackPanel Grid.Row="1" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="Options:"
+                           FontSize="11"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
                 <Button Classes="route"
                         Classes.selected="{Binding IsFreeSelected}"
                         Command="{Binding SelectFreeCommand}"
-                        IsEnabled="{Binding HasFreeRoute}"
+                        IsVisible="{Binding ShowFreeCard}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Left"
                         BorderThickness="1"
@@ -45,6 +60,7 @@
 
                 <Button Classes="route"
                         Classes.selected="{Binding IsGatedSelected}"
+                        Classes.danger="{Binding GatedIsDanger}"
                         Command="{Binding SelectGatedCommand}"
                         IsVisible="{Binding ShowGatedCard}"
                         HorizontalAlignment="Stretch"
@@ -65,6 +81,7 @@
 
                 <Button Classes="route"
                         Classes.selected="{Binding IsSendItSelected}"
+                        Classes.danger="{Binding SendItIsDanger}"
                         Command="{Binding SelectSendItCommand}"
                         IsVisible="{Binding ShowSendItCard}"
                         HorizontalAlignment="Stretch"
@@ -97,6 +114,27 @@
                                    TextWrapping="Wrap"
                                    Foreground="{StaticResource ChromeFgBrush}"/>
                         <TextBlock Text="{Binding SearchDetail}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Classes="route"
+                        Classes.selected="{Binding IsAvoidAltSelected}"
+                        Classes.danger="{Binding AvoidAltIsDanger}"
+                        Command="{Binding SelectAvoidAltCommand}"
+                        IsVisible="{Binding ShowAvoidAltCard}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        BorderThickness="1"
+                        Padding="12,10">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding AvoidAltSummary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <TextBlock Text="{Binding AvoidAltDetail}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>

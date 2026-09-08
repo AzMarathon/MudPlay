@@ -1178,6 +1178,16 @@ public sealed class RouteChoicePlannerTests
             Assert.Equal(
                 new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 9) },
                 choice.GatedPath);   // the avoid-respecting river route, not through 1/5
+
+            // The avoid-crossing route (through 1/5) is available as the EXTRA card:
+            // it needs no counter, so it's a real alternative to the raft crossing.
+            var alt = RouteChoicePlanner.AvoidAlternative(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            Assert.NotNull(alt);
+            Assert.Equal(1, alt!.Value.AvoidedCount);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 9) },
+                alt.Value.Path);
         },
         spellsJson: HazardSpellsJson,
         itemsJson: HazardItemsJson,
@@ -1188,5 +1198,15 @@ public sealed class RouteChoicePlannerTests
             filter.InventoryReadyProbe = () => true;
             filter.ItemCarriedProbe = _ => false;   // no raft carried
         });
+    }
+
+    [Fact]
+    public void AvoidAlternative_IsNull_WhenNothingIsMarkedAvoid()
+    {
+        WithGraph(AvoidWithHazardBypassJson, (bfs, graph, filter) =>
+            // Nothing avoided → the ignore-avoids route touches no marked room, so
+            // there's no extra avoid-crossing card to offer.
+            Assert.Null(RouteChoicePlanner.AvoidAlternative(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9))));
     }
 }

@@ -11,7 +11,11 @@
 - Route picker no longer offers a class-restricted teleport to a character who can't use it (a bard-only barmaid transport was being surfaced to non-bards) — a class-branching transport now binds its gate to the class on the teleport's own branch
 - Route picker no longer says "no route respects your avoids" when an obtainable counter would open one — if buying/finding a raft (or any hazard counter, key, ticket) reaches the destination without crossing an avoided room, it now offers those obtain / cross-unprotected / search options instead of only the avoid-override
 - Route picker writes its decision to the program log (which fork fired, step counts, the requirement or avoided-room count) so a walk that surfaces one card can be traced
-- bug reports addressed: stock-20260907-175035, paradigm-20260907-212758
+- Route picker reads cleaner: a uniform **"From X to Y"** title over an **Options:** list, and the disabled "no route" explanatory note is gone (the cards carry it)
+- Route picker pops faster: it only checks your **bank** (and the party) when cash on hand can't cover a buy — plenty of cash on hand skips the round-trips entirely
+- Route picker also offers **"route through your avoided rooms"** as an extra card beside the obtain/cross options when that avoid-crossing route needs no counter — so you can plow through instead of fetching a raft
+- Route picker tints the risky cards **red** (cross unprotected / route through avoided rooms) and sizes the window to show every card
+- bug reports addressed: stock-20260907-175035, paradigm-20260907-212758, paradigm-20260907-215048
 
 ## 3.55.8
 

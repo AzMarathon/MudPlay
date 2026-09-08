@@ -80,7 +80,15 @@ public sealed record RouteChoice(
     // For an AvoidOverride choice: how many rooms the user marked "avoid" the gated
     // (override) route passes through, so the card can warn ("routes through N rooms
     // you marked Avoid"). Zero for every other kind.
-    int AvoidedRoomCount = 0)
+    int AvoidedRoomCount = 0,
+    // An OPTIONAL avoid-crossing alternative offered alongside a hazard/gate route
+    // that already respects the avoids: the ignore-avoids route (RoomKey path) and
+    // how many marked rooms it crosses. Non-null only when the picker attaches it to
+    // an item-gate/hazard choice — a raft route respects your avoids, but plowing
+    // through the avoided rooms needs no raft, so it's a real second way there. Null
+    // on every fork that doesn't offer it.
+    IReadOnlyList<RoomKey>? AvoidAlternativePath = null,
+    int AvoidAlternativeCount = 0)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -382,6 +390,34 @@ public static class RouteChoicePlanner
             overrideKeys,
             RouteChoiceKind.AvoidOverride,
             AvoidedRoomCount: avoidedCrossed);
+    }
+
+    // The avoid-crossing route to offer as an EXTRA card alongside a hazard/gate
+    // choice that already respects the avoids. It's the ignore-avoids route (every
+    // real gate still honoured) when that route actually crosses ≥1 marked room —
+    // "plow through your avoided rooms" needs no raft, so it's a genuine alternative
+    // to the obtain/cross options. Null when lifting the avoids opens nothing new
+    // (the avoids aren't the wall) or the route touches no avoided room. The caller
+    // attaches it only to an item-gate/hazard choice (whose own routes respect the
+    // avoids), so the two never describe the same path.
+    public static (IReadOnlyList<RoomKey> Path, int AvoidedCount)? AvoidAlternative(
+        BfsMapper bfs,
+        MovementFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+
+        IReadOnlyList<Direction>? route =
+            bfs.FindPath(source, destination, filter, ignoreAvoids: true);
+        if (route is null || route.Count == 0) return null;
+
+        IReadOnlyList<RoomKey> keys = BuildKeyPath(graph, source, route);
+        int crossed = CountAvoidedOnPath(filter, keys);
+        return crossed > 0 ? (keys, crossed) : null;
     }
 
     // How many rooms on a key path (excluding the source the walker already stands
