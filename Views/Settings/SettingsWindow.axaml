@@ -3,11 +3,11 @@
         xmlns:vm="using:MudPlay.ViewModels.Settings"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="940" d:DesignHeight="600"
+        mc:Ignorable="d" d:DesignWidth="1040" d:DesignHeight="600"
         x:Class="MudPlay.Views.Settings.SettingsWindow"
         x:DataType="vm:SettingsWindowViewModel"
         Title="Settings"
-        Width="940" Height="600"
+        Width="1040" Height="600"
         MinWidth="820" MinHeight="500"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
