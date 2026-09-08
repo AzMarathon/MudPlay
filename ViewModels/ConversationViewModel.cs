@@ -22,6 +22,10 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private readonly CommandHistoryNavigator _nav;
     private readonly Action<string> _sendUserText;
     private readonly ProfileService _profile;
+    private readonly Application _app;
+    // Live display channel carrying the Conversation row font; observed so a
+    // Settings → Talk Apply re-fonts the open window without a reopen.
+    private readonly DisplayConfig _display;
     // Two brushes per channel: the accent (channel tag / speaker / toolbar
     // toggle) and the message-body text colour. Both start from the theme
     // defaults and are overlaid with the character's per-channel Talk overrides.
@@ -39,21 +43,22 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // Recent commands for the recall dropdown, newest first.
     public ObservableCollection<string> RecentCommands { get; } = new();
 
-    // Row typography resolved once from the character's Talk settings so the
-    // window can be re-fonted from Settings → Talk without touching each row
-    // template. Empty ConvoFont falls back to the bundled JetBrains Mono
-    // (FontMono); ConvoFontSize <= 0 falls back to the built-in 12. Applied on
-    // window open — a read-only toggle window picks up edits on the next open.
+    // Row typography sourced from the live Display channel (fed from the char's
+    // Talk settings) so the window re-fonts the instant Settings → Talk is
+    // applied — the VM subscribes to Display and re-reads on a Convo* change
+    // instead of only picking edits up on the next open. Empty ConvoFontFamily
+    // falls back to the bundled JetBrains Mono (FontMono); ConvoFontSize <= 0
+    // falls back to the built-in 12.
     private const double DefaultMessageFontSize = 12;   // points
     // The Talk size setting is in POINTS, but these values bind straight to
     // Avalonia TextBlock.FontSize, which is DIP — so convert, exactly like the
     // terminal and Backscroll do at their draw sites. Without it every size
     // renders ~25% small and a size change barely moves (the "does nothing" bug).
     private const double PointToPixel = 96.0 / 72.0;
-    public FontFamily RowFontFamily { get; }
-    // Message body size in POINTS (from Talk settings); MessageFontSize / MetaFontSize
-    // are the DIP equivalents Avalonia actually renders.
-    private readonly double _messagePointSize;
+    [ObservableProperty] private FontFamily _rowFontFamily = new("monospace");
+    // Message body size in POINTS (from the live Display channel); MessageFontSize
+    // / MetaFontSize are the DIP equivalents Avalonia actually renders.
+    private double _messagePointSize = DefaultMessageFontSize;
     public double MessageFontSize => _messagePointSize * PointToPixel;
     // Timestamp / channel-tag / speaker sit one point smaller than the message
     // body — take the point off BEFORE the DIP conversion so the gap stays a
@@ -97,19 +102,21 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // Fired by the window's code-behind to scroll the newest row into view.
     public event Action<ConversationRowViewModel>? ScrollToRowRequested;
 
-    public ConversationViewModel(ChatHistoryStore history, CommandHistory commands, Action<string> sendUserText, Application app, TalkSettings talk, ProfileService profile)
+    public ConversationViewModel(ChatHistoryStore history, CommandHistory commands, Action<string> sendUserText, Application app, TalkSettings talk, ProfileService profile, DisplayConfig display)
     {
         _history = history;
         _commands = commands;
         _nav = new CommandHistoryNavigator(commands);
         _sendUserText = sendUserText;
         _profile = profile;
+        _app = app;
+        _display = display;
         _channelBrushes = BuildChannelBrushMap(app);
         _textBrushes = BuildTextBrushMap(app);
         ApplyColorOverrides(talk.ChannelColors);
 
-        RowFontFamily = ResolveFont(app, talk.ConvoFont);
-        _messagePointSize = talk.ConvoFontSize > 0 ? talk.ConvoFontSize : DefaultMessageFontSize;
+        ApplyFontFromDisplay();
+        _display.PropertyChanged += OnDisplayChanged;
 
         // Seed the header toggles from the character's saved state. Direct field
         // writes (not the generated setters) so no change notification fires and
@@ -297,6 +304,27 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
             ? f : new FontFamily("monospace");
     }
 
+    // Re-read the row font from the live Display channel and notify. Runs at
+    // construction and whenever Display's Convo* fields change (a Settings → Talk
+    // Apply). The row template binds FontFamily / FontSize to these off the parent
+    // VM, so a change here re-fonts every row without a Rebuild.
+    private void ApplyFontFromDisplay()
+    {
+        RowFontFamily = ResolveFont(_app, _display.ConvoFontFamily);
+        _messagePointSize = _display.ConvoFontSize > 0 ? _display.ConvoFontSize : DefaultMessageFontSize;
+        OnPropertyChanged(nameof(MessageFontSize));
+        OnPropertyChanged(nameof(MetaFontSize));
+    }
+
+    private void OnDisplayChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(DisplayConfig.ConvoFontFamily)
+                           or nameof(DisplayConfig.ConvoFontSize))
+        {
+            ApplyFontFromDisplay();
+        }
+    }
+
     private static IBrush LookupBrush(Application app, string key)
         => app.TryGetResource(key, null, out object? v) && v is IBrush b ? b : Brushes.Gray;
 
@@ -376,5 +404,6 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         _disposed = true;
         ((INotifyCollectionChanged)_history.Entries).CollectionChanged -= OnHistoryChanged;
         _commands.Changed -= OnCommandsChanged;
+        _display.PropertyChanged -= OnDisplayChanged;
     }
 }

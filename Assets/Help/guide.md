@@ -691,7 +691,7 @@ Type into the input box at the bottom and press **Enter** (or click **Send**) to
 
 ## Logging and history
 
-The window keeps its history even after you close it, and replays your last session's chat when you reconnect. To save chat to a file, turn on **Settings → Talk → Log conversations** — it writes to the `Logs` folder, which you can open from **Tools → Open logs folder**. There's no clear button in the window itself; use **Tools → Clear chatlog** on the main window to wipe it. The chat font and channel colors are set on the Talk tab and take effect the next time you open the window.
+The window keeps its history even after you close it, and replays your last session's chat when you reconnect. To save chat to a file, turn on **Settings → Talk → Log conversations** — it writes to the `Logs` folder, which you can open from **Tools → Open logs folder**. There's no clear button in the window itself; use **Tools → Clear chatlog** on the main window to wipe it. The chat font and channel colors are set on the Talk tab; the font applies live when you hit Apply, while the channel colors take effect the next time you open the window.
 
 ---
 
@@ -824,7 +824,7 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 **Does MudPlay save automatically?** No — the Settings window uses an explicit **OK / Apply / Cancel** model. Edits are staged in memory; **OK** applies every changed tab and closes the window, **Apply** applies without closing, and **Cancel** (or the window's X button) discards everything you changed since opening it. A few things outside the main Settings tabs are the exception and save the instant you change them: keybind rebinds, macro edits, the Events tab's list, and the "Disable all events" toggle.
 
 **Before you start changing things — a few things worth knowing:**
-- Nearly every setting documented here takes effect **live**, with no restart or reconnect required — this guide calls out the exceptions explicitly (e.g. terminal scrollback size, Conversation-window fonts/colors, a handful of BBS-connection fields that only apply on the *next* connect).
+- Nearly every setting documented here takes effect **live**, with no restart or reconnect required — this guide calls out the exceptions explicitly (e.g. terminal scrollback size, Conversation-window channel colors, a handful of BBS-connection fields that only apply on the *next* connect).
 - A handful of controls exist in the UI but currently **do nothing** — they're either genuine stubs (the whole Sounds tab) or fields that were built but never wired into the automation engines (Combat's *Polite mode* and *Show combat round totals*). This guide flags every one of them explicitly rather than describing invented behavior.
 - Many settings only matter once a corresponding **master switch** is on. For example, the entire Auto-Light tab only matters once the Auto-Light engine itself is enabled (Settings → General, or its toolbar toggle); Combat/Spells/Health settings only matter while Auto-Combat is on.
 
@@ -1808,13 +1808,13 @@ Settings → Talk.
 **Default:** JetBrains Mono, 12pt
 **Available options:** Font — JetBrains Mono, IBM Plex Sans, MX437 IBM VGA; Size — 10–20pt in a fixed list.
 **What it does:** The font used inside the Conversation window's chat log.
-**Important notes:** Unlike almost everything else in this app, this only applies the **next time you open** the Conversation window — not live to a window already open.
+**Important notes:** Applies **live** — hit Apply and an already-open Conversation window re-fonts on the spot, no reopen needed.
 
 ### Channel colors (per-channel Accent / Text)
 
 **Default:** theme defaults (no override)
 **What it does:** Lets you pick a custom color for each chat channel's tag/speaker name (Accent) and separately its message body (Text).
-**Important notes:** Also only applies the next time the Conversation window is opened, same as the font settings above.
+**Important notes:** Unlike the font above, channel colors still only apply the **next time you open** the Conversation window — not live to a window already open.
 
 ---
 
