@@ -314,7 +314,11 @@ public sealed class LoopRunner : IRecoverableEngine
         // only and can't run a custom-command step mid-escape.
         for (int k = 0; k < n && dirs.Count < count; k++)
         {
-            if (_expandedSteps[(_index + k) % n] is not MoveLoopStep move) break;
+            // A teleport step counts as a custom command too — LoopExpander turns a
+            // BFS path straight into MoveLoopSteps, so a circuit that crosses a CMD
+            // teleport carries one, and it can't go out as a bare direction.
+            if (_expandedSteps[(_index + k) % n] is not MoveLoopStep move
+                || !move.Direction.IsCardinal()) break;
             dirs.Add(move.Direction);
         }
         return dirs;
@@ -325,6 +329,8 @@ public sealed class LoopRunner : IRecoverableEngine
         // Tier-3 backtrack: send a single direction without advancing
         // our own loop index. The tracker still records the move so its
         // FSM stays in sync with the observation it'll receive.
+        // Cardinals only, same as the walker's — callers must keep
+        // Direction.Teleport out rather than have this swallow it.
         _tracker.NoteMoveSent(direction);
         byte[] bytes = AutoWalkManager.EncodeMove(direction);
         _preMoveHook?.Invoke();

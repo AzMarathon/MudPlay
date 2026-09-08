@@ -1574,6 +1574,88 @@ public sealed class HealthManagerTests
             h.Engine.SentBacktrackMoves);
     }
 
+    // Crash-20260908-181131: fled out of the Negative Power Plane at -467 HP.
+    // BFS routes through CMD-teleport hops, so the reverse trail's first step was
+    // Direction.Teleport — which has no wire encoding, so EncodeMove threw off the
+    // dispatcher and killed the app mid-fight.
+    [Fact]
+    public void Flee_Backward_StopsAtATeleportHop()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 4;
+        h.Engine!.JourneyOrigin = new Game.Map.RoomKey(1, 0);
+        h.ReversePath = (_, _) => new[]
+        {
+            Game.Map.Direction.S,
+            Game.Map.Direction.W,
+            Game.Map.Direction.Teleport,   // can only be crossed by its own command
+            Game.Map.Direction.E,          // on the far side — unreachable by fleeing
+        };
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));
+
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 30;
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 100));
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 101));
+
+        Assert.Equal(
+            new[] { Game.Map.Direction.S, Game.Map.Direction.W },
+            h.Engine.SentBacktrackMoves);
+        Assert.DoesNotContain(Game.Map.Direction.Teleport, h.Engine.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_Backward_TeleportFirstStep_SkipsFleeEntirely()
+    {
+        // Nothing cardinal to walk, so there is no flee route at all. Standing
+        // still and letting the other low-HP reactions handle it beats crashing.
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 3;
+        h.Engine!.JourneyOrigin = new Game.Map.RoomKey(1, 0);
+        h.LastSent = null;   // no last-move fallback either
+        h.ReversePath = (_, _) => new[] { Game.Map.Direction.Teleport, Game.Map.Direction.N };
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));
+
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 30;
+
+        Assert.Empty(h.Engine.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_Forward_StopsAtATeleportHop()
+    {
+        // Forward mode walks the engine's own planned route, which crosses the
+        // same teleport exits — the report's engine had "next planned: Teleport".
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Forward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 4;
+        h.Engine!.PlannedForward.AddRange(new[]
+        {
+            Game.Map.Direction.N, Game.Map.Direction.Teleport, Game.Map.Direction.S,
+        });
+
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 30;
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 100));
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 101));
+
+        Assert.Equal(new[] { Game.Map.Direction.N }, h.Engine.SentBacktrackMoves);
+    }
+
     [Fact]
     public void Flee_AutoResume_OnHpRecovery()
     {

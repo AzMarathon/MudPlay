@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.57.6**
-> - Swap-to-Default-on-combat no longer stalls the fight: after the mid-fight gear swap breaks the swing, combat re-engages immediately instead of idling until the monster attacks again
-> - Buffs no longer fire at the BBS login/menu after a hangup or reconnect — the cast loop now holds until you're actually back in the game world
+> **Version 3.57.7**
+> - Fixed a crash when fleeing a fight from a room whose way back is a teleport (e.g. the Negative Power Plane) — the retreat now stops at the teleport instead of taking the client down
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

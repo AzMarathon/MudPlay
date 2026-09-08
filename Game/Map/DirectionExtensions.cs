@@ -24,6 +24,15 @@ public static class DirectionExtensions
         _            => d.ToString(),
     };
 
+    // Whether this direction can be sent to the game as a bare movement command.
+    // Every real exit off a Rooms row can; Direction.Teleport cannot — it's a
+    // pseudo-direction RoomGraphManager mints so BFS can route through a CMD
+    // teleport, and crossing it means sending that exit's own command (`go hole`,
+    // `use <item>`, `ask <npc> <keyword>`), which only SpecialExitDispatch knows.
+    // Any code path holding a bare Direction with no RoomExit beside it must check
+    // this before encoding: it has no way to cross a teleport and must not try.
+    public static bool IsCardinal(this Direction d) => d <= Direction.D;
+
     // The abbreviation the client sends on the wire for a cardinal move — "n",
     // "ne", "u". The short forms `TryFromToken` accepts, going the other way; used
     // by the route step list to show the exact command each hop executes.

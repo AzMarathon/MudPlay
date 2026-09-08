@@ -1,5 +1,10 @@
 # Version history
 
+## 3.57.7
+
+- Fixed a crash when fleeing a fight from a room whose way back is a teleport (e.g. the Negative Power Plane) — the retreat now stops at the teleport instead of taking the client down
+- bug reports addressed: Crash-20260908-181131
+
 ## 3.57.6
 
 - Swap-to-Default-on-combat no longer stalls the fight: after the mid-fight gear swap breaks the swing, combat re-engages immediately instead of idling until the monster attacks again
