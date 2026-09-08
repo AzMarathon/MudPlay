@@ -8459,6 +8459,16 @@ public sealed class AppServices
             : general.NavTooltipFontFamily;
         Display.NavTooltipFontSize = general.NavTooltipFontSize ?? DisplayConfig.DefaultNavTooltipFontSize;
         Display.ScaleToWindow = general.ScaleTerminalToWindow;
+
+        // Conversation row font is char-tier Talk, not General — but it shares the
+        // same ProfileLoaded / ProfileMutated triggers, so seed it here too. Stored
+        // as the raw delta ("" / 0 mean default); the Conversation window resolves
+        // the fallback and observes these for a live re-font on Settings Apply.
+        Models.Profile.TalkSettings talk =
+            ReadSection<Models.Profile.TalkSettings>(Profile.Current, "Talk");
+        Display.ConvoFontFamily = talk.ConvoFont ?? "";
+        Display.ConvoFontSize = talk.ConvoFontSize;
+        Display.ConvoChannelColors = talk.ChannelColors;
         // SplashAnimate is deliberately NOT seeded here: it's an install-global
         // attract-screen preference, sourced once at startup from the Global default
         // profile (see the seed after the startup profile load). Re-seeding it per
@@ -8487,6 +8497,9 @@ public sealed class AppServices
         Display.FontSize = DisplayConfig.DefaultFontSize;
         Display.NavTooltipFontFamily = DisplayConfig.DefaultFontFamily;
         Display.NavTooltipFontSize = DisplayConfig.DefaultNavTooltipFontSize;
+        Display.ConvoFontFamily = "";
+        Display.ConvoFontSize = 0;
+        Display.ConvoChannelColors = null;
         // SplashAnimate is intentionally left untouched — it's install-global (seeded
         // once at startup from the Global default profile), so a profile close/swap
         // must not reset it back on.

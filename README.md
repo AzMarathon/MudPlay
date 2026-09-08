@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.57.1**
-> - Fixed a burst of outgoing telepaths (e.g. a `@roomba` reply with several items) logging only the last message's text in the Conversation window, with the rest blank — sends and their server confirmations now pair up in order instead of racing on a single shared slot
+> **Version 3.57.3**
+> - Conversation window font/size now applies live on Settings → Talk Apply — an already-open window re-fonts on the spot instead of only on the next open
+> - Conversation per-channel colors now apply live the same way — an already-open window recolors on Apply
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

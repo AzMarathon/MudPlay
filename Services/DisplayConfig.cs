@@ -2,15 +2,18 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace MudPlay.Services;
 
-// Live, observable channel for the terminal's display state. ScrollbackLines,
+// Live, observable channel for the app's display state. ScrollbackLines,
 // TerminalCols and TerminalRows mirror the BBS-tier settings; FontFamily,
-// FontSize and ScaleToWindow mirror the char-tier General settings. The
-// settings sections write into this for live effect; the main window subscribes
-// to PropertyChanged and re-applies side effects: font rebind on FontFamily /
-// FontSize, scrollback ring resize on ScrollbackLines, emulator screen resize +
-// Telnet NAWS re-advertise on TerminalCols / TerminalRows, terminal re-fit on
-// ScaleToWindow. AppServices re-resolves these from the active profile / BBS on
-// ProfileLoaded / ProfileMutated.
+// FontSize and ScaleToWindow mirror the char-tier General settings; the
+// NavTooltip* and Convo* fonts mirror char-tier General / Talk settings for the
+// Navigation and Conversation windows. The settings sections write into this for
+// live effect; the subscribers re-apply side effects: the main window rebinds the
+// terminal font on FontFamily / FontSize, resizes the scrollback ring on
+// ScrollbackLines, resizes the emulator screen + re-advertises Telnet NAWS on
+// TerminalCols / TerminalRows, and re-fits on ScaleToWindow; the Navigation window
+// reads NavTooltip* on the next hover; the Conversation window subscribes and
+// re-fonts its rows live on Convo* changes. AppServices re-resolves all of these
+// from the active profile / BBS on ProfileLoaded / ProfileMutated.
 public sealed partial class DisplayConfig : ObservableObject
 {
     // The bundled MX437 CP437 bitmap font the TerminalControl renders by
@@ -58,4 +61,19 @@ public sealed partial class DisplayConfig : ObservableObject
     // size 13 the tooltip has always used.
     [ObservableProperty] private string _navTooltipFontFamily = DefaultFontFamily;
     [ObservableProperty] private double _navTooltipFontSize = DefaultNavTooltipFontSize;
+
+    // Conversation window row font, sourced from the char-tier TalkSettings.Convo*
+    // deltas. Unlike the terminal / nav-tooltip fonts these hold the RAW delta —
+    // an empty family and a 0 size mean "use the built-in default", resolved by the
+    // Conversation VM (empty -> bundled JetBrains Mono, 0 -> 12pt). The window
+    // observes these so a Settings -> Talk Apply re-fonts the open window on the
+    // spot instead of only on the next open.
+    [ObservableProperty] private string _convoFontFamily = "";
+    [ObservableProperty] private double _convoFontSize;
+
+    // Conversation per-channel colour overrides, sourced from TalkSettings.ChannelColors
+    // (keyed by the seven filter-toggle groups; null / a missing entry means "theme
+    // default"). The window observes this and re-resolves its brush maps + rebuilds
+    // its rows on a Settings -> Talk Apply, same live-effect path as the font above.
+    [ObservableProperty] private Dictionary<string, Models.Profile.ChannelColor>? _convoChannelColors;
 }

@@ -3415,7 +3415,8 @@ public partial class MainWindowViewModel : ObservableObject
                 SendUserText,
                 Application.Current,
                 AppServices.Current.Resolver.Resolve<Models.Profile.TalkSettings>("Talk"),
-                AppServices.Current.Profile),
+                AppServices.Current.Profile,
+                AppServices.Current.Display),
         };
         window.Closed += (_, _) => _conversation = null;
         _conversation = window;
