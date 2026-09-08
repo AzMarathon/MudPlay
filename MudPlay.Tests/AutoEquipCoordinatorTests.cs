@@ -536,4 +536,140 @@ public sealed class AutoEquipCoordinatorTests
         player.Position = PlayerPosition.Standing;
         Assert.Empty(applied);
     }
+
+    // ===== While Moving / Bossing sets =====
+
+    private static EquipmentSet SetWith(EquipTriggerType trigger, bool enabled, string id)
+        => new()
+        {
+            Trigger = trigger, Enabled = enabled, Id = id,
+            Slots = { new EquipmentSlotEntry { Slot = EquipmentSlot.Head, ItemName = "hat" } },
+        };
+
+    private static AutoEquipCoordinator Coord(
+        PlayerState player, EquipmentSettings cfg, List<string> applied,
+        Func<Game.Map.RoomKey, bool>? isBossRoom = null,
+        Func<Game.Map.RoomKey, bool>? isLair = null,
+        Func<bool>? isMoving = null)
+        => new(player, () => cfg, () => false, () => false,
+            id => { applied.Add(id); return EquipResult.Applied; },
+            () => true, () => true, log: null, now: null,
+            isBossRoom: isBossRoom, isLair: isLair, isMoving: isMoving);
+
+    [Fact]
+    public void Moving_WearsMovementSet_ThenCombatSwapsToDefaultAndEngages()
+    {
+        var player = new PlayerState { InCombat = false };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied);
+
+        coord.OnMovementStarted();
+        Assert.Equal(new[] { "move-set" }, applied);
+
+        // Hostile recognized while moving → swap to Default (independent of the
+        // rest-only SwapToDefaultOnCombat flag, which stays false here).
+        applied.Clear();
+        player.InCombat = true;
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    [Fact]
+    public void MovementStopped_RevertsToDefault()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied);
+
+        coord.OnMovementStarted();
+        applied.Clear();
+        coord.OnMovementStopped();   // walk-to arrived / run stopped
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    [Fact]
+    public void EmptyMovementSet_DoesNotSuppressLoopStartDefault()
+    {
+        var player = new PlayerState();
+        // WhileMoving enabled but with NO slots — must not shadow the loop-start Default.
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied);
+
+        coord.OnLoopStarted();
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    [Fact]
+    public void BossRoom_WearsBossingBeforeEntry_RevertsToDefaultOnLeaving()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.Bossing, enabled: true, "boss-set"));
+        var applied = new List<string>();
+        var boss = new Game.Map.RoomKey(1, 500);
+        var plain = new Game.Map.RoomKey(1, 501);
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: k => k == boss, isMoving: () => false);
+
+        // Pre-step into the boss room wears the Bossing set.
+        coord.OnAboutToEnterRoom(boss);
+        Assert.Equal(new[] { "boss-set" }, applied);
+
+        // Leaving the boss room (not moving) reverts to Default.
+        applied.Clear();
+        coord.OnRoomChanged(previous: boss, current: plain);
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    [Fact]
+    public void AboutToEnterLair_SwapsToDefaultOnlyWhenOptOnAndMoving()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        cfg.SwapToDefaultBeforeLairs = true;
+        var applied = new List<string>();
+        var lair = new Game.Map.RoomKey(2, 42);
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: _ => false, isLair: k => k == lair);
+
+        // Not yet in the movement set → no pre-lair swap (nothing to swap away from).
+        coord.OnAboutToEnterRoom(lair);
+        Assert.Empty(applied);
+
+        // Now travelling in the movement set → the pre-lair step swaps to Default.
+        coord.OnMovementStarted();          // wears move-set
+        applied.Clear();
+        coord.OnAboutToEnterRoom(lair);
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    [Fact]
+    public void AboutToEnterLair_OptOff_DoesNotSwap()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"));
+        cfg.SwapToDefaultBeforeLairs = false;   // enter in movement gear, swap on monsters
+        var applied = new List<string>();
+        var lair = new Game.Map.RoomKey(2, 42);
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: _ => false, isLair: k => k == lair);
+
+        coord.OnMovementStarted();
+        applied.Clear();
+        coord.OnAboutToEnterRoom(lair);
+        Assert.Empty(applied);   // stays in the movement set
+    }
 }

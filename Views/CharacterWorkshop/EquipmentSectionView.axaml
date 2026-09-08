@@ -93,16 +93,29 @@
                 </ListBox>
             </Border>
 
-            <!-- Combat-swap behavior. Checked (default) = keep the pre-rest loadout
-                 through a rest-interrupting fight, the long-standing behavior.
-                 Unchecked opts into fighting in the Default set and swapping back. -->
-            <CheckBox Grid.Row="2" Margin="0,14,0,0"
-                      IsChecked="{Binding DontSwapToDefaultOnCombat, Mode=TwoWay}"
-                      IsVisible="{Binding HasProfile}"
-                      ToolTip.Tip="Checked (default): if a fight interrupts a rest you keep your pre-rest gear until you've recovered.&#10;Unchecked: as soon as monsters enter, swap to your Default set to fight; once the room is clear — if you haven't yet reached your rest-max HP/mana — swap back to the rest set and resume resting.">
-                <TextBlock Text="Don't swap to default upon entering combat"
-                           TextWrapping="Wrap"/>
-            </CheckBox>
+            <!-- Per-set behavior options — each shows only when its own set is
+                 selected (combat-swap for the pre-rest sets, lair-swap for the
+                 While Moving set), so they never clash. -->
+            <StackPanel Grid.Row="2" Margin="0,14,0,0" Spacing="10">
+                <!-- Combat-swap behavior (resting sets). Checked (default) = keep the
+                     pre-rest loadout through a rest-interrupting fight; unchecked opts
+                     into fighting in the Default set and swapping back. -->
+                <CheckBox IsChecked="{Binding DontSwapToDefaultOnCombat, Mode=TwoWay}"
+                          IsVisible="{Binding ShowCombatSwapOption}"
+                          ToolTip.Tip="Checked (default): if a fight interrupts a rest you keep your pre-rest gear until you've recovered.&#10;Unchecked: as soon as monsters enter, swap to your Default set to fight; once the room is clear — if you haven't yet reached your rest-max HP/mana — swap back to the rest set and resume resting.">
+                    <TextBlock Text="Don't swap to default upon entering combat"
+                               TextWrapping="Wrap"/>
+                </CheckBox>
+                <!-- Lair-swap behavior (While Moving set). Checked = swap to Default
+                     before stepping into a known lair; unchecked = enter in the movement
+                     set and swap when monsters are recognized. -->
+                <CheckBox IsChecked="{Binding SwapToDefaultBeforeLairs, Mode=TwoWay}"
+                          IsVisible="{Binding ShowLairSwapOption}"
+                          ToolTip.Tip="Checked: swap to your Default set the step before entering a known lair, so you arrive already in combat gear.&#10;Unchecked (default): stay in your movement gear into the lair and swap to Default when hostiles are recognized.">
+                    <TextBlock Text="Swap to default before entering lairs"
+                               TextWrapping="Wrap"/>
+                </CheckBox>
+            </StackPanel>
         </Grid>
 
         <!-- ===== Right: the selected set's slot grid ===== -->
