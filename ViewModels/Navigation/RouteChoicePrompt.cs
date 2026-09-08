@@ -54,6 +54,33 @@ public static class RouteChoicePrompt
             return;
         }
 
+        RoomKey src = source.Key;
+
+        // The forks below each need the same two full-graph pathfinds: the plain
+        // default route (gates + avoids on, teleports allowed) — used by teleport /
+        // trap-avoid / avoid-override / item-gate alike — and the avoids-lifted route,
+        // used by avoid-override AND the avoid-alt card. On a large graph each BFS is a
+        // chunk of the planning cost, so compute each ONCE here and hand the evaluators
+        // a memoized closure (caches the result, null included) instead of letting each
+        // re-run it. Cuts the plain route from ~4 BFS to 1 and the avoids-lifted from 2
+        // to 1.
+        IReadOnlyList<Direction>? baseCache = null; bool baseDone = false;
+        IReadOnlyList<Direction>? BaseRoute()
+        {
+            if (!baseDone) { baseCache = services.Bfs.FindPath(src, destination, services.Movement); baseDone = true; }
+            return baseCache;
+        }
+        IReadOnlyList<Direction>? avoidLiftedCache = null; bool avoidLiftedDone = false;
+        IReadOnlyList<Direction>? AvoidLiftedRoute()
+        {
+            if (!avoidLiftedDone)
+            {
+                avoidLiftedCache = services.Bfs.FindPath(src, destination, services.Movement, ignoreAvoids: true);
+                avoidLiftedDone = true;
+            }
+            return avoidLiftedCache;
+        }
+
         // Walk-vs-teleport fork takes precedence over the item-gate fork: if the
         // shortest route teleports and a pure-walking route also exists, let the
         // user weigh the teleport's shortcut against its danger. A teleport can
@@ -61,7 +88,7 @@ public static class RouteChoicePrompt
         // boat), survivable or not depending on the character — a call the client
         // can't make, so we surface it rather than silently taking the shortcut.
         RouteChoice? teleport = RouteChoicePlanner.EvaluateTeleport(
-            services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
+            services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
         if (teleport is not null)
         {
             services.Log.Info(LogCat,
@@ -76,7 +103,7 @@ public static class RouteChoicePrompt
         // instead of trusting the step-time disarm — a disarm can fail (no picks, no
         // party disarmer) and some traps aren't worth the hit even when disarmable.
         RouteChoice? trapAvoid = RouteChoicePlanner.EvaluateTrapAvoid(
-            services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
+            services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
         if (trapAvoid is not null)
         {
             services.Log.Info(LogCat,
@@ -95,7 +122,7 @@ public static class RouteChoicePrompt
         // respecting route — that's a route the user CAN take without overriding, so
         // the item-gate fork below surfaces its obtain / cross options instead.
         RouteChoice? avoidOverride = RouteChoicePlanner.EvaluateAvoidOverride(
-            services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
+            services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute, AvoidLiftedRoute);
         if (avoidOverride is not null)
         {
             services.Log.Info(LogCat,
@@ -107,7 +134,7 @@ public static class RouteChoicePrompt
         }
 
         RouteChoice? choice = RouteChoicePlanner.Evaluate(
-            services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
+            services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
         if (choice is null)
         {
             // No shorter gated route. If instead the route is fully blocked but the
@@ -137,7 +164,7 @@ public static class RouteChoicePrompt
         // through my avoided rooms" instead of fetching a raft (report
         // paradigm-20260907-212758 follow-up: surface it as a co-option, not hidden).
         if (RouteChoicePlanner.AvoidAlternative(
-                services.Bfs, services.Movement, services.RoomGraph, source.Key, destination) is { } alt)
+                services.Bfs, services.Movement, services.RoomGraph, src, destination, AvoidLiftedRoute) is { } alt)
         {
             choice = choice with { AvoidAlternativePath = alt.Path, AvoidAlternativeCount = alt.AvoidedCount };
             services.Log.Info(LogCat,

@@ -132,7 +132,12 @@ public static class RouteChoicePlanner
         MovementFilter filter,
         RoomGraphManager graph,
         RoomKey source,
-        RoomKey destination)
+        RoomKey destination,
+        // Optional memoized provider for the plain default route (gates + avoids on,
+        // teleports allowed). Several forks compute the SAME route; the caller passes
+        // one memoized closure so the full-graph BFS runs once instead of per fork.
+        // Null → compute it here (tests / standalone callers).
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);
         ArgumentNullException.ThrowIfNull(filter);
@@ -140,7 +145,7 @@ public static class RouteChoicePlanner
 
         // Free route: gates active. May be null when every path to the
         // destination crosses an acquirable gate.
-        IReadOnlyList<Direction>? free = bfs.FindPath(source, destination, filter);
+        IReadOnlyList<Direction>? free = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
 
         // Direct route: acquirable gates suspended so BFS crosses them. No direct
         // route either → genuinely disconnected (or blocked by a non-acquirable
@@ -227,14 +232,17 @@ public static class RouteChoicePlanner
         MovementFilter filter,
         RoomGraphManager graph,
         RoomKey source,
-        RoomKey destination)
+        RoomKey destination,
+        // Memoized plain default route (see Evaluate). The teleports-allowed shortest
+        // route IS that base route; reuse it rather than re-running the BFS.
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(graph);
 
         // Shortest route: teleports allowed (the walker's default plan).
-        IReadOnlyList<Direction>? tele = bfs.FindPath(source, destination, filter);
+        IReadOnlyList<Direction>? tele = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
         if (tele is null || tele.Count == 0) return null;
 
         // Nothing to weigh unless the shortest route actually teleports.
@@ -274,14 +282,17 @@ public static class RouteChoicePlanner
         MovementFilter filter,
         RoomGraphManager graph,
         RoomKey source,
-        RoomKey destination)
+        RoomKey destination,
+        // Memoized plain default route (see Evaluate) — the "shortest by hops" route
+        // is that same base route.
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(graph);
 
         // Shortest route: by hops (what the walker would otherwise take).
-        IReadOnlyList<Direction>? shortest = bfs.FindPath(source, destination, filter);
+        IReadOnlyList<Direction>? shortest = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
         if (shortest is null || shortest.Count == 0) return null;
 
         int shortestTraps = bfs.CountTrapsOnPath(source, shortest);
@@ -331,7 +342,13 @@ public static class RouteChoicePlanner
         MovementFilter filter,
         RoomGraphManager graph,
         RoomKey source,
-        RoomKey destination)
+        RoomKey destination,
+        // Memoized plain default route (see Evaluate) — the avoid-honouring "free"
+        // route is that base route.
+        Func<IReadOnlyList<Direction>?>? baseRoute = null,
+        // Memoized avoids-lifted route (ignoreAvoids), shared with AvoidAlternative so
+        // the ignore-avoids BFS runs once across both.
+        Func<IReadOnlyList<Direction>?>? avoidLiftedRoute = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);
         ArgumentNullException.ThrowIfNull(filter);
@@ -340,8 +357,8 @@ public static class RouteChoicePlanner
         // Route lifting ONLY the avoids (every real gate stays honoured). If even
         // that finds nothing, an avoid isn't the wall — bail so Evaluate / PlanBlocked
         // can name the real gate or disconnect.
-        IReadOnlyList<Direction>? overrideRoute =
-            bfs.FindPath(source, destination, filter, ignoreAvoids: true);
+        IReadOnlyList<Direction>? overrideRoute = avoidLiftedRoute is { } ap
+            ? ap() : bfs.FindPath(source, destination, filter, ignoreAvoids: true);
         if (overrideRoute is null || overrideRoute.Count == 0) return null;
 
         IReadOnlyList<RoomKey> overrideKeys = BuildKeyPath(graph, source, overrideRoute);
@@ -350,7 +367,7 @@ public static class RouteChoicePlanner
 
         // Route honouring the avoids, gates active. Null → no gate-free avoid-
         // respecting route (the potential SOLE case).
-        IReadOnlyList<Direction>? free = bfs.FindPath(source, destination, filter);
+        IReadOnlyList<Direction>? free = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
         bool hasFree = free is { Count: > 0 };
 
         if (!hasFree)
@@ -405,14 +422,17 @@ public static class RouteChoicePlanner
         MovementFilter filter,
         RoomGraphManager graph,
         RoomKey source,
-        RoomKey destination)
+        RoomKey destination,
+        // Memoized avoids-lifted route, shared with EvaluateAvoidOverride so the
+        // ignore-avoids BFS runs once across both.
+        Func<IReadOnlyList<Direction>?>? avoidLiftedRoute = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(graph);
 
-        IReadOnlyList<Direction>? route =
-            bfs.FindPath(source, destination, filter, ignoreAvoids: true);
+        IReadOnlyList<Direction>? route = avoidLiftedRoute is { } ap
+            ? ap() : bfs.FindPath(source, destination, filter, ignoreAvoids: true);
         if (route is null || route.Count == 0) return null;
 
         IReadOnlyList<RoomKey> keys = BuildKeyPath(graph, source, route);
