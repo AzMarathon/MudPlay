@@ -11,6 +11,16 @@
 - Route picker no longer offers a class-restricted teleport to a character who can't use it (a bard-only barmaid transport was being surfaced to non-bards) — a class-branching transport now binds its gate to the class on the teleport's own branch
 - bug reports addressed: stock-20260907-175035
 
+## 3.55.8
+
+- Roomba reroutes around a destination room that's full, to the next room labelled for the same category and then the catch-all, instead of re-sending refused drops every lap
+- A full room's mark lasts the rest of the sweep — it becomes a preferred place to collect *from*, since emptying it is the only thing that frees its capacity — and clears on the next sweep
+- Roomba paces its get/drop commands past the game's rate limit rather than flooding it and losing the whole batch
+- Roomba leaves alone what auto-discard would bin, and no longer loses track of items it is carrying
+- The carry budget no longer writes off heavy items because the pack was temporarily full, and a pack too full to sort stops with an explanation
+- The Roomba Log now names why each item was left behind — a full house reads as such instead of "no matching room"
+- bug reports addressed: stock-20260902-224515, stock-20260903-001443, stock-20260903-170905, stock-20260903-175132, stock-20260903-182339
+
 ## 3.55.2
 
 - Fixed two clients with "Look back when a player looks at us" mirroring each other forever (each look-back triggering the other's) until one died — the auto-look toggles now fire at most once per player per local day, matching how "Greet players" is throttled
