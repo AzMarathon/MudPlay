@@ -4533,6 +4533,13 @@ public sealed class AppServices
                 // with Default worn, so this terminates after one correction.
                 if (!Health.IsRecoveringRest && CurrentEquippedIsPreRestSet())
                     AutoEquip.OnRecoveryComplete();
+                // If this swap streamed during a live fight (swap-to-Default-on-combat),
+                // its wear/eq burst breaks the swing on Paradigm — arm combat's
+                // interrupt resume so the imminent *Combat Off* re-engages instead of
+                // waiting on the mob's next swing (reports paradigm-20260908-051035 /
+                // -095552). Self-guards on auto-combat + a live engageable roster, so an
+                // ordinary out-of-combat swap is a no-op.
+                Combat.NoteGearSwapInterrupt();
             }
         };
 
