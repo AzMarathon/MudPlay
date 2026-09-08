@@ -301,6 +301,31 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void Waypoint_WithChainedCommand_SendsEachFragmentAsItsOwnLine()
+    {
+        // A waypoint command chained with ; / ^M fans out to one wire line per
+        // fragment (MacroStore convention), then the step's delay applies once and
+        // the move follows.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Loop loop = new("chain", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "get all;drop coins^Mrest", 500),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        });
+        h.Runner.Start(loop);
+
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("get all\r", Encoding.Latin1.GetString(h.Sent[0]));
+        Assert.Equal("drop coins\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.Equal("rest\r", Encoding.Latin1.GetString(h.Sent[2]));
+
+        h.Runner.FireDelayForTests();
+        Assert.Equal(4, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[3]));   // move after the batch
+    }
+
+    [Fact]
     public void MissingExit_FailsRun()
     {
         // Player at C (1/3 — only S exit). Loop is [A, B] which

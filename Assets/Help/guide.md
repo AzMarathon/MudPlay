@@ -192,7 +192,7 @@ Or build it off the map: **Navigation Management → New Loop** opens an editor 
 
 **Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Run**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) alongside your starred GOTO rooms, so you can start it from anywhere.
 
-Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
+Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. Chain several commands in one waypoint with `;` or `^M` — each is sent as its own line (e.g. `get all;drop coins`), the same convention macros and the pre-/post-rest commands use. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
 
 ## Estimating a loop's exp/hour
 
