@@ -11,6 +11,7 @@
 > - Navigation **routes through your Sys Goto locations** automatically when a `sys goto` jump + short walk beats the overland path (or is the only way); level-gated locations are skipped when your level is unknown or too low
 > - Waypoint action commands can now chain with `;` or `^M` (each sent as its own line), matching macros / pre-rest commands
 > - Settings window is wider by default so the Sys Goto locations table isn't cramped
+> - Route picker no longer offers a class-restricted teleport (e.g. a bard-only barmaid transport) while your class is still unknown — the gate holds until the stat screen is parsed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
