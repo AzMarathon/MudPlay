@@ -251,9 +251,9 @@ public sealed class PlayerDatabaseTests
         EquipmentItem newHelm = new("head",   "Mithril Helm");
         EquipmentItem newCape = new("back",   "Crimson Cape");
 
-        db.RecordLook("Debbie", race: null, @class: null,
+        db.RecordLook("Debbie", race: null, @class: null, gang: null,
             equipment: new[] { oldHelm }, nowUtc: t1);
-        db.RecordLook("Debbie", race: null, @class: null,
+        db.RecordLook("Debbie", race: null, @class: null, gang: null,
             equipment: new[] { newHelm, newCape }, nowUtc: t2);
 
         PlayerRecord r = Assert.Single(db.Players);
@@ -275,9 +275,9 @@ public sealed class PlayerDatabaseTests
         DateTime t2 = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
         EquipmentItem helm = new("head", "Iron Helm");
-        db.RecordLook("Debbie", race: null, @class: null,
+        db.RecordLook("Debbie", race: null, @class: null, gang: null,
             equipment: new[] { helm }, nowUtc: t1);
-        db.RecordLook("Debbie", race: null, @class: null,
+        db.RecordLook("Debbie", race: null, @class: null, gang: null,
             equipment: null, nowUtc: t2);
 
         PlayerRecord r = Assert.Single(db.Players);

@@ -6,6 +6,7 @@
 > - Route picker is now economy-aware: "buy at X" reveals the bank-withdraw it would do, and in a party it checks your own **bank**, the party's carried cash (`@wealth`), and whether a member **has** the item (`@have`) before offering a buy — telling you where the money/item is, and walking to the shop and pausing when the money's elsewhere or spread across the party
 > - Reads the `bank` deposit listing (self-only) and maps each bank to its room
 > - New **"Search en route"** route-picker card: walk toward a hazard searching each room, grab a counter if one turns up (then cross) — and a searched-up counter is now actually collected by the obtain pipeline
+> - Route picker no longer offers a class-restricted teleport (e.g. a bard-only barmaid transport) to a character of the wrong class
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

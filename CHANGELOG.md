@@ -8,6 +8,18 @@
 - Reads the `bank` command's per-bank deposit listing (self-only, all banks you've used) and maps each bank to its room via the bank-shop catalogue
 - Route picker: new **"Search en route"** card for a hazard you'd counter — walks toward it searching each room, grabs a counter if one turns up (then crosses), else stops at the edge; a way to find one free instead of buying
 - Search-en-route now actually works: a route counter revealed on the floor by an en-route `sea` is collected by the obtain pipeline itself, no longer dependent on the Auto-Get engine being on and the item flagged auto-collect
+- Route picker no longer offers a class-restricted teleport to a character who can't use it (a bard-only barmaid transport was being surfaced to non-bards) — a class-branching transport now binds its gate to the class on the teleport's own branch
+- bug reports addressed: stock-20260907-175035
+
+## 3.55.2
+
+- Fixed two clients with "Look back when a player looks at us" mirroring each other forever (each look-back triggering the other's) until one died — the auto-look toggles now fire at most once per player per local day, matching how "Greet players" is throttled
+- A look also records when we last auto-looked, so a look whose reply we couldn't read (a shadowy figure) still counts against the daily limit rather than looping
+
+## 3.55.1
+
+- Fixed the LOOK header not parsing when it carries a trailing `-- Immortal !` or `(gang)` suffix — on a realm where everyone's in a gang, every look block was skipped, so a player's race/class/equipment was never recorded and the trap-delegation probe re-`look`ed the same member on every party join
+- A LOOK now also records a player's gang (like a WHO row does), filling one in without erasing a gang already known
 
 ## 3.55.0
 

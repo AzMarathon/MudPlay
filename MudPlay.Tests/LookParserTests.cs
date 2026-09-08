@@ -24,6 +24,97 @@ public sealed class LookParserTests
     /// longest-match token list (Dark-Elf beats Elf), the
     /// `<item>   (<slot>)` row shape, and block termination on prompt.
     /// </summary>
+    /// <summary>
+    /// The header does not always end at the "]". Stock LOOK appends an
+    /// optional red " -- Immortal !" and an optional " (&lt;gang&gt;)", and the
+    /// header pattern used to anchor straight to end-of-line — so a gang
+    /// member's look block was skipped entirely and RecordLook never fired.
+    /// On a realm where everyone is in a gang that meant NOBODY was ever
+    /// recorded, and TrapDelegationManager (which probes an unknown member's
+    /// race with `look &lt;member&gt;` and waits for this pipeline) re-probed on
+    /// every join — the "it keeps looking" loop.
+    /// </summary>
+    [Theory]
+    [InlineData("[ MudPlay WuzHere ]",                          null)]
+    [InlineData("[ MudPlay WuzHere ] (Knights of Chaos)",       "Knights of Chaos")]
+    [InlineData("[ MudPlay WuzHere ] -- Immortal !",            null)]
+    [InlineData("[ MudPlay WuzHere ] -- Immortal ! (Knights of Chaos)",
+                                                                "Knights of Chaos")]
+    public void ParsesHeaderSuffixes_RecordsLookAndGang(string header, string? gang)
+    {
+        LookParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(new[]
+        {
+            header,
+            "MudPlay is a healthy, well built Dark-Elf Mystic with short black hair and black",
+            "eyes.  He is unwounded.",
+            "",
+            "He is equipped with:",
+            "quarterstaff                    (Weapon Hand)",
+        }, Now);
+        p.FeedPromptLine("[HP=33]:", Now);
+
+        PlayerRecord r = Assert.Single(db.Players);
+        Assert.Equal("MudPlay",  r.GivenName);
+        Assert.Equal("WuzHere",  r.FamilyName);
+        Assert.Equal("Dark-Elf", r.Race);
+        Assert.Equal("Mystic",   r.Class);
+        Assert.Equal(gang,       r.Gang);
+    }
+
+    /// <summary>
+    /// A look that carries no gang must not erase one a WHO row already
+    /// taught us — the suffix being absent means "not seen", not "none".
+    /// </summary>
+    [Fact]
+    public void LookWithoutGang_LeavesAKnownGangAlone()
+    {
+        LookParser p = Build(out PlayerDatabase db);
+        db.RecordLook("MudPlay", race: null, @class: null,
+            gang: "Knights of Chaos", equipment: null, nowUtc: Now);
+
+        p.FeedTestLines(new[]
+        {
+            "[ MudPlay ]",
+            "MudPlay is a healthy, well built Dark-Elf Mystic with short black hair and black",
+            "eyes.  He is unwounded.",
+            "",
+            "He is equipped with:",
+            "",
+            "Nothing",
+        }, Now);
+        p.FeedPromptLine("[HP=33]:", Now);
+
+        PlayerRecord r = Assert.Single(db.Players);
+        Assert.Equal("Knights of Chaos", r.Gang);
+        Assert.Equal("Dark-Elf", r.Race);
+    }
+
+    /// <summary>
+    /// The strictness that keeps unrelated bracketed lines (chat tags, status
+    /// codes) from false-triggering has to survive the new optional suffixes.
+    /// </summary>
+    [Theory]
+    [InlineData("[ Global ] Someone says hello")]
+    [InlineData("[ MudPlay ] extra words")]
+    [InlineData("[MudPlay]")]
+    [InlineData("[ MudPlay ] (unclosed gang")]
+    public void NonHeaderBracketedLines_DoNotStartABlock(string line)
+    {
+        LookParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(new[]
+        {
+            line,
+            "Someone is a healthy, well built Dark-Elf Mystic with short black hair.",
+            "",
+            "He is equipped with:",
+            "quarterstaff                    (Weapon Hand)",
+        }, Now);
+        p.FeedPromptLine("[HP=33]:", Now);
+
+        Assert.Empty(db.Players);
+    }
+
     [Fact]
     public void ParsesEquippedLook_RecordsRaceClassAndAllSlots()
     {

@@ -10,8 +10,29 @@ namespace MudPlay.Game;
 // both off by default:
 //
 //  • LookBackWhenLookedAt — when the wire shows "<name> is looking at you.", we
-//    send `look <name>` back. One look per line; no dedup — a look-at is a
-//    deliberate social poke and mirroring it each time is the point.
+//    send `look <name>` back.
+//
+// BOTH TOGGLES ARE ONCE PER PLAYER PER LOCAL-CALENDAR DAY, on the same rule
+// and the same clock GreetManager uses (PlayerObservation.LastLookedUtc via
+// PlayerDatabase.GetLastLookedUtc / RecordLooked, local midnight to local
+// midnight). A look tells us race, class and loadout, and none of those change
+// often enough to be worth re-asking inside a day.
+//
+// THE LOOK-BACK USED TO HAVE NO DEDUP AT ALL, on the reasoning that "a look-at
+// is a deliberate social poke and mirroring it each time is the point". That
+// holds for a person; it does not hold for two clients. With the box ticked on
+// both sides it is an unconditional mutual mirror and it never terminates:
+//
+//     A looks at B  ->  server tells B  ->  B looks back at A
+//                   ->  server tells A  ->  A looks back at B  ->  ...
+//
+// Reported from a live pair looking at each other non-stop. The arrival toggle
+// only lights the fuse; the look-back is the engine, so the throttle has to
+// cover it too or the loop survives.
+//
+// STAMPED ON SEND, not on a parsed reply — a look at someone we cannot resolve
+// (a shadowy figure, a truncated block) must still count, or the throttle would
+// never engage for exactly the players it can learn nothing from.
 //
 //  • LookAtPlayersOnArrival — when a non-party player walks into our room, we
 //    send `look <name>` to learn/refresh their kit. Driven off
@@ -29,6 +50,7 @@ namespace MudPlay.Game;
 public sealed class PlayerLookManager : IDisposable
 {
     private readonly RoomEntryWatcher _roomEntry;
+    private readonly PlayerDatabase _players;
     private readonly PartyState _party;
     private readonly Func<string?> _selfNameProvider;
     private readonly IDisposable _lookedAtSub;
@@ -42,17 +64,23 @@ public sealed class PlayerLookManager : IDisposable
     // Default off.
     public bool LookAtPlayersOnArrival { get; set; }
 
+    // Test seam for the day-boundary clock, same shape as GreetManager's.
+    public Func<DateTime> NowUtcProvider { get; set; } = static () => DateTime.UtcNow;
+
     public PlayerLookManager(
         MessageRouter router,
         RoomEntryWatcher roomEntry,
+        PlayerDatabase players,
         PartyState party,
         Func<string?> selfNameProvider)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(roomEntry);
+        ArgumentNullException.ThrowIfNull(players);
         ArgumentNullException.ThrowIfNull(party);
         ArgumentNullException.ThrowIfNull(selfNameProvider);
         _roomEntry = roomEntry;
+        _players = players;
         _party = party;
         _selfNameProvider = selfNameProvider;
         _lookedAtSub = router.Subscribe(KnownPatterns.PlayerLooksAtYou, OnLookedAt);
@@ -89,7 +117,8 @@ public sealed class PlayerLookManager : IDisposable
         (string given, _) = PlayerObservation.SplitName(name);
         if (string.IsNullOrEmpty(given)) return;
         if (IsSelf(given)) return; // never look-back at ourselves
-        _wireSender(Encoding.Latin1.GetBytes($"look {given}\r"));
+        if (LookedAlreadyToday(given)) return;
+        Send(given);
     }
 
     private void OnArrival(RoomEntryArrivalEvent e)
@@ -108,7 +137,26 @@ public sealed class PlayerLookManager : IDisposable
         if (string.IsNullOrEmpty(given)) return;
         if (IsSelf(given)) return;
         if (IsPartyMember(given)) return;
-        _wireSender(Encoding.Latin1.GetBytes($"look {given}\r"));
+        if (LookedAlreadyToday(given)) return;
+        Send(given);
+    }
+
+    // Have we already auto-looked at them since local midnight? The day
+    // boundary is LOCAL, matching GreetManager, so "once a day" means what a
+    // person sitting at the client would take it to mean.
+    private bool LookedAlreadyToday(string given)
+    {
+        DateTime? last = _players.GetLastLookedUtc(given);
+        return last is { } when
+            && when.ToLocalTime().Date == NowUtcProvider().ToLocalTime().Date;
+    }
+
+    // Write the look and stamp it in one place, so no caller can send without
+    // recording and quietly re-open the loop.
+    private void Send(string given)
+    {
+        _wireSender!(Encoding.Latin1.GetBytes($"look {given}\r"));
+        _players.RecordLooked(given, NowUtcProvider());
     }
 
     private bool IsSelf(string given)

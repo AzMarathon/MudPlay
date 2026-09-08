@@ -4741,7 +4741,7 @@ public sealed class AppServices
         // Settings → Talk reactive-look automation. Shares Greet's self-name
         // resolution; RoomEntry (built earlier) supplies the arrival hook.
         // Wire-sender bound by MainWindowViewModel after telnet connects.
-        PlayerLook = new Game.PlayerLookManager(Router, RoomEntry, Party.State,
+        PlayerLook = new Game.PlayerLookManager(Router, RoomEntry, Players, Party.State,
             selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
         // Players Seen log. Records off the same room-presence hooks (Also-here
         // classification + room walk-ins) and shares the self-name resolution;
