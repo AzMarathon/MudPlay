@@ -716,6 +716,9 @@
                         <MenuItem Header="Recent destinations" IsVisible="{Binding HasContextRecentDestinations}"
                                   ItemsSource="{Binding ContextRecentDestinations}"
                                   ItemContainerTheme="{StaticResource RoomWalkItemTheme}"/>
+                        <MenuItem Header="Sys Gotos" IsVisible="{Binding HasContextSysopGotos}"
+                                  ItemsSource="{Binding ContextSysopGotos}"
+                                  ItemContainerTheme="{StaticResource RoomWalkItemTheme}"/>
                         <Separator IsVisible="{Binding HasContextWalkLists}"/>
                         <MenuItem Header="Walk here"
                                   Command="{Binding WalkToContextRoomCommand}"/>
