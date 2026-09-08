@@ -6,8 +6,8 @@
 - Route picker: "buy at X" for a hazard/gate counter now reveals the bank-withdraw it would do when coin on hand is short, and warns when you can't cover it
 - Route picker is now economy-aware in a party: before offering a buy you can't afford from cash, it checks your own **bank** deposits and the party's carried cash (`@wealth`) and whether a member already **has** the item (`@have`), and tells you where the money/item is. When the money is at another bank or spread across the party, Go walks you to the shop and pauses so you can provision the party by hand
 - Reads the `bank` command's per-bank deposit listing (self-only, all banks you've used) and maps each bank to its room via the bank-shop catalogue
+- Route picker: new **"Search en route"** card for a hazard you'd counter — walks toward it searching each room, grabs a counter if one turns up (then crosses), else stops at the edge; a way to find one free instead of buying
 - Search-en-route now actually works: a route counter revealed on the floor by an en-route `sea` is collected by the obtain pipeline itself, no longer dependent on the Auto-Get engine being on and the item flagged auto-collect
-- Follow-up: an explicit "search en route" route-picker card (force-search regardless of the Settings toggle) is deferred
 
 ## 3.55.0
 

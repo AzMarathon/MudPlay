@@ -82,6 +82,26 @@
                                    Foreground="{StaticResource ChromeFgMutedBrush}"/>
                     </StackPanel>
                 </Button>
+
+                <Button Classes="route"
+                        Classes.selected="{Binding IsSearchSelected}"
+                        Command="{Binding SelectSearchCommand}"
+                        IsVisible="{Binding ShowSearchCard}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        BorderThickness="1"
+                        Padding="12,10">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding SearchSummary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <TextBlock Text="{Binding SearchDetail}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
             <TextBlock Grid.Row="2"

@@ -14,6 +14,8 @@ public enum RouteChoiceResult
     Free,           // the longer gate-free route
     Gated,          // the shorter gated route — acquire the missing items first
     GatedNoAcquire, // the shorter gated route — "send it": cross as-is, no acquisition
+    SearchEnRoute,  // walk toward the hazard searching each room; cross if a counter
+                    // turns up (the floor collector grabs it), else halt at the edge.
 }
 
 // Route picker, shown when RouteChoicePlanner found a fork worth a user decision.
@@ -134,6 +136,22 @@ public sealed partial class RouteChoiceDialogViewModel
     private readonly bool _soleHazardOnly;
     private readonly bool _crossesSurvivableHazard;
     private readonly bool _mixedHazard;
+    // The route needs a hazard counter the player lacks — so "search en route" is a
+    // valid alternative (find one free by searching each room on the way).
+    private readonly bool _hazardCounterNeeded;
+
+    // The "search en route" card: walk toward the hazard searching each room, and
+    // cross if a counter turns up (the obtain pipeline's floor collector grabs it),
+    // else halt at the edge. Offered whenever a hazard counter is needed — a way to
+    // source it free instead of (or before) buying / detouring. Not on a teleport /
+    // trap-avoid / avoid-override / blocked fork.
+    public bool ShowSearchCard =>
+        _hazardCounterNeeded && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice;
+
+    public string SearchSummary { get; }
+    public string SearchDetail =>
+        "Searches each room on the way; if a counter turns up it's grabbed and you cross, "
+        + "otherwise you stop at the hazard's edge. Turn up nothing, lose nothing.";
 
     // The muted sub-line under the send-it card — reframed for the hazard flavour
     // (take the damage) vs the item-gate flavour (carry the gate items yourself).
@@ -147,6 +165,7 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(IsFreeSelected))]
     [NotifyPropertyChangedFor(nameof(IsGatedSelected))]
     [NotifyPropertyChangedFor(nameof(IsSendItSelected))]
+    [NotifyPropertyChangedFor(nameof(IsSearchSelected))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
     [NotifyCanExecuteChangedFor(nameof(ShowDetailsCommand))]
     private RouteChoiceResult? _selectedRoute;
@@ -154,6 +173,7 @@ public sealed partial class RouteChoiceDialogViewModel
     public bool IsFreeSelected => SelectedRoute == RouteChoiceResult.Free;
     public bool IsGatedSelected => SelectedRoute == RouteChoiceResult.Gated;
     public bool IsSendItSelected => SelectedRoute == RouteChoiceResult.GatedNoAcquire;
+    public bool IsSearchSelected => SelectedRoute == RouteChoiceResult.SearchEnRoute;
 
     public RouteChoiceDialogViewModel(
         RouteChoice choice,
@@ -186,6 +206,8 @@ public sealed partial class RouteChoiceDialogViewModel
         if (choice.Kind == RouteChoiceKind.Blocked)
         {
             HazardObtain = false;
+            _hazardCounterNeeded = false;
+            SearchSummary = string.Empty;
             string reason = choice.BlockedReason ?? "a blocked exit";
             Heading = $"Only route to {destinationLabel} is blocked";
             FreeSummary = $"No open route — blocked by {reason}";
@@ -211,6 +233,10 @@ public sealed partial class RouteChoiceDialogViewModel
         _soleHazardOnly = soleHazardOnly;
         _crossesSurvivableHazard = hazardSurvivable;
         _mixedHazard = hazardSurvivable && !soleHazardOnly;
+        _hazardCounterNeeded = choice.Requirements.Any(r => r.Kind == RouteRequirementKind.HazardProtection);
+        SearchSummary = _hazardCounterNeeded
+            ? $"Search en route — {StepsEta(choice.GatedStepCount, gatedEta)}"
+            : string.Empty;
         // A resolved counter source means "obtain then cross" is offerable — for ANY
         // hazard (a grave hazard's only safe crossing is obtaining the counter).
         HazardObtain = !string.IsNullOrEmpty(hazardCounterSource);
@@ -476,6 +502,15 @@ public sealed partial class RouteChoiceDialogViewModel
         SelectedRoute = RouteChoiceResult.GatedNoAcquire;
         // Same physical route as the gated acquire choice — preview its line.
         PreviewRequested?.Invoke(RouteChoiceResult.GatedNoAcquire);
+    }
+
+    [RelayCommand]
+    private void SelectSearch()
+    {
+        if (!ShowSearchCard) return;
+        SelectedRoute = RouteChoiceResult.SearchEnRoute;
+        // Same physical route as the gated crossing — preview its line.
+        PreviewRequested?.Invoke(RouteChoiceResult.SearchEnRoute);
     }
 
     // The Details… button lights up once a route is picked: it opens the shared

@@ -5,7 +5,7 @@
 > - Route picker: when a destination is reachable only through a room you marked **Avoid**, it offers to route through anyway (warning how many) instead of failing; a much-shorter through-avoided route gets a "respect your avoids / shorter" fork. Your avoid list is never changed
 > - Route picker is now economy-aware: "buy at X" reveals the bank-withdraw it would do, and in a party it checks your own **bank**, the party's carried cash (`@wealth`), and whether a member **has** the item (`@have`) before offering a buy — telling you where the money/item is, and walking to the shop and pausing when the money's elsewhere or spread across the party
 > - Reads the `bank` deposit listing (self-only) and maps each bank to its room
-> - Search-en-route works: a counter revealed on the floor by an en-route search is now collected by the obtain pipeline itself
+> - New **"Search en route"** route-picker card: walk toward a hazard searching each room, grab a counter if one turns up (then cross) — and a searched-up counter is now actually collected by the obtain pipeline
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

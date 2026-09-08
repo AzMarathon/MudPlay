@@ -178,6 +178,10 @@ public static class RouteChoicePrompt
         // party about — feed the pick-time economy probe (own bank + @wealth/@have).
         List<(int ItemId, RoomKey ShopRoom)> buys = new();
         List<(int ItemId, string Name)> neededItems = new();
+        // Every any-of counter id for the hazards on this route — the "search en
+        // route" card force-obtains all of them so a `sea`-revealed one (whichever
+        // turns up) is grabbed by the floor collector and the crossing goes safe.
+        List<int> hazardCounterIds = new();
         // The specific counter resolved per hazard requirement (which item, and how) —
         // so the picker's requirement line names the exact one it'll obtain ("log raft
         // (buy at Pier)") instead of the whole any-of list.
@@ -186,6 +190,8 @@ public static class RouteChoicePrompt
             foreach (RouteRequirement req in choice.Requirements)
             {
                 if (req.Kind != RouteRequirementKind.HazardProtection) continue;
+                foreach (int cid in req.ItemIds)
+                    if (!hazardCounterIds.Contains(cid)) hazardCounterIds.Add(cid);
                 // A counter already chosen for an earlier hazard that also appears in
                 // THIS hazard's any-of set covers it too — both FCCO slide rooms accept
                 // rope-and-grapple OR climbing harness, so one rope answers both. Skip
@@ -276,9 +282,11 @@ public static class RouteChoicePrompt
             vm.PreviewRequested += r => previewSink(r switch
             {
                 RouteChoiceResult.Free => choice.FreePath,
-                // Both direct choices trace the same physical gated line.
+                // The direct / send-it / search choices all trace the same physical
+                // gated line toward the hazard.
                 RouteChoiceResult.Gated => choice.GatedPath,
                 RouteChoiceResult.GatedNoAcquire => choice.GatedPath,
+                RouteChoiceResult.SearchEnRoute => choice.GatedPath,
                 _ => null,
             });
             // A pre-selected route (trap-avoid defaults to the trap-free line) draws
@@ -410,6 +418,16 @@ public static class RouteChoicePrompt
                 // route still avoids traps, matching the planner's chosen approach.
                 CommitWalk(services, destination, gated: true,
                     armAcquisition: false, avoidTraps: !choice.HasFreeRoute);
+                break;
+            case RouteChoiceResult.SearchEnRoute:
+                // "Search en route": force-obtain every any-of counter (which opens
+                // the path-item demand gate → arms AutoSearch's per-room `sea`), then
+                // walk the gated route. The floor collector grabs whichever counter a
+                // search reveals; once it's in hand the walk crosses, and if none turns
+                // up the walker halts at a grave hazard's edge — nothing bought.
+                if (hazardCounterIds.Count > 0)
+                    services.ForcePathObtain(hazardCounterIds);
+                CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
                 break;
             // null → cancelled: walk nothing (and leave any manual pause intact —
             // the user backed out, so nothing changed).
