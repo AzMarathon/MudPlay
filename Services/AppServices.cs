@@ -3752,6 +3752,12 @@ public sealed class AppServices
             writeStatus: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
             commitLocated: key => RoomTracker.SetLocated(key),
             log: Log);
+        // Late-wire HealthManager's "sys goto wimpy instead of hanging" escape now
+        // that SysopGoto exists (Health is built earlier). When the emergency low-HP
+        // path would hang up, it calls this instead: break combat + jump to the
+        // configured escape location. Returns false (→ normal hangup) when the power
+        // is off here or the location isn't in the table.
+        Health.SetWimpyGoto(name => SysopGoto.TryFireForWimpy(name));
         // The gate asks only from a recovery escalation, where the move being
         // unconfirmed IS the problem — so don't queue behind it.
         Recovery.TrySysopLocate = reason => SysopLocate.TryRequestLocate(reason, forRecovery: true);

@@ -96,6 +96,7 @@ public sealed class HealthManager : IDisposable
     private Action<byte[]>? _wireSender;
     private Action<byte[]>? _hangupWireSender;  // un-wrapped: pierces EngineSendGate
     private Action? _requestHangupDisconnect;   // hard-close the socket after the exit command
+    private Func<string, bool>? _tryWimpyGoto;  // sys-goto-wimpy escape substitute for the hangup
     private Func<bool>? _isPartyFollower;       // in a party AND not the leader
     private Action? _requestPartyWait;          // ping leader to halt (PartyRestSync)
     private Action? _requestPartyOk;            // release leader
@@ -313,6 +314,19 @@ public sealed class HealthManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(requestDisconnect);
         _requestHangupDisconnect = requestDisconnect;
+    }
+
+    // Wire the "sys goto wimpy instead of hanging" escape. When set and the
+    // character's HealthSettings opt in with a location, the emergency low-HP path
+    // calls this instead of dropping the carrier: it breaks combat and fires
+    // `sys goto <location>`. The callback returns true when it dispatched the jump
+    // (so the hangup is skipped), false when it couldn't — power off on this BBS,
+    // the location no longer in the table — so the hangup runs as the fallback.
+    // Unset (tests / minimal wiring) means no substitute: the normal hangup fires.
+    public void SetWimpyGoto(Func<string, bool> tryWimpyGoto)
+    {
+        ArgumentNullException.ThrowIfNull(tryWimpyGoto);
+        _tryWimpyGoto = tryWimpyGoto;
     }
 
     // Wire party-role-aware recovery. isPartyFollower returns true when the local
@@ -1144,6 +1158,30 @@ public sealed class HealthManager : IDisposable
         if (_hangFired) return false;
 
         _hangFired = true;
+
+        // "Sys goto wimpy instead of hanging": rather than drop the carrier, break
+        // combat and jump to the configured escape location. Only when the character
+        // opted in with a location AND the jump actually dispatched (the delegate
+        // gates on the per-BBS sysop-goto power + the location still being in the
+        // table). A refused / unwired jump falls through to the normal hangup below,
+        // so a mis-set escape never leaves a low-HP character sitting in the fight.
+        //
+        // Gated on HP > 0: at or below 0 the character is mortally wounded, the game
+        // rejects every action command ("You may not do that while you are mortally
+        // wounded!"), and PlayerDroppedGate holds the EngineSendGate — so a `sys goto`
+        // can neither be sent nor honoured. There the hangup is the only escape that
+        // works (closing the carrier needs no game action), so fall through to it.
+        if (s.SysGotoWimpyInsteadOfHanging
+            && _state.Hp > 0
+            && !string.IsNullOrWhiteSpace(s.SysGotoWimpyLocation)
+            && _tryWimpyGoto?.Invoke(s.SysGotoWimpyLocation.Trim()) == true)
+        {
+            _log?.Warn(LogCategory,
+                $"WIMPY GOTO instead of hangup — HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger} " +
+                $"→ break + 'sys goto {s.SysGotoWimpyLocation.Trim()}'");
+            return true;
+        }
+
         string? hangCmd = _readHangupCommand?.Invoke();
         if (string.IsNullOrWhiteSpace(hangCmd))
         {

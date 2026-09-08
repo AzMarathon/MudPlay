@@ -7,6 +7,7 @@
 > - Terminal right-click and Walk menus gain a **Sys Gotos** flyout listing your locations; typing `sys goto <name>` yourself is intercepted the same way
 > - After a jump, MudPlay sends a bare Enter to pull up the landing room (a sys goto shows no message on its own) and re-anchors your position on the map
 > - Blocked while actively in combat — MudPlay sends `break` and asks you to re-run once the fight stops; a room merely holding hostiles is fine
+> - New Health-tab **"Sys goto wimpy instead of hanging"** option: at the low-HP hangup threshold, break combat and `sys goto` to a chosen escape location instead of dropping the connection
 > - Settings window is wider by default so the Sys Goto locations table isn't cramped
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

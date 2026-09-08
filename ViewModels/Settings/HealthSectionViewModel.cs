@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -40,6 +41,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         "Minor heal combat", "Major heal combat",
         "Heal if above", "Heal if above resting", "Heal if above combat", "Mana floor",
         "Run if below", "Hang up if below", "Bless if above",
+        "Sys goto wimpy", "Wimpy", "Wimpy goto", "Wimpy location",
         "Use meditate ability", "Meditate before resting",
         "Pre-rest", "Post-rest", "Pre-meditate", "Post-meditate",
         "Percentage", "Value", "Absolute",
@@ -81,6 +83,26 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private string _preRestCommand  = string.Empty;
     [ObservableProperty] private string _postRestCommand = string.Empty;
 
+    // ----- Sys goto wimpy (escape instead of the emergency hangup) --
+
+    // When on, the emergency low-HP hangup (Hang-up if below) instead breaks combat
+    // and fires `sys goto <SysGotoWimpyLocation>`. Only usable when the active BBS
+    // grants the Sysop goto power (SysGotoAvailable gates the checkbox); the engine
+    // falls back to the normal hangup if the power is off or the location is gone.
+    [ObservableProperty] private bool _sysGotoWimpyInsteadOfHanging;
+
+    // The Sys Goto location keyword the wimpy escape jumps to — a Name from the
+    // active BBS's Sys Goto table (WimpyGotoChoices).
+    [ObservableProperty] private string? _sysGotoWimpyLocation;
+
+    // The active BBS's Sys Goto location keywords, for the wimpy-escape picker.
+    // Empty when the power is off. Rebuilt on load / profile mutate / set change.
+    public ObservableCollection<string> WimpyGotoChoices { get; } = new();
+
+    // Whether the active BBS grants the Sysop goto power — gates the wimpy checkbox
+    // and picker. False at design time / before services exist.
+    public bool SysGotoAvailable => AppServices.CurrentOrNull?.SysopGoto.Enabled ?? false;
+
     public HealthSectionViewModel() : this(
         AppServices.Current.Profile,
         TryGetPlayerState(),
@@ -97,6 +119,11 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         _gameData = gameData;
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
+        // A BBS-tab edit (toggling Sysop goto, or editing the location table) commits
+        // via NotifyMutated → refresh the wimpy picker's availability + choices. Only
+        // touches WimpyGotoChoices / SysGotoAvailable, never the loaded settings, so
+        // it can't clobber unsaved Health-tab edits.
+        _profile.ProfileMutated += OnProfileMutatedRefreshWimpy;
         if (_state is not null) _state.PropertyChanged += OnStateChanged;
         if (_gameData is not null) _gameData.ActiveSetChanged += OnActiveSetChanged;
         RefreshShadowRestAvailability();
@@ -104,6 +131,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         {
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
+            _profile.ProfileMutated -= OnProfileMutatedRefreshWimpy;
             if (_state is not null) _state.PropertyChanged -= OnStateChanged;
             if (_gameData is not null) _gameData.ActiveSetChanged -= OnActiveSetChanged;
         });
@@ -133,12 +161,33 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // Game Data set switch).
     [ObservableProperty] private bool _shadowRestAvailable;
 
-    private void OnActiveSetChanged(string? _) => RefreshShadowRestAvailability();
+    private void OnActiveSetChanged(string? _)
+    {
+        RefreshShadowRestAvailability();
+        RefreshWimpyGoto();   // a renumbered set can change which rows resolve
+    }
+
+    private void OnProfileMutatedRefreshWimpy(CharacterProfile _) => RefreshWimpyGoto();
 
     private void RefreshShadowRestAvailability()
     {
         ShadowRestAvailable =
             Game.GameData.AbilityNames.AnyClassHasShadowRest(_gameData?.GetRawTable("Classes"));
+    }
+
+    // Rebuild the wimpy-escape picker from the active BBS's Sys Goto locations and
+    // re-raise the checkbox's enable-gate. A stored selection that's no longer in the
+    // table is kept as a choice so the user still sees what's configured.
+    private void RefreshWimpyGoto()
+    {
+        WimpyGotoChoices.Clear();
+        if (AppServices.CurrentOrNull is { } svc)
+            foreach (Models.Profile.SysopGotoLocation loc in svc.SysopGoto.UsableNow)
+                WimpyGotoChoices.Add(loc.Name);
+        if (!string.IsNullOrEmpty(SysGotoWimpyLocation)
+            && !WimpyGotoChoices.Contains(SysGotoWimpyLocation!))
+            WimpyGotoChoices.Add(SysGotoWimpyLocation!);
+        OnPropertyChanged(nameof(SysGotoAvailable));
     }
 
     // Active-BBS death floor (BbsProfile.PlayerDiesAtHp), read through the same
@@ -276,6 +325,9 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
             MeditateBeforeResting  = MeditateBeforeResting,
             UtilizeShadowRest      = UtilizeShadowRest,
 
+            SysGotoWimpyInsteadOfHanging = SysGotoWimpyInsteadOfHanging,
+            SysGotoWimpyLocation         = SysGotoWimpyLocation ?? string.Empty,
+
             PreRestCommand         = PreRestCommand  ?? string.Empty,
             PostRestCommand        = PostRestCommand ?? string.Empty,
         };
@@ -346,8 +398,14 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         MeditateBeforeResting = dto.MeditateBeforeResting;
         UtilizeShadowRest     = dto.UtilizeShadowRest;
 
+        SysGotoWimpyInsteadOfHanging = dto.SysGotoWimpyInsteadOfHanging;
+        SysGotoWimpyLocation = string.IsNullOrEmpty(dto.SysGotoWimpyLocation)
+            ? null : dto.SysGotoWimpyLocation;
+
         PreRestCommand  = dto.PreRestCommand  ?? string.Empty;
         PostRestCommand = dto.PostRestCommand ?? string.Empty;
+
+        RefreshWimpyGoto();   // populate the picker + include any stored selection
     }
 
     private HealthSettings ReadOrDefault()
@@ -494,4 +552,8 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // Resting commands
     partial void OnPreRestCommandChanged(string value)        => MarkDirty();
     partial void OnPostRestCommandChanged(string value)       => MarkDirty();
+
+    // Sys goto wimpy
+    partial void OnSysGotoWimpyInsteadOfHangingChanged(bool value) => MarkDirty();
+    partial void OnSysGotoWimpyLocationChanged(string? value)      => MarkDirty();
 }

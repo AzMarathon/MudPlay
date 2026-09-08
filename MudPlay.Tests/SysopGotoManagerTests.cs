@@ -193,4 +193,63 @@ public sealed class SysopGotoManagerTests
         var mgr = h.Build();
         Assert.Empty(mgr.UsableNow);
     }
+
+    // ----- Wimpy escape (HealthManager's "sys goto wimpy instead of hanging") -----
+
+    [Fact]
+    public void Wimpy_OutOfCombat_FiresVerbatim_NoBreak()
+    {
+        var h = WithNames();
+        var mgr = h.Build();
+
+        Assert.True(mgr.TryFireForWimpy("newhaven"));
+        Assert.Equal(new[] { "sys goto newhaven" }, h.Sent);   // no break needed
+        Assert.Equal(1, h.ForceRoomDisplayCalls);
+        Assert.True(mgr.HasArmedLanding);
+    }
+
+    [Fact]
+    public void Wimpy_InCombat_BreaksThenFires()
+    {
+        var h = WithNames();
+        h.InCombat = true;
+        var mgr = h.Build();
+
+        Assert.True(mgr.TryFireForWimpy("newhaven"));
+        Assert.Equal(new[] { "break", "sys goto newhaven" }, h.Sent);   // break first, then jump
+    }
+
+    [Fact]
+    public void Wimpy_IgnoresLevelGate()
+    {
+        // A life-saving escape isn't a routing choice — the min-level gate that blocks
+        // a manual/menu fire doesn't apply here.
+        var h = WithNames();
+        h.Level = 1;
+        var mgr = h.Build();
+
+        Assert.True(mgr.TryFireForWimpy("lostcity"));   // needs L40 for a normal fire
+        Assert.Equal(new[] { "sys goto lostcity" }, h.Sent);
+    }
+
+    [Fact]
+    public void Wimpy_PowerOff_ReturnsFalse_NoSend()
+    {
+        var h = WithNames();
+        h.Enabled = false;
+        var mgr = h.Build();
+
+        Assert.False(mgr.TryFireForWimpy("newhaven"));
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void Wimpy_UnknownLocation_ReturnsFalse_NoSend()
+    {
+        var h = WithNames();
+        var mgr = h.Build();
+
+        Assert.False(mgr.TryFireForWimpy("nowhere"));
+        Assert.Empty(h.Sent);
+    }
 }

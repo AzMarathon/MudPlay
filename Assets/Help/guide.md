@@ -1533,6 +1533,12 @@ Settings → Health. Two stacked sections — **Health (HP)** on top, **Mana / K
 **What it does:** The absolute last resort: disconnects the game outright once HP falls to or below this value. Since 0 HP only "drops" you in MajorMUD rather than killing you outright, this threshold can go negative, all the way down to (but never past) the point your BBS's realm actually treats as death.
 **Important notes:** There's no "0 disables it" here — to fully disable the emergency hangup, use the toolbar's "Disable hangups" toggle instead.
 
+### Sys goto wimpy instead of hanging
+
+**Default:** Off
+**What it does:** Changes what the emergency escape *does* when your HP crosses the "Hang up if below" threshold with a hostile present. Instead of dropping the connection, MudPlay breaks combat (if you're actively fighting) and fires **`sys goto <location>`** to jump you to a safe town — a "wimpy" escape that keeps you online. Pick which location from the **Wimpy goto location** dropdown right below the checkbox.
+**Important notes:** This needs the **Sysop goto** power enabled on the BBS tab (the checkbox is greyed out until it is), and the location must be one of that BBS's Sys Goto entries. If the power is off, or the chosen location has been removed from the table, MudPlay falls back to the normal hangup — you're never left sitting in a fight. It rides the same trigger as the hangup, so the toolbar's "Disable hangups" toggle suppresses this too.
+
 ### Heal if above (rest/idle) / Heal if above (combat)
 
 **Default:** Resting 50%, Combat 0% (disabled — always heal)
@@ -2243,6 +2249,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Rest max / Rest if below (HP, MA) | 95/60/95/30 (%) | 0–100,000 | `RestMaxHp`, `RestIfBelowHp`, `RestMaxMa`, `RestIfBelowMa` | Models/Profile/HealthSettings.cs |
 | Run if below (HP, MA) | 20 / 10 (%) | 0–100,000 (0=off) | `RunIfBelowHp` / `RunIfBelowMa` | Models/Profile/HealthSettings.cs |
 | Hang up if below | `5` (%) | death-floor minimum–100,000 | `HangIfBelowHp` | Models/Profile/HealthSettings.cs |
+| Sys goto wimpy instead of hanging (+ location) | false / unset | bool / Sys Goto keyword | `SysGotoWimpyInsteadOfHanging` / `SysGotoWimpyLocation` | Models/Profile/HealthSettings.cs |
 | Heal (rest) / Minor / Major heal (combat) | 80/70/40 (%) | 0–100,000 | `HealRestTrigger`, `MinorHealCombatTrigger`, `MajorHealCombatTrigger` | Models/Profile/HealthSettings.cs |
 | Bless if above | `70` (%) | 0–100,000 | `BlessIfAboveMa` | Models/Profile/HealthSettings.cs |
 | Heal if above (rest / combat) | 50 / 0 (%) | 0–100,000 (0=off) | `HealIfAboveMaResting` / `HealIfAboveMaCombat` | Models/Profile/HealthSettings.cs |

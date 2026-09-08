@@ -157,6 +157,41 @@ public sealed class SysopGotoManager
             return false;
         }
 
+        DispatchGoto(loc);
+        return true;
+    }
+
+    // Wimpy escape (HealthManager's "sys goto wimpy instead of hanging"): break
+    // active combat, then jump to <name> — bypassing the interactive combat-refuse
+    // gate because the caller WANTS the break-then-go, not a "run it again" prompt.
+    // Still gated on the power being granted + the row existing (no level gate — a
+    // life-saving escape isn't a routing choice). Returns true when it dispatched
+    // the jump, false when it couldn't (power off / unknown location) so the caller
+    // can fall back to the normal hangup.
+    public bool TryFireForWimpy(string name)
+    {
+        if (!_enabled()) return false;
+        name = (name ?? string.Empty).Trim();
+        SysopGotoLocation? loc = FindByName(name);
+        if (loc is null)
+        {
+            _log?.Info(LogCat, $"Wimpy goto '{name}' isn't in the table — falling back to hangup.");
+            return false;
+        }
+        if (_inCombat())
+        {
+            _log?.Info(LogCat, $"Wimpy goto '{loc.Name}': actively in combat — sending 'break' before the jump.");
+            _send("break");
+        }
+        _log?.Info(LogCat, $"Wimpy goto firing → 'sys goto {loc.Name}' (HP-escape substitute for hangup).");
+        DispatchGoto(loc);
+        return true;
+    }
+
+    // Shared fire tail for both the gated and the wimpy paths: send the verbatim
+    // keyword, force the landing room display, and arm the name-matched resync.
+    private void DispatchGoto(SysopGotoLocation loc)
+    {
         var key = new RoomKey(loc.Map, loc.Room);
         string? landingName = _roomName(key);
         _send($"sys goto {loc.Name}");
@@ -175,7 +210,6 @@ public sealed class SysopGotoManager
             _log?.Info(LogCat,
                 $"Fired 'sys goto {loc.Name}' → landing {key}, but that room isn't in the active graph — can't arm a resync.");
         }
-        return true;
     }
 
     // Fed each time a room display is parsed. Commits an armed landing when the shown
