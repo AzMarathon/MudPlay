@@ -1,5 +1,13 @@
 # Version history
 
+## 3.57.0
+
+- New **Sysop goto** power (fourth per-BBS sysop checkbox): jump to a curated location with the game's `sys goto <name>` command
+- BBS tab gains an editable **Sys Goto locations** table — a keyword (sent verbatim), the map/room it lands you in, and an optional min-level gate; seeded with the starter towns (newhaven, silvermere, rhudaur, khazarad, lostcity)
+- Terminal right-click and Walk menus gain a **Sys Gotos** flyout listing your locations; typing `sys goto <name>` yourself is intercepted the same way
+- After a jump, MudPlay sends a bare Enter to pull up the landing room (a sys goto shows no message on its own) and re-anchors your position on the map
+- Blocked while actively in combat — MudPlay sends `break` and asks you to re-run once the fight stops; a room merely holding hostiles is fine
+
 ## 3.56.0
 
 - Route picker: when a destination is reachable only through a room you marked **Avoid**, it now offers to route through anyway (warning how many avoided rooms it crosses) instead of failing; when a much shorter route runs through an avoided room, a two-card "respect your avoids / shorter through avoided" fork is offered. Your avoid list is never changed — only that one walk ignores it

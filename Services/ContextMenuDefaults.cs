@@ -16,6 +16,7 @@ public static class ContextMenuDefaults
     {
         "walk.favorites",
         "walk.recent",
+        "walk.sysgotos",
         null,
         "view.backscroll",
         "view.workshop",

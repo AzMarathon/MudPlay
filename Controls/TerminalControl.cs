@@ -877,6 +877,15 @@ public sealed class TerminalControl : Control
                 // line as its own CR-terminated wire send.
                 string typedLine = buf.Text;
                 _ = buf.FlushBytes();
+                // A `sys goto <name>` line is gated + resync-armed by SysopGotoManager
+                // (nothing else consumes it): when it swallows the line it has already
+                // sent / refused it, so skip the normal fan-out. A non-goto line, or the
+                // command with the power off, isn't ours — it falls through untouched.
+                if (MudPlay.Services.AppServices.Current.SysopGoto.TryHandleTypedLine(typedLine))
+                {
+                    InvalidateVisual();
+                    return true;
+                }
                 foreach (string wireLine in MudPlay.Services.MacroStore.SplitTypedInput(typedLine))
                     UserInput?.Invoke(System.Text.Encoding.Latin1.GetBytes(wireLine + "\r"));
                 InvalidateVisual();

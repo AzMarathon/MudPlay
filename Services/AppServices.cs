@@ -1634,6 +1634,10 @@ public sealed class AppServices
     // character's own death when that per-BBS power is enabled.
     public Game.SysopGodLifeRecovery SysopGodLife { get; private set; } = null!;
 
+    // "Sysop goto" — gates + fires `sys goto <name>` to a curated location and
+    // re-anchors position on the landing. Enabled per-BBS (SysopGoto credential).
+    public Game.SysopGotoManager SysopGoto { get; private set; } = null!;
+
     // BFS pathfinding + planar layout over the active
     // RoomGraph. Consumed by the walker, loop runner,
     // auto-lair scheduler (pathfinding), and the Navigation
@@ -3726,6 +3730,28 @@ public sealed class AppServices
             send: cmd => SendGameCommand(cmd),
             log: Log);
         RoomTracker.PlayerDeathObserved += SysopGodLife.OnDeath;
+
+        // "Sysop goto": gate `sys goto <name>` (per-BBS power + active-combat block +
+        // table + level) and, on a fired jump, re-anchor position when the landing
+        // room displays. A hostile merely present in the room does NOT block — only
+        // active combat does. The fire also forces a bare Enter (a sys-goto shows no
+        // room on its own, just a statline) so the landing room displays and the
+        // resync can match it. The commit uses RoomTracker.SetLocated (the tier-3 "I am
+        // here" hard set), NOT Recovery.NoteAuthoritativePosition — the latter no-ops
+        // unless the recovery gate is already awaiting a resync, which a user-fired
+        // goto from a normal state isn't. The status write is Posted because a refusal
+        // can surface from inside the message pump (re-entering the emulator's Feed).
+        SysopGoto = new Game.SysopGotoManager(
+            enabled: SysopGotoEnabledHere,
+            locations: ActiveBbsSysopGotos,
+            inCombat: () => PlayerState.InCombat,
+            knownLevel: () => Stats.HasParsed ? PlayerStats.Level : (int?)null,
+            roomName: key => RoomGraph.GetRoom(key)?.Name,
+            send: cmd => SendGameCommand(cmd),
+            forceRoomDisplay: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("\r")),
+            writeStatus: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
+            commitLocated: key => RoomTracker.SetLocated(key),
+            log: Log);
         // The gate asks only from a recovery escalation, where the move being
         // unconfirmed IS the problem — so don't queue behind it.
         Recovery.TrySysopLocate = reason => SysopLocate.TryRequestLocate(reason, forRecovery: true);
@@ -8265,6 +8291,20 @@ public sealed class AppServices
     // Whether the loaded character has the "Sysop god lives" power on the active
     // BBS — gates the auto `sys god <name> add life` on death.
     private bool SysopGodLivesEnabledHere() => SysopPowerHere(static c => c.SysopGodLives);
+
+    // Whether the loaded character has the "Sysop goto" power on the active BBS —
+    // gates every `sys goto` surface (typed command, menus).
+    private bool SysopGotoEnabledHere() => SysopPowerHere(static c => c.SysopGoto);
+
+    // The active BBS credential's goto table, or empty when no character / BBS / row
+    // is set. Both the manager and the menus read through this so they share one table.
+    private IReadOnlyList<Models.Profile.SysopGotoLocation> ActiveBbsSysopGotos()
+        => ResolveActiveBbs()?.Name is { Length: > 0 } bbs
+           && Profile.Current?.BbsCredentials is { } creds
+           && creds.TryGetValue(bbs, out Models.Profile.BbsCredentials? cred)
+           && cred.SysopGotos is { } list
+            ? list
+            : System.Array.Empty<Models.Profile.SysopGotoLocation>();
 
     private bool SysopPowerHere(Func<Models.Profile.BbsCredentials, bool> pick)
         => ResolveActiveBbs()?.Name is { Length: > 0 } bbs

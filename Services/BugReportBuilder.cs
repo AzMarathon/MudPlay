@@ -957,6 +957,13 @@ public static class BugReportBuilder
             svc.SysopLocate.RequestInFlight ? "in flight"
             : svc.SysopLocate.LocateDeferred ? "queued behind movement"
             : svc.SysopLocate.LastOutcome);
+        // Sysop goto: whether the power is on for this BBS, how many locations the
+        // table holds, and any jump still awaiting its landing resync — a "goto left
+        // me lost" report needs the armed-but-uncommitted state.
+        Kv(sb, "Sysop goto",
+            svc.SysopGoto.Enabled ? $"on ({svc.SysopGoto.UsableNow.Count} location(s))" : "off");
+        if (svc.SysopGoto.ArmedLandingSummary is { } armed)
+            Kv(sb, "Sysop goto landing", $"awaiting {armed}");
 
         IReadOnlyList<Game.Map.RoomKey> history = svc.RoomTracker.GetHistory();
         if (history.Count > 0)
