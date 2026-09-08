@@ -1,13 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.55.0**
-> - New **Sysop powers** on Settings → BBS + Display: the old single "sysop / goto powers" checkbox is now a **Sysop map** / **Sysop status** / **Sysop god lives** set (per-character, per-BBS). None of them relate to `@goto`, which stays gated by the per-player Move-player permission
-> - **Sysop status** reads the game's `sys st` room dump to recover the client's position when the walker gets lost — and it now fires at every point Paradigm's `rm` re-anchor does (first mismatch, engine stall, the tier-3 give-up boundary, the terminal pre-Lost shot, the no-engine drift gap, `@where`, and a blocked loop/replan), throttled so the heavier dump doesn't flood the screen
-> - **Sysop god lives**: on the character's own death, auto-sends `sys god <name> add life` to recover the life just spent
-> - A tracker that goes lost, or a loop blocked because it lost track of where it is, re-anchors from that instead of waiting for an "I am here" click
-> - Fixed a loop hanging forever when a move went out and never confirmed, and one sitting idle after recovery had already succeeded
-> - Sysop status stays trusted once it has answered even once; before that, an unanswered probe backs off and retries rather than switching off for the session
+> **Version 3.55.1**
+> - Fixed the LOOK header not parsing when it carries a trailing `-- Immortal !` or `(gang)` suffix — on a gang realm every look block was skipped, so a player's race/class/equipment went unrecorded and the trap-delegation probe re-looked the same member every join
+> - A LOOK now also records a player's gang (like a WHO row), without erasing one already known
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

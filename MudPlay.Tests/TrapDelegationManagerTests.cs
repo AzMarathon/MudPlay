@@ -128,7 +128,7 @@ public sealed class TrapDelegationManagerTests : IDisposable
         h.router.Dispatch(Line("Helper started to follow you."));
         h.party.State.Members.First(m => m.Name == "Helper").Class = "Mage";
         // Race known from a prior look — Gnome grants traps (code 1002).
-        h.players.RecordLook("Helper", "Gnome", "Mage", null, Now.UtcDateTime);
+        h.players.RecordLook("Helper", "Gnome", "Mage", null, null, Now.UtcDateTime);
 
         TrapDelegationManager mgr = NewManager(h);
         Assert.True(mgr.AnyPartyMemberCanDisarm());
@@ -163,7 +163,7 @@ public sealed class TrapDelegationManagerTests : IDisposable
     public void OnMemberJoined_NoLook_WhenRaceAlreadyKnown()
     {
         var h = Harness();
-        h.players.RecordLook("Helper", "Human", null, null, Now.UtcDateTime);
+        h.players.RecordLook("Helper", "Human", null, null, null, Now.UtcDateTime);
         TrapDelegationManager mgr = NewManager(h);
 
         h.router.Dispatch(Line("Helper started to follow you."));

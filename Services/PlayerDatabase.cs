@@ -148,10 +148,14 @@ public sealed class PlayerDatabase
     // to infer either); equipment, when supplied, REPLACES the previous loadout
     // (it's a fresh snapshot, not a delta — empty list means "they were
     // equipped with Nothing"). Saves the BBS observation file after the merge.
+    // `gang` comes from the LOOK header's " (<gang>)" suffix and is null when
+    // the header carried none — so a look never erases a gang a WHO row taught
+    // us, it only fills one in.
     public void RecordLook(
         string name,
         string? race,
         string? @class,
+        string? gang,
         IReadOnlyList<EquipmentItem>? equipment,
         DateTime nowUtc)
     {
@@ -169,6 +173,7 @@ public sealed class PlayerDatabase
                 FamilyName  = string.IsNullOrEmpty(family) ? existing.FamilyName : family,
                 Race        = race      ?? existing.Race,
                 Class       = @class    ?? existing.Class,
+                Gang        = gang      ?? existing.Gang,
                 Equipment   = equipment ?? existing.Equipment,
                 LastSeenUtc = nowUtc,
             };
@@ -182,7 +187,7 @@ public sealed class PlayerDatabase
                 Race:         race,
                 Alignment:    null,
                 Title:        null,
-                Gang:         null,
+                Gang:         gang,
                 Role:         null,
                 FirstSeenUtc: nowUtc,
                 LastSeenUtc:  nowUtc,
