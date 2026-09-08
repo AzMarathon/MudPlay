@@ -148,10 +148,14 @@ public sealed class PlayerDatabase
     // to infer either); equipment, when supplied, REPLACES the previous loadout
     // (it's a fresh snapshot, not a delta — empty list means "they were
     // equipped with Nothing"). Saves the BBS observation file after the merge.
+    // `gang` comes from the LOOK header's " (<gang>)" suffix and is null when
+    // the header carried none — so a look never erases a gang a WHO row taught
+    // us, it only fills one in.
     public void RecordLook(
         string name,
         string? race,
         string? @class,
+        string? gang,
         IReadOnlyList<EquipmentItem>? equipment,
         DateTime nowUtc)
     {
@@ -169,6 +173,7 @@ public sealed class PlayerDatabase
                 FamilyName  = string.IsNullOrEmpty(family) ? existing.FamilyName : family,
                 Race        = race      ?? existing.Race,
                 Class       = @class    ?? existing.Class,
+                Gang        = gang      ?? existing.Gang,
                 Equipment   = equipment ?? existing.Equipment,
                 LastSeenUtc = nowUtc,
             };
@@ -182,7 +187,7 @@ public sealed class PlayerDatabase
                 Race:         race,
                 Alignment:    null,
                 Title:        null,
-                Gang:         null,
+                Gang:         gang,
                 Role:         null,
                 FirstSeenUtc: nowUtc,
                 LastSeenUtc:  nowUtc,
@@ -254,6 +259,52 @@ public sealed class PlayerDatabase
                 FirstSeenUtc:   whenUtc,
                 LastSeenUtc:    whenUtc,
                 LastGreetedUtc: whenUtc);
+        }
+
+        Rebuild();
+        SaveObservations();
+    }
+
+    // When PlayerLookManager last auto-looked at this player (UTC), or null if
+    // never. Same shape as GetLastGreetedUtc, and read the same way: the
+    // manager compares it against the local-calendar day.
+    public DateTime? GetLastLookedUtc(string givenName)
+    {
+        if (string.IsNullOrWhiteSpace(givenName)) return null;
+        (string given, _) = PlayerObservation.SplitName(givenName);
+        if (string.IsNullOrEmpty(given)) return null;
+        return _observations.TryGetValue(given, out PlayerObservation? o) ? o.LastLookedUtc : null;
+    }
+
+    // Stamp the auto-look time for one player. Creates a minimal row when the
+    // player is unknown, otherwise updates LastLookedUtc in place and leaves
+    // every other field alone -- sending a look is not itself an observation,
+    // so it must not overwrite class / race / equipment / LastSeen. Called by
+    // PlayerLookManager right after it writes the look to the wire.
+    public void RecordLooked(string name, DateTime whenUtc)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        (string given, string family) = PlayerObservation.SplitName(name);
+        if (string.IsNullOrEmpty(given)) return;
+
+        if (_observations.TryGetValue(given, out PlayerObservation? existing))
+        {
+            _observations[given] = existing with { LastLookedUtc = whenUtc };
+        }
+        else
+        {
+            _observations[given] = new PlayerObservation(
+                GivenName:      given,
+                FamilyName:     family,
+                Class:          null,
+                Race:           null,
+                Alignment:      null,
+                Title:          null,
+                Gang:           null,
+                Role:           null,
+                FirstSeenUtc:   whenUtc,
+                LastSeenUtc:    whenUtc,
+                LastLookedUtc:  whenUtc);
         }
 
         Rebuild();
@@ -642,6 +693,7 @@ public sealed class PlayerDatabase
             // later of the two so a duplicate-row collapse never re-opens a
             // greet / party-probe we already did today.
             LastGreetedUtc = LaterUtc(newer.LastGreetedUtc, older.LastGreetedUtc),
+            LastLookedUtc  = LaterUtc(newer.LastLookedUtc,  older.LastLookedUtc),
             LastPartiedUtc = LaterUtc(newer.LastPartiedUtc, older.LastPartiedUtc),
         };
     }

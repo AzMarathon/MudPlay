@@ -76,7 +76,14 @@ public sealed record PlayerObservation(
     // When we last STARTED partying with this player (UTC), driving the
     // once-per-local-day "first party of the day" stats probe (@level + @version).
     // null if we've never partied with them since this record was created.
-    DateTime? LastPartiedUtc = null)
+    DateTime? LastPartiedUtc = null,
+    // When PlayerLookManager last auto-sent `look <name>` at this player
+    // (UTC), driving the once-per-local-day rule on BOTH its toggles. null if
+    // never. Stamped on SEND rather than on a parsed reply, so a look whose
+    // response we could not read (a shadowy figure, a truncated block) still
+    // counts -- otherwise the throttle would never engage for exactly the
+    // players it can learn nothing from.
+    DateTime? LastLookedUtc = null)
 {
     // Combined display name — "GivenName FamilyName", trimmed. Used by the
     // database's case-insensitive lookup and by the customization

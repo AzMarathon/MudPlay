@@ -1,14 +1,24 @@
 # Version history
 
-## 3.55.6
+## 3.55.8
 
 - Roomba reroutes around a destination room that's full, to the next room labelled for the same category and then the catch-all, instead of re-sending refused drops every lap
-- Multiple catch-all rooms work as an overflow chain, and full rooms are re-checked each lap so space that frees up gets used
+- A full room's mark lasts the rest of the sweep — it becomes a preferred place to collect *from*, since emptying it is the only thing that frees its capacity — and clears on the next sweep
 - Roomba paces its get/drop commands past the game's rate limit rather than flooding it and losing the whole batch
 - Roomba leaves alone what auto-discard would bin, and no longer loses track of items it is carrying
 - The carry budget no longer writes off heavy items because the pack was temporarily full, and a pack too full to sort stops with an explanation
 - The Roomba Log now names why each item was left behind — a full house reads as such instead of "no matching room"
 - bug reports addressed: stock-20260902-224515, stock-20260903-001443, stock-20260903-170905, stock-20260903-175132, stock-20260903-182339
+
+## 3.55.2
+
+- Fixed two clients with "Look back when a player looks at us" mirroring each other forever (each look-back triggering the other's) until one died — the auto-look toggles now fire at most once per player per local day, matching how "Greet players" is throttled
+- A look also records when we last auto-looked, so a look whose reply we couldn't read (a shadowy figure) still counts against the daily limit rather than looping
+
+## 3.55.1
+
+- Fixed the LOOK header not parsing when it carries a trailing `-- Immortal !` or `(gang)` suffix — on a realm where everyone's in a gang, every look block was skipped, so a player's race/class/equipment was never recorded and the trap-delegation probe re-`look`ed the same member on every party join
+- A LOOK now also records a player's gang (like a WHO row does), filling one in without erasing a gang already known
 
 ## 3.55.0
 
