@@ -314,4 +314,41 @@ public sealed class GhSortQueueBuilderTests : IDisposable
         Assert.Empty(moves);
         Assert.Single(leftInPlace);
     }
+
+    [Fact]
+    public void Build_SkipsItemsAutoDiscardWouldBin()
+    {
+        // Otherwise the two engines fight over the same item every lap: Roomba
+        // collects it, auto-discard bins it mid-sweep, and the sweep is left
+        // believing it still carries something it doesn't — whose drop the game
+        // then partial-matches onto a different held item.
+        ItemNameStore names = NewStore();
+        var observed = new Dictionary<RoomKey, IReadOnlyList<string>>
+        {
+            [new RoomKey(1, 9)] = new[] { "war hammer", "chain shirt" },
+        };
+
+        (IReadOnlyList<GhPendingMove> moves, IReadOnlyList<GhSweepItemFound> left) =
+            GhSortQueueBuilder.Build(observed, Labels, names,
+                wouldAutoDiscard: entry => entry == "war hammer");
+
+        Assert.Equal("chain shirt", Assert.Single(moves).ItemName);
+        Assert.Contains(left, l => l.ItemName == "war hammer"
+                                && l.Reason == GhLeftReason.AutoDiscarded);
+    }
+
+    [Fact]
+    public void Build_WithNoDiscardPredicate_QueuesEverythingAsBefore()
+    {
+        ItemNameStore names = NewStore();
+        var observed = new Dictionary<RoomKey, IReadOnlyList<string>>
+        {
+            [new RoomKey(1, 9)] = new[] { "war hammer", "chain shirt" },
+        };
+
+        (IReadOnlyList<GhPendingMove> moves, _) =
+            GhSortQueueBuilder.Build(observed, Labels, names);
+
+        Assert.Equal(2, moves.Count);
+    }
 }

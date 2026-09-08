@@ -872,6 +872,10 @@ public static class BugReportBuilder
         Kv(sb, "Roomba searches per room", svc.GhRoomLabels.SearchesPerRoom.ToString());
         Kv(sb, "Roomba labeled / actively-managed (this char) / circuit rooms",
             $"{svc.GhRoomLabels.Labels.Count} / {svc.GhManagedRooms.Count} / {svc.GhSweep.CircuitRoomCount}");
+        Kv(sb, "Roomba rooms full this sweep",
+            svc.GhSweep.FullRooms is { Count: > 0 } full
+                ? string.Join(", ", full.Select(r => $"{r.Map}/{r.Room}"))
+                : "(none)");
         Kv(sb, "Roomba moved / left / pending / carried / hidden",
             $"{svc.GhSweep.MovedSoFar.Count} / {svc.GhSweep.LeftInPlace.Count} / "
             + $"{svc.GhSweep.PendingMoveCount} / {svc.GhSweep.CarriedPendingCount} / "

@@ -384,6 +384,11 @@ public static class DefaultPatterns
             @"^(?:(?<player>\w+) picks up|You took) (?<item>.*)\.");
         yield return new RegexPattern(KnownPatterns.PlayerDrops,
             @"^(?:(?<player>\w+) drops|You dropped) (?<item>.*)\.");
+        // Room-capacity refusal on a drop. Carries the item's FULL canonical name
+        // even when the command abbreviated it (`drop pend` → "amethyst pendant"),
+        // so it resolves against a pending drop the same way the confirmation does.
+        yield return new RegexPattern(KnownPatterns.RoomDropRefused,
+            @"^There is no room to drop (?<item>.*) here\.");
         yield return new RegexPattern(KnownPatterns.UserEquipped,
             @"^(?:You are now wearing|You lit the) (?<item>[\w ]+)\.$");
         yield return new RegexPattern(KnownPatterns.UserEquipFailed,

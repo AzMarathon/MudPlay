@@ -62,6 +62,16 @@ public sealed class GhSweepManager : IDisposable
     // confirmation that DOES land, so a legitimately slow multi-item room
     // isn't cut short — only fires once confirmations stop arriving entirely.
     private static readonly TimeSpan DispatchSettleTimeout = TimeSpan.FromSeconds(2);
+
+    // Fallback pace when a prompt doesn't arrive to release the next queued
+    // command. Comfortably slower than the game's limit, so a batch that loses
+    // its prompts still drains — just at the safe rate instead of the live one.
+    private static readonly TimeSpan PromptWaitTimeout = TimeSpan.FromMilliseconds(800);
+
+    // Pause after the game complains about our command rate before resuming the
+    // queue. Matches RoombaSyncSender's clobber backoff, for the same reason:
+    // give the limiter time to forgive before pushing again.
+    private static readonly TimeSpan RateLimitBackoff = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan InventoryVerificationTimeout = TimeSpan.FromSeconds(3);
 
     // A dispatched `get` can come back as a failure this manager must act on
@@ -82,6 +92,30 @@ public sealed class GhSweepManager : IDisposable
         @"^\s*You cannot carry that much!\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    // The DROP counterpart of the currency misparse — note the BRACES, where the
+    // get form uses brackets. Names no item, exactly like the get form, but with
+    // dispatch paced one command per prompt there is only ever one drop in flight,
+    // so the failure attributes unambiguously to the command just sent.
+    //
+    // It means the game didn't recognise the name as something we're holding, so
+    // the usual cause is that we aren't holding it — the ledger believes a pickup
+    // landed that actually didn't. Confirmed live 2026-09-02.
+    private static readonly Regex DropCurrencySyntaxRegex = new(
+        @"^\s*Syntax:\s*DROP\s*\{Amount\}\s*\{Currency\}",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    // The other face of the same problem, and the more dangerous one. The game
+    // partial-matches a drop's argument against what you're holding, so a `drop
+    // bloodstone` for bloodstones we no longer have can bind to a DIFFERENT held
+    // item — a "bloodstone orb" — and this line is the game refusing because that
+    // item happens to be undroppable. Had the collision landed on something
+    // droppable we'd have thrown away the wrong item with no complaint at all.
+    // Treated exactly like the syntax refusal: verify against a real `i` rather
+    // than retry. Confirmed live 2026-09-02.
+    private static readonly Regex DropNotAllowedRegex = new(
+        @"^\s*You may not drop that item!\s*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     private const string SweepLoopName = "Roomba sweep";
 
     public enum SweepPhase { Idle, Reconning, Sorting, FinalRecon }
@@ -99,7 +133,11 @@ public sealed class GhSweepManager : IDisposable
     private sealed class PendingSortMove
     {
         public required RoomKey From { get; init; }
-        public required RoomKey To { get; init; }
+        // Settable, unlike From: a destination that refuses the drop as full is
+        // re-targeted onto a backup room mid-sweep. The trip planner reads
+        // destinations straight off this ledger, so rewriting To is all it takes
+        // to route the carried item somewhere else.
+        public required RoomKey To { get; set; }
         public required string ItemName { get; init; }
         public required int Count { get; init; }
         public required bool RequiresSearch { get; init; }
@@ -123,10 +161,17 @@ public sealed class GhSweepManager : IDisposable
     private readonly LogService? _log;
     private readonly IDisposable _getSub;
     private readonly IDisposable _dropSub;
+    private readonly IDisposable _dropRefusedSub;
+    private readonly IDisposable _commandIgnoredSub;
+    private readonly IDisposable _slowDownSub;
+    private readonly WirePromptScanner? _promptScanner;
+    private readonly Func<string, bool>? _wouldAutoDiscard;
 
     private readonly DispatcherTimer _reconSearchSettle;
     private readonly DispatcherTimer _dispatchSettle;
     private readonly DispatcherTimer _inventorySettle;
+    private readonly DispatcherTimer _promptWait;
+    private readonly DispatcherTimer _rateLimitBackoff;
 
     private Action<byte[]>? _wireSender;
     private bool _disposed;
@@ -139,6 +184,25 @@ public sealed class GhSweepManager : IDisposable
     private RoomKey? _dispatchRoom;
     private readonly List<PendingSortMove> _outstandingDispatch = new();
 
+    // The dispatch batch, released one command per wire prompt rather than in a
+    // burst. See DispatchAtRoomAfterSearch for why the burst was fatal.
+    private readonly Queue<(string Verb, PendingSortMove Move)> _commandQueue = new();
+    private (string Verb, PendingSortMove Move)? _lastQueuedCommand;
+
+    // Rooms the game refused a drop in ("There is no room to drop X here.") this
+    // sweep. Two opposite effects from the one set: excluded as a DESTINATION, so
+    // pending moves re-resolve onto a backup room; and preferred as a SOURCE, so
+    // the foreign items sitting in them — the only things whose removal frees the
+    // capacity — get pulled out first.
+    //
+    // Per-sweep, cleared on start: a full room is only full until someone loots it,
+    // and carrying the mark across sweeps would permanently skip a room that has
+    // since emptied. Deliberately NOT cleared when a get frees a slot mid-sweep —
+    // every pending drop for the room has already been re-targeted by then, so
+    // restoring it as a destination would just churn them back and risk a
+    // mark/clear/refuse loop.
+    private readonly HashSet<RoomKey> _fullRooms = new();
+
     // Full-ledger verification: we trust "You took X" / "You dropped X" as ground
     // truth and track the working carry weight ourselves (each confirmed get adds
     // its weight, each drop subtracts), so the happy path never sends a
@@ -147,6 +211,16 @@ public sealed class GhSweepManager : IDisposable
     // the ledger has provably drifted (we thought an item fit and it didn't).
     private bool _awaitingInventoryResync;
     private bool _resyncPending;
+
+    // Set when the resync was triggered by a drop the game didn't recognise: the
+    // fresh `i` is being read to find moves we only THINK we're carrying, not just
+    // to correct the weight baseline.
+    private bool _verifyCarriedAfterResync;
+
+    // True while emptying a near-full pack before collecting anything more. Owned
+    // here rather than in the pure planner because the whole point is that it
+    // persists between decisions — that's what makes it a run instead of a flap.
+    private bool _unloading;
 
     // Baseline captured at sort start (and corrected on a resync): base = the
     // player's gear+pack weight carrying zero Roomba pickups; max = MaxWeight.
@@ -213,6 +287,11 @@ public sealed class GhSweepManager : IDisposable
 
     public IReadOnlyList<GhSweepMove> MovedSoFar => _movedSoFar;
     public IReadOnlyList<GhSweepItemFound> LeftInPlace => _leftInPlace;
+
+    // Rooms that refused a drop as full this sweep. Surfaced for the bug report:
+    // "Roomba kept carrying everything" reads identically to a routing bug unless
+    // you can see the destinations were simply out of space.
+    public IReadOnlyCollection<RoomKey> FullRooms => _fullRooms;
     public IReadOnlyList<GhSweepStranded> Stranded => _stranded;
     public int CircuitRoomCount => _sweepRooms.Count;
     public int PendingMoveCount => _pending.Count(p => !p.Delivered);
@@ -264,7 +343,9 @@ public sealed class GhSweepManager : IDisposable
         Func<bool>? isParadigm = null,
         InventoryManager? inventory = null,
         GhItemLocationStore? itemLocations = null,
-        Func<RoomKey, bool>? isRoomActivelyManaged = null)
+        Func<RoomKey, bool>? isRoomActivelyManaged = null,
+        WirePromptScanner? promptScanner = null,
+        Func<string, bool>? wouldAutoDiscard = null)
     {
         ArgumentNullException.ThrowIfNull(labels);
         ArgumentNullException.ThrowIfNull(loopRunner);
@@ -291,6 +372,8 @@ public sealed class GhSweepManager : IDisposable
         // per-BBS). Defaults to "all managed" when unwired so tests that only label
         // rooms sweep them exactly as before.
         _isRoomActivelyManaged = isRoomActivelyManaged ?? (static _ => true);
+        _promptScanner = promptScanner;
+        _wouldAutoDiscard = wouldAutoDiscard;
         _log = log;
 
         _reconSearchSettle = new DispatcherTimer { Interval = ReconSearchSettle };
@@ -299,9 +382,20 @@ public sealed class GhSweepManager : IDisposable
         _dispatchSettle.Tick += (_, _) => OnDispatchSettleElapsed();
         _inventorySettle = new DispatcherTimer { Interval = InventoryVerificationTimeout };
         _inventorySettle.Tick += (_, _) => OnInventoryVerificationTimeout();
+        _promptWait = new DispatcherTimer { Interval = PromptWaitTimeout };
+        _promptWait.Tick += (_, _) => SendNextQueuedCommand();
+        _rateLimitBackoff = new DispatcherTimer { Interval = RateLimitBackoff };
+        _rateLimitBackoff.Tick += (_, _) => { _rateLimitBackoff.Stop(); SendNextQueuedCommand(); };
 
         _getSub = _router.Subscribe(KnownPatterns.PlayerGets, OnGetLine);
         _dropSub = _router.Subscribe(KnownPatterns.PlayerDrops, OnDropLine);
+        _dropRefusedSub = _router.Subscribe(KnownPatterns.RoomDropRefused, OnDropRefusedLine);
+        // The game's own rate-limit signals. Both patterns already existed and
+        // nothing had ever subscribed to either, which is why a flooded dispatch
+        // looked like silence rather than a refusal.
+        _commandIgnoredSub = _router.Subscribe(KnownPatterns.CommandIgnored, _ => OnRateLimited(commandDropped: true));
+        _slowDownSub = _router.Subscribe(KnownPatterns.SlowDown, _ => OnRateLimited(commandDropped: false));
+        if (_promptScanner is not null) _promptScanner.PromptObserved += OnPromptObservedFromWire;
         // Raw-line hook for the get-FAILURE shapes (no KnownPattern for them);
         // gated hard on an outstanding get so a manual `get` failure isn't ours.
         _router.LineDispatched += OnLineForGetFailure;
@@ -374,6 +468,11 @@ public sealed class GhSweepManager : IDisposable
         _movedSoFar.Clear();
         _leftInPlace.Clear();
         _stranded.Clear();
+        _fullRooms.Clear();
+        _commandQueue.Clear();
+        _lastQueuedCommand = null;
+        _promptWait.Stop();
+        _rateLimitBackoff.Stop();
         CompletedReconLaps = 0;
         _sortLapCount = 0;
         _progressSnapshotMoved = 0;
@@ -389,6 +488,8 @@ public sealed class GhSweepManager : IDisposable
         _inventorySettle.Stop();
         _awaitingInventoryResync = false;
         _resyncPending = false;
+        _verifyCarriedAfterResync = false;
+        _unloading = false;
         _baseCarryWeight = 0;
         _maxCarryWeight = int.MaxValue;
 
@@ -571,6 +672,16 @@ public sealed class GhSweepManager : IDisposable
                 + string.Join("; ", stillCarried.Select(m => $"{m.ItemName} (from {m.From}) -> {m.To}")));
         }
 
+        // Name the rooms that hit capacity — otherwise a sweep that quietly
+        // rerouted half its load reads the same as one that had nowhere to go.
+        if (_fullRooms.Count > 0)
+        {
+            _log?.Warn(LogCategory,
+                $"{_fullRooms.Count} room(s) were full this sweep: "
+                + string.Join(", ", _fullRooms.OrderBy(r => r.Map).ThenBy(r => r.Room))
+                + ". Label another room for the same category to give them a backup.");
+        }
+
         return new GhSweepReport(_movedSoFar.ToList(), _leftInPlace.ToList(), _stranded.ToList());
     }
 
@@ -721,7 +832,7 @@ public sealed class GhSweepManager : IDisposable
         foreach ((RoomKey room, List<string> items) in _observedByRoom) observed[room] = items;
 
         (IReadOnlyList<GhPendingMove> moves, IReadOnlyList<GhSweepItemFound> leftInPlace) =
-            GhSortQueueBuilder.Build(observed, _labels.Labels, _itemNames);
+            GhSortQueueBuilder.Build(observed, _labels.Labels, _itemNames, _wouldAutoDiscard);
 
         foreach (GhPendingMove move in moves)
         {
@@ -1009,13 +1120,98 @@ public sealed class GhSweepManager : IDisposable
         _outstandingDispatch.Clear();
         _outstandingDispatch.AddRange(drops);
         _outstandingDispatch.AddRange(gets);
+
+        // Queue the batch and release it one command per prompt. Dumping a whole
+        // room's worth at once trips the game's command-rate limit (stock nudges
+        // with "Why don't you slow down for a few seconds?" then drops commands
+        // outright with "You are typing too quickly"), and once that happens NONE
+        // of the batch lands — nor does the loop's next move, which leaves the
+        // tracker Pending on a move the server never processed. Letting the
+        // game's own prompt meter the send makes that unreachable by
+        // construction, and needs no guess at the rate.
+        _commandQueue.Clear();
+        foreach (PendingSortMove move in drops) _commandQueue.Enqueue(("drop", move));
+        foreach (PendingSortMove move in gets) _commandQueue.Enqueue(("get", move));
+        SendNextQueuedCommand();
+    }
+
+    // Release one queued get/drop. Re-arms both the settle timer (so it measures
+    // "confirmations stopped arriving", not "the batch is long") and the
+    // prompt-timeout backstop.
+    private void SendNextQueuedCommand()
+    {
+        _promptWait.Stop();
+        if (_commandQueue.Count == 0) return;
+
+        (string verb, PendingSortMove move) = _commandQueue.Dequeue();
+        _lastQueuedCommand = (verb, move);
         _dispatchSettle.Stop();
         _dispatchSettle.Start();
+        CountedCommand.Emit(Send, verb, move.Count, move.ItemName, _isParadigm());
 
-        foreach (PendingSortMove move in drops)
-            CountedCommand.Emit(Send, "drop", move.Count, move.ItemName, _isParadigm());
-        foreach (PendingSortMove move in gets)
-            CountedCommand.Emit(Send, "get", move.Count, move.ItemName, _isParadigm());
+        // A prompt normally releases the next one. Arm a bounded fallback so a
+        // prompt we never see (or one swallowed by an interleaved burst) can't
+        // strand the rest of the batch.
+        if (_commandQueue.Count > 0) _promptWait.Start();
+    }
+
+    // The wire prompt came back, so the game has processed the last command.
+    private void OnPromptObservedFromWire(Services.PromptObservation _) => OnPromptObserved();
+
+    private void OnPromptObserved()
+    {
+        if (Phase != SweepPhase.Sorting) return;
+        // Held off while the game is telling us to slow down; the backoff timer
+        // owns the restart from there.
+        if (_rateLimitBackoff.IsEnabled) return;
+        SendNextQueuedCommand();
+    }
+
+    // Abandon whatever is left of the batch. Anything unsent stays on _pending
+    // and is retried on a later visit, exactly like an unconfirmed command.
+    private void ClearCommandQueue()
+    {
+        _commandQueue.Clear();
+        _lastQueuedCommand = null;
+        _promptWait.Stop();
+        _rateLimitBackoff.Stop();
+    }
+
+    // Test seams — drive the paced dispatch headless, without a wire or timers.
+    internal void FirePromptForTests() => OnPromptObserved();
+    internal void FirePromptWaitTimeoutForTests() => SendNextQueuedCommand();
+    internal void FireRateLimitBackoffForTests()
+    {
+        _rateLimitBackoff.Stop();
+        SendNextQueuedCommand();
+    }
+    internal int QueuedCommandCountForTests => _commandQueue.Count;
+
+    // The game reported a rate-limit clobber. On the hard form the last command
+    // was DROPPED, so re-queue it at the front; on the soft nudge it probably
+    // landed, so just leave a gap. Either way stop pushing for a beat.
+    private void OnRateLimited(bool commandDropped)
+    {
+        if (Phase != SweepPhase.Sorting) return;
+        if (_commandQueue.Count == 0 && _lastQueuedCommand is null) return;
+
+        if (commandDropped && _lastQueuedCommand is { } last)
+        {
+            // Put it back at the head, ahead of everything still waiting.
+            Queue<(string Verb, PendingSortMove Move)> restored = new();
+            restored.Enqueue(last);
+            foreach ((string, PendingSortMove) queued in _commandQueue) restored.Enqueue(queued);
+            _commandQueue.Clear();
+            foreach ((string, PendingSortMove) queued in restored) _commandQueue.Enqueue(queued);
+            _lastQueuedCommand = null;
+        }
+
+        _log?.Warn(LogCategory,
+            $"rate-limited mid-dispatch ({(commandDropped ? "command dropped" : "slow-down nudge")}); "
+            + $"backing off with {_commandQueue.Count} command(s) still queued");
+        _promptWait.Stop();
+        _rateLimitBackoff.Stop();
+        _rateLimitBackoff.Start();
     }
 
     // Backstop for a dispatched get/drop that fails without a confirmation line
@@ -1031,6 +1227,16 @@ public sealed class GhSweepManager : IDisposable
         _dispatchSettle.Stop();
         if (Phase != SweepPhase.Sorting || _outstandingDispatch.Count == 0) return;
 
+        // Still feeding the batch out (or sitting in a rate-limit backoff, which
+        // is deliberately longer than this window). "Confirmations stopped" isn't
+        // a meaningful reading until every command has actually been sent, so
+        // wait rather than abandoning a batch that's simply being paced.
+        if (_commandQueue.Count > 0 || _rateLimitBackoff.IsEnabled)
+        {
+            _dispatchSettle.Start();
+            return;
+        }
+
         _log?.Warn(LogCategory,
             $"dispatch settle timeout at {_dispatchRoom}: {_outstandingDispatch.Count} unconfirmed "
             + $"command(s) — leaving them queued for a later-lap retry: "
@@ -1038,6 +1244,7 @@ public sealed class GhSweepManager : IDisposable
 
         _outstandingDispatch.Clear();
         _dispatchRoom = null;
+        ClearCommandQueue();
         // Trust the ledger — a lost command just means that move stays queued; no
         // `i` needed. (A real capacity refusal arrives as its own line and resyncs.)
         ContinueAfterTransaction("dispatch settle timeout");
@@ -1061,18 +1268,101 @@ public sealed class GhSweepManager : IDisposable
         ResolveConfirm(m.Groups[1], isDrop: false);
     }
 
+    // The room is at item capacity ("There is no room to drop X here."). One line
+    // reroutes the whole batch: a full room refuses every drop we just sent, so
+    // the first refusal marks the room and re-targets everything bound for it, and
+    // the remaining refusal lines then match nothing and fall through harmlessly.
+    private void OnDropRefusedLine(MatchResult m)
+    {
+        if (Phase != SweepPhase.Sorting) return;
+        if (m.Groups.Count < 1) return;
+        if (_tracker.State.CurrentRoom is not { } current) return;
+        if (_dispatchRoom is not { } dispatchRoom || !dispatchRoom.Equals(current.Key)) return;
+
+        (_, string name) = CountedCommand.SplitLeadingCount(m.Groups[0]);
+        PendingSortMove? refused = _outstandingDispatch.FirstOrDefault(
+            p => !p.Delivered && p.IsCarried && SameItem(p.ItemName, name));
+        if (refused is null) return;   // a manual drop, or already handled
+
+        if (_fullRooms.Add(dispatchRoom))
+            _log?.Warn(LogCategory,
+                $"{dispatchRoom} is full (refused {name}) — re-targeting everything bound for it "
+                + "and prioritising it as a pickup source to free space");
+
+        // Every outstanding drop here will be refused too; stop waiting on them.
+        foreach (PendingSortMove queued in _outstandingDispatch
+                     .Where(p => !p.Delivered && p.IsCarried && p.To.Equals(dispatchRoom)).ToList())
+            _outstandingDispatch.Remove(queued);
+
+        RetargetAwayFromFullRooms();
+
+        PhaseChanged?.Invoke();
+        if (_outstandingDispatch.Count == 0)
+        {
+            _dispatchSettle.Stop();
+            _dispatchRoom = null;
+            ContinueAfterTransaction("destination full");
+        }
+    }
+
+    // Re-resolve every pending move whose destination has gone full — carried and
+    // not-yet-collected alike — onto the next room that admits it (another labeled
+    // room for the same category, then the catch-all). Anything with nowhere left
+    // is recorded and dropped from the queue rather than retried into the same
+    // wall every lap, which is exactly what used to run forever.
+    private void RetargetAwayFromFullRooms()
+    {
+        foreach (PendingSortMove move in _pending
+                     .Where(p => !p.Delivered && _fullRooms.Contains(p.To)).ToList())
+        {
+            GhItemClass? cls = GhItemClassifier.Classify(_itemNames, move.ItemName);
+            RoomKey? dest = cls is { } c
+                ? GhDestinationResolver.Resolve(c, _labels.Labels, _fullRooms)
+                : null;
+
+            if (dest is not { } target)
+            {
+                _log?.Warn(LogCategory,
+                    $"nowhere left for {move.ItemName}: every matching room and the catch-all are full "
+                    + $"— leaving it{(move.IsCarried ? " carried" : $" at {move.From}")}");
+                _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.AllDestinationsFull));
+                _pending.Remove(move);
+                continue;
+            }
+
+            _log?.Info(LogCategory,
+                $"re-targeting {move.Count}x {move.ItemName}: {move.To} (full) -> {target}");
+            move.To = target;
+        }
+    }
+
     private void ResolveConfirm(string token, bool isDrop)
     {
         (_, string name) = CountedCommand.SplitLeadingCount(token);
         if (_tracker.State.CurrentRoom is not { } current) return;
-        if (_dispatchRoom is not { } dispatchRoom || !dispatchRoom.Equals(current.Key)) return;
+        if (_dispatchRoom is not { } dispatchRoom || !dispatchRoom.Equals(current.Key))
+        {
+            // Not our dispatch — but if something ELSE just dropped an item we
+            // believe we're carrying (auto-discard binning loot we picked up is
+            // the live case), our ledger is now wrong. Left stale, the next
+            // delivery sends a drop for an item we no longer hold, and the game
+            // partial-matches that name onto whatever else we're carrying.
+            if (isDrop) ReconcileForeignDrop(name);
+            return;
+        }
 
         PendingSortMove? match = isDrop
             ? _outstandingDispatch.FirstOrDefault(p => !p.Delivered && p.IsCarried
                                          && SameItem(p.ItemName, name))
             : _outstandingDispatch.FirstOrDefault(p => !p.Delivered && !p.IsCarried
                                          && SameItem(p.ItemName, name));
-        if (match is null) return;   // not one of ours — a manual command or another engine's
+        if (match is null)
+        {
+            // Same reasoning as above: a drop we didn't dispatch, while we happen
+            // to be mid-dispatch in this room.
+            if (isDrop) ReconcileForeignDrop(name);
+            return;
+        }
 
         if (isDrop)
         {
@@ -1126,6 +1416,13 @@ public sealed class GhSweepManager : IDisposable
     private void OnLineForGetFailure(LineExtractor.EmittedLine line)
     {
         if (Phase != SweepPhase.Sorting) return;
+
+        if (DropCurrencySyntaxRegex.IsMatch(line.Text) || DropNotAllowedRegex.IsMatch(line.Text))
+        {
+            HandleDropSyntaxRefusal();
+            return;
+        }
+
         List<PendingSortMove> gets = _outstandingDispatch
             .Where(m => !m.IsCarried && !m.Delivered).ToList();
         if (gets.Count == 0) return;
@@ -1156,6 +1453,76 @@ public sealed class GhSweepManager : IDisposable
         // single get is outstanding; retrying the same name can't help either way.
         if (GetCurrencySyntaxRegex.IsMatch(line.Text) && gets.Count == 1)
             StrandFailedGet(gets[0], "game misparsed the get as a currency command");
+    }
+
+    // The game didn't recognise our drop's item name, which almost always means we
+    // aren't holding it — a pickup the ledger recorded that never actually landed
+    // (a flooded `get`, say). Don't take that on trust: ask for a real `i` and let
+    // OnFullInventoryParsed drop only the moves the inventory genuinely doesn't
+    // show. Retrying is pointless either way, so the command stops here.
+    private void HandleDropSyntaxRefusal()
+    {
+        List<PendingSortMove> drops = _outstandingDispatch
+            .Where(m => m.IsCarried && !m.Delivered).ToList();
+        if (drops.Count == 0) return;
+
+        foreach (PendingSortMove drop in drops) _outstandingDispatch.Remove(drop);
+        _verifyCarriedAfterResync = true;
+        _resyncPending = true;
+        _log?.Warn(LogCategory,
+            $"game misparsed a drop as a currency command at {_dispatchRoom} "
+            + $"({drops.Count} outstanding) — verifying against a fresh inventory");
+        PhaseChanged?.Invoke();
+        if (_outstandingDispatch.Count == 0)
+        {
+            _dispatchSettle.Stop();
+            _dispatchRoom = null;
+            ClearCommandQueue();
+            AdvanceAfterDispatch("drop syntax refusal");
+        }
+    }
+
+    // An item left our pack without us dropping it. Whatever took it (auto-discard
+    // is the one that actually bit), we are no longer carrying it, so the move
+    // can't be delivered — and keeping it queued is worse than useless: the drop
+    // we'd eventually send names an item we don't hold, and the game resolves that
+    // name against something we DO hold. Forget it rather than re-collect it,
+    // since whatever binned it will just bin it again next lap.
+    private void ReconcileForeignDrop(string name)
+    {
+        if (Phase != SweepPhase.Sorting) return;
+        PendingSortMove? carried = _pending.FirstOrDefault(
+            p => p.IsCarried && !p.Delivered && SameItem(p.ItemName, name));
+        if (carried is null) return;
+
+        _log?.Warn(LogCategory,
+            $"{carried.ItemName} left the pack without us dropping it (auto-discard, or a manual drop) "
+            + $"— abandoning its move to {carried.To} rather than sending a drop we can't honour");
+        _leftInPlace.Add(new GhSweepItemFound(carried.From, carried.ItemName, GhLeftReason.NotActuallyCarried));
+        _pending.Remove(carried);
+        PhaseChanged?.Invoke();
+    }
+
+    // Post-`i` reconciliation for the above: anything we believe we're carrying
+    // that the real inventory doesn't list was never picked up, so the move is a
+    // phantom. Remove it outright — leaving it queued means dispatching a drop
+    // that can only ever fail again.
+    private void DropPhantomCarriedMoves()
+    {
+        if (_inventory is null) return;
+        IReadOnlyList<string> carried = _inventory.Snapshot.CarriedItems;
+
+        foreach (PendingSortMove move in _pending
+                     .Where(p => p.IsCarried && !p.Delivered).ToList())
+        {
+            if (carried.Any(entry => SameItem(move.ItemName, entry))) continue;
+
+            _log?.Warn(LogCategory,
+                $"{move.ItemName} isn't in inventory despite a recorded pickup from {move.From} "
+                + "— dropping the phantom move rather than retrying a drop that can't work");
+            _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.NotActuallyCarried));
+            _pending.Remove(move);
+        }
     }
 
     // "You cannot carry that much!" — abort the outstanding pickups (they stay
@@ -1226,6 +1593,11 @@ public sealed class GhSweepManager : IDisposable
         if (!_awaitingInventoryResync || Phase != SweepPhase.Sorting) return;
         _inventorySettle.Stop();
         _awaitingInventoryResync = false;
+        if (_verifyCarriedAfterResync)
+        {
+            _verifyCarriedAfterResync = false;
+            DropPhantomCarriedMoves();
+        }
         ResyncCarryBaseline();
         // A corrected (smaller) budget can require finer stack splitting and can
         // reveal a single unit is now unmovable.
@@ -1306,10 +1678,10 @@ public sealed class GhSweepManager : IDisposable
         // Weight-aware, trip-minimizing pick: keep filling the pack (nearest source
         // whose batch fits the live headroom) before delivering (nearest carried
         // destination). See GhSortPlanner.
-        List<RoomKey> carried = _pending
+        List<GhSortPlanner.CarriedLoad> carried = _pending
             .Where(p => p.IsCarried && !p.Delivered)
-            .Select(p => p.To)
-            .Distinct()
+            .GroupBy(p => p.To)
+            .Select(g => new GhSortPlanner.CarriedLoad(g.Key, g.Sum(MoveWeight)))
             .ToList();
         // A room is a candidate source as long as its LIGHTEST pending move fits the
         // headroom (not its whole sum) — so a room holding a big split stack, or a
@@ -1321,8 +1693,20 @@ public sealed class GhSweepManager : IDisposable
             .Select(g => new GhSortPlanner.PickupRoom(g.Key, g.Min(MoveWeight)))
             .ToList();
 
+        // Above 80% of the working budget we stop collecting and empty the pack
+        // down past 40% before filling again, heaviest stop first. Without the
+        // hysteresis a saturated pack alternates deliver-one / collect-one and
+        // walks the same long leg twice per item.
+        bool wasUnloading = _unloading;
+        _unloading = GhSortPlanner.ShouldUnload(_unloading, LedgerCarriedWeight(), WorkingBudget());
+        if (_unloading != wasUnloading)
+            _log?.Info(LogCategory, _unloading
+                ? $"pack at {LedgerCarriedWeight()}/{WorkingBudget()} — delivering until it's back under "
+                  + $"{GhSortPlanner.UnloadExitLoad:P0} before collecting again"
+                : $"pack down to {LedgerCarriedWeight()}/{WorkingBudget()} — collecting again");
+
         RoomKey? target = GhSortPlanner.NextTarget(
-            carried, pickups, CurrentHeadroom(), _bfs.ComputeDistancesFrom(here));
+            carried, pickups, CurrentHeadroom(), _bfs.ComputeDistancesFrom(here), _fullRooms, _unloading);
         if (target is not { } destination) return false;
 
         var shuttle = new Loop(SweepLoopName, new[] { here, destination });
@@ -1344,7 +1728,7 @@ public sealed class GhSweepManager : IDisposable
             return Phase != SweepPhase.Sorting; // a synchronous Failed event already ended the sweep
         }
 
-        string targetKind = carried.Contains(destination) ? "drop" : "pickup";
+        string targetKind = carried.Any(c => c.Room.Equals(destination)) ? "drop" : "pickup";
         _log?.Info(LogCategory,
             $"shortest-work reroute: {here} -> {destination} ({targetKind}, "
             + $"{_bfs.DistanceBetween(here, destination)} hop(s))");
@@ -1463,6 +1847,12 @@ public sealed class GhSweepManager : IDisposable
         _inventorySettle.Stop();
         _getSub.Dispose();
         _dropSub.Dispose();
+        _dropRefusedSub.Dispose();
+        _commandIgnoredSub.Dispose();
+        _slowDownSub.Dispose();
+        if (_promptScanner is not null) _promptScanner.PromptObserved -= OnPromptObservedFromWire;
+        _promptWait.Stop();
+        _rateLimitBackoff.Stop();
         _router.LineDispatched -= OnLineForGetFailure;
         _loopRunner.Event -= OnLoopEvent;
         _groundItems.SurveyUpdated -= OnSurveyUpdated;

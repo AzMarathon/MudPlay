@@ -865,6 +865,18 @@ A `get <item>` that can't succeed replies with one of two shapes:
 - **`Syntax: GET [Amount] [Currency]`** — the game misparsed the item name as a **currency** get
   (observed for some multi-word names, e.g. `get silk cape`). No item name is echoed. Retrying the
   same name can't help.
+- **`Syntax: DROP {Amount} {Currency}`** — the **drop** counterpart, confirmed 2026-09-02. Note the
+  **braces**, where the get form uses brackets. Same shape otherwise: no item name is echoed, and it
+  means the game didn't recognise the name as something you're holding — usually because you aren't.
+  A `You may not drop that item!` line is a *different* refusal (the item is held but undroppable).
+- **Drop arguments are PARTIAL-MATCHED against what you hold** *([CONFIRMED] 2026-09-02, user)*. This
+  is the dangerous one. Observed: bloodstones were auto-discarded, and a later `drop bloodstone`
+  bound to a **`bloodstone orb`** still in the pack — the game answered `You may not drop that item!`
+  because the orb is undroppable. **Had the collision landed on something droppable, the wrong item
+  would have been dropped with no complaint at all.** So a drop for an item you may no longer hold is
+  never safe to send blind: confirm you hold it, or be ready to treat any refusal as "verify against
+  a real `i` before doing anything else". Roomba does the latter, and also drops its belief in a
+  carried item the moment anything else is seen dropping it.
 - **`You cannot carry that much!`** — a **capacity refusal**: the item is on the floor and gettable,
   but taking it would exceed the carry limit. The item is NOT gone (unlike the two above) — it's a
   transient block that clears once weight is shed. No item name is echoed. (Confirmed by screenshot:
@@ -879,6 +891,34 @@ thought it fit and it didn't), so re-verify inventory once (`i`) to resync the b
 — deliver to free room and retry, or strand the item if it's too heavy for the whole working budget.
 Do **not** name-match a failure line's word to decide anything — match by "we just sent a `get` and
 got a failure back," since the echo can be truncated or absent.
+
+## Room item capacity — drop refusal *([CONFIRMED] 2026-09-02, user, live capture)*
+
+A room holds a limited number of items. A `drop` into a room already at that limit is refused:
+
+```
+[HP=642/MA=265]:drop pend
+There is no room to drop amethyst pendant here.
+```
+
+Two details that matter:
+
+- **The reply carries the item's FULL canonical name**, not the word typed. The command above
+  abbreviated it to `pend`, and the refusal still named `amethyst pendant`. So unlike the `get`
+  failures above — where the echo can be truncated and name-matching is explicitly unsafe — a drop
+  refusal CAN be correlated to the outstanding drop by name.
+- **It is per-drop, not per-batch.** A batch of N drops into a full room produces N refusals, one
+  per command, and none of them confirm.
+
+The exact capacity is unknown, and the client never needs it: "full" is only ever learned by being
+refused.
+
+**Client implication (Roomba Mode):** a refusal marks that room full for the rest of the sweep. Every
+pending move bound there — carried or not yet collected — is re-resolved onto the next room labeled
+for the same category, then the catch-all; anything with nowhere left is recorded and dropped from
+the queue rather than retried. The same mark also makes the room a *preferred pickup source*, since
+the foreign items sitting in it are the only ones whose removal frees its capacity. The mark is
+per-sweep: a full room is only full until someone loots it.
 
 ## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
 
@@ -2538,7 +2578,16 @@ processed — and the wording of the notice is **realm-specific**:
 Implication for bulk sends (e.g. `@roomba sync`, which can be ~20 telepaths): pace them
 out (MudPlay uses ~800ms between telepaths) so a burst never forms, and treat the
 "command ignored" / "too many messages" lines as a signal that the last send was lost
-and should be re-sent. This is distinct from the outbound-write **interleaving** bug
+and should be re-sent.
+
+**This applies to bulk `get`/`drop` just as much as to telepaths** *(2026-09-02, observed —
+capture `stock-20260902-224515`)*: a Roomba sort dispatching a whole room's batch at once
+(26 gets) tripped the stock limiter, and **every** command in the batch was dropped — as was
+the movement command that followed it, which left the tracker Pending on a move the server
+never processed and took the sweep down with it. The collateral damage to the *next* command
+is the part worth remembering: a flood doesn't just cost you the flooded batch. Roomba now
+releases get/drop one command per wire prompt, which needs no guess at the rate because the
+game's own prompt is the meter. This is distinct from the outbound-write **interleaving** bug
 (that was a client-side concurrency defect in `TelnetClient`, not a game rate limit).
 
 ## Spell targeting: monster type tags
