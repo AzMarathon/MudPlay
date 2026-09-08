@@ -192,7 +192,7 @@ Or build it off the map: **Navigation Management → New Loop** opens an editor 
 
 **Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Run**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) alongside your starred GOTO rooms, so you can start it from anywhere.
 
-Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
+Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. Chain several commands in one waypoint with `;` or `^M` — each is sent as its own line (e.g. `get all;drop coins`), the same convention macros and the pre-/post-rest commands use. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
 
 ## Estimating a loop's exp/hour
 
@@ -1165,13 +1165,17 @@ Settings → "BBS + Display" — despite the plain "BBS" name in some places, th
 ### I have the following SYSOP powers
 
 **Default:** all off
-**What it does:** Declares which elevated sysop commands this character can actually use on this specific board — three independent checkboxes, saved per-character per-BBS. None of them touch `@goto`: that remote command is gated purely by the per-player **Move player** permission on the Players tab, not by anything here. Only tick a power if you genuinely have that sysop access on the board — the underlying command is refused on an ordinary account.
+**What it does:** Declares which elevated sysop commands this character can actually use on this specific board — four independent checkboxes, saved per-character per-BBS. None of them touch `@goto`: that remote command is gated purely by the per-player **Move player** permission on the Players tab, not by anything here. Only tick a power if you genuinely have that sysop access on the board — the underlying command is refused on an ordinary account.
 
 **Sysop map** — lets MudPlay use the game's **`sys map`** command (a text area map with no map/room numbers) to help work out where you are. For now this only records that you hold the power; reading the map to recover position is coming in a follow-up.
 
 **Sysop status** — lets MudPlay use the game's **`sysop status`** command (`sys st`), which prints the server's own debug dump for a room — including its **true map and room number**. That exact number is the fastest possible answer to "where am I?": without it, a client that loses track has to walk you backwards one room at a time until only one room fits, and if that fails you're left right-clicking **I am here** on the map. With this power, one command replaces all of that. MudPlay asks at every point it would otherwise start reversing moves or give up — the first sign of a mismatch, a wedged engine, the moment before it starts backtracking, the last resort before declaring **Lost**, a loop that's blocked because it lost its place, and a `@where` re-fix — mirroring how the Paradigm `room` command is used on that realm. If the answer doesn't come back (refused, too slow, or naming a room your active game-data set doesn't contain) nothing changes: you get the same walk-backwards recovery and **Lost** dialog you'd get without it. It never guesses. Because a `sys st` dump is much larger than Paradigm's one-line `room` reply (8+ lines, more with items on the floor), repeated asks are spaced out so they don't flood your screen, it won't ask while a move is still unconfirmed, and it stays out of the way while a teleport maze is being solved. On an ordinary account the command is refused, so MudPlay tries once, gets nothing, and switches this power off for the rest of the session — one rejected command, not a stream.
 
 **Sysop god lives** — when this character dies, MudPlay automatically sends **`sys god <your name> add life`** to restore the life just spent. One send per death; refused (and harmless) without real god access.
+
+**Sysop goto** — lets you teleport to a named location with the game's **`sys goto <location>`** command, and adds a **Sys Gotos** flyout to the terminal right-click menu (and Walk menu), plus the room right-click menu on the Navigation map, listing your configured locations. Ticking this reveals a **Sys Goto locations** table on the BBS tab where you edit the keyword→destination list: a **Location** keyword (sent to the game verbatim), the **Map** and **Room** it lands you in (MudPlay uses these only to work out where you ended up and to show you the room name it resolves to), and an optional **Min level** gate that greys the entry out until your character is high enough. A fresh install seeds the usual starter towns (newhaven, silvermere, rhudaur, khazarad, lostcity). A `sys goto` produces no message in-game — only a statline redisplay — so MudPlay sends a bare Enter afterward to pull up the room you landed in and re-fix your position on the map. You can `sys goto` out of a room full of hostiles, but **not while you're actively in combat**: if an attack is in progress MudPlay sends `break` first and tells you to run it again once the fight stops. Refused (and harmless) without real sysop access.
+
+Beyond the menus, the **navigation engine routes through your goto locations automatically**: when you walk somewhere, if firing a `sys goto` and walking from the landing is shorter than the overland path (or the only way there), MudPlay takes the jump as part of the walk — no manual step. It only does this for locations you can reach: a level-gated location is skipped by auto-routing whenever your level is unknown or below the gate (a manual fire still trusts you). If a hostile is engaged when the walk reaches the jump, it waits — the same as any other step during combat — and fires once the fight clears.
 
 ### Automated Logon Menu Navigation
 
@@ -1530,6 +1534,12 @@ Settings → Health. Two stacked sections — **Health (HP)** on top, **Mana / K
 **Default:** 5%
 **What it does:** The absolute last resort: disconnects the game outright once HP falls to or below this value. Since 0 HP only "drops" you in MajorMUD rather than killing you outright, this threshold can go negative, all the way down to (but never past) the point your BBS's realm actually treats as death.
 **Important notes:** There's no "0 disables it" here — to fully disable the emergency hangup, use the toolbar's "Disable hangups" toggle instead.
+
+### Sys goto wimpy instead of hanging
+
+**Default:** Off
+**What it does:** Changes what the emergency escape *does* when your HP crosses the "Hang up if below" threshold with a hostile present. Instead of dropping the connection, MudPlay breaks combat (if you're actively fighting) and fires **`sys goto <location>`** to jump you to a safe town — a "wimpy" escape that keeps you online. Pick which location from the **Wimpy goto location** dropdown right below the checkbox.
+**Important notes:** This needs the **Sysop goto** power enabled on the BBS tab (the checkbox is greyed out until it is), and the location must be one of that BBS's Sys Goto entries. If the power is off, or the chosen location has been removed from the table, MudPlay falls back to the normal hangup — you're never left sitting in a fight. It rides the same trigger as the hangup, so the toolbar's "Disable hangups" toggle suppresses this too.
 
 ### Heal if above (rest/idle) / Heal if above (combat)
 
@@ -2241,6 +2251,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Rest max / Rest if below (HP, MA) | 95/60/95/30 (%) | 0–100,000 | `RestMaxHp`, `RestIfBelowHp`, `RestMaxMa`, `RestIfBelowMa` | Models/Profile/HealthSettings.cs |
 | Run if below (HP, MA) | 20 / 10 (%) | 0–100,000 (0=off) | `RunIfBelowHp` / `RunIfBelowMa` | Models/Profile/HealthSettings.cs |
 | Hang up if below | `5` (%) | death-floor minimum–100,000 | `HangIfBelowHp` | Models/Profile/HealthSettings.cs |
+| Sys goto wimpy instead of hanging (+ location) | false / unset | bool / Sys Goto keyword | `SysGotoWimpyInsteadOfHanging` / `SysGotoWimpyLocation` | Models/Profile/HealthSettings.cs |
 | Heal (rest) / Minor / Major heal (combat) | 80/70/40 (%) | 0–100,000 | `HealRestTrigger`, `MinorHealCombatTrigger`, `MajorHealCombatTrigger` | Models/Profile/HealthSettings.cs |
 | Bless if above | `70` (%) | 0–100,000 | `BlessIfAboveMa` | Models/Profile/HealthSettings.cs |
 | Heal if above (rest / combat) | 50 / 0 (%) | 0–100,000 (0=off) | `HealIfAboveMaResting` / `HealIfAboveMaCombat` | Models/Profile/HealthSettings.cs |

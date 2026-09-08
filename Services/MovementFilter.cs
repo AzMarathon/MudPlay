@@ -358,8 +358,17 @@ public sealed class MovementFilter : IRoomFilter
     private bool IsClassGateBlocked(in RoomExit exit)
     {
         if (!exit.HasClassGate) return false;
-        if (ClassNumberProvider?.Invoke() is not { } myClass) return false;
-        return myClass != exit.ClassGate;
+        if (ClassNumberProvider?.Invoke() is { } myClass) return myClass != exit.ClassGate;
+
+        // Class unknown (stat screen not parsed yet — e.g. just after login). A class
+        // gate NEVER opens for the wrong class, so for a class-gated TELEPORT — a
+        // discrete shortcut the router / picker OFFERS as a choice — routing through
+        // one on a guess is wrong for all-but-one class; block it until the class is
+        // known (report stock-20260908-103628: a bard-only barmaid transport surfaced
+        // as a teleport fork to a warrior whose stat screen hadn't parsed yet, ~11s
+        // into the session). A class-gated CARDINAL keeps the level-gate rule instead —
+        // don't block on unknown, walk up and halt on the game's own refusal.
+        return exit.Hint == RoomExitHint.Teleport;
     }
 
     // An "(Alignment: X to Y)" exit admits only crossers whose alignment value is

@@ -773,6 +773,14 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildRecentDestinationsMenu();
         AppServices.Current.GotoHistory.Changed += RebuildRecentDestinationsMenu;
 
+        // Sys Goto flyout, rebuilt on profile load (character/BBS swap) and on any
+        // profile mutation (a credentials edit fires ProfileMutated) so toggling the
+        // power or editing the table refreshes the rows. The catalogue capability gate
+        // hides the whole flyout when the power is off.
+        RebuildSysopGotoMenu();
+        AppServices.Current.Profile.ProfileLoaded += _ => RebuildSysopGotoMenu();
+        AppServices.Current.Profile.ProfileMutated += _ => RebuildSysopGotoMenu();
+
         // Casting spell profiles (Settings → Combat): the Action → Profiles fly-out
         // and the toolbar profile-menu button share one item list, rebuilt on any
         // profile change; every swap echoes its report to the terminal.
@@ -865,6 +873,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Same pre-suppression feed drives the recovery gate's tier-3 look-sweep
         // — it reads peeked neighbours the tracker would otherwise drop.
         _roomDisplayParser.RoomParsed += AppServices.Current.Recovery.OnRoomObserved;
+        // And confirms a fired `sys goto` landing: when the shown room name matches
+        // the expected landing, SysopGoto commits the position (a from-anywhere
+        // teleport has no graph edge for the tracker to follow otherwise).
+        _roomDisplayParser.RoomParsed += obs => AppServices.Current.SysopGoto.OnRoomDisplayed(obs.Name);
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine);
@@ -1111,6 +1123,11 @@ public partial class MainWindowViewModel : ObservableObject
         // After the exit command goes out, close the carrier ourselves rather
         // than waiting on the server to notice — see RequestHangupDisconnect.
         AppServices.Current.Health.SetHangupDisconnect(RequestHangupDisconnect);
+        // The raw, gate-piercing wire for `sys goto` (SysopGotoManager). Sys commands
+        // are honoured at any HP — mortally-wounded included — so the jump (and the
+        // wimpy escape built on it) must survive the EngineSendGate hold, exactly like
+        // the emergency hangup above. Same un-wrapped SendUserInput.
+        AppServices.Current.SetRawWireSender(SendUserInput);
         // CastCoordinator's `c <spell> [target]` emits still respect the
         // suicide-password / trainer-menu lockouts (gate-wrapped), but ride
         // the raw send, NOT engineSend — engineSend funnels through
@@ -4170,6 +4187,41 @@ public partial class MainWindowViewModel : ObservableObject
         _hasFavorites = Favorites.Count > 0;
         OnPropertyChanged(nameof(HasFavorites));
         OnPropertyChanged(nameof(HasWalkFlyouts));
+    }
+
+    // The terminal right-click "Sys Gotos" flyout — the usable `sys goto` locations
+    // for the active BBS (empty when the power is off; the flyout is capability-gated
+    // out of the menu entirely then). Each row fires the jump on click, greyed (null
+    // command) when the character is below the row's Min level.
+    public ObservableCollection<FavoriteMenuItem> SysopGotoItems { get; } = new();
+
+    private void RebuildSysopGotoMenu()
+    {
+        var s = AppServices.Current;
+        SysopGotoItems.Clear();
+        int number = 0;
+        foreach (Models.Profile.SysopGotoLocation loc in s.SysopGoto.UsableNow)
+        {
+            string landing = s.RoomGraph.GetRoom(new Game.Map.RoomKey(loc.Map, loc.Room)) is { } r
+                ? r.Name
+                : $"{loc.Map}/{loc.Room}";
+            bool firable = s.SysopGoto.MeetsLevel(loc);
+            string label = firable
+                ? $"{loc.Name} — {landing}"
+                : $"{loc.Name} — {landing} (needs L{loc.MinLevel})";
+            Models.Profile.SysopGotoLocation target = loc;
+            SysopGotoItems.Add(new FavoriteMenuItem($"{++number})", label, GotoFavBrush,
+                firable ? new RelayCommand(() => FireSysopGoto(target)) : null));
+        }
+    }
+
+    // Fire a Sys Goto from a menu, surfacing any gate refusal to the terminal (the
+    // typed-command path writes its own; the menu path routes it here).
+    private void FireSysopGoto(Models.Profile.SysopGotoLocation loc)
+    {
+        if (!AppServices.Current.SysopGoto.TryFire(loc, out string refusal)
+            && !string.IsNullOrEmpty(refusal))
+            AppServices.Current.WriteTerminalNotice(refusal);
     }
 
     // The last GOTO destinations (newest first, up to 10 — GotoHistoryStore caps

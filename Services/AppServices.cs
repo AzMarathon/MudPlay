@@ -1634,6 +1634,10 @@ public sealed class AppServices
     // character's own death when that per-BBS power is enabled.
     public Game.SysopGodLifeRecovery SysopGodLife { get; private set; } = null!;
 
+    // "Sysop goto" — gates + fires `sys goto <name>` to a curated location and
+    // re-anchors position on the landing. Enabled per-BBS (SysopGoto credential).
+    public Game.SysopGotoManager SysopGoto { get; private set; } = null!;
+
     // BFS pathfinding + planar layout over the active
     // RoomGraph. Consumed by the walker, loop runner,
     // auto-lair scheduler (pathfinding), and the Navigation
@@ -3726,6 +3730,38 @@ public sealed class AppServices
             send: cmd => SendGameCommand(cmd),
             log: Log);
         RoomTracker.PlayerDeathObserved += SysopGodLife.OnDeath;
+
+        // "Sysop goto": gate `sys goto <name>` (per-BBS power + active-combat block +
+        // table + level) and, on a fired jump, re-anchor position when the landing
+        // room displays. A hostile merely present in the room does NOT block — only
+        // active combat does. The fire also forces a bare Enter (a sys-goto shows no
+        // room on its own, just a statline) so the landing room displays and the
+        // resync can match it. The commit uses RoomTracker.SetLocated (the tier-3 "I am
+        // here" hard set), NOT Recovery.NoteAuthoritativePosition — the latter no-ops
+        // unless the recovery gate is already awaiting a resync, which a user-fired
+        // goto from a normal state isn't. The status write is Posted because a refusal
+        // can surface from inside the message pump (re-entering the emulator's Feed).
+        SysopGoto = new Game.SysopGotoManager(
+            enabled: SysopGotoEnabledHere,
+            locations: ActiveBbsSysopGotos,
+            inCombat: () => PlayerState.InCombat,
+            knownLevel: () => Stats.HasParsed ? PlayerStats.Level : (int?)null,
+            roomName: key => RoomGraph.GetRoom(key)?.Name,
+            // Raw (gate-piercing) wire for BOTH the `sys goto` command and the bare
+            // Enter: sys commands are honoured at any HP, so they must survive the
+            // mortally-wounded send-gate hold (the wimpy escape fires while bleeding
+            // out). The gated SendGameCommand would drop them at HP <= 0.
+            send: cmd => SendGameCommandRaw(cmd),
+            forceRoomDisplay: () => _rawWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("\r")),
+            writeStatus: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
+            commitLocated: key => RoomTracker.SetLocated(key),
+            log: Log);
+        // Late-wire HealthManager's "sys goto wimpy instead of hanging" escape now
+        // that SysopGoto exists (Health is built earlier). When the emergency low-HP
+        // path would hang up, it calls this instead: break combat + jump to the
+        // configured escape location. Returns false (→ normal hangup) when the power
+        // is off here or the location isn't in the table.
+        Health.SetWimpyGoto(name => SysopGoto.TryFireForWimpy(name));
         // The gate asks only from a recovery escalation, where the move being
         // unconfirmed IS the problem — so don't queue behind it.
         Recovery.TrySysopLocate = reason => SysopLocate.TryRequestLocate(reason, forRecovery: true);
@@ -5006,6 +5042,17 @@ public sealed class AppServices
         // pulls its candidate sailings from RoomGraph's data-driven boat index, so
         // it no-ops on realms without docks.
         Walker.SetBoatPlanner(new Game.Map.BoatRoutePlanner(RoomGraph, Bfs, Log));
+        // Sys-goto shortcut planner + fire: weighs a `sys goto` jump against the land
+        // route (empty locations when the power's off → no shortcuts) and fires the
+        // chosen jump through SysopGotoManager. The router excludes level-gated
+        // locations when the level is unknown (unlike a manual fire).
+        Walker.SetSysGotoPlanner(
+            new Game.Map.SysopGotoRoutePlanner(
+                RoomGraph, Bfs,
+                () => SysopGoto.UsableNow,
+                () => Stats.HasParsed ? PlayerStats.Level : (int?)null,
+                Log),
+            loc => SysopGoto.FireForRoute(loc));
         // Voyage timer: the boat step waits out the sail — from boarding in the
         // captain's room, through the buff-locked transit legs, to landing at the
         // arrival shore — on a wall-clock deadline it sizes from the passage's
@@ -6675,6 +6722,28 @@ public sealed class AppServices
         _engineWireSend = send;
     }
 
+    // Un-wrapped wire sender that pierces the EngineSendGate — bound to the same raw
+    // SendUserInput the emergency hangup uses (NOT the gate-wrapped engine sender).
+    // `sys` commands ride this because they're honoured at ANY HP, mortally-wounded
+    // included (confirmed mechanic), so they must survive the HP <= 0 send-gate hold
+    // rather than being dropped like ordinary engine sends. Null until first connect.
+    private Action<byte[]>? _rawWireSend;
+
+    public void SetRawWireSender(Action<byte[]> send)
+    {
+        ArgumentNullException.ThrowIfNull(send);
+        _rawWireSend = send;
+    }
+
+    // Send a command line on the raw (gate-piercing) wire, CR appended. Used for the
+    // `sys goto` power so it fires at any HP. Returns false when no sender is bound.
+    private bool SendGameCommandRaw(string command)
+    {
+        if (_rawWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
+        _rawWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
+        return true;
+    }
+
     // Send a command line to the server as if the user typed it (CR appended),
     // riding the raw engine wire-sender. Used by the Calculators tab's "Parse
     // Toplist" button to request a fresh `top N` listing. Returns false when no
@@ -8265,6 +8334,20 @@ public sealed class AppServices
     // Whether the loaded character has the "Sysop god lives" power on the active
     // BBS — gates the auto `sys god <name> add life` on death.
     private bool SysopGodLivesEnabledHere() => SysopPowerHere(static c => c.SysopGodLives);
+
+    // Whether the loaded character has the "Sysop goto" power on the active BBS —
+    // gates every `sys goto` surface (typed command, menus).
+    private bool SysopGotoEnabledHere() => SysopPowerHere(static c => c.SysopGoto);
+
+    // The active BBS credential's goto table, or empty when no character / BBS / row
+    // is set. Both the manager and the menus read through this so they share one table.
+    private IReadOnlyList<Models.Profile.SysopGotoLocation> ActiveBbsSysopGotos()
+        => ResolveActiveBbs()?.Name is { Length: > 0 } bbs
+           && Profile.Current?.BbsCredentials is { } creds
+           && creds.TryGetValue(bbs, out Models.Profile.BbsCredentials? cred)
+           && cred.SysopGotos is { } list
+            ? list
+            : System.Array.Empty<Models.Profile.SysopGotoLocation>();
 
     private bool SysopPowerHere(Func<Models.Profile.BbsCredentials, bool> pick)
         => ResolveActiveBbs()?.Name is { Length: > 0 } bbs

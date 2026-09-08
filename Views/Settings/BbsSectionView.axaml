@@ -259,6 +259,54 @@
                         <CheckBox IsChecked="{Binding SysopGodLives, Mode=TwoWay}"
                                   Content="Sysop god lives"
                                   ToolTip.Tip="`sys god &lt;name&gt; add life` — when this character dies, automatically send the sysop command to restore the life just lost. Per-character, per-BBS."/>
+                        <CheckBox IsChecked="{Binding SysopGoto, Mode=TwoWay}"
+                                  Content="Sysop goto"
+                                  ToolTip.Tip="`sys goto &lt;name&gt;` — jump to a curated location from the table below. Independent of the other powers (a board can grant this alone) and unrelated to the party @goto command. Per-character, per-BBS."/>
+                    </StackPanel>
+
+                    <!-- The `sys goto` location table, shown only when the power is on.
+                         Location is the board keyword sent verbatim; Map/Room is where it
+                         lands (so the client re-anchors); Min level 0 = ungated. -->
+                    <TextBlock Classes="GroupHeader" Text="Sys Goto locations"
+                               IsVisible="{Binding SysopGoto}"/>
+                    <StackPanel IsEnabled="{Binding HasProfile}" IsVisible="{Binding SysopGoto}"
+                                Spacing="4" Margin="0,6,0,0">
+                        <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                                   Text="Each Location keyword is sent verbatim after `sys goto`; Map/Room is where that location lands (used to re-anchor your position). Min level 0 means no gate."/>
+                        <Grid ColumnDefinitions="*,64,64,80,*,Auto" Margin="0,0,0,2">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Location"/>
+                            <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Map" Margin="6,0,0,0"/>
+                            <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Room" Margin="6,0,0,0"/>
+                            <TextBlock Grid.Column="3" Classes="FieldLabel" Text="Min level" Margin="6,0,0,0"/>
+                            <TextBlock Grid.Column="4" Classes="FieldLabel" Text="Resolves to" Margin="6,0,0,0"/>
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{Binding SysopGotos}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SysopGotoRowViewModel">
+                                    <Grid ColumnDefinitions="*,64,64,80,*,Auto" Margin="0,0,0,4">
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 PlaceholderText="newhaven"/>
+                                        <TextBox Grid.Column="1" Margin="6,0,0,0"
+                                                 Text="{Binding Map, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                                        <TextBox Grid.Column="2" Margin="6,0,0,0"
+                                                 Text="{Binding Room, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                                        <TextBox Grid.Column="3" Margin="6,0,0,0"
+                                                 Text="{Binding MinLevel, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                                        <TextBlock Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                   Classes="FieldLabel" TextWrapping="NoWrap"
+                                                   Text="{Binding RoomNamePreview}"/>
+                                        <Button Grid.Column="5" Margin="6,0,0,0" Content="Remove"
+                                                Command="{Binding $parent[ItemsControl].((vm:BbsSectionViewModel)DataContext).RemoveSysopGotoCommand}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button Content="Add location" Command="{Binding AddSysopGotoCommand}"
+                                HorizontalAlignment="Left" Margin="0,4,0,0"/>
                     </StackPanel>
 
                     <TextBlock Classes="GroupHeader" Text="Automated Logon Menu Navigation"/>

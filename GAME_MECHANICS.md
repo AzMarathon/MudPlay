@@ -3855,6 +3855,39 @@ Hidden items: 1845(0) 14(0) 894(0) 223(0) 879(0) 870(0) 897(1) 876(1) 402(0) 430
   wins each site (realm-gated); on a stock realm with the power `sys st` fills in. (Maze-solve stays
   `rm`-only — the solver drives its own relocalization.)
 
+### `sys goto <location>` — teleport to a named location *([CONFIRMED] 2026-09-08, user)*
+A separately-gated sysop power (distinct from `sys status` / `sys map` / `sys god`). The
+client models it as a fourth per-BBS **Sysop goto** checkbox backed by an editable
+location table (keyword → map/room + optional min-level), stored per-character-per-BBS.
+
+- **The keyword is sent verbatim** — `sys goto newhaven` sends exactly that; **the game
+  resolves the name**, the client never sends the map/room. The stored map/room is only for
+  the client's own landing resync + a human-readable "resolves to" preview, and the optional
+  min-level is a client-side courtesy gate (the game enforces its own).
+- **Hostiles merely PRESENT in the room do NOT block it.** *([CONFIRMED] 2026-09-08, user)*
+  You can `sys goto` out of a room full of hostile monsters. **Only ACTIVE combat blocks** —
+  i.e. once an attack has been announced against a target. When actively engaged, you must
+  send **`break`** first to stop combat, *then* `sys goto`. (The client refuses with a notice
+  and auto-sends `break` so a re-run works once combat stops.)
+- **No confirmation, no messages on success** *([CONFIRMED] 2026-09-08, user)* — a successful
+  `sys goto` produces **only a statline redisplay**, no room display, no "you teleport" line.
+  To learn the room you landed in you must send a **bare Enter** to force the room display.
+  The client sends that Enter itself and arms a landing-name resync: the next room display
+  matching the stored location's name commits the position (`RoomTracker.SetLocated`).
+- **[UNVERIFIED]** The exact wording of a *denied* `sys goto` (no power, or the game rejecting
+  an unknown keyword) and of the `break`-then-goto success path is not pinned down. Nothing
+  depends on it: the client gates on its own per-BBS power flag + the location table, and the
+  landing resync is name-match-or-timeout, not a string match on any reply.
+- **`sys` commands are NOT gated by the mortally-wounded (HP ≤ 0) state** *([CONFIRMED]
+  2026-09-08, user)*. Ordinary action commands are refused while mortally wounded ("You may not
+  do that while you are mortally wounded!"), which is why the client holds its EngineSendGate at
+  HP ≤ 0 (PlayerDroppedGate). Sysop powers bypass that entirely — `sys goto` (and the other `sys`
+  commands) can be sent and are honoured at **any** HP, bleeding-out included. So the client must
+  send a `sys goto` on a sender that pierces the mortally-wounded hold (the raw un-wrapped wire,
+  like the emergency hangup uses), NOT the gate-wrapped engine sender that drops sends at HP ≤ 0.
+  Consequence: the "sys goto wimpy instead of hanging" escape fires at any HP in its window,
+  including deep in the bleeding-out band.
+
 ## MegaMUD `messages.md` format *([CONFIRMED] 2026-08-17, user + decode of both stock/paramud files)*
 
 The MegaMUD "Messages/Responses" catalogue ships as a plain-text `messages.md` (one per

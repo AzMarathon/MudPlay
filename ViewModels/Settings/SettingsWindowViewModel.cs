@@ -213,14 +213,33 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
             AppServices.Current.Settings,
             AppServices.Current.Bbs));
 
-        Sections.Add(new BbsSectionViewModel(
+        var bbsSection = new BbsSectionViewModel(
             AppServices.Current.Bbs,
             _profile,
             AppServices.Current.Passwords,
             AppServices.Current.Display,
-            AppServices.Current.Settings));
+            AppServices.Current.Settings);
+        Sections.Add(bbsSection);
 
-        Sections.Add(new HealthSectionViewModel());
+        var healthSection = new HealthSectionViewModel();
+        Sections.Add(healthSection);
+        // The Health tab's "Sys goto wimpy" gate + picker track the BBS tab's LIVE
+        // (unsaved) sysop-goto state, so ticking Sysop goto there enables the wimpy
+        // control immediately — no Save round-trip. Both sections live for the same
+        // window lifetime, so these subscriptions don't outlive them.
+        healthSection.BindLiveSysGoto(
+            () => bbsSection.SysopGoto,
+            () => bbsSection.SysopGotos
+                .Select(r => r.Name ?? string.Empty)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToList());
+        bbsSection.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(BbsSectionViewModel.SysopGoto))
+                healthSection.NotifyLiveSysGotoChanged();
+        };
+        bbsSection.SysopGotos.CollectionChanged += (_, _) => healthSection.NotifyLiveSysGotoChanged();
+
         Sections.Add(new SpellsSectionViewModel());
         Sections.Add(new CombatSectionViewModel());
         Sections.Add(new PartySectionViewModel());

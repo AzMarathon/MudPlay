@@ -1,14 +1,17 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.56.0**
-> - Route picker: when a destination is reachable only through a room you marked **Avoid**, it offers to route through anyway (warning how many) instead of failing; a much-shorter through-avoided route gets a "respect your avoids / shorter" fork. Your avoid list is never changed
-> - Route picker is now economy-aware: "buy at X" reveals the bank-withdraw it would do, and in a party it checks your own **bank**, the party's carried cash (`@wealth`), and whether a member **has** the item (`@have`) before offering a buy — telling you where the money/item is, and walking to the shop and pausing when the money's elsewhere or spread across the party
-> - Reads the `bank` deposit listing (self-only) and maps each bank to its room
-> - New **"Search en route"** route-picker card: walk toward a hazard searching each room, grab a counter if one turns up (then cross) — and a searched-up counter is now actually collected by the obtain pipeline
-> - Route picker no longer offers a class-restricted teleport (e.g. a bard-only barmaid transport) to a character of the wrong class
-> - Route picker no longer says "no route respects your avoids" when an obtainable counter would open one — if a bought/found raft (or any hazard counter, key, ticket) reaches the destination without crossing an avoided room, it offers those obtain / cross-unprotected / search options instead; its decision is now written to the program log
-> - Route picker polish: a uniform "From X to Y / Options:" layout, a single-line footnote ("Click a route to preview it on the map or click Details… to show routing information"), safe cards first and red-tinted risky cards (cross unprotected / route through avoided rooms) last, more legible card subtext, a "route through your avoided rooms" card offered beside the obtain/cross options, the window sized to show every card, and a faster pop-up (it only checks the bank when cash on hand can't cover a buy, and reuses each shared pathfind instead of recomputing it per fork). Route planning also runs off the UI thread when you're standing still, so the app no longer freezes while it computes a route on a big map — and if planning takes a beat, the picker opens immediately showing **"Calculating…"** and fills the cards in when it's done
+> **Version 3.57.0**
+> - New **Sysop goto** power (fourth per-BBS sysop checkbox): jump to a curated location with the game's `sys goto <name>` command
+> - BBS tab gains an editable **Sys Goto locations** table — a keyword (sent verbatim), the map/room it lands you in, and an optional min-level gate; seeded with the starter towns (newhaven, silvermere, rhudaur, khazarad, lostcity)
+> - Terminal right-click, Walk, and nav-map room right-click menus gain a **Sys Gotos** flyout listing your locations; typing `sys goto <name>` yourself is intercepted the same way
+> - After a jump, MudPlay sends a bare Enter to pull up the landing room (a sys goto shows no message on its own) and re-anchors your position on the map
+> - Blocked while actively in combat — MudPlay sends `break` and asks you to re-run once the fight stops; a room merely holding hostiles is fine
+> - New Health-tab **"Sys goto wimpy instead of hanging"** option: at the low-HP hangup threshold, break combat and `sys goto` to a chosen escape location instead of dropping the connection
+> - Navigation **routes through your Sys Goto locations** automatically when a `sys goto` jump + short walk beats the overland path (or is the only way); level-gated locations are skipped when your level is unknown or too low
+> - Waypoint action commands can now chain with `;` or `^M` (each sent as its own line), matching macros / pre-rest commands
+> - Settings window is wider by default so the Sys Goto locations table isn't cramped
+> - Route picker no longer offers a class-restricted teleport (e.g. a bard-only barmaid transport) while your class is still unknown — the gate holds until the stat screen is parsed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

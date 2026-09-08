@@ -1308,8 +1308,15 @@ public sealed class LoopRunner : IRecoverableEngine
     private void SendCommand(CommandLoopStep step)
     {
         _stepInFlight = true;
-        byte[] bytes = Encoding.Latin1.GetBytes(step.Command + "\r");
-        Write(bytes, $"command '{step.Command}'");
+        // A waypoint command may chain several commands with `;` or `^M` (the same
+        // convention macros / triggers / pre-rest commands use) — send each fragment
+        // as its own CR-terminated wire line. A command with no separator splits to a
+        // single element, so the common case is unchanged. The step's delay /
+        // prompt-advance below applies once, after the whole batch is on the wire.
+        IReadOnlyList<string> parts = MacroStore.SplitCommandSteps(step.Command);
+        if (parts.Count == 0) parts = new[] { step.Command };   // defensive: Save trims/nulls empty
+        foreach (string part in parts)
+            Write(Encoding.Latin1.GetBytes(part + "\r"), $"command '{part}'");
 
         if (step.DelayMs > 0)
         {

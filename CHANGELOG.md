@@ -1,5 +1,19 @@
 # Version history
 
+## 3.57.0
+
+- New **Sysop goto** power (fourth per-BBS sysop checkbox): jump to a curated location with the game's `sys goto <name>` command
+- BBS tab gains an editable **Sys Goto locations** table — a keyword (sent verbatim), the map/room it lands you in, and an optional min-level gate; seeded with the starter towns (newhaven, silvermere, rhudaur, khazarad, lostcity)
+- Terminal right-click, Walk, and nav-map room right-click menus gain a **Sys Gotos** flyout listing your locations; typing `sys goto <name>` yourself is intercepted the same way
+- After a jump, MudPlay sends a bare Enter to pull up the landing room (a sys goto shows no message on its own) and re-anchors your position on the map
+- Blocked while actively in combat — MudPlay sends `break` and asks you to re-run once the fight stops; a room merely holding hostiles is fine
+- New Health-tab **"Sys goto wimpy instead of hanging"** option: at the low-HP hangup threshold, break combat and `sys goto` to a chosen escape location instead of dropping the connection (falls back to the normal hangup if the power's off or the location's gone)
+- Navigation now **routes through your Sys Goto locations** automatically: a walk fires a `sys goto` jump and walks from the landing when that's shorter than the overland path (or the only way there). Level-gated locations are skipped by auto-routing when your level is unknown or too low; an engaged fight makes the jump wait, like any step
+- Waypoint action commands can now chain with `;` or `^M` (each sent as its own line), matching macros / pre-rest commands
+- Settings window is wider by default so the Sys Goto locations table isn't cramped
+- Route picker no longer offers a class-restricted teleport (e.g. a bard-only barmaid transport) while your class is still unknown — the gate now holds until the stat screen is parsed, instead of surfacing the shortcut to a not-yet-identified character
+- bug reports addressed: stock-20260908-103628
+
 ## 3.56.0
 
 - Route picker: when a destination is reachable only through a room you marked **Avoid**, it now offers to route through anyway (warning how many avoided rooms it crosses) instead of failing; when a much shorter route runs through an avoided room, a two-card "respect your avoids / shorter through avoided" fork is offered. Your avoid list is never changed — only that one walk ignores it

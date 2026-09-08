@@ -39,6 +39,21 @@ public sealed class HealthSettings
     // sentinel: turning the auto-hangup off is GeneralSettings.DisableHangups.
     public int HangIfBelowHp { get; set; } = 5;
 
+    // "Sys goto wimpy instead of hanging": when set, the emergency low-HP escape
+    // that would normally drop the carrier (HangIfBelowHp, see above) instead breaks
+    // active combat and fires `sys goto <SysGotoWimpyLocation>` to flee to safety.
+    // Only meaningful when the active BBS grants the Sysop goto power and the named
+    // location is in that BBS's Sys Goto table — otherwise the engine falls back to
+    // the normal hangup. Gated at the same point as the hangup, so
+    // GeneralSettings.DisableHangups (never auto-drop) suppresses this too. Default
+    // false.
+    public bool SysGotoWimpyInsteadOfHanging { get; set; }
+
+    // The Sys Goto location keyword the wimpy escape jumps to (a Name from the active
+    // BBS's SysopGotos table). Empty = unset (the escape can't fire, falls back to
+    // hangup). Default empty.
+    public string SysGotoWimpyLocation { get; set; } = string.Empty;
+
     // ----- Heal-spell thresholds (CastingDirector triggers) ---------
 
     // Cast the rest-time heal spell (SpellsSettings.MinorHealSpell) during a
