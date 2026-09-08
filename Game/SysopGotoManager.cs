@@ -188,7 +188,20 @@ public sealed class SysopGotoManager
         return true;
     }
 
-    // Shared fire tail for both the gated and the wimpy paths: send the verbatim
+    // Router path (AutoWalkManager's sys-goto shortcut): fire the jump for a
+    // location the planner already validated (in the table, level OK). No gates
+    // here — combat is handled upstream by the movement coordinator's pause (the
+    // walker stalls rather than reaching this step mid-fight), and the level /
+    // table checks happened at planning time. Just the verbatim send + bare Enter
+    // + landing resync, shared with every other fire path.
+    public void FireForRoute(SysopGotoLocation loc)
+    {
+        ArgumentNullException.ThrowIfNull(loc);
+        _log?.Info(LogCat, $"Router firing → 'sys goto {loc.Name}' (walk shortcut).");
+        DispatchGoto(loc);
+    }
+
+    // Shared fire tail for the gated, wimpy, and router paths: send the verbatim
     // keyword, force the landing room display, and arm the name-matched resync.
     private void DispatchGoto(SysopGotoLocation loc)
     {

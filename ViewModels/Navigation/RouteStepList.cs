@@ -89,7 +89,10 @@ public static class RouteStepList
 
             rows.Add(new RouteStepRow(++n, LocationLabel(current, roomName), StepCommand(step), Room: current));
 
+            // A move advances to its target; a sys-goto jump advances to its landing
+            // room (no graph edge, so it can't be inferred from an exit).
             if (step is MoveStep m) current = m.ExpectedTarget;
+            else if (step is SysGotoStep g) current = g.LandingRoom;
         }
 
         return rows;

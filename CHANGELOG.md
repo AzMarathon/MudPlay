@@ -8,6 +8,7 @@
 - After a jump, MudPlay sends a bare Enter to pull up the landing room (a sys goto shows no message on its own) and re-anchors your position on the map
 - Blocked while actively in combat — MudPlay sends `break` and asks you to re-run once the fight stops; a room merely holding hostiles is fine
 - New Health-tab **"Sys goto wimpy instead of hanging"** option: at the low-HP hangup threshold, break combat and `sys goto` to a chosen escape location instead of dropping the connection (falls back to the normal hangup if the power's off or the location's gone)
+- Navigation now **routes through your Sys Goto locations** automatically: a walk fires a `sys goto` jump and walks from the landing when that's shorter than the overland path (or the only way there). Level-gated locations are skipped by auto-routing when your level is unknown or too low; an engaged fight makes the jump wait, like any step
 - Waypoint action commands can now chain with `;` or `^M` (each sent as its own line), matching macros / pre-rest commands
 - Settings window is wider by default so the Sys Goto locations table isn't cramped
 

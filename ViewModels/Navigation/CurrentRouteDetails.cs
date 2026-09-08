@@ -72,6 +72,7 @@ public static class CurrentRouteDetails
                 ids = ExitGateItems(exit);
             gateItemsByStep.Add(ids);
             if (step is MoveStep m) cur = m.ExpectedTarget;
+            else if (step is SysGotoStep g) cur = g.LandingRoom;
         }
 
         var details = new List<RouteDetailRow>(rows.Count + 1);

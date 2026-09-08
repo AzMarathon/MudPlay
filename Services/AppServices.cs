@@ -5042,6 +5042,17 @@ public sealed class AppServices
         // pulls its candidate sailings from RoomGraph's data-driven boat index, so
         // it no-ops on realms without docks.
         Walker.SetBoatPlanner(new Game.Map.BoatRoutePlanner(RoomGraph, Bfs, Log));
+        // Sys-goto shortcut planner + fire: weighs a `sys goto` jump against the land
+        // route (empty locations when the power's off → no shortcuts) and fires the
+        // chosen jump through SysopGotoManager. The router excludes level-gated
+        // locations when the level is unknown (unlike a manual fire).
+        Walker.SetSysGotoPlanner(
+            new Game.Map.SysopGotoRoutePlanner(
+                RoomGraph, Bfs,
+                () => SysopGoto.UsableNow,
+                () => Stats.HasParsed ? PlayerStats.Level : (int?)null,
+                Log),
+            loc => SysopGoto.FireForRoute(loc));
         // Voyage timer: the boat step waits out the sail — from boarding in the
         // captain's room, through the buff-locked transit legs, to landing at the
         // arrival shore — on a wall-clock deadline it sizes from the passage's
