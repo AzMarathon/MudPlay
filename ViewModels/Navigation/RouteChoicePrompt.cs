@@ -19,6 +19,10 @@ namespace MudPlay.ViewModels.Navigation;
 // cancel walks nothing.
 public static class RouteChoicePrompt
 {
+    // Program-log category for the route-pick decision trace. Nav lifecycle → Info
+    // for the fork that actually fired (what the user sees), Debug for the plain
+    // no-fork walk so an ordinary GOTO doesn't spam the log.
+    private const string LogCat = "RoutePick";
     // previewSink: optional map-preview channel. When the user selects a route in
     // the picker (before committing), it's called with that route's RoomKey line
     // so the caller can draw it; called with null when the picker closes (the
@@ -36,6 +40,7 @@ public static class RouteChoicePrompt
         {
             // No confident source room — let the walker plan and report the
             // "no known source" failure itself rather than second-guessing here.
+            services.Log.Debug(LogCat, $"route pick to {destination}: no confident source room — plain walk");
             CommitWalk(services, destination, gated: false);
             return;
         }
@@ -50,6 +55,9 @@ public static class RouteChoicePrompt
             services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
         if (teleport is not null)
         {
+            services.Log.Info(LogCat,
+                $"route pick {source.Key} -> {destination}: teleport fork — walk {teleport.FreeStepCount} "
+                + $"vs teleport {teleport.GatedStepCount} hop(s) via {teleport.TeleportLanding}; showing picker");
             await RunPickerAsync(services, destination, source.Key, teleport, previewSink);
             return;
         }
@@ -62,6 +70,9 @@ public static class RouteChoicePrompt
             services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
         if (trapAvoid is not null)
         {
+            services.Log.Info(LogCat,
+                $"route pick {source.Key} -> {destination}: trap-avoid fork — fewest-traps route crosses "
+                + $"{trapAvoid.FreeTrapCount} trap(s) vs {trapAvoid.GatedTrapCount} on the shortest; showing picker");
             await RunPickerAsync(services, destination, source.Key, trapAvoid, previewSink);
             return;
         }
@@ -70,13 +81,18 @@ public static class RouteChoicePrompt
         // user marked "avoid" (sole), or a much shorter route runs through one
         // (two-route). Surface it so the user can override their own avoid list for
         // this walk rather than the walk silently failing with "blocked by your
-        // avoid". Checked before the item-gate fork: a route walled purely by an
-        // avoid makes Evaluate return null anyway, and overriding a deliberate avoid
-        // is a decision the user should see explicitly.
+        // avoid". Checked before the item-gate fork, but EvaluateAvoidOverride defers
+        // (returns null) when suspending the acquirable gates opens an avoid-
+        // respecting route — that's a route the user CAN take without overriding, so
+        // the item-gate fork below surfaces its obtain / cross options instead.
         RouteChoice? avoidOverride = RouteChoicePlanner.EvaluateAvoidOverride(
             services.Bfs, services.Movement, services.RoomGraph, source.Key, destination);
         if (avoidOverride is not null)
         {
+            services.Log.Info(LogCat,
+                $"route pick {source.Key} -> {destination}: avoid-override fork — "
+                + $"{(avoidOverride.HasFreeRoute ? $"a shorter route saves {avoidOverride.FreeStepCount - avoidOverride.GatedStepCount} step(s)" : "the only route")} "
+                + $"crosses {avoidOverride.AvoidedRoomCount} room(s) you marked Avoid; showing picker");
             await RunPickerAsync(services, destination, source.Key, avoidOverride, previewSink);
             return;
         }
@@ -93,13 +109,20 @@ public static class RouteChoicePrompt
                     services.Bfs, services.Movement, services.RoomGraph, source.Key, destination)
                 is { } blocked)
             {
+                services.Log.Info(LogCat,
+                    $"route pick {source.Key} -> {destination}: blocked — no full route; can run as far as "
+                    + $"{blocked.StopRoom} ({blocked.BlockDir} is {blocked.BlockExit.Hint}); showing picker");
                 await RunPickerAsync(services, destination, source.Key,
                     BuildBlockedChoice(services, source.Key, destination, blocked), previewSink);
                 return;
             }
+            services.Log.Debug(LogCat,
+                $"route pick {source.Key} -> {destination}: no fork (free route needs nothing acquirable); plain walk");
             CommitWalk(services, destination, gated: false);
             return;
         }
+
+        string reqSummary = string.Join(", ", choice.Requirements.Select(r => $"{r.Kind}[{string.Join("/", r.ItemIds)}]"));
 
         // Sole route (no gate-free alternative) whose gates are item/ticket/key,
         // not a hazard. When every gate is a single item/ticket the user flagged
@@ -118,13 +141,22 @@ public static class RouteChoicePrompt
         {
             if (services.ShouldAutoObtainSoleRoute(choice.Requirements))
             {
+                services.Log.Info(LogCat,
+                    $"route pick {source.Key} -> {destination}: sole route needs {reqSummary}, all auto-obtainable "
+                    + "— arming acquisition and walking, no prompt");
                 CommitWalk(services, destination, gated: true);
                 return;
             }
+            services.Log.Info(LogCat,
+                $"route pick {source.Key} -> {destination}: sole route needs {reqSummary} (not auto-obtainable); showing picker");
             await RunPickerAsync(services, destination, source.Key, choice, previewSink);
             return;
         }
 
+        services.Log.Info(LogCat,
+            $"route pick {source.Key} -> {destination}: item-gate fork — "
+            + $"{(choice.HasFreeRoute ? $"direct route saves {choice.FreeStepCount - choice.GatedStepCount} step(s)" : "sole route")} "
+            + $"needing {reqSummary}; showing picker");
         await RunPickerAsync(services, destination, source.Key, choice, previewSink);
     }
 

@@ -9,7 +9,9 @@
 - Route picker: new **"Search en route"** card for a hazard you'd counter — walks toward it searching each room, grabs a counter if one turns up (then crosses), else stops at the edge; a way to find one free instead of buying
 - Search-en-route now actually works: a route counter revealed on the floor by an en-route `sea` is collected by the obtain pipeline itself, no longer dependent on the Auto-Get engine being on and the item flagged auto-collect
 - Route picker no longer offers a class-restricted teleport to a character who can't use it (a bard-only barmaid transport was being surfaced to non-bards) — a class-branching transport now binds its gate to the class on the teleport's own branch
-- bug reports addressed: stock-20260907-175035
+- Route picker no longer says "no route respects your avoids" when an obtainable counter would open one — if buying/finding a raft (or any hazard counter, key, ticket) reaches the destination without crossing an avoided room, it now offers those obtain / cross-unprotected / search options instead of only the avoid-override
+- Route picker writes its decision to the program log (which fork fired, step counts, the requirement or avoided-room count) so a walk that surfaces one card can be traced
+- bug reports addressed: stock-20260907-175035, paradigm-20260907-212758
 
 ## 3.55.8
 

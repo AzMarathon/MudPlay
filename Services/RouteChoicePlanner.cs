@@ -305,7 +305,10 @@ public static class RouteChoicePlanner
     //   • SOLE — no avoid-honouring route exists at all, but lifting the avoids opens
     //     one: the destination is reachable ONLY through a marked-avoid room. The free
     //     side renders as a disabled "no route that respects your avoids" note; the
-    //     override route is the sole option, warned by its avoided-room count.
+    //     override route is the sole option, warned by its avoided-room count. NOT
+    //     offered when suspending the acquirable gates opens an avoid-respecting route
+    //     (a raft-crossable river, a keyable door): that's Evaluate's obtain/cross
+    //     story, which honours the avoids, so overriding them would be the wrong ask.
     //   • TWO-ROUTE — an avoid-honouring route exists but a route through avoided
     //     rooms is meaningfully shorter (>= MinAvoidOverrideSavings). The avoid-
     //     honouring route is the pre-selected "free" side; the shorter avoid-crossing
@@ -337,12 +340,28 @@ public static class RouteChoicePlanner
         int avoidedCrossed = CountAvoidedOnPath(filter, overrideKeys);
         if (avoidedCrossed == 0) return null;   // route doesn't touch an avoided room — no override story
 
-        // Route honouring the avoids. Null → the SOLE case (only way there crosses an
-        // avoided room).
+        // Route honouring the avoids, gates active. Null → no gate-free avoid-
+        // respecting route (the potential SOLE case).
         IReadOnlyList<Direction>? free = bfs.FindPath(source, destination, filter);
         bool hasFree = free is { Count: > 0 };
 
         if (!hasFree)
+        {
+            // Before declaring the avoided room the only way there, check whether the
+            // real wall is an ACQUIRABLE gate rather than the avoid: BFS with the
+            // item / ticket / key / hazard gates suspended but the avoids STILL
+            // honoured. If THAT reaches the destination, an avoid-respecting route
+            // exists once the gate item is obtained (buy a raft two rooms away, cross
+            // the river) — so overriding a deliberate avoid is the wrong ask. Defer to
+            // Evaluate, which surfaces the obtain / cross-unprotected / search-en-route
+            // options, all of which respect the avoids. (Report
+            // paradigm-20260907-212758: a raft-crossable river route existed, but the
+            // picker offered only "no route respects your avoids" because this case
+            // jumped straight to the override without weighing an obtainable counter.)
+            using (filter.SuspendAcquirableGates())
+                if (bfs.FindPath(source, destination, filter) is { Count: > 0 })
+                    return null;
+
             return new RouteChoice(
                 0, overrideRoute.Count,
                 Array.Empty<RouteRequirement>(),
@@ -350,6 +369,7 @@ public static class RouteChoicePlanner
                 overrideKeys,
                 RouteChoiceKind.AvoidOverride,
                 AvoidedRoomCount: avoidedCrossed);
+        }
 
         // TWO-ROUTE: an avoid-honouring route exists — only offer the override when
         // it's meaningfully shorter, or the user's deliberate avoid stands.

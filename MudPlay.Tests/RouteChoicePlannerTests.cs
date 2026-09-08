@@ -1125,4 +1125,68 @@ public sealed class RouteChoicePlannerTests
             Assert.Null(RouteChoicePlanner.EvaluateAvoidOverride(
                 bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9))));
     }
+
+    // Report paradigm-20260907-212758: the ONLY avoid-respecting route crosses a
+    // hazard room (a river you'd cross with a bought raft); the only avoid-FREE
+    // route runs through a marked-avoid room. The picker must NOT claim "no route
+    // respects your avoids" — an obtainable counter opens an avoid-respecting route,
+    // so EvaluateAvoidOverride defers and Evaluate surfaces the obtain/cross options.
+    //   avoid-respecting: 1/1 ──N── 1/2 (River, Spell 700, counter 42) ──N── 1/9
+    //   avoid-crossing:   1/1 ──E── 1/5 (Avoided) ──E── 1/9
+    private const string AvoidWithHazardBypassJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "River", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Avoided", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void AvoidOverride_DefersWhenAnAcquirableCounterOpensAnAvoidRespectingRoute()
+    {
+        WithGraph(AvoidWithHazardBypassJson, (bfs, graph, filter) =>
+        {
+            filter.MarkAvoided(new RoomKey(1, 5));   // the only avoid-FREE route runs through here
+
+            // The avoid-override must NOT fire: a raft (item 42) opens the river route,
+            // which respects the avoid. Deferred so the item-gate fork handles it.
+            Assert.Null(RouteChoicePlanner.EvaluateAvoidOverride(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+
+            // And Evaluate surfaces that river crossing as a sole hazard route
+            // (obtain / cross-unprotected), respecting the avoid.
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            Assert.NotNull(choice);
+            Assert.False(choice!.HasFreeRoute);
+            RouteRequirement req = Assert.Single(choice.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
+            Assert.Equal(new[] { 42 }, req.ItemIds);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 9) },
+                choice.GatedPath);   // the avoid-respecting river route, not through 1/5
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 2) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;   // no raft carried
+        });
+    }
 }
