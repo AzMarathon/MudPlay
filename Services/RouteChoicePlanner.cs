@@ -34,6 +34,10 @@ public enum RouteChoiceKind
                // because the walker would otherwise disarm at step time, and the user
                // may prefer the longer clean route to risking the disarm.
     Blocked,   // no route at all — offer to walk as far as possible, up to the block.
+    AvoidOverride, // the destination is reachable ONLY by routing through a room the user
+               // marked "avoid" (sole case), or a much shorter route exists through one
+               // (two-route case). Offered so the user can override their own avoid list
+               // for this one walk, warned about which/how many avoided rooms it crosses.
 }
 
 // A "run to the blocked room anyway" plan: the furthest room the walker can
@@ -72,7 +76,19 @@ public sealed record RouteChoice(
     // the real counts rather than claiming "trap-free" when it isn't. Zero for every
     // other kind.
     int FreeTrapCount = 0,
-    int GatedTrapCount = 0)
+    int GatedTrapCount = 0,
+    // For an AvoidOverride choice: how many rooms the user marked "avoid" the gated
+    // (override) route passes through, so the card can warn ("routes through N rooms
+    // you marked Avoid"). Zero for every other kind.
+    int AvoidedRoomCount = 0,
+    // An OPTIONAL avoid-crossing alternative offered alongside a hazard/gate route
+    // that already respects the avoids: the ignore-avoids route (RoomKey path) and
+    // how many marked rooms it crosses. Non-null only when the picker attaches it to
+    // an item-gate/hazard choice — a raft route respects your avoids, but plowing
+    // through the avoided rooms needs no raft, so it's a real second way there. Null
+    // on every fork that doesn't offer it.
+    IReadOnlyList<RoomKey>? AvoidAlternativePath = null,
+    int AvoidAlternativeCount = 0)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -104,12 +120,24 @@ public static class RouteChoicePlanner
     // just takes it (unchanged silent behavior).
     private const int MinTeleportSavings = 2;
 
+    // Minimum rooms an avoid-crossing route must save before the picker offers the
+    // TWO-ROUTE avoid override (an avoid-honouring route ALSO exists but is longer).
+    // Below this, the user's marked avoid is worth keeping — a one-room saving isn't
+    // worth routing through a room they deliberately excluded. The SOLE case (no
+    // avoid-honouring route at all) ignores this floor: it's the only way there.
+    private const int MinAvoidOverrideSavings = 2;
+
     public static RouteChoice? Evaluate(
         BfsMapper bfs,
         MovementFilter filter,
         RoomGraphManager graph,
         RoomKey source,
-        RoomKey destination)
+        RoomKey destination,
+        // Optional memoized provider for the plain default route (gates + avoids on,
+        // teleports allowed). Several forks compute the SAME route; the caller passes
+        // one memoized closure so the full-graph BFS runs once instead of per fork.
+        // Null → compute it here (tests / standalone callers).
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);
         ArgumentNullException.ThrowIfNull(filter);
@@ -117,7 +145,7 @@ public static class RouteChoicePlanner
 
         // Free route: gates active. May be null when every path to the
         // destination crosses an acquirable gate.
-        IReadOnlyList<Direction>? free = bfs.FindPath(source, destination, filter);
+        IReadOnlyList<Direction>? free = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
 
         // Direct route: acquirable gates suspended so BFS crosses them. No direct
         // route either → genuinely disconnected (or blocked by a non-acquirable
@@ -204,14 +232,17 @@ public static class RouteChoicePlanner
         MovementFilter filter,
         RoomGraphManager graph,
         RoomKey source,
-        RoomKey destination)
+        RoomKey destination,
+        // Memoized plain default route (see Evaluate). The teleports-allowed shortest
+        // route IS that base route; reuse it rather than re-running the BFS.
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(graph);
 
         // Shortest route: teleports allowed (the walker's default plan).
-        IReadOnlyList<Direction>? tele = bfs.FindPath(source, destination, filter);
+        IReadOnlyList<Direction>? tele = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
         if (tele is null || tele.Count == 0) return null;
 
         // Nothing to weigh unless the shortest route actually teleports.
@@ -251,14 +282,17 @@ public static class RouteChoicePlanner
         MovementFilter filter,
         RoomGraphManager graph,
         RoomKey source,
-        RoomKey destination)
+        RoomKey destination,
+        // Memoized plain default route (see Evaluate) — the "shortest by hops" route
+        // is that same base route.
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(graph);
 
         // Shortest route: by hops (what the walker would otherwise take).
-        IReadOnlyList<Direction>? shortest = bfs.FindPath(source, destination, filter);
+        IReadOnlyList<Direction>? shortest = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
         if (shortest is null || shortest.Count == 0) return null;
 
         int shortestTraps = bfs.CountTrapsOnPath(source, shortest);
@@ -281,6 +315,139 @@ public static class RouteChoicePlanner
             RouteChoiceKind.TrapAvoid,
             FreeTrapCount: fewestTraps,
             GatedTrapCount: shortestTraps);
+    }
+
+    // Compares the route honouring the user's "avoid this room" list against the
+    // route that lifts ONLY those avoids (every real gate — level / toll / class /
+    // item / ticket / key / hazard — still honoured). Returns an AvoidOverride
+    // RouteChoice in two shapes:
+    //   • SOLE — no avoid-honouring route exists at all, but lifting the avoids opens
+    //     one: the destination is reachable ONLY through a marked-avoid room. The free
+    //     side renders as a disabled "no route that respects your avoids" note; the
+    //     override route is the sole option, warned by its avoided-room count. NOT
+    //     offered when suspending the acquirable gates opens an avoid-respecting route
+    //     (a raft-crossable river, a keyable door): that's Evaluate's obtain/cross
+    //     story, which honours the avoids, so overriding them would be the wrong ask.
+    //   • TWO-ROUTE — an avoid-honouring route exists but a route through avoided
+    //     rooms is meaningfully shorter (>= MinAvoidOverrideSavings). The avoid-
+    //     honouring route is the pre-selected "free" side; the shorter avoid-crossing
+    //     route is the "gated" side. The user can keep their avoid or override it.
+    // Null when lifting avoids opens nothing new (the block is a real gate / genuine
+    // disconnect — Evaluate / PlanBlocked handle those), or the shorter avoid route
+    // doesn't save enough to be worth crossing a deliberately-excluded room. Never
+    // fires when the avoid-honouring route is already the shortest (no avoided room
+    // on it → nothing to override).
+    public static RouteChoice? EvaluateAvoidOverride(
+        BfsMapper bfs,
+        MovementFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination,
+        // Memoized plain default route (see Evaluate) — the avoid-honouring "free"
+        // route is that base route.
+        Func<IReadOnlyList<Direction>?>? baseRoute = null,
+        // Memoized avoids-lifted route (ignoreAvoids), shared with AvoidAlternative so
+        // the ignore-avoids BFS runs once across both.
+        Func<IReadOnlyList<Direction>?>? avoidLiftedRoute = null)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+
+        // Route lifting ONLY the avoids (every real gate stays honoured). If even
+        // that finds nothing, an avoid isn't the wall — bail so Evaluate / PlanBlocked
+        // can name the real gate or disconnect.
+        IReadOnlyList<Direction>? overrideRoute = avoidLiftedRoute is { } ap
+            ? ap() : bfs.FindPath(source, destination, filter, ignoreAvoids: true);
+        if (overrideRoute is null || overrideRoute.Count == 0) return null;
+
+        IReadOnlyList<RoomKey> overrideKeys = BuildKeyPath(graph, source, overrideRoute);
+        int avoidedCrossed = CountAvoidedOnPath(filter, overrideKeys);
+        if (avoidedCrossed == 0) return null;   // route doesn't touch an avoided room — no override story
+
+        // Route honouring the avoids, gates active. Null → no gate-free avoid-
+        // respecting route (the potential SOLE case).
+        IReadOnlyList<Direction>? free = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
+        bool hasFree = free is { Count: > 0 };
+
+        if (!hasFree)
+        {
+            // Before declaring the avoided room the only way there, check whether the
+            // real wall is an ACQUIRABLE gate rather than the avoid: BFS with the
+            // item / ticket / key / hazard gates suspended but the avoids STILL
+            // honoured. If THAT reaches the destination, an avoid-respecting route
+            // exists once the gate item is obtained (buy a raft two rooms away, cross
+            // the river) — so overriding a deliberate avoid is the wrong ask. Defer to
+            // Evaluate, which surfaces the obtain / cross-unprotected / search-en-route
+            // options, all of which respect the avoids. (Report
+            // paradigm-20260907-212758: a raft-crossable river route existed, but the
+            // picker offered only "no route respects your avoids" because this case
+            // jumped straight to the override without weighing an obtainable counter.)
+            using (filter.SuspendAcquirableGates())
+                if (bfs.FindPath(source, destination, filter) is { Count: > 0 })
+                    return null;
+
+            return new RouteChoice(
+                0, overrideRoute.Count,
+                Array.Empty<RouteRequirement>(),
+                Array.Empty<RoomKey>(),
+                overrideKeys,
+                RouteChoiceKind.AvoidOverride,
+                AvoidedRoomCount: avoidedCrossed);
+        }
+
+        // TWO-ROUTE: an avoid-honouring route exists — only offer the override when
+        // it's meaningfully shorter, or the user's deliberate avoid stands.
+        if (free!.Count - overrideRoute.Count < MinAvoidOverrideSavings) return null;
+
+        return new RouteChoice(
+            free.Count, overrideRoute.Count,
+            Array.Empty<RouteRequirement>(),
+            BuildKeyPath(graph, source, free),
+            overrideKeys,
+            RouteChoiceKind.AvoidOverride,
+            AvoidedRoomCount: avoidedCrossed);
+    }
+
+    // The avoid-crossing route to offer as an EXTRA card alongside a hazard/gate
+    // choice that already respects the avoids. It's the ignore-avoids route (every
+    // real gate still honoured) when that route actually crosses ≥1 marked room —
+    // "plow through your avoided rooms" needs no raft, so it's a genuine alternative
+    // to the obtain/cross options. Null when lifting the avoids opens nothing new
+    // (the avoids aren't the wall) or the route touches no avoided room. The caller
+    // attaches it only to an item-gate/hazard choice (whose own routes respect the
+    // avoids), so the two never describe the same path.
+    public static (IReadOnlyList<RoomKey> Path, int AvoidedCount)? AvoidAlternative(
+        BfsMapper bfs,
+        MovementFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination,
+        // Memoized avoids-lifted route, shared with EvaluateAvoidOverride so the
+        // ignore-avoids BFS runs once across both.
+        Func<IReadOnlyList<Direction>?>? avoidLiftedRoute = null)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+
+        IReadOnlyList<Direction>? route = avoidLiftedRoute is { } ap
+            ? ap() : bfs.FindPath(source, destination, filter, ignoreAvoids: true);
+        if (route is null || route.Count == 0) return null;
+
+        IReadOnlyList<RoomKey> keys = BuildKeyPath(graph, source, route);
+        int crossed = CountAvoidedOnPath(filter, keys);
+        return crossed > 0 ? (keys, crossed) : null;
+    }
+
+    // How many rooms on a key path (excluding the source the walker already stands
+    // in) the user marked "avoid" — the count the override card warns with.
+    private static int CountAvoidedOnPath(MovementFilter filter, IReadOnlyList<RoomKey> keys)
+    {
+        int n = 0;
+        for (int i = 1; i < keys.Count; i++)   // skip source
+            if (filter.IsAvoided(keys[i])) n++;
+        return n;
     }
 
     // When every route to the destination is blocked — no gate-free route, and

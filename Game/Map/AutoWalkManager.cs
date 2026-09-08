@@ -71,6 +71,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private IMazeSolver? _mazeSolver;
     private IPyramidSolver? _pyramidSolver;
     private BoatRoutePlanner? _boatPlanner;
+    private SysopGotoRoutePlanner? _sysGotoPlanner;
+    // Fires a routed sys-goto jump (SysopGotoManager.FireForRoute). Left unset on
+    // realms / profiles without the power — the walker then just plans land routes.
+    private Action<Models.Profile.SysopGotoLocation>? _sysGotoFire;
     private Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private readonly LogService? _log;
 
@@ -100,6 +104,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // "Sailing the high seas…" countdown while the voyage is in flight.
     private bool _awaitingBoatArrival;
     private IDisposable? _boatTimer;
+    // Sys-goto shortcut in flight: a SysGotoStep fired `sys goto <name>` and we're
+    // waiting for the landing room to confirm. Like a boat there's no graph edge to
+    // the arrival, so the tracker re-anchors when the forced room-display renders
+    // (SysopGotoManager's resync commits SetLocated there); a wall-clock backstop
+    // catches the case where the landing never matches. Combat isn't handled here —
+    // the coordinator pause already stalls the walker before the step fires.
+    private bool _awaitingSysGotoArrival;
+    private IDisposable? _sysGotoTimer;
     // One-shot settle after an abandoned-combat halt: holds the AbandonedCombat
     // gate a beat past the Combat-gate clear so a monster that follows us out has
     // time to arrive and re-assert Combat (report stock-20260731-010401).
@@ -139,6 +151,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // teleport, but it carries fixed board / transit / disembark overhead, so it
     // must beat walking by a clear margin to be worth splitting the party for.
     private const int BoatHopWeight = 4;
+
+    // A sys-goto jump weighs this many land hops when its landing→goal leg is
+    // compared against a pure land route. The jump is instant, but firing it (a
+    // possible `break`, the teleport, the forced room render + resync) is real
+    // overhead, so the shortcut must save at least this many walked rooms to be
+    // worth taking. Lighter than a boat (no party split), heavier than one step.
+    private const int SysGotoHopWeight = 3;
+    // The forced landing render + name-matched resync arrive within a couple of
+    // seconds; give a generous backstop before failing the jump out.
+    private static readonly TimeSpan SysGotoArrivalWindow = TimeSpan.FromSeconds(6);
 
     // Counter for mid-walk re-plans triggered by tracker entering
     // Suspect/Lost mid-step (typically caused by the user manually typing
@@ -394,6 +416,18 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(planner);
         _boatPlanner = planner;
+    }
+
+    // Bind the sys-goto shortcut planner + its fire action. The planner weighs a
+    // `sys goto` jump against the land route; the fire action puts the chosen jump
+    // on the wire (via SysopGotoManager). Both unset → no sys-goto shortcuts, land
+    // routes only. Combat gating is the coordinator's (the walker stalls paused).
+    public void SetSysGotoPlanner(SysopGotoRoutePlanner planner, Action<Models.Profile.SysopGotoLocation> fire)
+    {
+        ArgumentNullException.ThrowIfNull(planner);
+        ArgumentNullException.ThrowIfNull(fire);
+        _sysGotoPlanner = planner;
+        _sysGotoFire = fire;
     }
 
     // Bind the voyage scheduler — a one-shot wall-clock timer the boat step uses
@@ -776,6 +810,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // the trap-free route over the shorter trapped one) across the deferral.
     private bool _deferredWalkAvoidTraps;
 
+    // Carries the route picker's "route through avoided rooms" choice (true only when
+    // the user chose to override their own avoid list for this walk) across the deferral.
+    private bool _deferredWalkIgnoreAvoids;
+
     // One-shot watchdog for the tracker-Pending deferral. A move the server
     // refuses with no room redisplay leaves the tracker stuck Pending, so the
     // Confirmed transition the deferral waits on never arrives and the walk would
@@ -797,6 +835,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // silently reverts to the defaults and takes a teleport it was told to avoid.
     private bool _activeAvoidTeleports;
     private bool _activeAvoidTraps;
+    // True when the active walk overrides the user's avoid list (the picker's
+    // "route through avoided rooms" choice). A mid-walk replan must keep it, or the
+    // walk would re-honour the avoids it was told to cross and fail in place.
+    private bool _activeIgnoreAvoids;
     private bool _activeThroughGates;
     private bool _activeArmAcquisition = true;
 
@@ -834,7 +876,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool armItemAcquisition = true,
         bool avoidTeleports = false,
         bool avoidTraps = false,
-        bool supersedeSilently = false)
+        bool supersedeSilently = false,
+        // ignoreAvoids: when true, plan through (and into) rooms the user marked
+        // "avoid". The route picker's "route through avoided rooms" choice passes
+        // true; every other caller keeps the default (false) so the avoid list is
+        // honoured as before.
+        bool ignoreAvoids = false)
     {
         if (State is WalkState.Walking or WalkState.Paused)
         {
@@ -864,6 +911,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _deferredWalkArmAcquisition = armItemAcquisition;
             _deferredWalkAvoidTeleports = avoidTeleports;
             _deferredWalkAvoidTraps = avoidTraps;
+            _deferredWalkIgnoreAvoids = ignoreAvoids;
             _destination = destination;       // populated so status surfaces show the target
             State = WalkState.Walking;
             // Watchdog: if the tracker never settles (the in-flight move was
@@ -877,7 +925,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return true;
         }
 
-        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps);
+        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps, ignoreAvoids);
     }
 
     private bool WalkToImmediate(
@@ -885,7 +933,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool planThroughAcquirableGates = false,
         bool armItemAcquisition = true,
         bool avoidTeleports = false,
-        bool avoidTraps = false)
+        bool avoidTraps = false,
+        bool ignoreAvoids = false)
     {
         // Callers may arrive here from the WalkTo entry (Idle) OR from
         // the deferred dispatch in OnTrackerStateChanged (Walking with
@@ -946,22 +995,37 @@ public sealed class AutoWalkManager : IRecoverableEngine
         IReadOnlyList<Direction>? path;
         IReadOnlyList<WalkStep> expanded;
         BoatRoutePlan? boatPlan = null;
+        SysopGotoRoutePlan? sysGotoPlan = null;
         try
         {
             path = _bfs.FindPath(source.Key, destination, _filter,
-                refuseTeleports: avoidTeleports, avoidTraps: avoidTraps);
+                refuseTeleports: avoidTeleports, avoidTraps: avoidTraps, ignoreAvoids: ignoreAvoids);
 
             // A sea-captain sailing can beat (or replace) the land route. Weigh
             // the boat's stitched land-legs against the pure land route; the
             // planner returns a plan only when it wins by the boat-overhead
             // margin, or when there's no land route at all and a sail is the
             // sole crossing.
-            boatPlan = ChooseBoatRoute(source.Key, destination,
-                landHops: path is { Count: > 0 } ? path.Count : (int?)null);
+            int? landHops = path is { Count: > 0 } ? path.Count : (int?)null;
+            boatPlan = ChooseBoatRoute(source.Key, destination, landHops);
+
+            // A sys-goto jump can also beat (or replace) the land route — weigh it
+            // the same way. When BOTH a boat and a jump qualify, keep the one with
+            // the cheaper weighted land-hop cost so we never build two shortcuts.
+            sysGotoPlan = ChooseSysGotoRoute(source.Key, destination, landHops);
+            if (boatPlan is { } b && sysGotoPlan is { } s)
+            {
+                if (s.LandHops + SysGotoHopWeight < b.LandHops + BoatHopWeight) boatPlan = null;
+                else sysGotoPlan = null;
+            }
 
             if (boatPlan is { } chosen)
             {
                 expanded = BuildBoatWalk(source.Key, chosen);
+            }
+            else if (sysGotoPlan is { } chosenGoto)
+            {
+                expanded = BuildSysGotoWalk(chosenGoto);
             }
             else if (path is null || path.Count == 0)
             {
@@ -1042,6 +1106,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _destination = destination;
         _activeAvoidTeleports = avoidTeleports;
         _activeAvoidTraps = avoidTraps;
+        _activeIgnoreAvoids = ignoreAvoids;
         _activeThroughGates = planThroughAcquirableGates;
         _activeArmAcquisition = armItemAcquisition;
         _origin = source.Key;
@@ -1201,6 +1266,32 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (plan.FromArrival.Count > 0)
             steps.AddRange(RemoteActionPathExpander.Expand(
                 _graph, plan.Passage.ArrivalRoom, plan.FromArrival, _bfs, _filter, _log));
+        return steps;
+    }
+
+    // A sys-goto jump can shortcut the land route: fire `sys goto <name>` from
+    // wherever we stand and walk the (shorter) leg from the landing. Take it only
+    // when it beats the land route by the overhead margin — or when there's no land
+    // route at all and the jump is the sole crossing. Level-gated locations are
+    // already excluded at planning time (unknown level → excluded).
+    private SysopGotoRoutePlan? ChooseSysGotoRoute(RoomKey source, RoomKey destination, int? landHops)
+    {
+        if (_sysGotoPlanner is null || _sysGotoFire is null) return null;
+        if (_sysGotoPlanner.TryPlan(source, destination, _filter) is not { } plan) return null;
+        if (landHops is { } hops && plan.LandHops + SysGotoHopWeight >= hops) return null;
+        return plan;
+    }
+
+    // Expand a sys-goto plan into one ordered step list: the SysGotoStep jump
+    // (fired from the current room — no leg before it), then the land leg from the
+    // landing room to the goal, expanded like any land route so doors / traps /
+    // hidden exits along it are handled.
+    private IReadOnlyList<WalkStep> BuildSysGotoWalk(SysopGotoRoutePlan plan)
+    {
+        List<WalkStep> steps = new() { new SysGotoStep(plan.Location) };
+        if (plan.FromArrival.Count > 0)
+            steps.AddRange(RemoteActionPathExpander.Expand(
+                _graph, plan.LandingRoom, plan.FromArrival, _bfs, _filter, _log));
         return steps;
     }
 
@@ -1484,6 +1575,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 break;
             case BoatStep boat:
                 SendBoatStep(boat);
+                break;
+            case SysGotoStep sysGoto:
+                SendSysGotoStep(sysGoto);
                 break;
         }
     }
@@ -1972,6 +2066,30 @@ public sealed class AutoWalkManager : IRecoverableEngine
             $"sailing to {passage.Place} (~{voyageSeconds}s)", _destination));
     }
 
+    // Put a sys-goto jump on the wire. Fires `sys goto <name>` through
+    // SysopGotoManager (verbatim send + bare Enter + landing resync) — no combat
+    // gate here, the coordinator's pause already stalled us out of any fight before
+    // this step ran. Like a boat there's no graph edge to the landing, so we DON'T
+    // hand the tracker a pending move; HandleSysGotoTransition completes the step
+    // when the landing room confirms (the manager's resync commits SetLocated
+    // there), with OnSysGotoDeadline as the wall-clock backstop.
+    private void SendSysGotoStep(SysGotoStep step)
+    {
+        _stepInFlight = true;
+        _awaitingSysGotoArrival = true;
+
+        _log?.Info("Walker",
+            $"step {_index + 1}/{_path!.Count}: sys goto '{step.Location.Name}' "
+            + $"→ landing {step.LandingRoom} (jump, then walk from there).");
+
+        _sysGotoFire?.Invoke(step.Location);
+
+        // Arm the backstop last, after the jump bytes are out. An early landing
+        // observation disposes it in HandleSysGotoTransition; first to fire wins.
+        _sysGotoTimer?.Dispose();
+        _sysGotoTimer = _scheduleDelay?.Invoke(SysGotoArrivalWindow, OnSysGotoDeadline);
+    }
+
     // Emit a move (cardinal direction, text-exit command, or teleport
     // keyword) — fires the pre-move stealth hook (so sn is the last
     // command before the move) then writes the move bytes. Every move-byte
@@ -2014,14 +2132,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool armAcquisition = _deferredWalkArmAcquisition;
         bool avoidTeleports = _deferredWalkAvoidTeleports;
         bool avoidTraps = _deferredWalkAvoidTraps;
+        bool ignoreAvoids = _deferredWalkIgnoreAvoids;
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
         _deferredWalkAvoidTraps = false;
+        _deferredWalkIgnoreAvoids = false;
         _deferredWalkTimer?.Dispose();
         _deferredWalkTimer = null;
-        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps);
+        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps, ignoreAvoids);
     }
 
     // Watchdog fire for a deferral whose Confirmed transition never arrived (the
@@ -2066,6 +2186,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (_awaitingBoatArrival && _path[_index] is BoatStep boatStep)
         {
             HandleBoatTransition(transition, boatStep);
+            return;
+        }
+
+        // A sys-goto jump likewise owns every transition until the landing room
+        // confirms — the forced room render + resync churn the tracker, so intercept
+        // before the generic MoveStep / recovery paths would read it as a desync.
+        if (_awaitingSysGotoArrival && _path[_index] is SysGotoStep sysGotoStep)
+        {
+            HandleSysGotoTransition(transition, sysGotoStep);
             return;
         }
 
@@ -2257,7 +2386,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     planThroughAcquirableGates: _activeThroughGates,
                     armItemAcquisition: _activeArmAcquisition,
                     avoidTeleports: _activeAvoidTeleports,
-                    avoidTraps: _activeAvoidTraps);
+                    avoidTraps: _activeAvoidTraps,
+                    ignoreAvoids: _activeIgnoreAvoids);
             }
             finally
             {
@@ -2332,6 +2462,64 @@ public sealed class AutoWalkManager : IRecoverableEngine
         Raise(new WalkEvent(WalkEventKind.Failed,
             $"boat '{boat.Passage.Keyword}' never reached {arrival} "
             + "(captain refused boarding, or arrival mismatch)", _destination));
+        Reset();
+    }
+
+    // Own every transition while a sys-goto jump is in flight. Complete the step
+    // once the tracker confirms the landing room (SysopGotoManager's name-matched
+    // resync commits SetLocated there off the forced room render); otherwise the
+    // churn is transit — keep waiting for the backstop.
+    private void HandleSysGotoTransition(RoomTransition transition, SysGotoStep step)
+    {
+        RoomKey landing = step.LandingRoom;
+
+        if (transition.NewConfidence == RoomConfidence.Confirmed
+            && transition.NewRoom?.Key is { } here && here.Equals(landing))
+        {
+            _log?.Info("Walker", $"sys goto '{step.Location.Name}' landed at {landing}.");
+            _sysGotoTimer?.Dispose();
+            _sysGotoTimer = null;
+            _awaitingSysGotoArrival = false;
+            _stepInFlight = false;
+            _retryCount = 0;
+            _replanCount = 0;
+            AdvanceStep();
+            return;
+        }
+
+        _log?.Info("Walker",
+            $"sys goto '{step.Location.Name}' transit (tracker {transition.NewConfidence}); awaiting {landing}.");
+    }
+
+    // The jump's wall-clock backstop fired. If the tracker has re-anchored at the
+    // landing room by now, an arrival observation may just not have matched yet —
+    // complete the step. Otherwise the jump never landed (refused / arrival never
+    // rendered), so fail out rather than leave the walk wedged.
+    private void OnSysGotoDeadline()
+    {
+        _sysGotoTimer?.Dispose();
+        _sysGotoTimer = null;
+
+        if (!_awaitingSysGotoArrival) return;                 // already completed early
+        if (_path is null || _index >= _path.Count) return;
+        if (_path[_index] is not SysGotoStep step) return;
+
+        RoomKey landing = step.LandingRoom;
+        if (_tracker.State.CurrentRoom?.Key is { } here && here.Equals(landing))
+        {
+            _log?.Info("Walker",
+                $"sys goto '{step.Location.Name}' deadline: already at {landing}; completing step.");
+            _awaitingSysGotoArrival = false;
+            _stepInFlight = false;
+            _retryCount = 0;
+            _replanCount = 0;
+            AdvanceStep();
+            return;
+        }
+
+        Raise(new WalkEvent(WalkEventKind.Failed,
+            $"sys goto '{step.Location.Name}' never reached {landing} "
+            + "(jump refused, or landing never rendered)", _destination));
         Reset();
     }
 
@@ -2551,6 +2739,31 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return;
             }
 
+            // Same for a sys-goto jump in flight when the pause hit: don't re-fire it
+            // on resume (that re-teleports) — keep awaiting the landing, or complete
+            // now if the landing already confirmed while paused.
+            if (_awaitingSysGotoArrival)
+            {
+                RoomKey? landing = (_path is { } gp && _index < gp.Count && gp[_index] is SysGotoStep gs)
+                    ? gs.LandingRoom : (RoomKey?)null;
+                if (landing is { } land
+                    && _tracker.State.CurrentRoom?.Key is { } here2 && here2.Equals(land))
+                {
+                    _log?.Info("Walker", "resume: sys goto already landed while paused; completing step.");
+                    _sysGotoTimer?.Dispose();
+                    _sysGotoTimer = null;
+                    _awaitingSysGotoArrival = false;
+                    _stepInFlight = false;
+                    AdvanceStep();
+                }
+                else
+                {
+                    _log?.Info("Walker",
+                        "resume: sys goto still in flight; awaiting landing, not re-sending.");
+                }
+                return;
+            }
+
             // A greet teleport (ask-transport) owns its own re-ask watchdog, which
             // holds off while paused. If we already landed while paused, complete
             // the step; otherwise re-arm the watchdog so it resumes re-asking.
@@ -2718,6 +2931,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _boatTimer = null;
         _awaitingBoatArrival = false;
         _sailingPlace = null;
+        _sysGotoTimer?.Dispose();
+        _sysGotoTimer = null;
+        _awaitingSysGotoArrival = false;
         ClearGreetTeleportWait();
         _deferredWalkTimer?.Dispose();
         _deferredWalkTimer = null;
@@ -2726,8 +2942,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
         _deferredWalkAvoidTraps = false;
+        _deferredWalkIgnoreAvoids = false;
         _activeAvoidTeleports = false;
         _activeAvoidTraps = false;
+        _activeIgnoreAvoids = false;
         _activeThroughGates = false;
         _activeArmAcquisition = true;
         _retryCount = 0;

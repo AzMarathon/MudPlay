@@ -42,6 +42,7 @@ public sealed partial class LookParser : IDisposable
 
     private State _state = State.Idle;
     private string? _currentName;
+    private string? _currentGang;
     private readonly List<string> _descriptionLines = new();
     private readonly List<EquipmentItem> _equipment = new();
     private bool _sawEquipmentMarker;
@@ -114,6 +115,13 @@ public sealed partial class LookParser : IDisposable
                 if (nameMatch.Success)
                 {
                     _currentName = nameMatch.Groups["name"].Value.Trim();
+                    // Absent group, or a "( )" with nothing in it, both mean
+                    // "no gang seen" — null, so RecordLook leaves whatever a
+                    // WHO row already taught us alone.
+                    _currentGang = nameMatch.Groups["gang"].Success
+                        ? nameMatch.Groups["gang"].Value.Trim()
+                        : null;
+                    if (string.IsNullOrEmpty(_currentGang)) _currentGang = null;
                     _descriptionLines.Clear();
                     _equipment.Clear();
                     _sawEquipmentMarker = false;
@@ -195,11 +203,11 @@ public sealed partial class LookParser : IDisposable
         IReadOnlyList<EquipmentItem>? equipment =
             _sawEquipmentMarker ? _equipment.ToArray() : null;
 
-        _db.RecordLook(_currentName, race, cls, equipment, nowUtc);
+        _db.RecordLook(_currentName, race, cls, _currentGang, equipment, nowUtc);
 
         _log?.Info("LookParser",
             $"look response complete for '{_currentName}' — race: {race ?? "?"}, " +
-            $"class: {cls ?? "?"}, equipment: " +
+            $"class: {cls ?? "?"}, gang: {_currentGang ?? "?"}, equipment: " +
             (equipment is null ? "unchanged" : $"{equipment.Count} item(s)"));
 
         _state = State.Idle;
@@ -231,7 +239,32 @@ public sealed partial class LookParser : IDisposable
     // Bracketed player name header — e.g. "[ MudPlay WuzHere ]". Restricted to
     // alphabetic content + spaces so unrelated bracketed lines (chat tags,
     // status codes) don't false-trigger.
-    [GeneratedRegex(@"^\s*\[\s+(?<name>[A-Za-z][A-Za-z' -]*?)\s+\]\s*$",
+    //
+    // THE HEADER DOES NOT ALWAYS END AT THE "]". Stock LOOK appends two
+    // optional suffixes after the bracket, and this pattern anchored straight
+    // to end-of-line, so a header carrying either one matched nothing and the
+    // whole look block was skipped — no race, no class, no equipment recorded:
+    //
+    //   [ Merlin Ambrosius ] -- Immortal !
+    //   [ Merlin Ambrosius ] (Knights of Chaos)
+    //
+    // The gang suffix is the one that bites in practice. On a realm where
+    // everyone is in a gang, EVERY look header carries it, so RecordLook never
+    // fired for anybody — and TrapDelegationManager, which probes an unknown
+    // member's race with `look <member>` and waits for the pipeline to fill it
+    // in, re-probed on every single join. That is the "it keeps looking" loop.
+    //
+    // Both suffixes are optional and independently present. The immortal
+    // marker is an exact literal (" -- Immortal !" — one space, two hyphens,
+    // one space, capital I, space before the bang); the gang is
+    // " (<name>)" and is captured, so a look teaches us the gang the same way
+    // a WHO row does. The gang group is deliberately permissive — gang names
+    // are free text — but it must still be the last thing on the line, which
+    // keeps the anti-false-trigger property the strict name group provides.
+    [GeneratedRegex(@"^\s*\[\s+(?<name>[A-Za-z][A-Za-z' -]*?)\s+\]" +
+        @"(?:\s+--\s+Immortal\s+!)?" +
+        @"(?:\s+\((?<gang>[^)
+]*)\))?\s*$",
         RegexOptions.CultureInvariant)]
     private static partial Regex NameHeaderPattern();
 

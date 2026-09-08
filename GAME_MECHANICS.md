@@ -865,6 +865,18 @@ A `get <item>` that can't succeed replies with one of two shapes:
 - **`Syntax: GET [Amount] [Currency]`** — the game misparsed the item name as a **currency** get
   (observed for some multi-word names, e.g. `get silk cape`). No item name is echoed. Retrying the
   same name can't help.
+- **`Syntax: DROP {Amount} {Currency}`** — the **drop** counterpart, confirmed 2026-09-02. Note the
+  **braces**, where the get form uses brackets. Same shape otherwise: no item name is echoed, and it
+  means the game didn't recognise the name as something you're holding — usually because you aren't.
+  A `You may not drop that item!` line is a *different* refusal (the item is held but undroppable).
+- **Drop arguments are PARTIAL-MATCHED against what you hold** *([CONFIRMED] 2026-09-02, user)*. This
+  is the dangerous one. Observed: bloodstones were auto-discarded, and a later `drop bloodstone`
+  bound to a **`bloodstone orb`** still in the pack — the game answered `You may not drop that item!`
+  because the orb is undroppable. **Had the collision landed on something droppable, the wrong item
+  would have been dropped with no complaint at all.** So a drop for an item you may no longer hold is
+  never safe to send blind: confirm you hold it, or be ready to treat any refusal as "verify against
+  a real `i` before doing anything else". Roomba does the latter, and also drops its belief in a
+  carried item the moment anything else is seen dropping it.
 - **`You cannot carry that much!`** — a **capacity refusal**: the item is on the floor and gettable,
   but taking it would exceed the carry limit. The item is NOT gone (unlike the two above) — it's a
   transient block that clears once weight is shed. No item name is echoed. (Confirmed by screenshot:
@@ -879,6 +891,34 @@ thought it fit and it didn't), so re-verify inventory once (`i`) to resync the b
 — deliver to free room and retry, or strand the item if it's too heavy for the whole working budget.
 Do **not** name-match a failure line's word to decide anything — match by "we just sent a `get` and
 got a failure back," since the echo can be truncated or absent.
+
+## Room item capacity — drop refusal *([CONFIRMED] 2026-09-02, user, live capture)*
+
+A room holds a limited number of items. A `drop` into a room already at that limit is refused:
+
+```
+[HP=642/MA=265]:drop pend
+There is no room to drop amethyst pendant here.
+```
+
+Two details that matter:
+
+- **The reply carries the item's FULL canonical name**, not the word typed. The command above
+  abbreviated it to `pend`, and the refusal still named `amethyst pendant`. So unlike the `get`
+  failures above — where the echo can be truncated and name-matching is explicitly unsafe — a drop
+  refusal CAN be correlated to the outstanding drop by name.
+- **It is per-drop, not per-batch.** A batch of N drops into a full room produces N refusals, one
+  per command, and none of them confirm.
+
+The exact capacity is unknown, and the client never needs it: "full" is only ever learned by being
+refused.
+
+**Client implication (Roomba Mode):** a refusal marks that room full for the rest of the sweep. Every
+pending move bound there — carried or not yet collected — is re-resolved onto the next room labeled
+for the same category, then the catch-all; anything with nowhere left is recorded and dropped from
+the queue rather than retried. The same mark also makes the room a *preferred pickup source*, since
+the foreign items sitting in it are the only ones whose removal frees its capacity. The mark is
+per-sweep: a full room is only full until someone loots it.
 
 ## Lair respawn timers & NPC-placed monsters *([CONFIRMED] 2026-08-02, user)*
 
@@ -2472,6 +2512,32 @@ is parsed on its own outbound gate (`health` observed) and never through the sta
 (HP/MA **regen** — `HP Regen` / `MA Regen` — only appears in Paradigm's `stat all`, which the client
 does NOT parse; regen is computed from stats in the Player Workshop.) (StatParser.TryHealthCommandLine.)
 
+## The `bank` command output *([CONFIRMED] 2026-09-07, user + screenshots, stock + Paradigm)*
+
+`bank` is a **self-only, global account query** — it lists the character's balance at **every bank
+they have ever deposited at**, from any room (it is NOT a room action like `dep`/`with`, which do
+require standing at the bank). A bank the character has **never used stays hidden**; one used and
+then fully withdrawn **shows with a zero balance**. It never surfaces party members' banks — bank
+balances can only be seen for yourself (party on-hand cash is separately visible via `@wealth`,
+which reports **carried** coin only, never deposits).
+
+Output is one two-line block per bank, repeated:
+
+```
+Your balance at Bank of Godfrey is:                              (Paradigm — bank name only)
+On deposit: 19578816 copper farthings [195,788.16 gold crowns]
+Your balance at Bank of Godfrey (#8) is:                         (Stock — appends the shop number)
+On deposit: 4512 copper farthings [45.12 gold crowns]
+```
+
+Parsing points: the header is `Your balance at <name> is:`, where `<name>` is the bank's **shop
+name** — Stock appends a ` (#N)` shop-number suffix that Paradigm omits (drop it so the name matches
+the shop-name key). The deposit line's authoritative figure is the **copper farthings** count
+(thousands-commas allowed); the bracketed gold-crowns value is a gloss. Because the name is the shop
+name, a parsed balance maps back to its room(s) via the bank-shop catalogue (ShopType 7), so a route
+that needs money the purse can't cover can point at the nearest bank the deposit actually sits in.
+(BankBalanceProbe.)
+
 ## Realm exit / logoff sequence *([CONFIRMED] 2026-09-05, user + report `stock-20260904-230111`)*
 
 Exiting the realm from inside the game is the exit command (the user's board: a bare `x`):
@@ -2538,7 +2604,16 @@ processed — and the wording of the notice is **realm-specific**:
 Implication for bulk sends (e.g. `@roomba sync`, which can be ~20 telepaths): pace them
 out (MudPlay uses ~800ms between telepaths) so a burst never forms, and treat the
 "command ignored" / "too many messages" lines as a signal that the last send was lost
-and should be re-sent. This is distinct from the outbound-write **interleaving** bug
+and should be re-sent.
+
+**This applies to bulk `get`/`drop` just as much as to telepaths** *(2026-09-02, observed —
+capture `stock-20260902-224515`)*: a Roomba sort dispatching a whole room's batch at once
+(26 gets) tripped the stock limiter, and **every** command in the batch was dropped — as was
+the movement command that followed it, which left the tracker Pending on a move the server
+never processed and took the sweep down with it. The collateral damage to the *next* command
+is the part worth remembering: a flood doesn't just cost you the flooded batch. Roomba now
+releases get/drop one command per wire prompt, which needs no guess at the rate because the
+game's own prompt is the meter. This is distinct from the outbound-write **interleaving** bug
 (that was a client-side concurrency defect in `TelnetClient`, not a game rate limit).
 
 ## Spell targeting: monster type tags
@@ -3779,6 +3854,39 @@ Hidden items: 1845(0) 14(0) 894(0) 223(0) 879(0) 870(0) 897(1) 876(1) 402(0) 430
   the gate's `NoteAuthoritativePosition` / `OnAuthoritativeResyncFailed` consumers. On Paradigm `rm`
   wins each site (realm-gated); on a stock realm with the power `sys st` fills in. (Maze-solve stays
   `rm`-only — the solver drives its own relocalization.)
+
+### `sys goto <location>` — teleport to a named location *([CONFIRMED] 2026-09-08, user)*
+A separately-gated sysop power (distinct from `sys status` / `sys map` / `sys god`). The
+client models it as a fourth per-BBS **Sysop goto** checkbox backed by an editable
+location table (keyword → map/room + optional min-level), stored per-character-per-BBS.
+
+- **The keyword is sent verbatim** — `sys goto newhaven` sends exactly that; **the game
+  resolves the name**, the client never sends the map/room. The stored map/room is only for
+  the client's own landing resync + a human-readable "resolves to" preview, and the optional
+  min-level is a client-side courtesy gate (the game enforces its own).
+- **Hostiles merely PRESENT in the room do NOT block it.** *([CONFIRMED] 2026-09-08, user)*
+  You can `sys goto` out of a room full of hostile monsters. **Only ACTIVE combat blocks** —
+  i.e. once an attack has been announced against a target. When actively engaged, you must
+  send **`break`** first to stop combat, *then* `sys goto`. (The client refuses with a notice
+  and auto-sends `break` so a re-run works once combat stops.)
+- **No confirmation, no messages on success** *([CONFIRMED] 2026-09-08, user)* — a successful
+  `sys goto` produces **only a statline redisplay**, no room display, no "you teleport" line.
+  To learn the room you landed in you must send a **bare Enter** to force the room display.
+  The client sends that Enter itself and arms a landing-name resync: the next room display
+  matching the stored location's name commits the position (`RoomTracker.SetLocated`).
+- **[UNVERIFIED]** The exact wording of a *denied* `sys goto` (no power, or the game rejecting
+  an unknown keyword) and of the `break`-then-goto success path is not pinned down. Nothing
+  depends on it: the client gates on its own per-BBS power flag + the location table, and the
+  landing resync is name-match-or-timeout, not a string match on any reply.
+- **`sys` commands are NOT gated by the mortally-wounded (HP ≤ 0) state** *([CONFIRMED]
+  2026-09-08, user)*. Ordinary action commands are refused while mortally wounded ("You may not
+  do that while you are mortally wounded!"), which is why the client holds its EngineSendGate at
+  HP ≤ 0 (PlayerDroppedGate). Sysop powers bypass that entirely — `sys goto` (and the other `sys`
+  commands) can be sent and are honoured at **any** HP, bleeding-out included. So the client must
+  send a `sys goto` on a sender that pierces the mortally-wounded hold (the raw un-wrapped wire,
+  like the emergency hangup uses), NOT the gate-wrapped engine sender that drops sends at HP ≤ 0.
+  Consequence: the "sys goto wimpy instead of hanging" escape fires at any HP in its window,
+  including deep in the bleeding-out band.
 
 ## MegaMUD `messages.md` format *([CONFIRMED] 2026-08-17, user + decode of both stock/paramud files)*
 

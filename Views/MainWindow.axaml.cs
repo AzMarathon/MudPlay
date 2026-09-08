@@ -69,6 +69,13 @@ public partial class MainWindow : Window
                 RebuildHelpMenu(vm);
                 vm.ContextMenu.Layout.CollectionChanged += OnContextMenuLayoutChanged;
                 RebuildTerminalContextMenu(vm);
+                // The Sys Goto flyout is capability-gated at build time, so rebuild the
+                // whole menu when the power / table could have changed (profile load,
+                // or a credentials save which fires ProfileMutated) — otherwise ticking
+                // the Sysop-goto checkbox wouldn't surface the flyout until the layout
+                // was next dirtied.
+                MudPlay.Services.AppServices.Current.Profile.ProfileLoaded += _ => RebuildTerminalContextMenu(vm);
+                MudPlay.Services.AppServices.Current.Profile.ProfileMutated += _ => RebuildTerminalContextMenu(vm);
                 vm.CombatProfileItems.CollectionChanged += OnCombatProfileItemsChanged;
                 RebuildProfilesMenu(vm);
             }
@@ -315,12 +322,26 @@ public partial class MainWindow : Window
             : null;
     }
 
+    // Whether a catalogue entry's capability id is currently granted, so the menu
+    // renders it. Only the sysop-goto power gates a menu entry today.
+    private static bool IsMenuCapabilityOn(string capability) => capability switch
+    {
+        "sysop.goto" => MudPlay.Services.AppServices.Current.SysopGoto.Enabled,
+        _ => true,
+    };
+
     // Resolve one catalogue entry into a MenuItem, or null when it can't be built
-    // (an unresolvable command). customLabel (the user's chosen name) overrides
-    // the catalogue label when set.
+    // (an unresolvable command, or a capability that's off). customLabel (the user's
+    // chosen name) overrides the catalogue label when set.
     private Control? BuildContextMenuEntry(MenuActionCatalogue.Entry def, MainWindowViewModel vm, string? customLabel = null)
     {
         string header = string.IsNullOrWhiteSpace(customLabel) ? def.Label : customLabel!;
+        // Capability-gated entries (e.g. the Sys Goto flyout) are omitted from the
+        // live menu when their power is off — the entry still lives in the editor pool,
+        // so the user can place it before enabling the power. Same "return null →
+        // silently omitted" contract the unresolvable-Command path below already uses.
+        if (def.Capability is { } cap && !IsMenuCapabilityOn(cap))
+            return null;
         switch (def.EntryKind)
         {
             case MenuActionCatalogue.Kind.WalkFlyout:
@@ -332,9 +353,12 @@ public partial class MainWindow : Window
                 // disabled "(none yet)" slot instead of vanishing. Items rebuild on
                 // every collection change (subscriptions are dropped on the next
                 // menu rebuild — see RebuildTerminalContextMenu).
-                bool isFav = string.Equals(def.Parameter, "favorites", System.StringComparison.Ordinal);
-                System.Collections.ObjectModel.ObservableCollection<FavoriteMenuItem> source =
-                    isFav ? vm.Favorites : vm.RecentDestinations;
+                System.Collections.ObjectModel.ObservableCollection<FavoriteMenuItem> source = def.Parameter switch
+                {
+                    "recent" => vm.RecentDestinations,
+                    "sysgotos" => vm.SysopGotoItems,
+                    _ => vm.Favorites,
+                };
                 MenuItem item = new() { Header = header };
                 if (def.Tooltip is not null) item[ToolTip.TipProperty] = def.Tooltip;
                 if (TerminalContextMenu?.TryFindResource("WalkFlyoutItemTheme", out object? themeObj) == true

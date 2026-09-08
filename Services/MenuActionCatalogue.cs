@@ -36,7 +36,12 @@ public static class MenuActionCatalogue
         string? ToggleProperty = null,
         string? GestureProperty = null,
         string? Parameter = null,
-        string? Tooltip = null);
+        string? Tooltip = null,
+        // Optional capability id (e.g. "sysop.goto") the rendered menu gates on: when
+        // set and the capability is off, BuildContextMenuEntry omits the entry from
+        // the live menu. The entry stays in the editor pool regardless — only the
+        // rendered menu is gated. Null = always rendered.
+        string? Capability = null);
 
     // ----- Individual File-menu commands -----
     private static readonly Entry[] _file =
@@ -180,6 +185,9 @@ public static class MenuActionCatalogue
             Tooltip: "Your starred GOTO locations — click one to walk there. Hidden when you have none."),
         new("walk.recent", "Recent destinations", Kind.WalkFlyout, "Walk shortcuts", Parameter: "recent",
             Tooltip: "The last places you walked — click one to walk there. Hidden when empty."),
+        new("walk.sysgotos", "Sys Gotos", Kind.WalkFlyout, "Walk shortcuts", Parameter: "sysgotos",
+            Capability: "sysop.goto",
+            Tooltip: "Jump to a curated `sys goto` location. Only shown when the Sysop goto power is on for this BBS."),
     };
 
     private static readonly Entry[] _all =

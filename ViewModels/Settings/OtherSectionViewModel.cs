@@ -181,39 +181,20 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // The remaining un-wired Other-tab fields, rendered inline below the wired
     // group as disabled placeholders. Entries are removed from this list as
     // their consumer engines wire through OtherSettings.
-    public IReadOnlyList<StubGroup> StubGroups { get; } = new[]
-    {
-        new StubGroup("Walker behaviour", new[]
-        {
-            // Auto-train / Auto-train stats live on their own Settings →
-            // Auto-Trainer tab (toggles + the discovered-trainers allow table).
-            new StubField("Teleport to avoid combat instead of hanging", StubFieldKind.Check,
-                          "Phase 7 — when fleeing, use sys-goto (stock) or a town token (paradigm) instead of dropping the line."),
-            // "Allow hangup in all-off mode" is a wired checkbox on the General
-            // tab (HealthManager runs only the emergency-hangup branch when
-            // every Auto-* engine is off and
-            // GeneralSettings.AllowHangupInAllOffMode set).
-            // "Search rooms if item needed" is a wired checkbox below the door
-            // caps (PathItemDemandTracker arms auto-search while a route needs
-            // an item we lack).
-            // "Don't move unless sneaking" was dropped: our movement engine
-            // always sneaks before moving — the toggle was a MegaMUD workaround
-            // for a message-parsing combat bug we don't share.
-            // "Go backwards if running" / "Break combat before running" are
-            // wired checkboxes on the Combat tab (HealthManager reads
-            // CombatSettings.RunDirection / BreakBeforeFleeing).
-            // Lock / trap preference toggles live next to their matching
-            // retry-count pickers (see "Locks & traps" group).
-        }),
-        // Ignored ailments are a real wired section above (rendered inline in
-        // OtherSectionView.axaml). Auto-engage-on-connect is a 1-to-1 set of
-        // "re-enable on reconnect" checkboxes (one per AutoMode auto-action),
-        // also wired inline in OtherSectionView.axaml.
-        // Locks & traps: Attempt-bash / Pick-locks-over-bash / Attempt-pick-lock
-        // are wired fields (DoorOpenManager); "Attempt to disarm traps" is the
-        // wired "Utilize disarm traps if able" checkbox; "Attempt disarm" (retry
-        // cap) is the already-wired "@trap max disarms" picker above.
-    };
+    // The inline stub catalog is now empty — every former Other-tab placeholder has
+    // graduated to a real wired control. Kept as a property (the view still binds it)
+    // so re-adding a stub later is a one-liner. Where the old entries went:
+    //   • "Teleport to avoid combat instead of hanging" → wired on the Health tab as
+    //     "Sys goto wimpy instead of hanging" (HealthSettings.SysGotoWimpyInsteadOfHanging
+    //     + SysGotoWimpyLocation; HealthManager substitutes it for the emergency hangup).
+    //   • Auto-train / Auto-train stats → their own Settings → Auto-Trainer tab.
+    //   • "Allow hangup in all-off mode" → wired checkbox on the General tab.
+    //   • "Search rooms if item needed" → wired checkbox below the door caps.
+    //   • "Don't move unless sneaking" → dropped (our movement always sneaks first).
+    //   • "Go backwards if running" / "Break combat before running" → Combat tab.
+    //   • Lock / trap preference toggles → next to their retry-count pickers.
+    //   • Ignored ailments / auto-engage-on-connect → wired inline in OtherSectionView.axaml.
+    public IReadOnlyList<StubGroup> StubGroups { get; } = System.Array.Empty<StubGroup>();
 
     public OtherSectionViewModel()
         : this(AppServices.Current.Profile, AppServices.Current.Settings) { }

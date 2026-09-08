@@ -2,15 +2,19 @@ namespace MudPlay.Models.Profile;
 
 // Per-character customization of the terminal right-click (context) menu — an
 // ordered list the user arranges in Settings → Toolbar + Shortcuts, mirroring
-// the toolbar-layout model (ToolbarSettings). Each entry is either a
-// catalogue-resolved menu entry (a command, a toggle, a whole main-menu
-// submenu, a Player Workshop tab link, or a calculator link — see
-// Services.MenuActionCatalogue) or a separator. Persisted as the "ContextMenu"
-// entry in CharacterProfile.Settings. null Layout means "use defaults"
-// (Services.ContextMenuDefaults — the built-in menu).
+// the toolbar-layout model (ToolbarSettings). Each entry is a separator, a
+// user-defined fly-out folder, or a catalogue-resolved action — a command, a
+// toggle, a Workshop-tab / calculator / Settings-tab / Game-Data-section link,
+// or a walk fly-out (Favorites / Recent destinations); see the kinds on
+// Services.MenuActionCatalogue.Entry and ContextMenuEntry below. Persisted as the
+// "ContextMenu" entry in CharacterProfile.Settings; null Layout means "use
+// defaults" (Services.ContextMenuDefaults — the built-in menu).
 //
-// The pinned Favorites / Recent-destinations walk flyouts are NOT part of this
-// list — they always lead the menu; this list is everything below them.
+// The Favorites / Recent-destinations walk fly-outs are ordinary entries the user
+// can reorder or remove, NOT pinned leaders — ContextMenuDefaults just seeds them
+// first. They're single-instance, so the editor drops them from the pool once
+// placed; nothing is fixed ahead of the user's list (MainWindow's
+// ContextMenuFixedLeadingItems is 0).
 public sealed class ContextMenuSettings
 {
     // Ordered entries. null or empty falls back to Services.ContextMenuDefaults.

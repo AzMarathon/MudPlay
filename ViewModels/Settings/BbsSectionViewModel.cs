@@ -39,7 +39,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     public override IEnumerable<string> SearchableLabels => new[]
     {
         "BBS", "Host", "Port", "Telnet", "Redial", "Cleanup", "Reconnect",
-        "Sysop", "Terminal", "Cols", "Rows", "NAWS", "Connection",
+        "Sysop", "Sys Goto", "Terminal", "Cols", "Rows", "NAWS", "Connection",
         "Game entry command", "Game exit command", "Enter realm", "Logoff",
         "Player dies at", "Death floor", "Bleeding out", "Dropped", "Hangup HP",
         "Auto-refine death floor", "Trace death floor", "Slow death", "Learn floor",
@@ -80,6 +80,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _sysopMap;
     [ObservableProperty] private bool _sysopStatus;
     [ObservableProperty] private bool _sysopGodLives;
+    [ObservableProperty] private bool _sysopGoto;
     [ObservableProperty] private int _terminalCols = 80;
     [ObservableProperty] private int _terminalRows = 25;
     [ObservableProperty] private int _scrollbackLines = 4_000;
@@ -178,6 +179,10 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
     // Editable rows for the per-character menu-nav sequence.
     public ObservableCollection<MenuStepEditorViewModel> MenuNavSteps { get; } = new();
+
+    // Editable rows for the per-character `sys goto` location table (shown/enabled
+    // only when SysopGoto is on).
+    public ObservableCollection<SysopGotoRowViewModel> SysopGotos { get; } = new();
 
     // Logon sequences from other saved characters, offered as import sources so a
     // new (or additional) character doesn't have to retype a flow another
@@ -468,6 +473,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         cred.SysopMap = SysopMap;
         cred.SysopStatus = SysopStatus;
         cred.SysopGodLives = SysopGodLives;
+        cred.SysopGoto = SysopGoto;
+        cred.SysopGotos = SysopGotos.Select(vm => vm.ToModel()).ToList();
 
         if (_pendingPassword is not null)
         {
@@ -673,11 +680,12 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     {
         _pendingPassword = null;
         MenuNavSteps.Clear();
+        SysopGotos.Clear();
         if (!HasProfile)
         {
             Username = string.Empty;
             Password = string.Empty;
-            SysopMap = SysopStatus = SysopGodLives = false;
+            SysopMap = SysopStatus = SysopGodLives = SysopGoto = false;
             return;
         }
         CharacterProfile? character = _profile.Current;
@@ -697,16 +705,29 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             SysopMap = cred.SysopMap;
             SysopStatus = cred.SysopStatus;
             SysopGodLives = cred.SysopGodLives;
+            SysopGoto = cred.SysopGoto;
             foreach (MenuStep step in cred.MenuNavSteps)
             {
                 MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, Dirty));
+            }
+            foreach (SysopGotoLocation loc in cred.SysopGotos)
+            {
+                SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, Dirty, RoomName));
             }
         }
         else
         {
             Username = string.Empty;
             Password = string.Empty;
-            SysopMap = SysopStatus = SysopGodLives = false;
+            SysopMap = SysopStatus = SysopGodLives = SysopGoto = false;
+            // A BBS with no credential yet still shows the starter goto locations, so
+            // saving it persists them instead of an empty table — CommitCredentials
+            // writes this collection wholesale over the model's own starter default,
+            // so the seed has to live here too (mirrors BbsCredentials.SysopGotos).
+            foreach (SysopGotoLocation loc in SysopGotoLocation.DefaultStarterSet())
+            {
+                SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, Dirty, RoomName));
+            }
         }
 
         RefreshImportSources(bbsName);
@@ -913,6 +934,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnSysopMapChanged(bool value)                  { Dirty(); }
     partial void OnSysopStatusChanged(bool value)               { Dirty(); }
     partial void OnSysopGodLivesChanged(bool value)             { Dirty(); }
+    partial void OnSysopGotoChanged(bool value)                 { Dirty(); }
     partial void OnTerminalColsChanged(int value)               { PushToCache(); Dirty(); }
     partial void OnTerminalRowsChanged(int value)               { PushToCache(); Dirty(); }
 
@@ -942,6 +964,30 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         MenuNavSteps.Add(new MenuStepEditorViewModel(Dirty));
         Dirty();
     }
+
+    [RelayCommand]
+    private void AddSysopGoto()
+    {
+        if (_suppressDirty) return;
+        SysopGotos.Add(new SysopGotoRowViewModel(Dirty, RoomName));
+        Dirty();
+    }
+
+    [RelayCommand]
+    private void RemoveSysopGoto(SysopGotoRowViewModel? row)
+    {
+        if (row is null || _suppressDirty) return;
+        if (!SysopGotos.Remove(row)) return;
+        Dirty();
+    }
+
+    // Resolve a landing room's name for a row's read-only preview cell. Reads the
+    // live active-set graph; null-safe for headless / pre-init contexts (the
+    // preview binding simply shows "(unknown room)").
+    private static string? RoomName(int map, int room)
+        => AppServices.Current is { } svc
+            ? svc.RoomGraph.GetRoom(new Game.Map.RoomKey(map, room))?.Name
+            : null;
 
     [RelayCommand]
     private void RemoveMenuStep(MenuStepEditorViewModel? step)

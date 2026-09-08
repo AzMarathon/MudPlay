@@ -310,6 +310,14 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         AppServices.Current.PlayerLook.LookBackWhenLookedAt   = dto.LookBackWhenLookedAt;
         AppServices.Current.PlayerLook.LookAtPlayersOnArrival = dto.LookAtPlayersOnArrival;
         AppServices.Current.SessionLog.ApplySettings(dto);
+
+        // Push the row font + channel colours into the live display channel; an open
+        // Conversation window observes these and re-fonts / re-colours on the spot. A
+        // plain profile Save fires neither ProfileLoaded nor ProfileMutated, so without
+        // this the window would only pick the changes up on the next open.
+        AppServices.Current.Display.ConvoFontFamily = dto.ConvoFont ?? "";
+        AppServices.Current.Display.ConvoFontSize = dto.ConvoFontSize;
+        AppServices.Current.Display.ConvoChannelColors = dto.ChannelColors;
     }
 
     // ----- IsDirty plumbing -----

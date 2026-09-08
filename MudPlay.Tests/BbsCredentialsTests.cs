@@ -42,4 +42,45 @@ public sealed class BbsCredentialsTests
         // The legacy shim is set-only, so a new save never re-emits it.
         Assert.DoesNotContain("HasSysopPowers", json);
     }
+
+    [Fact]
+    public void SysopGoto_FlagAndTable_RoundTrip()
+    {
+        var cred = new BbsCredentials
+        {
+            SysopGoto = true,
+            SysopGotos = new()
+            {
+                new() { Name = "twilight", Map = 9, Room = 42, MinLevel = 30 },
+            },
+        };
+        string json = JsonSerializer.Serialize(cred);
+
+        BbsCredentials back = JsonSerializer.Deserialize<BbsCredentials>(json)!;
+        Assert.True(back.SysopGoto);
+        // The starter set is replaced wholesale by whatever the user saved.
+        var row = Assert.Single(back.SysopGotos);
+        Assert.Equal("twilight", row.Name);
+        Assert.Equal(9, row.Map);
+        Assert.Equal(42, row.Room);
+        Assert.Equal(30, row.MinLevel);
+    }
+
+    [Fact]
+    public void SysopGotos_DefaultsToStarterSet_WhenFieldAbsent()
+    {
+        // An old profile with no SysopGotos field keeps the seeded starter towns.
+        BbsCredentials cred = JsonSerializer.Deserialize<BbsCredentials>("""{ "SysopGoto": true }""")!;
+        Assert.Contains(cred.SysopGotos, l => l.Name == "newhaven");
+        Assert.Contains(cred.SysopGotos, l => l.Name == "lostcity" && l.MinLevel == 40);
+        Assert.Equal(SysopGotoLocation.DefaultStarterSet().Count, cred.SysopGotos.Count);
+    }
+
+    [Fact]
+    public void SysopGotos_ExplicitEmptyList_StaysEmpty()
+    {
+        // A user who clears every row saves []; the seed must not re-populate it.
+        BbsCredentials cred = JsonSerializer.Deserialize<BbsCredentials>("""{ "SysopGotos": [] }""")!;
+        Assert.Empty(cred.SysopGotos);
+    }
 }

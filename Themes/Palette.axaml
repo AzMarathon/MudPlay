@@ -48,6 +48,8 @@
     <Color x:Key="AccentAmberSoftColor">#2ED4A24C</Color>
     <Color x:Key="AccentCyanColor">#FF5FB3D9</Color>
     <Color x:Key="AccentRedColor">#FFE06060</Color>
+    <!-- RedSoft mirrors AmberSoft: red at ~18% opacity for a "danger" card fill. -->
+    <Color x:Key="AccentRedSoftColor">#2EE06060</Color>
     <Color x:Key="AccentYellowColor">#FFE0B040</Color>
     <Color x:Key="AccentGreenColor">#FF7AB870</Color>
     <Color x:Key="AccentMagentaColor">#FFB868B8</Color>
@@ -57,6 +59,7 @@
     <SolidColorBrush x:Key="AccentAmberSoftBrush"  Color="{StaticResource AccentAmberSoftColor}"/>
     <SolidColorBrush x:Key="AccentCyanBrush"       Color="{StaticResource AccentCyanColor}"/>
     <SolidColorBrush x:Key="AccentRedBrush"        Color="{StaticResource AccentRedColor}"/>
+    <SolidColorBrush x:Key="AccentRedSoftBrush"    Color="{StaticResource AccentRedSoftColor}"/>
     <SolidColorBrush x:Key="AccentYellowBrush"     Color="{StaticResource AccentYellowColor}"/>
     <SolidColorBrush x:Key="AccentGreenBrush"      Color="{StaticResource AccentGreenColor}"/>
     <SolidColorBrush x:Key="AccentMagentaBrush"    Color="{StaticResource AccentMagentaColor}"/>

@@ -872,6 +872,10 @@ public static class BugReportBuilder
         Kv(sb, "Roomba searches per room", svc.GhRoomLabels.SearchesPerRoom.ToString());
         Kv(sb, "Roomba labeled / actively-managed (this char) / circuit rooms",
             $"{svc.GhRoomLabels.Labels.Count} / {svc.GhManagedRooms.Count} / {svc.GhSweep.CircuitRoomCount}");
+        Kv(sb, "Roomba rooms full this sweep",
+            svc.GhSweep.FullRooms is { Count: > 0 } full
+                ? string.Join(", ", full.Select(r => $"{r.Map}/{r.Room}"))
+                : "(none)");
         Kv(sb, "Roomba moved / left / pending / carried / hidden",
             $"{svc.GhSweep.MovedSoFar.Count} / {svc.GhSweep.LeftInPlace.Count} / "
             + $"{svc.GhSweep.PendingMoveCount} / {svc.GhSweep.CarriedPendingCount} / "
@@ -953,6 +957,20 @@ public static class BugReportBuilder
             svc.SysopLocate.RequestInFlight ? "in flight"
             : svc.SysopLocate.LocateDeferred ? "queued behind movement"
             : svc.SysopLocate.LastOutcome);
+        // Sysop goto: whether the power is on for this BBS, how many locations the
+        // table holds, and any jump still awaiting its landing resync — a "goto left
+        // me lost" report needs the armed-but-uncommitted state.
+        Kv(sb, "Sysop goto",
+            svc.SysopGoto.Enabled ? $"on ({svc.SysopGoto.UsableNow.Count} location(s))" : "off");
+        if (svc.SysopGoto.ArmedLandingSummary is { } armed)
+            Kv(sb, "Sysop goto landing", $"awaiting {armed}");
+        // "Sys goto wimpy instead of hanging" (Health tab) — a low-HP escape that
+        // substitutes for the hangup, so a "didn't hang / didn't jump" report needs it.
+        var healthCfg = svc.Resolver.Resolve<Models.Profile.HealthSettings>("Health");
+        Kv(sb, "Sys goto wimpy",
+            healthCfg.SysGotoWimpyInsteadOfHanging
+                ? $"on → '{(string.IsNullOrWhiteSpace(healthCfg.SysGotoWimpyLocation) ? "(no location set)" : healthCfg.SysGotoWimpyLocation)}'"
+                : "off");
 
         IReadOnlyList<Game.Map.RoomKey> history = svc.RoomTracker.GetHistory();
         if (history.Count > 0)

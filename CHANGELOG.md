@@ -1,5 +1,68 @@
 # Version history
 
+## 3.57.3
+
+- Conversation window font/size now applies live on Settings → Talk Apply — an already-open window re-fonts on the spot instead of only on the next open
+- Conversation per-channel colors now apply live the same way — an already-open window recolors on Apply
+
+## 3.57.1
+
+- Fixed a burst of outgoing telepaths (e.g. a `@roomba` reply with several items) logging only the last message's text in the Conversation window, with the rest blank — sends and their server confirmations now pair up in order instead of racing on a single shared slot
+- bug reports addressed: paradigm-20260908-061546
+
+## 3.57.0
+
+- New **Sysop goto** power (fourth per-BBS sysop checkbox): jump to a curated location with the game's `sys goto <name>` command
+- BBS tab gains an editable **Sys Goto locations** table — a keyword (sent verbatim), the map/room it lands you in, and an optional min-level gate; seeded with the starter towns (newhaven, silvermere, rhudaur, khazarad, lostcity)
+- Terminal right-click, Walk, and nav-map room right-click menus gain a **Sys Gotos** flyout listing your locations; typing `sys goto <name>` yourself is intercepted the same way
+- After a jump, MudPlay sends a bare Enter to pull up the landing room (a sys goto shows no message on its own) and re-anchors your position on the map
+- Blocked while actively in combat — MudPlay sends `break` and asks you to re-run once the fight stops; a room merely holding hostiles is fine
+- New Health-tab **"Sys goto wimpy instead of hanging"** option: at the low-HP hangup threshold, break combat and `sys goto` to a chosen escape location instead of dropping the connection (falls back to the normal hangup if the power's off or the location's gone)
+- Navigation now **routes through your Sys Goto locations** automatically: a walk fires a `sys goto` jump and walks from the landing when that's shorter than the overland path (or the only way there). Level-gated locations are skipped by auto-routing when your level is unknown or too low; an engaged fight makes the jump wait, like any step
+- Waypoint action commands can now chain with `;` or `^M` (each sent as its own line), matching macros / pre-rest commands
+- Settings window is wider by default so the Sys Goto locations table isn't cramped
+- Route picker no longer offers a class-restricted teleport (e.g. a bard-only barmaid transport) while your class is still unknown — the gate now holds until the stat screen is parsed, instead of surfacing the shortcut to a not-yet-identified character
+- bug reports addressed: stock-20260908-103628
+
+## 3.56.0
+
+- Route picker: when a destination is reachable only through a room you marked **Avoid**, it now offers to route through anyway (warning how many avoided rooms it crosses) instead of failing; when a much shorter route runs through an avoided room, a two-card "respect your avoids / shorter through avoided" fork is offered. Your avoid list is never changed — only that one walk ignores it
+- Route picker: "buy at X" for a hazard/gate counter now reveals the bank-withdraw it would do when coin on hand is short, and warns when you can't cover it
+- Route picker is now economy-aware in a party: before offering a buy you can't afford from cash, it checks your own **bank** deposits and the party's carried cash (`@wealth`) and whether a member already **has** the item (`@have`), and tells you where the money/item is. When the money is at another bank or spread across the party, Go walks you to the shop and pauses so you can provision the party by hand
+- Reads the `bank` command's per-bank deposit listing (self-only, all banks you've used) and maps each bank to its room via the bank-shop catalogue
+- Route picker: new **"Search en route"** card for a hazard you'd counter — walks toward it searching each room, grabs a counter if one turns up (then crosses), else stops at the edge; a way to find one free instead of buying
+- Search-en-route now actually works: a route counter revealed on the floor by an en-route `sea` is collected by the obtain pipeline itself, no longer dependent on the Auto-Get engine being on and the item flagged auto-collect
+- Route picker no longer offers a class-restricted teleport to a character who can't use it (a bard-only barmaid transport was being surfaced to non-bards) — a class-branching transport now binds its gate to the class on the teleport's own branch
+- Route picker no longer says "no route respects your avoids" when an obtainable counter would open one — if buying/finding a raft (or any hazard counter, key, ticket) reaches the destination without crossing an avoided room, it now offers those obtain / cross-unprotected / search options instead of only the avoid-override
+- Route picker writes its decision to the program log (which fork fired, step counts, the requirement or avoided-room count) so a walk that surfaces one card can be traced
+- Route picker reads cleaner: a uniform **"From X to Y"** title over an **Options:** list, and the disabled "no route" explanatory note is gone (the cards carry it)
+- Route picker pops faster: it only checks your **bank** (and the party) when cash on hand can't cover a buy — plenty of cash on hand skips the round-trips entirely — and the shared pathfinds each fork needs are now computed once and reused instead of re-run per fork
+- Route picker also offers **"route through your avoided rooms"** as an extra card beside the obtain/cross options when that avoid-crossing route needs no counter — so you can plow through instead of fetching a raft
+- Route picker tints the risky cards **red** (cross unprotected / route through avoided rooms), orders the safe cards first and the red ones last, brightens the card subtext for legibility, and sizes the window to show every card
+- Route picker footnote simplified to a single line — "Click a route to preview it on the map or click Details… to show routing information" — replacing the per-case guidance paragraph
+- Route planning for a walk-to now runs off the UI thread when you're standing still, so the app no longer freezes for up to ~1s while it computes a route on a big map; if planning takes a beat, the picker window pops up immediately showing **"Calculating…"** and swaps the cards in when it's done (a quick plan skips the window and opens the picker fully-built). Planning stays on the UI thread if a walk is already in progress
+- bug reports addressed: stock-20260907-175035, paradigm-20260907-212758, paradigm-20260907-215048
+
+## 3.55.8
+
+- Roomba reroutes around a destination room that's full, to the next room labelled for the same category and then the catch-all, instead of re-sending refused drops every lap
+- A full room's mark lasts the rest of the sweep — it becomes a preferred place to collect *from*, since emptying it is the only thing that frees its capacity — and clears on the next sweep
+- Roomba paces its get/drop commands past the game's rate limit rather than flooding it and losing the whole batch
+- Roomba leaves alone what auto-discard would bin, and no longer loses track of items it is carrying
+- The carry budget no longer writes off heavy items because the pack was temporarily full, and a pack too full to sort stops with an explanation
+- The Roomba Log now names why each item was left behind — a full house reads as such instead of "no matching room"
+- bug reports addressed: stock-20260902-224515, stock-20260903-001443, stock-20260903-170905, stock-20260903-175132, stock-20260903-182339
+
+## 3.55.2
+
+- Fixed two clients with "Look back when a player looks at us" mirroring each other forever (each look-back triggering the other's) until one died — the auto-look toggles now fire at most once per player per local day, matching how "Greet players" is throttled
+- A look also records when we last auto-looked, so a look whose reply we couldn't read (a shadowy figure) still counts against the daily limit rather than looping
+
+## 3.55.1
+
+- Fixed the LOOK header not parsing when it carries a trailing `-- Immortal !` or `(gang)` suffix — on a realm where everyone's in a gang, every look block was skipped, so a player's race/class/equipment was never recorded and the trap-delegation probe re-`look`ed the same member on every party join
+- A LOOK now also records a player's gang (like a WHO row does), filling one in without erasing a gang already known
+
 ## 3.55.0
 
 - New **Sysop powers** on Settings → BBS + Display: the old single "sysop / goto powers" checkbox is now a **Sysop map** / **Sysop status** / **Sysop god lives** set (per-character, per-BBS). None of them relate to `@goto`, which stays gated by the per-player Move-player permission

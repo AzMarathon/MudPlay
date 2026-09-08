@@ -209,6 +209,29 @@
                           IsVisible="{Binding ShadowRestAvailable}"
                           ToolTip.Tip="For ShadowRest classes (Paradigm): when solo and hidden/sneaking, rest in place even with a monster in the room — the game keeps you un-attacked while stealthed. Inert on classes without the ability."/>
 
+                <!-- ============ Emergency escape ============
+                     Substitute for the low-HP hangup: break combat + sys goto to a
+                     curated location. Gated on the active BBS's Sysop goto power. -->
+                <TextBlock Classes="SectionHeader" Text="Emergency escape"/>
+                <CheckBox Content="Sys goto wimpy instead of hanging"
+                          IsEnabled="{Binding SysGotoAvailable}"
+                          IsChecked="{Binding SysGotoWimpyInsteadOfHanging, Mode=TwoWay}"
+                          ToolTip.Tip="When your HP crosses the 'Hang up if below' threshold with a hostile present, break combat and `sys goto` to the location below instead of dropping the connection. Needs the Sysop goto power on this BBS; falls back to the normal hangup if the power is off or the location is gone."/>
+                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           IsVisible="{Binding !SysGotoAvailable}"
+                           Text="Enable the Sysop goto power on the BBS tab (and add a location) to use this."/>
+                <Grid ColumnDefinitions="140,240" Margin="0,4,0,0"
+                      IsVisible="{Binding SysGotoAvailable}">
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Wimpy goto location"/>
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Left" MinWidth="220"
+                              ItemsSource="{Binding WimpyGotoChoices}"
+                              SelectedItem="{Binding SysGotoWimpyLocation, Mode=TwoWay}"
+                              IsEnabled="{Binding SysGotoWimpyInsteadOfHanging}"
+                              PlaceholderText="pick a location"
+                              ToolTip.Tip="The Sys Goto location the wimpy escape jumps to — one of the keywords from this BBS's Sys Goto table."/>
+                </Grid>
+
                 <!-- ============ Resting commands ============ -->
                 <TextBlock Classes="SectionHeader" Text="Resting commands"/>
                 <!-- Left-aligned, fixed-width boxes: a chained rest command is

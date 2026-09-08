@@ -1,13 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.55.0**
-> - New **Sysop powers** on Settings → BBS + Display: the old single "sysop / goto powers" checkbox is now a **Sysop map** / **Sysop status** / **Sysop god lives** set (per-character, per-BBS). None of them relate to `@goto`, which stays gated by the per-player Move-player permission
-> - **Sysop status** reads the game's `sys st` room dump to recover the client's position when the walker gets lost — and it now fires at every point Paradigm's `rm` re-anchor does (first mismatch, engine stall, the tier-3 give-up boundary, the terminal pre-Lost shot, the no-engine drift gap, `@where`, and a blocked loop/replan), throttled so the heavier dump doesn't flood the screen
-> - **Sysop god lives**: on the character's own death, auto-sends `sys god <name> add life` to recover the life just spent
-> - A tracker that goes lost, or a loop blocked because it lost track of where it is, re-anchors from that instead of waiting for an "I am here" click
-> - Fixed a loop hanging forever when a move went out and never confirmed, and one sitting idle after recovery had already succeeded
-> - Sysop status stays trusted once it has answered even once; before that, an unanswered probe backs off and retries rather than switching off for the session
+> **Version 3.57.3**
+> - Conversation window font/size now applies live on Settings → Talk Apply — an already-open window re-fonts on the spot instead of only on the next open
+> - Conversation per-channel colors now apply live the same way — an already-open window recolors on Apply
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

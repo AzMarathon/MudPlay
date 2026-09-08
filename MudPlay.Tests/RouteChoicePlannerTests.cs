@@ -979,4 +979,234 @@ public sealed class RouteChoicePlannerTests
             Assert.Null(choice);
         });
     }
+
+    // ----- EvaluateAvoidOverride: route-through-avoided-rooms fork ----
+    //
+    // 1/1 ──E── 1/5 ──E── 1/9   the ONLY route to 1/9 runs through 1/5.
+    private const string AvoidSoleJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Avoided",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A 2-hop route through avoided 1/5 vs a 4-hop avoid-free detour (saves 2).
+    // 1/1 ──E── 1/5 ──N── 1/9   AND   1/1 ──N── 1/2 ──N── 1/3 ──E── 1/4 ──E── 1/9
+    private const string AvoidTwoRouteJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Avoided",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Mid1",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Mid2",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Mid3",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/5", "E": "0", "W": "1/4",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A 2-hop route through avoided 1/5 vs a 3-hop avoid-free detour (saves only 1).
+    // 1/1 ──E── 1/5 ──N── 1/9   AND   1/1 ──N── 1/2 ──E── 1/3 ──E── 1/9
+    private const string AvoidTwoRouteSmallJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Avoided",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Mid1",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Mid2",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Goal",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/5", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void OffersSoleAvoidOverride_WhenAvoidWallsTheOnlyRoute()
+    {
+        WithGraph(AvoidSoleJson, (bfs, graph, filter) =>
+        {
+            filter.MarkAvoided(new RoomKey(1, 5));   // the only path room, marked avoid
+
+            RouteChoice? choice = RouteChoicePlanner.EvaluateAvoidOverride(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.Equal(RouteChoiceKind.AvoidOverride, choice!.Kind);
+            Assert.False(choice.HasFreeRoute);          // no avoid-honouring route
+            Assert.Empty(choice.FreePath);
+            Assert.Equal(2, choice.GatedStepCount);
+            Assert.Equal(1, choice.AvoidedRoomCount);   // routes through 1 avoided room
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 9) },
+                choice.GatedPath);
+        });
+    }
+
+    [Fact]
+    public void OffersTwoRouteAvoidOverride_WhenAvoidRouteIsMuchShorter()
+    {
+        WithGraph(AvoidTwoRouteJson, (bfs, graph, filter) =>
+        {
+            filter.MarkAvoided(new RoomKey(1, 5));
+
+            RouteChoice? choice = RouteChoicePlanner.EvaluateAvoidOverride(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.Equal(RouteChoiceKind.AvoidOverride, choice!.Kind);
+            Assert.True(choice.HasFreeRoute);           // an avoid-honouring route exists
+            Assert.Equal(4, choice.FreeStepCount);      // the avoid-free detour
+            Assert.Equal(2, choice.GatedStepCount);     // the shorter route through 1/5
+            Assert.Equal(1, choice.AvoidedRoomCount);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 9) },
+                choice.GatedPath);
+        });
+    }
+
+    [Fact]
+    public void NoAvoidOverride_WhenAvoidRouteSavesTooLittle()
+    {
+        WithGraph(AvoidTwoRouteSmallJson, (bfs, graph, filter) =>
+        {
+            filter.MarkAvoided(new RoomKey(1, 5));
+
+            // Through-avoid saves only 1 room over the avoid-free route — the user's
+            // deliberate avoid stands, no override offered.
+            Assert.Null(RouteChoicePlanner.EvaluateAvoidOverride(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+        });
+    }
+
+    [Fact]
+    public void NoAvoidOverride_WhenRouteTouchesNoAvoidedRoom()
+    {
+        WithGraph(AvoidTwoRouteJson, (bfs, graph, filter) =>
+            // Nothing marked avoid → the shortest route touches no avoided room, so
+            // there's no override to offer.
+            Assert.Null(RouteChoicePlanner.EvaluateAvoidOverride(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9))));
+    }
+
+    // Report paradigm-20260907-212758: the ONLY avoid-respecting route crosses a
+    // hazard room (a river you'd cross with a bought raft); the only avoid-FREE
+    // route runs through a marked-avoid room. The picker must NOT claim "no route
+    // respects your avoids" — an obtainable counter opens an avoid-respecting route,
+    // so EvaluateAvoidOverride defers and Evaluate surfaces the obtain/cross options.
+    //   avoid-respecting: 1/1 ──N── 1/2 (River, Spell 700, counter 42) ──N── 1/9
+    //   avoid-crossing:   1/1 ──E── 1/5 (Avoided) ──E── 1/9
+    private const string AvoidWithHazardBypassJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "River", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Avoided", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void AvoidOverride_DefersWhenAnAcquirableCounterOpensAnAvoidRespectingRoute()
+    {
+        WithGraph(AvoidWithHazardBypassJson, (bfs, graph, filter) =>
+        {
+            filter.MarkAvoided(new RoomKey(1, 5));   // the only avoid-FREE route runs through here
+
+            // The avoid-override must NOT fire: a raft (item 42) opens the river route,
+            // which respects the avoid. Deferred so the item-gate fork handles it.
+            Assert.Null(RouteChoicePlanner.EvaluateAvoidOverride(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+
+            // And Evaluate surfaces that river crossing as a sole hazard route
+            // (obtain / cross-unprotected), respecting the avoid.
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            Assert.NotNull(choice);
+            Assert.False(choice!.HasFreeRoute);
+            RouteRequirement req = Assert.Single(choice.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
+            Assert.Equal(new[] { 42 }, req.ItemIds);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 9) },
+                choice.GatedPath);   // the avoid-respecting river route, not through 1/5
+
+            // The avoid-crossing route (through 1/5) is available as the EXTRA card:
+            // it needs no counter, so it's a real alternative to the raft crossing.
+            var alt = RouteChoicePlanner.AvoidAlternative(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            Assert.NotNull(alt);
+            Assert.Equal(1, alt!.Value.AvoidedCount);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 9) },
+                alt.Value.Path);
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 2) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;   // no raft carried
+        });
+    }
+
+    [Fact]
+    public void AvoidAlternative_IsNull_WhenNothingIsMarkedAvoid()
+    {
+        WithGraph(AvoidWithHazardBypassJson, (bfs, graph, filter) =>
+            // Nothing avoided → the ignore-avoids route touches no marked room, so
+            // there's no extra avoid-crossing card to offer.
+            Assert.Null(RouteChoicePlanner.AvoidAlternative(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9))));
+    }
 }
