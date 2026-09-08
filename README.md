@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.57.6**
-> - Swap-to-Default-on-combat no longer stalls the fight: after the mid-fight gear swap breaks the swing, combat re-engages immediately instead of idling until the monster attacks again
-> - Buffs no longer fire at the BBS login/menu after a hangup or reconnect — the cast loop now holds until you're actually back in the game world
+> **Version 3.57.7**
+> - Auto-Lair leaves a lair as soon as the fight is over and the loot is collected, instead of always sitting out the full 30-second engage timeout (which is now just an upper bound)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

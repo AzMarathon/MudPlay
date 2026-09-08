@@ -1,5 +1,10 @@
 # Version history
 
+## 3.57.7
+
+- Auto-Lair leaves a lair as soon as the fight is over and the loot is collected, instead of always sitting out the full 30-second engage timeout (which is now just an upper bound)
+- bug reports addressed: stock-20260908-192900
+
 ## 3.57.6
 
 - Swap-to-Default-on-combat no longer stalls the fight: after the mid-fight gear swap breaks the swing, combat re-engages immediately instead of idling until the monster attacks again
