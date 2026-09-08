@@ -1070,7 +1070,7 @@
     "TargetMessage": "A host of illusionary creatures appear!",
     "WitnessMessage": "A host of illusionary creatures appear and attack {source}!",
     "AppliedMessage": "You are distracted by illusionary attackers",
-    "AppliedEndsWith": "Without a sound: the illusionary attackers vanish",
+    "AppliedEndsWith": "the illusionary attackers vanish",
     "Links": [
       {
         "Table": "Spells",
@@ -2432,7 +2432,7 @@
     "TargetMessage": "The {source} utters a {spellname}!",
     "WitnessMessage": "The {source} utters a {spellname}!",
     "AppliedMessage": "You feel confused",
-    "AppliedEndsWith": "The effects of the death dog's shriek wears off",
+    "AppliedEndsWith": "The effects of the death dog's shriek wear",
     "Links": [
       {
         "Table": "Spells",
@@ -2554,7 +2554,7 @@
     "TargetMessage": "A freezing storm of ice surrounds you!",
     "WitnessMessage": "A freezing storm of ice sweeps through the room!",
     "AppliedMessage": "You are freezing",
-    "AppliedEndsWith": "Your are no longer freezing",
+    "AppliedEndsWith": "are no longer freezing",
     "Links": [
       {
         "Table": "Spells",
@@ -8956,8 +8956,8 @@
     "CasterMessage": "You cast {spellname} on {target}!",
     "TargetMessage": "{source} casts {spellname} upon you!",
     "WitnessMessage": "{source} casts {spellname} on {target}!",
-    "AppliedMessage": "n",
-    "AppliedEndsWith": "E",
+    "AppliedMessage": "You are blurred",
+    "AppliedEndsWith": "The effects of blur wear off",
     "Links": [
       {
         "Table": "Spells",
@@ -9602,8 +9602,8 @@
     "CasterMessage": "You rub your amethyst pendant!",
     "TargetMessage": "{null}",
     "WitnessMessage": "{source} rubs an amethyst pendant!",
-    "AppliedMessage": "n",
-    "AppliedEndsWith": "E",
+    "AppliedMessage": "You are blurred",
+    "AppliedEndsWith": "The effects of blur wear off",
     "Links": [
       {
         "Table": "Spells",
