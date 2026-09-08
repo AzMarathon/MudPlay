@@ -816,6 +816,14 @@ on stock target selection** — they are Paradigm-only.
 - **AoE clears the whole room as a burst of exp lines** *([CONFIRMED] 2026-08-15, user — "20 targets
   dead in 1 spell")*. One room spell prints a `<flavor>` + `You gain N experience.` **pair per monster
   it kills**, then a **single** `*Combat Off*` at the end. So exp-line count = kill count.
+- **"The fight is over" = `*Combat Off*` AND an empty hostile roster** *([CONFIRMED] 2026-09-08,
+  user)*. On stock, `*Combat Off*` is the message that marks combat ending — but as above it also
+  fires on every cast and once per strike for non-sustaining attacks, so on its own it says nothing
+  about whether anything is still alive. The usable pair is that line **plus** a room re-display
+  showing no engageable monster left; `CombatStateTracker` is where the two are combined (it clears
+  the Combat gate only on that observation, and its idle-stall watchdog sends a bare CR to force a
+  re-display when a final kill produced none). Anything asking "may I leave this room now?" — the
+  Auto-Lair engage phase is the first — must read the gate, never the raw line.
 - **Death messages are arbitrary per-monster flavor** — no shared keyword (a scan of 1035 seed death
   lines: `…a tortured squeak`, `…to the ground`, `…without a sound`, `…a thousand pieces`, `…an
   agonized bellow`, `…in a heap`, most with no death word) and no distinctive colour (they render

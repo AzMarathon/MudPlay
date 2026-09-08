@@ -27,10 +27,11 @@ namespace MudPlay.Game.Map;
 //                 targets and walk to a different wait-room.
 //   Entering    — single walker leg from wait-room into the lair,
 //                 dispatched on the entry tick.
-//   Engaging    — player is in the lair fighting. Timer-bound
-//                 (EngageTimeoutSeconds) before returning to Approaching
-//                 for the next pick. A future combat-ended signal will
-//                 replace the timeout.
+//   Engaging    — player is in the lair fighting. Leaves for the next pick as
+//                 soon as the fight is over and its loot is in hand (the
+//                 Combat then Acquisition gates clearing — OnGatesChanged),
+//                 with EngageTimeoutSeconds as the upper bound for a fight
+//                 that never resolves or a lair that turned out empty.
 //
 // Why no built-in pause: the walker honours its own MovementCoordinator
 // pause gates. When the walker pauses (HP threshold, encumbrance,
@@ -65,6 +66,10 @@ public sealed class AutoLairManager : IDisposable
     // lets the Stopped handler ignore our own supersede while still rescheduling
     // on a genuine external stop (user move / another engine grabbing the walker).
     private bool _issuingWalk;
+
+    // Whether a fight has actually started during the current Engaging phase.
+    // Gates the early exit: see OnGatesChanged.
+    private bool _engageSawCombat;
 
     // Travel-cost model — flat default until the encumbrance-gated table
     // from AutoLairSettings is wired in.
@@ -183,6 +188,7 @@ public sealed class AutoLairManager : IDisposable
 
         _walker.Event += OnWalkerEvent;
         _tracker.StateChanged += OnTrackerTransition;
+        if (_coordinator is not null) _coordinator.GatesChanged += OnGatesChanged;
     }
 
     public void Dispose()
@@ -194,6 +200,7 @@ public sealed class AutoLairManager : IDisposable
         _retryTimer.Dispose();
         _walker.Event -= OnWalkerEvent;
         _tracker.StateChanged -= OnTrackerTransition;
+        if (_coordinator is not null) _coordinator.GatesChanged -= OnGatesChanged;
     }
 
     // ----- marker CRUD ---------------------------------------------
@@ -631,31 +638,64 @@ public sealed class AutoLairManager : IDisposable
     private void StartEngagement()
     {
         SetPhase(AutoLairPhase.Engaging);
+        _engageSawCombat = false;
         _engageTimer.Stop();
         _engageTimer.Interval = TimeSpan.FromSeconds(Math.Max(1, EngageTimeoutSeconds));
         _engageTimer.Start();
         _log?.Info("AutoLair",
-            $"engaging — re-evaluating in {EngageTimeoutSeconds}s.");
-        // The engage window is a fixed wall-clock timeout
-        // (EngageTimeoutSeconds, default 30 s) because we don't yet know
-        // whether combat is actually in progress. A combat signal could
-        // drive the Engaging phase directly instead:
-        //   - on first damage line / attack send in this room →
-        //     SetPhase(Engaging) + stop the engage timer (we know we're
-        //     actually fighting, no timeout needed)
-        //   - on "room cleared" (no live targets remaining in the current
-        //     room's Also-Here list, OR the auto-combat engine reports
-        //     done) → SetPhase(Approaching) + EvaluateAndDispatch() to
-        //     pick the next lair.
-        // The timeout would stay as the FALLBACK upper bound so the
-        // scheduler never permanently parks on a dead lair if combat
-        // detection misses a clear-signal.
+            $"engaging — leaving when the fight ends, or in {EngageTimeoutSeconds}s.");
+    }
+
+    // Combat gate asserted/cleared, or loot finished — see OnGatesChanged for why
+    // both matter. The timer is now only the upper bound.
+    private void OnGatesChanged()
+    {
+        if (Phase != AutoLairPhase.Engaging) return;
+        if (!IsActive || IsPaused) return;
+        if (_coordinator is null) return;
+
+        // CombatStateTracker owns this gate and clears it authoritatively when a
+        // room re-display shows no engageable monster left — the reliable
+        // end-of-combat signal on stock. The raw `*Combat Off*` line is not: the
+        // server emits one every time we cast, and once per strike for
+        // non-sustaining attacks, so a Warlock nuking mid-fight would look done
+        // several times per kill (GAME_MECHANICS, "Monster-kill message order").
+        if (_coordinator.IsGateAsserted(MovementCoordinator.CombatGate))
+        {
+            _engageSawCombat = true;
+            return;
+        }
+
+        // Entering a lair asserts nothing until a monster is actually seen, so an
+        // un-asserted gate right after entry means "combat hasn't started", not
+        // "combat is over". Leaving on that would walk straight back out. Wait for
+        // a fight to have existed; an empty lair falls through to the timer.
+        if (!_engageSawCombat) return;
+
+        // The kill's drops are still being picked up — auto-get/cash asserts this
+        // while gets are outstanding. Walking off now would abandon the loot we
+        // just fought for.
+        if (_coordinator.IsGateAsserted(MovementCoordinator.AcquisitionGate)) return;
+
+        FinishEngagement("fight over and loot collected");
     }
 
     private void OnEngageTimerFired()
     {
+        // Upper bound only: a fight that never resolves (a monster we can't kill,
+        // one that fled, a missed clear-signal) must not park the scheduler here.
+        FinishEngagement($"engage timeout ({EngageTimeoutSeconds}s)");
+    }
+
+    // Test seam: the Engaging phase is normally reached through DispatcherTimer
+    // ticks, which the unit tests don't pump.
+    internal void StartEngagementForTests() => StartEngagement();
+
+    private void FinishEngagement(string why)
+    {
         _engageTimer.Stop();
         if (!IsActive || IsPaused) return;
+        _log?.Info("AutoLair", $"engagement done — {why}; picking the next lair.");
         SetPhase(AutoLairPhase.Approaching);
         EvaluateAndDispatch();
     }
