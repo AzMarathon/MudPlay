@@ -49,25 +49,28 @@ public sealed partial class RouteChoiceDialogViewModel
     // it just forwards which route is selected and lets the prompt resolve it.
     public event Action<RouteChoiceResult>? ShowDetailsRequested;
 
-    public string Heading { get; }
-    public string FreeSummary { get; }
-    public string GatedSummary { get; }
-    public string SendItSummary { get; }
-    public string RequirementSummary { get; }
+    // Set once in a constructor (Heading) or by Populate (the rest). The picker
+    // can open in a "Calculating…" state before Populate runs (see IsCalculating),
+    // so these carry a "" default and become settable rather than init-only.
+    public string Heading { get; private set; } = "";
+    public string FreeSummary { get; private set; } = "";
+    public string GatedSummary { get; private set; } = "";
+    public string SendItSummary { get; private set; } = "";
+    public string RequirementSummary { get; private set; } = "";
 
     // The caveat shown under the shorter route in a teleport choice — names the
     // teleport's landing room and warns the shortcut can be lethal. Empty for the
     // item-gate choice, which shows RequirementSummary instead.
-    public string TeleportCaveat { get; }
+    public string TeleportCaveat { get; private set; } = "";
 
     // The caveat shown under the shorter route in a trap-avoid choice — that the
     // shortcut crosses a trap the walker disarms at step time, which can fail. Empty
     // for the other forks.
-    public string TrapCaveat { get; }
+    public string TrapCaveat { get; private set; } = "";
 
     // The caveat shown under the override route in an avoid-override choice — that it
     // routes through room(s) the user marked "avoid". Empty for the other forks.
-    public string AvoidCaveat { get; }
+    public string AvoidCaveat { get; private set; } = "";
 
     // The sub-line under the shorter route's card: the item requirements for an
     // item-gate choice, the teleport caveat for a teleport choice, the trap caveat
@@ -80,30 +83,30 @@ public sealed partial class RouteChoiceDialogViewModel
 
     // The footnote under the cards, explaining the fork's options — different
     // wording for the teleport choice (no acquire / send-it split there).
-    public string Footnote { get; }
+    public string Footnote { get; private set; } = "";
 
     // True when this is the walk-vs-teleport fork: the shorter route takes a
     // teleport the walking route avoids. Reworders the cards (Walk / Teleport) and
     // hides the acquire/send-it split (there's nothing to acquire).
-    public bool IsTeleportChoice { get; }
+    public bool IsTeleportChoice { get; private set; }
 
     // True when this is the trap-avoid fork: the shortest route crosses a trap and a
     // trap-free route exists. A plain two-way choice (avoid / cross), no acquire /
     // send-it split. The trap-free route is pre-selected so the safe route is the
     // default (the user can still pick the shortcut).
-    public bool IsTrapAvoidChoice { get; }
+    public bool IsTrapAvoidChoice { get; private set; }
 
     // True when this is the avoid-override fork: the destination is reachable only
     // through a room the user marked "avoid" (sole), or a much shorter route runs
     // through one (two-route). A plain two-way choice (respect avoids / override), no
     // acquire / send-it split. In the two-route case the avoid-honouring route is
     // pre-selected so respecting the user's own avoid is the default.
-    public bool IsAvoidOverrideChoice { get; }
+    public bool IsAvoidOverrideChoice { get; private set; }
 
     // False when there's no gate-free route — the direct (hazard-crossing) route
     // is the only way there. The Free card renders as a disabled "why you can't
     // just walk it" note; only the direct route is selectable.
-    public bool HasFreeRoute { get; }
+    public bool HasFreeRoute { get; private set; }
 
     // The "cross unprotected / send it" card. Two flavours share it:
     //   • item-gate two-route fork (HasFreeRoute): "send it" through the gates as-is
@@ -131,17 +134,17 @@ public sealed partial class RouteChoiceDialogViewModel
     // True when the caller resolved an obtainable counter for the hazard: Go fetches
     // it then crosses (vs. "cross unprotected"). Drives the obtain wording + the
     // send-it card, for both a sole hazard and a mixed (hazard + hard gate) route.
-    public bool HazardObtain { get; }
+    public bool HazardObtain { get; private set; }
 
     // The route crosses a survivable hazard the player can't currently pass, whether
     // that's the only gate (_soleHazardOnly) or there's also a hard gate past it
     // (_mixedHazard). Both gate the card-visibility rules above.
-    private readonly bool _soleHazardOnly;
-    private readonly bool _crossesSurvivableHazard;
-    private readonly bool _mixedHazard;
+    private bool _soleHazardOnly;
+    private bool _crossesSurvivableHazard;
+    private bool _mixedHazard;
     // The route needs a hazard counter the player lacks — so "search en route" is a
     // valid alternative (find one free by searching each room on the way).
-    private readonly bool _hazardCounterNeeded;
+    private bool _hazardCounterNeeded;
 
     // The "search en route" card: walk toward the hazard searching each room, and
     // cross if a counter turns up (the obtain pipeline's floor collector grabs it),
@@ -151,7 +154,7 @@ public sealed partial class RouteChoiceDialogViewModel
     public bool ShowSearchCard =>
         _hazardCounterNeeded && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice;
 
-    public string SearchSummary { get; }
+    public string SearchSummary { get; private set; } = "";
     public string SearchDetail =>
         "Searches each room on the way; if a counter turns up it's grabbed and you cross, "
         + "otherwise you stop at the hazard's edge. Turn up nothing, lose nothing.";
@@ -165,9 +168,9 @@ public sealed partial class RouteChoiceDialogViewModel
     // The extra "route through your avoided rooms" card, offered beside a hazard/gate
     // route that respects the avoids — the avoid-crossing way needs no counter, so
     // it's a genuine alternative. Path kept for preview/commit; summary built in ctor.
-    private readonly IReadOnlyList<RoomKey>? _avoidAltPath;
+    private IReadOnlyList<RoomKey>? _avoidAltPath;
     public bool ShowAvoidAltCard => _avoidAltPath is { Count: > 0 };
-    public string AvoidAltSummary { get; }
+    public string AvoidAltSummary { get; private set; } = "";
     public string AvoidAltDetail =>
         "Skips the counter and plows through rooms you marked Avoid. Your avoid list stays "
         + "set — only this one walk crosses them.";
@@ -187,6 +190,19 @@ public sealed partial class RouteChoiceDialogViewModel
     public bool SendItIsDanger => true;                   // "cross unprotected" / "send it direct"
     public bool AvoidAltIsDanger => true;                 // always crosses avoided rooms
 
+    // True while the picker is up but its options are still being computed — a
+    // pick-time economy probe (own bank + party @wealth / @have, server round-trips)
+    // is in flight. The window shows the From/To heading and a centered
+    // "Calculating…" line with no cards; when the probe returns, Populate fills the
+    // cards and flips this false. Only the buy path opens in this state (the only
+    // fork with a real async wait); every other fork constructs fully-populated and
+    // never shows it, so the cards don't flicker.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOptions))]
+    private bool _isCalculating;
+
+    public bool ShowOptions => !IsCalculating;
+
     // Which route the user has selected to preview. Null until they click one —
     // Go stays disabled until then, forcing the click-to-preview-then-Go flow.
     [ObservableProperty]
@@ -204,6 +220,9 @@ public sealed partial class RouteChoiceDialogViewModel
     public bool IsSendItSelected => SelectedRoute == RouteChoiceResult.GatedNoAcquire;
     public bool IsSearchSelected => SelectedRoute == RouteChoiceResult.SearchEnRoute;
 
+    // Full construction: compute the heading from the labels, then Populate the card
+    // data from the resolved choice straight away. Used by every fork whose options
+    // are ready at construction time (all but the buy path).
     public RouteChoiceDialogViewModel(
         RouteChoice choice,
         string destinationLabel,
@@ -225,6 +244,49 @@ public sealed partial class RouteChoiceDialogViewModel
         // exercise the heading, construct the VM without it.
         string sourceLabel = "")
     {
+        Heading = ComposeHeading(destinationLabel, sourceLabel);
+        Populate(
+            choice, destinationLabel, itemName, giveNameForItem, shopBuyPhraseForItem,
+            dropNameForItem, freeEta, gatedEta, hazardCounterSource, hazardSurvivable,
+            resolvedHazardCounter, economyNote);
+    }
+
+    // "Calculating…" construction: the buy path opens the picker with only the
+    // From/To heading while a pick-time economy probe runs, then calls Populate once
+    // it returns. Leaves every card empty and IsCalculating true, so ShowOptions
+    // hides the (empty) card list until Populate flips it.
+    public RouteChoiceDialogViewModel(string destinationLabel, string sourceLabel)
+    {
+        Heading = ComposeHeading(destinationLabel, sourceLabel);
+        IsCalculating = true;
+    }
+
+    // One uniform title across every fork — the per-case wording lived in the card
+    // summaries anyway, and a plain "From X to Y" over the option list reads cleaner
+    // than a heading that restated the sole card (user request).
+    private static string ComposeHeading(string destinationLabel, string sourceLabel) =>
+        string.IsNullOrEmpty(sourceLabel)
+            ? $"Route to {destinationLabel}"
+            : $"From {sourceLabel} to {destinationLabel}";
+
+    // Fill the card data from the resolved choice + the caller's name/economy helpers,
+    // then reveal the options (IsCalculating → false, and refresh every card binding).
+    // Called synchronously from the full constructor, or from the buy path once its
+    // economy probe returns and the "Calculating…" window is already up.
+    public void Populate(
+        RouteChoice choice,
+        string destinationLabel,
+        Func<int, string?> itemName,
+        Func<int, string?>? giveNameForItem = null,
+        Func<int, string?>? shopBuyPhraseForItem = null,
+        Func<int, string?>? dropNameForItem = null,
+        TimeSpan freeEta = default,
+        TimeSpan gatedEta = default,
+        string? hazardCounterSource = null,
+        bool hazardSurvivable = false,
+        Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null,
+        string? economyNote = null)
+    {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
 
@@ -232,13 +294,6 @@ public sealed partial class RouteChoiceDialogViewModel
         IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;
         IsAvoidOverrideChoice = choice.Kind == RouteChoiceKind.AvoidOverride;
         HasFreeRoute = choice.HasFreeRoute;
-
-        // One uniform title across every fork — the per-case wording lived in the
-        // card summaries anyway, and a plain "From X to Y" over the option list reads
-        // cleaner than a heading that restated the sole card (user request).
-        Heading = string.IsNullOrEmpty(sourceLabel)
-            ? $"Route to {destinationLabel}"
-            : $"From {sourceLabel} to {destinationLabel}";
 
         // The extra avoid-crossing card (offered beside a hazard/gate route that
         // respects the avoids): the ignore-avoids route needs no counter.
@@ -451,6 +506,15 @@ public sealed partial class RouteChoiceDialogViewModel
             TrapCaveat = string.Empty;
             AvoidCaveat = string.Empty;
         }
+
+        // Options are ready: drop the "Calculating…" state and refresh every card
+        // binding at once (a blank name signals "all properties changed"), so the
+        // cards the buy path deferred appear now. The full-constructor path runs this
+        // before the window exists — a harmless no-op there. (The Blocked branch
+        // returns above; it's only ever built via the full constructor, never the buy
+        // path, so it never lingers in the calculating state.)
+        IsCalculating = false;
+        OnPropertyChanged(string.Empty);
     }
 
     // Re-fire the current selection's preview so a pre-selected route (trap-avoid

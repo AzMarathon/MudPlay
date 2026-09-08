@@ -300,62 +300,79 @@ public static class RouteChoicePrompt
             ? string.Join("; ", hazardSources) : null;
         bool hazardObtain = hazardCounterSource is not null;
 
-        // The run would BUY a counter → check the money BEFORE surfacing (the user's
-        // "check own bank, send @wealth to the party, then surface based on
-        // availability"): refresh own bank and, in a party, probe members' on-hand
-        // cash + whether a member already holds a needed item. Drives the card note
-        // and — when the leader can't pay from cash / the configured bank — redirects
-        // Go to walk to the shop and pause for manual provisioning.
-        Game.Map.RouteBuyEconomy? economy = buys.Count > 0
-            ? await services.AssessRouteBuyAsync(buys, neededItems, source)
-            : null;
-        string? economyNote = economy is { } eco
-            ? (eco.PartyItemHolder is { } holder
-                ? $"{holder} in your party has it — will hand it over on the way"
-                : eco.Affordability.Note)
-            : null;
-        // Leader can't pay from cash / configured bank, and no party member holds
-        // the item outright → don't arm an auto-buy that would stall; walk to the
-        // shop and pause so the user provisions the party by hand.
-        RoomKey? buyPauseRoom = economy is { PartyItemHolder: null } e2 && !e2.AutoPayable
-            ? e2.ShopRoom
-            : null;
+        // Requirement-clause name helpers shared by both build paths:
+        //   • give: the NPC / room a free deterministic give would ask (preempts the
+        //     shop and drop tails — the give router stands both down).
+        //   • shop: the shop the run would detour to buy at when it's give-less and
+        //     flagged buy-if-needed (resolved from this walk's source/destination).
+        //   • drop: the lair a flagged dropper sits in, when there's no give or shop.
+        //   • resolvedCounter: the specific counter the run resolved per hazard
+        //     requirement (item + "buy at Pier" / "ask X" / …), so the clause names
+        //     that one, not the whole any-of set.
+        Func<int, string?> giveName = itemId => services.PathItemGiveName(itemId, source, destination);
+        Func<int, string?> shopName = itemId => services.PathItemShopName(itemId, source, destination);
+        Func<int, string?> dropName = itemId => services.PathItemDropName(itemId, source);
+        Func<RouteRequirement, (int ItemId, string Source)?> resolvedCounter =
+            req => resolvedCounters.TryGetValue(req, out (int ItemId, string Source) v) ? v : ((int, string)?)null;
+
+        string destLabel = DestinationLabel(services, destination);
+        string srcLabel = DestinationLabel(services, source);
 
         // For a mixed route with no sourceable counter, the base card walks to the
         // hazard's edge and stops (the user then fetches a counter / clears the hard
-        // gate themselves), rather than crossing the hazard blindly.
+        // gate themselves), rather than crossing the hazard blindly. Economy-
+        // independent, so it's the same for both build paths.
         RoomKey? hazardEdge = mixedHazard && !hazardObtain
             ? services.HazardApproachRoom(choice.GatedPath)
             : null;
 
-        var vm = new RouteChoiceDialogViewModel(
-            choice,
-            DestinationLabel(services, destination),
-            services.ItemNames.GetName,
-            // Name the NPC / room the run would ask for a free deterministic give,
-            // when one exists. This preempts the shop and drop tails (the give
-            // router stands both down), so the "ask X" tail matches the run.
-            itemId => services.PathItemGiveName(itemId, source, destination),
-            // No free give but a shop stocks the gate item and it's flagged
-            // buy-if-needed: name the shop the run would detour to buy at. Resolved
-            // from this walk's source/destination so the "buy at X" tail matches
-            // the actual detour.
-            itemId => services.PathItemShopName(itemId, source, destination),
-            // No give or shop but a flagged monster drops it: name the lair the
-            // run would reroute to hunt, so the picker previews the hunt option
-            // (which otherwise only surfaces as a prompt once the walk starts).
-            itemId => services.PathItemDropName(itemId, source),
-            freeEta,
-            gatedEta,
-            hazardCounterSource,
-            crossesSurvivableHazard,
-            // The specific counter the run resolved for a hazard requirement (item id +
-            // "buy at Pier" / "ask X" / …), so its requirement clause names that one
-            // rather than the whole any-of set.
-            req => resolvedCounters.TryGetValue(req, out (int ItemId, string Source) v)
-                ? v : ((int, string)?)null,
-            economyNote,
-            sourceLabel: DestinationLabel(services, source));
+        RouteChoiceDialogViewModel vm;
+        Task<RouteChoiceResult?> dialogTask;
+        // Leader can't pay from cash / configured bank, and no party member holds the
+        // item outright → don't arm an auto-buy that would stall; walk to the shop and
+        // pause so the user provisions the party by hand. Only the buy path sets it.
+        RoomKey? buyPauseRoom = null;
+
+        if (buys.Count > 0)
+        {
+            // The run would BUY a counter → a pick-time economy probe is coming (the
+            // user's "check own bank, send @wealth to the party, then surface by
+            // availability"): refresh own bank and, in a party, members' on-hand cash +
+            // whether a member already holds a needed item. Those are server round-trips
+            // that take a beat, so surface the picker NOW in a "Calculating…" state — the
+            // From/To heading, no cards — then swap the cards in once the probe returns.
+            // Awaiting the probe lets the window paint before the (synchronous) card
+            // build. Only this path has a real async wait; every other fork builds
+            // fully-populated and never shows the calculating state.
+            vm = new RouteChoiceDialogViewModel(destLabel, srcLabel);
+            dialogTask = services.Dialogs
+                .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
+            services.Log.Debug(LogCat,
+                $"route pick {source} -> {destination}: probing funds for {buys.Count} buy(s); picker shows Calculating…");
+
+            Game.Map.RouteBuyEconomy? economy = await services.AssessRouteBuyAsync(buys, neededItems, source);
+            string? economyNote = economy is { } eco
+                ? (eco.PartyItemHolder is { } holder
+                    ? $"{holder} in your party has it — will hand it over on the way"
+                    : eco.Affordability.Note)
+                : null;
+            buyPauseRoom = economy is { PartyItemHolder: null } e2 && !e2.AutoPayable ? e2.ShopRoom : null;
+
+            vm.Populate(
+                choice, destLabel, services.ItemNames.GetName, giveName, shopName, dropName,
+                freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote);
+        }
+        else
+        {
+            // No buy → no economy probe, nothing to wait on: build the fully-populated
+            // VM and show it straight away (no calculating state to flicker through).
+            vm = new RouteChoiceDialogViewModel(
+                choice, destLabel, services.ItemNames.GetName, giveName, shopName, dropName,
+                freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter,
+                economyNote: null, sourceLabel: srcLabel);
+            dialogTask = services.Dialogs
+                .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
+        }
 
         // Draw the selected route's line while the picker is open; clear it when
         // the picker closes so a committed walk's live path isn't double-drawn and
@@ -392,11 +409,12 @@ public static class RouteChoicePrompt
                 _ => choice.GatedPath,
             });
 
+        // The window is already open (both build paths showed it above); await its
+        // close for the picked route.
         RouteChoiceResult? result;
         try
         {
-            result = await services.Dialogs
-                .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
+            result = await dialogTask;
         }
         finally
         {

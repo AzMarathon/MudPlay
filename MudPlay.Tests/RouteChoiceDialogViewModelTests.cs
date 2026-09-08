@@ -667,4 +667,31 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Contains("Obtain, then cross", vm.GatedSummary);
         Assert.Contains("Cross unprotected", vm.SendItSummary);
     }
+
+    // The buy path opens the picker in a "Calculating…" state (From/To heading, no
+    // cards) while its economy probe runs, then Populate fills the cards. Pin that
+    // the calculating constructor hides the options and the heading is right, and
+    // that Populate reveals them with the choice's card content.
+    [Fact]
+    public void CalculatingConstructor_HidesOptions_ThenPopulateReveals()
+    {
+        var vm = new RouteChoiceDialogViewModel("The Iceforge (3/632)", "Pier (1/9)");
+
+        Assert.True(vm.IsCalculating);
+        Assert.False(vm.ShowOptions);
+        Assert.Equal("From Pier (1/9) to The Iceforge (3/632)", vm.Heading);
+
+        var choice = SoleChoice(
+            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690 }));
+        vm.Populate(
+            choice, "The Iceforge (3/632)", id => "a raft",
+            hazardCounterSource: "buy at Pier", hazardSurvivable: true);
+
+        Assert.False(vm.IsCalculating);
+        Assert.True(vm.ShowOptions);
+        // Heading is set by the constructor, not Populate — it must survive the fill.
+        Assert.Equal("From Pier (1/9) to The Iceforge (3/632)", vm.Heading);
+        Assert.Contains("Obtain, then cross", vm.GatedSummary);
+        Assert.Contains("Cross unprotected", vm.SendItSummary);
+    }
 }

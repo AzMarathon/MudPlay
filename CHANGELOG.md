@@ -15,6 +15,7 @@
 - Route picker pops faster: it only checks your **bank** (and the party) when cash on hand can't cover a buy — plenty of cash on hand skips the round-trips entirely — and the shared pathfinds each fork needs are now computed once and reused instead of re-run per fork
 - Route picker also offers **"route through your avoided rooms"** as an extra card beside the obtain/cross options when that avoid-crossing route needs no counter — so you can plow through instead of fetching a raft
 - Route picker tints the risky cards **red** (cross unprotected / route through avoided rooms), orders the safe cards first and the red ones last, brightens the card subtext for legibility, and sizes the window to show every card
+- Route picker opens instantly showing **"Calculating…"** when a route needs a buy — the window pops up with the From/To heading while it checks your funds (bank / party), then swaps the cards in, instead of the window appearing only once the check finishes
 - bug reports addressed: stock-20260907-175035, paradigm-20260907-212758, paradigm-20260907-215048
 
 ## 3.55.8
