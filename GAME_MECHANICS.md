@@ -2512,6 +2512,32 @@ is parsed on its own outbound gate (`health` observed) and never through the sta
 (HP/MA **regen** — `HP Regen` / `MA Regen` — only appears in Paradigm's `stat all`, which the client
 does NOT parse; regen is computed from stats in the Player Workshop.) (StatParser.TryHealthCommandLine.)
 
+## The `bank` command output *([CONFIRMED] 2026-09-07, user + screenshots, stock + Paradigm)*
+
+`bank` is a **self-only, global account query** — it lists the character's balance at **every bank
+they have ever deposited at**, from any room (it is NOT a room action like `dep`/`with`, which do
+require standing at the bank). A bank the character has **never used stays hidden**; one used and
+then fully withdrawn **shows with a zero balance**. It never surfaces party members' banks — bank
+balances can only be seen for yourself (party on-hand cash is separately visible via `@wealth`,
+which reports **carried** coin only, never deposits).
+
+Output is one two-line block per bank, repeated:
+
+```
+Your balance at Bank of Godfrey is:                              (Paradigm — bank name only)
+On deposit: 19578816 copper farthings [195,788.16 gold crowns]
+Your balance at Bank of Godfrey (#8) is:                         (Stock — appends the shop number)
+On deposit: 4512 copper farthings [45.12 gold crowns]
+```
+
+Parsing points: the header is `Your balance at <name> is:`, where `<name>` is the bank's **shop
+name** — Stock appends a ` (#N)` shop-number suffix that Paradigm omits (drop it so the name matches
+the shop-name key). The deposit line's authoritative figure is the **copper farthings** count
+(thousands-commas allowed); the bracketed gold-crowns value is a gloss. Because the name is the shop
+name, a parsed balance maps back to its room(s) via the bank-shop catalogue (ShopType 7), so a route
+that needs money the purse can't cover can point at the nearest bank the deposit actually sits in.
+(BankBalanceProbe.)
+
 ## Realm exit / logoff sequence *([CONFIRMED] 2026-09-05, user + report `stock-20260904-230111`)*
 
 Exiting the realm from inside the game is the exit command (the user's board: a bare `x`):

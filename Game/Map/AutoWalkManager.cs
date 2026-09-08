@@ -776,6 +776,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // the trap-free route over the shorter trapped one) across the deferral.
     private bool _deferredWalkAvoidTraps;
 
+    // Carries the route picker's "route through avoided rooms" choice (true only when
+    // the user chose to override their own avoid list for this walk) across the deferral.
+    private bool _deferredWalkIgnoreAvoids;
+
     // One-shot watchdog for the tracker-Pending deferral. A move the server
     // refuses with no room redisplay leaves the tracker stuck Pending, so the
     // Confirmed transition the deferral waits on never arrives and the walk would
@@ -797,6 +801,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // silently reverts to the defaults and takes a teleport it was told to avoid.
     private bool _activeAvoidTeleports;
     private bool _activeAvoidTraps;
+    // True when the active walk overrides the user's avoid list (the picker's
+    // "route through avoided rooms" choice). A mid-walk replan must keep it, or the
+    // walk would re-honour the avoids it was told to cross and fail in place.
+    private bool _activeIgnoreAvoids;
     private bool _activeThroughGates;
     private bool _activeArmAcquisition = true;
 
@@ -834,7 +842,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool armItemAcquisition = true,
         bool avoidTeleports = false,
         bool avoidTraps = false,
-        bool supersedeSilently = false)
+        bool supersedeSilently = false,
+        // ignoreAvoids: when true, plan through (and into) rooms the user marked
+        // "avoid". The route picker's "route through avoided rooms" choice passes
+        // true; every other caller keeps the default (false) so the avoid list is
+        // honoured as before.
+        bool ignoreAvoids = false)
     {
         if (State is WalkState.Walking or WalkState.Paused)
         {
@@ -864,6 +877,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _deferredWalkArmAcquisition = armItemAcquisition;
             _deferredWalkAvoidTeleports = avoidTeleports;
             _deferredWalkAvoidTraps = avoidTraps;
+            _deferredWalkIgnoreAvoids = ignoreAvoids;
             _destination = destination;       // populated so status surfaces show the target
             State = WalkState.Walking;
             // Watchdog: if the tracker never settles (the in-flight move was
@@ -877,7 +891,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return true;
         }
 
-        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps);
+        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps, ignoreAvoids);
     }
 
     private bool WalkToImmediate(
@@ -885,7 +899,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool planThroughAcquirableGates = false,
         bool armItemAcquisition = true,
         bool avoidTeleports = false,
-        bool avoidTraps = false)
+        bool avoidTraps = false,
+        bool ignoreAvoids = false)
     {
         // Callers may arrive here from the WalkTo entry (Idle) OR from
         // the deferred dispatch in OnTrackerStateChanged (Walking with
@@ -949,7 +964,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         try
         {
             path = _bfs.FindPath(source.Key, destination, _filter,
-                refuseTeleports: avoidTeleports, avoidTraps: avoidTraps);
+                refuseTeleports: avoidTeleports, avoidTraps: avoidTraps, ignoreAvoids: ignoreAvoids);
 
             // A sea-captain sailing can beat (or replace) the land route. Weigh
             // the boat's stitched land-legs against the pure land route; the
@@ -1042,6 +1057,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _destination = destination;
         _activeAvoidTeleports = avoidTeleports;
         _activeAvoidTraps = avoidTraps;
+        _activeIgnoreAvoids = ignoreAvoids;
         _activeThroughGates = planThroughAcquirableGates;
         _activeArmAcquisition = armItemAcquisition;
         _origin = source.Key;
@@ -2014,14 +2030,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool armAcquisition = _deferredWalkArmAcquisition;
         bool avoidTeleports = _deferredWalkAvoidTeleports;
         bool avoidTraps = _deferredWalkAvoidTraps;
+        bool ignoreAvoids = _deferredWalkIgnoreAvoids;
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
         _deferredWalkAvoidTraps = false;
+        _deferredWalkIgnoreAvoids = false;
         _deferredWalkTimer?.Dispose();
         _deferredWalkTimer = null;
-        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps);
+        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps, ignoreAvoids);
     }
 
     // Watchdog fire for a deferral whose Confirmed transition never arrived (the
@@ -2257,7 +2275,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     planThroughAcquirableGates: _activeThroughGates,
                     armItemAcquisition: _activeArmAcquisition,
                     avoidTeleports: _activeAvoidTeleports,
-                    avoidTraps: _activeAvoidTraps);
+                    avoidTraps: _activeAvoidTraps,
+                    ignoreAvoids: _activeIgnoreAvoids);
             }
             finally
             {
@@ -2726,8 +2745,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
         _deferredWalkAvoidTraps = false;
+        _deferredWalkIgnoreAvoids = false;
         _activeAvoidTeleports = false;
         _activeAvoidTraps = false;
+        _activeIgnoreAvoids = false;
         _activeThroughGates = false;
         _activeArmAcquisition = true;
         _retryCount = 0;

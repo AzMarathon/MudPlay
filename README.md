@@ -1,13 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.55.8**
-> - Roomba reroutes around a destination room that's full, to the next room labelled for the same category and then the catch-all, instead of re-sending refused drops every lap
-> - A full room's mark lasts the rest of the sweep — it becomes a preferred place to collect *from*, since emptying it is the only thing that frees its capacity — and clears on the next sweep
-> - Roomba paces its get/drop commands past the game's rate limit rather than flooding it and losing the whole batch
-> - Roomba leaves alone what auto-discard would bin, and no longer loses track of items it is carrying
-> - The carry budget no longer writes off heavy items because the pack was temporarily full, and a pack too full to sort stops with an explanation
-> - The Roomba Log now names why each item was left behind — a full house reads as such instead of "no matching room"
+> **Version 3.56.0**
+> - Route picker: when a destination is reachable only through a room you marked **Avoid**, it offers to route through anyway (warning how many) instead of failing; a much-shorter through-avoided route gets a "respect your avoids / shorter" fork. Your avoid list is never changed
+> - Route picker is now economy-aware: "buy at X" reveals the bank-withdraw it would do, and in a party it checks your own **bank**, the party's carried cash (`@wealth`), and whether a member **has** the item (`@have`) before offering a buy — telling you where the money/item is, and walking to the shop and pausing when the money's elsewhere or spread across the party
+> - Reads the `bank` deposit listing (self-only) and maps each bank to its room
+> - New **"Search en route"** route-picker card: walk toward a hazard searching each room, grab a counter if one turns up (then cross) — and a searched-up counter is now actually collected by the obtain pipeline
+> - Route picker no longer offers a class-restricted teleport (e.g. a bard-only barmaid transport) to a character of the wrong class
+> - Route picker no longer says "no route respects your avoids" when an obtainable counter would open one — if a bought/found raft (or any hazard counter, key, ticket) reaches the destination without crossing an avoided room, it offers those obtain / cross-unprotected / search options instead; its decision is now written to the program log
+> - Route picker polish: a uniform "From X to Y / Options:" layout, a single-line footnote ("Click a route to preview it on the map or click Details… to show routing information"), safe cards first and red-tinted risky cards (cross unprotected / route through avoided rooms) last, more legible card subtext, a "route through your avoided rooms" card offered beside the obtain/cross options, the window sized to show every card, and a faster pop-up (it only checks the bank when cash on hand can't cover a buy, and reuses each shared pathfind instead of recomputing it per fork). Route planning also runs off the UI thread when you're standing still, so the app no longer freezes while it computes a route on a big map — and if planning takes a beat, the picker opens immediately showing **"Calculating…"** and fills the cards in when it's done
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

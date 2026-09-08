@@ -394,6 +394,11 @@ public sealed class AppServices
     // @what and the write-side @get-all; cleared on room change.
     public Game.Inventory.GroundItemTracker GroundItems { get; private set; } = null!;
 
+    // Collects a demanded path item (NeedKind.PathItem) the moment a floor survey
+    // reveals it — so search-en-route is a real sourcing method, independent of the
+    // Auto-Get engine's master toggle + per-item AutoCollect flag.
+    public Game.Map.PathItemFloorCollector PathItemFloor { get; private set; } = null!;
+
     // Consumer of RemoteCommands for the
     // Models.GameData.PlayerRemoteControls.QueryInventory
     // category — @wealth / @enc / @have / @what.
@@ -1426,6 +1431,13 @@ public sealed class AppServices
     // the players table (wealth drifts); it's fired only when a route
     // crosses a toll.
     public Game.Remote.PartyWealthProbe PartyWealthProbe { get; private set; } = null!;
+
+    // Self-only bank-balance probe + passive parser. Parses the `bank` command's
+    // per-bank "On deposit: N copper farthings" listing (a global account query —
+    // it shows every bank we've used, from any room) so the route picker can weigh
+    // a buy the purse can't cover against money on deposit. Bank name = shop name,
+    // so a balance maps to its room(s) via BankCatalog for the withdraw detour.
+    public Game.Remote.BankBalanceProbe BankBalance { get; private set; } = null!;
 
     // Demand-driven party-wealth gate — feeds
     // MovementFilter.PartyWealthProvider so BFS routes a following party
@@ -4236,6 +4248,11 @@ public sealed class AppServices
         // Auto-recover reads the floor survey to confirm our corpse is in the room
         // before sending `recover corpse` (and arms off its SurveyUpdated event).
         DeathRecovery.AttachGroundItems(GroundItems);
+        // Demand-aware floor collector: `get` a still-needed path item the moment a
+        // survey reveals it (search-en-route sourcing), independent of Auto-Get.
+        PathItemFloor = new Game.Map.PathItemFloorCollector(
+            Needs, IsItemOnFloor, ItemNames.GetName, cmd => SendGameCommand(cmd), Log);
+        PathItemFloor.Attach(GroundItems);
         // Realm picks the recovery mechanic: Paradigm packs the pile into a corpse
         // (`recover corpse`), Stock scatters it loose on the floor (per-item `get`).
         DeathRecovery.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
@@ -4872,6 +4889,9 @@ public sealed class AppServices
             log: Log);
         Movement.PartyWealthProvider = PartyWealth.MinWealth;
         Movement.WealthWarmProbe = PartyWealth.Probe;
+
+        // Self bank-balance probe — sends `bank` and parses the deposit listing.
+        BankBalance = new Game.Remote.BankBalanceProbe(send: cmd => SendGameCommand(cmd), log: Log);
 
         // Base auto-search — a room-wide `sea` reveals hidden items for the
         // auto-get engines. Armed by the persisted master toggle OR the transient
@@ -7267,14 +7287,15 @@ public sealed class AppServices
             : null;
     }
 
-    // Route-picker helper: for a path-gate item the direct route needs, name the
-    // shop the walk would actually detour to buy it — but only when that detour
-    // will really run. It runs only if the item is flagged AutoObtainForPath
-    // (same gate PathItemShopRouter enforces), no free deterministic give
-    // preempts it (a give owns the item over a buy), AND a reachable shop stocks
-    // it, so all conditions must hold or we return null. The chosen shop matches
-    // the router's fewest-added-steps pick (shared TrySelectShop), so the picker's
-    // "buy at X" promise is the shop the run visits — not a plausible guess.
+    // Route-picker helper: for a path-gate item the direct route needs, return the
+    // full "buy at <shop>" clause the walk would run — with the bank-run / shortfall
+    // note appended when the crosser can't cover it from cash on hand (see
+    // PathItemBuyPhrase) — but only when that detour will really run. It runs only if
+    // the item is flagged AutoObtainForPath (same gate PathItemShopRouter enforces),
+    // no free deterministic give preempts it (a give owns the item over a buy), AND a
+    // reachable shop stocks it, so all conditions must hold or we return null. The
+    // chosen shop matches the router's fewest-added-steps pick (shared TrySelectShop),
+    // so the clause names the shop the run visits — not a plausible guess.
     public string? PathItemShopName(int itemId, Game.Map.RoomKey source, Game.Map.RoomKey destination)
     {
         if (!IsAutoObtainForPath(itemId)) return null;
@@ -7285,7 +7306,9 @@ public sealed class AppServices
                 shops, source, destination, (a, b) => Bfs.DistanceBetween(a, b, Movement),
                 out Game.Map.RoomKey shop))
             return null;
-        return RoomGraph.GetRoom(shop)?.Name;
+        return RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName
+            ? PathItemBuyPhrase(itemId, shop, shopName)
+            : null;
     }
 
     // Route-picker helper: for a path-gate item no give / shop covers, name the
@@ -7345,6 +7368,161 @@ public sealed class AppServices
             return (long)Math.Ceiling(copper);
         }
         return null;
+    }
+
+    // Route-picker buy clause for a path / hazard counter the run would purchase:
+    // "buy at <shop>" when cash on hand covers it; "buy at <shop> (withdraw ~<N>
+    // copper at <bank> first)" when it's short but a bank is configured to draw
+    // from; "buy at <shop> — short ~<N> copper, set a bank in Settings → Cash" when
+    // short with no bank. Mirrors PathItemShopRouter.NeedsBankRun so the card
+    // previews the exact bank-run / shortfall the walk will hit. quantity is how
+    // many copies the run buys (a per-person × head-count party provision, else 1).
+    // Amounts are in copper farthings — the same denomination the game prices in
+    // ("You bought lantern for 396 copper farthings.").
+    private string PathItemBuyPhrase(
+        int itemId, Game.Map.RoomKey shopRoom, string shopName, int quantity = 1)
+    {
+        string basePhrase = $"buy at {shopName}";
+        if (PathItemBuyCost(itemId, shopRoom) is not { } unit || unit <= 0) return basePhrase;
+        long cost = unit * Math.Max(1, quantity);
+        long cash = PathItemCashOnHand();
+        if (cash >= cost) return basePhrase;   // affordable from the purse — no bank leg
+        string amount = $"~{cost - cash:N0} copper";
+        if (PathItemBankRoom() is { } bank && RoomGraph.GetRoom(bank)?.Name is { Length: > 0 } bankName)
+            return $"{basePhrase} (withdraw {amount} at {bankName} first)";
+        return $"{basePhrase} — short {amount}, set a bank in Settings → Cash";
+    }
+
+    // The bank name (= its shop name, what `bank` lists) hosting a room, via the
+    // BankCatalog reverse index — so a configured/nearest bank room resolves to the
+    // name BankBalanceProbe keys deposits on.
+    private string? BankNameForRoom(Game.Map.RoomKey room)
+    {
+        foreach (Game.GameData.BankShop b in Game.GameData.BankCatalog.Enumerate(GameData))
+            if (b.Key.Equals(room)) return b.Name;
+        return null;
+    }
+
+    // Last-known deposit (copper) at the configured auto-deposit bank, 0 when
+    // unset / never seen in a `bank` listing.
+    private long ConfiguredBankDepositCopper() =>
+        PathItemBankRoom() is { } room && BankNameForRoom(room) is { } name
+            ? BankBalance.Balance(name) ?? 0
+            : 0;
+
+    // Used banks (seen in a `bank` listing with a positive deposit) whose room is
+    // reachable from source, nearest-first, EXCLUDING the configured bank (counted
+    // separately as the auto-withdraw source). Each bank name maps to its room(s)
+    // via BankCatalog; a bank assigned to several rooms uses its nearest.
+    private List<(string Name, long Deposit)> ReachableUsedBankDeposits(
+        Game.Map.RoomKey source, Game.Map.RoomKey? exclude)
+    {
+        var scored = new List<(string Name, long Deposit, int Dist)>();
+        IReadOnlyList<Game.GameData.BankShop> banks = Game.GameData.BankCatalog.Enumerate(GameData);
+        foreach ((string name, long deposit) in BankBalance.LastKnown)
+        {
+            if (deposit <= 0) continue;
+            int? best = null;
+            foreach (Game.GameData.BankShop b in banks)
+            {
+                if (!string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (exclude is { } ex && b.Key.Equals(ex)) continue;
+                if (Bfs.DistanceBetween(source, b.Key, Movement) is { } d && (best is null || d < best))
+                    best = d;
+            }
+            if (best is { } dist) scored.Add((name, deposit, dist));
+        }
+        scored.Sort((a, b) => a.Dist.CompareTo(b.Dist));
+        return scored.ConvertAll(s => (s.Name, s.Deposit));
+    }
+
+    // Pick-time economy read for a route that needs BUYING counter/gate items.
+    // Actively refreshes own bank (`bank`) and — in a party — the members' on-hand
+    // cash (`@wealth`) and whether a member already holds a needed item (`@have`),
+    // THEN classifies who can pay (per the user's "check before surfacing options").
+    // buys are the item+shop pairs the run would purchase; neededItems are the
+    // items to ask the party about. Best-effort: a probe that errors/times out just
+    // leaves that dimension at zero (degrades to the self/solo view).
+    public async Task<Game.Map.RouteBuyEconomy> AssessRouteBuyAsync(
+        IReadOnlyList<(int ItemId, Game.Map.RoomKey ShopRoom)> buys,
+        IReadOnlyList<(int ItemId, string Name)> neededItems,
+        Game.Map.RoomKey source)
+    {
+        ArgumentNullException.ThrowIfNull(buys);
+        ArgumentNullException.ThrowIfNull(neededItems);
+
+        long cost = 0;
+        Game.Map.RoomKey? nearestShop = null;
+        int? nearestDist = null;
+        foreach ((int itemId, Game.Map.RoomKey shopRoom) in buys)
+        {
+            cost += PathItemBuyCost(itemId, shopRoom) ?? 0;
+            int? d = Bfs.DistanceBetween(source, shopRoom, Movement);
+            if (nearestShop is null || (d is { } dd && (nearestDist is null || dd < nearestDist)))
+            {
+                nearestShop = shopRoom;
+                nearestDist = d;
+            }
+        }
+
+        // Cash on hand is live (parsed inventory — no round-trip). If it already
+        // covers the buy, there's nothing to look up: skip the `bank` query AND the
+        // party @wealth/@have probes entirely. Those round-trips were making the
+        // route picker wait on the network before it could pop, even with a full
+        // purse — only reach for the bank/party when cash actually falls short.
+        long ownCash = PathItemCashOnHand();
+        if (ownCash >= cost)
+        {
+            Log.Info("RouteBuy",
+                $"buy cost ~{cost:N0}c covered by cash on hand ({ownCash:N0}c) — no bank/party probe");
+            return new Game.Map.RouteBuyEconomy(
+                Game.Map.RouteBuyAffordabilityCalculator.Classify(
+                    cost, ownCash, 0, new List<(string Name, long Deposit)>(), 0),
+                nearestShop, null);
+        }
+
+        // Cash falls short → find the rest: refresh the bank listing, then read deposits.
+        try { await BankBalance.QueryAsync(); } catch { /* degrade to last-known */ }
+        Game.Map.RoomKey? configured = PathItemBankRoom();
+        long configuredDeposit = ConfiguredBankDepositCopper();
+        List<(string Name, long Deposit)> otherBanks = ReachableUsedBankDeposits(source, configured);
+
+        // Party money + item holders (bank is self-only, so party wealth is on-hand).
+        long partyOnHand = 0;
+        string? holder = null;
+        if (PartyState.IsInParty)
+        {
+            try
+            {
+                Game.Remote.PartyWealthProbe.PartyWealthResult w = await PartyWealthProbe.QueryAsync();
+                foreach (KeyValuePair<string, long> kv in w.WealthByMember) partyOnHand += kv.Value;
+            }
+            catch { /* degrade: party cash unknown */ }
+
+            foreach ((int itemId, string name) in neededItems)
+            {
+                try
+                {
+                    Game.Remote.PartyInventoryProbe.PartyItemResult have =
+                        await PartyInventory.QueryAsync(itemId, name);
+                    if (have.AnyHeld)
+                    {
+                        foreach (KeyValuePair<string, int> kv in have.CountsByMember)
+                            if (kv.Value > 0) { holder = kv.Key; break; }
+                        if (holder is not null) break;
+                    }
+                }
+                catch { /* degrade: party inventory unknown */ }
+            }
+        }
+
+        Game.Map.RouteBuyAffordability afford = Game.Map.RouteBuyAffordabilityCalculator.Classify(
+            cost, ownCash, configuredDeposit, otherBanks, partyOnHand);
+        Log.Info("RouteBuy",
+            $"buy cost ~{cost:N0}c: cash {ownCash:N0}, configured-bank {configuredDeposit:N0}, "
+            + $"{otherBanks.Count} other reachable bank(s), party on-hand {partyOnHand:N0} → {afford.Source}"
+            + (holder is { } h ? $"; party member {h} holds a needed item" : ""));
+        return new Game.Map.RouteBuyEconomy(afford, nearestShop, holder);
     }
 
     // HP rest gate for DoorOpenManager's bash-interleave. recovered=false → "HP has
@@ -7619,14 +7797,14 @@ public sealed class AppServices
     // then cross" choice is explicit consent, so it offers a counter the run can
     // source whether or not it's flagged AutoObtainForPath. Returns the chosen
     // counter id + a source phrase, or null when none is sourceable.
-    public (int ItemId, string Source, bool OnFloor)? ResolveHazardCounter(
+    public (int ItemId, string Source, bool OnFloor, Game.Map.RoomKey? ShopRoom)? ResolveHazardCounter(
         IReadOnlyList<int> counters, Game.Map.RoomKey source, Game.Map.RoomKey destination)
     {
         ArgumentNullException.ThrowIfNull(counters);
         // On the current floor — grabbed in place, so it never routes through the
         // detour pipeline (the caller issues a `get`); flagged OnFloor to say so.
         foreach (int id in counters)
-            if (IsItemOnFloor(id)) return (id, "grab from the floor here", true);
+            if (IsItemOnFloor(id)) return (id, "grab from the floor here", true, null);
 
         // The destination is hazard-gated (that is WHY a counter is needed), so the
         // shop/give/drop round-trip THROUGH it is only reachable with the acquirable
@@ -7640,13 +7818,13 @@ public sealed class AppServices
                     && Game.Map.PathItemGiveRouter.TrySelectGiver(
                         GiveSourcesForItem(id), source, destination,
                         (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.GiveSource giver))
-                    return (id, $"ask {giver.GiverName}", false);
+                    return (id, $"ask {giver.GiverName}", false, null);
 
             int? Dist(Game.Map.RoomKey a, Game.Map.RoomKey b) => Bfs.DistanceBetween(a, b, Movement);
             // Among the counters buyable at a reachable shop, pick the CHEAPEST by
             // base Price (deterministic — a log raft over a river punt), not just the
             // first in the any-of list.
-            (int Id, string ShopName, int Price)? bestBuy = null;
+            (int Id, string ShopName, Game.Map.RoomKey Shop, int Price)? bestBuy = null;
             foreach (int id in counters)
             {
                 System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
@@ -7657,7 +7835,7 @@ public sealed class AppServices
                 {
                     int price = ItemNames.PriceOf(id) ?? int.MaxValue;
                     if (bestBuy is null || price < bestBuy.Value.Price)
-                        bestBuy = (id, shopName, price);
+                        bestBuy = (id, shopName, shop, price);
                     continue;
                 }
 
@@ -7669,7 +7847,11 @@ public sealed class AppServices
                         $"item {id} shop at {sr.Map}/{sr.Room}: src→shop={Dist(source, sr)?.ToString() ?? "∞"}, "
                         + $"shop→dest={Dist(sr, destination)?.ToString() ?? "∞"}");
             }
-            if (bestBuy is { } b) return (b.Id, $"buy at {b.ShopName}", false);
+            // Name the shop AND preview the bank-run / shortfall the buy leg will hit
+            // (mirrors PathItemShopRouter.NeedsBankRun) so a broke crosser sees the
+            // withdraw the run already does — or a "set a bank" warning when short.
+            if (bestBuy is { } b)
+                return (b.Id, PathItemBuyPhrase(b.Id, b.Shop, b.ShopName), false, b.Shop);
 
             foreach (int id in counters)
             {
@@ -7678,7 +7860,7 @@ public sealed class AppServices
                     && Game.Map.MonsterDropRouter.SelectNearestSpawn(
                         spawns, Bfs.ComputeDistancesFrom(source, Movement),
                         out Game.Map.MonsterDropSpawn best, out _))
-                    return (id, $"dropped by {best.MonsterName}", false);
+                    return (id, $"dropped by {best.MonsterName}", false, null);
             }
         }
 

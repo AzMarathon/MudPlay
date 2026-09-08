@@ -73,12 +73,24 @@ public static class GreetTeleportResolver
     }
 
     // Follow the directive block a greet keyword points at (through empty-Action
-    // LinkTo hops) and report its teleport destination + level floor — but only
-    // when the block carries NO alignment / quest-ability gate. Any such gate
-    // aborts the whole keyword (returns false), because it makes the transport
-    // conditional on state the client can't read; routing through it risks a
-    // silent no-op that strands the walker. Only the first non-empty block is
-    // scanned, mirroring GuardDoorCommandResolver.TryResolveExit.
+    // LinkTo hops) and report its teleport destination + level floor + class gate.
+    // Only the first non-empty block is scanned, mirroring
+    // GuardDoorCommandResolver.TryResolveExit.
+    //
+    // A block is often a class-branch TABLE — one `class N:<effects>` line per
+    // class, and usually only ONE of them teleports (the barmaid's `adventure`:
+    // every non-bard line just prints text, the class-9 line teleports to the inn).
+    // So each line is scanned in its OWN scope and the first line that actually
+    // teleports decides the destination, level floor, and class gate — the class
+    // that gates the transport is the one on the SAME line as the teleport, NOT the
+    // last `class N` seen in the block (binding to the last one mis-gated the
+    // barmaid transport to class 15 instead of class 9, report
+    // stock-20260907-175035). A line carrying an alignment / quest-ability gate is
+    // skipped (that branch is conditional on state the client can't read, so
+    // routing it risks a silent no-op that strands the walker); a `testskill`
+    // attribute roll is NOT such a gate — it gates the right class by a live skill
+    // check the walker reacts to (verify-and-retry), so the transport stays
+    // routable for its class.
     private static bool TryResolveUngatedTeleport(TBInfoStore store, int number,
         HashSet<int> visited, out RoomKey dest, out int minLevel, out int requiredClass)
     {
@@ -96,38 +108,48 @@ public static class GreetTeleportResolver
                 continue;
             }
 
-            bool haveDest = false;
             foreach (string rawLine in entry.Action.Split('\n'))
             {
+                int lineMinLevel = 0;
+                int lineClass = 0;
+                RoomKey lineDest = default;
+                bool lineHasDest = false;
+                bool lineGated = false;
+
                 foreach (string tokenRaw in rawLine.Split(':'))
                 {
                     string token = tokenRaw.Trim();
                     if (token.Length == 0) continue;
-                    if (IsGate(token)) return false;
-                    if (token.StartsWith("minlevel ", StringComparison.OrdinalIgnoreCase))
+                    if (IsGate(token)) lineGated = true;
+                    else if (token.StartsWith("minlevel ", StringComparison.OrdinalIgnoreCase))
                     {
                         int lvl = GuardDoorCommandResolver.FirstIntAfter(token, "minlevel ");
-                        if (lvl > 0) minLevel = lvl;
+                        if (lvl > 0) lineMinLevel = lvl;
                     }
-                    // `class N` restricts the transport to a single class (N =
-                    // Classes.Number). Surface it as the edge's ClassGate so the
-                    // wrong class is filtered out — a `testskill` attribute roll in
-                    // the same block is NOT modelled here (it gates the right class
-                    // by a live skill check the router can't predict; see the resolver
-                    // doc).
+                    // `class N` (N = Classes.Number) restricts this branch line to a
+                    // single class; surfaced as the edge's ClassGate so a character
+                    // of the wrong class is filtered out.
                     else if (token.StartsWith("class ", StringComparison.OrdinalIgnoreCase))
                     {
                         int cls = GuardDoorCommandResolver.FirstIntAfter(token, "class ");
-                        if (cls > 0) requiredClass = cls;
+                        if (cls > 0) lineClass = cls;
                     }
-                    else if (!haveDest && TBInfoTeleportResolver.TryParseTeleport(token, out RoomKey d))
+                    else if (!lineHasDest && TBInfoTeleportResolver.TryParseTeleport(token, out RoomKey d))
                     {
-                        dest = d;
-                        haveDest = true;
+                        lineDest = d;
+                        lineHasDest = true;
                     }
                 }
+
+                if (lineHasDest && !lineGated)
+                {
+                    dest = lineDest;
+                    minLevel = lineMinLevel;
+                    requiredClass = lineClass;
+                    return true;
+                }
             }
-            return haveDest; // first non-empty block decides
+            return false; // first non-empty block decides
         }
         return false;
     }

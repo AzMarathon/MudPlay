@@ -1,5 +1,24 @@
 # Version history
 
+## 3.56.0
+
+- Route picker: when a destination is reachable only through a room you marked **Avoid**, it now offers to route through anyway (warning how many avoided rooms it crosses) instead of failing; when a much shorter route runs through an avoided room, a two-card "respect your avoids / shorter through avoided" fork is offered. Your avoid list is never changed — only that one walk ignores it
+- Route picker: "buy at X" for a hazard/gate counter now reveals the bank-withdraw it would do when coin on hand is short, and warns when you can't cover it
+- Route picker is now economy-aware in a party: before offering a buy you can't afford from cash, it checks your own **bank** deposits and the party's carried cash (`@wealth`) and whether a member already **has** the item (`@have`), and tells you where the money/item is. When the money is at another bank or spread across the party, Go walks you to the shop and pauses so you can provision the party by hand
+- Reads the `bank` command's per-bank deposit listing (self-only, all banks you've used) and maps each bank to its room via the bank-shop catalogue
+- Route picker: new **"Search en route"** card for a hazard you'd counter — walks toward it searching each room, grabs a counter if one turns up (then crosses), else stops at the edge; a way to find one free instead of buying
+- Search-en-route now actually works: a route counter revealed on the floor by an en-route `sea` is collected by the obtain pipeline itself, no longer dependent on the Auto-Get engine being on and the item flagged auto-collect
+- Route picker no longer offers a class-restricted teleport to a character who can't use it (a bard-only barmaid transport was being surfaced to non-bards) — a class-branching transport now binds its gate to the class on the teleport's own branch
+- Route picker no longer says "no route respects your avoids" when an obtainable counter would open one — if buying/finding a raft (or any hazard counter, key, ticket) reaches the destination without crossing an avoided room, it now offers those obtain / cross-unprotected / search options instead of only the avoid-override
+- Route picker writes its decision to the program log (which fork fired, step counts, the requirement or avoided-room count) so a walk that surfaces one card can be traced
+- Route picker reads cleaner: a uniform **"From X to Y"** title over an **Options:** list, and the disabled "no route" explanatory note is gone (the cards carry it)
+- Route picker pops faster: it only checks your **bank** (and the party) when cash on hand can't cover a buy — plenty of cash on hand skips the round-trips entirely — and the shared pathfinds each fork needs are now computed once and reused instead of re-run per fork
+- Route picker also offers **"route through your avoided rooms"** as an extra card beside the obtain/cross options when that avoid-crossing route needs no counter — so you can plow through instead of fetching a raft
+- Route picker tints the risky cards **red** (cross unprotected / route through avoided rooms), orders the safe cards first and the red ones last, brightens the card subtext for legibility, and sizes the window to show every card
+- Route picker footnote simplified to a single line — "Click a route to preview it on the map or click Details… to show routing information" — replacing the per-case guidance paragraph
+- Route planning for a walk-to now runs off the UI thread when you're standing still, so the app no longer freezes for up to ~1s while it computes a route on a big map; if planning takes a beat, the picker window pops up immediately showing **"Calculating…"** and swaps the cards in when it's done (a quick plan skips the window and opens the picker fully-built). Planning stays on the UI thread if a walk is already in progress
+- bug reports addressed: stock-20260907-175035, paradigm-20260907-212758, paradigm-20260907-215048
+
 ## 3.55.8
 
 - Roomba reroutes around a destination room that's full, to the next room labelled for the same category and then the catch-all, instead of re-sending refused drops every lap
