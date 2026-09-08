@@ -35,6 +35,15 @@ public static class RouteChoicePrompt
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Yield once before the route planning runs. The planner's BFS passes are
+        // synchronous and, on a large graph (Paradigm), can take up to ~1s — long
+        // enough that the nav-map right-click menu that launched this walk can't even
+        // close, since the UI thread is blocked before any await. Yielding lets that
+        // click finish and the context menu dismiss first; the picker then opens when
+        // planning is done. (The planning itself still runs on the UI thread — moving
+        // the BFS off-thread is a separate change.)
+        await Task.Yield();
+
         Room? source = services.RoomTracker.State.CurrentRoom;
         if (source is null)
         {

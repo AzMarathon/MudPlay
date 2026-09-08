@@ -43,7 +43,7 @@
             <StackPanel Grid.Row="1" Spacing="10" VerticalAlignment="Center">
                 <TextBlock Text="Options:"
                            FontSize="11"
-                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
                 <Button Classes="route"
                         Classes.selected="{Binding IsFreeSelected}"
                         Command="{Binding SelectFreeCommand}"
@@ -75,7 +75,30 @@
                         <TextBlock Text="{Binding GatedDetail}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- Non-tinted (safe) cards first — Free / Obtain above — then Search,
+                     then the red-tinted risky cards (Cross-unprotected, Route-through-
+                     avoided) last, so the safe picks read before the dangerous ones. -->
+                <Button Classes="route"
+                        Classes.selected="{Binding IsSearchSelected}"
+                        Command="{Binding SelectSearchCommand}"
+                        IsVisible="{Binding ShowSearchCard}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        BorderThickness="1"
+                        Padding="12,10">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding SearchSummary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <TextBlock Text="{Binding SearchDetail}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                 </Button>
 
@@ -96,27 +119,7 @@
                         <TextBlock Text="{Binding SendItDetail}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                    </StackPanel>
-                </Button>
-
-                <Button Classes="route"
-                        Classes.selected="{Binding IsSearchSelected}"
-                        Command="{Binding SelectSearchCommand}"
-                        IsVisible="{Binding ShowSearchCard}"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        BorderThickness="1"
-                        Padding="12,10">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="{Binding SearchSummary}"
-                                   FontSize="12"
-                                   TextWrapping="Wrap"
-                                   Foreground="{StaticResource ChromeFgBrush}"/>
-                        <TextBlock Text="{Binding SearchDetail}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                 </Button>
 
@@ -137,7 +140,7 @@
                         <TextBlock Text="{Binding AvoidAltDetail}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                 </Button>
             </StackPanel>
@@ -146,7 +149,7 @@
                        Text="{Binding Footnote}"
                        FontSize="10"
                        TextWrapping="Wrap"
-                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                       Foreground="{StaticResource ChromeFgSecBrush}"/>
 
             <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">
                 <!-- Details…: bottom-left, enabled once a route is picked. Opens the

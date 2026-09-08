@@ -8,7 +8,7 @@
 > - New **"Search en route"** route-picker card: walk toward a hazard searching each room, grab a counter if one turns up (then cross) — and a searched-up counter is now actually collected by the obtain pipeline
 > - Route picker no longer offers a class-restricted teleport (e.g. a bard-only barmaid transport) to a character of the wrong class
 > - Route picker no longer says "no route respects your avoids" when an obtainable counter would open one — if a bought/found raft (or any hazard counter, key, ticket) reaches the destination without crossing an avoided room, it offers those obtain / cross-unprotected / search options instead; its decision is now written to the program log
-> - Route picker polish: a uniform "From X to Y / Options:" layout, red-tinted risky cards (cross unprotected / route through avoided rooms), a "route through your avoided rooms" card offered beside the obtain/cross options, the window sized to show every card, and a faster pop-up (it only checks the bank when cash on hand can't cover a buy)
+> - Route picker polish: a uniform "From X to Y / Options:" layout, safe cards first and red-tinted risky cards (cross unprotected / route through avoided rooms) last, more legible card subtext, a "route through your avoided rooms" card offered beside the obtain/cross options, the window sized to show every card, and a faster pop-up (it only checks the bank when cash on hand can't cover a buy)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
