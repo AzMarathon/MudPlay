@@ -1,5 +1,10 @@
 # Version history
 
+## 3.55.2
+
+- Fixed two clients with "Look back when a player looks at us" mirroring each other forever (each look-back triggering the other's) until one died — the auto-look toggles now fire at most once per player per local day, matching how "Greet players" is throttled
+- A look also records when we last auto-looked, so a look whose reply we couldn't read (a shadowy figure) still counts against the daily limit rather than looping
+
 ## 3.55.1
 
 - Fixed the LOOK header not parsing when it carries a trailing `-- Immortal !` or `(gang)` suffix — on a realm where everyone's in a gang, every look block was skipped, so a player's race/class/equipment was never recorded and the trap-delegation probe re-`look`ed the same member on every party join
