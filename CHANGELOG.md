@@ -1,5 +1,9 @@
 # Version history
 
+## 3.57.4
+
+- Fixed six message-seed fields whose wording never matched the game, so the conditions they track no longer latch forever — a death-dog confuse now clears (unsticking the nav pause + auto-cure), plus ice storm, a creature-illusion distract, a regen effect, and two blur records that had matched almost every line
+
 ## 3.57.3
 
 - Conversation window font/size now applies live on Settings → Talk Apply — an already-open window re-fonts on the spot instead of only on the next open
