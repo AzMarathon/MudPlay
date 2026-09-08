@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.55.1**
-> - Fixed the LOOK header not parsing when it carries a trailing `-- Immortal !` or `(gang)` suffix — on a gang realm every look block was skipped, so a player's race/class/equipment went unrecorded and the trap-delegation probe re-looked the same member every join
-> - A LOOK now also records a player's gang (like a WHO row), without erasing one already known
+> **Version 3.55.2**
+> - Fixed two clients with "Look back when a player looks at us" mirroring each other non-stop until one died — the auto-look toggles now fire at most once per player per local day (matching how "Greet players" is throttled)
+> - A look whose reply couldn't be read (a shadowy figure) still counts against the daily limit rather than looping
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
