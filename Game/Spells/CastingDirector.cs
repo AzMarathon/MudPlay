@@ -115,6 +115,15 @@ public sealed class CastingDirector : IDisposable
     // but TryCast still returns true and arms the recast timer, so an ungated loop
     // (now heartbeat-driven every 1s) would "cast" phantom buffs into a dead socket.
     private Func<bool>? _isConnected;
+    // In-game latch — the socket flag above is true again the instant a reconnect's
+    // TCP connect lands, which is the BBS login/menu screen, NOT the game world. The
+    // 1s heartbeat never stops and HasPromptData/Hp stay stale-true across a drop, so
+    // an ungated loop drains buffs onto the login prompts during re-entry (report
+    // paradigm-20260908-053448). Set true on any disconnect (PauseBuffTimers), cleared
+    // on the first real in-game prompt after reconnect (ResumeBuffTimers, fired off
+    // PromptScanner.PromptObserved which never matches the BBS menu). Mirrors the same
+    // fix already shipped for the party poller's par/@health telepaths.
+    private bool _suspended;
     // Reports whether the combat tick currently firing OnCombatTick was driven by a
     // server combat line (TickEngine.RecordCombatTick) rather than the 5 s timer
     // fallback. A damage-line-driven tick fires DURING the round's line burst, before
@@ -745,6 +754,10 @@ public sealed class CastingDirector : IDisposable
     // a fresh character (ProfileLoaded) or a too-long gap on resume clears instead.
     public void PauseBuffTimers()
     {
+        // Latch the loop off until we're confirmed back in the game world — set
+        // unconditionally (even with no armed timers) so a disconnect with nothing
+        // active still can't cast into the login/menu. Cleared in ResumeBuffTimers.
+        _suspended = true;
         _pausedAt = _activeUntil.Count > 0 ? _now() : null;
         if (_pausedAt is not null)
             _log?.Info(LogCategory, $"buff timers paused (drop) — {_activeUntil.Count} armed, frozen until reconnect");
@@ -758,6 +771,11 @@ public sealed class CastingDirector : IDisposable
     // passed while we were away are dropped so they show "not up" and recast.
     public void ResumeBuffTimers()
     {
+        // First in-game prompt after a (re)connect — lift the cast-suspend latch
+        // BEFORE the no-timers early-return, so casting always resumes even when the
+        // disconnect had no armed timers to unfreeze. Fired on every prompt; harmless
+        // to clear repeatedly.
+        _suspended = false;
         if (_pausedAt is null) return;
         _pausedAt = null;
 
@@ -1209,6 +1227,11 @@ public sealed class CastingDirector : IDisposable
         // frozen (PauseBuffTimers); casting now would only re-arm recast timers off
         // phantom sends. Resumes when the gate reads connected again.
         if (_isConnected?.Invoke() == false) return null;
+        // Dropped, or reconnected but still at the BBS login/menu — the socket flag
+        // above lies (true from TCP connect onward), so hold every cast until the
+        // first in-game prompt clears the latch. Without this, buffs drain onto the
+        // login prompts during re-entry (report paradigm-20260908-053448).
+        if (_suspended) return null;
         // Two independent masters share this loop: the heal / cure / rest
         // categories run under AutoHealRest (_isEnabled), buffing runs under
         // AutoBless (_autoBlessEnabled), and each is gated separately in the

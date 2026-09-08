@@ -1748,6 +1748,55 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void Suspend_HoldsBuffsUntilFirstInGamePrompt()
+    {
+        // A disconnect (PauseBuffTimers) latches the loop off — the cast must stay
+        // silent even after the socket reconnects, until the first in-game prompt
+        // (ResumeBuffTimers) lifts the latch, so buffs don't fire onto the BBS
+        // login/menu during re-entry (report paradigm-20260908-053448).
+        using CureHarness h = new();
+        h.AutoBlessEnabled = false;               // no cast during setup's reactive passes
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        h.AutoBlessEnabled = true;                // eligible, not yet evaluated
+
+        h.Director.PauseBuffTimers();             // disconnect
+        h.Director.Evaluate();                    // 1s heartbeat while at the login/menu
+        Assert.Empty(h.CastsSent);                // suspended — nothing onto the login prompt
+
+        h.Director.ResumeBuffTimers();            // first in-game prompt clears the latch
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);               // back in the game world — buff fires
+        Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PauseBuffTimers_NoArmedTimers_StillSuspendsCasting()
+    {
+        // The latch must arm even when the drop had no active timers (PauseBuffTimers
+        // leaves PausedAtUtc null in that case) — otherwise a disconnect with nothing
+        // buffed would still leak casts onto the login prompt.
+        using CureHarness h = new();
+        h.AutoBlessEnabled = false;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        h.AutoBlessEnabled = true;
+
+        h.Director.PauseBuffTimers();
+        Assert.Null(h.Director.PausedAtUtc);      // nothing was frozen…
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);                // …but casting is still latched off
+    }
+
+    [Fact]
     public void SelfBuff_CoveredByPartyBuff_IsNotCast()
     {
         // In a party, a party-wide buff (chan) that removes bless supersedes the self-cast:

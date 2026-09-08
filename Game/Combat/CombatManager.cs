@@ -2763,6 +2763,25 @@ public sealed partial class CombatManager : IDisposable
     // ManualResumePacing) without ever throttling the engine's per-round resumes.
     public void NoteManualBetweenRoundCast() => NoteBetweenRoundCast(manual: true);
 
+    // A mid-fight gear swap (swap-to-Default-on-combat, or any set change during a
+    // live fight) streams wear/eq commands, and on Paradigm each wear/eq drops
+    // *Combat Off* — breaking our sustained attack exactly like a between-round
+    // survival cast does. AppServices pokes this at the swap-complete edge so the
+    // wear's imminent *Combat Off* is attributed to our own action and the existing
+    // interrupt-resume window re-engages promptly, instead of idling until the mob's
+    // next swing wakes OnCombatLine (reports paradigm-20260908-051035 / -095552:
+    // swapped to Default mid-fight, then sat un-attacking ~4s). No-op unless
+    // auto-combat is on and a fight is actually live, so an out-of-combat pre-rest
+    // swap can't arm a phantom resume.
+    public void NoteGearSwapInterrupt()
+    {
+        if (_disposed) return;
+        if (!_isEnabled()) return;
+        if (_classifier.Current is not { } live || !HasEngageable(live)) return;
+        _log?.Combat(LogCategory, "gear swap during a live fight — arming interrupt resume for the wear's *Combat Off*");
+        NoteBetweenRoundCast();
+    }
+
     // ----- Manual user-attack override -------------------------------------
     // When the user hand-types an attack this round — a combat spell (round energy
     // 1–1000, see CombatSpellIndex / GAME_MECHANICS) or a physical attack verb — they

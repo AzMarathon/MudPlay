@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.57.4**
-> - Fixed six message-seed fields whose wording never matched the game, so the conditions they track no longer latch forever — a death-dog confuse now clears (unsticking the nav pause + auto-cure), plus ice storm, a creature-illusion distract, a regen effect, and two blur records that had matched almost every line
+> **Version 3.57.6**
+> - Swap-to-Default-on-combat no longer stalls the fight: after the mid-fight gear swap breaks the swing, combat re-engages immediately instead of idling until the monster attacks again
+> - Buffs no longer fire at the BBS login/menu after a hangup or reconnect — the cast loop now holds until you're actually back in the game world
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
