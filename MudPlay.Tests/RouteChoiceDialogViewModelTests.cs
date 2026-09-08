@@ -35,7 +35,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Bank (1/9)", id => id == 5 ? "a raft" : null,
-            shopNameForItem: id => id == 5 ? "General Store" : null);
+            shopBuyPhraseForItem: id => id == 5 ? "buy at General Store" : null);
 
         Assert.Equal("Requires a raft (buy at General Store)", vm.RequirementSummary);
     }
@@ -47,7 +47,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Docks (1/9)", id => id == 7 ? "a ferry ticket" : null,
-            shopNameForItem: id => id == 7 ? "Ticket Booth" : null);
+            shopBuyPhraseForItem: id => id == 7 ? "buy at Ticket Booth" : null);
 
         Assert.Equal("Requires a ferry ticket (buy at Ticket Booth)", vm.RequirementSummary);
     }
@@ -61,7 +61,7 @@ public sealed class RouteChoiceDialogViewModelTests
         // giver or shop must be ignored for the DoorKey kind.
         var vm = new RouteChoiceDialogViewModel(
             choice, "Vault (1/9)", id => "the iron key",
-            giveNameForItem: id => "a gatekeeper", shopNameForItem: id => "Locksmith");
+            giveNameForItem: id => "a gatekeeper", shopBuyPhraseForItem: id => "buy at Locksmith");
 
         Assert.Equal("Requires the iron key", vm.RequirementSummary);
     }
@@ -91,7 +91,7 @@ public sealed class RouteChoiceDialogViewModelTests
         var vm = new RouteChoiceDialogViewModel(
             choice, "Sunbaked dune (1/9)",
             id => id == 42 ? "a waterskin" : null,
-            shopNameForItem: id => null,          // no shop stocks it
+            shopBuyPhraseForItem: id => null,          // no shop stocks it
             dropNameForItem: id => id == 42 ? "a sand nomad" : null);
 
         Assert.Equal("Requires a waterskin (dropped by a sand nomad)", vm.RequirementSummary);
@@ -113,7 +113,9 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(vm.HazardObtain);
         Assert.True(vm.ShowSendItCard);
         Assert.Contains("Obtain, then cross", vm.GatedSummary);
-        Assert.Contains("grab from the floor here", vm.Footnote);
+        // The footnote is now one uniform line (the counter source it used to name
+        // lives on the cards / Details… now).
+        Assert.Contains("Details", vm.Footnote);
         Assert.Contains("take the damage", vm.SendItSummary);
         Assert.Equal("Requires rope and grapple or climbing harness", vm.RequirementSummary);
     }
@@ -132,7 +134,9 @@ public sealed class RouteChoiceDialogViewModelTests
 
         Assert.False(vm.HazardObtain);
         Assert.False(vm.ShowSendItCard);
-        Assert.Contains("carry, buy, or use a counter", vm.Footnote);
+        // The manual-counter wording now lives on the Free card ("a hazard you must
+        // counter"); the footnote is the uniform preview/Details line.
+        Assert.Contains("you must counter", vm.FreeSummary);
     }
 
     [Fact]
@@ -144,7 +148,7 @@ public sealed class RouteChoiceDialogViewModelTests
 
         var vm = new RouteChoiceDialogViewModel(
             choice, "Bank (1/9)", id => "a raft",
-            shopNameForItem: id => "General Store",
+            shopBuyPhraseForItem: id => "buy at General Store",
             dropNameForItem: id => "a river troll");
 
         Assert.Equal("Requires a raft (buy at General Store)", vm.RequirementSummary);
@@ -175,7 +179,7 @@ public sealed class RouteChoiceDialogViewModelTests
         var vm = new RouteChoiceDialogViewModel(
             choice, "Bank (1/9)", id => "a bloodstone orb",
             giveNameForItem: id => "Gnome Commander",
-            shopNameForItem: id => "General Store",
+            shopBuyPhraseForItem: id => "buy at General Store",
             dropNameForItem: id => "a river troll");
 
         Assert.Equal("Requires a bloodstone orb (ask Gnome Commander)", vm.RequirementSummary);
@@ -192,7 +196,7 @@ public sealed class RouteChoiceDialogViewModelTests
         var vm = new RouteChoiceDialogViewModel(
             choice, "Flooded hall (1/9)",
             id => id == 11 ? "a fish-helm" : "a waterskin",
-            shopNameForItem: id => null,
+            shopBuyPhraseForItem: id => null,
             dropNameForItem: id => "a deep one");
 
         Assert.Equal("Requires a fish-helm or a waterskin", vm.RequirementSummary);
@@ -398,8 +402,8 @@ public sealed class RouteChoiceDialogViewModelTests
 
         Assert.False(vm.HasFreeRoute);
         Assert.False(vm.ShowSendItCard);
-        Assert.Contains("gated", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("hazard", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        // Heading is now the uniform "Route to …"; the gate-not-hazard distinction
+        // lives in the card wording (FreeSummary), asserted below.
         Assert.DoesNotContain("hazard", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
         Assert.Contains("gate", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
         // The key names itself with no source tail (keys aren't sourced).
@@ -414,7 +418,7 @@ public sealed class RouteChoiceDialogViewModelTests
             "Sunbaked dune (1/9)", id => "a waterskin");
 
         Assert.False(vm.HasFreeRoute);
-        Assert.Contains("hazard", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        // Hazard wording moved from the (now-uniform) heading into the card text.
         Assert.Contains("hazard", vm.FreeSummary, System.StringComparison.OrdinalIgnoreCase);
     }
 
@@ -487,7 +491,7 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(vm.IsTeleportChoice);
         Assert.True(vm.HasFreeRoute);
         Assert.False(vm.ShowSendItCard);            // no acquisition to skip
-        Assert.Contains("teleport", vm.Heading, System.StringComparison.OrdinalIgnoreCase);
+        // Teleport wording is on the cards now, not the uniform heading.
         Assert.Contains("Walk it", vm.FreeSummary);
         Assert.Contains("Teleport", vm.GatedSummary);
         Assert.Empty(vm.RequirementSummary);
@@ -643,7 +647,7 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(vm.ShowSendItCard);
         Assert.Contains("Walk to the hazard and stop", vm.GatedSummary);
         Assert.Contains("Cross unprotected", vm.SendItSummary);
-        Assert.Contains("crosses a hazard, then a gate", vm.Heading);
+        Assert.Contains("crosses a hazard, then a gate", vm.FreeSummary);
         Assert.Contains("the dragon key", vm.RequirementSummary);
     }
 
@@ -666,5 +670,54 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(vm.ShowSendItCard);
         Assert.Contains("Obtain, then cross", vm.GatedSummary);
         Assert.Contains("Cross unprotected", vm.SendItSummary);
+    }
+
+    // The idle path opens the picker in a "Calculating…" state (From/To heading, no
+    // cards) while route planning runs off-thread, then calls Populate to fill the
+    // cards. Pin that the calculating constructor hides the options with the right
+    // heading, and that Populate reveals them with the choice's card content.
+    [Fact]
+    public void CalculatingConstructor_HidesOptions_ThenPopulateReveals()
+    {
+        var vm = new RouteChoiceDialogViewModel("The Iceforge (3/632)", "Pier (1/9)");
+
+        Assert.True(vm.IsCalculating);
+        Assert.False(vm.ShowOptions);
+        Assert.Equal("From Pier (1/9) to The Iceforge (3/632)", vm.Heading);
+
+        var choice = SoleChoice(
+            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690 }));
+        vm.Populate(
+            choice, id => "a raft",
+            hazardCounterSource: "buy at Pier", hazardSurvivable: true);
+
+        Assert.False(vm.IsCalculating);
+        Assert.True(vm.ShowOptions);
+        // Heading is set by the constructor, not Populate — it must survive the fill.
+        Assert.Equal("From Pier (1/9) to The Iceforge (3/632)", vm.Heading);
+        Assert.Contains("Obtain, then cross", vm.GatedSummary);
+        Assert.Contains("Cross unprotected", vm.SendItSummary);
+    }
+
+    // Regression: a Blocked choice returns early inside Populate. The idle path can
+    // route Blocked through Populate onto a pre-opened calc-state VM, so that early
+    // return must still leave the calculating state — otherwise the picker sticks on
+    // "Calculating…" and the "run to the block" card never appears (Go stays disabled).
+    [Fact]
+    public void Blocked_Populate_LeavesCalculatingState()
+    {
+        var vm = new RouteChoiceDialogViewModel("Dest (1/9)", "Src (1/1)");
+        Assert.True(vm.IsCalculating);
+
+        var blocked = Choice() with
+        {
+            Kind = RouteChoiceKind.Blocked,
+            BlockedReason = "a locked door",
+        };
+        vm.Populate(blocked, id => null);
+
+        Assert.False(vm.IsCalculating);
+        Assert.True(vm.ShowOptions);
+        Assert.Contains("Run to the blocked room", vm.GatedSummary);
     }
 }

@@ -68,6 +68,61 @@ public sealed class CombatCalculatorTests
         Assert.Equal(CombatCalculator.PARAMUD_HIT_CAP, para.HitMaxCap);
     }
 
+    // ----- ProtGood / VileWard realm exclusivity ---------------------------
+    // Stock uses Protection-from-Good (ability 25); Paradigm dropped it for
+    // VileWard (ability 1113). Each counts only in its own realm.
+
+    [Fact]
+    public void CalculateHitChance_ProtGood_LowersHitOnStock_IgnoredOnParaMud()
+    {
+        // Accuracy/AC chosen so the hit chance sits mid-band (not clamped), so a
+        // ProtGood contribution to the defender's defense is visible in the delta.
+        HitCalcResult stockNoPg = CombatCalculator.CalculateHitChance(
+            attackerAccuracy: 200, defenderAC: 30, defenderDodge: 0,
+            protGood: 0, realmType: RealmType.Stock);
+        HitCalcResult stockPg = CombatCalculator.CalculateHitChance(
+            attackerAccuracy: 200, defenderAC: 30, defenderDodge: 0,
+            protGood: 20, realmType: RealmType.Stock);
+
+        // On Stock, Prot-Good raises the defender's effective AC → fewer hits land.
+        Assert.True(stockPg.HitPercent < stockNoPg.HitPercent);
+
+        HitCalcResult paraNoPg = CombatCalculator.CalculateHitChance(
+            attackerAccuracy: 200, defenderAC: 30, defenderDodge: 0,
+            protGood: 0, realmType: RealmType.ParaMud);
+        HitCalcResult paraPg = CombatCalculator.CalculateHitChance(
+            attackerAccuracy: 200, defenderAC: 30, defenderDodge: 0,
+            protGood: 20, realmType: RealmType.ParaMud);
+
+        // On Paradigm the server ignores Prot-Good entirely — a leaked value must
+        // not change the outcome.
+        Assert.Equal(paraNoPg.HitPercent, paraPg.HitPercent);
+    }
+
+    [Fact]
+    public void CalculateHitChance_VileWard_LowersHitOnParaMud_IgnoredOnStock()
+    {
+        HitCalcResult paraNoVw = CombatCalculator.CalculateHitChance(
+            attackerAccuracy: 200, defenderAC: 30, defenderDodge: 0,
+            vileWard: 0, evilLevel: EvilLevel.Villain, realmType: RealmType.ParaMud);
+        HitCalcResult paraVw = CombatCalculator.CalculateHitChance(
+            attackerAccuracy: 200, defenderAC: 30, defenderDodge: 0,
+            vileWard: 200, evilLevel: EvilLevel.Villain, realmType: RealmType.ParaMud);
+
+        // On Paradigm, VileWard (vs an evil attacker) raises effective AC.
+        Assert.True(paraVw.HitPercent < paraNoVw.HitPercent);
+
+        HitCalcResult stockNoVw = CombatCalculator.CalculateHitChance(
+            attackerAccuracy: 200, defenderAC: 30, defenderDodge: 0,
+            vileWard: 0, evilLevel: EvilLevel.Villain, realmType: RealmType.Stock);
+        HitCalcResult stockVw = CombatCalculator.CalculateHitChance(
+            attackerAccuracy: 200, defenderAC: 30, defenderDodge: 0,
+            vileWard: 200, evilLevel: EvilLevel.Villain, realmType: RealmType.Stock);
+
+        // Stock has no VileWard ability — it must not affect the hit chance.
+        Assert.Equal(stockNoVw.HitPercent, stockVw.HitPercent);
+    }
+
     // ----- Dodge -----------------------------------------------------------
 
     [Fact]

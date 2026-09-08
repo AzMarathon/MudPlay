@@ -114,6 +114,18 @@ public sealed class AppServices
         if (!string.IsNullOrWhiteSpace(text)) _typedInputSender?.Invoke(text);
     }
 
+    // Drop a bracketed yellow status line into the terminal scrollback — the same
+    // "[…]" notice cadence quest-availability / roomba-complete use. The text is
+    // written verbatim (no auto-bracketing): callers supply their own "[…]" so a
+    // multi-line report reads exactly as they compose it. No-op until the main VM
+    // binds it; the sink already marshals to the UI thread.
+    private Action<string>? _terminalNotice;
+    public void SetTerminalNotice(Action<string> sink) => _terminalNotice = sink;
+    public void WriteTerminalNotice(string text)
+    {
+        if (!string.IsNullOrWhiteSpace(text)) _terminalNotice?.Invoke(text);
+    }
+
     // Opens (or re-focuses) the single Navigation Management dialog. Both the map
     // window's "Navigation Management" button and the toolbar Start button route
     // here so there's only ever one instance — no two identical windows. The bool
@@ -381,6 +393,11 @@ public sealed class AppServices
     // <list> here." survey (cash excluded). Feeds the read-side
     // @what and the write-side @get-all; cleared on room change.
     public Game.Inventory.GroundItemTracker GroundItems { get; private set; } = null!;
+
+    // Collects a demanded path item (NeedKind.PathItem) the moment a floor survey
+    // reveals it — so search-en-route is a real sourcing method, independent of the
+    // Auto-Get engine's master toggle + per-item AutoCollect flag.
+    public Game.Map.PathItemFloorCollector PathItemFloor { get; private set; } = null!;
 
     // Consumer of RemoteCommands for the
     // Models.GameData.PlayerRemoteControls.QueryInventory
@@ -1415,6 +1432,13 @@ public sealed class AppServices
     // crosses a toll.
     public Game.Remote.PartyWealthProbe PartyWealthProbe { get; private set; } = null!;
 
+    // Self-only bank-balance probe + passive parser. Parses the `bank` command's
+    // per-bank "On deposit: N copper farthings" listing (a global account query —
+    // it shows every bank we've used, from any room) so the route picker can weigh
+    // a buy the purse can't cover against money on deposit. Bank name = shop name,
+    // so a balance maps to its room(s) via BankCatalog for the withdraw detour.
+    public Game.Remote.BankBalanceProbe BankBalance { get; private set; } = null!;
+
     // Demand-driven party-wealth gate — feeds
     // MovementFilter.PartyWealthProvider so BFS routes a following party
     // around (Toll: N) exits a member can't afford. Polls @wealth only when
@@ -1609,6 +1633,10 @@ public sealed class AppServices
     // "Sysop god lives" recovery — sends `sys god <name> add life` on the
     // character's own death when that per-BBS power is enabled.
     public Game.SysopGodLifeRecovery SysopGodLife { get; private set; } = null!;
+
+    // "Sysop goto" — gates + fires `sys goto <name>` to a curated location and
+    // re-anchors position on the landing. Enabled per-BBS (SysopGoto credential).
+    public Game.SysopGotoManager SysopGoto { get; private set; } = null!;
 
     // BFS pathfinding + planar layout over the active
     // RoomGraph. Consumed by the walker, loop runner,
@@ -2220,6 +2248,18 @@ public sealed class AppServices
         // instead of blanking. The obtained set is name-backed, so it survives
         // the renumber — no need to re-apply the profile's persisted names here.
         GameData.ActiveSetChanged += _ => SeedSpellbook(Profile.Current?.LastKnownStats, reseed: true);
+
+        // Nav-seed additive apply on set-activate: starter loops / GOTO favourites
+        // added in a LATER build reach an already-imported set on launch, never
+        // re-adding ones the user deleted (per-set ledger in NavSeedBootstrapper).
+        // Off the UI thread — it enumerates the bundle + set folder — and a no-op
+        // (nothing new) touches no disk. Import still seeds a fresh set synchronously.
+        GameData.ActiveSetChanged += _ =>
+        {
+            string? set = GameData.ActiveSet;
+            if (!string.IsNullOrWhiteSpace(set))
+                System.Threading.Tasks.Task.Run(() => NavSeedBootstrapper.SeedIfNeeded(set, Log));
+        };
 
         // Persist the learned-spell set with the rest of the profile. Snapshot
         // only when the book has a resolved class — with no class the obtained
@@ -3495,7 +3535,11 @@ public sealed class AppServices
         // where it was first seen — a locator hint for tracking down the source.
         MessageCandidateWatcher = new Game.MessageCandidateWatcher(
             Router, Messages, MessageCandidates,
-            currentRoom: () => RoomTracker.State.CurrentRoom?.Key, log: Log);
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key, log: Log,
+            // A room-display title line is not a server message — the room-display
+            // parser reads it directly and registers no router pattern, so exclude
+            // any line that's a known room name in the active set (O(1) name index).
+            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null);
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a
         // curable ailment (or being held) it announces ".@poisoned" /
@@ -3596,7 +3640,7 @@ public sealed class AppServices
         // duration (SpellCalculator.Duration at the live level);
         // ShortFromAppliedRecord maps a fired AppliedMessage record back
         // to the cast code so a confirmed self-buff starts its timer.
-        CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord);
+        CastDirector.SetBuffDurationSources(BuffInfoByShort, ShortFromAppliedRecord, RemovesShortsFor);
         // A fresh character starts with no buffs assumed — clear any timers carried over
         // (e.g. paused from a prior character's disconnect) so a character switch doesn't
         // resurrect the old character's buffs. A same-character reconnect does NOT reload
@@ -3629,6 +3673,10 @@ public sealed class AppServices
         // round cadence. Subscribed BEFORE CastDirector.OnCombatTick below so the slot
         // is freed before this round's between-round evaluation runs.
         Tick.CombatTickElapsed += CastDirector.NotifyRoundComplete;
+        // Tell CastDirector whether the tick it's handling was fired by a server combat
+        // line (HP not yet refreshed by the round's prompt) vs the 5s timer fallback, so
+        // it can hold its non-heal casts on a stale-HP tick (report paradigm-20260904-214056).
+        CastDirector.SetCombatTickSource(() => Tick.LastCombatTickWasDamageDriven);
         Tick.CombatTickElapsed += CastDirector.OnCombatTick;
         // Out of combat the combat tick doesn't free-run (it's only anchored once a
         // combat line lands), so drive the between-round loop off the 1 s heartbeat
@@ -3688,6 +3736,38 @@ public sealed class AppServices
             send: cmd => SendGameCommand(cmd),
             log: Log);
         RoomTracker.PlayerDeathObserved += SysopGodLife.OnDeath;
+
+        // "Sysop goto": gate `sys goto <name>` (per-BBS power + active-combat block +
+        // table + level) and, on a fired jump, re-anchor position when the landing
+        // room displays. A hostile merely present in the room does NOT block — only
+        // active combat does. The fire also forces a bare Enter (a sys-goto shows no
+        // room on its own, just a statline) so the landing room displays and the
+        // resync can match it. The commit uses RoomTracker.SetLocated (the tier-3 "I am
+        // here" hard set), NOT Recovery.NoteAuthoritativePosition — the latter no-ops
+        // unless the recovery gate is already awaiting a resync, which a user-fired
+        // goto from a normal state isn't. The status write is Posted because a refusal
+        // can surface from inside the message pump (re-entering the emulator's Feed).
+        SysopGoto = new Game.SysopGotoManager(
+            enabled: SysopGotoEnabledHere,
+            locations: ActiveBbsSysopGotos,
+            inCombat: () => PlayerState.InCombat,
+            knownLevel: () => Stats.HasParsed ? PlayerStats.Level : (int?)null,
+            roomName: key => RoomGraph.GetRoom(key)?.Name,
+            // Raw (gate-piercing) wire for BOTH the `sys goto` command and the bare
+            // Enter: sys commands are honoured at any HP, so they must survive the
+            // mortally-wounded send-gate hold (the wimpy escape fires while bleeding
+            // out). The gated SendGameCommand would drop them at HP <= 0.
+            send: cmd => SendGameCommandRaw(cmd),
+            forceRoomDisplay: () => _rawWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("\r")),
+            writeStatus: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
+            commitLocated: key => RoomTracker.SetLocated(key),
+            log: Log);
+        // Late-wire HealthManager's "sys goto wimpy instead of hanging" escape now
+        // that SysopGoto exists (Health is built earlier). When the emergency low-HP
+        // path would hang up, it calls this instead: break combat + jump to the
+        // configured escape location. Returns false (→ normal hangup) when the power
+        // is off here or the location isn't in the table.
+        Health.SetWimpyGoto(name => SysopGoto.TryFireForWimpy(name));
         // The gate asks only from a recovery escalation, where the move being
         // unconfirmed IS the problem — so don't queue behind it.
         Recovery.TrySysopLocate = reason => SysopLocate.TryRequestLocate(reason, forRecovery: true);
@@ -4122,6 +4202,15 @@ public sealed class AppServices
         // suspended on the drop so nothing leaks into the login-menu nav.
         PromptScanner.PromptObserved += _ => PartyPoller.NotifyEnteredRealm();
         PromptScanner.PromptObserved += _ => PartyProbe.NotifyEnteredRealm();
+        // Release the trainer/creation form's character-mode the instant the
+        // returning statline prompt lands off the wire — the committed StatusLine
+        // pattern can't see it (it redraws in place with no CR until the user
+        // types), so without this the keyboard stays captured and the next
+        // command is sent byte-by-byte (report paradigm-20260906-090057).
+        PromptScanner.PromptObserved += _ => TrainerMenu.NotifyLivePromptObserved();
+        // Same in-game gate arms unrecognized-line capture: nothing before the first
+        // realm prompt (splash / login menu / connect banner) stages a candidate.
+        PromptScanner.PromptObserved += _ => MessageCandidateWatcher.NotifyInGame();
         // Same in-game gate resumes frozen buff timers after an unexpected drop: the
         // disconnect handler paused them (kept the remaining), and this shifts each
         // forward by the offline gap so the recast clock picks up where it left off.
@@ -4201,6 +4290,11 @@ public sealed class AppServices
         // Auto-recover reads the floor survey to confirm our corpse is in the room
         // before sending `recover corpse` (and arms off its SurveyUpdated event).
         DeathRecovery.AttachGroundItems(GroundItems);
+        // Demand-aware floor collector: `get` a still-needed path item the moment a
+        // survey reveals it (search-en-route sourcing), independent of Auto-Get.
+        PathItemFloor = new Game.Map.PathItemFloorCollector(
+            Needs, IsItemOnFloor, ItemNames.GetName, cmd => SendGameCommand(cmd), Log);
+        PathItemFloor.Attach(GroundItems);
         // Realm picks the recovery mechanic: Paradigm packs the pile into a corpse
         // (`recover corpse`), Stock scatters it loose on the floor (per-item `get`).
         DeathRecovery.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
@@ -4445,6 +4539,13 @@ public sealed class AppServices
                 // with Default worn, so this terminates after one correction.
                 if (!Health.IsRecoveringRest && CurrentEquippedIsPreRestSet())
                     AutoEquip.OnRecoveryComplete();
+                // If this swap streamed during a live fight (swap-to-Default-on-combat),
+                // its wear/eq burst breaks the swing on Paradigm — arm combat's
+                // interrupt resume so the imminent *Combat Off* re-engages instead of
+                // waiting on the mob's next swing (reports paradigm-20260908-051035 /
+                // -095552). Self-guards on auto-combat + a live engageable roster, so an
+                // ordinary out-of-combat swap is a no-op.
+                Combat.NoteGearSwapInterrupt();
             }
         };
 
@@ -4689,7 +4790,7 @@ public sealed class AppServices
         // Settings → Talk reactive-look automation. Shares Greet's self-name
         // resolution; RoomEntry (built earlier) supplies the arrival hook.
         // Wire-sender bound by MainWindowViewModel after telnet connects.
-        PlayerLook = new Game.PlayerLookManager(Router, RoomEntry, Party.State,
+        PlayerLook = new Game.PlayerLookManager(Router, RoomEntry, Players, Party.State,
             selfNameProvider: () => Party.LocalCharacterName ?? Profile.Current?.Name);
         // Players Seen log. Records off the same room-presence hooks (Also-here
         // classification + room walk-ins) and shares the self-name resolution;
@@ -4838,6 +4939,9 @@ public sealed class AppServices
         Movement.PartyWealthProvider = PartyWealth.MinWealth;
         Movement.WealthWarmProbe = PartyWealth.Probe;
 
+        // Self bank-balance probe — sends `bank` and parses the deposit listing.
+        BankBalance = new Game.Remote.BankBalanceProbe(send: cmd => SendGameCommand(cmd), log: Log);
+
         // Base auto-search — a room-wide `sea` reveals hidden items for the
         // auto-get engines. Armed by the persisted master toggle OR the transient
         // path-item demand gate above. A search won't run mid-combat, so the engine
@@ -4951,6 +5055,17 @@ public sealed class AppServices
         // pulls its candidate sailings from RoomGraph's data-driven boat index, so
         // it no-ops on realms without docks.
         Walker.SetBoatPlanner(new Game.Map.BoatRoutePlanner(RoomGraph, Bfs, Log));
+        // Sys-goto shortcut planner + fire: weighs a `sys goto` jump against the land
+        // route (empty locations when the power's off → no shortcuts) and fires the
+        // chosen jump through SysopGotoManager. The router excludes level-gated
+        // locations when the level is unknown (unlike a manual fire).
+        Walker.SetSysGotoPlanner(
+            new Game.Map.SysopGotoRoutePlanner(
+                RoomGraph, Bfs,
+                () => SysopGoto.UsableNow,
+                () => Stats.HasParsed ? PlayerStats.Level : (int?)null,
+                Log),
+            loc => SysopGoto.FireForRoute(loc));
         // Voyage timer: the boat step waits out the sail — from boarding in the
         // captain's room, through the buff-locked transit legs, to landing at the
         // arrival shore — on a wall-clock deadline it sizes from the passage's
@@ -5913,12 +6028,59 @@ public sealed class AppServices
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
             LoopRunner, AutoLair, PartyState, Party, Log);
 
-        // Startup profile: with Settings → General "Auto-load last profile" on,
-        // reopen the last session; otherwise (the default) open a blank draft and
+        // Startup profile priority: a --profile launch argument wins over the
+        // "Auto-load last profile" setting, which wins over a blank draft. The CLI
+        // token is resolved here (not in Program.Main) because resolving a bare
+        // name needs the saved-profile list, and Profile is live by now. An
+        // unresolved token logs a warning and falls through to the normal path
+        // rather than failing to launch.
+        bool cliRequested = StartupOptions.RequestedProfileToken is not null;
+        Models.Profile.ProfileRef? cliStartup = null;
+        if (StartupOptions.RequestedProfileToken is { } cliToken)
+        {
+            cliStartup = StartupOptions.ResolveToken(
+                cliToken, System.Linq.Enumerable.ToList(Profile.ListAll()), out string? cliError);
+            if (cliStartup is null)
+            {
+                // Token given but didn't resolve (typo / ambiguous bare name). Stash
+                // the reason for the main window to show on the terminal, and open a
+                // blank draft — deliberately NOT auto-load-last, so we never quietly
+                // launch a *different* character when the requested one didn't load.
+                StartupOptions.ProfileNotice = $"--profile \"{cliToken}\" did not load: {cliError}";
+                Log.Warn("Startup", StartupOptions.ProfileNotice + " Opened a blank profile instead.");
+            }
+            else
+                Log.Info("Startup",
+                    $"--profile: loading '{cliStartup.Name}' on '{cliStartup.Bbs}'" +
+                    (StartupOptions.SpawnedSiblings > 0 ? $" (+{StartupOptions.SpawnedSiblings} sibling instance(s) launched)" : ""));
+        }
+
+        if (cliStartup is { } cli)
+        {
+            try
+            {
+                Profile.Load(cli.Bbs, cli.Name);
+            }
+            catch (Exception ex)
+            {
+                Log.Info("Startup",
+                    $"--profile load of '{cli.Name}' on '{cli.Bbs}' failed " +
+                    $"({ex.GetType().Name}); loading the default profile instead.");
+                Profile.LoadDefaultProfile();
+            }
+        }
+        // A --profile was given but didn't resolve: blank draft (the notice is already
+        // stashed for the terminal), and we skip auto-load-last on purpose.
+        else if (cliRequested)
+        {
+            Profile.LoadDefaultProfile();
+        }
+        // Auto-load last profile: with Settings → General "Auto-load last profile"
+        // on, reopen the last session; otherwise (the default) open a blank draft and
         // let the user pick / build one via File → Open profile / Recent profiles.
         // A last-used profile that was since deleted / renamed throws on Load, so
         // fall back to the blank draft rather than failing startup.
-        if (Settings.Current.StartupProfile() is { } startup)
+        else if (Settings.Current.StartupProfile() is { } startup)
         {
             try
             {
@@ -6404,14 +6566,59 @@ public sealed class AppServices
 
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
     // effect the Spell Book renders as "Removes <spell>").
-    private HashSet<int> RemovedSpellNumbers(string castCode)
+    private HashSet<int> RemovedSpellNumbers(string castCode) =>
+        Spellbook.FindByCastCode(castCode.Trim()) is { } s
+            ? Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula)
+            : new HashSet<int>();
+
+    // Every pair of configured, resolvable buff slots where one's spell removes the
+    // other's via RemovesSpell (Abil 122) and their targeting can land on the same
+    // character (self, a shared member, or anyone via a whole-party cast). Purely
+    // informational — feeds the Buff Panel's per-row warning and the Buff Watchdog's
+    // generalized "covered by" label. Does NOT drive CastingDirector's cast/skip
+    // decision; SelfBuffCoverage above is the one case (self superseded by a
+    // whole-party buff) proven safe to automate. #item-cast slots don't resolve to a
+    // KnownSpell and are skipped, same as SelfBuffCoverage's self-buff collection.
+    public IReadOnlyList<Game.Spells.BuffOverwritePair> BuffSlotOverwritePairs()
     {
-        const int RemovesSpellAbil = 122;
-        HashSet<int> nums = new();
-        if (Spellbook.FindByCastCode(castCode.Trim()) is { } s)
-            foreach (Game.Spells.SpellAbility a in s.Formula.Abilities)
-                if (a.Code == RemovesSpellAbil) nums.Add(a.Value);
-        return nums;
+        List<Game.Spells.BuffOverwritePair> pairs = new();
+        System.Collections.Generic.List<Models.Profile.BuffSlot>? slots = Profile.Current?.PartyBuffs?.Slots;
+        if (slots is null || slots.Count == 0) return pairs;
+
+        List<(Game.Spells.KnownSpell Spell, Game.Spells.BuffAffectSet Affect)> resolved = new();
+        foreach (Models.Profile.BuffSlot slot in slots)
+        {
+            if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
+            string code = slot.Spell.Trim();
+            if (Spellbook.FindByCastCode(code) is not { } spell) continue;
+            bool isWholeParty = IsPartyWideBuff(code);
+            // Judge co-landing by SCOPE — what the slot COULD ever land on — not the live
+            // on/off toggles. The ⚠ is a heads-up about the configured PAIR: two buffs
+            // that remove each other still clobber whenever both are up, no matter which
+            // Self / Party / member boxes are ticked right now. (A whole-party buff can
+            // hit everyone; a self / single-target buff can hit you and/or any member.)
+            // The timer-side "conflict" call, by contrast, reads the live cast snapshot —
+            // so an un-cast buff never falsely marks another as clobbered.
+            Game.Spells.BuffAffectSet affect = isWholeParty
+                ? new Game.Spells.BuffAffectSet { Everyone = true, Members = System.Array.Empty<string>() }
+                : new Game.Spells.BuffAffectSet { Self = true, AllMembers = true, Members = System.Array.Empty<string>() };
+            resolved.Add((spell, affect));
+        }
+
+        for (int i = 0; i < resolved.Count; i++)
+        {
+            HashSet<int> removes = RemovedSpellNumbers(resolved[i].Spell.Short);
+            if (removes.Count == 0) continue;
+            for (int j = 0; j < resolved.Count; j++)
+            {
+                if (i == j || !removes.Contains(resolved[j].Spell.Number)) continue;
+                if (!Game.Spells.BuffConflictAnalyzer.CanCoLand(resolved[i].Affect, resolved[j].Affect)) continue;
+                pairs.Add(new Game.Spells.BuffOverwritePair(
+                    resolved[i].Spell.Short, resolved[i].Spell.Name,
+                    resolved[j].Spell.Short, resolved[j].Spell.Name));
+            }
+        }
+        return pairs;
     }
 
     // Build the cure-confirmation matchers
@@ -6511,6 +6718,22 @@ public sealed class AppServices
         return null;
     }
 
+    // The cast codes of the buffs a given cast code's spell REMOVES (RemovesSpell / Abil
+    // 122). Lets the CastingDirector re-attribute a wear-off that lands right after a
+    // clobbering cast to its victim rather than the just-cast survivor (bless & chant
+    // share the wear-off message, so the shared line can't disambiguate on its own).
+    private IReadOnlyCollection<string> RemovesShortsFor(string castShort)
+    {
+        if (string.IsNullOrWhiteSpace(castShort)
+            || Spellbook.FindByCastCode(castShort.Trim()) is not { } spell) return System.Array.Empty<string>();
+        HashSet<int> removed = Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(spell.Formula);
+        if (removed.Count == 0) return System.Array.Empty<string>();
+        List<string> shorts = new();
+        foreach (Game.Spells.KnownSpell s in Spellbook.Available)
+            if (removed.Contains(s.Number)) shorts.Add(s.Short);
+        return shorts;
+    }
+
     // ----- Mana-regen reroll glue ---------------------------------------
     // Raw engine wire-send used by the reroll engine for its abil query + the
     // deliberate cooldown-bypassing recast. Bound in the main VM alongside the
@@ -6524,6 +6747,28 @@ public sealed class AppServices
     {
         ArgumentNullException.ThrowIfNull(send);
         _engineWireSend = send;
+    }
+
+    // Un-wrapped wire sender that pierces the EngineSendGate — bound to the same raw
+    // SendUserInput the emergency hangup uses (NOT the gate-wrapped engine sender).
+    // `sys` commands ride this because they're honoured at ANY HP, mortally-wounded
+    // included (confirmed mechanic), so they must survive the HP <= 0 send-gate hold
+    // rather than being dropped like ordinary engine sends. Null until first connect.
+    private Action<byte[]>? _rawWireSend;
+
+    public void SetRawWireSender(Action<byte[]> send)
+    {
+        ArgumentNullException.ThrowIfNull(send);
+        _rawWireSend = send;
+    }
+
+    // Send a command line on the raw (gate-piercing) wire, CR appended. Used for the
+    // `sys goto` power so it fires at any HP. Returns false when no sender is bound.
+    private bool SendGameCommandRaw(string command)
+    {
+        if (_rawWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
+        _rawWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
+        return true;
     }
 
     // Send a command line to the server as if the user typed it (CR appended),
@@ -6687,6 +6932,28 @@ public sealed class AppServices
         Game.Calculators.ManaRegenBreakpointCalculator.Result r =
             Game.Calculators.ManaRegenBreakpointCalculator.Compute(inputs, (int)rmin, (int)rmax);
         return (r.WorstTick, r.BestTick);
+    }
+
+    // The character's natural passive mana-regen per 30 s tick — level / stats /
+    // magery with worn +ManaRgn% folded in, NOT meditating — the "mana gained per
+    // tick" the Buff Watchdog shows against its per-tick maintenance cost so you can
+    // see at a glance whether a buff set is self-sustaining. Deliberately excludes any
+    // mana-regen roll spell (nature tap / flux): its magnitude is a variable roll, and
+    // the spell itself is already counted on the maintenance side. Uses the same
+    // engine formula (CharacterCalculator.CalcManaRegen) the Level Projection grid
+    // trusts. Null for a non-caster (mageryType 0) or before the first stat parse.
+    public int? PassiveManaRegenTick()
+    {
+        if (!Stats.HasParsed) return null;
+        System.Text.Json.JsonElement? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
+        int mageryType = RowInt(classRow, "MageryType");
+        if (mageryType == 0) return null;   // non-caster: no mana pool worth planning
+        int mageryLevel = RowInt(classRow, "MageryLVL");
+        int gearRegen = Game.Calculators.CharacterCalculator
+            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
+        return Game.Calculators.CharacterCalculator.CalcManaRegen(
+            System.Math.Max(1, PlayerStats.Level), PlayerStats.Intellect, PlayerStats.Willpower,
+            PlayerStats.Charm, mageryType, mageryLevel, gearRegen, isMeditating: false, GameData.ActiveRealm);
     }
 
     private static int RowInt(System.Text.Json.JsonElement? row, string property)
@@ -7116,14 +7383,15 @@ public sealed class AppServices
             : null;
     }
 
-    // Route-picker helper: for a path-gate item the direct route needs, name the
-    // shop the walk would actually detour to buy it — but only when that detour
-    // will really run. It runs only if the item is flagged AutoObtainForPath
-    // (same gate PathItemShopRouter enforces), no free deterministic give
-    // preempts it (a give owns the item over a buy), AND a reachable shop stocks
-    // it, so all conditions must hold or we return null. The chosen shop matches
-    // the router's fewest-added-steps pick (shared TrySelectShop), so the picker's
-    // "buy at X" promise is the shop the run visits — not a plausible guess.
+    // Route-picker helper: for a path-gate item the direct route needs, return the
+    // full "buy at <shop>" clause the walk would run — with the bank-run / shortfall
+    // note appended when the crosser can't cover it from cash on hand (see
+    // PathItemBuyPhrase) — but only when that detour will really run. It runs only if
+    // the item is flagged AutoObtainForPath (same gate PathItemShopRouter enforces),
+    // no free deterministic give preempts it (a give owns the item over a buy), AND a
+    // reachable shop stocks it, so all conditions must hold or we return null. The
+    // chosen shop matches the router's fewest-added-steps pick (shared TrySelectShop),
+    // so the clause names the shop the run visits — not a plausible guess.
     public string? PathItemShopName(int itemId, Game.Map.RoomKey source, Game.Map.RoomKey destination)
     {
         if (!IsAutoObtainForPath(itemId)) return null;
@@ -7134,7 +7402,9 @@ public sealed class AppServices
                 shops, source, destination, (a, b) => Bfs.DistanceBetween(a, b, Movement),
                 out Game.Map.RoomKey shop))
             return null;
-        return RoomGraph.GetRoom(shop)?.Name;
+        return RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName
+            ? PathItemBuyPhrase(itemId, shop, shopName)
+            : null;
     }
 
     // Route-picker helper: for a path-gate item no give / shop covers, name the
@@ -7194,6 +7464,161 @@ public sealed class AppServices
             return (long)Math.Ceiling(copper);
         }
         return null;
+    }
+
+    // Route-picker buy clause for a path / hazard counter the run would purchase:
+    // "buy at <shop>" when cash on hand covers it; "buy at <shop> (withdraw ~<N>
+    // copper at <bank> first)" when it's short but a bank is configured to draw
+    // from; "buy at <shop> — short ~<N> copper, set a bank in Settings → Cash" when
+    // short with no bank. Mirrors PathItemShopRouter.NeedsBankRun so the card
+    // previews the exact bank-run / shortfall the walk will hit. quantity is how
+    // many copies the run buys (a per-person × head-count party provision, else 1).
+    // Amounts are in copper farthings — the same denomination the game prices in
+    // ("You bought lantern for 396 copper farthings.").
+    private string PathItemBuyPhrase(
+        int itemId, Game.Map.RoomKey shopRoom, string shopName, int quantity = 1)
+    {
+        string basePhrase = $"buy at {shopName}";
+        if (PathItemBuyCost(itemId, shopRoom) is not { } unit || unit <= 0) return basePhrase;
+        long cost = unit * Math.Max(1, quantity);
+        long cash = PathItemCashOnHand();
+        if (cash >= cost) return basePhrase;   // affordable from the purse — no bank leg
+        string amount = $"~{cost - cash:N0} copper";
+        if (PathItemBankRoom() is { } bank && RoomGraph.GetRoom(bank)?.Name is { Length: > 0 } bankName)
+            return $"{basePhrase} (withdraw {amount} at {bankName} first)";
+        return $"{basePhrase} — short {amount}, set a bank in Settings → Cash";
+    }
+
+    // The bank name (= its shop name, what `bank` lists) hosting a room, via the
+    // BankCatalog reverse index — so a configured/nearest bank room resolves to the
+    // name BankBalanceProbe keys deposits on.
+    private string? BankNameForRoom(Game.Map.RoomKey room)
+    {
+        foreach (Game.GameData.BankShop b in Game.GameData.BankCatalog.Enumerate(GameData))
+            if (b.Key.Equals(room)) return b.Name;
+        return null;
+    }
+
+    // Last-known deposit (copper) at the configured auto-deposit bank, 0 when
+    // unset / never seen in a `bank` listing.
+    private long ConfiguredBankDepositCopper() =>
+        PathItemBankRoom() is { } room && BankNameForRoom(room) is { } name
+            ? BankBalance.Balance(name) ?? 0
+            : 0;
+
+    // Used banks (seen in a `bank` listing with a positive deposit) whose room is
+    // reachable from source, nearest-first, EXCLUDING the configured bank (counted
+    // separately as the auto-withdraw source). Each bank name maps to its room(s)
+    // via BankCatalog; a bank assigned to several rooms uses its nearest.
+    private List<(string Name, long Deposit)> ReachableUsedBankDeposits(
+        Game.Map.RoomKey source, Game.Map.RoomKey? exclude)
+    {
+        var scored = new List<(string Name, long Deposit, int Dist)>();
+        IReadOnlyList<Game.GameData.BankShop> banks = Game.GameData.BankCatalog.Enumerate(GameData);
+        foreach ((string name, long deposit) in BankBalance.LastKnown)
+        {
+            if (deposit <= 0) continue;
+            int? best = null;
+            foreach (Game.GameData.BankShop b in banks)
+            {
+                if (!string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (exclude is { } ex && b.Key.Equals(ex)) continue;
+                if (Bfs.DistanceBetween(source, b.Key, Movement) is { } d && (best is null || d < best))
+                    best = d;
+            }
+            if (best is { } dist) scored.Add((name, deposit, dist));
+        }
+        scored.Sort((a, b) => a.Dist.CompareTo(b.Dist));
+        return scored.ConvertAll(s => (s.Name, s.Deposit));
+    }
+
+    // Pick-time economy read for a route that needs BUYING counter/gate items.
+    // Actively refreshes own bank (`bank`) and — in a party — the members' on-hand
+    // cash (`@wealth`) and whether a member already holds a needed item (`@have`),
+    // THEN classifies who can pay (per the user's "check before surfacing options").
+    // buys are the item+shop pairs the run would purchase; neededItems are the
+    // items to ask the party about. Best-effort: a probe that errors/times out just
+    // leaves that dimension at zero (degrades to the self/solo view).
+    public async Task<Game.Map.RouteBuyEconomy> AssessRouteBuyAsync(
+        IReadOnlyList<(int ItemId, Game.Map.RoomKey ShopRoom)> buys,
+        IReadOnlyList<(int ItemId, string Name)> neededItems,
+        Game.Map.RoomKey source)
+    {
+        ArgumentNullException.ThrowIfNull(buys);
+        ArgumentNullException.ThrowIfNull(neededItems);
+
+        long cost = 0;
+        Game.Map.RoomKey? nearestShop = null;
+        int? nearestDist = null;
+        foreach ((int itemId, Game.Map.RoomKey shopRoom) in buys)
+        {
+            cost += PathItemBuyCost(itemId, shopRoom) ?? 0;
+            int? d = Bfs.DistanceBetween(source, shopRoom, Movement);
+            if (nearestShop is null || (d is { } dd && (nearestDist is null || dd < nearestDist)))
+            {
+                nearestShop = shopRoom;
+                nearestDist = d;
+            }
+        }
+
+        // Cash on hand is live (parsed inventory — no round-trip). If it already
+        // covers the buy, there's nothing to look up: skip the `bank` query AND the
+        // party @wealth/@have probes entirely. Those round-trips were making the
+        // route picker wait on the network before it could pop, even with a full
+        // purse — only reach for the bank/party when cash actually falls short.
+        long ownCash = PathItemCashOnHand();
+        if (ownCash >= cost)
+        {
+            Log.Info("RouteBuy",
+                $"buy cost ~{cost:N0}c covered by cash on hand ({ownCash:N0}c) — no bank/party probe");
+            return new Game.Map.RouteBuyEconomy(
+                Game.Map.RouteBuyAffordabilityCalculator.Classify(
+                    cost, ownCash, 0, new List<(string Name, long Deposit)>(), 0),
+                nearestShop, null);
+        }
+
+        // Cash falls short → find the rest: refresh the bank listing, then read deposits.
+        try { await BankBalance.QueryAsync(); } catch { /* degrade to last-known */ }
+        Game.Map.RoomKey? configured = PathItemBankRoom();
+        long configuredDeposit = ConfiguredBankDepositCopper();
+        List<(string Name, long Deposit)> otherBanks = ReachableUsedBankDeposits(source, configured);
+
+        // Party money + item holders (bank is self-only, so party wealth is on-hand).
+        long partyOnHand = 0;
+        string? holder = null;
+        if (PartyState.IsInParty)
+        {
+            try
+            {
+                Game.Remote.PartyWealthProbe.PartyWealthResult w = await PartyWealthProbe.QueryAsync();
+                foreach (KeyValuePair<string, long> kv in w.WealthByMember) partyOnHand += kv.Value;
+            }
+            catch { /* degrade: party cash unknown */ }
+
+            foreach ((int itemId, string name) in neededItems)
+            {
+                try
+                {
+                    Game.Remote.PartyInventoryProbe.PartyItemResult have =
+                        await PartyInventory.QueryAsync(itemId, name);
+                    if (have.AnyHeld)
+                    {
+                        foreach (KeyValuePair<string, int> kv in have.CountsByMember)
+                            if (kv.Value > 0) { holder = kv.Key; break; }
+                        if (holder is not null) break;
+                    }
+                }
+                catch { /* degrade: party inventory unknown */ }
+            }
+        }
+
+        Game.Map.RouteBuyAffordability afford = Game.Map.RouteBuyAffordabilityCalculator.Classify(
+            cost, ownCash, configuredDeposit, otherBanks, partyOnHand);
+        Log.Info("RouteBuy",
+            $"buy cost ~{cost:N0}c: cash {ownCash:N0}, configured-bank {configuredDeposit:N0}, "
+            + $"{otherBanks.Count} other reachable bank(s), party on-hand {partyOnHand:N0} → {afford.Source}"
+            + (holder is { } h ? $"; party member {h} holds a needed item" : ""));
+        return new Game.Map.RouteBuyEconomy(afford, nearestShop, holder);
     }
 
     // HP rest gate for DoorOpenManager's bash-interleave. recovered=false → "HP has
@@ -7468,14 +7893,14 @@ public sealed class AppServices
     // then cross" choice is explicit consent, so it offers a counter the run can
     // source whether or not it's flagged AutoObtainForPath. Returns the chosen
     // counter id + a source phrase, or null when none is sourceable.
-    public (int ItemId, string Source, bool OnFloor)? ResolveHazardCounter(
+    public (int ItemId, string Source, bool OnFloor, Game.Map.RoomKey? ShopRoom)? ResolveHazardCounter(
         IReadOnlyList<int> counters, Game.Map.RoomKey source, Game.Map.RoomKey destination)
     {
         ArgumentNullException.ThrowIfNull(counters);
         // On the current floor — grabbed in place, so it never routes through the
         // detour pipeline (the caller issues a `get`); flagged OnFloor to say so.
         foreach (int id in counters)
-            if (IsItemOnFloor(id)) return (id, "grab from the floor here", true);
+            if (IsItemOnFloor(id)) return (id, "grab from the floor here", true, null);
 
         // The destination is hazard-gated (that is WHY a counter is needed), so the
         // shop/give/drop round-trip THROUGH it is only reachable with the acquirable
@@ -7489,13 +7914,13 @@ public sealed class AppServices
                     && Game.Map.PathItemGiveRouter.TrySelectGiver(
                         GiveSourcesForItem(id), source, destination,
                         (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.GiveSource giver))
-                    return (id, $"ask {giver.GiverName}", false);
+                    return (id, $"ask {giver.GiverName}", false, null);
 
             int? Dist(Game.Map.RoomKey a, Game.Map.RoomKey b) => Bfs.DistanceBetween(a, b, Movement);
             // Among the counters buyable at a reachable shop, pick the CHEAPEST by
             // base Price (deterministic — a log raft over a river punt), not just the
             // first in the any-of list.
-            (int Id, string ShopName, int Price)? bestBuy = null;
+            (int Id, string ShopName, Game.Map.RoomKey Shop, int Price)? bestBuy = null;
             foreach (int id in counters)
             {
                 System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
@@ -7506,7 +7931,7 @@ public sealed class AppServices
                 {
                     int price = ItemNames.PriceOf(id) ?? int.MaxValue;
                     if (bestBuy is null || price < bestBuy.Value.Price)
-                        bestBuy = (id, shopName, price);
+                        bestBuy = (id, shopName, shop, price);
                     continue;
                 }
 
@@ -7518,7 +7943,11 @@ public sealed class AppServices
                         $"item {id} shop at {sr.Map}/{sr.Room}: src→shop={Dist(source, sr)?.ToString() ?? "∞"}, "
                         + $"shop→dest={Dist(sr, destination)?.ToString() ?? "∞"}");
             }
-            if (bestBuy is { } b) return (b.Id, $"buy at {b.ShopName}", false);
+            // Name the shop AND preview the bank-run / shortfall the buy leg will hit
+            // (mirrors PathItemShopRouter.NeedsBankRun) so a broke crosser sees the
+            // withdraw the run already does — or a "set a bank" warning when short.
+            if (bestBuy is { } b)
+                return (b.Id, PathItemBuyPhrase(b.Id, b.Shop, b.ShopName), false, b.Shop);
 
             foreach (int id in counters)
             {
@@ -7527,7 +7956,7 @@ public sealed class AppServices
                     && Game.Map.MonsterDropRouter.SelectNearestSpawn(
                         spawns, Bfs.ComputeDistancesFrom(source, Movement),
                         out Game.Map.MonsterDropSpawn best, out _))
-                    return (id, $"dropped by {best.MonsterName}", false);
+                    return (id, $"dropped by {best.MonsterName}", false, null);
             }
         }
 
@@ -7933,6 +8362,20 @@ public sealed class AppServices
     // BBS — gates the auto `sys god <name> add life` on death.
     private bool SysopGodLivesEnabledHere() => SysopPowerHere(static c => c.SysopGodLives);
 
+    // Whether the loaded character has the "Sysop goto" power on the active BBS —
+    // gates every `sys goto` surface (typed command, menus).
+    private bool SysopGotoEnabledHere() => SysopPowerHere(static c => c.SysopGoto);
+
+    // The active BBS credential's goto table, or empty when no character / BBS / row
+    // is set. Both the manager and the menus read through this so they share one table.
+    private IReadOnlyList<Models.Profile.SysopGotoLocation> ActiveBbsSysopGotos()
+        => ResolveActiveBbs()?.Name is { Length: > 0 } bbs
+           && Profile.Current?.BbsCredentials is { } creds
+           && creds.TryGetValue(bbs, out Models.Profile.BbsCredentials? cred)
+           && cred.SysopGotos is { } list
+            ? list
+            : System.Array.Empty<Models.Profile.SysopGotoLocation>();
+
     private bool SysopPowerHere(Func<Models.Profile.BbsCredentials, bool> pick)
         => ResolveActiveBbs()?.Name is { Length: > 0 } bbs
            && Profile.Current?.BbsCredentials is { } creds
@@ -8043,6 +8486,16 @@ public sealed class AppServices
             : general.NavTooltipFontFamily;
         Display.NavTooltipFontSize = general.NavTooltipFontSize ?? DisplayConfig.DefaultNavTooltipFontSize;
         Display.ScaleToWindow = general.ScaleTerminalToWindow;
+
+        // Conversation row font is char-tier Talk, not General — but it shares the
+        // same ProfileLoaded / ProfileMutated triggers, so seed it here too. Stored
+        // as the raw delta ("" / 0 mean default); the Conversation window resolves
+        // the fallback and observes these for a live re-font on Settings Apply.
+        Models.Profile.TalkSettings talk =
+            ReadSection<Models.Profile.TalkSettings>(Profile.Current, "Talk");
+        Display.ConvoFontFamily = talk.ConvoFont ?? "";
+        Display.ConvoFontSize = talk.ConvoFontSize;
+        Display.ConvoChannelColors = talk.ChannelColors;
         // SplashAnimate is deliberately NOT seeded here: it's an install-global
         // attract-screen preference, sourced once at startup from the Global default
         // profile (see the seed after the startup profile load). Re-seeding it per
@@ -8071,6 +8524,9 @@ public sealed class AppServices
         Display.FontSize = DisplayConfig.DefaultFontSize;
         Display.NavTooltipFontFamily = DisplayConfig.DefaultFontFamily;
         Display.NavTooltipFontSize = DisplayConfig.DefaultNavTooltipFontSize;
+        Display.ConvoFontFamily = "";
+        Display.ConvoFontSize = 0;
+        Display.ConvoChannelColors = null;
         // SplashAnimate is intentionally left untouched — it's install-global (seeded
         // once at startup from the Global default profile), so a profile close/swap
         // must not reset it back on.

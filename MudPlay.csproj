@@ -29,7 +29,7 @@
          (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
          fixes AND ordinary enhancements to existing features (one bump per
          report handled or per enhancement). -->
-    <Version>3.52.0</Version>
+    <Version>3.58.0</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
          the Server GC (a heap + background thread per core), which on a
@@ -50,17 +50,37 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Defaults/ ships app-default seed data alongside the executable
-         (Messages catalogues per game-data set, the trigger seed list,
-         and any future per-tab defaults). Copied to bin/ on every
-         build so MessageStore / TriggerEngine can load them on first
-         launch when the per-character / per-set file doesn't exist
-         yet. NOT embedded as a resource — kept as loose files so
-         users can hand-edit them outside the build. -->
-    <Content Include="Defaults\**">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <!-- Defaults/ ships app-default seed data (Messages catalogues per game-data
+         set, the trigger seed list, monster/item overlays, boss + quest defs).
+         EMBEDDED in the assembly, not loose files — so a self-contained
+         single-file build carries the seeds INSIDE the exe. That way replacing
+         just the binary refreshes the seeds too: AppPaths.MaterializeBundledSeeds
+         extracts them to Global/_bundled on launch, and EnsureGlobalSeedsBootstrapped
+         syncs the read-only ones into Global (users who only swap the exe used to
+         keep stale seeds forever — the loose Defaults/ folder never updated). -->
+    <EmbeddedResource Include="Defaults\*.seed.json" />
   </ItemGroup>
+
+  <!-- nav-seed (starter Loops + Favorites) is a directory tree whose .loop filenames
+       carry spaces/parens that don't survive per-file embedded-resource naming, so
+       zip each realm and embed the zip; AppPaths unzips it into _bundled/nav-seed on
+       launch. Zipped fresh from the loose Defaults/nav-seed/ source each build (into
+       obj/, gitignored). ZipDirectory + ZipFile are managed .NET, so this is portable
+       across Linux/Windows/macOS. The target runs before the compiler collects
+       @(EmbeddedResource); the added items use explicit LogicalName so their manifest
+       names are stable regardless of build path. -->
+  <Target Name="ZipAndEmbedNavSeed" BeforeTargets="AssignTargetPaths">
+    <ZipDirectory SourceDirectory="Defaults\nav-seed\stock"
+                  DestinationFile="$(IntermediateOutputPath)nav-seed.stock.zip" Overwrite="true" />
+    <ZipDirectory SourceDirectory="Defaults\nav-seed\paradigm"
+                  DestinationFile="$(IntermediateOutputPath)nav-seed.paradigm.zip" Overwrite="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)nav-seed.stock.zip"
+                        LogicalName="MudPlay.Defaults.nav-seed.stock.zip" />
+      <EmbeddedResource Include="$(IntermediateOutputPath)nav-seed.paradigm.zip"
+                        LogicalName="MudPlay.Defaults.nav-seed.paradigm.zip" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <!-- MudPlay.Tests lives at the repo root as a sibling project. Without

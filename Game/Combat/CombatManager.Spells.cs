@@ -632,10 +632,7 @@ public sealed partial class CombatManager
             if (_now() - _lastAlternationAdvanceAt < AlternationAdvanceMinGap) return;
             _lastAlternationAdvanceAt = _now();
             _alternationRound++;
-            if (TryBuildCandidate(altObs, altTarget) is { } altCand)
-                DispatchRoundAction(settings, altCand, CountEngageable(altObs), altObs);
-            else
-                _castingSpellTarget = null;   // can't rebuild the target — drop; next observe re-picks
+            DeferRoundContinuation(settings, altTarget, "alternate-order");
             return;
         }
 
@@ -668,8 +665,7 @@ public sealed partial class CombatManager
             {
                 _log?.Combat(LogCategory,
                     $"round-cycle switch → spell phase (round={_alternationRound})");
-                if (TryBuildCandidate(cycleObs, cycleTarget) is { } cycleCand)
-                    DispatchRoundAction(settings, cycleCand, CountEngageable(cycleObs), cycleObs);
+                DeferRoundContinuation(settings, cycleTarget, "round-cycle switch");
                 return;
             }
             // Not a forced physical→spell edge — fall through. A continuing
@@ -920,6 +916,43 @@ public sealed partial class CombatManager
                 LogSpellReannounce(reason, from, to, target, obs);
                 DispatchRoundAction(settings, cand, CountEngageable(obs), obs, bypassRecastInterval: true);
             }
+        }
+
+        if (_scheduleSwitchDispatch is { } schedule)
+            schedule(SwitchDispatchDelay, Dispatch);
+        else
+            _post(Dispatch);
+    }
+
+    // The AlternateSpellPhysical/AlternatePhysicalSpell/CustomRoundCycle branches
+    // above force a fresh dispatch EVERY round — unlike DeferSwitchDispatch's
+    // spell-only cascade, this can re-announce a WEAPON action too, so it can't
+    // reuse that guard's _castingSpellTarget check (null in a physical-phase
+    // round would wrongly skip a live target). Same underlying race though: the
+    // heartbeat is damage-line driven, so it decides on a round's own killing
+    // blow ahead of the "dies." / "You gain N experience." that would drop the
+    // target. Defer by SwitchDispatchDelay and re-validate against _currentTarget
+    // + the freshest room view before dispatching (report paradigm-20260905-205200:
+    // every kill wasted a round re-announcing at the corpse — "You don't see X
+    // here!").
+    private void DeferRoundContinuation(CombatSettings settings, string target, string reason)
+    {
+        void Dispatch()
+        {
+            if (_disposed || !_isEnabled() || _combatOff) return;
+            if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase)
+                || _classifier.Current is not { } obs
+                || !TargetPresent(obs, target))
+            {
+                _log?.Combat(LogCategory,
+                    $"round continuation ({reason}) at '{target}' skipped — target gone before "
+                    + "the deferred dispatch (kill/leave landed first); no corpse-cast");
+                return;
+            }
+            if (TryBuildCandidate(obs, target) is { } cand)
+                DispatchRoundAction(settings, cand, CountEngageable(obs), obs);
+            else
+                _castingSpellTarget = null;   // can't rebuild the target — drop; next observe re-picks
         }
 
         if (_scheduleSwitchDispatch is { } schedule)

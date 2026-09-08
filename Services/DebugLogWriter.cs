@@ -1,7 +1,8 @@
 namespace MudPlay.Services;
 
 // Per-session diagnostic file writer. Each instance opens one file under
-// Data/Logs/{yyyy-MM-dd_HH-mm-ss}-{topic}.log and appends timestamped lines.
+// Data/Logs/{yyyy-MM-dd_HH-mm-ss}-p{pid}-{topic}.log and appends timestamped
+// lines (the pid keeps concurrent instances from sharing a filename).
 // Used by walk / loop / match diagnostics — anything too noisy for LogService
 // but useful when chasing a bug.
 //

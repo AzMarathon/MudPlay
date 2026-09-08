@@ -4,10 +4,22 @@
         x:Class="MudPlay.Views.Navigation.RouteChoiceDialog"
         x:DataType="vm:RouteChoiceDialogViewModel"
         Title="Choose a route"
-        Width="480" Height="360"
+        Width="480" MinHeight="240" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>
+        <!-- A "danger" card (skip the safe prep: cross unprotected / send it, or
+             plow through rooms you marked Avoid) reads as a soft-red tint so the
+             risky option is obvious at a glance. Defined BEFORE the selected style
+             so a picked danger card still shows the amber selection over the red. -->
+        <Style Selector="Button.route.danger">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="Background" Value="{StaticResource AccentRedSoftBrush}"/>
+        </Style>
+        <Style Selector="Button.route.danger:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentRedSoftBrush}"/>
+        </Style>
+
         <!-- A selected route card reads as the amber brand accent: an amber
              border over a soft-amber fill, so the previewed route stands out
              from the unselected one. -->
@@ -28,11 +40,26 @@
                        FontSize="13" FontWeight="SemiBold"
                        Foreground="{StaticResource ChromeFgBrush}"/>
 
-            <StackPanel Grid.Row="1" Spacing="10" VerticalAlignment="Center">
+            <!-- While route planning runs on a background thread (the idle path), the
+                 window is up but its options aren't computed yet — show a centered
+                 "Calculating…" in place of the card list so it doesn't feel like
+                 nothing's happening; Populate swaps the cards in when planning returns. -->
+            <TextBlock Grid.Row="1"
+                       Text="Calculating…"
+                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                       FontSize="12"
+                       Foreground="{StaticResource ChromeFgSecBrush}"
+                       IsVisible="{Binding IsCalculating}"/>
+
+            <StackPanel Grid.Row="1" Spacing="10" VerticalAlignment="Center"
+                        IsVisible="{Binding ShowOptions}">
+                <TextBlock Text="Options:"
+                           FontSize="11"
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
                 <Button Classes="route"
                         Classes.selected="{Binding IsFreeSelected}"
                         Command="{Binding SelectFreeCommand}"
-                        IsEnabled="{Binding HasFreeRoute}"
+                        IsVisible="{Binding ShowFreeCard}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Left"
                         BorderThickness="1"
@@ -45,6 +72,7 @@
 
                 <Button Classes="route"
                         Classes.selected="{Binding IsGatedSelected}"
+                        Classes.danger="{Binding GatedIsDanger}"
                         Command="{Binding SelectGatedCommand}"
                         IsVisible="{Binding ShowGatedCard}"
                         HorizontalAlignment="Stretch"
@@ -59,12 +87,36 @@
                         <TextBlock Text="{Binding GatedDetail}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- Non-tinted (safe) cards first — Free / Obtain above — then Search,
+                     then the red-tinted risky cards (Cross-unprotected, Route-through-
+                     avoided) last, so the safe picks read before the dangerous ones. -->
+                <Button Classes="route"
+                        Classes.selected="{Binding IsSearchSelected}"
+                        Command="{Binding SelectSearchCommand}"
+                        IsVisible="{Binding ShowSearchCard}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        BorderThickness="1"
+                        Padding="12,10">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding SearchSummary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <TextBlock Text="{Binding SearchDetail}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                 </Button>
 
                 <Button Classes="route"
                         Classes.selected="{Binding IsSendItSelected}"
+                        Classes.danger="{Binding SendItIsDanger}"
                         Command="{Binding SelectSendItCommand}"
                         IsVisible="{Binding ShowSendItCard}"
                         HorizontalAlignment="Stretch"
@@ -79,16 +131,38 @@
                         <TextBlock Text="{Binding SendItDetail}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Classes="route"
+                        Classes.selected="{Binding IsAvoidAltSelected}"
+                        Classes.danger="{Binding AvoidAltIsDanger}"
+                        Command="{Binding SelectAvoidAltCommand}"
+                        IsVisible="{Binding ShowAvoidAltCard}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        BorderThickness="1"
+                        Padding="12,10">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding AvoidAltSummary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <TextBlock Text="{Binding AvoidAltDetail}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                 </Button>
             </StackPanel>
 
             <TextBlock Grid.Row="2"
                        Text="{Binding Footnote}"
+                       IsVisible="{Binding ShowOptions}"
                        FontSize="10"
                        TextWrapping="Wrap"
-                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                       Foreground="{StaticResource ChromeFgSecBrush}"/>
 
             <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">
                 <!-- Details…: bottom-left, enabled once a route is picked. Opens the

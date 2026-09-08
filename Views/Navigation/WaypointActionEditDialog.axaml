@@ -25,8 +25,9 @@
                            VerticalAlignment="Center"/>
                 <TextBox   Grid.Column="1"
                            Text="{Binding Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                           PlaceholderText="e.g. rest, dep 100, ask barmaid pie"
-                           FontSize="11"/>
+                           PlaceholderText="e.g. rest  ·  chain with ; or ^M: get all;drop coins"
+                           FontSize="11"
+                           ToolTip.Tip="Sent when the loop reaches this waypoint. Chain several commands with ; or ^M — each is sent as its own line (e.g. 'get all;drop coins')."/>
             </Grid>
 
             <Grid Grid.Row="2" ColumnDefinitions="80,Auto,*" ColumnSpacing="8">

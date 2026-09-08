@@ -124,6 +124,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshLayout();
         RefreshFavorites();
         RefreshGotoHistory();
+        // Sys Goto flyout tracks the active BBS's power + table. Unlike Favorites /
+        // GotoHistory (their own stores fire Changed on a profile swap), sys gotos
+        // live on the per-BBS credential with no store event, so rebuild on profile
+        // load (char / BBS swap) and mutation (a credentials save).
+        _services.Profile.ProfileLoaded += OnProfileChangedRebuildSysopGotos;
+        _services.Profile.ProfileMutated += OnProfileChangedRebuildSysopGotos;
+        RebuildContextSysopGotos();
         RefreshCrawlerChords();
         RefreshTeleportRooms();
         RefreshDeathRooms();
@@ -170,6 +177,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.TBInfo.StoreReloaded    -= RefreshTeleportRooms;
         _services.Loops.LoopsChanged -= OnLoopsChanged;
         _services.Favorites.Changed -= OnFavoritesChanged;
+        _services.Profile.ProfileLoaded -= OnProfileChangedRebuildSysopGotos;
+        _services.Profile.ProfileMutated -= OnProfileChangedRebuildSysopGotos;
         _services.LoopRunner.Event -= OnLoopRunnerEvent;
         _services.Movement.AvoidedChanged -= OnAvoidedChanged;
         _services.Movement.StashChanged   -= OnStashChanged;
@@ -1087,12 +1096,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // flyout's FavoriteMenuItem carrier (label + self-contained command).
     public ObservableCollection<MudPlay.ViewModels.FavoriteMenuItem> ContextFavorites { get; } = new();
     public ObservableCollection<MudPlay.ViewModels.FavoriteMenuItem> ContextRecentDestinations { get; } = new();
+    // Sys Goto locations for the active BBS — a `sys goto <name>` jump on click (the
+    // same fire path as the terminal flyout). Empty when the power is off, so the
+    // menu hides via HasContextSysopGotos.
+    public ObservableCollection<MudPlay.ViewModels.FavoriteMenuItem> ContextSysopGotos { get; } = new();
     public bool HasContextFavorites => ContextFavorites.Count > 0;
     public bool HasContextRecentDestinations => ContextRecentDestinations.Count > 0;
+    public bool HasContextSysopGotos => ContextSysopGotos.Count > 0;
 
-    // Drives the separator that groups the two walk-to sub-lists at the top of the
-    // room menu — shown when either has rows.
-    public bool HasContextWalkLists => ContextFavorites.Count > 0 || ContextRecentDestinations.Count > 0;
+    // Drives the separator that groups the walk-to sub-lists at the top of the room
+    // menu — shown when any of them has rows.
+    public bool HasContextWalkLists =>
+        ContextFavorites.Count > 0 || ContextRecentDestinations.Count > 0 || ContextSysopGotos.Count > 0;
 
     // Same goto-blue the terminal Favorites flyout uses for room names, so the two
     // menus read identically (numbered "N)" prefix in the default colour + blue name).
@@ -1170,6 +1185,39 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasContextRecentDestinations));
         OnPropertyChanged(nameof(HasContextWalkLists));
     }
+
+    // Sys Goto flyout — the active BBS's `sys goto` locations, mirroring the terminal
+    // right-click flyout (same label + fire path). UsableNow is empty when the power
+    // is off, so the menu self-hides. A row below its Min level renders with a null
+    // command (FavoriteMenuItem greys it out) and the required level in the label.
+    private void RebuildContextSysopGotos()
+    {
+        ContextSysopGotos.Clear();
+        int number = 0;
+        foreach (Models.Profile.SysopGotoLocation loc in _services.SysopGoto.UsableNow)
+        {
+            RoomKey key = new(loc.Map, loc.Room);
+            string landing = Graph?.GetRoom(key) is { } r ? r.Name : $"{loc.Map}/{loc.Room}";
+            bool firable = _services.SysopGoto.MeetsLevel(loc);
+            string label = firable ? $"{loc.Name} — {landing}" : $"{loc.Name} — {landing} (needs L{loc.MinLevel})";
+            Models.Profile.SysopGotoLocation target = loc;
+            ContextSysopGotos.Add(new MudPlay.ViewModels.FavoriteMenuItem(
+                $"{++number})", label, GotoWalkBrush,
+                firable ? new RelayCommand(() => FireContextSysopGoto(target)) : null));
+        }
+        OnPropertyChanged(nameof(HasContextSysopGotos));
+        OnPropertyChanged(nameof(HasContextWalkLists));
+    }
+
+    // Fire a Sys Goto from the map flyout, surfacing any gate refusal to the terminal
+    // (same as the terminal flyout's fire path).
+    private void FireContextSysopGoto(Models.Profile.SysopGotoLocation loc)
+    {
+        if (!_services.SysopGoto.TryFire(loc, out string refusal) && !string.IsNullOrEmpty(refusal))
+            _services.WriteTerminalNotice(refusal);
+    }
+
+    private void OnProfileChangedRebuildSysopGotos(Models.Profile.CharacterProfile _) => RebuildContextSysopGotos();
 
     // Bound TwoWay to the history flyout's ListBox SelectedItem. Picking a row arms
     // it (like a search pick / favourite), then resets so the same row can be

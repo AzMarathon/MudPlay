@@ -77,3 +77,20 @@ public sealed record BoatStep(BoatPassage Passage) : WalkStep
 {
     public override string Display => Passage.Keyword;
 }
+
+// A sysop-goto routing shortcut: fire `sys goto <name>` to jump from ANYWHERE
+// straight to a curated location, then walk the land leg from there. Like a boat
+// this ONE step spans a teleport with no graph edge to the arrival room — the
+// walker suppresses the churn and completes when the tracker confirms the landing
+// room (LandingRoom), with a wall-clock backstop. Unlike a boat there's no
+// "leg to the dock": the jump fires from the current room, so a SysGotoStep is
+// always the first step of the route it heads. Combat is handled upstream by the
+// movement coordinator's pause (the walker stalls rather than firing mid-fight).
+public sealed record SysGotoStep(MudPlay.Models.Profile.SysopGotoLocation Location) : WalkStep
+{
+    // The room the jump lands in (Location's map/room). The walker's arrival
+    // detection completes the step when the tracker confirms this room.
+    public RoomKey LandingRoom => new(Location.Map, Location.Room);
+
+    public override string Display => $"sys goto {Location.Name}";
+}

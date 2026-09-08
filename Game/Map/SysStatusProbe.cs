@@ -11,9 +11,10 @@ namespace MudPlay.Game.Map;
 //
 // Capability is two-layered, because sysop access can't be detected reliably:
 //
-//   1. BbsCredentials.HasSysopPowers — the character's existing per-BBS
-//      "I have sysop / goto powers" flag. Default off; while it is, nothing is
-//      ever sent.
+//   1. BbsCredentials.SysopStatus — the character's per-BBS "I have sysop
+//      status powers" flag, resolved through AppServices.SysopStatusEnabledHere
+//      and passed in as the capabilityEnabled gate. Default off; until it's on,
+//      nothing is ever sent.
 //   2. Auto-disable — a probe that produces no parseable block within the
 //      timeout switches the capability off for the rest of the session. This is
 //      deliberately NOT a match on a denial message: the wording a denied sysop

@@ -156,7 +156,13 @@ public sealed class BfsMapper
         bool returnEmptyWhenAtDestination = false,
         bool ignoreExitGates = false,
         bool refuseTeleports = false,
-        bool avoidTraps = false)
+        bool avoidTraps = false,
+        // When true, the user's "avoid this room" set is NOT consulted — a route
+        // may pass through (and end in) an avoided room. Distinct from
+        // ignoreExitGates (which lifts level/toll/class/item/hazard exit gates but
+        // keeps avoids): this lifts ONLY avoids, so the route picker can offer to
+        // route through avoided rooms while every real gate stays honoured.
+        bool ignoreAvoids = false)
     {
         if (_graph.GetRoom(source) is null) return null;
         if (_graph.GetRoom(destination) is null) return null;
@@ -168,7 +174,7 @@ public sealed class BfsMapper
         // not a plain BFS — a refuse-all-traps BFS would return NOTHING the moment
         // one trap on the way is unavoidable, stranding the whole "avoid" offer.
         if (avoidTraps)
-            return FindMinTrapPath(source, destination, filter, ignoreExitGates, refuseTeleports);
+            return FindMinTrapPath(source, destination, filter, ignoreExitGates, refuseTeleports, ignoreAvoids);
 
         // Two-tier search: a deterministic pass first (gateway teleports
         // excluded), then — only if that finds nothing — a fallback pass that
@@ -178,8 +184,8 @@ public sealed class BfsMapper
         // walker never routes through the portal and loops; from the overworld,
         // where the only way up is the portal, the fallback pass takes it and the
         // walker re-plans from wherever the cast drops it.
-        return FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: false)
-            ?? FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: true);
+        return FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: false, ignoreAvoids)
+            ?? FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: true, ignoreAvoids);
     }
 
     private IReadOnlyList<Direction>? FindPathCore(
@@ -188,7 +194,8 @@ public sealed class BfsMapper
         IRoomFilter? filter,
         bool ignoreExitGates,
         bool refuseTeleports,
-        bool allowGateway)
+        bool allowGateway,
+        bool ignoreAvoids = false)
     {
         // Per-node parent + direction-from-parent, replayed on hit.
         var parent = new Dictionary<RoomKey, (RoomKey ParentKey, Direction Step)>();
@@ -244,8 +251,10 @@ public sealed class BfsMapper
 
                 // Avoid filter applies to intermediates AND to the
                 // destination itself — walking *into* an avoided room
-                // is the thing the user wants to forbid.
-                if (filter is not null && filter.IsAvoided(next)) continue;
+                // is the thing the user wants to forbid. Lifted only when the
+                // caller explicitly opts to route through avoids (the picker's
+                // "route through avoided rooms" offer).
+                if (!ignoreAvoids && filter is not null && filter.IsAvoided(next)) continue;
 
                 // Movement restriction on the exit itself (Form-A level
                 // gate) — non-traversable when the player doesn't meet
@@ -443,7 +452,8 @@ public sealed class BfsMapper
         RoomKey destination,
         IRoomFilter? filter,
         bool ignoreExitGates,
-        bool refuseTeleports)
+        bool refuseTeleports,
+        bool ignoreAvoids = false)
     {
         var best = new Dictionary<RoomKey, (int Traps, int Hops)>();
         var parent = new Dictionary<RoomKey, (RoomKey ParentKey, Direction Step)>();
@@ -473,7 +483,7 @@ public sealed class BfsMapper
                 if (exit.Hint == RoomExitHint.MultiActionHidden
                     && exit.MultiAction is not { IsSatisfiable: true }) continue;
                 if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
-                if (filter is not null && filter.IsAvoided(next)) continue;
+                if (!ignoreAvoids && filter is not null && filter.IsAvoided(next)) continue;
                 if (!ignoreExitGates && filter is not null && filter.IsExitBlocked(exit)) continue;
                 if (_graph.GetRoom(next) is null) continue;
 

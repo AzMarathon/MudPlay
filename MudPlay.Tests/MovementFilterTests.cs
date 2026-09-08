@@ -349,20 +349,53 @@ public sealed class MovementFilterTests
         new(new RoomKey(1, 2), RoomExitHint.None, RawHint: null,
             ClassGate: classNumber);
 
+    private static RoomExit ClassGatedTeleport(int classNumber) =>
+        new(new RoomKey(1, 2), RoomExitHint.Teleport, RawHint: null,
+            ClassGate: classNumber);
+
     [Fact]
-    public void IsExitBlocked_ClassGate_UnknownClass_DoesNotBlock()
+    public void IsExitBlocked_ClassGate_UnknownClass_DoesNotBlockPlainExit()
     {
         (_, MovementFilter filter) = NewPair();
         filter.ClassNumberProvider = () => null;   // no stat screen parsed yet
+        // A class-gated CARDINAL stays fail-open on unknown class (walk up, halt on
+        // the game's refusal), same as a level gate.
         Assert.False(filter.IsExitBlocked(ClassGatedExit(13)));
     }
 
     [Fact]
-    public void IsExitBlocked_ClassGate_NoProvider_DoesNotBlock()
+    public void IsExitBlocked_ClassGate_NoProvider_DoesNotBlockPlainExit()
     {
         (_, MovementFilter filter) = NewPair();
         // ClassNumberProvider unset (AppServices wires it; bare filter has none).
         Assert.False(filter.IsExitBlocked(ClassGatedExit(13)));
+    }
+
+    [Fact]
+    public void IsExitBlocked_ClassGatedTeleport_UnknownClass_Blocks()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.ClassNumberProvider = () => null;   // stat screen not parsed yet
+        // A class-gated TELEPORT is a discrete shortcut the router offers — don't
+        // route through it on an unknown class (report stock-20260908-103628: a
+        // bard-only barmaid transport surfaced to a not-yet-identified warrior).
+        Assert.True(filter.IsExitBlocked(ClassGatedTeleport(9)));
+    }
+
+    [Fact]
+    public void IsExitBlocked_ClassGatedTeleport_MatchingClass_Allows()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.ClassNumberProvider = () => 9;   // Bard at the bard-only transport
+        Assert.False(filter.IsExitBlocked(ClassGatedTeleport(9)));
+    }
+
+    [Fact]
+    public void IsExitBlocked_ClassGatedTeleport_WrongClass_Blocks()
+    {
+        (_, MovementFilter filter) = NewPair();
+        filter.ClassNumberProvider = () => 1;   // Warrior at the bard-only transport
+        Assert.True(filter.IsExitBlocked(ClassGatedTeleport(9)));
     }
 
     [Fact]

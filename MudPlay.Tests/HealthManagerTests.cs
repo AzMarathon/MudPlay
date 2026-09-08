@@ -36,6 +36,15 @@ public sealed class HealthManagerTests
         /// null to test the "not configured" branch.</summary>
         public string? HangupCommand { get; set; } = "=x";
 
+        /// <summary>What the wimpy-goto escape delegate returns — true = it
+        /// dispatched a jump (so the hangup is skipped), false = couldn't (falls
+        /// back to hangup). Default false.</summary>
+        public bool WimpyFireResult { get; set; }
+
+        /// <summary>The location the wimpy-goto delegate was last invoked with,
+        /// or null if never called this run.</summary>
+        public string? WimpyFiredWith { get; private set; }
+
         /// <summary>When true, HealthManager's rest-out branch skips —
         /// mirrors CombatStateTracker.HasEngageableHostiles in app code.
         /// Defaults false (room clear) so existing tests don't need to
@@ -124,6 +133,7 @@ public sealed class HealthManagerTests
                 now: () => Clock);
             Health.SetWireSender(b => Sent.Add(b));
             Health.SetHangupDisconnect(() => HangupDisconnectCount++);
+            Health.SetWimpyGoto(name => { WimpyFiredWith = name; return WimpyFireResult; });
             Health.SetShadowRest(
                 shadowRestClass: () => ShadowRestClass,
                 isStealthed: () => Stealthed,
@@ -1828,6 +1838,100 @@ public sealed class HealthManagerTests
 
         Assert.DoesNotContain("=x", h.SentLines);
         Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
+    [Fact]
+    public void WimpyGoto_Enabled_AndFires_SkipsHangup()
+    {
+        // "Sys goto wimpy instead of hanging": the emergency escape jumps instead of
+        // dropping the carrier. The wimpy delegate fires (returns true) → no exit
+        // command, no socket close, and it was asked for the configured location.
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "lostcity",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+
+        h.SetPrompt(hp: 5, maxHp: 200);   // below 5% hang threshold with a hostile
+
+        Assert.Equal("lostcity", h.WimpyFiredWith);
+        Assert.DoesNotContain("=x", h.SentLines);   // no hangup exit command
+        Assert.Equal(0, h.HangupDisconnectCount);   // carrier not closed
+    }
+
+    [Fact]
+    public void WimpyGoto_Enabled_ButCantFire_FallsBackToHangup()
+    {
+        // Power off on this BBS / location gone → the delegate returns false, so the
+        // normal hangup runs instead (a mis-set escape never strands a low-HP char).
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "lostcity",
+        };
+        using Harness h = new(s) { WimpyFireResult = false };
+
+        h.SetPrompt(hp: 5, maxHp: 200);
+
+        Assert.Equal("lostcity", h.WimpyFiredWith);   // it tried
+        Assert.Contains("=x", h.SentLines);           // then hung up
+        Assert.Equal(1, h.HangupDisconnectCount);
+    }
+
+    [Fact]
+    public void WimpyGoto_NoLocationSet_DoesNotAttempt_AndHangsUp()
+    {
+        // Opted in but no location chosen — nothing to jump to, so the delegate is
+        // never called and the normal hangup fires.
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = string.Empty,
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+
+        h.SetPrompt(hp: 5, maxHp: 200);
+
+        Assert.Null(h.WimpyFiredWith);       // never attempted
+        Assert.Contains("=x", h.SentLines);  // hung up as normal
+    }
+
+    [Fact]
+    public void WimpyGoto_MortallyWounded_StillFires_NoHangup()
+    {
+        // `sys` commands aren't gated by the mortally-wounded state (confirmed
+        // mechanic), so the wimpy escape fires even below 0 HP — the jump is sent on
+        // a gate-piercing wire. No fallback hangup when it dispatches.
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "lostcity",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+
+        h.SetPrompt(hp: -2, maxHp: 200);   // below 0 — mortally wounded, still in-window
+
+        Assert.Equal("lostcity", h.WimpyFiredWith);   // fired despite being dropped
+        Assert.DoesNotContain("=x", h.SentLines);      // no hangup
+        Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
+    [Fact]
+    public void WimpyGoto_Disabled_HangsUpNormally()
+    {
+        // Feature off → the delegate is never consulted; the hangup fires as before.
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = false,
+            SysGotoWimpyLocation = "lostcity",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+
+        h.SetPrompt(hp: 5, maxHp: 200);
+
+        Assert.Null(h.WimpyFiredWith);
+        Assert.Contains("=x", h.SentLines);
     }
 
     [Fact]

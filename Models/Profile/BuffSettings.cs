@@ -46,8 +46,15 @@ public sealed class BuffSlot
     // members for a single-target spell.
     public bool CastOnSelf { get; set; }
 
-    // Whole-party slots (Targets 10 / 13): the all-on / all-off toggle.
+    // Whole-party slots (Targets 10 / 13): the all-on / all-off toggle for casting
+    // it party-wide while in a party.
     public bool WholePartyOn { get; set; } = true;
+
+    // Whole-party slots: also cast it while solo. A whole-party cast still lands on
+    // a lone character (a party of one — see GAME_MECHANICS.md), so when set the
+    // slot fires solo under the self-bless timing gates. Defaults on to preserve the
+    // solo-casts behaviour; untick to make a whole-party buff party-only.
+    public bool CastSolo { get; set; } = true;
 
     // Single-target slots (Targets 2): bless every in-party member, auto-adapting
     // to whatever party you're in. When false, only Targets are blessed.

@@ -205,6 +205,14 @@ public sealed class CharacterProfile
     // Navigation goto-button dropdown. null or empty = no history yet.
     public List<string>? GotoHistory { get; set; }
 
+    // Per-table column-visibility choices in the Game Data Browser, keyed by the
+    // table's Title (e.g. "Monsters"). Value = the ordered list of column keys the
+    // user wants shown for that table. A missing table entry = its built-in default
+    // columns. Lets each character tailor which columns each table surfaces (e.g.
+    // opt a monster's per-element resist columns into the grid). Maintained by the
+    // shared table view-model's column picker; null = every table at its defaults.
+    public Dictionary<string, List<string>>? TableColumnLayouts { get; set; }
+
     // Last room the character was known to be standing in. Hydrated from
     // Game.Map.RoomTracker on a successful manual or auto locate; saved with the
     // rest of the profile and used as the initial Navigation map origin on the
@@ -317,6 +325,18 @@ public sealed class CharacterProfile
     // How the Buff Watchdog window arranges its config table vs the timer bars —
     // stacked (config top / bottom) or side-by-side (config left / right).
     public BuffWatchdogLayout BuffWatchdogLayout { get; set; } = BuffWatchdogLayout.ConfigTop;
+
+    // Whether the Buff Watchdog's config panel is collapsed (hidden, bars-only), toggled
+    // by the button on the timer-bar side. Sticky per character so the window reopens the
+    // way it was left.
+    public bool BuffWatchdogConfigCollapsed { get; set; }
+
+    // Where the user dragged the Buff Watchdog's config/bars splitter — the config pane's
+    // fixed extent in DIPs, plus whether it was a vertical (config top/bottom → a height)
+    // or horizontal (config left/right → a width) split, so a persisted height isn't
+    // applied as a width after a layout change. 0 = never dragged (use the default).
+    public double BuffWatchdogConfigExtent { get; set; }
+    public bool BuffWatchdogConfigExtentVertical { get; set; }
 
     // Given name of the party leader we were following, remembered so a
     // follower can auto-rejoin after an unexpected drop. Written through by

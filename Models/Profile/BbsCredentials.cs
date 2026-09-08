@@ -33,9 +33,11 @@ public sealed class BbsCredentials
     // is an independent capability the client only exercises when its box is
     // checked (the underlying `sys …` command is refused / meaningless without
     // real sysop access on the board). Per-character per-BBS, since different
-    // characters on the same BBS can have different powers. NONE of these relate
-    // to `@goto` — that remote command is gated solely by the per-player
-    // PlayerRemoteControls.MovePlayer permission.
+    // characters on the same BBS can have different powers. Note `sys goto` below
+    // is the SYSOP self-teleport game command (gated by SysopGoto here); it is a
+    // different thing from the party `@goto` remote walk command, which is gated
+    // solely by the per-player PlayerRemoteControls.MovePlayer permission — the two
+    // never share gating.
 
     // `sys map` — the client may request the game's own text area map to help
     // locate itself. (Reading the map to recover position is a later addition;
@@ -49,6 +51,22 @@ public sealed class BbsCredentials
     // `sys god <name> add life` — on the character's own death, auto-recover the
     // life just spent.
     public bool SysopGodLives { get; set; }
+
+    // `sys goto <name>` — the client may jump to a curated location by its board
+    // keyword. Independently granted (a board can give this without the others).
+    // Gates both the SysopGotos table below and every surface that fires it.
+    public bool SysopGoto { get; set; }
+
+    // The user's curated goto locations for this BBS. Each row's Name is sent
+    // verbatim after `sys goto`; the Map/Room is where the jump LANDS (used to
+    // re-anchor position, and — in a later PR — to route through the jump as a
+    // shortcut). Per-character per-BBS, like the powers above; no SettingsResolver
+    // tier (the sysop powers deliberately bypass the 4-tier hierarchy). Seeded with
+    // the standard starter locations so the table isn't empty on first use — an old
+    // profile whose JSON lacks the field keeps this default; a user who clears every
+    // row saves an explicit empty list, which deserializes back to empty (their edit
+    // is respected, not re-seeded).
+    public List<SysopGotoLocation> SysopGotos { get; set; } = SysopGotoLocation.DefaultStarterSet();
 
     // Legacy one-way migration. Releases through 3.50.x persisted a single
     // combined "HasSysopPowers" flag (dead until it was wired to sysop-status

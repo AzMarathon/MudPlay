@@ -102,6 +102,36 @@ public sealed class GreetTeleportResolverTests : IDisposable
     }
 
     [Fact]
+    public void Resolve_ClassBranchTable_BindsGateToTheTeleportsOwnBranch()
+    {
+        // The real barmaid `adventure` block (v1.11p TBInfo #4364, report
+        // stock-20260907-175035): a class-branch TABLE — one `class N:<effects>`
+        // line per class, and only the class-9 (Bard) line teleports; every other
+        // class just prints text. The pointer hops through an empty block (MDB
+        // encodes empty as a lone NUL, normalised to null → LinkTo is followed).
+        // The gate must bind to class 9 (the teleport's own branch), NOT class 15
+        // (the last `class N` in the block) — the earlier accumulate-last-class bug
+        // mis-gated it to class 15, so a class-15 Mystic saw a bard-only transport.
+        const string tbinfo = """
+            [
+              { "Number": 344, "LinkTo": 0, "Action": "adventure:4363\n", "Called From": "Monster #248" },
+              { "Number": 4363, "LinkTo": 4364, "Action": "\u0000", "Called From": "" },
+              { "Number": 4364, "LinkTo": 0,
+                "Action": "class 1:text 4361\nclass 2:text 4361\nclass 3:text 4361\nclass 4:text 4361\nclass 5:text 4361\nclass 6:text 4361\nclass 7:text 4361\nclass 8:text 4361\nclass 9:testskill charm 40 4385:message 3376:teleport 847 1:text 4386\nclass 10:text 4361\nclass 11:text 4361\nclass 12:text 4361\nclass 13:text 4361\nclass 14:text 4361\nclass 15:text 4361\n",
+                "Called From": "" }
+            ]
+            """;
+        TBInfoStore store = NewStore(tbinfo);
+
+        var teleports = GreetTeleportResolver.Resolve(store, 344, "barmaid").ToList();
+        Assert.Single(teleports);
+        Assert.Equal("ask barmaid adventure", teleports[0].Command);
+        Assert.Equal(new RoomKey(1, 847), teleports[0].Destination);
+        Assert.Equal(9, teleports[0].RequiredClass);   // bound to class 9, not the trailing class 15
+        Assert.Equal(0, teleports[0].MinLevel);
+    }
+
+    [Fact]
     public void Resolve_GatedTeleport_IsSkipped()
     {
         // A greet whose ONLY teleport topic is alignment/ability gated yields

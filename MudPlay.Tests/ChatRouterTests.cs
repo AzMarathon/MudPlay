@@ -93,6 +93,29 @@ public sealed class ChatRouterTests
     }
 
     [Fact]
+    public void TelepathOut_EngineOutboundBurst_MultipleSendsPairFifoWithConfirmations()
+    {
+        var (router, chat, entries) = Setup();
+        // A @roomba reply answers with one telepath per item — all four sends
+        // fire before any confirmation arrives, then the confirmations arrive
+        // as their own burst. Each must still get its own message, in order.
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("/Farmer greatsword x5\r"));
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("/Farmer sash x2\r"));
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("/Farmer vial x33\r"));
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("/Farmer robes x1\r"));
+        router.Dispatch(Line("--- Telepath sent to Farmer ---"));
+        router.Dispatch(Line("--- Telepath sent to Farmer ---"));
+        router.Dispatch(Line("--- Telepath sent to Farmer ---"));
+        router.Dispatch(Line("--- Telepath sent to Farmer ---"));
+
+        Assert.Equal(4, entries.Count);
+        Assert.Equal("greatsword x5", entries[0].Message);
+        Assert.Equal("sash x2",       entries[1].Message);
+        Assert.Equal("vial x33",      entries[2].Message);
+        Assert.Equal("robes x1",      entries[3].Message);
+    }
+
+    [Fact]
     public void ObserveOutbound_NonTelepathBytes_LeaveMessageEmpty()
     {
         var (router, chat, entries) = Setup();

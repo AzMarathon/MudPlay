@@ -38,7 +38,7 @@ public sealed class PlayerLookManagerTests
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log);
             RoomEntry = new RoomEntryWatcher(Router, Classifier, Log);
-            Look = new PlayerLookManager(Router, RoomEntry, Party, () => SelfName);
+            Look = new PlayerLookManager(Router, RoomEntry, Players, Party, () => SelfName);
             Look.SetWireSender(bytes => Sent.Add(Encoding.Latin1.GetString(bytes)));
         }
 
@@ -96,8 +96,14 @@ public sealed class PlayerLookManagerTests
         Assert.Empty(h.Sent);
     }
 
+    // THIS ASSERTION IS INVERTED FROM WHAT IT WAS, on purpose. It used to
+    // require a look back on EVERY sighting -- "no dedup, a look-at is a
+    // deliberate social poke and mirroring it each time is the point". True of
+    // a person, false of two clients: with the box ticked on both sides the
+    // mirror never terminates, which is what was reported. The look-back now
+    // shares the once-per-local-day rule with the arrival path.
     [Fact]
-    public void LookBack_EachSighting_Fires_NoDedup()
+    public void LookBack_EachSighting_LooksOncePerDay()
     {
         using Harness h = new();
         h.Look.LookBackWhenLookedAt = true;
@@ -105,7 +111,7 @@ public sealed class PlayerLookManagerTests
         h.Feed("Bob is looking at you.");
         h.Feed("Bob is looking at you.");
 
-        Assert.Equal(new[] { "look Bob\r", "look Bob\r" }, h.Sent);
+        Assert.Equal(new[] { "look Bob\r" }, h.Sent);
     }
 
     [Fact]
@@ -128,6 +134,75 @@ public sealed class PlayerLookManagerTests
         h.Look.TryLookBack("Bob");
 
         Assert.Equal(new[] { "look Bob\r" }, h.Sent);
+    }
+
+    // ----- Once per local day -----
+
+    [Fact]
+    public void LookBack_TwiceInOneDay_LooksOnce()
+    {
+        using Harness h = new();
+        h.AddPlayer("Bob");
+        h.Look.LookBackWhenLookedAt = true;
+
+        h.Look.TryLookBack("Bob");
+        h.Look.TryLookBack("Bob");
+        h.Look.TryLookBack("Bob");
+
+        Assert.Equal(new[] { "look Bob\r" }, h.Sent);
+    }
+
+    [Fact]
+    public void LookBack_NextDay_LooksAgain()
+    {
+        using Harness h = new();
+        h.AddPlayer("Bob");
+        h.Look.LookBackWhenLookedAt = true;
+        DateTime day1 = new(2026, 5, 30, 12, 0, 0, DateTimeKind.Utc);
+        h.Look.NowUtcProvider = () => day1;
+        h.Look.TryLookBack("Bob");
+
+        h.Look.NowUtcProvider = () => day1.AddDays(1);
+        h.Look.TryLookBack("Bob");
+
+        Assert.Equal(new[] { "look Bob\r", "look Bob\r" }, h.Sent);
+    }
+
+    // THE LOOP THIS EXISTS TO STOP. Two clients with the look-back box ticked
+    // mirror each other forever: A looks at B, the server tells B, B looks
+    // back, the server tells A, A looks back... The arrival toggle only lights
+    // the fuse, so the throttle has to cover BOTH paths or the loop survives on
+    // the look-back alone. Reported from a live pair looking at each other
+    // non-stop.
+    [Fact]
+    public void ArrivalThenLookBack_SamePlayerSameDay_LooksOnce()
+    {
+        using Harness h = new();
+        h.AddPlayer("Bob");
+        h.Look.LookAtPlayersOnArrival = true;
+        h.Look.LookBackWhenLookedAt = true;
+
+        h.Feed("Bob walks into the room from the north.");   // we look first
+        h.Look.TryLookBack("Bob");                           // Bob looks back
+        h.Look.TryLookBack("Bob");                           // ...and again
+        h.Feed("Bob walks into the room from the north.");   // and re-enters
+
+        Assert.Equal(new[] { "look Bob\r" }, h.Sent);
+    }
+
+    [Fact]
+    public void LookBack_DifferentPlayers_EachGetOne()
+    {
+        using Harness h = new();
+        h.AddPlayer("Bob");
+        h.AddPlayer("Carol");
+        h.Look.LookBackWhenLookedAt = true;
+
+        h.Look.TryLookBack("Bob");
+        h.Look.TryLookBack("Carol");
+        h.Look.TryLookBack("Bob");
+
+        Assert.Equal(new[] { "look Bob\r", "look Carol\r" }, h.Sent);
     }
 
     // ----- Arrival -----

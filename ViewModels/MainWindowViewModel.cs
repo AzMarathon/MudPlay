@@ -744,6 +744,17 @@ public partial class MainWindowViewModel : ObservableObject
         // a profile re-mutated (BBS rename), or a fresh profile loaded.
         RebuildGameDataSetsMenu();
         AppServices.Current.GameData.ActiveSetChanged += _ => RebuildGameDataSetsMenu();
+        // A game-data table whose on-disk JSON can't be parsed (a corrupt / truncated
+        // file from a bad or older MDB import) is dropped instead of crashing the
+        // lookup (see GameDataCache). Surface it loudly on the terminal — a silently
+        // missing table leaves the engines short of data with no obvious symptom.
+        // POST it: the lookup can fire from inside the emulator's message pump, and
+        // WriteTerminalStatus re-feeds the emulator — a synchronous call would re-enter
+        // Emulator.Feed and crash (same reason as the combat-profile echo below).
+        AppServices.Current.GameData.TableParseFailed += table =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
+                $"[GAME DATA: table '{table}' is corrupt and was not loaded — re-import the set; "
+                + "some features will be missing data]", TerminalStatusKind.Error));
         AppServices.Current.Profile.BbsPinApplied      += _ => RebuildGameDataSetsMenu();
         AppServices.Current.Profile.ProfileMutated     += _ => RebuildGameDataSetsMenu();
         AppServices.Current.Profile.ProfileLoaded      += _ => RebuildGameDataSetsMenu();
@@ -762,6 +773,14 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildRecentDestinationsMenu();
         AppServices.Current.GotoHistory.Changed += RebuildRecentDestinationsMenu;
 
+        // Sys Goto flyout, rebuilt on profile load (character/BBS swap) and on any
+        // profile mutation (a credentials edit fires ProfileMutated) so toggling the
+        // power or editing the table refreshes the rows. The catalogue capability gate
+        // hides the whole flyout when the power is off.
+        RebuildSysopGotoMenu();
+        AppServices.Current.Profile.ProfileLoaded += _ => RebuildSysopGotoMenu();
+        AppServices.Current.Profile.ProfileMutated += _ => RebuildSysopGotoMenu();
+
         // Casting spell profiles (Settings → Combat): the Action → Profiles fly-out
         // and the toolbar profile-menu button share one item list, rebuilt on any
         // profile change; every swap echoes its report to the terminal.
@@ -774,6 +793,11 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.CombatProfiles.Announce =
             report => Avalonia.Threading.Dispatcher.UIThread.Post(
                 () => WriteTerminalStatus($"[{report}]", TerminalStatusKind.Notice));
+        // Generic terminal-notice sink (e.g. the Buff Watchdog "Unlearned spells"
+        // dump): text arrives already bracketed, so pass it through verbatim.
+        AppServices.Current.SetTerminalNotice(
+            text => Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => WriteTerminalStatus(text, TerminalStatusKind.Notice)));
         RebuildCombatProfilesMenu();
         AppServices.Current.CombatProfiles.Changed += RebuildCombatProfilesMenu;
 
@@ -849,6 +873,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Same pre-suppression feed drives the recovery gate's tier-3 look-sweep
         // — it reads peeked neighbours the tracker would otherwise drop.
         _roomDisplayParser.RoomParsed += AppServices.Current.Recovery.OnRoomObserved;
+        // And confirms a fired `sys goto` landing: when the shown room name matches
+        // the expected landing, SysopGoto commits the position (a from-anywhere
+        // teleport has no graph edge for the tracker to follow otherwise).
+        _roomDisplayParser.RoomParsed += obs => AppServices.Current.SysopGoto.OnRoomDisplayed(obs.Name);
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine);
@@ -905,6 +933,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Sysop room-status parser — reads the `sys st` block. Inert until an
         // outbound sysop status arms it.
         AppServices.Current.SysRoomStatus.AttachLineExtractor(Lines);
+        // Self bank-balance listing — parses the `bank` command's per-bank
+        // "On deposit: N copper farthings" blocks so the route picker can weigh a
+        // buy the purse can't cover against money on deposit.
+        AppServices.Current.BankBalance.AttachLineExtractor(Lines);
         // Inbound ailment chip-clear — PartyAilmentTracker watches server
         // lines for OUR cure spell landing on a party member (matched by the
         // cure spell's CasterMessage template) and clears that member's
@@ -1091,6 +1123,11 @@ public partial class MainWindowViewModel : ObservableObject
         // After the exit command goes out, close the carrier ourselves rather
         // than waiting on the server to notice — see RequestHangupDisconnect.
         AppServices.Current.Health.SetHangupDisconnect(RequestHangupDisconnect);
+        // The raw, gate-piercing wire for `sys goto` (SysopGotoManager). Sys commands
+        // are honoured at any HP — mortally-wounded included — so the jump (and the
+        // wimpy escape built on it) must survive the EngineSendGate hold, exactly like
+        // the emergency hangup above. Same un-wrapped SendUserInput.
+        AppServices.Current.SetRawWireSender(SendUserInput);
         // CastCoordinator's `c <spell> [target]` emits still respect the
         // suicide-password / trainer-menu lockouts (gate-wrapped), but ride
         // the raw send, NOT engineSend — engineSend funnels through
@@ -1318,6 +1355,20 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildToolbarItems();
         Toolbar.Layout.CollectionChanged += (_, _) => RebuildToolbarItems();
         PropertyChanged += SyncToolbarStateFlags;
+
+        // A --profile launch argument that didn't resolve (typo / ambiguous bare
+        // name) surfaces its reason on the terminal at startup — dismiss the splash
+        // so it's visible — instead of quietly coming up on a blank profile. Posted
+        // so it lands after the ctor unwinds and the window is showing.
+        if (StartupOptions.ProfileNotice is { } profileNotice)
+        {
+            StartupOptions.ProfileNotice = null;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (ShowSplash) ShowSplash = false;
+                WriteTerminalStatus($"[{profileNotice}]", TerminalStatusKind.Error);
+            });
+        }
     }
 
     // Enabler for view-handled toolbar buttons (no CommandName) — a command-less
@@ -2994,6 +3045,9 @@ public partial class MainWindowViewModel : ObservableObject
         // drives a programmatic SetLocated, so an always-on match would let any
         // line on our screen relocate the character.
         AppServices.Current.SysRoomStatus.ObserveOutbound(data);
+        // Unrecognized-line watcher — remember the command briefly so its server
+        // echo isn't staged as an unknown candidate line.
+        AppServices.Current.MessageCandidateWatcher.ObserveOutbound(data);
         var t = _telnet;
         if (t is not null) _ = FireSendAsync(t, data);
     }
@@ -3361,7 +3415,8 @@ public partial class MainWindowViewModel : ObservableObject
                 SendUserText,
                 Application.Current,
                 AppServices.Current.Resolver.Resolve<Models.Profile.TalkSettings>("Talk"),
-                AppServices.Current.Profile),
+                AppServices.Current.Profile,
+                AppServices.Current.Display),
         };
         window.Closed += (_, _) => _conversation = null;
         _conversation = window;
@@ -4135,6 +4190,41 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasWalkFlyouts));
     }
 
+    // The terminal right-click "Sys Gotos" flyout — the usable `sys goto` locations
+    // for the active BBS (empty when the power is off; the flyout is capability-gated
+    // out of the menu entirely then). Each row fires the jump on click, greyed (null
+    // command) when the character is below the row's Min level.
+    public ObservableCollection<FavoriteMenuItem> SysopGotoItems { get; } = new();
+
+    private void RebuildSysopGotoMenu()
+    {
+        var s = AppServices.Current;
+        SysopGotoItems.Clear();
+        int number = 0;
+        foreach (Models.Profile.SysopGotoLocation loc in s.SysopGoto.UsableNow)
+        {
+            string landing = s.RoomGraph.GetRoom(new Game.Map.RoomKey(loc.Map, loc.Room)) is { } r
+                ? r.Name
+                : $"{loc.Map}/{loc.Room}";
+            bool firable = s.SysopGoto.MeetsLevel(loc);
+            string label = firable
+                ? $"{loc.Name} — {landing}"
+                : $"{loc.Name} — {landing} (needs L{loc.MinLevel})";
+            Models.Profile.SysopGotoLocation target = loc;
+            SysopGotoItems.Add(new FavoriteMenuItem($"{++number})", label, GotoFavBrush,
+                firable ? new RelayCommand(() => FireSysopGoto(target)) : null));
+        }
+    }
+
+    // Fire a Sys Goto from a menu, surfacing any gate refusal to the terminal (the
+    // typed-command path writes its own; the menu path routes it here).
+    private void FireSysopGoto(Models.Profile.SysopGotoLocation loc)
+    {
+        if (!AppServices.Current.SysopGoto.TryFire(loc, out string refusal)
+            && !string.IsNullOrEmpty(refusal))
+            AppServices.Current.WriteTerminalNotice(refusal);
+    }
+
     // The last GOTO destinations (newest first, up to 10 — GotoHistoryStore caps
     // it), each walking there on click through the same route picker the Favorites
     // flyout uses. Kept in most-recent order (NOT sorted) so the top row is where
@@ -4259,12 +4349,17 @@ public partial class MainWindowViewModel : ObservableObject
         importer.OnStatusChanged += s => AppServices.Current.Log.Info("MDB", s);
         importer.OnError         += s => AppServices.Current.Log.Error("MDB", s);
 
+        // Importing after launch runs on the splash screen (no session yet), which
+        // overlays the terminal and hides the import's status / error lines. Dismiss
+        // it so the import output is actually visible on the terminal.
+        if (ShowSplash) ShowSplash = false;
+
         WriteTerminalStatus("[MDB IMPORT STARTED]", TerminalStatusKind.Notice);
         MdbImportResult result = await importer.ImportAsync(path);
-        AppServices.Current.Log.Info("MDB", result.Message);
 
         if (result.Success)
         {
+            AppServices.Current.Log.Info("MDB", result.Message);
             WriteTerminalStatus(BuildMdbCompleteStatus(result), TerminalStatusKindFor(result));
             // Seed base navigation loops + GOTO favourites for the realm before we
             // switch to the set, so the ensuing set-switch loads the seeded files.
@@ -4274,6 +4369,9 @@ public partial class MainWindowViewModel : ObservableObject
         }
         else
         {
+            // An empty / malformed MDB no longer swaps to a broken set — it fails here
+            // with the reason (and the reader's catalog scan) in the Program Log.
+            AppServices.Current.Log.Warn("MDB", result.Message);
             WriteTerminalStatus("[MDB IMPORT FAILED — see Program Log]", TerminalStatusKind.Error);
         }
     }
@@ -4281,8 +4379,10 @@ public partial class MainWindowViewModel : ObservableObject
     // Compose the terminal-status line for a successful MDB import.
     // Carries entry + table totals plus a format-tag derived from the
     // MajorMUD MDB shape: 9 user tables = old realm format, 10 = new
-    // format. Anything else (or any per-table skips) flips the line red so
-    // the user notices the structural drift.
+    // format. FEWER than 9 (a truncated MDB) flips the line red; MORE than
+    // 10 (a newer export with extra tables) is fine — the extras are
+    // imported but unused. A zero-table MDB never reaches here: ImportAsync
+    // now fails such an import outright rather than reporting success.
     private static string BuildMdbCompleteStatus(MdbImportResult r)
     {
         string entries = $"{r.RowsImported:N0} entries";
@@ -4293,21 +4393,23 @@ public partial class MainWindowViewModel : ObservableObject
 
         string formatTag = r.TablesFound switch
         {
-            9  => " (old format)",
-            10 => " (new format)",
-            _  => " — UNEXPECTED TABLE COUNT",   // < 9 or > 10
+            9    => " (old format)",
+            10   => " (new format)",
+            > 10 => $" ({r.TablesFound} tables)",   // extra tables: imported but unused, not an error
+            _    => " — UNEXPECTED TABLE COUNT",    // 1..8: fewer than a MajorMUD MDB should carry
         };
 
-        // The "see Program Log" hint fires whenever the user has reason
-        // to dig in — skipped tables OR a wrong-shape MDB.
-        bool needsLogPointer = r.TablesSkipped > 0 || r.TablesFound < 9 || r.TablesFound > 10;
+        // The "see Program Log" hint fires whenever the user has reason to dig
+        // in — skipped tables OR a suspiciously small MDB (fewer game tables
+        // than any MajorMUD export ships).
+        bool needsLogPointer = r.TablesSkipped > 0 || r.TablesFound < 9;
         string logHint = needsLogPointer ? " — see Program Log" : string.Empty;
 
         return $"[MDB IMPORT COMPLETE: {r.FolderName} — {tablesPart}{formatTag}, {entries}{logHint}]";
     }
 
     private static TerminalStatusKind TerminalStatusKindFor(MdbImportResult r)
-        => (r.TablesSkipped > 0 || r.TablesFound < 9 || r.TablesFound > 10)
+        => (r.TablesSkipped > 0 || r.TablesFound < 9)
            ? TerminalStatusKind.Error
            : TerminalStatusKind.Notice;
 

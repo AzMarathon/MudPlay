@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using MudPlay.Models.Profile;
@@ -24,6 +25,16 @@ public partial class BuffWatchdogWindow : Window
 
     private BuffWatchdogViewModel? _vm;
     private INotifyPropertyChanged? _buffsNotifier;
+
+    // Last-applied zone state, so a reflow only happens when it genuinely needs to and
+    // preserves what the user dragged. _configExtent is the config pane's fixed size (a
+    // row Height when vertical, a column Width when not); _configExtentVertical is the
+    // orientation it's for, so a persisted height isn't reused as a width after a layout
+    // change. Seeded from the profile on open, saved back on close (per character).
+    private bool _appliedShowConfig;
+    private bool _appliedVertical;
+    private double _configExtent;
+    private bool _configExtentVertical;
 
     public BuffWatchdogWindow()
     {
@@ -51,20 +62,58 @@ public partial class BuffWatchdogWindow : Window
                 _buffsNotifier = buffs;
                 buffs.PropertyChanged += OnBuffsPropertyChanged;
             }
+            // Seed the splitter position from the character's saved value so the window
+            // reopens at the same division the user last dragged it to.
+            _configExtent = vm.ConfigExtent;
+            _configExtentVertical = vm.ConfigExtentVertical;
         }
         ApplyZoneLayout();
     }
 
+    // The config zone shows only when the class HAS configurable buffs (ShowPanel) and
+    // the user hasn't collapsed it with the timer-bar-side toggle (ConfigCollapsed).
+    private bool EffectiveShowConfig =>
+        (_vm?.Buffs?.ShowPanel ?? false) && !(_vm?.ConfigCollapsed ?? false);
+
+    // The splitter's fixed thickness (kept in step with ApplyZoneLayout's 4px splitter).
+    private const double SplitterThickness = 4;
+
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(BuffWatchdogViewModel.Layout)) ApplyZoneLayout();
+        if (e.PropertyName == nameof(BuffWatchdogViewModel.Layout))
+            ApplyZoneLayout();
+        else if (e.PropertyName == nameof(BuffWatchdogViewModel.ConfigCollapsed))
+            ToggleConfigWithResize();
+    }
+
+    // Collapsing / expanding the config panel also resizes the WINDOW along the split
+    // axis, so the panel's space is handed back on collapse and reclaimed on expand —
+    // the divider edge lands where the separator was, no manual resize needed. Keeps
+    // the top-left corner fixed (the far edge moves), which is exactly right for the
+    // config-on-right / config-on-bottom layouts and harmless for the others.
+    private void ToggleConfigWithResize()
+    {
+        bool collapsing = !EffectiveShowConfig;
+        ApplyZoneLayout();   // captures the config extent on collapse, restores it on expand
+        bool vertical = _vm?.Layout is BuffWatchdogLayout.ConfigTop or BuffWatchdogLayout.ConfigBottom;
+        double extent = _configExtent > 0 ? _configExtent : (vertical ? 180 : 300);
+        double delta = extent + SplitterThickness;
+        if (vertical)
+            Height = collapsing ? System.Math.Max(MinHeight, Height - delta) : Height + delta;
+        else
+            Width = collapsing ? System.Math.Max(MinWidth, Width - delta) : Width + delta;
     }
 
     private void OnBuffsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // ShowPanel toggles the config zone (a non-caster has no configurable buffs);
-        // re-run so the splitter + zone sizing collapse / restore to match.
-        if (e.PropertyName == nameof(ViewModels.BuffPanelViewModel.ShowPanel)) ApplyZoneLayout();
+        // reflow so the splitter + zone sizing collapse / restore to match — but ONLY
+        // when the effective visibility actually flips. It re-raises on every add /
+        // remove / toggle even when unchanged, and a reflow rebuilds the zone grid, which
+        // would snap the splitter back to its default division and undo the user's drag.
+        if (e.PropertyName == nameof(ViewModels.BuffPanelViewModel.ShowPanel)
+            && EffectiveShowConfig != _appliedShowConfig)
+            ApplyZoneLayout();
     }
 
     // Rebuild the zone grid: config table + timer bars split by a draggable
@@ -75,14 +124,38 @@ public partial class BuffWatchdogWindow : Window
         if (_zonesGrid is null || _configZone is null || _zoneSplitter is null || _barsZone is null)
             return;
 
+        // Capture the size the user dragged the config pane to before we clear the grid,
+        // so a legitimate reflow (panel show/hide, layout orientation change) re-applies
+        // it instead of snapping back to the default division. Only meaningful when the
+        // pane was showing in the SAME orientation — a height can't carry to a width.
+        if (_appliedShowConfig)
+        {
+            double cur = CurrentConfigExtent();
+            if (cur > 0) { _configExtent = cur; _configExtentVertical = _appliedVertical; }
+        }
+
         _zonesGrid.RowDefinitions.Clear();
         _zonesGrid.ColumnDefinitions.Clear();
 
-        bool showConfig = _vm?.Buffs?.ShowPanel ?? false;
+        // Config shows only when the class has buffs to configure AND the user hasn't
+        // collapsed the panel with the bar-side toggle. Own the zone + splitter visibility
+        // here (no XAML IsVisible binding) so the two can't fight this reflow.
+        bool showConfig = EffectiveShowConfig;
+        _appliedShowConfig = showConfig;
+        _configZone.IsVisible = showConfig;
         if (!showConfig)
         {
             _zoneSplitter.IsVisible = false;
             _zonesGrid.RowDefinitions.Add(new RowDefinition(GridLength.Star));
+            // Reset EVERY child to the single cell (0,0). The config zone and splitter
+            // keep whatever row/column they were assigned in the expanded layout (1, 2,
+            // …); collapsing to one cell leaves those indices pointing past the grid, and
+            // Avalonia's Grid.MeasureCellsGroup then indexes its definition arrays out of
+            // range and crashes — even though those two are IsVisible=false.
+            Grid.SetRow(_configZone, 0);
+            Grid.SetColumn(_configZone, 0);
+            Grid.SetRow(_zoneSplitter, 0);
+            Grid.SetColumn(_zoneSplitter, 0);
             Grid.SetRow(_barsZone, 0);
             Grid.SetColumn(_barsZone, 0);
             return;
@@ -91,6 +164,12 @@ public partial class BuffWatchdogWindow : Window
         BuffWatchdogLayout layout = _vm?.Layout ?? BuffWatchdogLayout.ConfigTop;
         bool vertical = layout is BuffWatchdogLayout.ConfigTop or BuffWatchdogLayout.ConfigBottom;
         bool configFirst = layout is BuffWatchdogLayout.ConfigTop or BuffWatchdogLayout.ConfigLeft;
+
+        // A preserved extent (dragged this session or restored from the profile) only
+        // applies within the same orientation; an orientation flip falls back to the
+        // default starting division for that axis.
+        double keptExtent = _configExtentVertical == vertical && _configExtent > 0 ? _configExtent : 0;
+        _appliedVertical = vertical;
 
         _zoneSplitter.IsVisible = true;
 
@@ -101,7 +180,7 @@ public partial class BuffWatchdogWindow : Window
         // collapsing. Defaults below are just the starting division.
         if (vertical)
         {
-            var configDef = new RowDefinition(new GridLength(180)) { MinHeight = 70 };
+            var configDef = new RowDefinition(new GridLength(keptExtent > 0 ? keptExtent : 180)) { MinHeight = 70 };
             var barsDef = new RowDefinition(GridLength.Star) { MinHeight = 70 };
             var splitDef = new RowDefinition(GridLength.Auto);
             if (configFirst)
@@ -134,7 +213,7 @@ public partial class BuffWatchdogWindow : Window
         }
         else
         {
-            var configDef = new ColumnDefinition(new GridLength(300)) { MinWidth = 140 };
+            var configDef = new ColumnDefinition(new GridLength(keptExtent > 0 ? keptExtent : 300)) { MinWidth = 140 };
             var barsDef = new ColumnDefinition(GridLength.Star) { MinWidth = 120 };
             var splitDef = new ColumnDefinition(GridLength.Auto);
             if (configFirst)
@@ -167,6 +246,30 @@ public partial class BuffWatchdogWindow : Window
         }
     }
 
+    // The config pane's current fixed extent (row height when vertical, column width
+    // when not), or 0 when the config zone isn't laid out right now. Read live so a
+    // splitter drag — which doesn't reflow the grid — is still captured (e.g. on close).
+    private double CurrentConfigExtent()
+    {
+        if (_zonesGrid is null || _configZone is null || !_appliedShowConfig) return 0;
+        if (_appliedVertical)
+        {
+            int r = Grid.GetRow(_configZone);
+            return r >= 0 && r < _zonesGrid.RowDefinitions.Count ? _zonesGrid.RowDefinitions[r].Height.Value : 0;
+        }
+        int c = Grid.GetColumn(_configZone);
+        return c >= 0 && c < _zonesGrid.ColumnDefinitions.Count ? _zonesGrid.ColumnDefinitions[c].Width.Value : 0;
+    }
+
+    // Double-click a buff row → open the same edit dialog the ✎ button opens
+    // (spell, recast, and — for a mana-regen roll spell like profane link — its
+    // reroll target), without needing to hit the small button precisely.
+    private void OnBuffRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is Control { DataContext: BuffSlotRowViewModel row } && _vm?.Buffs is { } buffs)
+            buffs.EditBuffCommand.Execute(row);
+    }
+
     private void DetachVm()
     {
         if (_vm is not null) _vm.PropertyChanged -= OnVmPropertyChanged;
@@ -177,8 +280,16 @@ public partial class BuffWatchdogWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        // Persist the splitter position (a live drag doesn't reflow, so read it now).
+        // Collapsed → no live def, and _configExtent already holds the last-shown value.
+        if (_vm is { } vm)
+        {
+            double cur = CurrentConfigExtent();
+            if (cur > 0) { _configExtent = cur; _configExtentVertical = _appliedVertical; }
+            vm.SaveConfigExtent(_configExtent, _configExtentVertical);
+        }
         DetachVm();
-        if (DataContext is ViewModels.BuffWatchdogViewModel vm) vm.Dispose();
+        if (DataContext is ViewModels.BuffWatchdogViewModel dvm) dvm.Dispose();
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

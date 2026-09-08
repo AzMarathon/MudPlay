@@ -40,6 +40,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     {
         "Number",
         "Name",
+        "Relationship",  // our set Enemy/Neutral/Friend/… for this monster (4-tier overlay-resolved)
         "RegenTime",     // "Rgn" — respawn timer
         "EXP",           // "65000 (20x)" — base reward with its multiplier (see ComputeRowCells)
         "HP",
@@ -291,6 +292,9 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["NonLiving"]    = HasAbil(element, 109) ? "1" : null,
             ["CastsSpells"]  = HasMidSpell(element) ? "1" : null,
             ["HasLoot"]      = HasDrop(element) ? "1" : null,
+            // Our configured relationship with this monster — the same 4-tier overlay
+            // the combat engine reads, so the column shows exactly how the engine treats it.
+            ["Relationship"] = ResolveRelationshipLabel(element),
         };
         if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int Count, long SumMax, int MaxMax) lair)
             && lair.Count > 0)
@@ -300,6 +304,22 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             cells["BiggestLair"] = lair.MaxMax.ToString(Inv);
         }
         return cells;
+    }
+
+    // Our set relationship with this monster: the MonsterOverlay merged across all four
+    // tiers (Char → BBS → Global → realm seed) — the exact resolution OpenEditAsync and
+    // the combat engine use — so the column reflects how the runtime actually treats it.
+    // An un-tagged monster defaults to Enemy (MonsterEngagement's engage-by-default rule).
+    private string ResolveRelationshipLabel(JsonElement element)
+    {
+        string wcc = ReadInt(element, "Number").ToString(Inv);
+        MonsterOverlay seedDefaults =
+            (_overlaySeed is not null && int.TryParse(wcc, out int seedNum))
+                ? _overlaySeed.GetOverlay(seedNum)
+                : new MonsterOverlay();
+        MonsterOverlay effective =
+            _resolverRef?.ResolveGameData<MonsterOverlay>("Monsters", wcc, seedDefaults) ?? seedDefaults;
+        return (effective.Relationship ?? MonsterRelationship.Enemy).ToString();
     }
 
     // The "Exp/(Dmg+HP)" exp-per-effort metric — effective exp per (two rounds of the
