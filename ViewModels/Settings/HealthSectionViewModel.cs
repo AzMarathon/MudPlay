@@ -99,9 +99,30 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // Empty when the power is off. Rebuilt on load / profile mutate / set change.
     public ObservableCollection<string> WimpyGotoChoices { get; } = new();
 
-    // Whether the active BBS grants the Sysop goto power — gates the wimpy checkbox
-    // and picker. False at design time / before services exist.
-    public bool SysGotoAvailable => AppServices.CurrentOrNull?.SysopGoto.Enabled ?? false;
+    // Optional LIVE (unsaved) view of the BBS tab's sysop-goto state, supplied by
+    // SettingsWindowViewModel (which owns both sections). When wired, the wimpy gate
+    // + picker track the BBS tab's pending edits so ticking Sysop goto there enables
+    // this immediately, without a Save round-trip; when null (Health tab standalone)
+    // they fall back to the persisted per-BBS power.
+    private Func<bool>? _liveSysGotoEnabled;
+    private Func<IReadOnlyList<string>>? _liveSysGotoLocations;
+
+    // Whether the Sysop goto power is available — gates the wimpy checkbox and
+    // picker. Prefers the BBS tab's live pending flag when wired, else the persisted
+    // power. False at design time / before services exist.
+    public bool SysGotoAvailable =>
+        _liveSysGotoEnabled?.Invoke() ?? (AppServices.CurrentOrNull?.SysopGoto.Enabled ?? false);
+
+    // Bind the wimpy gate + picker to the BBS tab's live sysop-goto state. Call
+    // NotifyLiveSysGotoChanged whenever that state changes so this tab re-reads it.
+    public void BindLiveSysGoto(Func<bool> enabled, Func<IReadOnlyList<string>> locations)
+    {
+        _liveSysGotoEnabled = enabled;
+        _liveSysGotoLocations = locations;
+        RefreshWimpyGoto();
+    }
+
+    public void NotifyLiveSysGotoChanged() => RefreshWimpyGoto();
 
     public HealthSectionViewModel() : this(
         AppServices.Current.Profile,
@@ -181,9 +202,18 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     private void RefreshWimpyGoto()
     {
         WimpyGotoChoices.Clear();
-        if (AppServices.CurrentOrNull is { } svc)
+        // Prefer the BBS tab's LIVE locations when wired (so the picker fills the
+        // moment a row is added there), else the persisted set.
+        if (_liveSysGotoLocations is { } live)
+        {
+            foreach (string name in live())
+                if (!string.IsNullOrWhiteSpace(name)) WimpyGotoChoices.Add(name);
+        }
+        else if (AppServices.CurrentOrNull is { } svc)
+        {
             foreach (Models.Profile.SysopGotoLocation loc in svc.SysopGoto.UsableNow)
                 WimpyGotoChoices.Add(loc.Name);
+        }
         if (!string.IsNullOrEmpty(SysGotoWimpyLocation)
             && !WimpyGotoChoices.Contains(SysGotoWimpyLocation!))
             WimpyGotoChoices.Add(SysGotoWimpyLocation!);
