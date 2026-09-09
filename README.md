@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.57.7**
+> **Version 3.58.8**
 > - Auto-Lair leaves a lair as soon as the fight is over and the loot is collected, instead of always sitting out the full 30-second engage timeout (which is now just an upper bound)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

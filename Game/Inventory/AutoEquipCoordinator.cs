@@ -53,10 +53,25 @@ public sealed class AutoEquipCoordinator : IDisposable
     private readonly Func<string, EquipResult> _applyBySetId;
     private readonly Func<bool> _wornLoadoutKnown;
     private readonly Func<bool> _isAutoEnabled;
+    // Room predicates + a live "is the nav engine moving?" probe for the movement /
+    // bossing sets. Null (unwired / tests) means "never" — the new sets stay inert.
+    private readonly Func<Game.Map.RoomKey, bool>? _isBossRoom;
+    private readonly Func<Game.Map.RoomKey, bool>? _isLair;
+    private readonly Func<bool>? _isMoving;
     private readonly LogService? _log;
     private readonly Func<DateTimeOffset> _now;
 
     private PlayerPosition _lastPosition;
+
+    // True while the "While Moving" set is the active auto loadout (worn because the
+    // nav engine is travelling). Cleared when we swap away for combat / a boss room /
+    // arrival, so the combat-entry and arrival handlers know whether a movement-gear
+    // revert is owed.
+    private bool _inMovementSet;
+
+    // Last room the tracker confirmed us into, so combat-entry and the movement
+    // handlers can tell whether the current room is a boss room (gear precedence).
+    private Game.Map.RoomKey? _currentRoom;
 
     // An item-cast buff (ItemCastSequencer) temporarily borrows an equip slot: it
     // removes the worn gear, wields the cast item, uses it, then re-equips the gear
@@ -96,7 +111,10 @@ public sealed class AutoEquipCoordinator : IDisposable
         Func<bool> wornLoadoutKnown,
         Func<bool> isAutoEnabled,
         LogService? log = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Func<Game.Map.RoomKey, bool>? isBossRoom = null,
+        Func<Game.Map.RoomKey, bool>? isLair = null,
+        Func<bool>? isMoving = null)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(readEquipment);
@@ -112,6 +130,9 @@ public sealed class AutoEquipCoordinator : IDisposable
         _applyBySetId = applyBySetId;
         _wornLoadoutKnown = wornLoadoutKnown;
         _isAutoEnabled = isAutoEnabled;
+        _isBossRoom = isBossRoom;
+        _isLair = isLair;
+        _isMoving = isMoving;
         _log = log;
         _now = now ?? (() => DateTimeOffset.Now);
 
@@ -174,6 +195,30 @@ public sealed class AutoEquipCoordinator : IDisposable
     // fight and reverts to Default only once recovered, the long-standing rule.
     private void OnCombatChanged(bool inCombat)
     {
+        if (inCombat)
+        {
+            // In a boss room the fight is fought in the Bossing set — it wins over the
+            // movement / rest swaps. The pre-step swap usually already wore it; this is
+            // the idempotent backstop for a boss room entered without a planned step.
+            if (CurrentRoomIsBoss() && EnabledSet(EquipTriggerType.Bossing) is not null)
+            {
+                _inMovementSet = false;
+                Fire(EquipTriggerType.Bossing);
+                return;
+            }
+            // A hostile appeared while we were travelling in the movement set — swap to
+            // Default and let combat engage. Independent of SwapToDefaultOnCombat, which
+            // governs only the rest-interrupt case below.
+            if (_inMovementSet)
+            {
+                _inMovementSet = false;
+                _log?.Info(EquipmentManager.LogCategory,
+                    "hostiles recognized while moving — swapping to Default for the fight");
+                Fire(EquipTriggerType.Default);
+                return;
+            }
+        }
+
         if (!_readEquipment().SwapToDefaultOnCombat)
         {
             // Toggling the box off mid-fight must not strand the restore flag.
@@ -220,7 +265,125 @@ public sealed class AutoEquipCoordinator : IDisposable
     // ActiveChanged(true). Unconditional (subject only to Fire's own gates): a run
     // starting means we're moving out under normal combat gear, whatever we were
     // wearing while idle / resting beforehand.
-    public void OnLoopStarted() => Fire(EquipTriggerType.Default);
+    public void OnLoopStarted()
+    {
+        // With a movement set configured (enabled + non-empty), the movement-state
+        // hook (OnMovementStarted) wears it once the run is actually travelling — so
+        // don't pre-empt with a Default swap here. Without one, keep the long-standing
+        // Default-at-loop-start behavior.
+        if (MovementSetActive()) return;
+        Fire(EquipTriggerType.Default);
+    }
+
+    // ----- movement / boss / lair sets (pushed from AppServices) ----------
+
+    // The nav engine started (or resumed) travelling and we're neither fighting nor
+    // resting — wear the movement set. No-op unless a movement set is enabled + has
+    // items, we're not already in it, and the current room isn't a boss room (Bossing
+    // owns gear there). Idempotent: re-entry while already in the set does nothing.
+    public void OnMovementStarted()
+    {
+        if (_inMovementSet) return;
+        if (_player.InCombat) return;
+        if (_hpGateAsserted() || _maGateAsserted()) return;
+        if (CurrentRoomIsBoss()) return;
+        if (!MovementSetActive()) return;
+        _inMovementSet = true;
+        _log?.Info(EquipmentManager.LogCategory, "nav engine moving — wearing the While Moving set");
+        Fire(EquipTriggerType.WhileMoving);
+    }
+
+    // The nav engine went fully idle — a walk-to reached its destination, or a loop /
+    // Auto-Lair run stopped. Revert the movement gear to Default. A pause for combat or
+    // rest is NOT idle (the run stays live), so those keep their own gear; only a true
+    // stop reverts.
+    public void OnMovementStopped()
+    {
+        if (!_inMovementSet) return;
+        _inMovementSet = false;
+        if (_player.InCombat || _hpGateAsserted() || _maGateAsserted() || CurrentRoomIsBoss()) return;
+        _log?.Info(EquipmentManager.LogCategory, "movement stopped — reverting the While Moving set to Default");
+        Fire(EquipTriggerType.Default);
+    }
+
+    // The tracked room changed (a confirmed transition). Drives the Bossing set:
+    // entering a boss room wears it, leaving one reverts — to the movement set if we're
+    // still travelling, otherwise Default (the user's "back to default on leaving").
+    public void OnRoomChanged(Game.Map.RoomKey? previous, Game.Map.RoomKey current)
+    {
+        _currentRoom = current;
+        bool curBoss = _isBossRoom is { } cb && cb(current);
+        bool prevBoss = _isBossRoom is { } pb && previous is { } pr && pb(pr);
+        if (curBoss)
+        {
+            // Backstop for a boss room entered without a pre-step swap (the pre-move
+            // hook usually wore Bossing already; ApplySet no-ops if it's on).
+            if (EnabledSet(EquipTriggerType.Bossing) is not null)
+            {
+                _inMovementSet = false;
+                Fire(EquipTriggerType.Bossing);
+            }
+            return;
+        }
+        if (prevBoss)
+        {
+            // Stepping out of a boss room always reverts to Default FIRST (clears the
+            // boss loadout), then re-layers the movement set if we're still travelling.
+            _inMovementSet = false;
+            _log?.Info(EquipmentManager.LogCategory, "left the boss room — reverting to Default");
+            Fire(EquipTriggerType.Default);
+            if (MovementSetActive() && (_isMoving?.Invoke() ?? false) && !_player.InCombat)
+            {
+                _inMovementSet = true;
+                _log?.Info(EquipmentManager.LogCategory, "still travelling — back to the While Moving set");
+                Fire(EquipTriggerType.WhileMoving);
+            }
+        }
+    }
+
+    // About to send a step INTO `next`. Swap BEFORE the wire move so we land already
+    // geared — the swap's wear/eq commands queue ahead of the move on the serialized
+    // wire (same ordering the pre-move backstab prep relies on). A boss room wears the
+    // Bossing set; a known lair wears Default when the movement set's "swap before
+    // lairs" option is on and we're currently travelling in the movement set.
+    public void OnAboutToEnterRoom(Game.Map.RoomKey next)
+    {
+        if (_player.InCombat) return;
+        if (_isBossRoom is { } boss && boss(next))
+        {
+            if (EnabledSet(EquipTriggerType.Bossing) is not null)
+            {
+                _inMovementSet = false;
+                _log?.Info(EquipmentManager.LogCategory, "about to enter a boss room — wearing the Bossing set before the step");
+                Fire(EquipTriggerType.Bossing);
+            }
+            return;
+        }
+        if (_inMovementSet
+            && _isLair is { } lair && lair(next)
+            && _readEquipment().SwapToDefaultBeforeLairs
+            && MovementSetActive())
+        {
+            _inMovementSet = false;
+            _log?.Info(EquipmentManager.LogCategory, "about to enter a lair — swapping to Default before the step");
+            Fire(EquipTriggerType.Default);
+        }
+    }
+
+    // The enabled, non-empty set for a trigger, or null. An empty set (no slots) is
+    // treated as absent so it can't shadow a fallback — e.g. an empty movement set must
+    // not suppress the loop-start Default.
+    private EquipmentSet? EnabledSet(EquipTriggerType type)
+    {
+        EquipmentSet? set = _readEquipment().Sets.FirstOrDefault(s => s.Trigger == type);
+        return set is { Enabled: true } && set.Slots.Count > 0 ? set : null;
+    }
+
+    // Whether the movement set takes over travel gear (enabled + has items).
+    private bool MovementSetActive() => EnabledSet(EquipTriggerType.WhileMoving) is not null;
+
+    private bool CurrentRoomIsBoss() =>
+        _isBossRoom is { } probe && _currentRoom is { } r && probe(r);
 
     // Recovery just topped off to rest-max (a held rest gate cleared), fired from
     // HealthManager while the character is STILL resting in the room — before the

@@ -218,6 +218,17 @@ public static class KnownPatterns
     // "nowhere" (script-spawn).
     public const string RoomEntryArrival     = "presence.room-entry-arrival";
 
+    // Room spawn arrival — a monster bursting into the room with no direction, e.g.
+    // "A slimeworm crashes through the ground into the room!" The verb phrase is
+    // free-form per-monster flavor (GreetTXT), so the name can't be reliably parsed
+    // out of it the way RoomEntryArrival's directional form allows — the only fixed
+    // marker is the trailing "into the room". CombatManager keys the same bare-CR
+    // room refresh off this line so the authoritative "Also here:" repopulates the
+    // roster and combat engages a round BEFORE the spawn's first swing, instead of
+    // waiting for that swing to trip the empty-room recovery net. Distinct from
+    // RoomEntryArrival, whose directional form ends in "from <direction>", never here.
+    public const string RoomSpawnArrival     = "presence.room-spawn-arrival";
+
     // Room-exit departure — "<name> walks out of the room to <direction>." Fires
     // when a monster leaves our room, most often when a fleeing player drags the
     // mob we were engaged with out with them. RoomDepartureWatcher strips the

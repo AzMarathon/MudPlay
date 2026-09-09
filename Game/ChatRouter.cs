@@ -43,6 +43,21 @@ public sealed class ChatRouter : IDisposable
     // without limit; a real burst is a handful of lines, so 16 never trims live work.
     private const int MaxPendingChatCaptures = 16;
 
+    // Guards against double-enqueuing ONE physical send. An engine-fired reply
+    // is captured via ObserveOutbound (the raw bytes, immediately). If that
+    // reply happens to land on the same screen row as the still-displayed
+    // prompt, LineExtractor's prompt-split (EmitLine) re-emits its text as an
+    // ordinary content line, which OnLineDispatched also sniffs — capturing the
+    // identical text a second time before any confirmation ever consumes the
+    // first. Left unguarded, every reply leaves one extra stale entry in the
+    // queue, so pairing drifts further off with every exchange for the rest of
+    // the session. Holds the most recent still-unconfirmed capture; a repeat of
+    // that exact text is dropped instead of re-queued. Cleared on the next
+    // confirmation (of either kind) so a later, genuinely new send that happens
+    // to produce identical text isn't wrongly suppressed.
+    private string? _lastEnqueuedTelepath;
+    private string? _lastEnqueuedDirected;
+
     // Board-specific disconnect line, for the conversation window's realm
     // category. Returns the active BBS's raw DisconnectPattern ({name}/* syntax,
     // empty/null when the board uses only the standard lines). Set by AppServices
@@ -101,6 +116,7 @@ public sealed class ChatRouter : IDisposable
         {
             string? target = SafeGroup(result, 0);
             string message = _pendingDirectedMessages.TryDequeue(out string? m) ? m : string.Empty;
+            _lastEnqueuedDirected = null;
             EntryClassified?.Invoke(new ChatLogEntry(
                 result.Line.Timestamp,
                 ChatChannel.Local,
@@ -118,6 +134,7 @@ public sealed class ChatRouter : IDisposable
         {
             string? recipient = SafeGroup(result, 0);
             string message = _pendingTelepathMessages.TryDequeue(out string? m) ? m : string.Empty;
+            _lastEnqueuedTelepath = null;
 
             EntryClassified?.Invoke(new ChatLogEntry(
                 result.Line.Timestamp,
@@ -248,14 +265,21 @@ public sealed class ChatRouter : IDisposable
         return _compiledDisconnect;
     }
 
-    // Engine-sent telepaths (party @-command broadcasts, join nags) reach the
-    // wire through SendUserInput without ever rendering on the terminal, so the
-    // on-screen /-line sniff in OnLineDispatched never sees them — the outgoing
-    // conversation entry would then come up blank. Peek the raw outbound bytes
-    // here too: a complete "/<recipient> <message>\r" burst captures the same
-    // pending message a typed line would. Char-by-char terminal typing carries
-    // no complete line in a single buffer, so nothing is captured here and the
-    // typed case stays handled by the on-screen path.
+    // Engine-sent telepaths (party @-command broadcasts, join nags, @roomba
+    // replies) fire complete "/<recipient> <message>\r" bytes through
+    // SendUserInput in one call, so they're captured here immediately —
+    // char-by-char terminal typing never carries a complete line in a single
+    // buffer, so a human-typed telepath is never captured here (only via the
+    // on-screen path below, once the whole typed line finally renders).
+    //
+    // An engine-fired reply also tends to land ON SCREEN: the terminal
+    // composites it onto the still-live prompt row, and LineExtractor's
+    // prompt-split re-emits that as an ordinary content line, which
+    // OnLineDispatched's /-line sniff below ALSO captures a moment later —
+    // the identical text, for the same one physical send. _lastEnqueuedTelepath
+    // / _lastEnqueuedDirected exist to drop that redundant second capture;
+    // without them every engine reply left one extra stale entry in the queue,
+    // permanently drifting every later pairing for the rest of the session.
     public void ObserveOutbound(byte[] data)
     {
         if (data.Length == 0) return;
@@ -284,7 +308,10 @@ public sealed class ChatRouter : IDisposable
         if (text.Length < 3 || text[0] != '/') return;
         int sp = text.IndexOf(' ');
         if (sp <= 1 || sp == text.Length - 1) return;
-        EnqueueBounded(_pendingTelepathMessages, text[(sp + 1)..]);
+        string message = text[(sp + 1)..];
+        if (message == _lastEnqueuedTelepath) return; // duplicate capture of the same send — see _lastEnqueuedTelepath
+        EnqueueBounded(_pendingTelepathMessages, message);
+        _lastEnqueuedTelepath = message;
     }
 
     // Form is ">Target message" — the directed-say verb. Same pairing rationale as
@@ -296,7 +323,10 @@ public sealed class ChatRouter : IDisposable
         if (text.Length < 3 || text[0] != '>') return;
         int sp = text.IndexOf(' ');
         if (sp <= 1 || sp == text.Length - 1) return;
-        EnqueueBounded(_pendingDirectedMessages, text[(sp + 1)..]);
+        string message = text[(sp + 1)..];
+        if (message == _lastEnqueuedDirected) return; // duplicate capture of the same send — see _lastEnqueuedDirected
+        EnqueueBounded(_pendingDirectedMessages, message);
+        _lastEnqueuedDirected = message;
     }
 
     // Enqueue with a hard cap: once a pending queue reaches MaxPendingChatCaptures,

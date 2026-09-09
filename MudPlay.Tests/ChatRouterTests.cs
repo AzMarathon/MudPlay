@@ -116,6 +116,34 @@ public sealed class ChatRouterTests
     }
 
     [Fact]
+    public void TelepathOut_DuplicateOnScreenEchoOfSameSend_DoesNotDoubleQueue()
+    {
+        var (router, chat, entries) = Setup();
+        // LineExtractor's prompt-split can re-emit an engine-fired reply's own
+        // text as an ordinary content line when it lands on the same row as the
+        // still-displayed prompt — so the exact same text can reach
+        // TryCaptureTelepath twice for one physical send: once via
+        // ObserveOutbound (the raw bytes), once via the on-screen echo dispatch.
+        // Without a dedup guard this leaves one stale entry in the queue per
+        // send, permanently drifting every later pairing for the rest of the
+        // session (the reported bug: a bloodstone-brooch answer surfacing on an
+        // unrelated later telepath to a different person).
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("/Farmer {no record of \"a\"}\r"));
+        router.Dispatch(Line("/Farmer {no record of \"a\"}")); // duplicate on-screen echo of the same send
+        router.Dispatch(Line("--- Telepath sent to Farmer ---"));
+
+        chat.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("/Kit {no record of \"b\"}\r"));
+        router.Dispatch(Line("/Kit {no record of \"b\"}"));
+        router.Dispatch(Line("--- Telepath sent to Kit ---"));
+
+        Assert.Equal(2, entries.Count);
+        Assert.Equal("Farmer", entries[0].Speaker);
+        Assert.Contains("\"a\"", entries[0].Message);
+        Assert.Equal("Kit", entries[1].Speaker);
+        Assert.Contains("\"b\"", entries[1].Message);
+    }
+
+    [Fact]
     public void ObserveOutbound_NonTelepathBytes_LeaveMessageEmpty()
     {
         var (router, chat, entries) = Setup();

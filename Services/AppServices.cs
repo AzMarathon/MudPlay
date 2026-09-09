@@ -5170,6 +5170,12 @@ public sealed class AppServices
         // guard in StealthManager prevents a double sn when both paths fire.
         Walker.SetPreMoveHook(() =>
         {
+            // Swap gear BEFORE the step (queues ahead of the move on the serialized
+            // wire, so we land already geared) when the next room is a boss room or a
+            // lair the movement set wants pre-swapped. Runs before backstab prep so a
+            // full set swap and a partial backstab swap don't interleave.
+            if (NextPlannedRoomForEquip(Walker.PeekNextPlannedDirection()) is { } next)
+                AutoEquip.OnAboutToEnterRoom(next);
             Combat.PrepBackstabForMove();
             // Clear the per-room AoE-debuff / attack caps so the next room's crabs
             // aren't read as "already debuffed" from the room we're leaving (report
@@ -5363,7 +5369,14 @@ public sealed class AppServices
             // Master gate: no per-set AutoMode flag exists, so auto-equip follows
             // the Auto-All kill-switch — silenced automation means no gear swaps.
             isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
-            log: Log);
+            log: Log,
+            // Room predicates for the While Moving / Bossing sets. Boss rooms resolve
+            // live off the active realm's Bosses table (all rooms, not just StopBefore);
+            // a lair is the game-data lair tag on the room. isMoving reads the coalesced
+            // run-state (Running = an engine is travelling, not held by combat/rest).
+            isBossRoom: IsBossRoomLive,
+            isLair: k => RoomGraph.GetRoom(k)?.HasLair == true,
+            isMoving: () => MovementControl.State == Game.Map.MovementEngineState.Running);
 
         // Per-game-data-set loop catalogue. Loops live
         // under the active set's Loops/ folder, so the catalogue reloads
@@ -5483,6 +5496,10 @@ public sealed class AppServices
         // gear before the sneak (equipping breaks sneak), then the move.
         LoopRunner.SetPreMoveHook(() =>
         {
+            // Pre-step gear swap for a boss / lair room on a loop lap (see the walker
+            // hook above for the wire-ordering rationale).
+            if (NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()) is { } next)
+                AutoEquip.OnAboutToEnterRoom(next);
             Combat.PrepBackstabForMove();
             // Same per-room cap reset the walker does — a loop circuit that hunts the
             // same species room-to-room otherwise fires its AoE debuff only in the
@@ -5579,6 +5596,26 @@ public sealed class AppServices
         // the Nav window because both act on the same engine primitives.
         MovementControl = new Game.Map.MovementController(
             Walker, LoopRunner, AutoLair, MovementCoordinator, Log);
+
+        // Gear driven by movement + room, for the While Moving / Bossing sets. Both
+        // no-op unless the user enabled + filled the set (AutoEquipCoordinator guards).
+        // The coalesced run-state drives the movement set: Running = travelling (a
+        // pause for combat/rest is Paused, not Idle, so those keep their own gear);
+        // Idle = a walk-to arrived or a run stopped → revert to Default. The tracked
+        // room drives the Bossing set on confirmed entry/exit.
+        MovementControl.StateChanged += () =>
+        {
+            switch (MovementControl.State)
+            {
+                case Game.Map.MovementEngineState.Running: AutoEquip.OnMovementStarted(); break;
+                case Game.Map.MovementEngineState.Idle:    AutoEquip.OnMovementStopped(); break;
+            }
+        };
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewConfidence != Game.Map.RoomConfidence.Confirmed || t.NewRoom is not { } nr) return;
+            AutoEquip.OnRoomChanged(t.PreviousRoom?.Key, nr.Key);
+        };
 
         // Roomba Mode — see GhSweepManager. Built on the same LoopRunner
         // rather than its own navigation engine; refuses to start while
@@ -6402,6 +6439,29 @@ public sealed class AppServices
         return Profile.Current?.Equipment?.Sets.FirstOrDefault(s => s.Id == id)
             is { Trigger: Models.Profile.EquipTriggerType.PreRestHp
                        or Models.Profile.EquipTriggerType.PreRestMana };
+    }
+
+    // Whether RoomKey is a boss room on the active realm — any room listed for any
+    // boss in the Bosses table (all rooms, not just the StopBefore subset). Resolved
+    // live so a realm swap or Bosses-tab edit takes effect without re-wiring; the
+    // Bossing gear set consults it, called at most once per room change / combat entry.
+    private bool IsBossRoomLive(Game.Map.RoomKey key)
+    {
+        foreach (Models.Profile.BossDef b in Bosses.ResolveForRealm(GameData.ActiveRealm))
+            foreach (string wire in b.Rooms)
+                if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k) && k == key)
+                    return true;
+        return false;
+    }
+
+    // The RoomKey a planned cardinal step will land in — the graph edge from the
+    // current room in `dir`. Null when there's no planned cardinal step, no known
+    // current room, or the direction isn't a graph exit (a command / boat / special
+    // step). Feeds the pre-move gear swap for boss / lair rooms.
+    private Game.Map.RoomKey? NextPlannedRoomForEquip(Game.Map.Direction? dir)
+    {
+        if (dir is not { } d || RoomTracker.State.CurrentRoom is not { } cur) return null;
+        return cur.Exits.TryGetValue(d, out Game.Map.RoomExit exit) ? exit.Target : null;
     }
 
     // The DEFAULT gear set's item-bearing slots as EquippedItems, for summing their
