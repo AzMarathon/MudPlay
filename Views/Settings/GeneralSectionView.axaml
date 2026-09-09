@@ -36,44 +36,30 @@
                                Foreground="{StaticResource ChromeFgBrush}"
                                FontSize="{StaticResource FontSizeLg}"
                                FontWeight="SemiBold"/>
-                    <TextBlock Text="Load or create a character profile to edit General settings — every settings tab lives on the active character."
+                    <TextBlock Text="Load or create a character profile to edit General settings — the character-scoped settings here live on the active character."
                                Foreground="{StaticResource ChromeFgSecBrush}"
                                FontSize="{StaticResource FontSizeMd}"
                                TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 
-            <!-- Editor — visible when a profile is loaded. -->
+            <!-- Editor — visible when a profile is loaded. Grouped by persistence
+                 tier: everything under "Character profile settings" saves to the
+                 loaded character; the "Global client settings" block at the bottom
+                 is app-wide, shared by every character on this install. -->
             <StackPanel IsVisible="{Binding HasProfile}"
                         Margin="22"
                         Spacing="6"
                         MaxWidth="640"
                         HorizontalAlignment="Left">
 
-                <TextBlock Classes="SectionHeader" Text="Directories"/>
-
-                <Grid ColumnDefinitions="120,*,Auto,Auto">
-                    <TextBlock Grid.Column="0" Text="Data files:"
-                               Foreground="{StaticResource ChromeFgSecBrush}"
-                               FontSize="{StaticResource FontSizeMd}"
-                               VerticalAlignment="Center"/>
-                    <TextBox Grid.Column="1"
-                             Text="{Binding DataFilesPath, Mode=OneWay}"
-                             IsReadOnly="True"
-                             FontFamily="{StaticResource FontMono}"
-                             FontSize="{StaticResource FontSizeSm}"
-                             VerticalAlignment="Center"
-                             ToolTip.Tip="Defaults to the platform user-data path (XDG on Linux, %AppData% on Windows, Application Support on macOS). Use Change… to move the folder elsewhere — a tiny pointer file at the platform-config location remembers the new path on next launch."/>
-                    <Button Grid.Column="2"
-                            Content="Open Data folder…"
-                            Command="{Binding OpenDataFolderCommand}"
-                            Margin="8,0,0,0"/>
-                    <Button Grid.Column="3"
-                            Content="Change…"
-                            Command="{Binding ChangeDataFolderCommand}"
-                            Margin="8,0,0,0"
-                            ToolTip.Tip="Move every file under the data folder to a different location; the app restarts at the new path."/>
-                </Grid>
+                <!-- ============================================================
+                     Character profile settings (per-character).
+                     ============================================================ -->
+                <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+                <TextBlock Classes="SettingsSectionSub"
+                           Text="Saved to the loaded character — each character keeps its own copy."/>
+                <Border Classes="SettingsSectionRule"/>
 
                 <TextBlock Classes="SectionHeader" Text="Terminal font"/>
 
@@ -161,16 +147,6 @@
                           Content="Keep typing directed at the terminal when other windows are open"
                           ToolTip.Tip="When checked (default), keystrokes typed while another window (settings, editors, etc.) is focused fall through to the terminal — so you can keep sending commands with a window open — UNLESS you're editing a text field in that window, or the key is one the window needs (Tab, Escape, menu shortcuts). When unchecked, keys go only to the focused window (classic behaviour)."/>
 
-                <CheckBox Margin="0,2,0,0"
-                          IsChecked="{Binding ShowStartupMudAnimation, Mode=TwoWay}"
-                          Content="Show the mud-throwing startup animation"
-                          ToolTip.Tip="When checked (default), an animated scene plays on the terminal at startup until you connect or load a profile. When unchecked, only the static startup header (the MudPlay title and byline) shows. This is an install-wide preference — it's saved to the default profile and read at startup regardless of which character auto-loads, so turning it off stays off across launches and profiles. Applies immediately on Apply — a splash that's currently playing stops on the spot."/>
-
-                <CheckBox Margin="0,2,0,0"
-                          IsChecked="{Binding SnapWindows, Mode=TwoWay}"
-                          Content="Snap windows together"
-                          ToolTip.Tip="When checked (default), MudPlay's panel windows — Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats — snap flush to each other's edges as you drag them near, and dragging the main window carries the whole snapped cluster with it. Grab any other panel to pull it off freely. When unchecked, every window floats independently. Install-wide preference; applies on Apply."/>
-
                 <TextBlock Classes="SectionHeader" Text="Buff Watchdog layout"/>
                 <Grid ColumnDefinitions="120,*">
                     <TextBlock Grid.Column="0" Text="Config panel:"
@@ -190,62 +166,6 @@
                         </ComboBox.ItemTemplate>
                     </ComboBox>
                 </Grid>
-
-                <TextBlock Classes="SectionHeader" Text="Navigation line appearance"/>
-                <TextBlock Text="Colour and thickness for each route line drawn on the map. Applies to every character."
-                           Foreground="{StaticResource ChromeFgSecBrush}"
-                           FontSize="{StaticResource FontSizeSm}"
-                           TextWrapping="Wrap" Margin="0,0,0,6"/>
-                <ItemsControl ItemsSource="{Binding NavLineRows}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:NavLineStyleRowViewModel">
-                            <Grid ColumnDefinitions="210,Auto,Auto,Auto" Margin="0,3">
-                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"
-                                           VerticalAlignment="Center"/>
-
-                                <!-- Colour picker: swatch button opens a ColorView flyout. -->
-                                <Button Grid.Column="1" Padding="2" VerticalAlignment="Center"
-                                        ToolTip.Tip="Line colour. Click to pick.">
-                                    <Border Width="46" Height="18"
-                                            Background="{Binding Swatch}"
-                                            BorderBrush="{StaticResource ChromeBorderSoftBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="{StaticResource CornerSm}"/>
-                                    <Button.Flyout>
-                                        <Flyout>
-                                            <LayoutTransformControl>
-                                                <LayoutTransformControl.LayoutTransform>
-                                                    <ScaleTransform ScaleX="0.7" ScaleY="0.7"/>
-                                                </LayoutTransformControl.LayoutTransform>
-                                                <ColorView Color="{Binding Color, Mode=TwoWay}"
-                                                           IsAlphaEnabled="False"/>
-                                            </LayoutTransformControl>
-                                        </Flyout>
-                                    </Button.Flyout>
-                                </Button>
-
-                                <!-- Thickness -->
-                                <NumericUpDown Grid.Column="2" Width="120" Margin="8,0,0,0"
-                                               VerticalAlignment="Center"
-                                               Minimum="{Binding MinThickness}"
-                                               Maximum="{Binding MaxThickness}"
-                                               Increment="0.5"
-                                               FormatString="0.0"
-                                               Value="{Binding Thickness, Mode=TwoWay}"
-                                               ToolTip.Tip="Line thickness in pixels."/>
-
-                                <Button Grid.Column="3" Content="Reset" Margin="8,0,0,0"
-                                        VerticalAlignment="Center"
-                                        Command="{Binding ResetCommand}"
-                                        ToolTip.Tip="Reset this line's colour and thickness to the default."/>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <Button Content="Restore Defaults" Margin="0,8,0,0"
-                        HorizontalAlignment="Left"
-                        Command="{Binding RestoreNavLineDefaultsCommand}"
-                        ToolTip.Tip="Reset every navigation line's colour and thickness to the factory defaults."/>
 
                 <TextBlock Classes="SectionHeader" Text="Initial"/>
 
@@ -422,6 +342,110 @@
                               Content="Auto-Train"
                               ToolTip.Tip="When checked: Auto-Train is re-enabled on reconnect if it was disabled during the session."/>
                 </StackPanel>
+
+                <!-- ============================================================
+                     Global client settings (app-wide, not per-character).
+                     Nav-line appearance + the startup-animation / snap-windows
+                     toggles persist to GlobalSettings; the data-folder location
+                     is a machine-level install pointer (closest to app-wide, so
+                     it lives here too).
+                     ============================================================ -->
+                <TextBlock Classes="SettingsSectionBanner" Text="Global client settings"/>
+                <TextBlock Classes="SettingsSectionSub"
+                           Text="Apply to the whole app / this install, regardless of which BBS or character is active."/>
+                <Border Classes="SettingsSectionRule"/>
+
+                <TextBlock Classes="SectionHeader" Text="Directories"/>
+
+                <Grid ColumnDefinitions="120,*,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="Data files:"
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeMd}"
+                               VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1"
+                             Text="{Binding DataFilesPath, Mode=OneWay}"
+                             IsReadOnly="True"
+                             FontFamily="{StaticResource FontMono}"
+                             FontSize="{StaticResource FontSizeSm}"
+                             VerticalAlignment="Center"
+                             ToolTip.Tip="Defaults to the platform user-data path (XDG on Linux, %AppData% on Windows, Application Support on macOS). Use Change… to move the folder elsewhere — a tiny pointer file at the platform-config location remembers the new path on next launch. This is a machine-level location, not a per-character/BBS setting."/>
+                    <Button Grid.Column="2"
+                            Content="Open Data folder…"
+                            Command="{Binding OpenDataFolderCommand}"
+                            Margin="8,0,0,0"/>
+                    <Button Grid.Column="3"
+                            Content="Change…"
+                            Command="{Binding ChangeDataFolderCommand}"
+                            Margin="8,0,0,0"
+                            ToolTip.Tip="Move every file under the data folder to a different location; the app restarts at the new path."/>
+                </Grid>
+
+                <CheckBox Margin="0,8,0,0"
+                          IsChecked="{Binding ShowStartupMudAnimation, Mode=TwoWay}"
+                          Content="Show the mud-throwing startup animation"
+                          ToolTip.Tip="When checked (default), an animated scene plays on the terminal at startup until you connect or load a profile. When unchecked, only the static startup header (the MudPlay title and byline) shows. This is an install-wide preference — it's saved to the default profile and read at startup regardless of which character auto-loads, so turning it off stays off across launches and profiles. Applies immediately on Apply — a splash that's currently playing stops on the spot."/>
+
+                <CheckBox Margin="0,2,0,0"
+                          IsChecked="{Binding SnapWindows, Mode=TwoWay}"
+                          Content="Snap windows together"
+                          ToolTip.Tip="When checked (default), MudPlay's panel windows — Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats — snap flush to each other's edges as you drag them near, and dragging the main window carries the whole snapped cluster with it. Grab any other panel to pull it off freely. When unchecked, every window floats independently. Install-wide preference; applies on Apply."/>
+
+                <TextBlock Classes="SectionHeader" Text="Navigation line appearance"/>
+                <TextBlock Text="Colour and thickness for each route line drawn on the map. Applies to every character."
+                           Foreground="{StaticResource ChromeFgSecBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           TextWrapping="Wrap" Margin="0,0,0,6"/>
+                <ItemsControl ItemsSource="{Binding NavLineRows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NavLineStyleRowViewModel">
+                            <Grid ColumnDefinitions="210,Auto,Auto,Auto" Margin="0,3">
+                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"
+                                           VerticalAlignment="Center"/>
+
+                                <!-- Colour picker: swatch button opens a ColorView flyout. -->
+                                <Button Grid.Column="1" Padding="2" VerticalAlignment="Center"
+                                        ToolTip.Tip="Line colour. Click to pick.">
+                                    <Border Width="46" Height="18"
+                                            Background="{Binding Swatch}"
+                                            BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource CornerSm}"/>
+                                    <Button.Flyout>
+                                        <Flyout>
+                                            <LayoutTransformControl>
+                                                <LayoutTransformControl.LayoutTransform>
+                                                    <ScaleTransform ScaleX="0.7" ScaleY="0.7"/>
+                                                </LayoutTransformControl.LayoutTransform>
+                                                <ColorView Color="{Binding Color, Mode=TwoWay}"
+                                                           IsAlphaEnabled="False"/>
+                                            </LayoutTransformControl>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+
+                                <!-- Thickness -->
+                                <NumericUpDown Grid.Column="2" Width="120" Margin="8,0,0,0"
+                                               VerticalAlignment="Center"
+                                               Minimum="{Binding MinThickness}"
+                                               Maximum="{Binding MaxThickness}"
+                                               Increment="0.5"
+                                               FormatString="0.0"
+                                               Value="{Binding Thickness, Mode=TwoWay}"
+                                               ToolTip.Tip="Line thickness in pixels."/>
+
+                                <Button Grid.Column="3" Content="Reset" Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding ResetCommand}"
+                                        ToolTip.Tip="Reset this line's colour and thickness to the default."/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Content="Restore Defaults" Margin="0,8,0,0"
+                        HorizontalAlignment="Left"
+                        Command="{Binding RestoreNavLineDefaultsCommand}"
+                        ToolTip.Tip="Reset every navigation line's colour and thickness to the factory defaults."/>
+
             </StackPanel>
 
         </Grid>

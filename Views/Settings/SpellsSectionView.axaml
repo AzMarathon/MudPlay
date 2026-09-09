@@ -69,6 +69,11 @@
                         Margin="22" Spacing="4"
                         MaxWidth="700" HorizontalAlignment="Left">
 
+                <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+                <TextBlock Classes="SettingsSectionSub"
+                           Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
+                <Border Classes="SettingsSectionRule"/>
+
 
 
                 <!-- ============ Spell type priority ============ -->

@@ -171,4 +171,40 @@
         <Setter Property="Padding" Value="10,6"/>
     </Style>
 
+    <!-- ============ Settings-tab tier banners ============
+         A Settings tab groups its controls by which persistence tier they save
+         to — Global (app-wide), BBS (shared by every character on the board), or
+         Character (only the loaded character). These banner + subtitle + rule
+         styles head each such section so it's obvious where a setting lands.
+         Shared here rather than per-view so every Settings section reads the
+         same; used via Classes="SettingsSectionBanner" etc. -->
+    <Style Selector="TextBlock.SettingsSectionBanner">
+        <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+        <!-- XL (20px) so a tier header is decisively larger than any setting under
+             it — settings text is 13px, group sub-headers 11px. -->
+        <Setter Property="FontSize" Value="{StaticResource FontSizeXL}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <!-- Big leading gap so a section break reads as clearly larger than a
+             within-section group header (16px margin) — sets the new tier
+             section apart from the previous section's last setting. -->
+        <Setter Property="Margin" Value="0,42,0,0"/>
+    </Style>
+    <!-- The first banner on a tab sits flush at the top — opt out of the leading
+         gap with Classes="SettingsSectionBanner first". -->
+    <Style Selector="TextBlock.SettingsSectionBanner.first">
+        <Setter Property="Margin" Value="0,0,0,0"/>
+    </Style>
+    <Style Selector="TextBlock.SettingsSectionSub">
+        <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="Margin" Value="0,1,0,0"/>
+    </Style>
+    <Style Selector="Border.SettingsSectionRule">
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Background" Value="{StaticResource ChromeBorderSoftBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="Margin" Value="0,6,0,0"/>
+    </Style>
+
 </Styles>

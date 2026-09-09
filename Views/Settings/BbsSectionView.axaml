@@ -19,6 +19,8 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,16,0,6"/>
         </Style>
+        <!-- Section-tier banners (SettingsSectionBanner / …Sub / …Rule) are shared
+             app-wide in Themes/Controls.axaml so every Settings tab reads the same. -->
         <Style Selector="TextBlock.CredHint">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
         </Style>
@@ -76,6 +78,15 @@
                 <StackPanel IsVisible="{Binding HasSelection}"
                             Margin="22" Spacing="4"
                             MaxWidth="620" HorizontalAlignment="Left">
+
+                    <!-- ============================================================
+                         SECTION 1 — BBS settings (per-BBS, on BbsProfile).
+                         Shared by every character that connects to this board.
+                         ============================================================ -->
+                    <TextBlock Classes="SettingsSectionBanner first" Text="BBS settings"/>
+                    <TextBlock Classes="SettingsSectionSub"
+                               Text="Stored with this BBS and shared by every character that connects to it."/>
+                    <Border Classes="SettingsSectionRule"/>
 
                     <TextBlock Classes="GroupHeader" Text="Connection"/>
 
@@ -191,8 +202,118 @@
                                TextWrapping="Wrap"
                                Text="Columns / rows are advertised via Telnet NAWS. MajorMUD renders against a fixed 80×25 grid and won't reflow if you push higher; non-game BBS doors usually do reflow."/>
 
-                    <TextBlock Classes="GroupHeader"
-                               Text="Credentials  —  The settings shown below are saved per character profile"/>
+                    <!-- ===== Game-menu commands (per-BBS) =====
+                         The two main-menu picks for entering / leaving the
+                         realm. Stored on the BbsProfile because the menu key
+                         bindings belong to the realm / front-end, not the
+                         character — every character on the same BBS uses the
+                         same picks. Bind directly (no HasProfile gate): these
+                         live on the selected BBS, not the loaded character. -->
+                    <TextBlock Classes="GroupHeader" Text="Game-menu commands"/>
+
+                    <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
+                          Margin="0,6,0,0" ColumnSpacing="8" RowSpacing="4">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Game entry command"/>
+                        <TextBox   Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding GameEntryCommand, Mode=TwoWay}"
+                                   Width="120" FontFamily="{StaticResource FontMono}"
+                                   ToolTip.Tip="Sent at the MajorMUD main menu to enter the realm. Default 'E'."/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Game exit command"/>
+                        <TextBox   Grid.Row="1" Grid.Column="1"
+                                   Text="{Binding GameExitCommand, Mode=TwoWay}"
+                                   Width="120" FontFamily="{StaticResource FontMono}"
+                                   ToolTip.Tip="Sent at the MajorMUD main menu to log off. Default '=x'. Fires immediately when a permitted player telepaths @hangup; full cleanup-warning automation ships in a follow-up PR."/>
+                    </Grid>
+
+                    <!-- ===== Realm mechanics (per-BBS) =====
+                         The negative-HP death floor. 0 HP only drops a character
+                         into a revivable bleed-out; death happens at this value.
+                         Stored per-BBS because it's a realm balance knob. The
+                         emergency auto-hangup reads it so the disconnect keeps
+                         firing all the way through the bleeding-out window. -->
+                    <TextBlock Classes="GroupHeader" Text="Realm mechanics"/>
+
+                    <Grid ColumnDefinitions="180,Auto,*" Margin="0,6,0,0" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Player dies at (HP):"/>
+                        <NumericUpDown Grid.Column="1"
+                                       Value="{Binding PlayerDiesAtHp, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                       Minimum="-999" Maximum="0" Increment="1"
+                                       FormatString="0" Width="140"
+                                       HorizontalAlignment="Left"
+                                       ToolTip.Tip="Negative-HP floor at which a character actually dies. 0 HP only drops you into a revivable bleed-out — death happens here. The emergency auto-hangup keeps firing through the whole bleeding-out window down to this floor. Default -25."/>
+                    </Grid>
+
+                    <!-- Auto-refine traces the true floor from slow deaths: a
+                         bleed-out crosses the floor one tick at a time and lands
+                         right at it, so its HP reading measures the real value.
+                         The seed above is only a guess; a single big overkill hit
+                         over-negatives the floor and is discarded. Off pins the
+                         manual value. -->
+                    <CheckBox IsChecked="{Binding AutoRefineDeathFloor, Mode=TwoWay}"
+                              Margin="0,6,0,0"
+                              Content="Auto-refine the floor from slow deaths"
+                              ToolTip.Tip="Learn the realm's true death floor from deaths where you bled out gradually (which land right at the floor). A single big overkill hit blows past the floor and is ignored. Turn off to keep the value you set above."/>
+
+                    <!-- Nightly boss cleanup: "Respawns @ Cleanup" bosses on the
+                         Bosses tab read DEAD once marked and flip back to ALIVE at
+                         this daily wall-clock time (in the chosen zone). -->
+                    <Grid ColumnDefinitions="180,Auto,Auto,*" Margin="0,12,0,0" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Boss cleanup time:"/>
+                        <TextBox Grid.Column="1" Width="90" HorizontalAlignment="Left"
+                                 FontFamily="{StaticResource FontMono}"
+                                 Text="{Binding CleanupTimeOfDay, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 PlaceholderText="21:00"
+                                 ToolTip.Tip="Daily server-cleanup time as HH:mm (24-hour) in the time zone at right. Cleanup-only bosses flip from DEAD back to ALIVE at this time. Blank disables cleanup-boss timers."/>
+                        <ComboBox Grid.Column="2" Width="240" HorizontalAlignment="Left"
+                                  FontFamily="{StaticResource FontMono}"
+                                  ItemsSource="{Binding TimeZoneIds}"
+                                  SelectedItem="{Binding CleanupTimeZoneId, Mode=TwoWay}"
+                                  ToolTip.Tip="Time zone the cleanup time is in. Defaults to your computer's own zone; change it to override (e.g. if the board's cleanup runs on a different zone)."/>
+                    </Grid>
+
+                    <!-- ===== Board disconnect line (per-BBS) =====
+                         Additive to the built-in "X just disconnected!!!" /
+                         "X just hung up!!!" forms. Some boards (Playpen) emit a
+                         custom BBS-level logoff line keyed on the ACCOUNT name,
+                         not the character name — this teaches the client that
+                         line so a party member's drop is caught. {name} captures
+                         the disconnecting player (matched against a player's
+                         account-name override, else their character name); *
+                         swallows a varying run (e.g. a trailing user count). -->
+                    <TextBlock Classes="GroupHeader" Text="Board disconnect line"/>
+                    <TextBlock Classes="FieldLabel"
+                               Margin="0,4,0,0" TextWrapping="Wrap"
+                               Text="Extra logoff line to watch, on top of the built-in &quot;just disconnected&quot; / &quot;just hung up&quot; forms. Use {name} for the player and * for a varying run. Leave blank on boards that use the standard lines."/>
+                    <TextBox Text="{Binding DisconnectPattern, Mode=TwoWay}"
+                             Margin="0,6,0,0" MaxWidth="420" HorizontalAlignment="Left"
+                             FontFamily="{StaticResource FontMono}"
+                             PlaceholderText="e.g.  ►►► [{name}] logs OFF*"
+                             ToolTip.Tip="Optional board-specific disconnect line. {name} captures the disconnecting player — matched against each party member's account-name override (Game Data → Players) if set, else their character name. * matches any varying text (like Playpen's trailing 'Lines in Use: N'). Empty = only the built-in disconnect/hang-up lines are watched."/>
+
+                    <!-- ===== Realm-specific naming (per-BBS) =====
+                         Per-BBS label for the runic currency. Some realms
+                         relabel "runic" to a board-specific word, which
+                         changes the coin wording the server sends — so the
+                         pickup/drop/hide parsers have to match the custom
+                         name, not the literal "runic". -->
+                    <TextBlock Classes="GroupHeader" Text="Runic currency name"/>
+                    <TextBox Text="{Binding RunicCurrencyName, Mode=TwoWay}"
+                             Margin="0,6,0,0" Width="220" HorizontalAlignment="Left"
+                             ToolTip.Tip="Saved to the BBS settings — different realms relabel the runic currency, so this is per-BBS, not per-character. Blank falls back to 'runic'."/>
+
+                    <!-- ============================================================
+                         SECTION 2 — Character profile settings (per-character).
+                         Written onto the loaded character's per-BBS credential
+                         slice (BbsSectionViewModel.CommitCredentials) — every
+                         character on this BBS keeps its own.
+                         ============================================================ -->
+                    <TextBlock Classes="SettingsSectionBanner" Text="Character profile settings"/>
+                    <TextBlock Classes="SettingsSectionSub"
+                               Text="Only for the character you have loaded — each character on this BBS keeps its own copy."/>
+                    <Border Classes="SettingsSectionRule"/>
+
+                    <TextBlock Classes="GroupHeader" Text="Credentials"/>
 
                     <TextBlock Classes="CredHint"
                                Classes.HintWarning="{Binding IsCredentialsHintWarning}"
@@ -371,107 +492,19 @@
                         </Grid>
                     </StackPanel>
 
-                    <!-- ===== Game-menu commands (per-BBS) =====
-                         The two main-menu picks for entering / leaving the
-                         realm. Stored on the BbsProfile because the menu key
-                         bindings belong to the realm / front-end, not the
-                         character — every character on the same BBS uses the
-                         same picks. Bind directly (no HasProfile gate): these
-                         live on the selected BBS, not the loaded character. -->
-                    <TextBlock Classes="GroupHeader" Text="Game-menu commands"/>
+                    <!-- ============================================================
+                         SECTION 3 — Global client settings (Global tier).
+                         Install-wide UX preferences persisted in
+                         GlobalSettings.Settings["Confirm"], mirrored live onto
+                         AppServices.Current.Confirm — not tied to this BBS or the
+                         loaded character.
+                         ============================================================ -->
+                    <TextBlock Classes="SettingsSectionBanner" Text="Global client settings"/>
+                    <TextBlock Classes="SettingsSectionSub"
+                               Text="Apply to the whole app, regardless of which BBS or character is active."/>
+                    <Border Classes="SettingsSectionRule"/>
 
-                    <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto"
-                          Margin="0,6,0,0" ColumnSpacing="8" RowSpacing="4">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Game entry command"/>
-                        <TextBox   Grid.Row="0" Grid.Column="1"
-                                   Text="{Binding GameEntryCommand, Mode=TwoWay}"
-                                   Width="120" FontFamily="{StaticResource FontMono}"
-                                   ToolTip.Tip="Sent at the MajorMUD main menu to enter the realm. Default 'E'."/>
-
-                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Game exit command"/>
-                        <TextBox   Grid.Row="1" Grid.Column="1"
-                                   Text="{Binding GameExitCommand, Mode=TwoWay}"
-                                   Width="120" FontFamily="{StaticResource FontMono}"
-                                   ToolTip.Tip="Sent at the MajorMUD main menu to log off. Default '=x'. Fires immediately when a permitted player telepaths @hangup; full cleanup-warning automation ships in a follow-up PR."/>
-                    </Grid>
-
-                    <!-- ===== Realm mechanics (per-BBS) =====
-                         The negative-HP death floor. 0 HP only drops a character
-                         into a revivable bleed-out; death happens at this value.
-                         Stored per-BBS because it's a realm balance knob. The
-                         emergency auto-hangup reads it so the disconnect keeps
-                         firing all the way through the bleeding-out window. -->
-                    <TextBlock Classes="GroupHeader" Text="Realm mechanics" Margin="0,18,0,0"/>
-
-                    <Grid ColumnDefinitions="180,Auto,*" Margin="0,6,0,0" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Player dies at (HP):"/>
-                        <NumericUpDown Grid.Column="1"
-                                       Value="{Binding PlayerDiesAtHp, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                       Minimum="-999" Maximum="0" Increment="1"
-                                       FormatString="0" Width="140"
-                                       HorizontalAlignment="Left"
-                                       ToolTip.Tip="Negative-HP floor at which a character actually dies. 0 HP only drops you into a revivable bleed-out — death happens here. The emergency auto-hangup keeps firing through the whole bleeding-out window down to this floor. Default -25."/>
-                    </Grid>
-
-                    <!-- Auto-refine traces the true floor from slow deaths: a
-                         bleed-out crosses the floor one tick at a time and lands
-                         right at it, so its HP reading measures the real value.
-                         The seed above is only a guess; a single big overkill hit
-                         over-negatives the floor and is discarded. Off pins the
-                         manual value. -->
-                    <CheckBox IsChecked="{Binding AutoRefineDeathFloor, Mode=TwoWay}"
-                              Margin="0,6,0,0"
-                              Content="Auto-refine the floor from slow deaths"
-                              ToolTip.Tip="Learn the realm's true death floor from deaths where you bled out gradually (which land right at the floor). A single big overkill hit blows past the floor and is ignored. Turn off to keep the value you set above."/>
-
-                    <!-- Nightly boss cleanup: "Respawns @ Cleanup" bosses on the
-                         Bosses tab read DEAD once marked and flip back to ALIVE at
-                         this daily wall-clock time (in the chosen zone). -->
-                    <Grid ColumnDefinitions="180,Auto,Auto,*" Margin="0,12,0,0" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Boss cleanup time:"/>
-                        <TextBox Grid.Column="1" Width="90" HorizontalAlignment="Left"
-                                 FontFamily="{StaticResource FontMono}"
-                                 Text="{Binding CleanupTimeOfDay, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                 PlaceholderText="21:00"
-                                 ToolTip.Tip="Daily server-cleanup time as HH:mm (24-hour) in the time zone at right. Cleanup-only bosses flip from DEAD back to ALIVE at this time. Blank disables cleanup-boss timers."/>
-                        <ComboBox Grid.Column="2" Width="240" HorizontalAlignment="Left"
-                                  FontFamily="{StaticResource FontMono}"
-                                  ItemsSource="{Binding TimeZoneIds}"
-                                  SelectedItem="{Binding CleanupTimeZoneId, Mode=TwoWay}"
-                                  ToolTip.Tip="Time zone the cleanup time is in. Defaults to your computer's own zone; change it to override (e.g. if the board's cleanup runs on a different zone)."/>
-                    </Grid>
-
-                    <!-- ===== Board disconnect line (per-BBS) =====
-                         Additive to the built-in "X just disconnected!!!" /
-                         "X just hung up!!!" forms. Some boards (Playpen) emit a
-                         custom BBS-level logoff line keyed on the ACCOUNT name,
-                         not the character name — this teaches the client that
-                         line so a party member's drop is caught. {name} captures
-                         the disconnecting player (matched against a player's
-                         account-name override, else their character name); *
-                         swallows a varying run (e.g. a trailing user count). -->
-                    <TextBlock Classes="GroupHeader" Text="Board disconnect line" Margin="0,18,0,0"/>
-                    <TextBlock Classes="FieldLabel"
-                               Margin="0,4,0,0" TextWrapping="Wrap"
-                               Text="Extra logoff line to watch, on top of the built-in &quot;just disconnected&quot; / &quot;just hung up&quot; forms. Use {name} for the player and * for a varying run. Leave blank on boards that use the standard lines."/>
-                    <TextBox Text="{Binding DisconnectPattern, Mode=TwoWay}"
-                             Margin="0,6,0,0" MaxWidth="420" HorizontalAlignment="Left"
-                             FontFamily="{StaticResource FontMono}"
-                             PlaceholderText="e.g.  ►►► [{name}] logs OFF*"
-                             ToolTip.Tip="Optional board-specific disconnect line. {name} captures the disconnecting player — matched against each party member's account-name override (Game Data → Players) if set, else their character name. * matches any varying text (like Playpen's trailing 'Lines in Use: N'). Empty = only the built-in disconnect/hang-up lines are watched."/>
-
-                    <!-- ===== Confirmations =====
-                         Show-information / Show-data-being-sent /
-                         Show-reason-for-running were removed entirely —
-                         the system log covers what they would have
-                         exposed and we have no plans to surface them
-                         on the terminal canvas. Show-combat-round-totals
-                         moved to Settings → Combat. The "Display" group
-                         label was dropped — the bold "Show confirmations"
-                         header below already names what this group is.
-                         These four toggles persist at Global tier; the
-                         live mirror is ConfirmService. -->
-                    <StackPanel Spacing="2" Margin="0,18,0,0">
+                    <StackPanel Spacing="2" Margin="0,10,0,0">
                         <TextBlock Text="Show confirmations"
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
                                    FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/>
@@ -488,23 +521,6 @@
                                   IsChecked="{Binding ConfirmDeletes, Mode=TwoWay}"
                                   ToolTip.Tip="Prompt before destructive list-row removes (toolbar rows, BBS profiles, future game-data records)."/>
                     </StackPanel>
-
-                    <!-- ===== Realm-specific naming (per-BBS) =====
-                         Per-BBS label for the runic currency. Some realms
-                         relabel "runic" to a board-specific word, which
-                         changes the coin wording the server sends — so the
-                         pickup/drop/hide parsers have to match the custom
-                         name, not the literal "runic". -->
-                    <Grid ColumnDefinitions="220,*" Margin="0,18,0,0">
-                        <TextBlock Grid.Column="0" Text="Name of runic currency"
-                                   Foreground="{StaticResource ChromeFgSecBrush}"
-                                   FontSize="{StaticResource FontSizeMd}"
-                                   VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="1"
-                                 Text="{Binding RunicCurrencyName, Mode=TwoWay}"
-                                 Width="220" HorizontalAlignment="Left"
-                                 ToolTip.Tip="Saved to the BBS settings — different realms relabel the runic currency, so this is per-BBS, not per-character. Blank falls back to 'runic'."/>
-                    </Grid>
 
                 </StackPanel>
             </Grid>

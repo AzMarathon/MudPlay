@@ -821,7 +821,7 @@ MudPlay is a Telnet terminal client for MajorMUD / MegaMUD-style BBS door games.
 
 **Where to find them.** Almost everything lives in one place: the **Settings window** (opened from the toolbar, the View menu, or its keybind — default varies by build). It's organized into tabs down the left side: General, Toolbar + Shortcuts, BBS + Display, Health, Spells, Combat, Party, Cash, Statline, Talk, Auto-Light, Auto-Lair, Auto-Trainer, Other, Events, and Sounds. A search box at the top of the window filters the tab list. Two related editors live outside this window: the **keybind rebind dialog** (opened from a row on the Toolbar + Shortcuts tab) and the **macro editor** (a separate Game Data dialog).
 
-**Where settings are stored.** MudPlay never stores a setting in one flat file. It uses a four-tier hierarchy — **Defaults → Global → BBS → Character** — and each tab's fields belong to one specific tier:
+**Where settings are stored.** MudPlay never stores a setting in one flat file. It uses a four-tier hierarchy — **Defaults → Global → BBS → Character** — and each tab's fields belong to one specific tier. Every tab makes this visible: its controls sit under **banner-headed sections** naming the tier they save to (Global client settings / BBS settings / Character profile settings), so you can see at a glance where a change lands. A tab whose settings are all one tier shows a single banner; the mixed tabs (BBS + Display, General, Toolbar + Shortcuts, Other) split into a section per tier. The tiers:
 
 - **Character-tier** (the vast majority of settings — Combat, Spells, Health, Party, Cash, Talk, Auto-Light, Auto-Lair, Auto-Trainer, most of General, keybinds, macros) live inside that character's own profile file and only apply to that one character.
 - **BBS-tier** (connection info, reconnect behavior, terminal size, per-BBS realm quirks) live in that BBS's own file and are shared by every character who plays there.
@@ -1098,7 +1098,7 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 ## BBS + Display (Connection & Network)
 
-Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings and, at the very bottom, the four global confirmation-prompt checkboxes (documented separately below since they're Global-tier, not per-BBS). Connection fields here are stored per-BBS — shared by every character who connects to that board — except credentials, which are per-character.
+Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. To make it obvious which persistence level each setting falls under, the tab is split into three banner-headed sections: **BBS settings** (stored with the board, shared by every character on it — connection, retry/reconnect, display size + scrollback, game-menu commands, realm mechanics, board disconnect line, runic-currency name); **Character profile settings** (only for the loaded character — username/password, the read-only captured suicide password, SYSOP powers, the Sys Goto table, and the automated logon-menu steps); and **Global client settings** (app-wide, regardless of BBS or character — the confirmation prompts, documented separately below).
 
 ### Name
 

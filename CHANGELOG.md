@@ -1,5 +1,9 @@
 # Version history
 
+## 3.58.25
+
+- Every Settings tab now shows which persistence tier each setting saves to, via banner-headed sections — Global (app-wide) / BBS (shared by all characters on the board) / Character profile (only the loaded character) — so it's clear where a setting lands instead of the tiers being interleaved. BBS + Display, General, Toolbar + Shortcuts, and Other split into multiple tier sections; the per-character-only tabs (Health, Spells, Combat, Party, Cash, Statline, Talk, Auto-Light, Auto-Lair, Auto-Trainer, Events) carry a single header naming their tier
+
 ## 3.58.24
 
 - Mana-flux reroll: bumping the reroll cap / lowering the threshold now re-rolls the flux that's already up (if its last roll falls short) instead of waiting for the next cast — so changing the setting acts on the active buff

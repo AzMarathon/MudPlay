@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.24**
-> - Mana-flux reroll: bumping the reroll cap / lowering the threshold now re-rolls the flux that's already up (if its last roll falls short) instead of waiting for the next cast — so changing the setting acts on the active buff
-> - Mana-flux reroll: new "Reroll infinite" checkbox below Max rerolls — keep re-rolling until the roll clears the threshold, no cap (pauses and resumes across meditation if mana runs dry)
-> - Mana-regen roll spells now reroll regardless of a slot's target flags: flux is a self-only cast (can't be aimed at others), so a slot left on whole-party no longer silently disables its rerolling
+> **Version 3.58.25**
+> - Every Settings tab now shows which persistence tier each setting saves to, via banner-headed sections — Global (app-wide) / BBS (shared by all characters on the board) / Character profile (only the loaded character) — so it's clear where a setting lands instead of the tiers being interleaved. BBS + Display, General, Toolbar + Shortcuts, and Other split into multiple tier sections; the per-character-only tabs carry a single header naming their tier
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
