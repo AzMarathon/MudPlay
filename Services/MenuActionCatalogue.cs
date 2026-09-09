@@ -48,7 +48,6 @@ public static class MenuActionCatalogue
     {
         new("file.connect", "Connect / Disconnect", Kind.Command, "File", CommandName: "ToggleConnectionCommand", GestureProperty: "ToggleConnectionGesture"),
         new("file.quickconnect", "Quick Connect…", Kind.Command, "File", CommandName: "OpenQuickConnectCommand"),
-        new("file.bbslist", "BBS list", Kind.Command, "File", CommandName: "OpenBbsSettingsCommand"),
         new("file.disablehangups", "Disable hangups", Kind.Toggle, "File", ToggleProperty: "IsDisableHangupsActive"),
         new("file.newprofile", "New profile…", Kind.Command, "File", CommandName: "NewProfileCommand", GestureProperty: "NewProfileGesture"),
         new("file.openprofile", "Open profile…", Kind.Command, "File", CommandName: "OpenProfileCommand", GestureProperty: "OpenProfileGesture"),
@@ -65,6 +64,7 @@ public static class MenuActionCatalogue
         new("view.conversation", "Conversation", Kind.Command, "View", CommandName: "OpenConversationCommand", GestureProperty: "ConversationGesture"),
         new("view.party", "Party", Kind.Command, "View", CommandName: "OpenPartyCommand", GestureProperty: "PartyGesture"),
         new("view.buffwatchdog", "Buff Watchdog", Kind.Command, "View", CommandName: "OpenBuffWatchdogCommand", GestureProperty: "BuffWatchdogGesture"),
+        new("view.profilemanager", "Profile Management", Kind.Command, "View", CommandName: "OpenProfileManagerCommand", GestureProperty: "ProfileManagerGesture"),
         new("view.workshop", "Player Workshop", Kind.Command, "View", CommandName: "OpenWorkshopCommand", GestureProperty: "WorkshopGesture"),
         new("view.navigation", "Navigation", Kind.Command, "View", CommandName: "OpenNavigationCommand", GestureProperty: "NavigationGesture"),
         new("view.spellbook", "Spell Book", Kind.Command, "View", CommandName: "OpenSpellBookCommand", GestureProperty: "SpellBookGesture"),

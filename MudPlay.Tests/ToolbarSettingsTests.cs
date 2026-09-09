@@ -29,6 +29,7 @@ public sealed class ToolbarSettingsTests
         "ToggleSprintMode",
         null,
         "OpenParty",
+        "OpenProfileManager",
         "OpenBackscroll",
         null,
         "ToggleAllAutoOff",

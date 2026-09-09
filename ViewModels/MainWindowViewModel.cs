@@ -675,11 +675,21 @@ public partial class MainWindowViewModel : ObservableObject
             OnPropertyChanged(nameof(Recent2));
             OnPropertyChanged(nameof(Recent3));
             OnPropertyChanged(nameof(Recent4));
+            OnPropertyChanged(nameof(Recent5));
+            OnPropertyChanged(nameof(Recent6));
+            OnPropertyChanged(nameof(Recent7));
+            OnPropertyChanged(nameof(Recent8));
+            OnPropertyChanged(nameof(Recent9));
             OnPropertyChanged(nameof(ProfileName0));
             OnPropertyChanged(nameof(ProfileName1));
             OnPropertyChanged(nameof(ProfileName2));
             OnPropertyChanged(nameof(ProfileName3));
             OnPropertyChanged(nameof(ProfileName4));
+            OnPropertyChanged(nameof(ProfileName5));
+            OnPropertyChanged(nameof(ProfileName6));
+            OnPropertyChanged(nameof(ProfileName7));
+            OnPropertyChanged(nameof(ProfileName8));
+            OnPropertyChanged(nameof(ProfileName9));
             OnPropertyChanged(nameof(HasRecents));
         };
         RebuildRecentProfiles();
@@ -798,6 +808,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetTerminalNotice(
             text => Avalonia.Threading.Dispatcher.UIThread.Post(
                 () => WriteTerminalStatus(text, TerminalStatusKind.Notice)));
+        // Let non-main surfaces (Settings → BBS) open the Profile Management window.
+        AppServices.Current.SetOpenProfileManager(OpenProfileManager);
         RebuildCombatProfilesMenu();
         AppServices.Current.CombatProfiles.Changed += RebuildCombatProfilesMenu;
 
@@ -3465,6 +3477,29 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
+    // Singleton handle for the live Profile Management window — re-press toggles
+    // closed. The VM borrows the current-profile lifecycle (New / Save / Save As
+    // / swap) from this VM so the collapsed File menu loses no capability.
+    private ProfileManagerWindow? _profileManager;
+
+    [RelayCommand]
+    private void OpenProfileManager()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_profileManager is { } existing) { existing.Close(); return; }
+
+        ProfileManagerWindow window = new()
+        {
+            DataContext = new ProfileManagerViewModel(
+                () => IsDisconnected, SwapToProfileRef, NewProfile, SaveProfile, SaveProfileAsAsync),
+        };
+        window.Closed += (_, _) => _profileManager = null;
+        _profileManager = window;
+        window.Show(main);
+    }
+
     private SettingsWindow? _settings;
 
     // ----- Profile file management ----------------------------------------
@@ -3490,14 +3525,26 @@ public partial class MainWindowViewModel : ObservableObject
     public string? Recent2 => RecentLabel(2);
     public string? Recent3 => RecentLabel(3);
     public string? Recent4 => RecentLabel(4);
+    public string? Recent5 => RecentLabel(5);
+    public string? Recent6 => RecentLabel(6);
+    public string? Recent7 => RecentLabel(7);
+    public string? Recent8 => RecentLabel(8);
+    public string? Recent9 => RecentLabel(9);
 
     // ProfileNameN parallel accessors — the (bbs, char) ref for the click
-    // handler. Recent0..4 are display strings only.
+    // handler. RecentN are display strings only. Ten fixed slots is the ceiling
+    // (GlobalSettings.MaxRecentProfilesShown); how many actually populate is
+    // capped by RebuildRecentProfiles per the user's "recent profiles shown".
     public ProfileRef? ProfileName0 => RecentProfiles.Count > 0 ? RecentProfiles[0] : null;
     public ProfileRef? ProfileName1 => RecentProfiles.Count > 1 ? RecentProfiles[1] : null;
     public ProfileRef? ProfileName2 => RecentProfiles.Count > 2 ? RecentProfiles[2] : null;
     public ProfileRef? ProfileName3 => RecentProfiles.Count > 3 ? RecentProfiles[3] : null;
     public ProfileRef? ProfileName4 => RecentProfiles.Count > 4 ? RecentProfiles[4] : null;
+    public ProfileRef? ProfileName5 => RecentProfiles.Count > 5 ? RecentProfiles[5] : null;
+    public ProfileRef? ProfileName6 => RecentProfiles.Count > 6 ? RecentProfiles[6] : null;
+    public ProfileRef? ProfileName7 => RecentProfiles.Count > 7 ? RecentProfiles[7] : null;
+    public ProfileRef? ProfileName8 => RecentProfiles.Count > 8 ? RecentProfiles[8] : null;
+    public ProfileRef? ProfileName9 => RecentProfiles.Count > 9 ? RecentProfiles[9] : null;
 
     private string? RecentLabel(int index)
     {
@@ -3637,24 +3684,30 @@ public partial class MainWindowViewModel : ObservableObject
             PruneMissingRecentProfiles();
             return;
         }
-        // Defer the load off the menu-click call stack. Loading a profile
-        // repositions/resizes the main window (WindowLayoutStore restores the
-        // profile's saved bounds on ProfileLoaded); running that synchronously
-        // here moves the window while the File menu's popup is still open, so the
-        // flyout is left stranded at the window's old position until the click
-        // returns. Posting lets the menu close first, then the reposition lands.
+        SwapToProfileRef(recent);
+    }
+
+    // Load a profile by ref, promote it to recent, and sync the profile menu.
+    // Shared by File → Recent and the Profile Management window's Swap-to.
+    // Deferred off the click call stack: loading a profile repositions/resizes
+    // the main window (WindowLayoutStore restores saved bounds on ProfileLoaded);
+    // running that synchronously would move the window while the menu popup is
+    // still open, stranding the flyout. Posting lets the menu close first.
+    private void SwapToProfileRef(ProfileRef target)
+    {
+        ProfileService profile = AppServices.Current.Profile;
         Dispatcher.UIThread.Post(() =>
         {
             try
             {
-                profile.Load(recent.Bbs, recent.Name);
-                PromoteRecent(recent);
+                profile.Load(target.Bbs, target.Name);
+                PromoteRecent(target);
                 SyncProfileMenuState();
             }
             catch (Exception ex)
             {
                 AppServices.Current.Log.Error("Profile",
-                    $"Failed to load '{recent.Name}' on '{recent.Bbs}': {ex.Message}");
+                    $"Failed to load '{target.Name}' on '{target.Bbs}': {ex.Message}");
             }
         });
     }
@@ -3666,7 +3719,9 @@ public partial class MainWindowViewModel : ObservableObject
         settings.RecentProfiles ??= new();
         settings.RecentProfiles.RemoveAll(r => r == profileRef);
         settings.RecentProfiles.Insert(0, profileRef);
-        while (settings.RecentProfiles.Count > GlobalSettings.RecentProfilesLimit)
+        // Retain up to the hard ceiling regardless of how many the menu shows, so
+        // raising "recent profiles shown" reveals more without re-loading them.
+        while (settings.RecentProfiles.Count > GlobalSettings.MaxRecentProfilesShown)
             settings.RecentProfiles.RemoveAt(settings.RecentProfiles.Count - 1);
         settings.LastUsedProfile = profileRef;
         settingsSvc.Save();
@@ -3683,9 +3738,12 @@ public partial class MainWindowViewModel : ObservableObject
         PruneMissingRecentProfiles();
 
         RecentProfiles.Clear();
-        IList<ProfileRef>? source = AppServices.Current.Settings.Current.RecentProfiles;
-        if (source is null) return;
-        foreach (ProfileRef recent in source) RecentProfiles.Add(recent);
+        GlobalSettings settings = AppServices.Current.Settings.Current;
+        if (settings.RecentProfiles is not { } source) return;
+        // Show only the configured number (clamped to the retained ceiling); the
+        // rest stay on disk for when the user raises the count.
+        int shown = Math.Clamp(settings.RecentProfilesShown, 0, GlobalSettings.MaxRecentProfilesShown);
+        for (int i = 0; i < source.Count && i < shown; i++) RecentProfiles.Add(source[i]);
     }
 
     // Remove recent-profile refs pointing at a profile that no longer exists and
@@ -3718,9 +3776,6 @@ public partial class MainWindowViewModel : ObservableObject
 
     [RelayCommand]
     private void OpenSettings() => OpenSettingsAt(null);
-
-    [RelayCommand]
-    private void OpenBbsSettings() => OpenSettingsAt("bbs");
 
     // View → Events menu entry. Opens the Settings window deep-linked to
     // the Events tab (matches the MenuCommandIds.SettingsOpenEvents
@@ -4873,6 +4928,7 @@ public partial class MainWindowViewModel : ObservableObject
     public string ConversationGesture     => GetGesture(Models.Profile.BuiltInAction.OpenConversation);
     public string PartyGesture            => GetGesture(Models.Profile.BuiltInAction.OpenParty);
     public string BuffWatchdogGesture     => GetGesture(Models.Profile.BuiltInAction.OpenBuffWatchdog);
+    public string ProfileManagerGesture   => GetGesture(Models.Profile.BuiltInAction.OpenProfileManager);
     public string WorkshopGesture         => GetGesture(Models.Profile.BuiltInAction.OpenWorkshop);
     public string NavigationGesture       => GetGesture(Models.Profile.BuiltInAction.OpenNavigation);
     public string SpellBookGesture        => GetGesture(Models.Profile.BuiltInAction.OpenSpellBook);
@@ -4898,6 +4954,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversationGesture));
         OnPropertyChanged(nameof(PartyGesture));
         OnPropertyChanged(nameof(BuffWatchdogGesture));
+        OnPropertyChanged(nameof(ProfileManagerGesture));
         OnPropertyChanged(nameof(WorkshopGesture));
         OnPropertyChanged(nameof(NavigationGesture));
         OnPropertyChanged(nameof(SpellBookGesture));

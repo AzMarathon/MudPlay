@@ -44,8 +44,9 @@ public sealed class ProfileService
     // between a character and its server (there is no longer a BbsName field on
     // the DTO; folder location is the source of truth). For a named profile
     // this is set from disk on Load; for a blank draft it stays null until the
-    // user pins a BBS via PinDraftBbs (Settings → BBS Apply). Consumed by
-    // SettingsResolver and AppServices.ResolveActiveBbs to decide the active BBS.
+    // draft is named + homed (File → Save As, or the Profile Management window's
+    // Add / Assign). Consumed by SettingsResolver and AppServices.ResolveActiveBbs
+    // to decide the active BBS.
     public string? CurrentBbsName { get; private set; }
 
     // Whether the current no-name profile persists to the Global default-profile
@@ -317,17 +318,6 @@ public sealed class ProfileService
         profile.Settings["General"] = JsonSerializer.SerializeToElement(general);
     }
 
-    // Pin a BBS onto the loaded blank draft so its credentials / overrides have
-    // a home before the draft is named. No-op (and ignored) for a named profile
-    // — those re-home via ReHome instead, since the folder already exists on
-    // disk. Fires nothing; the Settings → BBS Apply path that calls this also
-    // raises NotifyMutated / NotifyBbsPinApplied.
-    public void PinDraftBbs(string? bbsName)
-    {
-        if (CurrentProfileName is not null) return; // named profile → ReHome path owns this.
-        CurrentBbsName = string.IsNullOrWhiteSpace(bbsName) ? null : bbsName;
-    }
-
     // Move the loaded named profile's folder from its current BBS (and name) to
     // newBbs (and optionally newName), updating CurrentBbsName /
     // CurrentProfileName / CharacterProfile.Name to match. Silent — mirrors the
@@ -522,6 +512,98 @@ public sealed class ProfileService
         ProfileSaving?.Invoke(Current);
         Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
         JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), Current);
+    }
+
+    // Create a new named character on a BBS from the Global default template,
+    // WITHOUT loading it — the explicit "add a character" path (the Profile
+    // Management window), distinct from SaveAs which renames the loaded profile.
+    // Throws on a blank name or when a profile of that name already exists under
+    // the BBS. Fires nothing: Current is untouched.
+    public void CreateProfile(string bbsName, string profileName)
+    {
+        if (string.IsNullOrWhiteSpace(bbsName))
+            throw new ArgumentException("BBS name is required.", nameof(bbsName));
+        if (string.IsNullOrWhiteSpace(profileName))
+            throw new ArgumentException("Profile name is required.", nameof(profileName));
+        if (Exists(bbsName, profileName))
+            throw new IOException($"A profile named '{profileName}' already exists on '{bbsName}'.");
+
+        CharacterProfile fresh = ReadDefaultProfileFile();
+        fresh.Name = profileName;
+        Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
+        JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), fresh);
+        Log?.Info(LogCategory, $"Created profile '{profileName}' on '{bbsName}'.");
+    }
+
+    // Delete a saved profile's folder. When it's the CURRENTLY loaded profile,
+    // Close() it FIRST (that clears Current and fires ProfileClosed but does NOT
+    // save — a Load/LoadDefaultProfile with a live Current would auto-save the
+    // outgoing profile and resurrect the folder we're deleting), then remove the
+    // folder, then LoadDefaultProfile so the session always has a live Current
+    // (its outgoing-save is skipped because Current is already null). A
+    // non-current profile is simply removed from disk (fires nothing).
+    public void DeleteProfile(string bbsName, string profileName)
+    {
+        if (string.IsNullOrWhiteSpace(bbsName) || string.IsNullOrWhiteSpace(profileName)) return;
+        string folder = AppPaths.ProfileFolder(bbsName, profileName);
+        bool isCurrent = Current is not null
+            && string.Equals(CurrentBbsName, bbsName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(CurrentProfileName, profileName, StringComparison.Ordinal);
+
+        if (isCurrent)
+        {
+            Close();
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+            Log?.Info(LogCategory, $"Deleted the loaded profile '{profileName}' on '{bbsName}'.");
+            LoadDefaultProfile();
+            return;
+        }
+
+        if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        Log?.Info(LogCategory, $"Deleted profile '{profileName}' on '{bbsName}'.");
+    }
+
+    // Move a profile's folder to a new BBS and/or name — unifies rename (same
+    // BBS, new name) and assign-to-BBS (different BBS), current or not. For the
+    // CURRENTLY loaded profile this reuses ReHome (updates Current + logs). For a
+    // stored non-current profile it moves the folder and rewrites the moved
+    // profile.json's Name. Throws if the destination already exists (the caller
+    // resolves a name clash first, then re-invokes with a clash-free name).
+    public void MoveProfile(string fromBbs, string fromName, string toBbs, string toName)
+    {
+        if (string.IsNullOrWhiteSpace(fromBbs) || string.IsNullOrWhiteSpace(fromName))
+            throw new ArgumentException("Source BBS and profile are required.", nameof(fromName));
+        if (string.IsNullOrWhiteSpace(toBbs) || string.IsNullOrWhiteSpace(toName))
+            throw new ArgumentException("Destination BBS and profile are required.", nameof(toName));
+        if (string.Equals(fromBbs, toBbs, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(fromName, toName, StringComparison.Ordinal))
+            return; // no-op
+
+        bool isCurrent = Current is not null
+            && string.Equals(CurrentBbsName, fromBbs, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(CurrentProfileName, fromName, StringComparison.Ordinal);
+        if (isCurrent)
+        {
+            ReHome(toBbs, toName);
+            return;
+        }
+
+        string destFolder = AppPaths.ProfileFolder(toBbs, toName);
+        if (Directory.Exists(destFolder) || Exists(toBbs, toName))
+            throw new IOException($"A profile already exists at '{destFolder}'.");
+        string sourceFolder = AppPaths.ProfileFolder(fromBbs, fromName);
+        if (!Directory.Exists(sourceFolder)) return;
+
+        Directory.CreateDirectory(AppPaths.BbsProfilesDir(toBbs));
+        Directory.Move(sourceFolder, destFolder);
+        // The moved profile.json still carries the old Name — bring it in line.
+        string path = AppPaths.CharacterProfileFile(toBbs, toName);
+        if (JsonStore.Load<CharacterProfile>(path) is { } moved)
+        {
+            moved.Name = toName;
+            JsonStore.Save(path, moved);
+        }
+        Log?.Info(LogCategory, $"Moved profile '{fromName}' ({fromBbs}) → '{toName}' ({toBbs}).");
     }
 
     // Enumerate every profile across every BBS that has a primary profile.json

@@ -1,10 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.30**
-> - Fixed a crash: renaming a BBS to a name whose folder already exists no longer takes the app down — it refuses with a "name already in use" notice and leaves the rename undone
-> - A deleted (or renamed-away) character profile no longer keeps reappearing in File → Recent — stale entries are pruned from the menu and the saved list
-> - Buff Watchdog: a buff that isn't set to recast now drops its bar the moment its timer runs out, instead of sitting full at 0s until cleared by hand — only a buff set to recast persists as an expired bar
+> **Version 3.59.0**
+> - New **Profile Management** window (View menu + toolbar) — one place to add / rename / delete / load characters, move a character to another BBS, and add / remove / rename BBSes
+> - **Load** is multi-select: tick several characters and the first loads into this client while the rest each open in their own new client — a whole stable online in one click (a connected client is left alone; all selected open new)
+> - File menu's New / Open / Save / Save As collapsed into a single **Profile Management** entry (the Ctrl+N/O/S/Shift+S shortcuts still work)
+> - Characters can now be **renamed and deleted**, and moved between BBSes via an explicit **Assign to BBS**
+> - BBS add / remove moved out of Settings → BBS + Display into the new window; that tab keeps the BBS list for selecting and editing a board's connection/display fields
+> - Selecting a BBS in Settings no longer silently re-homes your loaded character
+> - New Settings → General picker for how many recent profiles the File menu lists (0–10, default 5)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
