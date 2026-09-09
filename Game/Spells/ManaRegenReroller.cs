@@ -9,8 +9,11 @@ namespace MudPlay.Game.Spells;
 // Threshold: reroll while the rolled spells: contribution lands below this.
 // null disables rerolling — the spell then just recasts on expiry through the
 // normal buff path, no abil read. Cap: hard ceiling on consecutive rerolls per
-// cast cycle before accepting whatever landed.
-public readonly record struct ManaRegenRerollConfig(int? Threshold, int Cap);
+// cast cycle before accepting whatever landed. Unlimited: ignore Cap and keep
+// rerolling until the roll clears the threshold (the mana floor still suspends /
+// resumes the cycle) — the "reroll infinite" toggle, so the user needn't set an
+// obscene Cap.
+public readonly record struct ManaRegenRerollConfig(int? Threshold, int Cap, bool Unlimited = false);
 
 // Paradigm-only reroll state machine for a code-145 mana-regen roll spell
 // (nature tap / mana flux) — a persistent +/- modifier to the mana-regen rate
@@ -155,7 +158,7 @@ public sealed class ManaRegenReroller : IDisposable
             _activeShort = spellShort;
             _rerollsUsed = 0;
             _log?.Info(LogCategory,
-                $"reroll cycle start spell={spellShort} threshold={cfg.Threshold} cap={cfg.Cap}");
+                $"reroll cycle start spell={spellShort} threshold={cfg.Threshold} cap={CapLabel(cfg)}");
         }
         else
         {
@@ -211,13 +214,13 @@ public sealed class ManaRegenReroller : IDisposable
 
         ManaRegenRerollConfig cfg = _readConfig();
         if (cfg.Threshold is null) { Reset(); return; }     // rerolling disabled meanwhile
-        if (_rerollsUsed >= cfg.Cap) { Reset(); return; }   // defensive: nothing left to spend
+        if (!cfg.Unlimited && _rerollsUsed >= cfg.Cap) { Reset(); return; }   // defensive: nothing left to spend
         if (!_canAffordReroll()) return;                    // still under the floor — keep waiting
 
         _waitingForMana = false;
         _rerollsUsed++;
         _log?.Info(LogCategory,
-            $"resuming reroll spell={shortCode} after mana recovery — attempt {_rerollsUsed}/{cfg.Cap}");
+            $"resuming reroll spell={shortCode} after mana recovery — attempt {_rerollsUsed}/{CapLabel(cfg)}");
         _recast(shortCode);
     }
 
@@ -247,7 +250,7 @@ public sealed class ManaRegenReroller : IDisposable
             return;
         }
 
-        if (_rerollsUsed >= cfg.Cap)
+        if (!cfg.Unlimited && _rerollsUsed >= cfg.Cap)
         {
             _log?.Info(LogCategory,
                 $"reroll cap reached spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
@@ -267,15 +270,54 @@ public sealed class ManaRegenReroller : IDisposable
             _waitingForMana = true;
             _log?.Info(LogCategory,
                 $"reroll paused at mana floor spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
-                $"after {_rerollsUsed}/{cfg.Cap} reroll(s) — waiting for mana to recover before the next attempt");
+                $"after {_rerollsUsed}/{CapLabel(cfg)} reroll(s) — waiting for mana to recover before the next attempt");
             return;
         }
 
         _rerollsUsed++;
         _log?.Info(LogCategory,
             $"rerolling spell={shortCode} {valueLabel}={value} < threshold={threshold} " +
-            $"attempt {_rerollsUsed}/{cfg.Cap}");
+            $"attempt {_rerollsUsed}/{CapLabel(cfg)}");
         _recast(shortCode);
+    }
+
+    // Cap for the log: "∞" when unlimited, else the numeric ceiling.
+    private static string CapLabel(ManaRegenRerollConfig cfg) => cfg.Unlimited ? "∞" : cfg.Cap.ToString();
+
+    // A reroll-config edit (cap raised / threshold loosened / infinite turned on) can
+    // now warrant rerolling the roll spell that's ALREADY active — its last landed roll
+    // is remembered in LastObservedValue. Re-open a cycle and stage one recast when that
+    // roll is now below the new threshold and a reroll is allowed, so bumping the setting
+    // acts on the live buff instead of waiting for the next natural recast (report
+    // paradigm-20260909-113655: user set flux 0→20 expecting the active -2 to reroll). The
+    // caller supplies the active roll spell's short code and has confirmed it's up. No-op
+    // when a cycle is already in flight, no roll has been observed, rerolling is disabled,
+    // no reroll is allowed, or the active roll already clears the threshold.
+    public void ReconsiderActiveRoll(string spellShort)
+    {
+        if (string.IsNullOrWhiteSpace(spellShort)) return;
+        if (_activeShort is not null) return;              // a cycle is running; it reads live config already
+        if (LastObservedValue is not { } last) return;     // never saw a roll to judge
+        ManaRegenRerollConfig cfg = _readConfig();
+        if (cfg.Threshold is not { } threshold) return;     // rerolling disabled
+        if (!cfg.Unlimited && cfg.Cap <= 0) return;         // no rerolls allowed
+        if (last >= threshold) return;                      // the active roll already clears the bar
+
+        _activeShort = spellShort;
+        _rerollsUsed = 0;
+        if (!_canAffordReroll())
+        {
+            // Below the mana floor — SUSPEND; OnRecoveryTick fires the reroll once mana climbs.
+            _waitingForMana = true;
+            _log?.Info(LogCategory,
+                $"config change — active {spellShort} roll {last} < threshold {threshold} (cap {CapLabel(cfg)}): " +
+                "under the mana floor, waiting to reroll");
+            return;
+        }
+        _rerollsUsed = 1;
+        _log?.Info(LogCategory,
+            $"config change — rerolling active {spellShort} (last roll {last} < threshold {threshold}) attempt 1/{CapLabel(cfg)}");
+        _recast(spellShort);
     }
 
     // Abandon any in-progress cycle — call on disconnect / death / spell-pick

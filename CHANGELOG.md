@@ -1,5 +1,12 @@
 # Version history
 
+## 3.58.24
+
+- Mana-flux reroll: bumping the reroll cap / lowering the threshold now re-rolls the flux that's already up (if its last roll falls short) instead of waiting for the next cast — so changing the setting acts on the active buff
+- Mana-flux reroll: new "Reroll infinite" checkbox below Max rerolls — keep re-rolling until the roll clears the threshold, no cap (pauses and resumes across meditation if mana runs dry)
+- Mana-regen roll spells now reroll regardless of a slot's target flags: flux is a self-only cast (can't be aimed at others), so a slot left on whole-party no longer silently disables its rerolling
+- bug reports addressed: paradigm-20260909-113655
+
 ## 3.58.22
 
 - Auto-Lair now walks to the closest lair that's up by the time you arrive (a closer lair still on cooldown that pops during the walk counts, and beats a farther already-ready one) and no longer parks in a wait-room idling for a nearer lair unless it'd actually be ready when you get there — maximizing hits per run instead of waiting out long idle timers
