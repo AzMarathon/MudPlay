@@ -4,7 +4,7 @@
 > **Version 3.60.0**
 > - Loops: per-room **"Do not attack here"** flag — the loop skips combat in that room as if auto-combat were off, but a triggered rest still clears it
 > - Loops: loop-wide **"Only attack in lair rooms"** — only engage in game-data lair rooms; walk through the rest (do-not-attack still overrides on a lair room)
-> - New **Entire Loop Settings** entry at the top of the CURRENT NAV rail (and a matching control in the Edit Loop window) — home for whole-loop toggles
+> - New **Entire Loop Settings** entry at the top of the CURRENT NAV area — while building a loop, while one is running, and mirrored in the Edit Loop window — home for whole-loop toggles
 > - Edit Loop table now edits each waypoint's command / delay / no-rest / no-attack **inline as columns** (the ✎ per-row dialog is gone; the build-time strip keeps it)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

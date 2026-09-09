@@ -1261,6 +1261,33 @@
                             <!-- The section's description line lives up in the
                                  top-bar action label (TopBarStatusText) now, so
                                  CURRENT NAV holds only its step rows. -->
+                            <!-- Build-time Entire Loop Settings — the loop-wide toggles for the
+                                 loop being built (mirrors the running loop's rail entry + the
+                                 Edit Loop window). First thing in the current-nav area while
+                                 building, above the per-room click list. -->
+                            <Button IsVisible="{Binding IsLoopBuilding}"
+                                    HorizontalAlignment="Left"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="2,0"
+                                    FontSize="11"
+                                    Content="⚙  Entire Loop Settings"
+                                    ToolTip.Tip="Settings that apply to the whole loop you're building, not any one room.">
+                                <Button.Flyout>
+                                    <Flyout Placement="Bottom">
+                                        <StackPanel Spacing="6" MaxWidth="280">
+                                            <TextBlock Text="Entire Loop Settings"
+                                                       FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource ChromeFgBrush}"/>
+                                            <CheckBox Content="Only attack in lair rooms"
+                                                      FontSize="11"
+                                                      IsChecked="{Binding LoopBuilder.OnlyAttackInLairRooms, Mode=TwoWay}"
+                                                      ToolTip.Tip="Only engage hostiles in game-data lair rooms; walk through the rest as if auto-combat were off. A per-room 'do not attack' still skips even a lair room, and a triggered rest still clears any room."/>
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+
                             <!-- Building-loop click list — visible only while in LoopBuild mode.
                                  Click a row to attach a command to that waypoint (opens the
                                  same Waypoint action editor the loop editor uses); ✕ removes,

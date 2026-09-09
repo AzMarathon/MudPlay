@@ -214,7 +214,7 @@ Each waypoint can carry its own per-room settings, edited **inline in the Edit L
 
 ### Entire Loop Settings
 
-Some settings apply to the **whole loop**, not one room. They live in one place: the **⚙ Entire Loop Settings** entry at the top of the CURRENT NAV rail while a loop is running (click it for a flyout), mirrored by a checkbox next to **Set as favorite** in the Edit Loop window.
+Some settings apply to the **whole loop**, not one room. Reach them from **⚙ Entire Loop Settings** — it appears at the top of the CURRENT NAV area **while you're building a loop** and again at the top of the rail **while a loop is running** (click it for a flyout), and it's mirrored by a checkbox next to **Set as favorite** in the Edit Loop window.
 
 - **Only attack in lair rooms** — the loop only engages hostiles in **lair rooms** (rooms the game data tags as monster lairs); every other room is walked through as if auto-combat were off. The inverse of per-room "no atk": instead of opting rooms out one by one, you opt the whole loop *in* to lair rooms only. A per-room **"do not attack"** still skips even a lair room (it wins), and a triggered rest still clears any suppressed room so it can rest. Note the suppressed rooms include the walked-through connectors between waypoints, not just the marked waypoints.
 

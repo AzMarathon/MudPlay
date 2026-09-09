@@ -35,6 +35,12 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
 
     [ObservableProperty] private string _proposedName = "";
     [ObservableProperty] private string _notes = string.Empty;
+
+    // Loop-wide "only attack in lair rooms" (an Entire Loop Setting), set from
+    // the build-time ⚙ Entire Loop Settings flyout. Carried into the saved loop
+    // on Save/BuildTransient. Loop-wide, not per-waypoint.
+    [ObservableProperty] private bool _onlyAttackInLairRooms;
+
     [ObservableProperty] private int _expandedStepCount;
     [ObservableProperty] private string _unreachableSummary = string.Empty;
 
@@ -138,6 +144,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         UnreachableSummary = string.Empty;
         PreviewedRoomKeys = null;
         WaypointKeys = null;
+        OnlyAttackInLairRooms = false;
         OnPropertyChanged(nameof(HasClicks));
         OnPropertyChanged(nameof(CanSave));
     }
@@ -175,6 +182,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         return new Loop(ProposedName, waypoints)
         {
             Notes = Notes ?? string.Empty,
+            OnlyAttackInLairRooms = OnlyAttackInLairRooms,
         };
     }
 
