@@ -1266,12 +1266,13 @@
                                  Edit Loop window). First thing in the current-nav area while
                                  building, above the per-room click list. -->
                             <Button IsVisible="{Binding IsLoopBuilding}"
-                                    HorizontalAlignment="Left"
+                                    HorizontalAlignment="Center"
+                                    HorizontalContentAlignment="Center"
                                     Background="Transparent"
                                     BorderThickness="0"
                                     Padding="2,0"
-                                    FontSize="11"
-                                    Content="⚙  Entire Loop Settings"
+                                    FontSize="13"
+                                    Content="⚙  Entire Loop Settings  ⚙"
                                     ToolTip.Tip="Settings that apply to the whole loop you're building, not any one room.">
                                 <Button.Flyout>
                                     <Flyout Placement="Bottom">
@@ -1458,12 +1459,12 @@
                                                    settings (the extensible home for whole-loop toggles). -->
                                               <Button IsVisible="{Binding IsLoopSettingsEntry}"
                                                       HorizontalAlignment="Stretch"
-                                                      HorizontalContentAlignment="Left"
+                                                      HorizontalContentAlignment="Center"
                                                       Background="Transparent"
                                                       BorderThickness="0"
                                                       Padding="2,0"
-                                                      FontSize="11"
-                                                      Content="⚙  Entire Loop Settings"
+                                                      FontSize="13"
+                                                      Content="⚙  Entire Loop Settings  ⚙"
                                                       ToolTip.Tip="Settings that apply to the whole loop, not any one room.">
                                                   <Button.Flyout>
                                                       <Flyout Placement="Bottom">
