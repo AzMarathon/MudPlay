@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.18**
-> - Auto-Lair routing-heuristic option now spells "minimize" (was the British "minimise")
-> - Map legend rewritten to match what the map actually draws: current room now shows its bright ring + centre dot (not a flat swatch), and the walk-to destination, up+down exit rooms, deathpile skull, boss crown (plus stop-before-boss halt ring), trainer chevrons, gang-house robot, avoid/stash X-marks, and the @where result flash are all keyed now (route-line colours stay in Settings → General since they're recolourable)
-> - Custom monster spawn lines with no "into the room"/"from <dir>" wording (e.g. "A muckworm darts out of the mud!") are now recognized: the client spots the yellow-tagged monster name and engages the room a round before the spawn's first swing, instead of only reacting once it hits you
+> **Version 3.58.22**
+> - Auto-Lair now walks to the closest lair that's up by the time you arrive (a closer lair still on cooldown that pops during the walk counts, and beats a farther already-ready one) and no longer parks in a wait-room idling for a nearer lair unless it'd actually be ready when you get there — maximizing hits per run instead of waiting out long idle timers
+> - Gear-set swaps no longer send a redundant "rem" before re-equipping a paired ring/bracelet: the worn-slot snapshot now tracks the game's real finger/wrist order, so wearing the ring auto-evicts cleanly (also quiets the meditate↔default swap chatter)
+> - Fixed a two-handed item-use buff (a 2H weapon cast) sometimes leaving the 2H equipped over your normal 1H+shield: the restore now falls back to your Default set's weapon and off-hand instead of only the live snapshot, so a stranded 2H recovers instead of persisting across recasts
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

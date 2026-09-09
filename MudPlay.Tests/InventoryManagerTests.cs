@@ -758,6 +758,31 @@ public sealed class InventoryManagerTests
     }
 
     [Fact]
+    public void Equip_PairedRingSwap_PreservesPhysicalSlotOrder()
+    {
+        // `eq <ring>` into a full finger pair prints remove-then-wear (the game evicts
+        // slot 1 and wears the new ring there). The snapshot must keep the new ring in
+        // that freed position, NOT append it at the end — appending inverts the finger
+        // order the paired-slot gear composer reads, which made it emit a redundant
+        // `rem` on the next swap (report paradigm-20260909-074126).
+        using Harness h = new(slotResolver: name =>
+            name.EndsWith("ring", StringComparison.OrdinalIgnoreCase) ? "Finger" : null);
+        h.Feed("You are carrying diamond-studded ring (Finger), gold jeweled ring (Finger), "
+             + "5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Feed("You have removed diamond-studded ring.");   // eq pearl evicts slot 1
+        h.Feed("You are now wearing pearl ring.");
+
+        var fingers = new List<string>();
+        foreach (EquippedItem e in Worn(h))
+            if (e.Slot == "Finger") fingers.Add(e.Name);
+        // pearl took diamond's slot-1 spot → [pearl, gold], not [gold, pearl].
+        Assert.Equal(new[] { "pearl ring", "gold jeweled ring" }, fingers);
+    }
+
+    [Fact]
     public void Equip_SameWeaponReconfirmed_DoesNotDuplicateIntoCarried()
     {
         using Harness h = new();

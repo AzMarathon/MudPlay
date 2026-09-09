@@ -1,5 +1,12 @@
 # Version history
 
+## 3.58.22
+
+- Auto-Lair now walks to the closest lair that's up by the time you arrive (a closer lair still on cooldown that pops during the walk counts, and beats a farther already-ready one) and no longer parks in a wait-room idling for a nearer lair unless it'd actually be ready when you get there — maximizing hits per run instead of waiting out long idle timers
+- Gear-set swaps no longer send a redundant "rem" before re-equipping a paired ring/bracelet: the worn-slot snapshot now tracks the game's real finger/wrist order, so wearing the ring auto-evicts cleanly (also quiets the meditate↔default swap chatter)
+- Fixed a two-handed item-use buff (a 2H weapon cast) sometimes leaving the 2H equipped over your normal 1H+shield: the restore now falls back to your Default set's weapon and off-hand instead of only the live snapshot, so a stranded 2H recovers instead of persisting across recasts
+- bug reports addressed: paradigm-20260909-074126, paradigm-20260909-090029, paradigm-20260909-095419
+
 ## 3.58.18
 
 - Auto-Lair routing-heuristic option now spells "minimize" (was the British "minimise")

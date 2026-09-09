@@ -88,23 +88,104 @@ public sealed class AutoLairSchedulerTests
     }
 
     [Fact]
-    public void PickNext_DefaultHeuristic_IdlePenaltyZero_PrefersIdleOverWasted()
+    public void PickNext_DefaultHeuristic_PrefersReadyLair_EvenAtZeroPenalty()
     {
-        // With idlePenalty=0 the default reduces to throughput. The
-        // candidate with idle (negative slack) scores 0 and beats any
-        // candidate with even small wasted respawn.
+        // "Prefer a ready lair" is a hard rule for Default, independent of idlePenalty:
+        // an already-ready lair (200) always beats idling for a sooner-popping one
+        // (100), even at penalty 0 (where the old Default reduced to throughput and
+        // would have idled). Fixes the reported 112s wait-room idle.
         LairCandidate[] cands =
         {
-            Reachable(1, 100, readyAt: _t0.AddSeconds(100), hops:  2),  // idle=97s, score=0
-            Reachable(1, 200, readyAt: _t0,                 hops:  3),  // wasted=4s, score=4
+            Reachable(1, 100, readyAt: _t0.AddSeconds(100), hops:  2),  // idle=97s
+            Reachable(1, 200, readyAt: _t0,                 hops:  3),  // ready now, wasted=4s
         };
 
         LairDecision? best = AutoLairScheduler.PickNext(
             cands, _flat, AutoLairHeuristic.Default, idlePenalty: 0.0, now: _t0);
 
         Assert.NotNull(best);
+        Assert.Equal(new RoomKey(1, 200), best!.Lair);
+        Assert.True(best.SlackAtEntry >= TimeSpan.Zero);   // no idle wait
+    }
+
+    [Fact]
+    public void PickNext_DefaultHeuristic_PrefersReadyFarLair_OverShortIdleNearLair()
+    {
+        // The exact reported shape: a nearer lair popping soon (a small idle wait)
+        // used to out-score an already-ready farther lair and strand the walker idling.
+        // Near lair (200): 1 hop, pops in 5s → 3s idle (old score 3). Far lair (100):
+        // ready now, 10 hops → wasted 11 (old score 11). Old Default idled for 200;
+        // Default now goes to the already-ready 100 rather than sit idle.
+        LairCandidate[] cands =
+        {
+            Reachable(1, 100, readyAt: _t0,               hops: 10),  // ready now, no idle
+            Reachable(1, 200, readyAt: _t0.AddSeconds(5), hops:  1),  // 3s idle wait
+        };
+
+        LairDecision? best = AutoLairScheduler.PickNext(cands, _flat, now: _t0);
+
+        Assert.NotNull(best);
         Assert.Equal(new RoomKey(1, 100), best!.Lair);
-        Assert.Equal(0.0, best.Score, precision: 3);
+        Assert.True(best.SlackAtEntry >= TimeSpan.Zero);
+    }
+
+    [Fact]
+    public void PickNext_DefaultHeuristic_AllLairsIdle_FallsBackToLeastIdle()
+    {
+        // When NO lair is up by arrival — every option forces an idle wait — the
+        // prefer-ready rule has nothing to pick, so Default falls back to its balanced
+        // least-idle choice (200, a 17s wait, over 100's 97s wait).
+        LairCandidate[] cands =
+        {
+            Reachable(1, 100, readyAt: _t0.AddSeconds(100), hops: 2),  // idle ~97s
+            Reachable(1, 200, readyAt: _t0.AddSeconds(20),  hops: 2),  // idle ~17s
+        };
+
+        LairDecision? best = AutoLairScheduler.PickNext(cands, _flat, now: _t0);
+
+        Assert.NotNull(best);
+        Assert.Equal(new RoomKey(1, 200), best!.Lair);
+        Assert.True(best.SlackAtEntry < TimeSpan.Zero);   // forced idle
+    }
+
+    [Fact]
+    public void PickNext_DefaultHeuristic_ClosestReadyByArrival_NotLeastWasted()
+    {
+        // Among lairs that are up by arrival, pick the CLOSEST (fewest hops = soonest
+        // we start fighting = most hits/run), NOT the one with the least wasted respawn.
+        // Lair A (100): ready long ago, 3 hops → arrival 4s (wasted 104). Lair B (200):
+        // ready now, 10 hops → arrival 11s (wasted 11). Least-wasted would pick B; the
+        // right pick for throughput is the closer A.
+        LairCandidate[] cands =
+        {
+            Reachable(1, 100, readyAt: _t0.AddSeconds(-100), hops:  3),
+            Reachable(1, 200, readyAt: _t0,                  hops: 10),
+        };
+
+        LairDecision? best = AutoLairScheduler.PickNext(cands, _flat, now: _t0);
+
+        Assert.NotNull(best);
+        Assert.Equal(new RoomKey(1, 100), best!.Lair);
+    }
+
+    [Fact]
+    public void PickNext_DefaultHeuristic_CloserCooldownReadyByArrival_BeatsFartherReadyNow()
+    {
+        // A closer lair still on cooldown that WILL be up by the time we walk there
+        // beats a farther already-ready one — no idling, and we start fighting sooner.
+        // Lair A (100): ready now, 5 hops → arrival 6s. Lair B (200): pops in 2s, 2 hops
+        // → arrival 3s, up by then (slack +1). B is the closer, sooner fight.
+        LairCandidate[] cands =
+        {
+            Reachable(1, 100, readyAt: _t0,               hops: 5),
+            Reachable(1, 200, readyAt: _t0.AddSeconds(2), hops: 2),
+        };
+
+        LairDecision? best = AutoLairScheduler.PickNext(cands, _flat, now: _t0);
+
+        Assert.NotNull(best);
+        Assert.Equal(new RoomKey(1, 200), best!.Lair);
+        Assert.True(best.SlackAtEntry >= TimeSpan.Zero);   // no idle wait
     }
 
     // ----- throughput heuristic -------------------------------------
@@ -146,22 +227,25 @@ public sealed class AutoLairSchedulerTests
     }
 
     [Fact]
-    public void PickNext_ExactlyOnTime_SlackZero_WinsOverPositiveAndNegative()
+    public void PickNext_ExactlyOnTime_ReadyByArrival_WinsOverIdle_FreshestBreaksTie()
     {
-        // Perfect timing — slack=0 → score=0 → beats anything else.
-        // entryArrival = _t0 + 3 hops × 1s + 1s entry = _t0 + 4s.
+        // All three are 3 hops → arrival = _t0 + 3×1s + 1s entry = _t0 + 4s. Lair 100
+        // pops exactly at arrival (slack 0) and 300 is already up (slack +4) — both
+        // ready by arrival, same distance; the freshest (100, slack 0) breaks the tie.
+        // Lair 200 pops at +10 (would idle 6s) and is excluded. Score is the arrival
+        // time (4s), the metric ready-by-arrival lairs rank on.
         LairCandidate[] cands =
         {
-            Reachable(1, 100, readyAt: _t0.AddSeconds( 4), hops: 3),  // perfect
-            Reachable(1, 200, readyAt: _t0.AddSeconds(10), hops: 3),  // 6s idle
-            Reachable(1, 300, readyAt: _t0,                hops: 3),  // 4s wasted
+            Reachable(1, 100, readyAt: _t0.AddSeconds( 4), hops: 3),  // ready exactly on arrival
+            Reachable(1, 200, readyAt: _t0.AddSeconds(10), hops: 3),  // would idle 6s
+            Reachable(1, 300, readyAt: _t0,                hops: 3),  // already up (wasted 4s)
         };
 
         LairDecision? best = AutoLairScheduler.PickNext(cands, _flat, now: _t0);
 
         Assert.NotNull(best);
         Assert.Equal(new RoomKey(1, 100), best!.Lair);
-        Assert.Equal(0.0, best.Score, precision: 3);
+        Assert.Equal(4.0, best.Score, precision: 3);
     }
 
     // ----- decision payload -----------------------------------------

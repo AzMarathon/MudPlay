@@ -67,6 +67,14 @@ public sealed partial class InventoryManager : IDisposable
     private bool _loaded;
     private DateTimeOffset _lastUpdated = DateTimeOffset.MinValue;
     private IReadOnlyList<EquippedItem> _equipped = Array.Empty<EquippedItem>();
+    // The list index + paired family ("Finger" / "Wrist") of the item a preceding
+    // "You have removed X." line just vacated, so the NEXT "You are now wearing Y."
+    // of the same family can slot Y into that exact position rather than appending —
+    // the game's `eq <ring>` into a full pair prints remove-then-wear, and appending
+    // the new ring at the end inverts the snapshot's finger order vs the game's, which
+    // made the paired-slot gear composer mis-read which finger held which and emit a
+    // redundant `rem` on the next swap. Null when there's nothing to correlate.
+    private (int Index, string Family)? _lastRemovedPaired;
     // Carried-but-unworn item names. Re-based by each full 'i' dump and patched
     // incrementally between dumps: get / buy add, drop / sell remove, and
     // equip / remove move a name between this list and the worn set. Name
@@ -357,9 +365,21 @@ public sealed partial class InventoryManager : IDisposable
             // "Worn" when unresolved — the next full 'i' dump restores the exact
             // 21-slot placement, and AC / ability bonuses sum regardless of slot.
             string slot = _slotResolver?.Invoke(name) ?? "Worn";
+            (int Index, string Family)? filled = _lastRemovedPaired;
+            _lastRemovedPaired = null;   // consumed — correlate only the immediately-following wear
             PatchEquipped(list =>
             {
-                list.Add(new EquippedItem(name, slot));
+                // A finger/wrist item worn right after removing a same-family slot-mate
+                // took THAT physical slot (the game's `eq <ring>` remove-then-wear
+                // pair) — insert it at the freed index so the snapshot keeps the game's
+                // slot order. Only when the family still has a surviving slot-mate (so
+                // we're filling a pair, not seeding one). Otherwise append, unchanged.
+                if (filled is { } f && PairedFamily(slot) is { } fam && fam == f.Family
+                    && f.Index <= list.Count
+                    && list.Exists(e => PairedFamily(e.Slot) == fam))
+                    list.Insert(f.Index, new EquippedItem(name, slot));
+                else
+                    list.Add(new EquippedItem(name, slot));
                 return true;
             });
             RemoveCarried(name);
@@ -370,8 +390,15 @@ public sealed partial class InventoryManager : IDisposable
         if (removed.Success)
         {
             string name = removed.Groups[1].Value.TrimEnd();
+            _lastRemovedPaired = null;
             PatchEquipped(list =>
-                list.RemoveAll(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)) > 0);
+            {
+                int idx = list.FindIndex(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+                // Remember a vacated finger/wrist slot for the wear line that follows.
+                if (idx >= 0 && PairedFamily(list[idx].Slot) is { } fam)
+                    _lastRemovedPaired = (idx, fam);
+                return list.RemoveAll(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)) > 0;
+            });
             // A removed piece returns to the pack (unworn) until re-equipped.
             PatchCarried(list => { list.Add(name); return true; });
             return;
@@ -803,6 +830,17 @@ public sealed partial class InventoryManager : IDisposable
             + (readiedLight is { } rl ? $", lit={rl.Name} (Readied/{rl.Readied})" : ""));
         Changed?.Invoke();
         FullInventoryParsed?.Invoke();
+    }
+
+    // The paired-slot family a worn-slot label belongs to — "Finger" or "Wrist" —
+    // or null for any non-paired slot. Matches both the bare "Finger"/"Wrist" the
+    // 'i' dump prints and the "Finger1"/"Wrist2" form a resolver may hand back.
+    private static string? PairedFamily(string? slot)
+    {
+        if (string.IsNullOrEmpty(slot)) return null;
+        if (slot.StartsWith("Finger", StringComparison.OrdinalIgnoreCase)) return "Finger";
+        if (slot.StartsWith("Wrist", StringComparison.OrdinalIgnoreCase))  return "Wrist";
+        return null;
     }
 
     // Apply an in-place edit to the worn set, publishing only if it changed.

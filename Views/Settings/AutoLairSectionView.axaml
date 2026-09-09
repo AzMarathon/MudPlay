@@ -43,10 +43,10 @@
             <!-- Routing heuristic -->
             <TextBlock Classes="SectionHeader" Text="ROUTING HEURISTIC"/>
 
-            <RadioButton Content="Default — balance wasted respawn vs idle wait"
+            <RadioButton Content="Default — closest ready lair (no idle waits)"
                          GroupName="Heuristic"
                          IsChecked="{Binding IsDefaultHeuristic, Mode=TwoWay}"
-                         ToolTip.Tip="Picks the lair that minimizes max(0, slack) + max(0, -slack) × idlePenalty. Slack = entry-arrival minus ready-at; positive = wasted respawn, negative = idle wait."/>
+                         ToolTip.Tip="Maximizes hits per run: goes to the CLOSEST lair that's up by the time you arrive — a closer lair still on cooldown that pops during the walk counts, and beats a farther already-up one. Never idles in a wait-room for a nearer lair unless it'd actually be ready when you get there. Only when no lair is up by arrival does it wait for the soonest."/>
             <RadioButton Content="Throughput — minimize wasted respawn only"
                          GroupName="Heuristic"
                          IsChecked="{Binding IsThroughputHeuristic, Mode=TwoWay}"

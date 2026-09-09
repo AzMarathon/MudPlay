@@ -1861,15 +1861,15 @@ Settings → Auto-Lair. This tab tunes the scheduler that loops between "lairs" 
 ### Routing heuristic
 
 **Default:** `Default`
-**Available options:** `Default — balance wasted respawn vs idle wait`, `Throughput — minimize wasted respawn only`
-**What it does:** How the scheduler weighs "arriving too early and standing around" against "arriving too late and wasting respawned time." Default balances both; Throughput only cares about not wasting respawn and treats waiting as free.
-**When you might change it:** Pick Throughput if you don't mind parking and waiting as long as you never walk into an already-picked-clean lair.
+**Available options:** `Default — closest ready lair (no idle waits)`, `Throughput — minimize wasted respawn only`
+**What it does:** How the scheduler picks the next lair. **Default** maximizes hits per run: it goes to the **closest lair that's up by the time you arrive** — a closer lair still on cooldown that pops *during* the walk counts, and beats a farther already-up one — and **never idles in a wait-room** for a nearer lair unless it'd actually be ready when you get there; only when no lair is up by arrival does it wait for the soonest. **Throughput** instead only cares about never wasting a respawn and treats your idle time as free, so it will park and wait for the soonest-popping lair even when another is already up.
+**When you might change it:** Pick Throughput if you'd rather never walk into an already-picked-clean lair and don't mind standing in a wait-room to time each respawn perfectly.
 
 ### Idle penalty weight
 
 **Default:** `1.0`
 **Available options:** 0–100
-**What it does:** Only matters under the Default heuristic — the multiplier applied to idle-wait time when scoring which lair to visit next. `0` makes waiting free (same as Throughput mode); higher values make the scheduler avoid waiting more aggressively.
+**What it does:** Legacy tuning knob from the old balance-scoring model; the current **Default** heuristic no longer uses it (it never idles when a lair is ready, so there's no idle-wait to weight). Left in place for compatibility; changing it has no effect under either heuristic.
 
 ### Engage timeout
 
