@@ -19,4 +19,14 @@ public enum EquipTriggerType
 
     // Equipped fully before resting / @wait when the reason is mana.
     PreRestMana,
+
+    // Worn while the nav engine is actively moving and we're neither fighting nor
+    // resting — for +quickness / movement-speed gear. Swaps to Default (and engages)
+    // when hostiles are recognized; a walk-to reverts to Default on arrival. Off by
+    // default (opt-in); when unset, movement keeps today's Default-at-loop-start.
+    WhileMoving,
+
+    // Worn while in a room the Bosses table marks as a boss room (swapped in before
+    // entering, reverts to Default on leaving) — for boss-fight gear. Off by default.
+    Bossing,
 }

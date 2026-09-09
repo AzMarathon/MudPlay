@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.57.6**
-> - Swap-to-Default-on-combat no longer stalls the fight: after the mid-fight gear swap breaks the swing, combat re-engages immediately instead of idling until the monster attacks again
-> - Buffs no longer fire at the BBS login/menu after a hangup or reconnect — the cast loop now holds until you're actually back in the game world
+> **Version 3.58.0**
+> - New **While Moving** gear set — worn while travelling (not fighting or resting) so you can carry +quickness movement gear; swaps to Default and engages on hostiles, reverts to Default when a walk-to arrives. Off by default
+> - **While Moving** has a **"Swap to default before entering lairs"** option: swap the step before a known lair (arrive combat-ready), or enter in movement gear and swap on seeing monsters
+> - New **Bossing** gear set — worn just before entering a Bosses-table boss room; on leaving it reverts to Default first, then re-layers the While Moving set if you're still travelling. Off by default
+> - The Equipment Manager's per-set behavior checkboxes are now contextual: the combat-swap option shows for the pre-rest sets, the lair-swap option for the While Moving set
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

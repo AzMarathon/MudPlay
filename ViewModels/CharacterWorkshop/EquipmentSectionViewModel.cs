@@ -48,6 +48,8 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         (EquipTriggerType.Backstab, "Backstab", "backstab"),
         (EquipTriggerType.PreRestHp, "Pre-rest HP", "prerest-hp"),
         (EquipTriggerType.PreRestMana, "Pre-rest Mana", "prerest-mana"),
+        (EquipTriggerType.WhileMoving, "While Moving", "moving"),
+        (EquipTriggerType.Bossing, "Bossing", "bossing"),
     };
 
     private readonly ProfileService _profile;
@@ -99,6 +101,8 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(DisableCommand))]
     [NotifyCanExecuteChangedFor(nameof(SnapshotCurrentCommand))]
     [NotifyCanExecuteChangedFor(nameof(ApplyNowCommand))]
+    [NotifyPropertyChangedFor(nameof(ShowCombatSwapOption))]
+    [NotifyPropertyChangedFor(nameof(ShowLairSwapOption))]
     private EquipmentSetRowViewModel? _selectedSetRow;
 
     // Transient one-line result of the last Apply Now press.
@@ -120,6 +124,20 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     // rest-interrupting fight). Unchecking it opts into swapping to Default for the
     // fight and back afterward. Persisted on change; loaded under _suppress.
     [ObservableProperty] private bool _dontSwapToDefaultOnCombat = true;
+
+    // The "Swap to default before entering lairs" checkbox — mirrors
+    // EquipmentSettings.SwapToDefaultBeforeLairs directly (checked = swap to Default
+    // the step before a known lair; unchecked = enter in the movement set and swap on
+    // seeing monsters). Only meaningful for the While Moving set. Persisted on change.
+    [ObservableProperty] private bool _swapToDefaultBeforeLairs;
+
+    // Contextual per-set behavior toggles: the combat-swap option belongs to the
+    // resting sets (it governs a rest-interrupting fight); the lair-swap option belongs
+    // to the movement set. Each shows only when its set is selected. Refreshed from
+    // OnSelectedSetRowChanged.
+    public bool ShowCombatSwapOption =>
+        SelectedSet is { Trigger: EquipTriggerType.PreRestHp or EquipTriggerType.PreRestMana };
+    public bool ShowLairSwapOption => SelectedSet is { Trigger: EquipTriggerType.WhileMoving };
 
     // True when the bonuses panel has at least one non-zero stat row.
     [ObservableProperty] private bool _hasBonuses;
@@ -225,6 +243,16 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         if (_suppress) return;
         if (_profile.Current?.Equipment is not { } cfg) return;
         cfg.SwapToDefaultOnCombat = !value;
+        _profile.Save();
+    }
+
+    // Mirrors the persisted flag directly (checked = swap before a lair). Written
+    // through on change unless mid-load.
+    partial void OnSwapToDefaultBeforeLairsChanged(bool value)
+    {
+        if (_suppress) return;
+        if (_profile.Current?.Equipment is not { } cfg) return;
+        cfg.SwapToDefaultBeforeLairs = value;
         _profile.Save();
     }
 
@@ -361,6 +389,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         {
             SetRows.Clear();
             DontSwapToDefaultOnCombat = true;
+            SwapToDefaultBeforeLairs = false;
             if (_profile.Current is { } p)
             {
                 EquipmentSettings cfg = p.Equipment ??= new EquipmentSettings();
@@ -368,6 +397,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
                 foreach (EquipmentSet s in cfg.Sets)
                     SetRows.Add(new EquipmentSetRowViewModel(s));
                 DontSwapToDefaultOnCombat = !cfg.SwapToDefaultOnCombat;
+                SwapToDefaultBeforeLairs = cfg.SwapToDefaultBeforeLairs;
             }
             SelectedSetRow = SetRows.FirstOrDefault();
         }
