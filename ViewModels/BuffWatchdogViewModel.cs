@@ -374,6 +374,15 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
     {
         Groups.Clear();
 
+        // A snapshot-driven row (a not-maintained whole-party buff, or a member not
+        // configured as a target) is surfaced only while its timer is genuinely LIVE.
+        // An expired entry lingers in _activeUntil (nothing recasts a buff that isn't
+        // set to recast, and there's no wear-off line to reap it), so match on
+        // t.Until > now — otherwise the bar sits full at 0s forever. A buff that IS
+        // set to recast (WholePartyOn / a targeted member / CastOnSelf) stays config-
+        // driven and persists as "not up" past expiry, since the engine will refresh it.
+        DateTime now = _castDirector.PausedAtUtc ?? DateTime.UtcNow;
+
         // Section order: you first, then each current party member (so a member with no
         // active buff still gets a seeded section, dropped below only if truly empty).
         Dictionary<string, BuffWatchdogPlayerGroup> byName = new(StringComparer.OrdinalIgnoreCase);
@@ -406,9 +415,11 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 if (wholeParty)
                 {
                     // Show a whole-party buff only when it's actually being maintained
-                    // (WholePartyOn = set to recast) OR is currently up. A configured-
-                    // but-off whole-party buff with no live timer isn't surfaced.
-                    bool wpActive = snap.Any(t => t.Target.Length == 0
+                    // (WholePartyOn = set to recast) OR is currently up (a LIVE timer).
+                    // A configured-but-off whole-party buff whose timer has expired isn't
+                    // surfaced — the expired entry lingers in the snapshot, so the row
+                    // would otherwise sit at 0s forever instead of dropping.
+                    bool wpActive = snap.Any(t => t.Target.Length == 0 && t.Until > now
                         && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase));
                     if (!(p.WholePartyOn || wpActive)) continue;
 
@@ -448,8 +459,9 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                     foreach ((string _, string given) in members.Where(m => p.Targets.Contains(m.Given)))
                         AddGiven(given);
                 foreach (ActiveBuffTimer t in snap)
-                    if (t.Target.Length > 0 && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase))
-                        AddGiven(t.Target);   // already lower-cased
+                    if (t.Target.Length > 0 && t.Until > now
+                        && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase))
+                        AddGiven(t.Target);   // already lower-cased, still-live timer only
 
                 // Configured single-target buff with nobody targeted and no live timer
                 // — it's not set to recast on anyone, so don't surface a bar for it.
@@ -471,7 +483,6 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         // nothing recasts an unconfigured buff, so an expired one earns no bar (unlike a
         // configured buff, whose row persists as "not up" because it's config-driven,
         // not snapshot-driven — the caster may just not have recast it yet).
-        DateTime now = _castDirector.PausedAtUtc ?? DateTime.UtcNow;
         HashSet<(string Code, string Target)> shown = new();
         foreach (BuffWatchdogPlayerGroup g in Groups)
             foreach (BuffWatchdogRowViewModel r in g.Rows)
@@ -571,6 +582,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         SpellsSettings spells, BuffSettings? buffs, IReadOnlyList<ActiveBuffTimer> snap)
     {
         StringBuilder sb = new();
+        DateTime sigNow = _castDirector.PausedAtUtc ?? DateTime.UtcNow;
         // Mana / HP regen are the only self buffs still on the Spells tab.
         sb.Append(spells.HpRegenSpell).Append('|').Append(spells.MaRegenSpell).Append("||");
         if (buffs is not null)
@@ -581,7 +593,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 // the fingerprint — the member-keyed timers below only cover single-target.
                 string code = (p.Spell ?? string.Empty).Trim();
                 bool wpActive = IsWholePartySlot(p.Spell)
-                    && snap.Any(t => t.Target.Length == 0
+                    && snap.Any(t => t.Target.Length == 0 && t.Until > sigNow
                         && string.Equals(t.Short, code, StringComparison.OrdinalIgnoreCase));
                 sb.Append(p.Spell).Append(':').Append(p.CastOnSelf ? "S" : "")
                   .Append(p.WholePartyOn ? "W" : "").Append(p.AllMembers ? "A" : "")
@@ -602,17 +614,17 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         // UNconfigured active buff (hand-cast, or a slot just removed) folds in, so its
         // read-only bar appears; keying on liveness means the signature flips the moment
         // it expires, so RebuildRows re-runs and drops the row (see RebuildRows' tail).
-        // Member-keyed timers always fold, as before.
+        // Member-keyed timers fold too, but likewise only while LIVE — an expired single-
+        // target timer drops out so a member you unticked loses their row when it runs out.
         HashSet<string> configuredCodes = new(StringComparer.OrdinalIgnoreCase);
         if (buffs is not null)
             foreach (BuffSlot p in buffs.Slots)
                 if (!string.IsNullOrWhiteSpace(p.Spell)) configuredCodes.Add(p.Spell.Trim());
 
-        DateTime sigNow = _castDirector.PausedAtUtc ?? DateTime.UtcNow;
         sb.Append("||");
         foreach (string k in snap
-                     .Where(t => t.Target.Length > 0
-                         || (!configuredCodes.Contains(t.Short) && t.Until > sigNow))
+                     .Where(t => t.Until > sigNow
+                         && (t.Target.Length > 0 || !configuredCodes.Contains(t.Short)))
                      .Select(t => t.Short + "@" + t.Target)
                      .OrderBy(k => k, StringComparer.Ordinal))
             sb.Append(k).Append(';');

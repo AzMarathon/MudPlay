@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.25**
-> - Every Settings tab now shows which persistence tier each setting saves to, via banner-headed sections — Global (app-wide) / BBS (shared by all characters on the board) / Character profile (only the loaded character) — so it's clear where a setting lands instead of the tiers being interleaved. BBS + Display, General, Toolbar + Shortcuts, and Other split into multiple tier sections; the per-character-only tabs carry a single header naming their tier
+> **Version 3.58.30**
+> - Fixed a crash: renaming a BBS to a name whose folder already exists no longer takes the app down — it refuses with a "name already in use" notice and leaves the rename undone
+> - A deleted (or renamed-away) character profile no longer keeps reappearing in File → Recent — stale entries are pruned from the menu and the saved list
+> - Buff Watchdog: a buff that isn't set to recast now drops its bar the moment its timer runs out, instead of sitting full at 0s until cleared by hand — only a buff set to recast persists as an expired bar
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
