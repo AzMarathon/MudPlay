@@ -631,6 +631,27 @@ public sealed class AutoEquipCoordinatorTests
     }
 
     [Fact]
+    public void LeavingBossRoomWhileMoving_RevertsToDefaultThenMovementSet()
+    {
+        var player = new PlayerState();
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetWith(EquipTriggerType.WhileMoving, enabled: true, "move-set"),
+            SetWith(EquipTriggerType.Bossing, enabled: true, "boss-set"));
+        var applied = new List<string>();
+        var boss = new Game.Map.RoomKey(1, 500);
+        var plain = new Game.Map.RoomKey(1, 501);
+        bool moving = true;
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: k => k == boss, isMoving: () => moving);
+
+        // Step out of the boss room while still travelling: Default FIRST, then the
+        // movement set re-layers (in that order).
+        coord.OnRoomChanged(previous: boss, current: plain);
+        Assert.Equal(new[] { "default-set", "move-set" }, applied);
+    }
+
+    [Fact]
     public void AboutToEnterLair_SwapsToDefaultOnlyWhenOptOnAndMoving()
     {
         var player = new PlayerState();

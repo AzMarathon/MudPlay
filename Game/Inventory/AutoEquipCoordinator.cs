@@ -327,16 +327,16 @@ public sealed class AutoEquipCoordinator : IDisposable
         }
         if (prevBoss)
         {
+            // Stepping out of a boss room always reverts to Default FIRST (clears the
+            // boss loadout), then re-layers the movement set if we're still travelling.
+            _inMovementSet = false;
+            _log?.Info(EquipmentManager.LogCategory, "left the boss room — reverting to Default");
+            Fire(EquipTriggerType.Default);
             if (MovementSetActive() && (_isMoving?.Invoke() ?? false) && !_player.InCombat)
             {
                 _inMovementSet = true;
-                _log?.Info(EquipmentManager.LogCategory, "left the boss room — back to the While Moving set");
+                _log?.Info(EquipmentManager.LogCategory, "still travelling — back to the While Moving set");
                 Fire(EquipTriggerType.WhileMoving);
-            }
-            else
-            {
-                _log?.Info(EquipmentManager.LogCategory, "left the boss room — reverting to Default");
-                Fire(EquipTriggerType.Default);
             }
         }
     }
