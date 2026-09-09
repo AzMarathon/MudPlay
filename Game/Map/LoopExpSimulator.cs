@@ -49,13 +49,20 @@ public readonly record struct ExpTarget(
     public bool Summons => ClearWaves > 1 || KillsPerMob > 1.0;
 }
 
-// A room whose entry-spell summons monsters on a d100 roll, re-rolled each combat
-// tick while you're in the room (nomonsters-gated: only when the room is otherwise
-// empty). ExpPerRoll is the probability-weighted exp of one roll (Σ band% × monster
-// exp); SummonChance is the chance any monster is summoned. The sim credits one roll
-// per visit, plus a second when a quick kill (rounds ≤ 2) lets another spawn before
-// you leave. See GAME_MECHANICS.md "Room-spell monster summons".
-public readonly record struct RoomSummon(string SpellName, double ExpPerRoll, double SummonChance);
+// A room whose entry-spell summons monsters on a d100 roll. ExpPerRoll is the
+// probability-weighted exp of one roll (Σ band% × monster exp); SummonChance is the
+// chance any monster is summoned. NoMonstersGated mirrors the spell's "nomonsters:"
+// condition — a gated spell only summons while the room is EMPTY of monsters.
+//
+// How many rolls a visit yields is realm- and gate-dependent (issue #384): the spell
+// re-rolls on entry and once per room-spell tick while you're present — Paradigm ticks
+// on the combat round, Stock on the (slower) medium tick. An UNGATED spell rolls every
+// such tick regardless of occupancy; a GATED one only rolls-and-summons while the room
+// is empty, so in a pass-through lair it effectively rolls once on an empty-entry visit
+// and not at all when you arrive to a full room. The fire count lives in the summon
+// credit in Simulate; see GAME_MECHANICS.md "Room-spell monster summons".
+public readonly record struct RoomSummon(
+    string SpellName, double ExpPerRoll, double SummonChance, bool NoMonstersGated = false);
 
 // One room in a lap (order matters), with its exp targets (may be empty — an
 // empty room still costs a travel step) and any monster-summoning entry spell.
@@ -74,7 +81,11 @@ public sealed record ExpSimSettings(
     // rounds-per-room knob; it IS rounds-per-mob.
     double RoundsPerMob,
     double RealConditionsMultiplier = 0.9,
-    double SecondsPerRound = 5.0);
+    double SecondsPerRound = 5.0,
+    // Stock and Paradigm differ only in how often a room's summon spell re-rolls
+    // (see RoomSummon): Paradigm on the combat round, Stock on the medium tick.
+    // Kill-rate (RoundsPerMob) is realm-agnostic — the user sets it directly.
+    RealmType Realm = RealmType.Stock);
 
 // Per-lair diagnostic: how often it fired vs was missed over the measured hour,
 // and the closest a miss came to being ready (so the user can nudge the loop to
@@ -120,11 +131,16 @@ public sealed record ExpEstimatorSnapshot(
     string Summary,
     IReadOnlyList<string> Lairs,     // "map/room  Name — fires/hr, misses" per resolved lair
     IReadOnlyList<string> Bosses,    // "Name — +exp/hr, once per Nh" per amortised boss
-    IReadOnlyList<string> Summons);  // "map/room  Spell — +exp/hr, N% summon" per summoning room
+    IReadOnlyList<string> Summons,   // "map/room  Spell — +exp/hr, N% summon" per summoning room
+    string RealmName = "");          // active realm — drives the summon re-roll cadence
 
 public static class LoopExpSimulator
 {
     private const double HorizonSeconds = 3600.0;
+    // Stock room spells re-roll on the "medium tick" — 6 seconds (user-confirmed),
+    // slower than Paradigm's per-combat-round (~5s) re-roll, so a Stock summoning room
+    // yields fewer rolls over the same fight.
+    private const double StockMediumTickSeconds = 6.0;
 
     public static ExpSimResult Simulate(ExpRoute route, ExpSimSettings s)
     {
@@ -140,7 +156,9 @@ public static class LoopExpSimulator
         double roundsPerMob = Math.Max(0.01, s.RoundsPerMob);
         double step = Math.Max(0.0, s.SecondsPerStep);
         bool area = s.CombatMode == ExpCombatMode.AreaAllTargets;
-        bool quickKill = roundsPerMob <= 2.0;
+        // A room's summon spell re-rolls on the realm's tick: Paradigm on the combat
+        // round, Stock on the slower 6s medium tick. See RoomSummon + SummonFires.
+        double roomSpellTick = s.Realm == RealmType.ParaMud ? tick : StockMediumTickSeconds;
 
         // Lair / fixture defs, DEDUPED by (room, target index): a room revisited in
         // the lap is the SAME physical lair, so its mobs share one set of respawn
@@ -248,6 +266,7 @@ public static class LoopExpSimulator
                 // have killed faster than combat allows).
                 double now = lapStart + Math.Max(engaged, (p + 1) * step);
                 bool killedHere = false;
+                double roomCombat = 0;   // combat seconds fighting base mobs here this visit
 
                 foreach (int d in posDefs[p])
                 {
@@ -258,7 +277,7 @@ public static class LoopExpSimulator
                         double ct = area
                             ? defWaves[d] * roundsPerMob * tick               // room-at-once
                             : up * defKills[d] * roundsPerMob * tick;         // serial
-                        combat += ct; engaged += ct;
+                        combat += ct; engaged += ct; roomCombat += ct;
                         lapExp += up * defExp[d];
                         killedHere = true;
                         if (measuring) clears[d]++;
@@ -301,7 +320,7 @@ public static class LoopExpSimulator
 
                 if (lap[p].Summon is { ExpPerRoll: > 0 } su)
                 {
-                    double roll = su.ExpPerRoll * (1.0 + (quickKill ? su.SummonChance : 0.0));
+                    double roll = su.ExpPerRoll * SummonFires(su, killedHere, roomCombat, roomSpellTick);
                     lapExp += roll;
                     if (measuring)
                     {
@@ -355,6 +374,18 @@ public static class LoopExpSimulator
 
         return new ExpSimResult(
             expPerHour, avgLap, (int)Math.Round(lapsPerHour), stats, bossStats, summonStats);
+    }
+
+    // How many times a room's summon spell rolls this visit. UNGATED: once on entry plus
+    // once per room-spell tick spent fighting here (roomSpellTick is the realm's cadence).
+    // GATED (nomonsters): only rolls while the room is empty, so a pass-through visit rolls
+    // once when the room was empty on arrival and not at all when base mobs were up.
+    internal static double SummonFires(RoomSummon su, bool roomOccupiedOnEntry, double roomCombatSeconds, double roomSpellTick)
+    {
+        if (su.NoMonstersGated)
+            return roomOccupiedOnEntry ? 0.0 : 1.0;
+        double perTick = roomSpellTick > 0 ? roomCombatSeconds / roomSpellTick : 0.0;
+        return 1.0 + perTick;
     }
 
     private static int CountReady(double[] clocks, double now)

@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.9**
+> **Version 3.58.11**
 > - Auto-Lair moves on within seconds when it walks into a lair that hasn't respawned, instead of standing in the empty room for the full engage timeout
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
