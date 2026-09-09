@@ -210,6 +210,45 @@ public sealed class AutoSearchManagerTests
         Assert.False(mgr.IsRevealInFlight);
     }
 
+    // ----- empty-search reactive release -----
+
+    [Fact]
+    public void RevealedNothing_ReleasesHoldWithoutWaitingSettle()
+    {
+        // An empty room's `sea` prints "Your search revealed nothing." — release the
+        // walker the instant that lands rather than idling out the settle window, so
+        // an empty transit room doesn't cost the full settle every step (report
+        // paradigm-20260909-004947).
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(
+            isEnabled: () => true,
+            hasGetEngineArmed: () => true,   // settle would otherwise hold the walker
+            coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged(Key());
+        mgr.OnClassifyElapsed();              // sea fires, settle holds
+        Assert.True(SearchHeld(coord));
+        Assert.True(mgr.IsRevealInFlight);
+
+        mgr.NotifySearchRevealedNothing();    // empty result → release now, no settle wait
+        Assert.False(SearchHeld(coord));
+        Assert.False(mgr.IsRevealInFlight);
+    }
+
+    [Fact]
+    public void RevealedNothing_NoOpWhenNoSearchInFlight()
+    {
+        // Outside our own reveal window (e.g. a manually typed `sea`), the empty-result
+        // line must not release a Search gate we aren't holding.
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.NotifySearchRevealedNothing();    // nothing in flight
+        Assert.False(SearchHeld(coord));      // no-op, no throw
+    }
+
     // ----- fight in the room: defer + hold, fire on clear -----
 
     [Fact]

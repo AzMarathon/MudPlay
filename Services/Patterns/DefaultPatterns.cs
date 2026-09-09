@@ -107,6 +107,11 @@ public static class DefaultPatterns
         // capture group hold the direction word either way.
         yield return new RegexPattern(KnownPatterns.UserSearchSucceeded,
             @"^You found an exit (?:to the )?(?<direction>\w+)!");
+        // A room-wide `sea` that turns up nothing concealed. AutoSearch releases
+        // its walker hold on this instead of waiting out the settle window; a
+        // fruitful search surfaces "You notice … here." (the room survey) instead.
+        yield return new RegexPattern(KnownPatterns.SearchRevealedNothing,
+            @"^Your search revealed nothing\.?\s*$");
 
         // ----- Combat ----------------------------------------------------
         yield return new RegexPattern(KnownPatterns.CombatStatus,

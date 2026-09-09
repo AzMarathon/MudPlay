@@ -4982,6 +4982,12 @@ public sealed class AppServices
         // handler ran first, so the hostile flag is current.
         RoomClassifier.EntitiesObserved += _ => AutoSearch.OnRoomObserved();
 
+        // Empty-search seam: an empty room's `sea` prints "Your search revealed
+        // nothing." — release the walker hold at once rather than idling the settle,
+        // so auto-search doesn't tax every empty transit room (a fruitful search
+        // surfaces the "You notice … here." survey the get engines handle instead).
+        Router.Subscribe(Services.Patterns.KnownPatterns.SearchRevealedNothing, _ => AutoSearch.NotifySearchRevealedNothing());
+
         // Drop the stale queue / ground snapshot when we actually change rooms.
         //
         // Registered here — before LoopRunner exists (constructed further below) —

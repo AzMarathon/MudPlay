@@ -3495,8 +3495,31 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.Walker.RemainingRoomKeys,
             _services.AutoLair.TravelCostModel,
             _services.RoomGraph.GetRoom,
-            includeLairDwell: _services.IsAutoCombatEnabled);
+            includeLairDwell: _services.IsAutoCombatEnabled,
+            lairWillBeFought: LairWillBeFought);
     }
+
+    // Whether the walker would actually fight a lair room's occupants — so the ETA
+    // only charges combat dwell for lairs it'll stop and clear. Resolves each lair
+    // monster's overlay through the same tier merge combat uses and asks
+    // MonsterEngagement, so a friendly-guardsman / passive-neutral "lair" (common on
+    // town routes) counts as a free walk-through. An unparseable lair tag falls back
+    // to "will fight" so a real lair is never under-counted.
+    private bool LairWillBeFought(Room room)
+    {
+        if (string.IsNullOrEmpty(room.RawLairTag)) return false;
+        RoomTooltipBuilder.ParseLairTag(room.RawLairTag, out _, out IReadOnlyList<int> monsterIds);
+        if (monsterIds.Count == 0) return true;
+        foreach (int id in monsterIds)
+            if (Game.Combat.MonsterEngagement.IsEngageable(ResolveMonsterOverlay(id))) return true;
+        return false;
+    }
+
+    private Models.GameData.MonsterOverlay ResolveMonsterOverlay(int number) =>
+        _services.Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
+            "Monsters",
+            number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            _services.MonsterOverlaySeed.GetOverlay(number));
 
     private static string FormatEta(TimeSpan eta) => RouteEtaEstimator.FormatCompact(eta);
 

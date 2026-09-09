@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.13**
+> **Version 3.58.14**
 > - Equipment Manager's gear-set list is taller so all sets (Default, Backstab, Pre-rest HP/Mana, While Moving, Bossing) show at once without a scrollbar
+> - Auto-search no longer stalls travel: it releases the walker the moment a room's search comes back empty ("Your search revealed nothing.") instead of always waiting out the full settle window, cutting seconds of per-room latency on long runs
+> - Route ETA no longer counts combat dwell for lairs the party won't actually fight (friendly/fled/neutral-not-KOS occupants), so estimates on hostile-free paths are much closer to real walk time
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

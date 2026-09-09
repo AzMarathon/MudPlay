@@ -48,7 +48,7 @@ public sealed class AutoSearchManager : IDisposable
     // this releases. The `sea` reply is just the command→reply latency (~150 ms, no
     // server-side delay) and the get path parses the survey immediately, so this
     // only has to outlast that round-trip plus a little parse margin.
-    private static readonly TimeSpan SearchSettle = TimeSpan.FromMilliseconds(350);
+    private static readonly TimeSpan SearchSettle = TimeSpan.FromMilliseconds(200);
 
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _isDemandActive;
@@ -212,6 +212,21 @@ public sealed class AutoSearchManager : IDisposable
     {
         _settle.Stop();
         ReleaseGate("search settle elapsed");
+    }
+
+    // The room-wide `sea` came back empty (KnownPatterns.SearchRevealedNothing, wired
+    // in AppServices). There's nothing concealed to collect, so the settle's whole
+    // job — bridging the reveal so the get engines can take over the hold — is moot:
+    // release the walker at once rather than idling out the window. This is what keeps
+    // an empty transit room from costing the full settle every step. Only while our
+    // own search is awaiting its reveal (settle running); an empty result outside that
+    // window (a manual search) is ignored. A fruitful search surfaces "You notice …
+    // here." instead, which the get engines act on and the settle timer still covers.
+    public void NotifySearchRevealedNothing()
+    {
+        if (_disposed || !_settle.IsEnabled) return;
+        _settle.Stop();
+        ReleaseGate("search revealed nothing");
     }
 
     private void FireSearch(bool postCombat)

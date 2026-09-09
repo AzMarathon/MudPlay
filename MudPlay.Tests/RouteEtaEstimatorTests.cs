@@ -113,4 +113,42 @@ public sealed class RouteEtaEstimatorTests
         Assert.Equal(TimeSpan.FromSeconds(2), RouteEtaEstimator.Estimate(
             rooms, Flat(), lookup, includeLairDwell: true));
     }
+
+    [Fact]
+    public void FriendlyLairs_AddNoDwell_WhenPredicateSaysWontFight()
+    {
+        // Both lair rooms hold occupants the walker won't fight (friendly town
+        // guardsmen), so the ETA charges no combat dwell — killing the phantom
+        // over-estimate on hostile-free routes (report paradigm-20260909-004947).
+        // 3 hops = 3 s only.
+        RoomKey[] rooms = { new(1, 1), new(1, 2), new(1, 3), new(1, 4) };
+        Func<RoomKey, Room?> lookup = Lookup(
+            Plain(1), Lair(2, "(Max 3): 100"), Lair(3, "(Max 2): 200"), Plain(4));
+        Assert.Equal(TimeSpan.FromSeconds(3), RouteEtaEstimator.Estimate(
+            rooms, Flat(), lookup, includeLairDwell: true, lairWillBeFought: _ => false));
+    }
+
+    [Fact]
+    public void MixedLairs_OnlyFoughtOnesCountDwell()
+    {
+        // Room 2's lair will be fought (3 × 5 = 15 s); room 3's is friendly (0).
+        // 3 hops + 15 = 18 s.
+        RoomKey[] rooms = { new(1, 1), new(1, 2), new(1, 3), new(1, 4) };
+        Func<RoomKey, Room?> lookup = Lookup(
+            Plain(1), Lair(2, "(Max 3): 100"), Lair(3, "(Max 2): 200"), Plain(4));
+        Assert.Equal(TimeSpan.FromSeconds(18), RouteEtaEstimator.Estimate(
+            rooms, Flat(), lookup, includeLairDwell: true,
+            lairWillBeFought: r => r.Key.Room == 2));
+    }
+
+    [Fact]
+    public void NullPredicate_CountsEveryLair()
+    {
+        // Back-compat: no engageability predicate → every lair counts, 28 s as before.
+        RoomKey[] rooms = { new(1, 1), new(1, 2), new(1, 3), new(1, 4) };
+        Func<RoomKey, Room?> lookup = Lookup(
+            Plain(1), Lair(2, "(Max 3): 100"), Lair(3, "(Max 2): 200"), Plain(4));
+        Assert.Equal(TimeSpan.FromSeconds(28), RouteEtaEstimator.Estimate(
+            rooms, Flat(), lookup, includeLairDwell: true, lairWillBeFought: null));
+    }
 }
