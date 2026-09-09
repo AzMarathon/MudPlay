@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.58.25**
-> - Settings → BBS + Display is now split into three banner-headed sections — BBS settings (shared by every character on the board), Character profile settings (only the loaded character), and Global client settings (app-wide) — so it's clear which persistence level each setting falls under instead of the tiers being interleaved
+> - Every Settings tab now shows which persistence tier each setting saves to, via banner-headed sections — Global (app-wide) / BBS (shared by all characters on the board) / Character profile (only the loaded character) — so it's clear where a setting lands instead of the tiers being interleaved. BBS + Display, General, Toolbar + Shortcuts, and Other split into multiple tier sections; the per-character-only tabs carry a single header naming their tier
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

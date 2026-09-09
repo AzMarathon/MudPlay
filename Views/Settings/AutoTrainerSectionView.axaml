@@ -22,6 +22,10 @@
              Auto-train stats (auto-apply the CP plan). Decoupled — either can run
              without the other, so neither gates the other's enabled state. -->
         <StackPanel Grid.Row="0" Spacing="4">
+            <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+            <TextBlock Classes="SettingsSectionSub"
+                       Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
+            <Border Classes="SettingsSectionRule" Margin="0,6,0,4"/>
             <StackPanel Orientation="Horizontal" Spacing="24">
                 <CheckBox Content="Auto-train"
                           IsChecked="{Binding AutoTrain, Mode=TwoWay}"

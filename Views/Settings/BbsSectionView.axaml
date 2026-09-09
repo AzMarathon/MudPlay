@@ -19,28 +19,8 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,16,0,6"/>
         </Style>
-        <!-- Top-level section banners split the right pane into three tiers so a
-             per-BBS knob is never mistaken for a per-character one (or vice versa):
-             BBS settings (shared by every character on the board), Character profile
-             settings (only the loaded character), and Global client settings (app-wide). -->
-        <Style Selector="TextBlock.SectionBanner">
-            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
-            <Setter Property="FontSize" Value="{StaticResource FontSizeLg}"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Margin" Value="0,26,0,0"/>
-        </Style>
-        <Style Selector="TextBlock.SectionSub">
-            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
-            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Margin" Value="0,1,0,0"/>
-        </Style>
-        <Style Selector="Border.SectionRule">
-            <Setter Property="Height" Value="1"/>
-            <Setter Property="Background" Value="{StaticResource ChromeBorderSoftBrush}"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <Setter Property="Margin" Value="0,6,0,0"/>
-        </Style>
+        <!-- Section-tier banners (SettingsSectionBanner / …Sub / …Rule) are shared
+             app-wide in Themes/Controls.axaml so every Settings tab reads the same. -->
         <Style Selector="TextBlock.CredHint">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
         </Style>
@@ -103,10 +83,10 @@
                          SECTION 1 — BBS settings (per-BBS, on BbsProfile).
                          Shared by every character that connects to this board.
                          ============================================================ -->
-                    <TextBlock Classes="SectionBanner" Margin="0,0,0,0" Text="BBS settings"/>
-                    <TextBlock Classes="SectionSub"
+                    <TextBlock Classes="SettingsSectionBanner first" Text="BBS settings"/>
+                    <TextBlock Classes="SettingsSectionSub"
                                Text="Stored with this BBS and shared by every character that connects to it."/>
-                    <Border Classes="SectionRule"/>
+                    <Border Classes="SettingsSectionRule"/>
 
                     <TextBlock Classes="GroupHeader" Text="Connection"/>
 
@@ -329,9 +309,9 @@
                          character on this BBS keeps its own.
                          ============================================================ -->
                     <TextBlock Classes="SectionBanner" Text="Character profile settings"/>
-                    <TextBlock Classes="SectionSub"
+                    <TextBlock Classes="SettingsSectionSub"
                                Text="Only for the character you have loaded — each character on this BBS keeps its own copy."/>
-                    <Border Classes="SectionRule"/>
+                    <Border Classes="SettingsSectionRule"/>
 
                     <TextBlock Classes="GroupHeader" Text="Credentials"/>
 
@@ -520,9 +500,9 @@
                          loaded character.
                          ============================================================ -->
                     <TextBlock Classes="SectionBanner" Text="Global client settings"/>
-                    <TextBlock Classes="SectionSub"
+                    <TextBlock Classes="SettingsSectionSub"
                                Text="Apply to the whole app, regardless of which BBS or character is active."/>
-                    <Border Classes="SectionRule"/>
+                    <Border Classes="SettingsSectionRule"/>
 
                     <StackPanel Spacing="2" Margin="0,10,0,0">
                         <TextBlock Text="Show confirmations"
