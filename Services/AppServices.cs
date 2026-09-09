@@ -3059,13 +3059,10 @@ public sealed class AppServices
             Router, MovementCoordinator, RoomClassifier, MonsterMessages,
             PlayerState,
             isAutoAttackEnabled: () => ReadAutoModeFlag(d => d.AutoCombat),
-            // Same overlay-resolve closure CombatManager uses — keeps
-            // the engageable predicate consistent so the gate and the
-            // swing decision can't diverge on the same room state.
-            resolveOverlay: n => Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
-                "Monsters",
-                n.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                MonsterOverlaySeed.GetOverlay(n)),
+            // Same overlay-resolve helper CombatManager uses — keeps the
+            // engageable predicate consistent so the gate and the swing
+            // decision can't diverge on the same room state.
+            resolveOverlay: ResolveMonsterOverlay,
             log: Log);
 
         // Generic color+wording combat-line recognizer — subscribes to the router's
@@ -3241,13 +3238,9 @@ public sealed class AppServices
 
         Combat = new Game.Combat.CombatManager(
             Router, RoomClassifier, MonsterMessages,
-            // Resolve per-monster overlay: seed-store value forms the
-            // Defaults tier, SettingsResolver overlays Global / BBS /
-            // Char-tier user overrides on top.
-            resolveOverlay: n => Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
-                "Monsters",
-                n.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                MonsterOverlaySeed.GetOverlay(n)),
+            // Resolve per-monster overlay through the shared tier-merge helper
+            // (seed Defaults + Global / BBS / Char overrides).
+            resolveOverlay: ResolveMonsterOverlay,
             party: PartyState,
             // The six weapon fields are derived from the Equipment Manager's gear
             // sets (the Combat tab no longer edits weapons): normal + alternate
@@ -5229,6 +5222,23 @@ public sealed class AppServices
                 _forcedPathObtain.Clear();
         };
 
+        // Search the room a walk / loop / auto-lair STARTS from. Auto-search fires on
+        // room entry, but the room the walker steps out of at the start of a run was
+        // entered earlier (before auto-search was armed, or at login) and so never got
+        // its entry search (report paradigm-20260909-055045). On the Started event —
+        // which fires before the walker's first SendNextStep, so asserting the Search
+        // gate here holds that step — search the current room, but only when it's
+        // Confirmed (the deferred/Pending Started is skipped; the walk re-raises Started
+        // once it settles). Loops route each leg through the walker too, so this also
+        // covers a loop's first room; the manager dedupes so later legs (starting from a
+        // room already searched on arrival) are no-ops.
+        Walker.Event += e =>
+        {
+            if (e.Kind != Game.Map.WalkEventKind.Started) return;
+            if (RoomTracker.State.Confidence != Game.Map.RoomConfidence.Confirmed) return;
+            AutoSearch.OnMovementStarting(RoomTracker.State.CurrentRoom?.Key);
+        };
+
         // Boss "stop before" rooms — the walker halts one room short of any boss
         // room flagged StopBefore on the active realm. Resolved live so realm swaps
         // + tab edits take effect without re-wiring; only the point-to-point walker
@@ -6347,6 +6357,34 @@ public sealed class AppServices
     // estimate (auto-combat off ⇒ the walker doesn't stop to fight, so the
     // route is pure travel time).
     public bool IsAutoCombatEnabled => ReadAutoModeFlag(d => d.AutoCombat);
+
+    // Per-monster overlay resolve: seed-store value forms the Defaults tier,
+    // SettingsResolver overlays Global / BBS / Char-tier user overrides on top.
+    // The single copy every consumer shares — the two CombatManager /
+    // MonsterEngagementGate closures and the lair-fight ETA predicate — so the
+    // engageable decision can't diverge on the same room state.
+    private Models.GameData.MonsterOverlay ResolveMonsterOverlay(int number) =>
+        Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
+            "Monsters",
+            number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            MonsterOverlaySeed.GetOverlay(number));
+
+    // Whether the walker would actually FIGHT a lair room's occupants — the gate
+    // RouteEtaEstimator uses so an ETA only charges combat dwell for lairs it'll
+    // stop and clear. Resolves each lair monster through the same tier merge combat
+    // uses and asks MonsterEngagement, so a friendly-guardsman / passive-neutral
+    // "lair" (common on town routes) is a free walk-through. An unparseable tag falls
+    // back to "will fight" so a real lair is never under-counted. Shared by every ETA
+    // surface (walk-status line, route-picker cards, Details title) so they agree.
+    public bool LairWillBeFought(Game.Map.Room room)
+    {
+        if (string.IsNullOrEmpty(room.RawLairTag)) return false;
+        Game.Map.RoomTooltipBuilder.ParseLairTag(room.RawLairTag, out _, out IReadOnlyList<int> monsterIds);
+        if (monsterIds.Count == 0) return true;
+        foreach (int id in monsterIds)
+            if (Game.Combat.MonsterEngagement.IsEngageable(ResolveMonsterOverlay(id))) return true;
+        return false;
+    }
 
     // Live read of the master "Disable hangups" kill-switch from the
     // char-tier General section — the same store the toolbar toggle

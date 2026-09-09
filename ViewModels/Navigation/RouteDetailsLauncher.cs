@@ -85,7 +85,8 @@ public static class RouteDetailsLauncher
         if (polyline is not { Count: > 1 }) return title;
         TimeSpan eta = RouteEtaEstimator.Estimate(
             polyline, services.AutoLair.TravelCostModel, services.RoomGraph.GetRoom,
-            includeLairDwell: services.IsAutoCombatEnabled);
+            includeLairDwell: services.IsAutoCombatEnabled,
+            lairWillBeFought: services.LairWillBeFought);
         return eta > TimeSpan.Zero ? $"{title}  ·  ~{RouteEtaEstimator.FormatCompact(eta)}" : title;
     }
 

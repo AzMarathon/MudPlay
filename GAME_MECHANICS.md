@@ -2720,7 +2720,12 @@ flag). These are hard eligibility gates, independent of resistance and level imm
   rather than sitting out the whole settle window — so a room with nothing hidden costs only the
   command→reply round-trip, not a fixed per-room wait. The settle window survives only as a short
   fallback for the case where the reveal *does* surface loot (the `You notice …` survey), which the
-  get engines then need a beat to collect.
+  get engines then need a beat to collect. **The room a walk / loop / auto-lair STARTS from is
+  searched too** (report paradigm-20260909-055045): auto-search normally arms on room *entry*, but
+  the room you're standing in when movement begins was entered earlier — before auto-search was
+  armed, or at login — so it never got that entry search. Movement start arms + searches it before
+  the walker steps out, deduped against the last room actually searched so a loop's later legs
+  (each starting from a room already searched on arrival) don't re-search.
 
 ### Item-cast triggers — how a `CastsSp` fires *([CONFIRMED] 2026-07-18, user)*
 
