@@ -4023,10 +4023,11 @@ public sealed class AppServices
         CombatTracker.SetMonsterCountWindow(
             () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat"));
 
-        // "Kill all engaged" needs the tracker to know when we've room-spelled the
-        // current room, so it can hold the walker below the Min floor to finish the
-        // survivors — read straight off CombatManager's own room-spell state.
-        CombatTracker.SetRoomSpellCommittedGate(() => Combat.HasRoomSpelledCurrentRoom);
+        // "Kill all engaged" needs the tracker to know when we've committed to the
+        // current room (its count met the engage window), so it can hold the walker
+        // below the Min floor to finish the survivors — read straight off
+        // CombatManager's own room-commitment state.
+        CombatTracker.SetRoomCommittedGate(() => Combat.HasCommittedToCurrentRoom);
 
         // Combat-off "clear hostiles when seen Hidden" override —
         // a stealth runner (AutoSneak on) sprinting a route with combat

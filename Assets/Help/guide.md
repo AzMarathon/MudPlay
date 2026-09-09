@@ -1357,8 +1357,8 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 ### Kill all engaged
 
 **Default:** Off
-**What it does:** Sits right below the Min/Max pickers. Once you've engaged a room **with a room spell** (an AoE multi-attack), it finishes the survivors off instead of moving on when the count drops below **Min. monsters** — for areas where monsters have **different HP pools**, so a single AoE leaves the tanky ones alive. Off (the default) is the current behavior: an AoE that kills 6 of 8 with Min set to 3 leaves the 2 survivors and moves on. On, the engine stays and clears the room to empty, then the walker continues.
-**Important notes:** Only bypasses the **minimum** — the **maximum** (too-crowded room) and every other gate still apply — and only for rooms you actually **room-spelled** (a room you engaged with single-target attacks still respects the floor). An HP/MA flee still overrides it, so a survivor that's beating on you will still trigger your run threshold.
+**What it does:** Sits right below the Min/Max pickers. Once a room has been **engaged** because its hostile count met **Min. monsters**, it keeps fighting per your combat settings until the room is cleared — instead of moving on when kills drop the count below **Min. monsters**. Useful for areas where monsters have **different HP pools**, so the first wave leaves the tanky ones alive. Off (the default) is the current behavior: if you engage a room of 8 with Min set to 3 and kill 6, it leaves the 2 survivors and moves on. On, the engine stays and clears the room to empty, then the walker continues.
+**Important notes:** Only bypasses the **minimum** — the **maximum** (too-crowded room) and every other gate still apply — and only for rooms you actually **engaged** (a room whose count never met the floor is skipped as before). An HP/MA flee still overrides it, so a survivor that's beating on you will still trigger your run threshold.
 
 ### Do BS attacks (backstab)
 

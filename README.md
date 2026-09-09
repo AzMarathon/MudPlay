@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.59.1**
-> - Combat → Room thresholds: new "Kill all engaged" checkbox — once a room is engaged with a room spell, finish off the survivors instead of moving on when the count drops below Min. monsters (for areas where mixed HP pools leave the tanky ones alive after an AoE); off (default) keeps today's behavior of moving on from the leftovers
+> - Combat → Room thresholds: new "Kill all engaged" checkbox — once a room is engaged because its count met Min. monsters, keep fighting it per your combat settings until cleared, instead of moving on when kills drop the count below Min. monsters (for areas where mixed HP pools leave the tanky ones alive); off (default) keeps today's behavior of moving on from the leftovers
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
