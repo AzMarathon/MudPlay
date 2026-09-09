@@ -180,9 +180,14 @@
          same; used via Classes="SettingsSectionBanner" etc. -->
     <Style Selector="TextBlock.SettingsSectionBanner">
         <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
-        <Setter Property="FontSize" Value="{StaticResource FontSizeLg}"/>
+        <!-- XL (20px) so a tier header is decisively larger than any setting under
+             it — settings text is 13px, group sub-headers 11px. -->
+        <Setter Property="FontSize" Value="{StaticResource FontSizeXL}"/>
         <Setter Property="FontWeight" Value="Bold"/>
-        <Setter Property="Margin" Value="0,26,0,0"/>
+        <!-- Big leading gap so a section break reads as clearly larger than a
+             within-section group header (16px margin) — sets the new tier
+             section apart from the previous section's last setting. -->
+        <Setter Property="Margin" Value="0,42,0,0"/>
     </Style>
     <!-- The first banner on a tab sits flush at the top — opt out of the leading
          gap with Classes="SettingsSectionBanner first". -->
