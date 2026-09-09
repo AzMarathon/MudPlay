@@ -308,7 +308,7 @@
                          slice (BbsSectionViewModel.CommitCredentials) — every
                          character on this BBS keeps its own.
                          ============================================================ -->
-                    <TextBlock Classes="SectionBanner" Text="Character profile settings"/>
+                    <TextBlock Classes="SettingsSectionBanner" Text="Character profile settings"/>
                     <TextBlock Classes="SettingsSectionSub"
                                Text="Only for the character you have loaded — each character on this BBS keeps its own copy."/>
                     <Border Classes="SettingsSectionRule"/>
@@ -499,7 +499,7 @@
                          AppServices.Current.Confirm — not tied to this BBS or the
                          loaded character.
                          ============================================================ -->
-                    <TextBlock Classes="SectionBanner" Text="Global client settings"/>
+                    <TextBlock Classes="SettingsSectionBanner" Text="Global client settings"/>
                     <TextBlock Classes="SettingsSectionSub"
                                Text="Apply to the whole app, regardless of which BBS or character is active."/>
                     <Border Classes="SettingsSectionRule"/>
