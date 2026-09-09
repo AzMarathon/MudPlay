@@ -1,5 +1,10 @@
 # Version history
 
+## 3.58.9
+
+- Asylum (teleport-maze) solver no longer fails out when a relocalization peek points at a closed door/gate — it bashes the barrier open first, then looks through it
+- bug reports addressed: stock-20260908-205441
+
 ## 3.58.8
 
 - Auto-Lair leaves a lair as soon as the fight is over and the loot is collected, instead of always sitting out the full 30-second engage timeout (which is now just an upper bound)

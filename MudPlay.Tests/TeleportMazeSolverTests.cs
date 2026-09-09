@@ -215,12 +215,16 @@ public sealed class TeleportMazeSolverTests : IDisposable
         public required TeleportMazeSolver Solver { get; init; }
         public List<byte[]> Sent { get; } = new();
         public List<WalkEvent> Events { get; } = new();
+        // Door-open requests the solver made via its openDoor delegate (when the
+        // harness wired one). Each carries the callback the test invokes to report
+        // open success/failure.
+        public List<(Direction Dir, Action<bool> Done)> DoorOpens { get; init; } = new();
         public List<string> SentText => Sent.Select(b => Encoding.Latin1.GetString(b)).ToList();
         public void Dispose() => Solver.Dispose();
     }
 
     private Harness NewHarness(string rooms = SplitMaze, bool bindWire = true, string spells = Spells,
-        bool isParadigm = false)
+        bool isParadigm = false, bool wireDoorOpener = false)
     {
         string dir = Path.Combine(_root, "alpha");
         Directory.CreateDirectory(dir);
@@ -241,16 +245,23 @@ public sealed class TeleportMazeSolverTests : IDisposable
         MovementCoordinator coord = new();
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
         TeleportMazeIndex index = new(graph);
+        // When asked, wire an openDoor delegate that records each request so a test
+        // can resolve it (open success/failure) — mirrors AppServices delegating to
+        // the shared door FSM. Left null otherwise (closed-door peeks just skip).
+        var doorOpens = new List<(Direction Dir, Action<bool> Done)>();
+        Action<Direction, Action<bool>>? opener = wireDoorOpener
+            ? (dir, done) => doorOpens.Add((dir, done))
+            : null;
         // Synchronous post + no dispatcher timers: Start() runs inline in TryBegin
         // and the settle / look timers are driven manually via test seams.
         TeleportMazeSolver solver = new(index, graph, tracker, bfs, walker,
             log: null, useTimer: false, post: a => a(),
-            isParadigm: isParadigm ? () => true : null);
+            isParadigm: isParadigm ? () => true : null, openDoor: opener);
 
         Harness h = new()
         {
             Graph = graph, Bfs = bfs, Tracker = tracker,
-            Walker = walker, Index = index, Solver = solver,
+            Walker = walker, Index = index, Solver = solver, DoorOpens = doorOpens,
         };
         walker.SetWireSender(h.Sent.Add);
         walker.SetMazeSolver(solver);
@@ -264,6 +275,13 @@ public sealed class TeleportMazeSolverTests : IDisposable
 
     private static RoomObservation PaddedCell(params Direction[] exits)
         => new("Padded Cell", new HashSet<Direction>(exits));
+
+    // A Warped Asylum room where one exit is a CLOSED door/gate (still a real exit,
+    // but flagged closed on the obvious-exits line so the solver opens it first).
+    private static RoomObservation AsylumClosed(Direction closed, params Direction[] exits)
+        => new("Warped Asylum", new HashSet<Direction>(exits),
+               OpenDoorDirections: null,
+               ClosedDoorDirections: new HashSet<Direction> { closed });
 
     // Mirror ParadigmPositionResolver.OnLocationObserved: hard-locate the tracker,
     // then raise PositionResolved (which the solver keys its relocalization off).
@@ -305,6 +323,69 @@ public sealed class TeleportMazeSolverTests : IDisposable
         Assert.Equal(0, h.Solver.Attempts);
         Assert.Equal(new RoomKey(1, 30), h.Tracker.State.CurrentRoom!.Key);
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    [Fact]
+    public void ClosedDoorPeek_OpensBarrierBeforeLooking_ThenRelocalizes()
+    {
+        // A teleport dropped us in 1/31 (tracker Lost) whose EAST exit is a CLOSED
+        // door. Peeking it with `look east` would be refused at the shut door — so
+        // the solver must open the barrier first, then look, then relocalize.
+        Harness h = NewHarness(wireDoorOpener: true);
+
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 30)));
+        Assert.True(h.Solver.Active);
+
+        // Self-look renders 1/31; its E exit is flagged "closed door".
+        h.Solver.OnRoomObserved(AsylumClosed(Direction.E, Direction.E, Direction.D));
+        h.Solver.FireSettleForTests();
+
+        // The sweep reaches E first, sees a closed door, and requests an open —
+        // WITHOUT sending the peek yet.
+        (Direction Dir, Action<bool> Done) req = Assert.Single(h.DoorOpens);
+        Assert.Equal(Direction.E, req.Dir);
+        Assert.DoesNotContain("look east\r", h.SentText);
+
+        // Barrier opens → the deferred peek now goes out.
+        req.Done(true);
+        Assert.Contains("look east\r", h.SentText);
+
+        // Feed the two neighbour renders (E → 1/30, D → 1/10); the signature
+        // resolves to 1/31 and the solver drives the plain route to the goal.
+        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.D));   // look east → 1/30
+        h.Solver.OnRoomObserved(Asylum(Direction.E, Direction.D));   // look down → 1/10
+
+        Assert.Equal(new RoomKey(1, 31), h.Tracker.State.CurrentRoom!.Key);
+        h.Solver.FireSettleForTests();
+        Assert.False(h.Solver.Active);
+        Assert.Equal(new RoomKey(1, 30), h.Tracker.State.CurrentRoom!.Key);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    [Fact]
+    public void ClosedDoorPeek_OpenFails_SkipsPeekInsteadOfFailingSolve()
+    {
+        // The reported bug: a closed door on a peek direction failed the whole solve
+        // out. Now an open-failure just skips that neighbour and carries on — the
+        // solve is NOT abandoned on one shut barrier.
+        Harness h = NewHarness(wireDoorOpener: true);
+
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 30)));
+        Assert.True(h.Solver.Active);
+
+        h.Solver.OnRoomObserved(AsylumClosed(Direction.E, Direction.E, Direction.D));
+        h.Solver.FireSettleForTests();
+
+        (Direction Dir, Action<bool> Done) req = Assert.Single(h.DoorOpens);
+        Assert.Equal(Direction.E, req.Dir);
+
+        // The open fails — the neighbour stays opaque. The solver skips E and peeks
+        // the next exit (D) rather than failing the solve.
+        req.Done(false);
+        Assert.Contains("look down\r", h.SentText);
+        Assert.True(h.Solver.Active);
         Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
     }
 
