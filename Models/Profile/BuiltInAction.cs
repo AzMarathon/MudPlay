@@ -10,6 +10,7 @@ public enum BuiltInAction
     OpenConversation,
     OpenParty,
     OpenBuffWatchdog,
+    OpenProfileManager,
     OpenWorkshop,
     OpenNavigation,
     OpenSpellBook,

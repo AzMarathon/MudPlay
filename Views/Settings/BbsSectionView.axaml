@@ -37,12 +37,12 @@
                 <TextBlock Text="Saved BBSes"
                            Foreground="{StaticResource ChromeFgMutedBrush}"
                            FontSize="11" FontWeight="SemiBold"/>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-                    <Button Grid.Column="0" Content="Add" Command="{Binding AddBbsCommand}"/>
-                    <Button Grid.Column="1" Content="Delete"
-                            Command="{Binding DeleteBbsCommand}"
-                            IsEnabled="{Binding HasSelection}"/>
-                </Grid>
+                <TextBlock Text="Select a BBS to edit its details. Adding, removing, renaming, and reassigning a character's BBS now live in Profile Management."
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="11" TextWrapping="Wrap"/>
+                <Button Content="Open Profile Management"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding OpenProfileManagerCommand}"/>
             </StackPanel>
 
             <ListBox ItemsSource="{Binding AvailableBbsNames}"
@@ -68,7 +68,7 @@
                                    Foreground="{StaticResource ChromeFgBrush}"
                                    FontSize="{StaticResource FontSizeLg}"
                                    FontWeight="SemiBold"/>
-                        <TextBlock Text="Add a BBS entry on the left to start filling in connection details."
+                        <TextBlock Text="Add a BBS in Profile Management (View → Profile Management), then select it on the left to fill in its connection details."
                                    Foreground="{StaticResource ChromeFgSecBrush}"
                                    FontSize="{StaticResource FontSizeMd}"
                                    TextWrapping="Wrap"/>

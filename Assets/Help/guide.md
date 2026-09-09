@@ -17,8 +17,10 @@ Two ways to connect:
 
 A **profile** is one character's workspace — its BBS login, macros, triggers, equipment sets, favorites, quest state, and every per-character setting. One profile is loaded at a time.
 
-- **New profile** (Ctrl+N) starts a blank draft; set up its BBS + credentials (below), then **Save** (Ctrl+S) to name it.
-- **Open profile** (Ctrl+O) loads a saved one.
+Everything to do with characters and BBSes now lives in one place: **File → Profile Management** (also on the View menu and the toolbar). See the **Profile Management** section just below for the full walkthrough.
+
+- **New profile** (Ctrl+N) starts a blank draft; set up its BBS + credentials (below), then **Save** (Ctrl+S) to name it. (New / Open / Save / Save As all live in the Profile Management window now, but the keyboard shortcuts still work app-wide.)
+- **Open (swap to) a profile** (Ctrl+O) loads a saved one — do it from the Profile Management window's character list.
 - **Auto-load last profile** (File menu — *Auto-load last profile on startup*) reopens the profile you used last on every launch.
 - **Launch straight into a profile** from the command line with `--profile`, so a shortcut or script can open you right where you want. Naming **more than one loads more than one** — each name opens its own window (one instance per profile), which is the easy way to run several characters at once. A name can be **bare** (`Fujin`) when only one of your saved profiles uses it; if the same character name exists on two BBSes, qualify it as **`BBS/Name`** (e.g. `Playpen/Fujin`) since a profile is really the BBS + character pair.
 
@@ -47,9 +49,22 @@ A **profile** is one character's workspace — its BBS login, macros, triggers, 
 
 Settings live in four tiers — **Defaults → Global → BBS → Character** — so a profile only records what differs from the tier beneath it. (The Settings Menu section notes each setting's tier.)
 
+## Profile Management
+
+Open **Profile Management** from **File**, the **View** menu, or its toolbar button — it's the single home for your characters and your BBSes. Re-selecting the menu item (or toolbar button) toggles it closed. The window has three parts:
+
+- **The current profile** (top strip) shows which character is loaded and gives you **New…**, **Save**, and **Save As…** — the same actions the File menu used to carry (their Ctrl+N / Ctrl+S / Ctrl+Shift+S shortcuts still work anywhere in the app).
+- **BBSes** (left) — every saved board. **Add** creates a new one (fill in its host/port and the rest over in **Settings → BBS + Display**), **Rename** retitles it (carrying its characters and your saved logins with it), and **Remove** deletes it. Removing a BBS deletes **every character saved under it**, so the confirm names how many will go.
+- **Characters** (right) — the characters saved under the selected BBS (multi-select). **Add** creates a new one, **Rename** retitles it, **Delete** removes it, **Assign to BBS** moves a character to a different board (pick the destination in the **Move to** dropdown; if that board already has a character by the same name you're asked for a new one), and **Load** brings the selection online. The character you currently have loaded is shown in **bold** and marked *loaded*.
+- **Load** is selection-aware, so you can bring a whole stable up at once: tick several characters and hit Load and you end up with one running client per character. The **first** selected character loads into **this** client when it's idle (a straight swap); each of the **rest** opens in its own new client instance. If this client is **actively connected**, it's left alone entirely — *every* selected character opens in a new client, so you never get the jarring disconnect → swap → reconnect just to launch alts. (Launching new clients uses the same multi-instance mechanism as the `--profile` command line.)
+
+Because deleting, renaming, or moving the **loaded** character (or removing the BBS it lives on) would pull the rug out from under your live session, those actions ask you to **disconnect first**. Everything you do to *other* characters works while you're still connected.
+
+BBS **connection details** (host, port, redial, display, realm mechanics, credentials) are still edited over in **Settings → BBS + Display** — select the BBS there and fill in its fields. Profile Management is where BBSes are created, renamed, removed, and where characters are assigned to them; Settings is where a selected BBS's details are edited. Selecting a BBS in Settings **only** edits that board now — it never moves your character (use **Assign to BBS** here for that).
+
 ## Setting up a BBS
 
-In **Settings → BBS + Display**, fill in the board's **name**, **host**, and **port**, your **username / password**, and — if the board needs it — the **automated logon** steps that walk you from the BBS menu into the game. Reconnect behavior and terminal size live here too. These are **BBS-tier**: shared by every character on that board.
+First **add the board** in **Profile Management** (File → Profile Management → BBSes → Add) — that's where BBSes are created, renamed, and removed now. Then, in **Settings → BBS + Display**, select it and fill in its **host** and **port**, your **username / password**, and — if the board needs it — the **automated logon** steps that walk you from the BBS menu into the game. Reconnect behavior and terminal size live here too. These are **BBS-tier**: shared by every character on that board. (The board's **name** is set when you add/rename it in Profile Management.)
 
 Each logon step is a **Message** to wait for and a **Response** to send when it appears (with `{username}` / `{password}` tokens for your saved credentials). Add **only steps that LOG YOU IN** — never a log-out or quit step (e.g. a *"Are you sure you want to log off? (Y/N)"* confirmation, a common MegaMUD holdover). That prompt never appears on the login path, so a logout step just sits there unmatched and stalls the sequence. You don't need a final "enter the realm" step either: once your steps reach the game's entry menu, MudPlay sends the entry command for you — and it does so even if your steps don't perfectly reach the end, so an automatic reconnect after a drop still lands you back in the game. (The one time it won't auto-enter is right after you hang up on purpose — a manual `@hangup` or a hang-up-on-low-HP / hang-up-when-naked rule — so you can read the screen and enter manually.)
 
@@ -888,6 +903,12 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **What it does:** As you drag the panel windows (Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats) they snap flush to each other's edges when brought close, and dragging the main window carries the whole snapped cluster with it. Turn it off to let every window float independently. See **The windows → Snapping windows together** for the full behavior.
 **Important notes:** Applies live. Editors and dialogs opened from inside a panel don't snap.
 
+### Recent profiles shown in File menu
+
+**Default:** 5 **Range:** 0–10
+**What it does:** How many recently-loaded characters the **File → Recent** submenu lists. The client always remembers the last ten, so raising this reveals more without your having to re-load them; lowering it just shows fewer.
+**Important notes:** Install-wide (Global tier). Applies on Apply.
+
 ### Buff Watchdog layout
 
 **Default:** Config above bars
@@ -1098,7 +1119,7 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 ## BBS + Display (Connection & Network)
 
-Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. To make it obvious which persistence level each setting falls under, the tab is split into three banner-headed sections: **BBS settings** (stored with the board, shared by every character on it — connection, retry/reconnect, display size + scrollback, game-menu commands, realm mechanics, board disconnect line, runic-currency name); **Character profile settings** (only for the loaded character — username/password, the read-only captured suicide password, SYSOP powers, the Sys Goto table, and the automated logon-menu steps); and **Global client settings** (app-wide, regardless of BBS or character — the confirmation prompts, documented separately below).
+Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. **Adding, removing, and renaming BBSes now lives in Profile Management** (View → Profile Management, or the button on this tab's left rail); this tab's list is for **selecting** a saved BBS to edit its details, and selecting one here only edits it — it never moves your loaded character (that's Profile Management's *Assign to BBS*). To make it obvious which persistence level each setting falls under, the tab is split into three banner-headed sections: **BBS settings** (stored with the board, shared by every character on it — connection, retry/reconnect, display size + scrollback, game-menu commands, realm mechanics, board disconnect line, runic-currency name); **Character profile settings** (only for the loaded character — username/password, the read-only captured suicide password, SYSOP powers, the Sys Goto table, and the automated logon-menu steps); and **Global client settings** (app-wide, regardless of BBS or character — the confirmation prompts, documented separately below).
 
 ### Name
 

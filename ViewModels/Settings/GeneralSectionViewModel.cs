@@ -98,6 +98,11 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // Install-global (GlobalSettings.SnapWindows), read live by WindowSnapManager.
     [ObservableProperty] private bool _snapWindows = true;
 
+    // Install-global (GlobalSettings.RecentProfilesShown): how many entries the
+    // File → Recent submenu lists. Default 5; capped at MaxRecentProfilesShown.
+    [ObservableProperty] private int _recentProfilesShown = 5;
+    public int MaxRecentProfilesShown => GlobalSettings.MaxRecentProfilesShown;
+
     // Buff Watchdog window layout — where the config table sits relative to the timer
     // bars. Persisted on the top-level CharacterProfile.BuffWatchdogLayout; the Buff
     // Watchdog reads it live (ProfileMutated) and reflows.
@@ -405,6 +410,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // Window snapping is install-global too; WindowSnapManager reads it live off
         // the same GlobalSettings, so this is all the wiring the toggle needs.
         _globalSettings.Current.SnapWindows = SnapWindows;
+        _globalSettings.Current.RecentProfilesShown =
+            System.Math.Clamp(RecentProfilesShown, 0, GlobalSettings.MaxRecentProfilesShown);
         _globalSettings.Save();
 
         // A plain profile Save fires neither ProfileLoaded nor ProfileMutated, so the
@@ -466,6 +473,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
 
         // Window snapping is Global-tier — reflect the live GlobalSettings value.
         SnapWindows = _globalSettings.Current.SnapWindows;
+        RecentProfilesShown = _globalSettings.Current.RecentProfilesShown;
 
         // Buff Watchdog layout is a top-level per-character field (not in the DTO).
         BuffWatchdogLayout layout = _profile.Current?.BuffWatchdogLayout ?? BuffWatchdogLayout.ConfigTop;
@@ -606,6 +614,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();
     partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
     partial void OnSnapWindowsChanged(bool value)                    => Dirty();
+    partial void OnRecentProfilesShownChanged(int value)             => Dirty();
     partial void OnSelectedBuffWatchdogLayoutChanged(BuffLayoutOption? value) => Dirty();
     // Live preview: push straight to the terminal canvas as the picker
     // changes, before Save/Cancel commit the choice. Discard reverts by

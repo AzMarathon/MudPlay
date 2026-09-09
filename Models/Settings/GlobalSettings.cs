@@ -31,13 +31,19 @@ public sealed class GlobalSettings
     public Profile.ProfileRef? StartupProfile()
         => AutoLoadLastProfile ? LastUsedProfile : null;
 
-    // Up to RecentProfilesLimit profiles the user has loaded recently,
+    // Up to MaxRecentProfilesShown profiles the user has loaded recently,
     // ordered most-recent-first. Each entry is a (BBS, character)
     // reference. Drives the File → Recent profiles submenu.
     public List<Profile.ProfileRef>? RecentProfiles { get; set; }
 
-    // Cap on RecentProfiles retention.
-    public const int RecentProfilesLimit = 5;
+    // Hard cap on RecentProfiles retention (and the number of menu slots) — the
+    // ceiling the "recent profiles shown" picker can reach.
+    public const int MaxRecentProfilesShown = 10;
+
+    // How many recent profiles the File → Recent submenu actually shows
+    // (Settings → General, Global tier). The full retained list keeps up to
+    // MaxRecentProfilesShown so raising this reveals more without re-loading.
+    public int RecentProfilesShown { get; set; } = 5;
 
     // Fallback game-data set name used when no BBS is pinned (or the pinned
     // BBS has no ActiveGameDataSet of its own). Once a BBS is pinned its

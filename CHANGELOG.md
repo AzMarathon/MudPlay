@@ -1,5 +1,16 @@
 # Version history
 
+## 3.59.0
+
+- New **Profile Management** window (View menu + toolbar) — one place to add / rename / delete / load characters, move a character to another BBS, and add / remove / rename BBSes
+- **Load** is multi-select: tick several characters and the first loads into this client (when idle) while the rest each open in their own new client — bring a whole stable online in one click. If this client is actively connected it's left alone; every selected character opens in a new client instead of a disconnect→swap→reconnect
+- File menu's New / Open / Save / Save As collapsed into a single **Profile Management** entry (the Ctrl+N/O/S/Shift+S shortcuts still work); the redundant "BBS list" entry removed
+- Characters can now be **renamed and deleted** (neither was possible before), and moved between BBSes via an explicit **Assign to BBS**
+- BBS add / remove moved out of Settings → BBS + Display into the new window; that tab keeps the BBS list for selecting and editing a board's connection/display fields
+- Selecting a BBS in Settings no longer silently re-homes your loaded character — moving a character is now an explicit action
+- Mutating the loaded character (load-swap / rename / delete / reassign) asks you to disconnect first; other characters are freely managed while connected
+- New **Settings → General** picker for how many recent profiles the File menu lists (0–10, default 5); the client now remembers up to ten
+
 ## 3.58.30
 
 - Fixed a crash: renaming a BBS to a name whose folder already exists no longer takes the app down — it refuses with a "name already in use" notice and leaves the rename undone

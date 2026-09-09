@@ -126,6 +126,15 @@ public sealed class AppServices
         if (!string.IsNullOrWhiteSpace(text)) _terminalNotice?.Invoke(text);
     }
 
+    // Toggle the Profile Management window. The window is owned by the main VM
+    // (it borrows that VM's connection gate + profile-swap path), so non-main
+    // surfaces — the Settings → BBS tab's "Open Profile Management" button —
+    // route through this bridge rather than reaching MainWindowViewModel. No-op
+    // until the main VM binds it.
+    private Action? _openProfileManager;
+    public void SetOpenProfileManager(Action open) => _openProfileManager = open;
+    public void OpenProfileManager() => _openProfileManager?.Invoke();
+
     // Opens (or re-focuses) the single Navigation Management dialog. Both the map
     // window's "Navigation Management" button and the toolbar Start button route
     // here so there's only ever one instance — no two identical windows. The bool

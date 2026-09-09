@@ -66,6 +66,8 @@ public static class ToolbarItemCatalogue
             "OpenPartyCommand"),
         new("OpenBuffWatchdog",   "Buff Watchdog",        "IconBuffWatchdog",
             "OpenBuffWatchdogCommand", Tooltip: "Buff Watchdog — configured buffs, active timers, recast markers"),
+        new("OpenProfileManager", "Profile Management",   "IconProfileManager",
+            "OpenProfileManagerCommand", Tooltip: "Profile Management — add / rename / delete / swap characters and manage BBSes"),
         new("OpenWorkshop",       "Player Workshop",      "IconUser",
             "OpenWorkshopCommand",     ShortcutHint: "F1"),
         new("OpenSpellBook",      "Spell Book",           "IconBook",
