@@ -44,12 +44,38 @@ public sealed class CombatSpellChooserTests
             AreaDebuffSpell = Slot("blind"),
             MultiAttackSpell = Slot("star"),
             NormalAttackSpell = Slot("harm"),
+            // With the skip off, the opener outranks every configured spell even in a
+            // room that would otherwise room-spell (the skip-on case is below).
+            SkipBackstabIfMultiAttack = false,
         };
 
         CombatSpellDecision d = sut.Choose(settings, Ctx(enemies: 5, backstabPending: true));
 
         Assert.Equal(CombatSpellAction.Backstab, d.Action);
         Assert.Null(d.Spell);
+    }
+
+    // paradigm-20260908-210406: with SkipBackstabIfMultiAttack on (the default), a room
+    // that qualifies for the multi-attack (room-spell) must NOT open with a backstab —
+    // the flag was wired to the UI/snapshot but never consulted in the chooser.
+    [Fact]
+    public void Choose_BackstabPending_SkippedWhenRoomQualifiesForMultiAttack()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            MultiAttackSpell = Slot("star", minEnemies: 4),
+            NormalAttackSpell = Slot("harm"),
+            SkipBackstabIfMultiAttack = true,   // the default, made explicit
+        };
+
+        // 5 enemies ≥ the multi's MinEnemies(4) → room-spells → backstab skipped.
+        Assert.Equal(CombatSpellAction.MultiAttack,
+            sut.Choose(settings, Ctx(enemies: 5, backstabPending: true)).Action);
+
+        // Below the multi's floor the room does NOT qualify, so the opener still fires.
+        Assert.Equal(CombatSpellAction.Backstab,
+            sut.Choose(settings, Ctx(enemies: 3, backstabPending: true)).Action);
     }
 
     [Fact]

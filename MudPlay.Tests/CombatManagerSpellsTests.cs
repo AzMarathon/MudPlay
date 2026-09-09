@@ -1652,6 +1652,9 @@ public sealed class CombatManagerSpellsTests
         using Harness h = new();
         h.Settings.DoBackstab = true;
         h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 1 };
+        // Skip-backstab-if-room-spelling off here so the opener beats the spell — the
+        // skip-on case is covered by CombatSpellChooserTests (paradigm-20260908-210406).
+        h.Settings.SkipBackstabIfMultiAttack = false;
         h.Sneaking = true;
         h.AddMonster(1, "giant rat");
 

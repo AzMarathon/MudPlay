@@ -108,6 +108,7 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _combatStatusSub;
     private readonly IDisposable _expGainSub;
     private readonly IDisposable _monsterProtectSub;
+    private readonly IDisposable _roomSpawnSub;
     private readonly IDisposable _bsResolveHitsSub;
     private readonly IDisposable _bsResolveMissesSub;
     private readonly IDisposable _attackConfirmHitsSub;
@@ -696,6 +697,7 @@ public sealed partial class CombatManager : IDisposable
         _combatStatusSub   = router.Subscribe(KnownPatterns.CombatStatus,   OnCombatStatus);
         _expGainSub        = router.Subscribe(KnownPatterns.UserGainExperience, OnUserGainExperience);
         _monsterProtectSub = router.Subscribe(KnownPatterns.MonsterMovesToProtect, OnMonsterProtect);
+        _roomSpawnSub = router.Subscribe(KnownPatterns.RoomSpawnArrival, OnRoomSpawnArrival);
 
         // Backstab surprise-round resolution rides on our own hit / miss lines.
         // Separate subscriptions from OnCombatLine (fan-out) so the resolution
@@ -2362,6 +2364,32 @@ public sealed partial class CombatManager : IDisposable
         }
     }
 
+    // Pre-emptive sibling of OnCombatLine, keyed on a directionless spawn line
+    // ("A slimeworm crashes through the ground into the room!"). RoomEntryWatcher's
+    // arrival parser only handles the "<name> <verb> in from <dir>" form — a spawn's
+    // free-form flavor carries no direction and no cleanly-parseable name, so nothing
+    // adds it to the roster and the mob stays invisible until it swings. That swing is
+    // what OnCombatLine currently recovers on, a full round late (the reported lag: a
+    // resting mage sat unengaged while ten slimeworms piled in, only engaging once the
+    // first bite tripped the empty-room net). Firing the same bare-CR refresh on the
+    // spawn line pulls the authoritative "Also here:" a round earlier, before the hit.
+    // Gated identically to OnCombatLine: auto-combat on, no held target, and a roster
+    // that shows nothing engageable — an already-tracked room needs no refresh.
+    private void OnRoomSpawnArrival(MatchResult _)
+    {
+        if (!_isEnabled()) return;
+        if (_currentTarget is not null) return;
+        if (_wireSender is null) return;
+        if (_classifier.Current is { } cur && HasEngageable(cur)) return;
+
+        if (TrySendRoomRefresh("monster spawned into the room"))
+        {
+            _log?.Combat(LogCategory,
+                "room-spawn arrival while room shows no engageable — sending CR for short re-display");
+            RoomAppearsEmptyDuringCombat?.Invoke();
+        }
+    }
+
     // Increments ConfirmedAttackCastCount once per REAL single-target attack/
     // alternate/drain-spell cast landing (or missing) against the current target —
     // the precise signal ReadRoundCount now runs on (see its declaration comment).
@@ -3527,6 +3555,7 @@ public sealed partial class CombatManager : IDisposable
         _combatStatusSub.Dispose();
         _expGainSub.Dispose();
         _monsterProtectSub.Dispose();
+        _roomSpawnSub.Dispose();
         _bsResolveHitsSub.Dispose();
         _bsResolveMissesSub.Dispose();
         _attackConfirmHitsSub.Dispose();
