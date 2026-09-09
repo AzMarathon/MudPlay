@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.5**
-> - Backstab no longer opens a fight in a room that qualifies for room-spelling — the "don't backstab if room-spelling" setting is now honored (it was previously ignored)
-> - Self-buff timers survive a hangup/reconnect instead of being thrown away, so re-entering the game no longer recasts every buff; only buffs that actually expired while you were offline recast
-> - Monsters that burst into the room ("… into the room!") with no direction are now detected and engaged a round before their first swing, instead of only once they attack
-> - Navigation status no longer sticks on "Waiting" after Auto-Lair is stopped and the walker winds down — the chip clears once the engines are genuinely idle
-> - Navigation log now records walk-to arrival and stop (with the room), so a report shows how a walk ended
+> **Version 3.58.6**
+> - Fixed the Conversation window's outgoing-telepath text drifting onto the wrong, unrelated exchange over a long session (e.g. a `@roomba` answer showing up hours later attached to someone else's unrelated question) — an engine-fired reply was being captured twice (once from the raw send, once from its own on-screen echo), leaving one stale entry queued per reply that permanently desynced every later pairing; captures now dedupe against the send still awaiting its own confirmation
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
