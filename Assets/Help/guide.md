@@ -207,7 +207,16 @@ Or build it off the map: **Navigation Management → New Loop** opens an editor 
 
 **Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Run**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) alongside your starred GOTO rooms, so you can start it from anywhere.
 
-Each waypoint can carry its own **command and delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`) and a **"Do not rest in this room"** flag, set from the waypoint's **✎** button. Chain several commands in one waypoint with `;` or `^M` — each is sent as its own line (e.g. `get all;drop coins`), the same convention macros and the pre-/post-rest commands use. If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
+Each waypoint can carry its own per-room settings, edited **inline in the Edit Loop table**: a **command** + **delay** (e.g. `rest`, `dep 100`, `ask barmaid pie`), a **"No rest"** flag, and a **"No atk"** flag. Chain several commands in one waypoint with `;` or `^M` — each is sent as its own line (e.g. `get all;drop coins`), the same convention macros and the pre-/post-rest commands use. (While *building* a loop from the map, click a waypoint row in the CURRENT NAV strip to set the same options in a small dialog.) If a route crosses a locked gate or a hazard room, a **Choose a route** prompt lets you take the free way around or push through.
+
+- **No rest** — the loop won't rest in this room even when HP/MA drop below your "rest if below" gates; it advances instead. Only this exact room is protected.
+- **No atk (do not attack here)** — the loop skips combat in this room *as if auto-combat were off*, walking on even when the Min/Max monster count is met. The one exception: if a **rest** is triggered here (HP or MA below its gate), it still clears the room so the rest can proceed. Only this exact room is affected.
+
+### Entire Loop Settings
+
+Some settings apply to the **whole loop**, not one room. Reach them from **⚙ Entire Loop Settings** — it appears at the top of the CURRENT NAV area **while you're building a loop** and again at the top of the rail **while a loop is running** (click it for a flyout), and it's mirrored by a checkbox next to **Set as favorite** in the Edit Loop window.
+
+- **Only attack in lair rooms** — the loop only engages hostiles in **lair rooms** (rooms the game data tags as monster lairs); every other room is walked through as if auto-combat were off. The inverse of per-room "no atk": instead of opting rooms out one by one, you opt the whole loop *in* to lair rooms only. A per-room **"do not attack"** still skips even a lair room (it wins), and a triggered rest still clears any suppressed room so it can rest. Note the suppressed rooms include the walked-through connectors between waypoints, not just the marked waypoints.
 
 ## Estimating a loop's exp/hour
 

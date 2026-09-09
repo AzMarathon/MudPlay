@@ -36,17 +36,26 @@ public sealed class LoopWaypoint
     // Defaults false, so older loop files without the field behave as before.
     public bool DoNotRest { get; set; }
 
+    // When true, the loop must NOT engage hostiles in THIS room even if the
+    // Min/Max monster-count window is met — it behaves as if auto-combat were
+    // off and walks on. Only this exact room is skipped. The one exception: if
+    // a rest is triggered here (HP/MA below its gate), the client still clears
+    // the room so the rest can proceed. Defaults false, so older loop files
+    // without the field behave as before.
+    public bool DoNotAttack { get; set; }
+
     // Parsed RoomKey from Room. Default when malformed.
     [JsonIgnore]
     public RoomKey Key => RoomKey.TryParseWire(Room, out RoomKey k) ? k : default;
 
     public LoopWaypoint() { }
 
-    public LoopWaypoint(RoomKey key, string? command = null, int delayMs = 0, bool doNotRest = false)
+    public LoopWaypoint(RoomKey key, string? command = null, int delayMs = 0, bool doNotRest = false, bool doNotAttack = false)
     {
-        Room      = key.ToString();
-        Command   = command;
-        DelayMs   = delayMs;
-        DoNotRest = doNotRest;
+        Room        = key.ToString();
+        Command     = command;
+        DelayMs     = delayMs;
+        DoNotRest   = doNotRest;
+        DoNotAttack = doNotAttack;
     }
 }

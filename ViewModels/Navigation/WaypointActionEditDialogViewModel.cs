@@ -28,12 +28,18 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
     // gates. Independent of Command (a dangerous room may have no command).
     [ObservableProperty] private bool _doNotRest;
 
-    public WaypointActionEditDialogViewModel(string waypointLabel, string? command, int delayMs, bool doNotRest)
+    // Never engage hostiles in this room — the loop treats it as if auto-combat
+    // were off and walks on. A triggered rest still clears it. Independent of
+    // Command and DoNotRest.
+    [ObservableProperty] private bool _doNotAttack;
+
+    public WaypointActionEditDialogViewModel(string waypointLabel, string? command, int delayMs, bool doNotRest, bool doNotAttack)
     {
         WaypointLabel = waypointLabel ?? string.Empty;
         _command = command;
         _delayMs = delayMs;
         _doNotRest = doNotRest;
+        _doNotAttack = doNotAttack;
     }
 
     [RelayCommand]
@@ -45,7 +51,7 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
         // delay-without-command would never fire because the loop only
         // pauses around the command step.
         if (trimmed is null) delay = 0;
-        CloseRequested?.Invoke(new WaypointActionEditResult(trimmed, delay, DoNotRest));
+        CloseRequested?.Invoke(new WaypointActionEditResult(trimmed, delay, DoNotRest, DoNotAttack));
     }
 
     [RelayCommand]
@@ -53,4 +59,4 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
 }
 
 // Committed payload — null Command means "no command attached".
-public sealed record WaypointActionEditResult(string? Command, int DelayMs, bool DoNotRest);
+public sealed record WaypointActionEditResult(string? Command, int DelayMs, bool DoNotRest, bool DoNotAttack);

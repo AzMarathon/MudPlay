@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.59.3**
-> - MudPlay now has its own icon — an amber **M** in a CP437 double-line box — replacing the default Avalonia logo on the window, the taskbar and the Windows .exe
+> **Version 3.60.0**
+> - Loops: per-room **"Do not attack here"** flag — the loop skips combat in that room as if auto-combat were off, but a triggered rest still clears it
+> - Loops: loop-wide **"Only attack in lair rooms"** — only engage in game-data lair rooms; walk through the rest (do-not-attack still overrides on a lair room)
+> - New **Entire Loop Settings** entry at the top of the CURRENT NAV area — while building a loop, while one is running, and mirrored in the Edit Loop window — home for whole-loop toggles
+> - Edit Loop table now edits each waypoint's command / delay / no-rest / no-attack **inline as columns** (the ✎ per-row dialog is gone; the build-time strip keeps it)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

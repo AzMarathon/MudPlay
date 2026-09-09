@@ -21,6 +21,12 @@ public sealed class CurrentNavRowViewModel
     // affordance so they leave this null.
     public RoomKey? EditKey { get; }
 
+    // True for the synthetic first row of a running loop — "⚙ Entire Loop
+    // Settings" — which opens a flyout of loop-wide toggles instead of showing
+    // a navigation step. Rendered distinctly by the rail DataTemplate; carries
+    // no step index.
+    public bool IsLoopSettingsEntry { get; }
+
     // Whole-entry text for the row's mouseover tooltip — the step label plus
     // its sublabel — so a narrow rail that ellipsises either still reveals the
     // full entry on hover.
@@ -39,7 +45,8 @@ public sealed class CurrentNavRowViewModel
         CurrentNavRowStatus status,
         string? subLabel = null,
         RoomKey? removeKey = null,
-        RoomKey? editKey = null)
+        RoomKey? editKey = null,
+        bool isLoopSettingsEntry = false)
     {
         Index = index;
         Label = label;
@@ -47,6 +54,7 @@ public sealed class CurrentNavRowViewModel
         SubLabel = subLabel;
         RemoveKey = removeKey;
         EditKey = editKey;
+        IsLoopSettingsEntry = isLoopSettingsEntry;
     }
 }
 

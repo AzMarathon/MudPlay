@@ -161,6 +161,40 @@ public sealed class LoopBuilderSessionTests : IDisposable
     }
 
     [Fact]
+    public void SetClickAction_DoNotAttack_CarriedIntoBuiltLoop()
+    {
+        // The "do not attack in this room" flag rides from the builder row into
+        // the built loop's LoopWaypoint, independent of command / do-not-rest.
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+
+        s.SetClickAction(0, command: null, delayMs: 0, doNotRest: false, doNotAttack: true);
+        Assert.True(s.Clicks[0].DoNotAttack);
+        Assert.False(s.Clicks[1].DoNotAttack);
+
+        Loop? loop = s.BuildTransient();
+        Assert.NotNull(loop);
+        Assert.True(loop!.Waypoints[0].DoNotAttack);
+        Assert.False(loop.Waypoints[1].DoNotAttack);
+    }
+
+    [Fact]
+    public void OnlyAttackInLairRooms_CarriedIntoBuiltLoop()
+    {
+        // The build-time "Entire Loop Settings" loop-wide toggle rides into the
+        // built loop.
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+        s.OnlyAttackInLairRooms = true;
+
+        Loop? loop = s.BuildTransient();
+        Assert.NotNull(loop);
+        Assert.True(loop!.OnlyAttackInLairRooms);
+    }
+
+    [Fact]
     public void DoNotRest_JsonRoundTrips_AndDefaultsFalseForOlderFiles()
     {
         // New loops persist the flag; older .loop files lacking it load as false —
