@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.12**
-> - Confusion/convulsion fumbles no longer leave you stuck: a fumble eats the command the client just sent, so the client now re-sends it — weapon swings, attack spells (immediately, not on the next round), item uses, and other client-sent commands alike — instead of sitting there (e.g. getting beat on while convulsing)
-> - Commands you typed yourself are never auto-repeated (that stays your call), and a fumbled movement step self-recovers as before
+> **Version 3.58.13**
+> - Equipment Manager's gear-set list is taller so all sets (Default, Backstab, Pre-rest HP/Mana, While Moving, Bossing) show at once without a scrollbar
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

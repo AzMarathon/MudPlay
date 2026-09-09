@@ -54,8 +54,10 @@
     <Grid Margin="22" ColumnDefinitions="220,*">
 
         <!-- ===== Left: the fixed trigger-set list ===== -->
-        <!-- Only four fixed sets, so the list sizes to its content (Auto) rather than
-             filling the column; the freed space below holds the combat-swap option. -->
+        <!-- The fixed trigger sets size to their content (Auto) rather than filling the
+             column; the freed space below holds the per-set options. The MaxHeight cap
+             is set high enough to show every set (Default, Backstab, Pre-rest HP/Mana,
+             While Moving, Bossing) without a scrollbar. -->
         <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,*" Margin="0,0,16,0">
 
             <!-- Enable / Disable act on the selected set. -->
@@ -72,7 +74,7 @@
                     BorderThickness="1" CornerRadius="4">
                 <ListBox ItemsSource="{Binding SetRows}"
                          SelectedItem="{Binding SelectedSetRow, Mode=TwoWay}"
-                         MaxHeight="240"
+                         MaxHeight="320"
                          Background="Transparent" BorderThickness="0">
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="vm:EquipmentSetRowViewModel">
