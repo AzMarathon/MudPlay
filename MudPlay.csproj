@@ -13,6 +13,11 @@
 
     <!-- Windows-only assembly manifest; harmless on Linux. -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Stamps the icon into the PE header so Explorer and the Windows
+         taskbar show it for the .exe itself. The window icon is a separate
+         concern — App.axaml's Window style sets that from the same file, so
+         Linux (where the exe has no embedded icon) still gets the artwork. -->
+    <ApplicationIcon>Assets\AppIcon\mudplay.ico</ApplicationIcon>
     <!-- Avalonia: bind XAML to view-model properties at compile time so
          typos and bad bindings show up as build errors instead of silent
          no-ops at runtime. -->
@@ -29,7 +34,7 @@
          (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
          fixes AND ordinary enhancements to existing features (one bump per
          report handled or per enhancement). -->
-    <Version>3.59.1</Version>
+    <Version>3.59.3</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
          the Server GC (a heap + background thread per core), which on a
@@ -47,6 +52,11 @@
          own MIT text from the same source of truth the repo ships. -->
     <AvaloniaResource Include="Assets\**" />
     <AvaloniaResource Include="LICENSE" />
+    <!-- The app icon's SVG masters and its regeneration script are build-time
+         sources, not runtime resources — only the .ico they produce is loaded
+         via avares://, so keep the rest out of the assembly. -->
+    <AvaloniaResource Remove="Assets\AppIcon\*.svg" />
+    <AvaloniaResource Remove="Assets\AppIcon\*.py" />
   </ItemGroup>
 
   <ItemGroup>
