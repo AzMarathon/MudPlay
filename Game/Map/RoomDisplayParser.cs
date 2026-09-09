@@ -124,17 +124,19 @@ public sealed partial class RoomDisplayParser : IDisposable
         if (exits.Success)
         {
             HashSet<Direction> dirs = ParseExits(exits.Groups["list"].Value,
-                out HashSet<Direction> openDoors);
+                out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors);
             string? name = _brightCyanRoomName ?? FindRoomNameInBuffer();
             if (name is not null)
             {
                 var observation = new RoomObservation(name, dirs,
-                    openDoors.Count > 0 ? openDoors : null);
+                    openDoors.Count > 0 ? openDoors : null,
+                    closedDoors.Count > 0 ? closedDoors : null);
                 RoomParsed?.Invoke(observation);
                 _tracker.NoteRoomObserved(observation, line.Timestamp);
                 _log?.Info("RoomDisplay",
                     $"observed: '{name}' exits={{{string.Join(",", dirs)}}}"
-                    + (openDoors.Count > 0 ? $" openDoors={{{string.Join(",", openDoors)}}}" : ""));
+                    + (openDoors.Count > 0 ? $" openDoors={{{string.Join(",", openDoors)}}}" : "")
+                    + (closedDoors.Count > 0 ? $" closedDoors={{{string.Join(",", closedDoors)}}}" : ""));
             }
             else
             {
@@ -280,10 +282,11 @@ public sealed partial class RoomDisplayParser : IDisposable
     }
 
     private static HashSet<Direction> ParseExits(string list,
-        out HashSet<Direction> openDoors)
+        out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors)
     {
         var result = new HashSet<Direction>();
         openDoors = new HashSet<Direction>();
+        closedDoors = new HashSet<Direction>();
         if (string.IsNullOrWhiteSpace(list)) return result;
         if (list.Trim().Equals("none", StringComparison.OrdinalIgnoreCase)) return result;
 
@@ -300,15 +303,18 @@ public sealed partial class RoomDisplayParser : IDisposable
 
             // A door/gate barrier is phrased "<open|closed> <door|gate> <dir>"
             // (e.g. "open door south", "closed gate north"). Strip the state +
-            // barrier-noun prefix, recording open state so the walker can skip
-            // the open-FSM on an already-open exit. Some realms render the
-            // inner-gate portcullis as "gate" rather than "door" — same barrier
-            // semantics, so both nouns feed OpenDoorDirections.
+            // barrier-noun prefix, recording the state: an OPEN barrier lets the
+            // walker skip the open-FSM; a CLOSED one flags a shut barrier the
+            // asylum solver must open before it can peek/move that way. Some realms
+            // render the inner-gate portcullis as "gate" rather than "door" — same
+            // barrier semantics, so both nouns feed the open/closed sets alike.
             bool isOpenDoor = false;
+            bool isClosedDoor = false;
             Match barrier = BarrierPrefixPattern().Match(entry);
             if (barrier.Success)
             {
                 isOpenDoor = barrier.Groups["state"].Value == "open";
+                isClosedDoor = !isOpenDoor;
                 entry = entry[barrier.Length..];
             }
 
@@ -337,6 +343,7 @@ public sealed partial class RoomDisplayParser : IDisposable
                 if (dir is not { } d) continue;
                 result.Add(d);
                 if (isOpenDoor) openDoors.Add(d);
+                else if (isClosedDoor) closedDoors.Add(d);
             }
         }
         return result;

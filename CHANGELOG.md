@@ -1,10 +1,15 @@
 # Version history
 
-## 3.58.9
+## 3.58.10
 
-- Exp/Hr estimator now counts a room's summon-spell yield by realm: Paradigm re-rolls every combat round plus on entry, Stock on a slower tick plus on room change (replaces the old quick-kill bonus guess)
+- Exp/Hr estimator now counts a room's summon-spell yield by realm: Paradigm re-rolls every combat round plus on entry, Stock on the slower 6-second medium tick plus on room change (replaces the old quick-kill bonus guess)
 - Summon spells with a `nomonsters:` gate are credited only on clear pass-throughs (empty on entry), not when arriving to a full lair
 - Estimator panel shows the active realm driving the summon cadence; the bug report captures it
+
+## 3.58.9
+
+- Asylum (teleport-maze) solver no longer fails out when a relocalization peek points at a closed door/gate — it bashes the barrier open first, then looks through it
+- bug reports addressed: stock-20260908-205441
 
 ## 3.58.8
 

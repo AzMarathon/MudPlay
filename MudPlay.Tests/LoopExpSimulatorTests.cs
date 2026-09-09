@@ -344,20 +344,22 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
-    public void Realm_ThreadsThrough_PlaceholderEqualCadence()
+    public void Realm_StockFiresSummonSlowerThanParadigm()
     {
-        // The realm only changes the summon re-roll cadence. With the stock medium
-        // tick assumed equal to the combat round (current placeholder), Stock and
-        // Paradigm must give identical estimates — this pins the plumbing and the
-        // placeholder so a later real stock interval is a one-constant change.
+        // The realm only changes the summon re-roll cadence: Paradigm re-rolls every
+        // combat round (~5s), Stock on the slower 6s medium tick. So over the same
+        // occupied-lair fight a Paradigm summoning room yields MORE summon rolls —
+        // strictly more exp — than a Stock one. (Lair exp is identical; only the
+        // summon contribution differs.)
         ExpRoomVisit room = new(new RoomKey(13, 3573),
             new[] { Lair(2, 5000, 120) }, new RoomSummon("crypt summon 2", 1850, 0.15));
         ExpRoute route = Route(room, Empty(13, 3574));
         var stock = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 2, RealConditionsMultiplier: 1, Realm: RealmType.Stock);
         var para = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 2, RealConditionsMultiplier: 1, Realm: RealmType.ParaMud);
 
-        Assert.Equal(LoopExpSimulator.Simulate(route, stock).ExpPerHour,
-                     LoopExpSimulator.Simulate(route, para).ExpPerHour, 3);
+        double stockExp = LoopExpSimulator.Simulate(route, stock).ExpPerHour;
+        double paraExp = LoopExpSimulator.Simulate(route, para).ExpPerHour;
+        Assert.True(paraExp > stockExp, $"paradigm {paraExp:N0} should beat stock {stockExp:N0}");
     }
 
     [Fact]

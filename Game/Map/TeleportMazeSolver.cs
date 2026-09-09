@@ -117,6 +117,20 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     private readonly Queue<Direction> _lookQueue = new();
     private Direction _currentLookDir;
 
+    // Closed-door peek handling (stock asylum). A neighbour behind a "closed
+    // door/gate <dir>" (flagged on the obvious-exits line) can't be read with
+    // `look <dir>` until the barrier is opened — the server refuses the peek and
+    // the sweep used to fail the whole solve. _ownClosedDoors snapshots the
+    // current room's closed-barrier exits at sweep start; _peekDoorsTried caps the
+    // open attempt to once per direction per sweep; _awaitingPeekDoor suppresses
+    // stray renders while the door-open is in flight. _openDoor delegates to the
+    // shared door FSM (null in tests / when no door opener is wired → the closed
+    // neighbour is simply skipped, same as a failed open).
+    private readonly Action<Direction, Action<bool>>? _openDoor;
+    private readonly HashSet<Direction> _ownClosedDoors = new();
+    private readonly HashSet<Direction> _peekDoorsTried = new();
+    private bool _awaitingPeekDoor;
+
     // Enter-from-outside crossing target.
     private RoomKey _entranceSource;
     private Direction _entranceDir;
@@ -168,8 +182,9 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         LogService? log = null,
         Func<bool>? isParadigm = null,
         ParadigmPositionResolver? paradigmResolver = null,
-        Func<bool>? enabled = null)
-        : this(index, graph, tracker, bfs, walker, log, useTimer: true, post: null, isParadigm, paradigmResolver, enabled) { }
+        Func<bool>? enabled = null,
+        Action<Direction, Action<bool>>? openDoor = null)
+        : this(index, graph, tracker, bfs, walker, log, useTimer: true, post: null, isParadigm, paradigmResolver, enabled, openDoor) { }
 
     internal TeleportMazeSolver(
         TeleportMazeIndex index,
@@ -182,7 +197,8 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         Action<Action>? post,
         Func<bool>? isParadigm = null,
         ParadigmPositionResolver? paradigmResolver = null,
-        Func<bool>? enabled = null)
+        Func<bool>? enabled = null,
+        Action<Direction, Action<bool>>? openDoor = null)
     {
         ArgumentNullException.ThrowIfNull(index);
         ArgumentNullException.ThrowIfNull(graph);
@@ -200,6 +216,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         _isParadigm = isParadigm ?? (() => false);
         _paradigmResolver = paradigmResolver;
         _enabled = enabled ?? (() => true);
+        _openDoor = openDoor;
 
         _walker.Event += OnWalkerEvent;
         if (_paradigmResolver is not null)
@@ -255,6 +272,10 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         switch (_phase)
         {
             case Phase.Looking:
+                // Ignore renders while a closed-door peek is being opened — the
+                // bash/pick chatter isn't the neighbour we asked to see; the real
+                // peek fires from OnPeekDoorResolved once the door is open.
+                if (_awaitingPeekDoor) break;
                 _neighbourMasks[_currentLookDir] = MaskOf(obs.Exits);
                 _lookTimeout?.Stop();
                 SendNextLook();
@@ -556,6 +577,15 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         _ownMask = MaskOf(obs.Exits);
         _neighbourMasks.Clear();
         _lookQueue.Clear();
+        _peekDoorsTried.Clear();
+        _awaitingPeekDoor = false;
+        // Snapshot which of THIS room's exits are shut barriers so the sweep opens
+        // them before peeking through — the obvious-exits line flagged them "closed
+        // door/gate". Taken now (from the current room) because a peek updates
+        // _lastObserved to the NEIGHBOUR room as the sweep proceeds.
+        _ownClosedDoors.Clear();
+        if (obs.ClosedDoorDirections is { } closed)
+            foreach (Direction cd in closed) _ownClosedDoors.Add(cd);
         for (int d = (int)Direction.N; d <= (int)Direction.D; d++)
             if ((_ownMask & (1u << d)) != 0)
                 _lookQueue.Enqueue((Direction)d);
@@ -580,8 +610,48 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         }
 
         _currentLookDir = _lookQueue.Dequeue();
+
+        // A neighbour behind a closed door/gate can't be peeked until the barrier
+        // is opened (the server refuses `look <dir>` at a shut door). Open it first
+        // — asylum barriers are plain-bashable, so the shared door FSM bashes/picks
+        // it — then look from the callback. Once per direction per sweep; if no door
+        // opener is wired (tests), fall through to the plain look.
+        if (_openDoor is not null
+            && _ownClosedDoors.Contains(_currentLookDir)
+            && _peekDoorsTried.Add(_currentLookDir))
+        {
+            Direction d = _currentLookDir;
+            _awaitingPeekDoor = true;
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"peek {d.ToLongName()} is a closed door — opening it before the look");
+            _openDoor(d, opened => OnPeekDoorResolved(d, opened));
+            return;   // the look (and its timeout) fire from OnPeekDoorResolved
+        }
+
         SendLook(_currentLookDir);
         RestartLookTimeout();
+    }
+
+    // Terminal result of opening a closed-barrier peek direction. On success the
+    // neighbour is now readable — run the deferred `look`. On failure the neighbour
+    // stays opaque: skip it and resolve off whatever else the sweep read (an
+    // ambiguous signature falls through to BlindReshuffle), rather than failing the
+    // whole solve on one shut door.
+    private void OnPeekDoorResolved(Direction d, bool opened)
+    {
+        if (!Active || _phase != Phase.Looking || _currentLookDir != d) return;
+        _awaitingPeekDoor = false;
+        if (opened)
+        {
+            SendLook(d);
+            RestartLookTimeout();
+        }
+        else
+        {
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"could not open closed door {d.ToLongName()} — skipping that peek");
+            SendNextLook();
+        }
     }
 
     private void ResolveAfterLooks()

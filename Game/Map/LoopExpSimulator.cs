@@ -137,10 +137,10 @@ public sealed record ExpEstimatorSnapshot(
 public static class LoopExpSimulator
 {
     private const double HorizonSeconds = 3600.0;
-    // Stock room spells re-roll on the "medium tick"; the true interval is unconfirmed,
-    // so assume it equals the combat round (5s) for now — both realms then fire at the
-    // same rate, and this is the single constant to change when the real value lands.
-    private const double StockMediumTickSeconds = 5.0;
+    // Stock room spells re-roll on the "medium tick" — 6 seconds (user-confirmed),
+    // slower than Paradigm's per-combat-round (~5s) re-roll, so a Stock summoning room
+    // yields fewer rolls over the same fight.
+    private const double StockMediumTickSeconds = 6.0;
 
     public static ExpSimResult Simulate(ExpRoute route, ExpSimSettings s)
     {
@@ -157,7 +157,7 @@ public static class LoopExpSimulator
         double step = Math.Max(0.0, s.SecondsPerStep);
         bool area = s.CombatMode == ExpCombatMode.AreaAllTargets;
         // A room's summon spell re-rolls on the realm's tick: Paradigm on the combat
-        // round, Stock on the (assumed-equal) medium tick. See RoomSummon + SummonFires.
+        // round, Stock on the slower 6s medium tick. See RoomSummon + SummonFires.
         double roomSpellTick = s.Realm == RealmType.ParaMud ? tick : StockMediumTickSeconds;
 
         // Lair / fixture defs, DEDUPED by (room, target index): a room revisited in

@@ -5024,7 +5024,14 @@ public sealed class AppServices
             MazeIndex, RoomGraph, RoomTracker, Bfs, Walker, Log,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             paradigmResolver: ParadigmResync,
-            enabled: () => Settings.Current.AsylumSolverEnabled);
+            enabled: () => Settings.Current.AsylumSolverEnabled,
+            // Open a closed door/gate blocking a relocalization peek before looking
+            // through it, via the shared door FSM. Asylum barriers are plain-bashable
+            // (no key, no strength gate the resolver can read while Lost), so request
+            // a bashable no-key open and report back whether it opened.
+            openDoor: (dir, done) => Door.Enqueue(
+                dir, statRequirement: 0, canBash: true, keyItemId: 0, sender: "maze",
+                reply: r => done(r is Game.Map.DoorOpenResult.Opened)));
         Walker.SetMazeSolver(MazeSolver);
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo

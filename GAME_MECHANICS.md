@@ -1038,9 +1038,9 @@ the exp comes from summons the route resolver never counted.
 
 - **Re-roll cadence differs by realm** *([CONFIRMED] 2026-09-08, user)*. **Paradigm** re-casts the room
   spell **every combat tick (~5s)** while you're present (the user timed it at **~5.3s**, firing just after
-  entry) plus the entry cast. **Stock** re-rolls on a slower **"medium tick"** (per the `wccmmud.dll`
-  disassembly) plus on room change; the exact stock interval is **unconfirmed** — the estimator currently
-  assumes it equals the combat round until a real figure lands (one constant, `StockMediumTickSeconds`).
+  entry) plus the entry cast. **Stock** re-rolls on a slower **"medium tick" of 6 seconds** (per the
+  `wccmmud.dll` disassembly) plus on room change — so a Stock summoning room yields fewer rolls over the
+  same fight than a Paradigm one. The estimator encodes the 6s value as `StockMediumTickSeconds`.
 
 - **The summon lives in a TextBlock, not an `Abil 12` slot.** The room spell carries a **`TextBlock`
   ability (`Abil == 148`)** whose `AbilVal` is a **TBInfo `Number`**. The TBInfo `Action` string is the
@@ -1741,6 +1741,12 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
   the peeked room, and the window is consumed when `NoteRoomObserved` fires on the exits line. The
   player's *own* room is unaffected: walking in for real re-renders the room outside the window and the
   automation runs normally.
+  - **A closed door/gate blocks the peek** *([CONFIRMED] 2026-09-08, user + report `stock-20260908-205441`)*.
+    `look <dir>` at an exit whose barrier is **shut** renders no room — the server answers *"The door is
+    closed in that direction!"* instead. The obvious-exits line flags it ahead of time (`closed door
+    north` / `closed gate north`), so a peek that must read the neighbour has to **open the barrier
+    first, then look**. The Warped Asylum look-sweep does exactly this (its rooms gate siblings behind
+    bashable doors); before #346 a shut door on a peek direction failed the whole maze solve out.
 - **[CONFIRMED]** **Some rooms harm you on entry unless you carry (or wear, or drink) a protective
   item — either exit-gated or room-spell-gated.** Encoding fully decoded off the 1.11p data set below.
   There are TWO gate locations (exit vs room-spell) and, within room-spells, THREE distinct
