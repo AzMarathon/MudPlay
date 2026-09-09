@@ -47,6 +47,14 @@ public sealed class BbsProfileStore
         JsonStore.Save(AppPaths.BbsProfileFile(profile.Name), profile);
     }
 
+    // True when a BBS folder already occupies this name. Tests the folder, not
+    // the bbs.json — Rename moves the whole folder and Directory.Move throws if
+    // the destination exists at all, even a stray folder with no bbs.json (a
+    // half-deleted BBS, or one holding only nested profiles). Callers gate their
+    // rename clash-check on this so they refuse the same cases Move would reject.
+    public bool Exists(string bbsName) =>
+        !string.IsNullOrWhiteSpace(bbsName) && Directory.Exists(AppPaths.BbsFolder(bbsName));
+
     // Delete a BBS — removes the entire Data/BBS/{name}/ folder (primary file +
     // all side-files). No-op if the folder doesn't exist.
     public void Delete(string bbsName)

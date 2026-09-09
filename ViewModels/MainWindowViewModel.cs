@@ -3631,7 +3631,10 @@ public partial class MainWindowViewModel : ObservableObject
         {
             AppServices.Current.Log.Warn("Profile",
                 $"Recent profile '{recent.Name}' on '{recent.Bbs}' no longer exists.");
-            RecentProfiles.Remove(recent);
+            // Drop it from the persisted list, not just the in-memory copy —
+            // an in-memory-only remove let the dead ref reload from global.json
+            // on the next rebuild and reappear in File → Recent.
+            PruneMissingRecentProfiles();
             return;
         }
         // Defer the load off the menu-click call stack. Loading a profile
@@ -3670,12 +3673,37 @@ public partial class MainWindowViewModel : ObservableObject
         RebuildRecentProfiles();
     }
 
+    private bool _pruningRecents;
+
     private void RebuildRecentProfiles()
     {
+        // Drop refs whose on-disk profile is gone (deleted / renamed away) before
+        // mirroring — otherwise a stale ref reloads from global.json every rebuild
+        // and keeps reappearing in File → Recent.
+        PruneMissingRecentProfiles();
+
         RecentProfiles.Clear();
         IList<ProfileRef>? source = AppServices.Current.Settings.Current.RecentProfiles;
         if (source is null) return;
         foreach (ProfileRef recent in source) RecentProfiles.Add(recent);
+    }
+
+    // Remove recent-profile refs pointing at a profile that no longer exists and
+    // persist the trimmed list. Save() fires GlobalSettingsChanged synchronously,
+    // which re-enters RebuildRecentProfiles → back here; the guard makes that pass
+    // a no-op (the list is already clean) so there's no recursion.
+    private void PruneMissingRecentProfiles()
+    {
+        if (_pruningRecents) return;
+        if (AppServices.Current.Settings.Current.RecentProfiles is not { Count: > 0 } list) return;
+        ProfileService profile = AppServices.Current.Profile;
+        int removed = list.RemoveAll(r => !profile.Exists(r.Bbs, r.Name));
+        if (removed == 0) return;
+        AppServices.Current.Log.Info("Profile",
+            $"Pruned {removed} stale recent-profile entr{(removed == 1 ? "y" : "ies")} (profile no longer exists).");
+        _pruningRecents = true;
+        try { AppServices.Current.Settings.Save(); }
+        finally { _pruningRecents = false; }
     }
 
     private void SyncProfileMenuState()

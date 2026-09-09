@@ -499,8 +499,21 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             if (profile is null) return;
         }
 
-        // Don't trample an existing BBS with the new name.
-        if (_loaded.ContainsKey(newName) || _bbsStore.Get(newName) is not null) return;
+        // Don't trample an existing BBS with the new name. Test the folder, not
+        // just a loadable bbs.json: BbsProfileStore.Rename moves the whole folder
+        // and Directory.Move throws if the destination folder exists at all —
+        // even a stray one with no bbs.json (half-deleted BBS, or one holding
+        // only nested profiles). Guarding on Get(newName) alone let those slip
+        // through and crashed the app with an unhandled IOException on Apply.
+        if (_loaded.ContainsKey(newName) || _bbsStore.Exists(newName))
+        {
+            AppServices.Current.Log.Info("BBS",
+                $"Rename '{oldName}' → '{newName}' refused: a folder for that name already exists.");
+            AppServices.Current.Dialogs.ShowInfo(
+                "BBS not renamed",
+                $"A BBS named “{newName}” already exists. Pick a name that isn't in use.");
+            return;
+        }
 
         // Move the whole Data/BBS/{old}/ subtree — bbs.json, side-files, and
         // every nested character profile — to the new name. The old
