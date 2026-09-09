@@ -4485,8 +4485,8 @@ public sealed class AppServices
         // stat-screen max (so a rest set that LOWERS the pool can never strand the rest
         // out of reach — report paradigm-20260902-052036).
         Health.SetRestPoolMaxProviders(
-            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerStats.MaxHits),
-            () => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerStats.MaxMana),
+            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp),
+            () => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa),
             () => PlayerStats.MaxHits,
             () => PlayerStats.MaxMana);
         // Self-heal HP triggers anchor to the Default set too (same basis as rest).
@@ -6467,27 +6467,34 @@ public sealed class AppServices
     // stay put while a Pre-rest set that alters the pool is worn. Falls back to the
     // live pool max before a stat screen / when no Default set is configured.
     public int RestPreviewMaxHp()
-        => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerStats.MaxHits) is int v and > 0 ? v : PlayerState.MaxHp;
+        => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp) is int v and > 0 ? v : PlayerState.MaxHp;
     public int RestPreviewMaxMa()
-        => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerStats.MaxMana) is int v and > 0 ? v : PlayerState.MaxMa;
+        => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa) is int v and > 0 ? v : PlayerState.MaxMa;
 
     // The max HP or mana the DEFAULT gear set would give (selector picks the pool
-    // from an equipment-stat summary). Re-bases the authoritative current-gear max
-    // (stat screen) from the CURRENTLY-worn flat pool bonus to the DEFAULT set's, so
-    // the rest engine anchors to the loadout the user's rest %s are tuned for
-    // regardless of any Pre-rest set swapped in. Returns 0 (→ HealthManager falls back
-    // to its own real / live max) before a stat screen has landed or when no Default
-    // set is configured.
-    private int DefaultSetMaxPool(Func<Game.Calculators.EquipmentStatSummary, int> pool, int realMax)
+    // from an equipment-stat summary). Re-bases the LIVE gear-aware pool max off the
+    // CURRENTLY-worn flat pool bonus onto the DEFAULT set's, so the rest engine anchors
+    // to the loadout the user's rest %s are tuned for regardless of any Pre-rest set
+    // swapped in. It MUST use the live max (PlayerState.MaxHp/MaxMa, kept in step with
+    // worn gear by EquipmentMaxPoolSync), NOT the stat-screen max: the live max minus
+    // the currently-worn bonus is the gear-independent bare base, so `live - worn + def`
+    // stays fixed across a swap. The stat screen stays frozen at whatever gear was worn
+    // when the last stat check landed, so subtracting the LIVE worn bonus from it
+    // double-counts a swap — a Pre-rest MANA set (which ADDS mana) then drove the basis
+    // DOWN, dragging the rest target below the rest trigger and flapping the mana gate
+    // every room, thrashing meditate↔move↔gear-swap (report paradigm-20260909-095419).
+    // Returns 0 (→ HealthManager falls back to its own real / live max) before a pool
+    // max is known or when no Default set is configured.
+    private int DefaultSetMaxPool(Func<Game.Calculators.EquipmentStatSummary, int> pool, int liveMax)
     {
-        if (realMax <= 0) return 0;
+        if (liveMax <= 0) return 0;
         IReadOnlyList<Game.Inventory.EquippedItem> defaultItems = DefaultSetEquippedItems();
         if (defaultItems.Count == 0) return 0;
         int worn = pool(Game.Calculators.CharacterCalculator
             .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals);
         int def = pool(Game.Calculators.CharacterCalculator
             .AggregateEquipmentStats(defaultItems, GameData).Totals);
-        return Math.Max(1, realMax - worn + def);
+        return Math.Max(1, liveMax - worn + def);
     }
 
     // Whether the gear set the engine last equipped is a pre-rest swap set (HP / Mana)

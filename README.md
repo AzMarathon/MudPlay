@@ -3,7 +3,8 @@
 <!-- current-version:start -->
 > **Version 3.58.22**
 > - Auto-Lair now walks to the closest lair that's up by the time you arrive (a closer lair still on cooldown that pops during the walk counts, and beats a farther already-ready one) and no longer parks in a wait-room idling for a nearer lair unless it'd actually be ready when you get there — maximizing hits per run instead of waiting out long idle timers
-> - Gear-set swaps no longer send a redundant "rem" before re-equipping a paired ring/bracelet: the worn-slot snapshot now tracks the game's real finger/wrist order, so wearing the ring auto-evicts cleanly (also quiets the meditate↔default swap chatter)
+> - Gear-set swaps no longer send a redundant "rem" before re-equipping a paired ring/bracelet: the worn-slot snapshot now tracks the game's real finger/wrist order, so wearing the ring auto-evicts cleanly
+> - Mana rest no longer thrashes meditate↔move↔gear-swap every room: a Pre-rest Mana set (which raises max mana) was dragging the rest target below the rest trigger and flapping the mana-rest gate on and off — rest thresholds now stay anchored to your normal loadout's max regardless of which set is worn, so the character sits and meditates once to top off (like an HP rest) instead of stepping between ticks
 > - Fixed a two-handed item-use buff (a 2H weapon cast) sometimes leaving the 2H equipped over your normal 1H+shield: the restore now falls back to your Default set's weapon and off-hand instead of only the live snapshot, so a stranded 2H recovers instead of persisting across recasts
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
