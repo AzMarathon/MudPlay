@@ -1032,10 +1032,15 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
 ### Room-spell monster summons *([CONFIRMED] 2026-08-06, user + game-data trace, Paradigm 1.9.1)*
 
 Distinct from a monster's death-summon: a **room itself** can summon monsters via its entry spell.
-`Rooms.Spell` names a `Spells` row cast **on room entry and re-cast every combat tick (~5s)** while
-you're in the room (the user times it at **~5.3s** — the tick, firing just after entry). These are the
-monster-spawning rooms that made the Exp/Hr estimator under-report: the exp comes from summons the
-route resolver never counted.
+`Rooms.Spell` names a `Spells` row cast **on room entry and re-cast on a recurring tick** while
+you're in the room. These are the monster-spawning rooms that made the Exp/Hr estimator under-report:
+the exp comes from summons the route resolver never counted.
+
+- **Re-roll cadence differs by realm** *([CONFIRMED] 2026-09-08, user)*. **Paradigm** re-casts the room
+  spell **every combat tick (~5s)** while you're present (the user timed it at **~5.3s**, firing just after
+  entry) plus the entry cast. **Stock** re-rolls on a slower **"medium tick" of 6 seconds** (per the
+  `wccmmud.dll` disassembly) plus on room change — so a Stock summoning room yields fewer rolls over the
+  same fight than a Paradigm one. The estimator encodes the 6s value as `StockMediumTickSeconds`.
 
 - **The summon lives in a TextBlock, not an `Abil 12` slot.** The room spell carries a **`TextBlock`
   ability (`Abil == 148`)** whose `AbilVal` is a **TBInfo `Number`**. The TBInfo `Action` string is the
@@ -1053,10 +1058,18 @@ route resolver never counted.
     `90:…:summon 2111` (86–90, **cairn wraith** 13000) · `95:…:summon 2119` (91–95, **ogre skeleton**
     12000) · `100:…:summon 2122` (96–100, **zombie warrior** 12000).
   - → **15% summon chance**, **1,850 expected exp per roll** (`0.05 × (13000+12000+12000)`).
-- **Estimator model** *(user design)*: credit each summoning room **one averaged roll per visit**
-  (`Σ band% × monster exp`), plus a **second roll's worth when a quick kill (rounds ≤ 2)** lets another
-  spawn before you leave (`× (1 + summonChance)`), scaled by laps/hr. A simplification of the true
-  per-tick loop, but it lands close and stops the under-report.
+- **Estimator model** *(user design, revised 2026-09-08)*: credit each summoning room `ExpPerRoll ×
+  fires` per visit, where `ExpPerRoll = Σ band% × monster exp` and `fires` follows the cadence + gate:
+  - **Ungated spell** — rolls regardless of occupancy: `fires = 1 (entry/room-change) + roundsInRoom`,
+    where `roundsInRoom` = combat rounds spent fighting base mobs here ÷ the realm's room-spell tick
+    (Paradigm = combat round, Stock = medium tick).
+  - **Gated spell (`nomonsters:`)** — only summons while the room is empty, so a pass-through visit
+    credits **1** fire when the room was empty on arrival and **0** when you arrive to a full lair;
+    combat length adds no fires.
+
+  Summon mobs are never *killed* by the estimator (a room-attached spell never kills NPCs, and no
+  feedback is modeled) — `RoundsPerMob` (the clear-rate knob) stays realm-agnostic and the user sets it
+  directly. Lives in `LoopExpSimulator.SummonFires`.
 
 ### What makes a room-entry spell a movement HAZARD *([CONFIRMED] 2026-08-25, user)*
 

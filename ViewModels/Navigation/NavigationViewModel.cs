@@ -2595,7 +2595,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             }
 
             var session = new ExpEstimatorSessionViewModel(
-                _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.Movement);
+                _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement);
             session.PropertyChanged += OnExpEstimatorPropertyChanged;
             ExpEstimator = session;
             CurrentMode = NavigationMode.ExpEstimator;
@@ -2613,7 +2613,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         TearDownExpEstimator();
         TearDownLoopBuilder();
         var session = new ExpEstimatorSessionViewModel(
-            _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.Movement)
+            _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement)
         { ProposedName = loop.Name };
         session.PropertyChanged += OnExpEstimatorPropertyChanged;
         foreach (LoopWaypoint w in loop.Waypoints) session.AddClick(w.Key);
