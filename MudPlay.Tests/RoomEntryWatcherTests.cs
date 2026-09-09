@@ -459,4 +459,102 @@ public sealed class RoomEntryWatcherTests
         Assert.Equal("The Eternal", appended.ResolvedName);
         Assert.Equal(251,           appended.MonsterNumber);
     }
+
+    // ----- colour-scan fallback: custom, unstructured spawn lines -------
+
+    // Build attributes where only the cells spanning `name` carry the yellow
+    // index (3); every other cell is default-colour.
+    private static CellAttributes[] YellowOnName(string text, string name)
+    {
+        CellAttributes[] arr = new CellAttributes[text.Length];
+        for (int i = 0; i < text.Length; i++) arr[i] = CellAttributes.Default;
+        int idx = text.IndexOf(name, StringComparison.Ordinal);
+        for (int i = idx; i >= 0 && i < idx + name.Length; i++)
+            arr[i] = CellAttributes.Default.WithForeground(TerminalColor.Indexed(3));
+        return arr;
+    }
+
+    // A custom spawn line — no "into the room" / "from <dir>", so the structured
+    // patterns miss it — with the whole line painted yellow. The colour scan finds
+    // the yellow monster name and treats it as an arrival.
+    [Fact]
+    public void CustomSpawnLine_WholeLineYellow_TreatedAsArrival()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "muckworm");
+        string line = "A muckworm darts out of the mud!";
+        h.Feed(line, h.AttrsWithFg(line, index: 3));
+
+        Assert.Single(h.Arrivals);
+        Assert.Equal(EntityKind.Monster, h.Arrivals[0].Kind);
+        Assert.Equal("muckworm", h.Arrivals[0].Name);
+    }
+
+    // Same line but only the NAME is yellow (name-yellow constructor); the rest is
+    // default-colour. Still recognised.
+    [Fact]
+    public void CustomSpawnLine_OnlyNameYellow_TreatedAsArrival()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "muckworm");
+        string line = "A muckworm darts out of the mud!";
+        h.Feed(line, YellowOnName(line, "muckworm"));
+
+        Assert.Single(h.Arrivals);
+        Assert.Equal("muckworm", h.Arrivals[0].Name);
+    }
+
+    // A two-word name inside an all-yellow custom line — the 1–4-word window finds it.
+    [Fact]
+    public void CustomSpawnLine_MultiWordName_Yellow_TreatedAsArrival()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "acid slime");
+        string line = "An acid slime bubbles out of the swamp!";
+        h.Feed(line, h.AttrsWithFg(line, index: 3));
+
+        Assert.Single(h.Arrivals);
+        Assert.Equal("acid slime", h.Arrivals[0].Name);
+    }
+
+    // A plain room description names a monster but in default colour (all white) —
+    // never an arrival, regardless of the room-descriptions-on setting.
+    [Fact]
+    public void RoomDescription_WhiteMonsterName_NotAnArrival()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "skeleton");
+        string line = "A skeleton lies crumpled in the corner.";
+        CellAttributes[] white = new CellAttributes[line.Length];
+        for (int i = 0; i < line.Length; i++) white[i] = CellAttributes.Default;
+        h.Feed(line, white);
+
+        Assert.Empty(h.Arrivals);
+    }
+
+    // A monster already in the room, re-mentioned in yellow, isn't a fresh arrival.
+    [Fact]
+    public void CustomSpawnLine_AlreadyPresent_NotReAdded()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "muckworm");
+        string line = "A muckworm darts out of the mud!";
+        h.Feed(line, h.AttrsWithFg(line, index: 3));   // first sighting → arrival
+        h.Feed(line, h.AttrsWithFg(line, index: 3));   // same mob again → no new arrival
+
+        Assert.Single(h.Arrivals);
+    }
+
+    // A structured arrival whose name is ALSO yellow is handled by the directional
+    // pattern; the colour scan must not double-count it (AnyPatternMatches gate).
+    [Fact]
+    public void StructuredArrival_NotDoubleHandledByColourScan()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "muckworm");
+        string line = "A muckworm oozes into the room from nowhere.";
+        h.Feed(line, h.AttrsWithFg(line, index: 3));
+
+        Assert.Single(h.Arrivals);
+    }
 }
