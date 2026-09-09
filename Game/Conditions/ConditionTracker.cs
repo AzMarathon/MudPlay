@@ -57,10 +57,17 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     private Dictionary<string, List<MessageRecord>> _appliedAliases = new(StringComparer.Ordinal);
 
     // Normalized confusion-fumble wordings pulled from every Confused record's
-    // ConfuseFumbleLine (one per line). A fumbled MOVE reverts on any of these — see
-    // MovementRefusalDetector, which queries IsConfuseFumbleLine instead of hardcoding
-    // the wordings. Rebuilt with the other indexes on every MessageStore change.
-    private List<string> _confuseFumbleIndex = new();
+    // ConfuseFumbleLine (one per line), paired with the record it came from. A
+    // fumbled MOVE reverts on any of these — see MovementRefusalDetector, which
+    // queries IsConfuseFumbleLine instead of hardcoding the wordings. A match ALSO
+    // fires ActionFailed (see OnLine): a confusion fumble IS an eaten command, the
+    // exact thing ActionFailed exists to signal, so combat can re-send the lost
+    // swing without requiring a second, separately LastActionFailed-flagged record
+    // duplicating the same wording — no shipped record has ever carried that flag,
+    // which left a fumbled swing during confusion/convulsions unattacked until the
+    // user manually re-sent it (report paradigm-20260908-211659: "sit here and get
+    // beat on"). Rebuilt with the other indexes on every MessageStore change.
+    private List<(string Norm, MessageRecord Record)> _confuseFumbleIndex = new();
 
     private LineExtractor? _lines;
     private bool _disposed;
@@ -87,14 +94,15 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // Fires when a previously-active record's AppliedEndsWith matches.
     public event Action<MessageRecord>? ConditionEnded;
 
-    // Fires per matching line for a record carrying LastActionFailed — the
-    // transient "the action you just sent didn't take, resend it" outcome (a
-    // fizzle, an interrupted/eaten command), NOT a lasting condition and NOT
-    // confusion-specific. (Confusion's fumbled MOVE revert rides the separate
-    // ConfuseFumbleLine path; a fumble line merely happens to be one thing that
-    // can carry this flag.) Unlike ConditionApplied this is NOT deduped by the
-    // active set: the same failure line can recur action after action, and combat
-    // must re-send its lost swing on EVERY occurrence, not just the first. Fires
+    // Fires per matching line for either (a) a record carrying LastActionFailed
+    // or (b) a line matching some Confused record's ConfuseFumbleLine — both are
+    // the same transient "the action you just sent didn't take, resend it"
+    // outcome (a fizzle, an interrupted/eaten command), NOT a lasting condition.
+    // A confusion fumble IS an eaten command, so it fires this on its own; a
+    // dedicated LastActionFailed record exists for any OTHER, non-confusion
+    // source of the same outcome. Unlike ConditionApplied this is NOT deduped by
+    // the active set: the same failure line can recur action after action, and
+    // combat must re-send its lost swing on EVERY occurrence, not just the first. Fires
     // at most once per line.
     public event Action<MessageRecord>? ActionFailed;
 
@@ -147,12 +155,20 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // hardcoding the wordings.
     public bool IsConfuseFumbleLine(string text)
     {
-        if (_confuseFumbleIndex.Count == 0 || string.IsNullOrEmpty(text)) return false;
+        if (string.IsNullOrEmpty(text)) return false;
         string norm = NormalizeFumbleLine(text);
-        if (norm.Length == 0) return false;
-        foreach (string wording in _confuseFumbleIndex)
-            if (string.Equals(norm, wording, StringComparison.OrdinalIgnoreCase)) return true;
-        return false;
+        return norm.Length > 0 && MatchConfuseFumble(norm) is not null;
+    }
+
+    // The Confused record whose ConfuseFumbleLine contains normalizedText, or null.
+    // Shared by IsConfuseFumbleLine and OnLine's ActionFailed detection so both
+    // read the same index the same way.
+    private MessageRecord? MatchConfuseFumble(string normalizedText)
+    {
+        foreach ((string wording, MessageRecord record) in _confuseFumbleIndex)
+            if (string.Equals(normalizedText, wording, StringComparison.OrdinalIgnoreCase))
+                return record;
+        return null;
     }
 
     // Trim surrounding whitespace and one trailing sentence terminator so a stored
@@ -187,7 +203,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         List<(string, MessageRecord)> applied = new();
         List<(string, MessageRecord)> ends = new();
         Dictionary<string, List<MessageRecord>> aliases = new(StringComparer.Ordinal);
-        List<string> fumbles = new();
+        List<(string Norm, MessageRecord Record)> fumbles = new();
         foreach (MessageRecord r in _messages.Messages)
         {
             // 'Disabled (don't use)' — ignore the record wholesale: it never indexes,
@@ -212,7 +228,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                 {
                     if (MessageRecord.IsAbsentSentinel(wording)) continue;
                     string norm = NormalizeFumbleLine(wording);
-                    if (norm.Length > 0) fumbles.Add(norm);
+                    if (norm.Length > 0) fumbles.Add((norm, r));
                 }
         }
         _appliedIndex = applied;
@@ -323,6 +339,17 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                 if (!_active.Add(r.Id)) continue;
                 appliedThisLine.Add(r);
             }
+
+        // A confusion fumble (ConfuseFumbleLine) is itself an eaten command — the
+        // same outcome LastActionFailed exists to signal — so it fires ActionFailed
+        // the same way, without needing a second record to duplicate the wording
+        // under that flag. Only checked when nothing above already claimed the
+        // line, matching the existing first-match-only rule.
+        if (actionFailed is null)
+        {
+            string norm = NormalizeFumbleLine(text);
+            if (norm.Length > 0) actionFailed = MatchConfuseFumble(norm);
+        }
 
         if (endedThisLine.Count > 0 || appliedThisLine.Count > 0)
             RecomputeFlags();

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.58.12
+
+- Fixed combat sitting unattacked while confused/convulsing: a fumbled attack ("You convulse violently!" and the other confusion-fumble lines) now re-sends the lost swing immediately, instead of taking free hits until you manually re-attack — the re-send mechanism existed but no shipped fumble line was ever wired to trigger it
+- bug reports addressed: paradigm-20260908-211659
+
 ## 3.58.11
 
 - Auto-Lair moves on within seconds when it walks into a lair that hasn't respawned, instead of standing in the empty room for the full engage timeout
