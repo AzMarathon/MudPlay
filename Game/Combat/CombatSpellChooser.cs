@@ -52,6 +52,13 @@ public sealed class CombatSpellChooser
     private int _areaDebuffCasts;
     private int _singleDebuffCasts;
     private int _multiAttackCasts;
+
+    // True once we've cast the multi-attack (room spell) at least once in the
+    // current room — i.e. "we room-spelled this room." Sticky within a room
+    // (survives the AoE multi-kill roster re-parse via ResetForRosterClear),
+    // reset on a physical room change (ResetForNewRoom). Drives the
+    // "Kill all engaged" below-floor override.
+    public bool HasMultiAttackedThisRoom => _multiAttackCasts > 0;
     private int _normalAttackCasts;
     private int _alternateAttackCasts;
     private int _drainCasts;

@@ -32,6 +32,11 @@ namespace MudPlay.Game.Combat;
 public sealed partial class CombatManager
 {
     private readonly CombatSpellChooser _spellChooser = new();
+
+    // True once we've cast a room spell (multi-attack) in the current room —
+    // exposed for the min-monster "Kill all engaged" override (see
+    // MonsterCountGate) and for the CombatStateTracker's mirror of the same gate.
+    public bool HasRoomSpelledCurrentRoom => _spellChooser.HasMultiAttackedThisRoom;
     private CastCoordinator? _cast;
     private Func<(int Ma, int MaxMa)>? _readMana;
     // Live HP / max-HP for the drain spell's %-trigger. Optional — until wired the

@@ -1331,7 +1331,9 @@ public sealed partial class CombatManager : IDisposable
                 _log?.Warn(LogCategory,
                     $"MinMonsters={min} > MaxMonsters={max} — gate disabled for this observation");
             }
-            else if (engageable.Count < min || engageable.Count > max)
+            else if (!MonsterCountGate.WithinWindow(
+                         engageable.Count, min, max,
+                         settings.KillAllEngaged, HasRoomSpelledCurrentRoom))
             {
                 _log?.Combat(LogCategory,
                     $"min/max gate skip — count={engageable.Count} window=[{min}..{max}]");
@@ -1339,6 +1341,15 @@ public sealed partial class CombatManager : IDisposable
                 // that's now out-of-window after a kill.
                 _currentTarget = null;
                 return;
+            }
+            else if (settings.KillAllEngaged && HasRoomSpelledCurrentRoom
+                     && engageable.Count < min && engageable.Count > 0)
+            {
+                // "Kill all engaged" is holding us here: we room-spelled this room
+                // and it's now below the Min floor, but we finish the survivors
+                // instead of moving on (mixed HP pools left the tanky ones alive).
+                _log?.Combat(LogCategory,
+                    $"kill-all-engaged: finishing {engageable.Count} leftover(s) below min {min} (room-spelled)");
             }
         }
 

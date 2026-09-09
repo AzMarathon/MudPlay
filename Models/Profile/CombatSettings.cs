@@ -127,6 +127,14 @@ public sealed class CombatSettings
     // (rooms cap at 20 NPCs). Default 20.
     public int MaxMonstersInRoom { get; set; } = 20;
 
+    // When a room was engaged via a room spell (multi-attack AoE), finish it to
+    // empty instead of moving on once the live hostile count drops below
+    // MinMonstersInRoom — so an AoE that leaves tanky survivors (mixed HP pools)
+    // gets cleaned up rather than dragging the leftovers. Bypasses only the MIN
+    // floor, and only while we've actually room-spelled this room; the MAX cap
+    // and every other gate still apply. Default false = move on from leftovers.
+    public bool KillAllEngaged { get; set; }
+
     // Rooms to flee before re-evaluating. Range 1–100. Default 2.
     public int RunDistance { get; set; } = 2;
 

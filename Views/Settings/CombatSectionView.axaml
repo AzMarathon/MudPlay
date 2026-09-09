@@ -264,6 +264,11 @@
                                    ToolTip.Tip="Rooms to flee before re-evaluating. Range 1–100."/>
                 </Grid>
 
+                <CheckBox Content="Kill all engaged"
+                          Margin="0,6,0,0"
+                          IsChecked="{Binding KillAllEngaged, Mode=TwoWay}"
+                          ToolTip.Tip="Once a room has been engaged with a room spell (AoE), finish off the survivors instead of moving on when the hostile count drops below Min. monsters — for areas where mixed HP pools leave the tanky ones alive after an AoE. Only bypasses the minimum, and only for rooms you actually room-spelled; the maximum and every other gate still apply, and an HP/MA flee still overrides it. When unchecked (default), an AoE that leaves fewer than Min. monsters just moves on from the leftovers."/>
+
                 <!-- Run-away (flee) behaviour — coordinates with Run distance
                      above. HealthManager.TryFlee reads RunDirection /
                      BreakBeforeFleeing from CombatSettings. -->
