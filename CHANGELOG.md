@@ -1,5 +1,9 @@
 # Version history
 
+## 3.58.25
+
+- Settings → BBS + Display is now split into three banner-headed sections — BBS settings (shared by every character on the board), Character profile settings (only the loaded character), and Global client settings (app-wide) — so it's clear which persistence level each setting falls under instead of the tiers being interleaved
+
 ## 3.58.24
 
 - Mana-flux reroll: bumping the reroll cap / lowering the threshold now re-rolls the flux that's already up (if its last roll falls short) instead of waiting for the next cast — so changing the setting acts on the active buff

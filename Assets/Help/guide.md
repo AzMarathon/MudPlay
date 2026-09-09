@@ -1098,7 +1098,7 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 ## BBS + Display (Connection & Network)
 
-Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings and, at the very bottom, the four global confirmation-prompt checkboxes (documented separately below since they're Global-tier, not per-BBS). Connection fields here are stored per-BBS — shared by every character who connects to that board — except credentials, which are per-character.
+Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. To make it obvious which persistence level each setting falls under, the tab is split into three banner-headed sections: **BBS settings** (stored with the board, shared by every character on it — connection, retry/reconnect, display size + scrollback, game-menu commands, realm mechanics, board disconnect line, runic-currency name); **Character profile settings** (only for the loaded character — username/password, the read-only captured suicide password, SYSOP powers, the Sys Goto table, and the automated logon-menu steps); and **Global client settings** (app-wide, regardless of BBS or character — the confirmation prompts, documented separately below).
 
 ### Name
 
