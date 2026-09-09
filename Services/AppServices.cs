@@ -4554,10 +4554,18 @@ public sealed class AppServices
         // combat-entry trigger can't clobber the swap (the weapon-flap report).
         Equipment.SetCombatWeaponOwnershipProbe(() => Combat.IsWeaponOverrideActive);
 
-        // Confusion-fumble retry: a fumbled attack is consumed without engaging,
-        // so re-send the last swing on every fumble line (ConditionTracker gates
-        // the raw signal to the confusion record; Combat gates on an active fight).
-        Conditions.ActionFailed += _ => Combat.OnActionFailed();
+        // Confusion-fumble retry: a fumble consumes the just-sent command without it
+        // executing, so the client re-sends it. Combat re-sends a weapon swing first
+        // (it owns the engage-verification bookkeeping); if this isn't a weapon fight it
+        // can act on — a fumbled attack SPELL, an item-use, or any other client command —
+        // fall through to re-firing the last client command generically. Movement is NOT
+        // re-fired here (ReplayLastClientCommand skips bare moves): a fumbled step already
+        // reverts + re-sends via the walker, so a second send would desync position. A
+        // command the USER typed is never re-fired — it never flowed through the gate.
+        Conditions.ActionFailed += _ =>
+        {
+            if (!Combat.OnActionFailed()) EngineGate.ReplayLastClientCommand();
+        };
 
         // CashManager. Subscribes to cash-on-ground
         // / cash-picked-up / cash-dropped patterns and dispatches

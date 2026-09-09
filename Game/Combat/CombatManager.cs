@@ -3472,19 +3472,26 @@ public sealed partial class CombatManager : IDisposable
     // auto-repeats and the failures stop. Weapon mode only — spell mode re-issues
     // its cast on the per-round tick (OnCombatTick), and _lastAttackCommand holds a
     // weapon verb we must not fire into a spell fight.
-    public void OnActionFailed()
+    // Returns true when it re-sent the weapon swing (so the caller knows combat
+    // handled the fumble and need not fall back to a generic re-fire). False when this
+    // isn't a weapon fight it can act on — spell mode, no target, attacks blocked, or
+    // no prior swing — in which case the caller re-fires the last client command
+    // generically (EngineSendGate.ReplayLastClientCommand), which covers the fumbled
+    // attack SPELL / item-use / other client commands.
+    public bool OnActionFailed()
     {
-        if (_disposed || !_isEnabled()) return;
-        if (_castingSpellTarget is not null) return;
-        if (_currentTarget is null) return;
-        if (_lastAttackCommand is not { Length: > 0 } line) return;
-        if (_wireSender is null) return;
-        if (AttacksBlocked()) return;   // can't re-send a swing while attacks are blocked
+        if (_disposed || !_isEnabled()) return false;
+        if (_castingSpellTarget is not null) return false;
+        if (_currentTarget is null) return false;
+        if (_lastAttackCommand is not { Length: > 0 } line) return false;
+        if (_wireSender is null) return false;
+        if (AttacksBlocked()) return false;   // can't re-send a swing while attacks are blocked
 
         _combatOff = false;
         _log?.Combat(LogCategory, $"action failed — re-sending last attack '{line}'");
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         NoteAttackSent();
+        return true;
     }
 
     // Arm the engage-verification timer after a fresh attack goes out. No-op once

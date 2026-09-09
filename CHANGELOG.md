@@ -2,7 +2,8 @@
 
 ## 3.58.12
 
-- Fixed combat sitting unattacked while confused/convulsing: a fumbled attack ("You convulse violently!" and the other confusion-fumble lines) now re-sends the lost swing immediately, instead of taking free hits until you manually re-attack — the re-send mechanism existed but no shipped fumble line was ever wired to trigger it
+- Confusion/convulsion fumbles no longer leave you stuck: a fumble eats the command the client just sent, so the client now re-sends it — weapon swings, attack spells (immediately, not on the next round), item uses, and other client-sent commands alike — instead of sitting there (e.g. getting beat on while convulsing)
+- Commands you typed yourself are never auto-repeated (that stays your call), and a fumbled movement step self-recovers as before
 - bug reports addressed: paradigm-20260908-211659
 
 ## 3.58.11

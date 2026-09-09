@@ -3342,13 +3342,25 @@ glass jug               5               2 gold crowns
   action, not just combat — and the fumble line can be customized per confuse source.** Most confusion
   sources surface the generic `You fumble in confusion!`; `convulsions` customizes it to `You convulse
   violently!` (with its own onset `You are in convulsions!`). Either way the just-sent command is consumed
-  and never executes. The client already re-sends a fumbled combat swing (ConditionTracker's
-  `LastActionFailed` → `CombatManager.OnActionFailed`), but a fumbled **move** has to REVERT its pending
+  and never executes, so the client re-sends it — but a fumbled **move** has to REVERT its pending
   step or the tracker strands — the unreverted move got wrongly matched against later unrelated text and
   stranded a tier-3 recovery backtrack indefinitely (no timeout watched its landing). The fumble line
   always appears as the direct reply to the command it swallowed, never as unprompted ambient text.
   **Client encoding:** `MovementRefusalDetector` recognizes BOTH `You fumble in confusion!` and `You
   convulse violently!` as movement refusals, reverting the pending move immediately.
+- **[CONFIRMED] 2026-09-09, user + report `paradigm-20260908-211659`: the re-send covers EVERY client-sent
+  command, not just a weapon swing — but only the CLIENT's own commands, never what the user typed.** A
+  fumble eats whatever command was just sent; to perform it you re-send the same command. The client now
+  does this generically for anything IT sent — weapon swing, attack spell (immediately, not deferred to
+  the next round tick), item use, door bash, and so on — because a user fighting confused shouldn't have
+  to hand-repeat each eaten action. A command the **user typed** is never auto-repeated (re-sending a
+  manual command is the user's call). **Client encoding:** every fumble fires `ConditionTracker.ActionFailed`
+  (on a `LastActionFailed` record OR a `ConfuseFumbleLine` match); the handler calls
+  `CombatManager.OnActionFailed` first (re-sends a weapon swing WITH its engage-verification bookkeeping,
+  returns whether it did), and on false falls through to `EngineSendGate.ReplayLastClientCommand`, which
+  re-sends the last command that passed through the engine send gate. User-typed input bypasses that gate
+  (it flows straight to `SendUserInput`), so it's never in the replay buffer; a bare **movement** step is
+  skipped by the replay (the move-revert above already recovers it, and a second send would double-step).
 - **[CONFIRMED] 2026-09-02, report `paradigm-20260902-113201`: convulsions can fumble several consecutive
   moves in a row, well inside a handful of seconds.** The revert above is correct per-move, but
   `LoopRunner`'s bounded recovery budget (3 attempts) was shared between genuine desyncs and these
