@@ -62,7 +62,6 @@ public sealed class AutoLairManagerTests : IDisposable
         public required AutoWalkManager Walker { get; init; }
         public required AutoLairManager Roam { get; init; }
         public required LairTimerStore Timers { get; init; }
-        public required MovementCoordinator Coordinator { get; init; }
         public void Dispose()
         {
             Roam.Dispose();
@@ -85,14 +84,13 @@ public sealed class AutoLairManagerTests : IDisposable
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
         walker.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
-        AutoLairManager roam = new(walker, tracker, graph, bfs, timers, coordinator: coord);
+        AutoLairManager roam = new(walker, tracker, graph, bfs, timers);
         return new Harness
         {
             Tracker = tracker,
             Walker = walker,
             Roam = roam,
             Timers = timers,
-            Coordinator = coord,
         };
     }
 
@@ -361,69 +359,5 @@ public sealed class AutoLairManagerTests : IDisposable
         Assert.Null(h.Roam.CurrentTarget);
         Assert.Null(h.Roam.CurrentWaitRoom);
         Assert.Null(h.Roam.LastDecision);
-    }
-
-    // ----- leaving Engaging on the fight ending ----------------------
-    // Report stock-20260908-192900: Engaging was bound to a fixed 30s timer, so a
-    // fight that finished in 10s still parked the scheduler for the remaining 20.
-    // The Combat gate clearing is the reliable end-of-combat signal on stock —
-    // CombatStateTracker clears it only when a room re-display shows no engageable
-    // monster left. The raw `*Combat Off*` line is not usable here: the server
-    // emits one on every cast and once per strike for non-sustaining attacks.
-
-    private static Harness Engaging(Harness h)
-    {
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.Roam.Mark(new RoomKey(1, 1));
-        h.Roam.Mark(new RoomKey(1, 3));
-        h.Roam.Start();
-        h.Roam.StartEngagementForTests();
-        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
-        return h;
-    }
-
-    [Fact]
-    public void Engaging_CombatClearedAfterAFight_LeavesForTheNextLair()
-    {
-        using Harness h = Engaging(NewHarness());
-
-        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");
-        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);   // still fighting
-
-        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "room cleared");
-
-        Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
-    }
-
-    [Fact]
-    public void Engaging_BeforeAnyFight_StaysPut()
-    {
-        // Entering a lair asserts nothing until a monster is seen, so a gate that
-        // was never asserted means combat hasn't started — not that it's over.
-        // Acting on it would walk straight back out of every lair on arrival.
-        using Harness h = Engaging(NewHarness());
-
-        h.Coordinator.AssertGate(MovementCoordinator.SearchGate, "test", "unrelated");
-        h.Coordinator.ClearGate(MovementCoordinator.SearchGate, "test", "unrelated");
-
-        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
-    }
-
-    [Fact]
-    public void Engaging_WaitsForLootBeforeLeaving()
-    {
-        // The kill's drops are still being collected — leaving now abandons the
-        // loot we just fought for.
-        using Harness h = Engaging(NewHarness());
-
-        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");
-        h.Coordinator.AssertGate(MovementCoordinator.AcquisitionGate, "test", "gets pending");
-        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "room cleared");
-
-        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);   // held for the loot
-
-        h.Coordinator.ClearGate(MovementCoordinator.AcquisitionGate, "test", "gets-confirmed");
-
-        Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
     }
 }

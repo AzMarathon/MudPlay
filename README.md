@@ -7,7 +7,6 @@
 > - The Roomba Log gains an **Out of space** section naming the categories that need another room, and the map rings a Roomba room that ran out of space
 > - A loop blocked because it lost track of where it is asks the game for its position without waiting out the repeat-ask delay, so the retry isn't denied every time
 > - Recovery attempts are spaced out, so a reroute that instantly re-blocks can't spend the whole retry budget in one second
-> - Auto-Lair leaves a lair as soon as the fight is over and the loot is collected, instead of always sitting out the full 30-second engage timeout (which is now just an upper bound)
 > - Fixed a crash when fleeing a fight from a room whose way back is a teleport (e.g. the Negative Power Plane) — the retreat now stops at the teleport instead of taking the client down
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
