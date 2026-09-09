@@ -112,7 +112,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         CurrentProfileLabel = _profile.Current is null
             ? "No character loaded"
             : _profile.CurrentProfileName is null
-                ? "Default profile — use Save As to name it"
+                ? "{default} — Use Save to update the default profile template"
                 : $"{_profile.CurrentBbsName} / {_profile.CurrentProfileName}";
 
     private void ReloadBbses()
