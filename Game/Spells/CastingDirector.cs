@@ -748,10 +748,11 @@ public sealed class CastingDirector : IDisposable
     // the on-screen remaining continuous across the gap.
     public DateTime? PausedAtUtc => _pausedAt;
 
-    // Freeze the live buff timers on a disconnect — record when so the reconnect can
-    // resume them with the same remaining. Used INSTEAD of clearing on ANY disconnect
-    // (the buffs persist server-side through link-death and an auto-reconnect is coming);
-    // a fresh character (ProfileLoaded) or a too-long gap on resume clears instead.
+    // Freeze the live buff timers on a disconnect — record when so the reconnect resumes
+    // them intact. Used INSTEAD of clearing on ANY disconnect (the buffs persist server-
+    // side through link-death and an auto-reconnect is coming); on resume, only the timers
+    // whose real expiry lapsed while we were away drop and recast. A fresh character
+    // (ProfileLoaded → ResetBuffTracking) is the only path that wipes everything.
     public void PauseBuffTimers()
     {
         // Latch the loop off until we're confirmed back in the game world — set
@@ -763,12 +764,15 @@ public sealed class CastingDirector : IDisposable
             _log?.Info(LogCategory, $"buff timers paused (drop) — {_activeUntil.Count} armed, frozen until reconnect");
     }
 
-    // Resume after a reconnect. WE were the one offline, so our OWN buffs are uncertain —
-    // clear the self timers and re-establish them fresh. The other party members stayed
-    // ONLINE, so their buffs kept counting toward their real (absolute) expiry the whole
-    // time we were gone — so their timers are left exactly as they are (NOT shifted): they
-    // now read the correctly reduced remaining. Any whose absolute expiry has already
-    // passed while we were away are dropped so they show "not up" and recast.
+    // Resume after a reconnect. Buffs persist server-side through a link-death + auto-
+    // reconnect, so a brief hang must NOT rebuff — we keep BOTH self and party timers
+    // across the gap and let each ride its real (absolute) expiry. Party members stayed
+    // ONLINE, so theirs already read the correctly reduced remaining; ours were frozen
+    // for the display only (PausedAtUtc), never shifted, so on resume they too reflect
+    // the true elapsed time. Any timer whose absolute expiry passed while we were away —
+    // self or party — is dropped so it shows "not up" and recasts; the rest stay, so the
+    // client doesn't recast buffs that are still up. (Self timers used to be wiped here
+    // wholesale, forcing a full rebuff on every re-entry — report paradigm-20260908-205555.)
     public void ResumeBuffTimers()
     {
         // First in-game prompt after a (re)connect — lift the cast-suspend latch
@@ -779,8 +783,6 @@ public sealed class CastingDirector : IDisposable
         if (_pausedAt is null) return;
         _pausedAt = null;
 
-        int selfCleared = RemoveTimersFor("");
-
         List<(string Target, string Short)>? expired = null;
         foreach ((string Target, string Short) key in _activeUntil.Keys)
             if (_activeUntil[key].Until <= _now())
@@ -789,8 +791,7 @@ public sealed class CastingDirector : IDisposable
             foreach ((string, string) key in expired) _activeUntil.Remove(key);
 
         _log?.Info(LogCategory,
-            $"buff timers resumed — self cleared ({selfCleared}); party timers keep counting from real expiry "
-            + $"(dropped {expired?.Count ?? 0} that lapsed while offline).");
+            $"buff timers resumed — kept across the drop; dropped {expired?.Count ?? 0} that lapsed while offline.");
     }
 
     // A combat round tick elapsed (wired to TickEngine.CombatTickElapsed) — free the

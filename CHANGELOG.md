@@ -1,5 +1,14 @@
 # Version history
 
+## 3.58.5
+
+- Backstab no longer opens a fight in a room that qualifies for room-spelling — the "don't backstab if room-spelling" setting is now honored (it was previously ignored)
+- Self-buff timers survive a hangup/reconnect instead of being thrown away, so re-entering the game no longer recasts every buff; only buffs that actually expired while you were offline recast
+- Monsters that burst into the room ("… into the room!") with no direction are now detected and engaged a round before their first swing, instead of only once they attack
+- Navigation status no longer sticks on "Waiting" after Auto-Lair is stopped and the walker winds down — the chip clears once the engines are genuinely idle
+- Navigation log now records walk-to arrival and stop (with the room), so a report shows how a walk ended
+- bug reports addressed: paradigm-20260908-210406, paradigm-20260908-205555, paradigm-20260908-210658, stock-20260908-192900
+
 ## 3.58.0
 
 - New **While Moving** gear set — worn while travelling (not fighting or resting) so you can carry +quickness movement gear; swaps to Default and engages on hostiles, reverts to Default when a walk-to arrives. Off by default

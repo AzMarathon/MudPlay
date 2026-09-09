@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.0**
-> - New **While Moving** gear set — worn while travelling (not fighting or resting) so you can carry +quickness movement gear; swaps to Default and engages on hostiles, reverts to Default when a walk-to arrives. Off by default
-> - **While Moving** has a **"Swap to default before entering lairs"** option: swap the step before a known lair (arrive combat-ready), or enter in movement gear and swap on seeing monsters
-> - New **Bossing** gear set — worn just before entering a Bosses-table boss room; on leaving it reverts to Default first, then re-layers the While Moving set if you're still travelling. Off by default
-> - The Equipment Manager's per-set behavior checkboxes are now contextual: the combat-swap option shows for the pre-rest sets, the lair-swap option for the While Moving set
+> **Version 3.58.5**
+> - Backstab no longer opens a fight in a room that qualifies for room-spelling — the "don't backstab if room-spelling" setting is now honored (it was previously ignored)
+> - Self-buff timers survive a hangup/reconnect instead of being thrown away, so re-entering the game no longer recasts every buff; only buffs that actually expired while you were offline recast
+> - Monsters that burst into the room ("… into the room!") with no direction are now detected and engaged a round before their first swing, instead of only once they attack
+> - Navigation status no longer sticks on "Waiting" after Auto-Lair is stopped and the walker winds down — the chip clears once the engines are genuinely idle
+> - Navigation log now records walk-to arrival and stop (with the room), so a report shows how a walk ended
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
