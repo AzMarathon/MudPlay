@@ -3495,7 +3495,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.Walker.RemainingRoomKeys,
             _services.AutoLair.TravelCostModel,
             _services.RoomGraph.GetRoom,
-            includeLairDwell: _services.IsAutoCombatEnabled);
+            includeLairDwell: _services.IsAutoCombatEnabled,
+            lairWillBeFought: _services.LairWillBeFought);
     }
 
     private static string FormatEta(TimeSpan eta) => RouteEtaEstimator.FormatCompact(eta);

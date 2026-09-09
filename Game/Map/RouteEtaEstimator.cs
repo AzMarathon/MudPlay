@@ -4,7 +4,9 @@ namespace MudPlay.Game.Map;
 
 // Projects the wall-clock arrival time over a walk's REMAINING route: the
 // sum of per-hop travel estimates plus, when auto-combat is on, a dwell
-// allowance for every lair the walker will fight through on the way.
+// allowance for every lair the walker will actually FIGHT through on the way
+// (a lair of friendly / passive occupants it walks straight past adds nothing —
+// see the lairWillBeFought gate).
 //
 // ITravelCostModel is hop-count-only (it can't see the route's rooms), so
 // the lair accounting has to live outside the model — here, where the
@@ -27,11 +29,20 @@ public static class RouteEtaEstimator
     //                      LairSecondsPerMonster × monster count for each lair
     //                      room the walker steps into. False leaves the ETA as
     //                      pure travel time (no fight allowance).
+    //   lairWillBeFought — optional gate on the dwell: given a lair room, returns
+    //                      true only if its occupants are actually hostile (the
+    //                      client will fight them). A lair of friendly guardsmen or
+    //                      passive neutrals is walked straight through, so it adds no
+    //                      combat dwell — without this the ETA over-counts every
+    //                      town "lair" as a fight (report paradigm-20260909-004947:
+    //                      a hostile-free walk estimated ~30s over its real time).
+    //                      Null = count every lair (older callers / tests).
     public static TimeSpan Estimate(
         IReadOnlyList<RoomKey> remainingRooms,
         ITravelCostModel travel,
         Func<RoomKey, Room?> getRoom,
-        bool includeLairDwell)
+        bool includeLairDwell,
+        Func<Room, bool>? lairWillBeFought = null)
     {
         ArgumentNullException.ThrowIfNull(travel);
         ArgumentNullException.ThrowIfNull(getRoom);
@@ -49,6 +60,9 @@ public static class RouteEtaEstimator
             for (int i = 1; i < remainingRooms.Count; i++)
             {
                 if (getRoom(remainingRooms[i]) is not { HasLair: true } room) continue;
+                // A lair we won't actually fight (friendly / passive occupants) is a
+                // free walk-through — no combat dwell.
+                if (lairWillBeFought is not null && !lairWillBeFought(room)) continue;
                 int monsters = RoomTooltipBuilder.TryParseLairMax(room.RawLairTag, out int max) && max > 0
                     ? max
                     : 1;

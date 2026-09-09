@@ -2715,7 +2715,17 @@ flag). These are hard eligibility gates, independent of resistance and level imm
   then keeps the walker held briefly so the revealed `You notice … here.` survey lands and the get
   engines collect it **before** the loop sets up sneaking and steps on. One search per room; empty
   rooms (no fight) search on entry as before. (Targeted `sea <dir>` hidden-exit reveals are a
-  separate path, above.)
+  separate path, above.) **The post-search hold is released *reactively*:** because an empty search
+  answers with `Your search revealed nothing.`, the walker is let go the instant that line arrives
+  rather than sitting out the whole settle window — so a room with nothing hidden costs only the
+  command→reply round-trip, not a fixed per-room wait. The settle window survives only as a short
+  fallback for the case where the reveal *does* surface loot (the `You notice …` survey), which the
+  get engines then need a beat to collect. **The room a walk / loop / auto-lair STARTS from is
+  searched too** (report paradigm-20260909-055045): auto-search normally arms on room *entry*, but
+  the room you're standing in when movement begins was entered earlier — before auto-search was
+  armed, or at login — so it never got that entry search. Movement start arms + searches it before
+  the walker steps out, deduped against the last room actually searched so a loop's later legs
+  (each starting from a room already searched on arrival) don't re-search.
 
 ### Item-cast triggers — how a `CastsSp` fires *([CONFIRMED] 2026-07-18, user)*
 

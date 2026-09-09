@@ -268,17 +268,20 @@ public static class RouteChoicePrompt
         RouteChoiceDialogViewModel? calcVm = null,
         Task<RouteChoiceResult?>? calcDialogTask = null)
     {
-        // Approximate arrival ETA for each route — realm-aware per-hop travel plus
-        // a lair-fight dwell for each lair the walker steps into when auto-combat is
-        // on, the same estimate the live walk-status label surfaces. Empty free
-        // path (sole route) estimates to zero, so the picker shows a bare step count
-        // there.
+        // Approximate arrival ETA for each route — realm-aware per-hop travel plus,
+        // when auto-combat is on, a dwell for each lair the walker will actually FIGHT
+        // through (friendly / passive "lairs" walk straight past — services.LairWillBeFought).
+        // The same estimate the live walk-status label surfaces, so they agree. Empty
+        // free path (sole route) estimates to zero, so the picker shows a bare step
+        // count there.
         TimeSpan freeEta = RouteEtaEstimator.Estimate(
             choice.FreePath, services.AutoLair.TravelCostModel,
-            services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled);
+            services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled,
+            lairWillBeFought: services.LairWillBeFought);
         TimeSpan gatedEta = RouteEtaEstimator.Estimate(
             choice.GatedPath, services.AutoLair.TravelCostModel,
-            services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled);
+            services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled,
+            lairWillBeFought: services.LairWillBeFought);
 
         // A route that crosses a SURVIVABLE hazard the player can't currently pass —
         // whether the hazard is the only gate (sole hazard) or the route ALSO has a

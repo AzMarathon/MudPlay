@@ -440,6 +440,12 @@ public static class KnownPatterns
     public const string TrapNoneInSearch      = "trap.none-in-search";    // "You notice nothing different to the <dir>."
     public const string TrapDisarmedSuccess   = "trap.disarmed-success";  // "You successfully disarmed the trap to the <dir>."
 
+    // Empty result of a room-wide `sea` — nothing concealed here. Lets AutoSearch
+    // release its hold the instant an empty room's search comes back, instead of
+    // idling out the settle window (a fruitful search surfaces the "You notice …
+    // here." survey instead, which the get engines act on).
+    public const string SearchRevealedNothing = "search.revealed-nothing"; // "Your search revealed nothing."
+
     // ----- Door open/bash/pick -------------------------------------------
     // Drives the walker's door FSM — covers the door / gate noun pair (some
     // realms render "gate" for the same lock state) and the bash / pick / open

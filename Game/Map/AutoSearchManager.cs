@@ -35,12 +35,17 @@ public sealed class AutoSearchManager : IDisposable
     // LogService category — [AutoSearch] rows per sent search.
     public const string LogCategory = "AutoSearch";
 
-    // Wait after room entry for the "Also here:" occupant line to reveal any
-    // fight before treating the room as clear and searching. Kept short — it only
-    // delays the clear-room `sea` and does NOT hold the walker (a loop's per-room
-    // step delay dwarfs it). A fight that reveals within the window cancels this
-    // via OnRoomObserved and the defer path takes over.
-    private static readonly TimeSpan ClassifyDelay = TimeSpan.FromMilliseconds(150);
+    // Brief arrival grace before the clear-room `sea` fires. RoomTracker confirms a
+    // move on the "Obvious exits:" line, which the server sends AFTER "Also here:",
+    // so the room's roster is already parsed by the time OnRoomChanged arms this — the
+    // occupants don't need "revealing." What this window still guards is a hostile that
+    // walks/spawns in a fraction of a second AFTER the room render completes (a
+    // separate wire message): a fight that reveals within it cancels the timer via
+    // OnRoomObserved and the defer path takes over, so the `sea` isn't sent into the
+    // start of a fight (where the server drops it). Trimmed from a longer wait once the
+    // roster-already-parsed timing was understood — the leftover was dead per-room
+    // latency on a search-along-route walk (report paradigm-20260909-004947).
+    private static readonly TimeSpan ClassifyDelay = TimeSpan.FromMilliseconds(90);
 
     // Keep the Search gate held this long after the post-fight `sea` goes out,
     // bridging the search's server round-trip so the revealed "You notice" survey
@@ -48,7 +53,7 @@ public sealed class AutoSearchManager : IDisposable
     // this releases. The `sea` reply is just the command→reply latency (~150 ms, no
     // server-side delay) and the get path parses the survey immediately, so this
     // only has to outlast that round-trip plus a little parse margin.
-    private static readonly TimeSpan SearchSettle = TimeSpan.FromMilliseconds(350);
+    private static readonly TimeSpan SearchSettle = TimeSpan.FromMilliseconds(200);
 
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _isDemandActive;
@@ -73,6 +78,12 @@ public sealed class AutoSearchManager : IDisposable
     // and a null-room (death) transition clears it rather than firing in the wrong
     // room (report paradigm-20260820-090736 Face B).
     private RoomKey? _owedFor;
+    // The room the last `sea` actually went out for. Lets a movement-start search
+    // (OnMovementStarting) skip a room we already searched on arrival — otherwise
+    // every loop leg would re-search the room it starts from. Null until the first
+    // search fires; never auto-reset (it just tracks "last searched", compared only
+    // against the current room at movement start).
+    private RoomKey? _lastSearchedFor;
     // A fight was seen this room — the search waits for it to clear and the Search
     // gate is held meanwhile.
     private bool _deferredForCombat;
@@ -160,6 +171,28 @@ public sealed class AutoSearchManager : IDisposable
         }
     }
 
+    // A walk / loop / auto-lair is about to send its first step from the room we're
+    // standing in. Auto-search fires on room ENTRY, but this room was entered earlier
+    // — before auto-search was armed, or at login — so it never got that entry search
+    // (report paradigm-20260909-055045: turned auto-search on standing still, then
+    // walked; the start room was skipped). Arm + search it now, before the walker
+    // steps out, on the same hold-and-classify path a room entry uses. Deduped: a leg
+    // that starts from a room we just searched on arrival (every loop hop past the
+    // first) is a no-op, so this never double-searches. The caller passes a Confirmed
+    // room key only.
+    public void OnMovementStarting(RoomKey? currentRoom)
+    {
+        if (_disposed || currentRoom is null) return;
+        if (!ShouldSearch()) return;
+        // A search is already armed / deferred / in flight for this room — leave it.
+        if (_owedFor is not null || _deferredForCombat) return;
+        // Already searched this room this visit (arrived here and searched on entry).
+        if (_lastSearchedFor is { } last && last.Equals(currentRoom.Value)) return;
+        _owedFor = currentRoom;
+        AssertGate("movement starting — search start room");
+        _classify.Start();
+    }
+
     // Each room-entity observation (wired after the combat tracker so the hostile
     // check is current). Holds the search while a fight is engageable and fires it
     // the moment the room clears.
@@ -214,6 +247,21 @@ public sealed class AutoSearchManager : IDisposable
         ReleaseGate("search settle elapsed");
     }
 
+    // The room-wide `sea` came back empty (KnownPatterns.SearchRevealedNothing, wired
+    // in AppServices). There's nothing concealed to collect, so the settle's whole
+    // job — bridging the reveal so the get engines can take over the hold — is moot:
+    // release the walker at once rather than idling out the window. This is what keeps
+    // an empty transit room from costing the full settle every step. Only while our
+    // own search is awaiting its reveal (settle running); an empty result outside that
+    // window (a manual search) is ignored. A fruitful search surfaces "You notice …
+    // here." instead, which the get engines act on and the settle timer still covers.
+    public void NotifySearchRevealedNothing()
+    {
+        if (_disposed || !_settle.IsEnabled) return;
+        _settle.Stop();
+        ReleaseGate("search revealed nothing");
+    }
+
     private void FireSearch(bool postCombat)
     {
         _classify.Stop();
@@ -232,6 +280,7 @@ public sealed class AutoSearchManager : IDisposable
             return;
         }
 
+        RoomKey? searching = _owedFor;
         _owedFor = null;
         _deferredForCombat = false;
 
@@ -242,6 +291,10 @@ public sealed class AutoSearchManager : IDisposable
         }
 
         _wire.Send("sea");
+        // Remember what we just searched so a movement-start search (OnMovementStarting)
+        // doesn't re-fire on the room it's about to leave (every loop leg starts from a
+        // room we searched on arrival).
+        _lastSearchedFor = searching;
         _log?.Debug(LogCategory, postCombat
             ? "sent 'sea' — room cleared of hostiles"
             : _isEnabled() ? "sent 'sea' on room entry"

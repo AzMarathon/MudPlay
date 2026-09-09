@@ -210,6 +210,123 @@ public sealed class AutoSearchManagerTests
         Assert.False(mgr.IsRevealInFlight);
     }
 
+    // ----- empty-search reactive release -----
+
+    [Fact]
+    public void RevealedNothing_ReleasesHoldWithoutWaitingSettle()
+    {
+        // An empty room's `sea` prints "Your search revealed nothing." — release the
+        // walker the instant that lands rather than idling out the settle window, so
+        // an empty transit room doesn't cost the full settle every step (report
+        // paradigm-20260909-004947).
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(
+            isEnabled: () => true,
+            hasGetEngineArmed: () => true,   // settle would otherwise hold the walker
+            coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged(Key());
+        mgr.OnClassifyElapsed();              // sea fires, settle holds
+        Assert.True(SearchHeld(coord));
+        Assert.True(mgr.IsRevealInFlight);
+
+        mgr.NotifySearchRevealedNothing();    // empty result → release now, no settle wait
+        Assert.False(SearchHeld(coord));
+        Assert.False(mgr.IsRevealInFlight);
+    }
+
+    [Fact]
+    public void RevealedNothing_NoOpWhenNoSearchInFlight()
+    {
+        // Outside our own reveal window (e.g. a manually typed `sea`), the empty-result
+        // line must not release a Search gate we aren't holding.
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.NotifySearchRevealedNothing();    // nothing in flight
+        Assert.False(SearchHeld(coord));      // no-op, no throw
+    }
+
+    // ----- movement-start: search the room the walk begins from -----
+
+    [Fact]
+    public void MovementStarting_SearchesStartRoom_NeverEntered()
+    {
+        // Auto-search armed while standing still (turned on in place, or a login
+        // room) → the start room never got an entry search. Movement start arms +
+        // searches it before the walker steps out (report paradigm-20260909-055045).
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnMovementStarting(Key(58));      // arms + holds the walker
+        Assert.True(SearchHeld(coord));
+        Assert.Empty(mgr.LastSentForTests);   // nothing sent until classify
+
+        mgr.OnClassifyElapsed();
+        Assert.Single(mgr.LastSentForTests);
+        Assert.Equal("sea", Decode(mgr.LastSentForTests[0]));
+    }
+
+    [Fact]
+    public void MovementStarting_SkipsRoomAlreadySearchedOnArrival()
+    {
+        // Arrived here and searched on entry, then a new leg starts from the same
+        // room — don't re-search it. This is what stops every loop leg re-searching
+        // the room it departs.
+        var mgr = new AutoSearchManager(isEnabled: () => true);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged(Key(96));
+        mgr.OnClassifyElapsed();              // entry search fires (1 sea)
+        Assert.Single(mgr.LastSentForTests);
+
+        mgr.OnMovementStarting(Key(96));      // leg departs the same room
+        mgr.OnClassifyElapsed();
+        Assert.Single(mgr.LastSentForTests);  // still one — no re-search
+    }
+
+    [Fact]
+    public void MovementStarting_NoOpWhenDisabled()
+    {
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(isEnabled: () => false, coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnMovementStarting(Key(58));
+        Assert.False(SearchHeld(coord));      // not armed → no hold, no search
+        mgr.OnClassifyElapsed();
+        Assert.Empty(mgr.LastSentForTests);
+    }
+
+    [Fact]
+    public void MovementStarting_NoOpWhenSearchAlreadyOwed()
+    {
+        // A search is already armed for the room (entry search classifying) — the
+        // start hook must not double-arm it.
+        var mgr = new AutoSearchManager(isEnabled: () => true);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnRoomChanged(Key(58));           // arms the entry search
+        mgr.OnMovementStarting(Key(58));      // must not re-arm
+        mgr.OnClassifyElapsed();
+
+        Assert.Single(mgr.LastSentForTests);  // exactly one search
+    }
+
+    [Fact]
+    public void MovementStarting_NullRoom_NoOp()
+    {
+        var coord = new MovementCoordinator();
+        var mgr = new AutoSearchManager(isEnabled: () => true, coordinator: coord);
+        mgr.SetWireSender(_ => { });
+
+        mgr.OnMovementStarting(null);
+        Assert.False(SearchHeld(coord));
+    }
+
     // ----- fight in the room: defer + hold, fire on clear -----
 
     [Fact]
