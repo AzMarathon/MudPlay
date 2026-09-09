@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using MudPlay.Game;
 using MudPlay.Game.Map;
 using Xunit;
 
@@ -280,12 +281,12 @@ public sealed class LoopExpSimulatorTests
     }
 
     [Fact]
-    public void RoomSummon_CountedEvenWithNoLair_QuickKillAddsBonusRoll()
+    public void RoomSummon_CountedEvenWithNoLair_OneFirePerVisit()
     {
         // A summon-only room (crypt summon 2: 1850 expected exp/roll, 15% chance). It
-        // has no placed lair, yet its expected exp is still credited. A quick kill
-        // (rounds ≤ 2) adds a second roll's worth (× (1 + chance)); a slow kill gets
-        // only the base roll — so quick/slow = 1.15, independent of lap timing.
+        // has no placed lair, yet its expected exp is still credited — one roll per
+        // visit (the entry re-roll). With no base mobs there's no combat in the room,
+        // so the kill-rate knob (RoundsPerMob) doesn't change the summon yield.
         ExpRoute route = Route(SummonRoom(13, 3573, "crypt summon 2", 1850, 0.15));
         var quickS = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 1, RealConditionsMultiplier: 1);
         var slowS = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 3, RealConditionsMultiplier: 1);
@@ -297,8 +298,66 @@ public sealed class LoopExpSimulatorTests
         ExpSummonStat s = Assert.Single(quick.Summons);
         Assert.Equal(new RoomKey(13, 3573), s.Room);
         Assert.Equal("crypt summon 2", s.SpellName);
-        Assert.True(quick.ExpPerHour > slow.ExpPerHour);          // the rounds≤2 bonus roll
-        Assert.Equal(1.15, quick.ExpPerHour / slow.ExpPerHour, 3);
+        Assert.Equal(quick.ExpPerHour, slow.ExpPerHour, 3);       // no in-room combat → kill-rate irrelevant
+    }
+
+    [Fact]
+    public void SummonFires_Ungated_ScalesWithRoundsInRoom()
+    {
+        // Ungated spell: one roll on entry plus one per room-spell tick spent fighting
+        // here — so a longer fight in the room means more summon rolls, regardless of
+        // whether the room was occupied on arrival.
+        var ungated = new RoomSummon("s", 100, 0.2, NoMonstersGated: false);
+        Assert.Equal(1.0, LoopExpSimulator.SummonFires(ungated, roomOccupiedOnEntry: false, roomCombatSeconds: 0, roomSpellTick: 5), 6);
+        Assert.Equal(2.0, LoopExpSimulator.SummonFires(ungated, roomOccupiedOnEntry: true, roomCombatSeconds: 5, roomSpellTick: 5), 6);
+        Assert.Equal(4.0, LoopExpSimulator.SummonFires(ungated, roomOccupiedOnEntry: true, roomCombatSeconds: 15, roomSpellTick: 5), 6);
+    }
+
+    [Fact]
+    public void SummonFires_Gated_OnlyWhenRoomEmptyOnEntry()
+    {
+        // Gated (nomonsters) spell: only summons while the room is empty, so a visit
+        // credits one roll when the room was empty on arrival and none when base mobs
+        // were up — combat length never adds fires for a gated spell.
+        var gated = new RoomSummon("s", 100, 0.2, NoMonstersGated: true);
+        Assert.Equal(1.0, LoopExpSimulator.SummonFires(gated, roomOccupiedOnEntry: false, roomCombatSeconds: 0, roomSpellTick: 5), 6);
+        Assert.Equal(0.0, LoopExpSimulator.SummonFires(gated, roomOccupiedOnEntry: true, roomCombatSeconds: 0, roomSpellTick: 5), 6);
+        Assert.Equal(0.0, LoopExpSimulator.SummonFires(gated, roomOccupiedOnEntry: true, roomCombatSeconds: 30, roomSpellTick: 5), 6);
+    }
+
+    [Fact]
+    public void RoomSummon_GatedYieldsLessThanUngated_OnOccupiedLair()
+    {
+        // Same occupied lair room, same settings — only the nomonsters gate differs.
+        // The ungated spell rolls through the fight; the gated one is suppressed while
+        // mobs are up, so it contributes strictly less summon exp.
+        var s = Single(secPerStep: 1, roundsPerMob: 3);
+        ExpRoomVisit ungated = new(new RoomKey(13, 3573),
+            new[] { Lair(2, 5000, 120) }, new RoomSummon("crypt summon 2", 1850, 0.15, NoMonstersGated: false));
+        ExpRoomVisit gated = new(new RoomKey(13, 3573),
+            new[] { Lair(2, 5000, 120) }, new RoomSummon("crypt summon 2", 1850, 0.15, NoMonstersGated: true));
+
+        double ungatedExp = LoopExpSimulator.Simulate(Route(ungated, Empty(13, 3574)), s).ExpPerHour;
+        double gatedExp = LoopExpSimulator.Simulate(Route(gated, Empty(13, 3574)), s).ExpPerHour;
+
+        Assert.True(ungatedExp > gatedExp, $"ungated {ungatedExp:N0} should beat gated {gatedExp:N0}");
+    }
+
+    [Fact]
+    public void Realm_ThreadsThrough_PlaceholderEqualCadence()
+    {
+        // The realm only changes the summon re-roll cadence. With the stock medium
+        // tick assumed equal to the combat round (current placeholder), Stock and
+        // Paradigm must give identical estimates — this pins the plumbing and the
+        // placeholder so a later real stock interval is a one-constant change.
+        ExpRoomVisit room = new(new RoomKey(13, 3573),
+            new[] { Lair(2, 5000, 120) }, new RoomSummon("crypt summon 2", 1850, 0.15));
+        ExpRoute route = Route(room, Empty(13, 3574));
+        var stock = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 2, RealConditionsMultiplier: 1, Realm: RealmType.Stock);
+        var para = new ExpSimSettings(1, ExpCombatMode.SingleTarget, RoundsPerMob: 2, RealConditionsMultiplier: 1, Realm: RealmType.ParaMud);
+
+        Assert.Equal(LoopExpSimulator.Simulate(route, stock).ExpPerHour,
+                     LoopExpSimulator.Simulate(route, para).ExpPerHour, 3);
     }
 
     [Fact]

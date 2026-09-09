@@ -104,7 +104,7 @@ public sealed class RouteExpResolver : IDisposable
                 n => TbActions().TryGetValue(n, out string? a) ? a : null,
                 id => (Math.Max(0, Monster(id).Exp), Monster(id).Name));
             if (table is { ExpPerRoll: > 0 })
-                result = new RoomSummon(tb.Name, table.ExpPerRoll, table.SummonChance);
+                result = new RoomSummon(tb.Name, table.ExpPerRoll, table.SummonChance, table.NoMonstersGate);
         }
         cache[room.Spell] = result;
         return result;

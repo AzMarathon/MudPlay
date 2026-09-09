@@ -1857,6 +1857,15 @@
                                             </StackPanel>
                                         </Border>
 
+                                        <!-- Active realm (read-only — follows the active game-data set).
+                                             Only affects how often a room's summon spell re-rolls:
+                                             Paradigm on the combat round, Stock on the medium tick. Your
+                                             kill-rate knobs below are realm-agnostic. -->
+                                        <TextBlock FontSize="10"
+                                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                   ToolTip.Tip="A room's summon spell re-rolls on the combat round in Paradigm and on the (slower) medium tick in Stock. This only changes summoning-room yield, not your kill rate."
+                                                   Text="{Binding ExpEstimator.RealmLabel, StringFormat='Realm: {0} — sets room-summon cadence'}"/>
+
                                         <!-- Per-lair breakdown: fires vs misses per hour, amber
                                              when a miss was close (nudge the loop to catch it). -->
                                         <ListBox Classes="RailList" Focusable="False"

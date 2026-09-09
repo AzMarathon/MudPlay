@@ -1142,6 +1142,7 @@ public static class BugReportBuilder
         Kv(sb, "Laps", $"{snap.LapsPerHour} laps/hr · {snap.AvgLapSeconds:N1}s/lap");
         Kv(sb, "Summary", snap.Summary);
         Kv(sb, "Combat mode", snap.AreaCombat ? "area (rooming)" : "single-target");
+        if (!string.IsNullOrEmpty(snap.RealmName)) Kv(sb, "Realm", snap.RealmName);
         Kv(sb, "Seconds per step", $"{snap.SecondsPerStep:0.0}");
         Kv(sb, "Rounds to kill a mob", $"{snap.RoundsPerMob:0.0}");
         Kv(sb, "Real-world multiplier", $"{snap.RealConditionsMultiplier:0.00}");

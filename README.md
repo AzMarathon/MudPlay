@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.8**
-> - Auto-Lair leaves a lair as soon as the fight is over and the loot is collected, instead of always sitting out the full 30-second engage timeout (which is now just an upper bound)
+> **Version 3.58.9**
+> - Exp/Hr estimator now counts a room's summon-spell yield by realm: Paradigm re-rolls every combat round plus on entry, Stock on a slower tick plus on room change (replaces the old quick-kill bonus guess)
+> - Summon spells with a `nomonsters:` gate are credited only on clear pass-throughs (empty on entry), not when arriving to a full lair
+> - Estimator panel shows the active realm driving the summon cadence; the bug report captures it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
