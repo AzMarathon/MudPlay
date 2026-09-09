@@ -1,5 +1,9 @@
 # Version history
 
+## 3.59.3
+
+- MudPlay now has its own icon — an amber **M** in a CP437 double-line box — replacing the default Avalonia logo on the window, the taskbar and the Windows .exe
+
 ## 3.59.1
 
 - Combat → Room thresholds: new "Kill all engaged" checkbox — once a room is engaged because its count met Min. monsters, keep fighting it per your combat settings until cleared, instead of moving on when kills drop the count below Min. monsters (for areas where mixed HP pools leave the tanky ones alive); off (default) = current behavior, move on from the leftovers
