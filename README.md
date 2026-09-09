@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.61.1**
-> - Switching profiles no longer strands the new character at the game main menu — a stale low-HP hangup from the previous character was suppressing realm auto-entry
-> - Switching profiles clears the outgoing character's live HP so it can't trip a spurious low-HP hangup on the swap
-> - Login "quest available" announcements only fire once you're actually in the realm, not while sitting at the login menu
+> **Version 3.61.4**
+> - Buff/heal/cure maintenance no longer sits idle forever while Sneaking or Hidden — casting breaks both, but that's now an accepted cost instead of a silent block
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

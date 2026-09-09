@@ -94,7 +94,6 @@ public sealed class CastingDirector : IDisposable
     // Null until wired → the heal falls back to the live _state.MaxHp.
     private Func<int>? _restDefaultMaxHp;
     private Func<int>? _restRealMaxHp;
-    private Func<bool>? _isStealthedFunc;
     private Func<bool>? _inputCaptured;
     private Func<bool>? _buffStripRoom;
     private Func<(string Spell, string? Target)?>? _combatDebuffSource;
@@ -391,12 +390,6 @@ public sealed class CastingDirector : IDisposable
     // pummel emits one after every strike), so the engine can't safely resume on it
     // alone.
     public event Action? CastFired;
-
-    // Wire a stealth-state predicate so the Buff slot can skip candidate casts that
-    // would break stealth. Typically pointed at StealthManager.IsStealthed. Optional
-    // — when unset the buff slot fires regardless of stealth.
-    public void SetStealthGate(Func<bool> isStealthed) =>
-        _isStealthedFunc = isStealthed;
 
     // Wire the self-heal rest-target ceilings (DEFAULT-set max HP + current gear's
     // real max) so heal triggers anchor to the Default set like the rest gates.
@@ -1830,11 +1823,6 @@ public sealed class CastingDirector : IDisposable
     // behaviour.
     private CastCandidate? PickBuff(SpellsSettings spells, HealthSettings health, PartySettings? party)
     {
-        // Stealth gate: any cast — or an item-cast's equip/use/re-equip — breaks
-        // sneak / hide; suppress buffs entirely while stealthed so a backstab
-        // window stays open.
-        if (_isStealthedFunc?.Invoke() == true) return null;
-
         // Buff-strip-room gate: the room casts a buff-removal spell on entry, so
         // any buff we put up is torn straight back off. Skip the whole category
         // here — heals / cures still run their own paths.

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.61.4
+
+- Buff/heal/cure maintenance no longer sits idle forever while Sneaking or Hidden — casting breaks both, but that's now an accepted cost instead of a silent block
+- bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119
+
 ## 3.61.1
 
 - Switching profiles no longer strands the new character at the game main menu — a stale low-HP hangup from the previous character was suppressing realm auto-entry

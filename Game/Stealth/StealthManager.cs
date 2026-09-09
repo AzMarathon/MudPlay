@@ -152,8 +152,10 @@ public sealed class StealthManager : IDisposable
     }
 
     // True while we hold any active stealth (Sneaking or Hidden). Read by
-    // CastingDirector to suppress buff casts that would break stealth, and by
     // CombatManager's backstab gate to open with bs instead of a normal attack.
+    // Casting DOES break both Sneak and Hide (GAME_MECHANICS.md), but that's an
+    // accepted cost the automation pays to keep buffs up rather than a reason to
+    // suppress the cast — CastingDirector does not gate on this.
     public bool IsStealthed =>
         _stateValue == StealthState.Sneaking || _stateValue == StealthState.Hidden;
 

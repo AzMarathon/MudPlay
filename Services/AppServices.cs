@@ -3613,9 +3613,6 @@ public sealed class AppServices
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             isEnabled: () => ReadAutoModeFlag(d => d.AutoHealRest),
             log: Log);
-        // Stealth gate — buff casts suppressed while
-        // sneaking or hidden so we don't break the backstab window.
-        CastDirector.SetStealthGate(() => Stealth.IsStealthed);
         // Survival casts (heal / cure / buff / party heal) skip any spell the
         // player can't afford — the cost comes from the game-data Spells table
         // via the live spellbook. Combat-tab spells keep their own

@@ -420,6 +420,13 @@ it isn't here and you're unsure, ask.
 - **Ideally used solo.** Resting while hidden un-targets you from party single-target heals/buffs
   (same reason auto-hide is party-suppressed above), so ShadowRest resting is a solo behavior.
 
+**Casting breaks both Sneak and Hide** *([CONFIRMED] 2026-09-09, user)*
+- Casting a spell — self buff/heal/cure, party buff, anything — breaks Sneak **and** Hide alike.
+  This is an accepted cost, not a reason to withhold the cast: the buff-maintenance automation casts
+  a due buff/heal/cure regardless of stealth state rather than silently sitting on it to preserve
+  Sneak or Hide (`CastingDirector` does not gate casts on `StealthManager.IsStealthed`). Only the
+  backstab opener still reads combined stealth state, since either Sneaking or Hidden opens it.
+
 ## Combat & backstab
 
 ### Attack-prevented states *([CONFIRMED] 2026-09-03, user)*
