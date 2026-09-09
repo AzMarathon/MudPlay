@@ -165,7 +165,16 @@ public sealed class CombatSpellChooser
         // (ctx.BackstabPending) and suppressed on a DontBackstab target. It sits
         // outside the spells-vs-physical choice below; when it fires the engine's
         // BS path owns the swing and no spell goes out.
-        if (ctx.BackstabPending && !ctx.TargetDontBackstab)
+        //
+        // Also suppressed when the user opted out of backstabbing a crowded room
+        // (SkipBackstabIfMultiAttack) AND the room meets the room-spell's trigger
+        // (Auto-Nuke on, multi-attack configured, enemy count ≥ its MinEnemies): the
+        // stealthed opener then falls through to the cascade and room-spells instead of
+        // spending the surprise round on a backstab. The flag was wired to Settings and
+        // carried into the round snapshot but never read here — report
+        // paradigm-20260908-210406.
+        if (ctx.BackstabPending && !ctx.TargetDontBackstab
+            && !(settings.SkipBackstabIfMultiAttack && MultiAttackRoomQualifies(settings, ctx)))
             return CombatSpellDecision.Backstab;
 
         // SpellsFirst always reaches for the attack-spell cascade (multi → normal
@@ -375,6 +384,18 @@ public sealed class CombatSpellChooser
             && ctx.EnemyCount >= multi.MinEnemies
             && CastsOk(multi, _multiAttackCasts)
             && ManaOk(multi, ctx, mode);
+    }
+
+    // Does the room meet the room multi-attack spell's TRIGGER — Auto-Nuke on, the spell
+    // configured, and the enemy count at/over its MinEnemies? This is the room-count
+    // condition the backstab opener consults for SkipBackstabIfMultiAttack. Deliberately
+    // NOT gated on this round's mana / cast cap (the user's rule is "don't backstab if
+    // rooming", by monster count) — unlike MultiAttackWouldFire, which answers whether the
+    // AoE actually fires THIS round.
+    private static bool MultiAttackRoomQualifies(CombatSettings settings, in CombatSpellContext ctx)
+    {
+        CombatSpellSlot multi = settings.MultiAttackSpell;
+        return ctx.AllowNukes && IsConfigured(multi) && ctx.EnemyCount >= multi.MinEnemies;
     }
 
     // Attack-spell phase: multi-attack room spell while it qualifies, then

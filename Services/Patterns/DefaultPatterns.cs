@@ -288,6 +288,17 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.RoomEntryArrival,
             @"^(?!You notice )(?<name>.+?) \w+ in(?:to)?(?: the room)? from (?:the )?(?<direction>[\w-]+)[.!]\s*$");
 
+        // Directionless spawn arrival — a monster bursting in with per-monster flavor
+        // text and NO "from <dir>", e.g. "A slimeworm crashes through the ground into
+        // the room!". The middle verb phrase is arbitrary and multi-word, so the name
+        // can't be lifted out reliably; the only stable marker is the trailing "into
+        // the room". Anchored to a leading article (how monster arrivals lead) + that
+        // ending so it can't collide with the directional RoomEntryArrival above (which
+        // ends in "from <dir>") or with chat / room-title lines. CombatManager keys a
+        // room-refresh off it; no name group because nothing consumes one.
+        yield return new RegexPattern(KnownPatterns.RoomSpawnArrival,
+            @"^(?:A|An|The) .+ into the room[.!]\s*$");
+
         // Reactive look-back — another player `look`ed at us. Wording is
         // user-confirmed (not in any imported game-data table); keyed on the
         // exact "<name> is looking at you." phrase. Name is a bare word (players

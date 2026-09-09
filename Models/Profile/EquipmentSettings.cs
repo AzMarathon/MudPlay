@@ -18,4 +18,12 @@ public sealed class EquipmentSettings
     // Manager as the "Don't swap to default upon entering combat" checkbox (checked
     // = false here).
     public bool SwapToDefaultOnCombat { get; set; }
+
+    // While the "While Moving" set is in use and this is true, the coordinator
+    // swaps to Default the step BEFORE entering a known lair room, so you arrive
+    // already in combat gear. Default false = enter the lair in the movement set
+    // and swap to Default when hostiles are recognized. Surfaced in the Equipment
+    // Manager as the "Swap to default before entering lairs" checkbox, shown only
+    // when the movement set is selected.
+    public bool SwapToDefaultBeforeLairs { get; set; }
 }

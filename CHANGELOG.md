@@ -1,6 +1,6 @@
 # Version history
 
-## 3.58.2
+## 3.58.7
 
 - An interrupted sweep no longer dumps its load on you: what Roomba was carrying and what it still had to do are remembered per character, verified against a real inventory read, and picked up next time
 - New **Resume** button on the Roomba tab — carries on from a stopped sweep without re-walking the whole circuit, and survives closing the client
@@ -9,7 +9,28 @@
 - Recovery attempts are spaced out, so a reroute that instantly re-blocks can't spend the whole retry budget in one second
 - Auto-Lair leaves a lair as soon as the fight is over and the loot is collected, instead of always sitting out the full 30-second engage timeout (which is now just an upper bound)
 - Fixed a crash when fleeing a fight from a room whose way back is a teleport (e.g. the Negative Power Plane) — the retreat now stops at the teleport instead of taking the client down
-- bug reports addressed: stock-20260904-135419, stock-20260904-143436, stock-20260908-192900, Crash-20260908-181131
+- bug reports addressed: stock-20260904-135419, stock-20260904-143436, Crash-20260908-181131
+
+## 3.58.6
+
+- Fixed the Conversation window's outgoing-telepath text drifting onto the wrong, unrelated exchange over a long session (e.g. a `@roomba` answer showing up hours later attached to someone else's unrelated question) — an engine-fired reply was being captured twice (once from the raw send, once from its own on-screen echo), leaving one stale entry queued per reply that permanently desynced every later pairing; captures now dedupe against the send still awaiting its own confirmation
+- bug reports addressed: paradigm-20260908-134645
+
+## 3.58.5
+
+- Backstab no longer opens a fight in a room that qualifies for room-spelling — the "don't backstab if room-spelling" setting is now honored (it was previously ignored)
+- Self-buff timers survive a hangup/reconnect instead of being thrown away, so re-entering the game no longer recasts every buff; only buffs that actually expired while you were offline recast
+- Monsters that burst into the room ("… into the room!") with no direction are now detected and engaged a round before their first swing, instead of only once they attack
+- Navigation status no longer sticks on "Waiting" after Auto-Lair is stopped and the walker winds down — the chip clears once the engines are genuinely idle
+- Navigation log now records walk-to arrival and stop (with the room), so a report shows how a walk ended
+- bug reports addressed: paradigm-20260908-210406, paradigm-20260908-205555, paradigm-20260908-210658, stock-20260908-192900
+
+## 3.58.0
+
+- New **While Moving** gear set — worn while travelling (not fighting or resting) so you can carry +quickness movement gear; swaps to Default and engages on hostiles, reverts to Default when a walk-to arrives. Off by default
+- **While Moving** has a **"Swap to default before entering lairs"** option: swap the step before a known lair (arrive combat-ready), or enter in movement gear and swap on seeing monsters
+- New **Bossing** gear set — worn just before entering a Bosses-table boss room; on leaving it reverts to Default first, then re-layers the While Moving set if you're still travelling. Off by default
+- The Equipment Manager's per-set behavior checkboxes are now contextual: the combat-swap option shows for the pre-rest sets, the lair-swap option for the While Moving set
 
 ## 3.57.6
 

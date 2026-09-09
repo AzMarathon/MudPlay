@@ -3091,9 +3091,32 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 if (!string.IsNullOrWhiteSpace(e.Detail))
                     _services.Log?.Info("Navigation", $"walk-to failed: {e.Detail}");
                 break;
+            case WalkEventKind.Finished:
+                // How the walk ENDED is as much a lifecycle event as how it started —
+                // without it the log shows a walk-to begin with no matching arrival, so
+                // a later reader can't tell whether the walker reached its goal or is
+                // still parked. (This gap is why a nav bug report couldn't say what the
+                // engine had been doing.)
+                _services.Log?.Info("Navigation", $"walk-to arrived{DescribeWalkDest(e)}.");
+                break;
+            case WalkEventKind.Stopped:
+                _services.Log?.Info("Navigation",
+                    $"walk-to stopped{DescribeWalkDest(e)}"
+                    + (string.IsNullOrWhiteSpace(e.Detail) ? "." : $": {e.Detail}"));
+                break;
         }
 
         RefreshFromWalker();
+    }
+
+    // " at 16/239 - Underground Lake" for a walk event that carries a destination
+    // key, else "" — used to name the room in the arrival / stop lifecycle log lines.
+    private string DescribeWalkDest(WalkEvent e)
+    {
+        if (e.Destination is not { } key) return string.Empty;
+        return _services.RoomGraph.GetRoom(key) is { } room
+            ? $" at {key} - {room.DisplayName}"
+            : $" at {key}";
     }
 
     // Refresh the boat countdown label each second while a sail is in flight;
@@ -3108,7 +3131,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         RaiseTopBarStatus();
     }
-    private void OnPauseChanged(bool paused) => IsPaused = paused;
+    private void OnPauseChanged(bool paused)
+    {
+        IsPaused = paused;
+        // The pause true→false edge is where a walk deferred by mid-journey combat
+        // reconciles and can wind down to Idle — a transition that otherwise fires no
+        // gate/condition callback, so without recomputing here the chip could keep the
+        // last combat-hold label after the engines have actually gone quiet. Cheap:
+        // RefreshActivityStatus early-outs when nothing changed.
+        RefreshActivityStatus();
+    }
 
     // Every gate assert/clear may change the live "why are we paused" label,
     // even when the overall paused state doesn't flip (Combat → Resting keeps
@@ -3189,11 +3221,27 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // off the same edge, but the flag flips first).
     private (string Text, NavActivityKind Kind) ComputeActivity()
     {
-        if (!IsAnyExecuting) return (string.Empty, NavActivityKind.None);
+        // Gate on the LIVE engines, not the cached EngineActionKind. That cache can
+        // strand "executing" — a walk that ends via the event-less Reset() (silent
+        // supersede/replan) or whose terminal Finished is swallowed when the last room
+        // lands into combat never fires the recompute that returns the kind to Idle. A
+        // stale cache there latches the chip on a "Waiting"/"Fighting" hold indefinitely
+        // (reported: engines all Idle, no gates, chip stuck "Waiting"). Reading the
+        // engines directly means an all-idle state always collapses the chip to None.
+        if (!AnyEngineLiveExecuting()) return (string.Empty, NavActivityKind.None);
         Game.Map.MovementCoordinator mc = _services.MovementCoordinator;
         return NavActivity.Describe(
             mc.AssertedGates, mc.IsPaused, _services.Conditions.IsMovementPrevented);
     }
+
+    // Is any movement engine genuinely driving right now, read straight off the
+    // engines? Mirrors the non-Idle branches of RefreshEngineActionKind exactly, but
+    // without the intervening cached field that can go stale (see ComputeActivity).
+    private bool AnyEngineLiveExecuting() =>
+        _services.AutoLair.IsActive
+        || (_services.LoopRunner.State != LoopState.Idle
+            && _services.LoopRunner.CurrentLoop is not null)
+        || _services.Walker.State is WalkState.Walking or WalkState.Paused;
 
     // The hold reason to fold into the top-bar status line ("… — resting (low HP)"),
     // or null when the engine isn't actually held. Reads the live gate state even

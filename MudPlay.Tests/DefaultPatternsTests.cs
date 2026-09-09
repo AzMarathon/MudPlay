@@ -99,6 +99,23 @@ public sealed class DefaultPatternsTests
     }
 
     [Fact]
+    public void RoomSpawnArrivalRegex_MatchesDirectionlessSpawn_NotDirectionalOrTitle()
+    {
+        IMessagePattern p = PatternById(KnownPatterns.RoomSpawnArrival);
+
+        // Confirmed spawn flavor (paradigm-20260908-210658): no direction, arbitrary
+        // multi-word verb phrase, ending "into the room".
+        Assert.True(p.TryMatch(Line("A slimeworm crashes through the ground into the room!"), out _));
+        Assert.True(p.TryMatch(Line("An ancient wyrm surges up into the room."), out _));
+
+        // Must NOT swallow the directional walk-in (RoomEntryArrival owns that) or a
+        // plain room-title / exits line.
+        Assert.False(p.TryMatch(Line("A cave bear lumbers in from the south!"), out _));
+        Assert.False(p.TryMatch(Line("Underground Lake"), out _));
+        Assert.False(p.TryMatch(Line("Obvious exits: north, southwest"), out _));
+    }
+
+    [Fact]
     public void ParadigmLocationRegex_CapturesMapAndRoom()
     {
         IMessagePattern p = PatternById(KnownPatterns.ParadigmLocation);

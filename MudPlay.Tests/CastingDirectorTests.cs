@@ -1702,21 +1702,43 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PauseResume_ClearsSelfTimersOnReconnect()
+    public void PauseResume_KeepsSelfTimerOnBriefReconnect()
     {
-        // WE were the one offline, so on reconnect our own buffs are uncertain — the
-        // self timers (keyed "") are cleared so they re-establish fresh.
+        // paradigm-20260908-205555: a hangup + reconnect must NOT throw the self-buff
+        // timers away and force a full rebuff — the buff persists server-side through the
+        // drop, so a brief gap keeps it armed (client does not recast). (Self timers used
+        // to be cleared wholesale here.)
         using CureHarness h = new();
         h.Spells.BlessSlots[1] = "bles";
-        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.BuffInfo["bles"] = (string.Empty, 300);   // 5-minute self buff
         h.Director.NoteManualBuffCast("bles");     // a self timer
         Assert.Single(h.Director.SnapshotActiveBuffs());
 
-        h.Director.PauseBuffTimers();              // drop
-        h.Now = h.Now.AddSeconds(45);              // 45s offline
+        h.Director.PauseBuffTimers();              // disconnect
+        h.Now = h.Now.AddSeconds(45);              // brief hang, « 300s
         h.Director.ResumeBuffTimers();             // reconnect
 
-        Assert.Empty(h.Director.SnapshotActiveBuffs());   // self cleared
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal(string.Empty, kept.Target);   // self timer survived the drop
+    }
+
+    [Fact]
+    public void PauseResume_DropsSelfTimerWhenGapOutlivesBuff()
+    {
+        // The flip side: a gap longer than the buff drops the (now genuinely expired) self
+        // timer on reconnect, so the normal cadence recasts it — "keep" is not "never
+        // expire".
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "bles";
+        h.BuffInfo["bles"] = (string.Empty, 300);
+        h.Director.NoteManualBuffCast("bles");
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+
+        h.Director.PauseBuffTimers();
+        h.Now = h.Now.AddSeconds(400);             // outlived the 300s buff while offline
+        h.Director.ResumeBuffTimers();
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());   // expired → dropped → recast next pass
     }
 
     [Fact]
@@ -2802,11 +2824,11 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyBless_Reconnect_ClearsSelfKeepsPartyCountingDown()
+    public void PartyBless_Reconnect_KeepsBothSelfAndPartyTimers()
     {
-        // On OUR reconnect: self timers clear; the party member (online the whole time)
-        // keeps their ABSOLUTE expiry — it isn't shifted forward, so it now reads the
-        // real reduced remaining.
+        // On OUR reconnect BOTH survive the drop: the party member stayed online (absolute
+        // expiry, now reduced), and our OWN buff persisted server-side through the link-
+        // drop (paradigm-20260908-205555). Neither is shifted; both keep their real expiry.
         using PartyBlessHarness h = new();
         h.Health.BlessIfAboveMa = 0;
         h.AddTargetSlot("bles", "Raijin");
@@ -2818,18 +2840,23 @@ public sealed class CastingDirectorTests
         h.Confirm("You cast bless on Raijin!");         // arm ("raijin", bles)
         h.Director.NoteManualBuffCast("mysh");          // arm a self buff ("")
 
-        DateTime partyUntil = default;
+        DateTime partyUntil = default, selfUntil = default;
         foreach (Game.Spells.ActiveBuffTimer t in h.Director.SnapshotActiveBuffs())
-            if (t.Target.Length > 0) partyUntil = t.Until;
+            if (t.Target.Length > 0) partyUntil = t.Until; else selfUntil = t.Until;
         Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
 
         h.Director.PauseBuffTimers();
-        h.Now = h.Now.AddSeconds(45);
+        h.Now = h.Now.AddSeconds(45);                   // brief gap, under both durations
         h.Director.ResumeBuffTimers();
 
-        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
-        Assert.Equal("raijin", kept.Target);            // self gone, party kept
-        Assert.Equal(partyUntil, kept.Until);           // absolute expiry unchanged (not shifted)
+        System.Collections.Generic.IReadOnlyList<Game.Spells.ActiveBuffTimer> after =
+            h.Director.SnapshotActiveBuffs();
+        Assert.Equal(2, after.Count);                   // both survive
+        foreach (Game.Spells.ActiveBuffTimer t in after)
+        {
+            if (t.Target == "raijin") Assert.Equal(partyUntil, t.Until);  // absolute, unshifted
+            else { Assert.Equal(string.Empty, t.Target); Assert.Equal(selfUntil, t.Until); }
+        }
     }
 
     [Fact]
