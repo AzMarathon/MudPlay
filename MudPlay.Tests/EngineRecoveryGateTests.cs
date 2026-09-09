@@ -326,6 +326,34 @@ public sealed class EngineRecoveryGateTests : IDisposable
         Assert.Equal(Direction.S, Assert.Single(engine.Backtracks));
     }
 
+    // The reverse-walk can only send bare cardinals, and a CMD teleport isn't one —
+    // nothing undoes it, since the destination need not even have a return exit.
+    // NoteEngineStepSent keeps that out of reach by clearing the executed history
+    // when a teleport crosses it: everything before the hop is on the far side, so
+    // there is no trail left to reverse. Pinned because the alternative is what
+    // Crash-20260908-181131 did from the flee path — hand Teleport to the move
+    // encoder, which throws off the dispatcher and takes the app down mid-fight.
+    [Fact]
+    public void Tier3Backtrack_NeverReversesATeleportHop()
+    {
+        (RoomGraphManager graph, RoomTracker tracker) = NewGraphAndTracker("tp1", TwinSouthGraphJson);
+        var gate = new EngineRecoveryGate(graph, tracker) { TryResync = _ => false };
+        var engine = new RecordingEngine();
+        RecoveryFailedEvent? failed = null;
+        gate.RecoveryFailed += e => failed = e;
+        ParkSuspectAtFork(tracker, Direction.N, Direction.S);
+        gate.Attach(engine);
+        gate.NoteEngineStepSent(Direction.N);          // ordinary step, reversible
+        gate.NoteEngineStepSent(Direction.Teleport);   // hop — strands the trail behind it
+
+        gate.NoteEngineStalled("move never confirmed");
+
+        // No move at all, and specifically never the teleport: with the trail
+        // cleared there's nothing to walk back, so tier 3 gives up instead.
+        Assert.Empty(engine.Backtracks);
+        Assert.NotNull(failed);
+    }
+
     [Fact]
     public void NoteEngineStalled_PrefersTheAuthoritativeResyncWhenAvailable()
     {

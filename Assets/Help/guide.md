@@ -1360,6 +1360,8 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 **Default:** On (backward)
 **What it does:** When fleeing, `Backward` retraces the rooms you just came through (safer — you already know what's there); unchecked (`Forward`) instead keeps pushing along your planned route into unexplored territory (faster, riskier).
 
+Either way a flee only ever sends plain compass moves, so it **stops short at anything that isn't one**: a lever or door step, or a teleport hop (the way in and out of somewhere like the Negative Power Plane). It retreats as far as the ordinary moves go and re-checks there rather than trying to cross it mid-fight — and if the very first step out is a teleport, it doesn't run at all and your other low-HP reactions take over. The program log names the step that cut the retreat short.
+
 ### Break combat before running
 
 **Default:** On
