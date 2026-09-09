@@ -719,6 +719,34 @@ public sealed class RoomDisplayParserTests : IDisposable
         Assert.Null(tracker.State.OpenDoorDirections);
     }
 
+    // A mixed line — "closed door north, open gate south, open door west" — splits
+    // the barriers by state: the closed one feeds ClosedDoorDirections (so the
+    // asylum solver knows to open it before peeking through), the open ones feed
+    // OpenDoorDirections. Both door- and gate-nouns count the same.
+    [Fact]
+    public void ClosedBarrier_CapturedInClosedDoorDirections_AlongsideOpenOnes()
+    {
+        (_, RoomDisplayParser parser) = NewParser();
+        RoomObservation? captured = null;
+        parser.RoomParsed += o => captured = o;
+
+        parser.FeedTestLines(new[]
+        {
+            "Abandoned Asylum",
+            "Obvious exits: closed door north, open gate south, open door west."
+        });
+
+        Assert.NotNull(captured);
+        RoomObservation obs = captured!.Value;
+        Assert.Contains(Direction.N, obs.Exits);   // still a real exit
+        Assert.NotNull(obs.ClosedDoorDirections);
+        Assert.Contains(Direction.N, obs.ClosedDoorDirections!);
+        Assert.DoesNotContain(Direction.S, obs.ClosedDoorDirections!);
+        Assert.NotNull(obs.OpenDoorDirections);
+        Assert.Contains(Direction.S, obs.OpenDoorDirections!);
+        Assert.Contains(Direction.W, obs.OpenDoorDirections!);
+    }
+
     [Fact]
     public void ColorAnchor_BoldCyan_AlsoQualifiesAsBrightCyan()
     {
