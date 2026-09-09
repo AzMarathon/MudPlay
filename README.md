@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.15**
-> - Equipment Manager's gear-set list is taller so all sets (Default, Backstab, Pre-rest HP/Mana, While Moving, Bossing) show at once without a scrollbar
-> - Auto-search no longer stalls travel: it releases the walker the moment a room's search comes back empty ("Your search revealed nothing.") instead of always waiting out the full settle window, and its per-room pre-search grace was trimmed to just what's needed to catch a hostile walking in — cutting seconds of latency on long search-along-route runs
-> - Auto-search now also searches the room a walk/loop/auto-lair starts from — previously the very first room (entered before you set off, or at login) was skipped
-> - Route ETA no longer counts combat dwell for lairs the party won't actually fight (friendly/fled/neutral-not-KOS occupants) — now applied consistently to the walk-status line, the route-picker cards, and the Details window, so a hostile-free path reads close to real walk time everywhere
+> **Version 3.58.17**
+> - Auto-Lair routing-heuristic option now spells "minimize" (was the British "minimise")
+> - Map legend rewritten to match what the map actually draws: current room now shows its bright ring (not a flat swatch), and the walk-to destination, up+down exit rooms, deathpile skull, boss crown (plus stop-before-boss halt ring), trainer chevrons, gang-house robot, avoid/stash X-marks, and the @where result flash are all keyed now (route-line colours stay in Settings → General since they're recolourable)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
