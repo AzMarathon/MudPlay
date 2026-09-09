@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.6**
-> - Fixed the Conversation window's outgoing-telepath text drifting onto the wrong, unrelated exchange over a long session (e.g. a `@roomba` answer showing up hours later attached to someone else's unrelated question) — an engine-fired reply was being captured twice (once from the raw send, once from its own on-screen echo), leaving one stale entry queued per reply that permanently desynced every later pairing; captures now dedupe against the send still awaiting its own confirmation
+> **Version 3.58.8**
+> - Auto-Lair leaves a lair as soon as the fight is over and the loot is collected, instead of always sitting out the full 30-second engage timeout (which is now just an upper bound)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
