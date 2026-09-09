@@ -836,12 +836,21 @@ public static class BugReportBuilder
             loop.CurrentLoop is { } running
                 ? $"{running.Name} — step {loop.CurrentIndex + 1}/{loop.StepCount}"
                 : "(none)");
-        if (loop.CurrentLoop is not null)
+        if (loop.CurrentLoop is { } curLoop)
         {
             Kv(sb, "Loop approach target",
                 loop.ApproachTarget is { } appr ? $"{appr.Map}/{appr.Room}" : "(none)");
             Kv(sb, "Loop circle start",
                 loop.CircleStartRoom is { } start ? $"{start.Map}/{start.Room}" : "(none)");
+            // Loop combat-suppression state — answers "why didn't it fight
+            // here?" for a do-not-attack / only-attack-in-lair report.
+            Kv(sb, "Loop only-attack-in-lair", curLoop.OnlyAttackInLairRooms.ToString());
+            Kv(sb, "Loop do-not-attack waypoints",
+                curLoop.Waypoints.Count(w => w.DoNotAttack).ToString());
+            Kv(sb, "Combat suppressed in current room",
+                svc.RoomTracker.State.CurrentRoom is { } cur
+                    ? Game.Map.LoopCombatSuppression.IsSuppressed(curLoop, cur.Key, cur.HasLair).ToString()
+                    : "(unknown room)");
         }
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
         // Last loop / auto-lair run this session, retained past a stop/death —

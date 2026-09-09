@@ -3067,7 +3067,7 @@ public sealed class AppServices
         CombatTracker = new Game.Combat.CombatStateTracker(
             Router, MovementCoordinator, RoomClassifier, MonsterMessages,
             PlayerState,
-            isAutoAttackEnabled: () => ReadAutoModeFlag(d => d.AutoCombat),
+            isAutoAttackEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
             // Same overlay-resolve helper CombatManager uses — keeps the
             // engageable predicate consistent so the gate and the swing
             // decision can't diverge on the same room state.
@@ -3264,7 +3264,7 @@ public sealed class AppServices
                     combat, Profile.Current?.Equipment ?? new Models.Profile.EquipmentSettings());
                 return combat;
             },
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoCombat),
+            isEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
             readOwnGivenName: () => Profile.CurrentProfileName,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log,
@@ -4049,7 +4049,11 @@ public sealed class AppServices
         // combat's off so we won't fight, and HP's above the flee trigger so we won't
         // run. HealthManager pokes RequestRestClearEngage to fire the first attack.
         Health.SetRestClearEngage(
-            isAutoCombatEnabled: () => ReadAutoModeFlag(d => d.AutoCombat),
+            // Effective auto-combat: a loop room the user marked "do not attack"
+            // (or a non-lair room under "only attack in lair rooms") reads as OFF
+            // here, so a rest triggered in a suppressed room arms the rest-clear
+            // and fights to clear it — the do-not-attack rest exception.
+            isAutoCombatEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
             requestEngage: Combat.RequestRestClearEngage);
         Combat.SetRestClearGate(() => Health.ForceClearForRest);
 
@@ -6373,6 +6377,41 @@ public sealed class AppServices
     // estimate (auto-combat off ⇒ the walker doesn't stop to fight, so the
     // route is pure travel time).
     public bool IsAutoCombatEnabled => ReadAutoModeFlag(d => d.AutoCombat);
+
+    // True when the running loop suppresses combat in the room we're standing
+    // in — a per-waypoint "do not attack here" or the loop-wide "only attack in
+    // lair rooms" (non-lair room). The three engage-gate delegates AND it into
+    // their effective auto-combat read so combat treats the room as if the
+    // master toggle were off (skip + walk on). Because HealthManager's rest-clear
+    // arms exactly when it sees auto-combat off, a triggered rest in a suppressed
+    // room automatically fires ForceClearForRest → CombatManager's rest-clear
+    // override fights to clear it (the rest exception, reused from #450). Loops
+    // only; the raw toggle (IsAutoCombatEnabled, toolbar/Settings display) is
+    // left untouched so it still shows the user's real ON/OFF.
+    private bool CombatSuppressedInCurrentRoom()
+    {
+        bool suppressed =
+            LoopRunner.State != Game.Map.LoopState.Idle
+            && LoopRunner.CurrentLoop is { } loop
+            && RoomTracker.State.CurrentRoom is { } here
+            && Game.Map.LoopCombatSuppression.IsSuppressed(loop, here.Key, here.HasLair);
+
+        // Edge-trigger a Combat-log line on transition — the three gate Funcs
+        // each call this per observation, so log only when (room, suppressed)
+        // actually changes to avoid per-line spam. Explains a "loop walked past
+        // hostiles" in the program log.
+        Game.Map.RoomKey? room = RoomTracker.State.CurrentRoom?.Key;
+        if (suppressed != _lastCombatSuppressed || !Equals(room, _lastCombatSuppressedRoom))
+        {
+            _lastCombatSuppressed = suppressed;
+            _lastCombatSuppressedRoom = room;
+            if (suppressed && room is { } rk)
+                Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
+        }
+        return suppressed;
+    }
+    private bool _lastCombatSuppressed;
+    private Game.Map.RoomKey? _lastCombatSuppressedRoom;
 
     // Per-monster overlay resolve: seed-store value forms the Defaults tier,
     // SettingsResolver overlays Global / BBS / Char-tier user overrides on top.

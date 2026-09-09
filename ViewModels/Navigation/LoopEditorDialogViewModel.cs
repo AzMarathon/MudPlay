@@ -35,7 +35,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // waypoint list to the current room at Start, so a positional diff against
     // it would false-positive; a restart re-rotates anyway, making rotation
     // irrelevant to whether the run would differ.
-    private readonly List<(string Room, string? Command, int DelayMs, bool DoNotRest)> _openedSteps;
+    private readonly List<(string Room, string? Command, int DelayMs, bool DoNotRest, bool DoNotAttack)> _openedSteps;
 
     // Window title — flips between "Create Loop" (when the dialog was opened
     // on a fresh empty loop) and "Edit Loop" (mutating an existing saved
@@ -49,14 +49,15 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // Favorites menu (green), where clicking it starts the loop.
     [ObservableProperty] private bool _favorite;
 
+    // Loop-wide "only attack in lair rooms" (an Entire Loop Setting). When set,
+    // the loop only engages hostiles in game-data lair rooms; every other room
+    // is walked through as if auto-combat were off. Mirrored by the nav rail's
+    // Entire Loop Settings flyout.
+    [ObservableProperty] private bool _onlyAttackInLairRooms;
+
     public ObservableCollection<LoopWaypointRowViewModel> Waypoints { get; } = new();
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSelection))]
-    private LoopWaypointRowViewModel? _selectedRow;
-
-    [ObservableProperty] private string _selectedCommand = string.Empty;
-    [ObservableProperty] private int _selectedDelayMs = DefaultCommandDelayMs;
+    [ObservableProperty] private LoopWaypointRowViewModel? _selectedRow;
 
     // Text input for the "add waypoint" row. Accepts the same input dialects
     // as the Navigation window's room search box — coordinate ("1/297",
@@ -93,11 +94,6 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     private DispatcherTimer? _searchDebounce;
     private static readonly TimeSpan SearchDebounceDelay = TimeSpan.FromMilliseconds(120);
 
-    private const int DefaultCommandDelayMs = 1200;
-
-    // True when a waypoint row is selected for command edit.
-    public bool HasSelection => SelectedRow is not null;
-
     public LoopEditorDialogViewModel(
         Loop loop,
         LoopManager loops,
@@ -118,6 +114,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         _name = loop.Name;
         _notes = loop.Notes ?? string.Empty;
         _favorite = loop.Favorite;
+        _onlyAttackInLairRooms = loop.OnlyAttackInLairRooms;
         foreach (LoopWaypoint w in loop.Waypoints)
             Waypoints.Add(new LoopWaypointRowViewModel(w, graph));
         RenumberRows();
@@ -126,7 +123,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         // (row.Key.ToString() / Command / DelayMs) so the dirty check is an
         // apples-to-apples comparison immune to Room-string reformatting.
         _openedSteps = Waypoints
-            .Select(r => (r.Key.ToString(), r.Command, r.DelayMs, r.DoNotRest))
+            .Select(r => (r.Key.ToString(), r.Command, r.DelayMs, r.DoNotRest, r.DoNotAttack))
             .ToList();
     }
 
@@ -159,53 +156,6 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         Waypoints.Remove(row);
         if (SelectedRow == row) SelectedRow = null;
         RenumberRows();
-    }
-
-    [RelayCommand]
-    private void ClearCommand()
-    {
-        if (SelectedRow is null) return;
-        SelectedRow.Command = null;
-        SelectedRow.DelayMs = 0;
-        SelectedRow.RefreshDisplay();
-        SelectedCommand = string.Empty;
-        SelectedDelayMs = DefaultCommandDelayMs;
-    }
-
-    // Per-row ✎ button → opens the modeless WaypointActionEditDialog
-    // pre-seeded with the row's current command + delay. On Save the returned
-    // values are applied to the row in place. The dialog is the primary path
-    // for editing per-waypoint actions; the in-dialog footer editor is gone.
-    [RelayCommand]
-    private async Task EditWaypointActionAsync(LoopWaypointRowViewModel? row)
-    {
-        if (row is null) return;
-        WaypointActionEditDialogViewModel vm = new(
-            waypointLabel: row.DisplayLabel,
-            command: row.Command,
-            delayMs: row.DelayMs,
-            doNotRest: row.DoNotRest);
-        WaypointActionEditResult? result = await AppServices.Current.Dialogs
-            .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
-        if (result is null) return;
-        row.Command = result.Command;
-        row.DelayMs = result.DelayMs;
-        row.DoNotRest = result.DoNotRest;
-        row.RefreshDisplay();
-    }
-
-    // Apply the inline command/delay edits to the selected waypoint row so
-    // the list reflects them. Save consolidates the rows into the persisted
-    // loop.
-    [RelayCommand]
-    private void ApplyCommandEdit()
-    {
-        if (SelectedRow is null) return;
-        int delay = Math.Max(0, SelectedDelayMs);
-        string? cmd = string.IsNullOrWhiteSpace(SelectedCommand) ? null : SelectedCommand;
-        SelectedRow.Command = cmd;
-        SelectedRow.DelayMs = cmd is null ? 0 : delay;
-        SelectedRow.RefreshDisplay();
     }
 
     partial void OnNewWaypointQueryChanged(string value)
@@ -417,15 +367,23 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
 
         var waypoints = new List<LoopWaypoint>(Waypoints.Count);
         foreach (LoopWaypointRowViewModel row in Waypoints)
-            waypoints.Add(new LoopWaypoint(row.Key, row.Command, row.DelayMs, row.DoNotRest));
+        {
+            // Normalize inline edits: an empty/whitespace command clears the
+            // command AND its delay (a delay only fires around a command step),
+            // mirroring the build-time dialog's convention.
+            string? cmd = string.IsNullOrWhiteSpace(row.Command) ? null : row.Command.Trim();
+            int delay = cmd is null ? 0 : Math.Max(0, row.DelayMs);
+            waypoints.Add(new LoopWaypoint(row.Key, cmd, delay, row.DoNotRest, row.DoNotAttack));
+        }
 
         bool renamed = !string.Equals(newName, _original.Name, StringComparison.OrdinalIgnoreCase);
         string oldName = _original.Name;
 
-        _original.Name      = newName;
-        _original.Notes     = Notes ?? string.Empty;
-        _original.Favorite  = Favorite;
-        _original.Waypoints = waypoints;
+        _original.Name                  = newName;
+        _original.Notes                 = Notes ?? string.Empty;
+        _original.Favorite              = Favorite;
+        _original.OnlyAttackInLairRooms = OnlyAttackInLairRooms;
+        _original.Waypoints             = waypoints;
 
         // Rename → delete the old file (LoopManager keys by Loop.Name
         // on disk) before saving under the new name. (Skip for a
@@ -487,7 +445,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         if (current.Count != _openedSteps.Count) return true;
         for (int i = 0; i < current.Count; i++)
         {
-            (string room, string? command, int delayMs, bool doNotRest) = _openedSteps[i];
+            (string room, string? command, int delayMs, bool doNotRest, bool doNotAttack) = _openedSteps[i];
             if (!string.Equals(current[i].Room, room, StringComparison.OrdinalIgnoreCase))
                 return true;
             if (!string.Equals(current[i].Command ?? string.Empty, command ?? string.Empty,
@@ -495,6 +453,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
                 return true;
             if (current[i].DelayMs != delayMs) return true;
             if (current[i].DoNotRest != doNotRest) return true;
+            if (current[i].DoNotAttack != doNotAttack) return true;
         }
         return false;
     }
@@ -504,12 +463,6 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
 
     // ----- internals -------------------------------------------------
 
-    partial void OnSelectedRowChanged(LoopWaypointRowViewModel? value)
-    {
-        SelectedCommand = value?.Command ?? string.Empty;
-        SelectedDelayMs = value?.DelayMs > 0 ? value.DelayMs : DefaultCommandDelayMs;
-    }
-
     private void RenumberRows()
     {
         for (int i = 0; i < Waypoints.Count; i++)
@@ -518,7 +471,8 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
 }
 
 // Per-row VM for the editor's Waypoints ListBox. Carries the resolved room
-// name (read-only) + the editable command + delay.
+// name (read-only) + the inline-editable command, delay, do-not-rest, and
+// do-not-attack fields (each a column in the table).
 public sealed partial class LoopWaypointRowViewModel : ObservableObject
 {
     public RoomKey Key { get; }
@@ -527,27 +481,7 @@ public sealed partial class LoopWaypointRowViewModel : ObservableObject
     [ObservableProperty] private string? _command;
     [ObservableProperty] private int _delayMs;
     [ObservableProperty] private bool _doNotRest;
-
-    // True when this waypoint has a command attached — drives the row's command badge in the AXAML.
-    public bool HasCommand => !string.IsNullOrEmpty(Command);
-
-    // Drives the row's "no rest" badge in the AXAML.
-    public bool HasDoNotRest => DoNotRest;
-
-    // One-line summary for the row's cyan badge — combines Command with
-    // DelayMs when both are set, so the user can see at a glance what the
-    // waypoint will fire and how long the loop waits after. Examples: "rest",
-    // "dep 100 · 1500ms".
-    public string CommandSummary
-    {
-        get
-        {
-            if (string.IsNullOrEmpty(Command)) return string.Empty;
-            return DelayMs > 0
-                ? $"{Command} · {DelayMs}ms"
-                : Command;
-        }
-    }
+    [ObservableProperty] private bool _doNotAttack;
 
     public LoopWaypointRowViewModel(LoopWaypoint source, RoomGraphManager graph)
     {
@@ -557,14 +491,8 @@ public sealed partial class LoopWaypointRowViewModel : ObservableObject
         _command = source.Command;
         _delayMs = source.DelayMs;
         _doNotRest = source.DoNotRest;
+        _doNotAttack = source.DoNotAttack;
         RefreshDisplayFor(graph);
-    }
-
-    public void RefreshDisplay()
-    {
-        OnPropertyChanged(nameof(HasCommand));
-        OnPropertyChanged(nameof(CommandSummary));
-        OnPropertyChanged(nameof(HasDoNotRest));
     }
 
     private void RefreshDisplayFor(RoomGraphManager graph)

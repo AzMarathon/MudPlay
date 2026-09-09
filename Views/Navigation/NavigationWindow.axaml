@@ -1311,7 +1311,7 @@
                                                            Foreground="{StaticResource ChromeFgBrush}"
                                                            TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Center"/>
-                                                <!-- Gear marks a command; ⛔ marks a "do not rest" waypoint. -->
+                                                <!-- Gear marks a command; ⛔ marks "do not rest"; ⚔ marks "do not attack". -->
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal"
                                                             Spacing="2" Margin="2,0" VerticalAlignment="Center">
                                                     <TextBlock Text="⚙" FontSize="11"
@@ -1322,6 +1322,10 @@
                                                                IsVisible="{Binding HasDoNotRest}"
                                                                Foreground="{StaticResource AccentRedBrush}"
                                                                ToolTip.Tip="Do not rest in this room"/>
+                                                    <TextBlock Text="⚔" FontSize="11"
+                                                               IsVisible="{Binding HasDoNotAttack}"
+                                                               Foreground="{StaticResource AccentRedBrush}"
+                                                               ToolTip.Tip="Do not attack in this room"/>
                                                 </StackPanel>
                                                 <Button Grid.Column="3"
                                                         Content="↑" FontSize="13" Padding="7,3" MinWidth="26"
@@ -1382,7 +1386,10 @@
                                                 Classes.Current="{Binding IsCurrent}"
                                                 Classes.Upcoming="{Binding IsUpcoming}"
                                                 Classes.Ready="{Binding IsReady}">
-                                            <Grid ColumnDefinitions="24,*,Auto,Auto,Auto">
+                                            <Panel>
+                                              <!-- Normal navigation step row. -->
+                                              <Grid ColumnDefinitions="24,*,Auto,Auto,Auto"
+                                                    IsVisible="{Binding !IsLoopSettingsEntry}">
                                                 <TextBlock Grid.Column="0"
                                                            Text="{Binding Index}"
                                                            FontSize="11"
@@ -1418,7 +1425,34 @@
                                                         IsVisible="{Binding HasRemove}"
                                                         Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).UnmarkAutoLairRoomCommand}"
                                                         CommandParameter="{Binding RemoveKey}"/>
-                                            </Grid>
+                                              </Grid>
+
+                                              <!-- Synthetic first entry: opens a flyout of loop-wide
+                                                   settings (the extensible home for whole-loop toggles). -->
+                                              <Button IsVisible="{Binding IsLoopSettingsEntry}"
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Left"
+                                                      Background="Transparent"
+                                                      BorderThickness="0"
+                                                      Padding="2,0"
+                                                      FontSize="11"
+                                                      Content="⚙  Entire Loop Settings"
+                                                      ToolTip.Tip="Settings that apply to the whole loop, not any one room.">
+                                                  <Button.Flyout>
+                                                      <Flyout Placement="Bottom">
+                                                          <StackPanel Spacing="6" MaxWidth="280">
+                                                              <TextBlock Text="Entire Loop Settings"
+                                                                         FontSize="11" FontWeight="SemiBold"
+                                                                         Foreground="{StaticResource ChromeFgBrush}"/>
+                                                              <CheckBox Content="Only attack in lair rooms"
+                                                                        FontSize="11"
+                                                                        IsChecked="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).LoopOnlyAttackInLairRooms, Mode=TwoWay}"
+                                                                        ToolTip.Tip="Only engage hostiles in game-data lair rooms; walk through the rest as if auto-combat were off. A per-room 'do not attack' still skips even a lair room, and a triggered rest still clears any room."/>
+                                                          </StackPanel>
+                                                      </Flyout>
+                                                  </Button.Flyout>
+                                              </Button>
+                                            </Panel>
                                         </Border>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>

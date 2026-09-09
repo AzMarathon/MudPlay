@@ -162,6 +162,56 @@ public sealed class LoopManagerTests : IDisposable
     }
 
     [Fact]
+    public void Save_RoundTripsCombatSuppressionFlags()
+    {
+        // Loop-wide OnlyAttackInLairRooms + per-waypoint DoNotAttack must survive
+        // a save + reload.
+        LoopManager m1 = NewManager();
+        m1.LoadAll(_setName);
+        m1.Save(new Loop("Suppress loop", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), doNotAttack: true),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        })
+        { OnlyAttackInLairRooms = true });
+
+        LoopManager m2 = NewManager();
+        m2.LoadAll(_setName);
+        Loop? round = m2.Get("Suppress loop");
+        Assert.NotNull(round);
+        Assert.True(round!.OnlyAttackInLairRooms);
+        Assert.True(round.Waypoints[0].DoNotAttack);
+        Assert.False(round.Waypoints[1].DoNotAttack);
+    }
+
+    [Fact]
+    public void LoadAll_LegacyLoopWithoutSuppressionFields_DefaultsFalse()
+    {
+        // A v3 file predating the do-not-attack / only-lair fields loads with
+        // both false (additive bools; System.Text.Json leaves them default).
+        string folder = AppPaths.GameDataSetLoopsFolder(_setName);
+        Directory.CreateDirectory(folder);
+        const string LegacyJson = """
+            {
+              "SchemaVersion": 3,
+              "Name": "PreSuppress",
+              "Waypoints": [
+                { "Room": "1/1" },
+                { "Room": "1/2" }
+              ]
+            }
+            """;
+        File.WriteAllText(Path.Combine(folder, "PreSuppress" + LoopManager.LoopFileSuffix), LegacyJson);
+
+        LoopManager m = NewManager();
+        m.LoadAll(_setName);
+        Loop? loaded = m.Get("PreSuppress");
+        Assert.NotNull(loaded);
+        Assert.False(loaded!.OnlyAttackInLairRooms);
+        Assert.All(loaded.Waypoints, w => Assert.False(w.DoNotAttack));
+    }
+
+    [Fact]
     public void Save_NoSetActive_IsNoOp()
     {
         LoopManager m = NewManager();

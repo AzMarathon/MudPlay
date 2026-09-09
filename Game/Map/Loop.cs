@@ -49,6 +49,15 @@ public sealed class Loop
     // favorite" checkbox in the loop editor.
     public bool Favorite { get; set; }
 
+    // Loop-wide combat setting. When true, the loop only engages hostiles in
+    // game-data lair rooms (Room.HasLair) — every other room behaves as if
+    // auto-combat were off and is walked through. A per-waypoint DoNotAttack
+    // still suppresses even a lair room; a triggered rest still clears any
+    // suppressed room so it can rest. Defaults false, so older loop files
+    // behave as before. Toggled from the Edit Loop window and the "Entire Loop
+    // Settings" entry in the nav rail.
+    public bool OnlyAttackInLairRooms { get; set; }
+
     // Folder this loop lives under inside the BBS Loops directory, relative
     // to it, using / separators (e.g. "Sewers/Lower"). Empty = the Loops
     // root. Not serialised — the on-disk subdirectory is the source of
