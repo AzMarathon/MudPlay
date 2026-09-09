@@ -220,4 +220,31 @@ public sealed class SysStatusProbeTests
 
         Assert.False(h.Probe.AutoDisabled);
     }
+
+    [Fact]
+    public async Task ResetAutoDisable_ClearsTheProvenLatch_SoANewCharacterCanAutoDisableAgain()
+    {
+        // The probe is app-scoped but sysop power is per-character. Without clearing
+        // the "proven" latch on profile load, a non-powered alt inherits a powered
+        // character's proof and can NEVER auto-disable — every recovery escalation
+        // eats a full probe timeout for the rest of the session. ResetAutoDisable
+        // (fired on ProfileLoaded) must clear _provenAvailable, not just the timer.
+        Harness h = new();
+
+        // Character A proves the privilege.
+        Task<SysRoomStatus?> ok = h.Probe.QueryAsync();
+        h.ReplyWithRoom(1, 100);
+        Assert.NotNull(await ok);
+        Assert.False(h.Probe.AutoDisabled);
+
+        // Switch characters — ProfileLoaded resets the probe.
+        h.Probe.ResetAutoDisable();
+
+        // Character B is NOT powered: the first timeout must now auto-disable it
+        // (before the fix, the inherited proof kept it permanently enabled).
+        Task<SysRoomStatus?> late = h.Probe.QueryAsync();
+        h.FireTimeout();
+        Assert.Null(await late);
+        Assert.True(h.Probe.AutoDisabled);
+    }
 }

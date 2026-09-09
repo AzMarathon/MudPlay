@@ -90,13 +90,21 @@ public sealed class SysStatusProbe : IDisposable
         _wireSender = sender;
     }
 
-    // Clear a session's auto-disable — called on profile load, so switching
-    // characters doesn't inherit a previous session's failed probe.
+    // Clear a session's probe state — called on profile load, so switching characters
+    // doesn't inherit a previous session's result. BOTH latches must reset: the
+    // auto-disable timer AND _provenAvailable. A non-powered alt that inherited
+    // _provenAvailable from a powered character could never AutoDisable (it gates on
+    // !_provenAvailable), so every recovery escalation would send a `sys st` and eat the
+    // full probe timeout, forever — the wasted-recovery cost this auto-disable exists to
+    // avoid. Cleared unconditionally: re-proving on the first probe of a new session is
+    // one cheap round-trip.
     public void ResetAutoDisable()
     {
-        if (_disabledUntilUtc is null) return;
+        bool hadState = _disabledUntilUtc is not null || _provenAvailable;
         _disabledUntilUtc = null;
-        _log?.Log(LogSeverity.Info, LogCategory, "Auto-disable cleared.");
+        _provenAvailable = false;
+        if (hadState)
+            _log?.Log(LogSeverity.Info, LogCategory, "Sysop-status session state reset for the new character.");
     }
 
     // Send a sysop status for the current room and await the parsed block.

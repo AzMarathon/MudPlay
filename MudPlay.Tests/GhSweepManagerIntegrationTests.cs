@@ -1070,7 +1070,9 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             new GhSuspendedMove("1/3", "1/1", "mace", 2, carried: true, hidden: false),
         });
 
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store);
+        // A live 'i' read still shows the carried mace — Resume verifies carried
+        // entries against the pack, so it must be present to be re-adopted.
+        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, carriedInventory: "mace, mace");
 
         Assert.True(h.Sweep.CanResume);
         Assert.Equal(2, h.Sweep.ResumableMoveCount);
@@ -1085,6 +1087,33 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // Consumed: a later Start mustn't adopt the same carried item again.
         Assert.False(store.Any);
 
+        h.Dispose();
+    }
+
+    [Fact]
+    public void Resume_DropsCarriedItemNoLongerInThePack()
+    {
+        // Resume verifies the carried half against a live 'i' read, exactly as a fresh
+        // Start does: an item sold or dropped since the sweep bailed is dropped from the
+        // plan rather than blindly re-dropped (which the game partial-matches onto a
+        // different item still held).
+        ProfileService profile = new();
+        profile.LoadBlank();
+        GhSuspendedSweepStore store = new(profile);
+        store.Save(new[]
+        {
+            new GhSuspendedMove("1/3", "1/1", "war hammer", 1, carried: false, hidden: false),
+            new GhSuspendedMove("1/3", "1/1", "mace", 1, carried: true, hidden: false),
+        });
+
+        // The pack no longer holds the mace.
+        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, carriedInventory: "nothing");
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Sweep.Resume());
+
+        Assert.Equal(1, h.Sweep.PendingMoveCount);      // only the uncarried war hammer survives
+        Assert.Equal(0, h.Sweep.CarriedPendingCount);   // the gone mace is dropped from the manifest
         h.Dispose();
     }
 
@@ -1262,6 +1291,41 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void MultiUnitMove_Paradigm_ConfirmsFromOneBulkReply()
+    {
+        // Paradigm HAS a bulk verb: a 2x move goes out as one `get 2 war hammer` and
+        // the game answers with a SINGLE count-prefixed line. Counting replies (a raw
+        // ++) left that move stuck at 1/2 forever — the sweep never finished; the fix
+        // adds the line's own count.
+        SweepHarness h = NewSweepHarness(_root, _scratchBbs, paradigm: true);
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Sweep.Start());
+
+        h.Feed("You notice 2 war hammer here.");
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("B", Direction.S);
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("A", Direction.N);
+        Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
+
+        h.Observe("C", Direction.N, Direction.S);
+        Assert.Equal("get 2 war hammer", h.Sent[^1]);   // one bulk command, not two
+
+        // One reply carries BOTH units.
+        h.Feed("You took 2 war hammer.");
+        Assert.Equal(1, h.Sweep.CarriedPendingCount);    // collected from the single line
+
+        h.Observe("A", Direction.N);
+        Assert.Equal("drop 2 war hammer", h.Sent[^1]);
+        h.Feed("You dropped 2 war hammer.");
+        Assert.Equal(0, h.Sweep.CarriedPendingCount);
+        Assert.Equal(2, Assert.Single(h.Sweep.MovedSoFar).Count);
+
+        h.Dispose();
+    }
+
+    [Fact]
     public void Resume_DoesNotCountItsOwnRestoredLoadAsThePlayersGear()
     {
         // CaptureCarryBaseline assumes an empty sort-load ("sorting opens with an
@@ -1278,9 +1342,10 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             new GhSuspendedMove("1/3", "1/1", "adamantite hauberk", 1, carried: true, hidden: false),
         });
 
-        // Pack reads 3000 of 5280, and 800 of that is the hauberk we just re-adopted.
+        // Pack reads 3000 of 5280, and 800 of that is the hauberk we just re-adopted
+        // — which a live 'i' read must show for Resume to re-adopt it.
         SweepHarness h = NewSweepHarness(_root, _scratchBbs, store,
-            currentWeight: 3000, maxWeight: 5280);
+            currentWeight: 3000, maxWeight: 5280, carriedInventory: "adamantite hauberk");
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Resume());
@@ -1469,7 +1534,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
     private static SweepHarness NewSweepHarness(string root, string scratchBbs,
         GhSuspendedSweepStore? suspended = null, int currentWeight = 1, int maxWeight = 100,
-        bool paradigm = true)
+        bool paradigm = true, string carriedInventory = "nothing")
     {
         Directory.CreateDirectory(Path.Combine(root, "alpha"));
         File.WriteAllText(Path.Combine(root, "alpha", "Rooms.json"), """
@@ -1512,7 +1577,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         InventoryManager inventory = new(itemWeightResolver: names.WeightOf);
         LineExtractor inventoryLines = new(new TerminalEmulator(80, 24));
         inventory.AttachLineExtractor(inventoryLines);
-        FeedInventory(inventoryLines, "nothing", currentWeight, maxWeight);
+        FeedInventory(inventoryLines, carriedInventory, currentWeight, maxWeight);
 
         RoomTracker tracker = new(graph);
         MovementCoordinator coordinator = new();

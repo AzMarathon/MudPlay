@@ -26,6 +26,10 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="4"/>
         </Style>
+        <!-- Warning border only when something actually needs attention. -->
+        <Style Selector="Border.Panel.warn">
+            <Setter Property="BorderBrush" Value="{StaticResource SeverityWarnBrush}"/>
+        </Style>
     </Window.Styles>
 
     <ScrollViewer Padding="16" VerticalScrollBarVisibility="Auto">
@@ -45,7 +49,7 @@
             </Border>
 
             <TextBlock Classes="SectionHeader" Text="Out of space"/>
-            <Border Classes="Panel" BorderBrush="{StaticResource SeverityWarnBrush}">
+            <Border Classes="Panel" Classes.warn="{Binding HasOutOfSpace}">
                 <TextBlock Text="{Binding OutOfSpace}" TextWrapping="Wrap"
                            FontFamily="{StaticResource FontMono}"
                            Foreground="{StaticResource ChromeFgBrush}"/>

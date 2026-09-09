@@ -23,6 +23,11 @@ public sealed partial class RoombaLogViewModel : ObservableObject, IDisposable
     // wrong place for the one thing the user can actually act on.
     [ObservableProperty] private string _outOfSpace = string.Empty;
 
+    // Drives the panel's warning border: amber only when a room actually ran out of
+    // space, so a clean sweep's "(no room ran out of space)" doesn't sit in an
+    // alarm-coloured box.
+    [ObservableProperty] private bool _hasOutOfSpace;
+
     public RoombaLogViewModel(GhSweepManager sweep)
     {
         ArgumentNullException.ThrowIfNull(sweep);
@@ -49,6 +54,7 @@ public sealed partial class RoombaLogViewModel : ObservableObject, IDisposable
             : string.Join("\n", _sweep.LeftInPlace.Select(f => $"{f.ItemName} at {f.Room} ({DescribeReason(f.Reason)})"));
 
         OutOfSpace = BuildOutOfSpace();
+        HasOutOfSpace = _sweep.SaturatedGroups.Count > 0 || _sweep.FullRooms.Count > 0;
 
         int itemsSorted = _sweep.MovedSoFar.Sum(m => m.Count);
         int roomsSorted = _sweep.MovedSoFar.Select(m => m.From).Distinct().Count();

@@ -555,7 +555,6 @@ public sealed class GhSweepManager : IDisposable
         _baseCarryWeight = 0;
         _maxCarryWeight = int.MaxValue;
         _minBaseCarryWeight = int.MaxValue;
-
     }
 
     // Work left over from a sweep that stopped early — what Resume would pick up.
@@ -567,6 +566,20 @@ public sealed class GhSweepManager : IDisposable
         => _suspended?.Count ?? _suspendedStore?.Load().Count ?? 0;
 
     public bool CanResume => Phase == SweepPhase.Idle && ResumableMoveCount > 0;
+
+    // This manager is app-scoped, but a resumable sweep belongs to ONE character:
+    // the manifest is persisted per profile (GhSuspendedSweepStore keys on the active
+    // character), yet _suspended is a shared in-memory copy. A character switch must
+    // drop it, or Resume would offer — and deliver — the previous character's load to
+    // the new one (its own items dropped by name against a pack that doesn't hold
+    // them). Cleared here so CanResume / ResumableMoveCount fall back to the
+    // newly-loaded character's own store; the UI re-reads on the PhaseChanged.
+    public void OnProfileLoaded()
+    {
+        if (_suspended is null) return;
+        _suspended = null;
+        PhaseChanged?.Invoke();
+    }
 
     // Carry on from where a stopped sweep left off, skipping recon entirely. The
     // survey a sweep dies holding is still good, and re-walking a 120-room circuit
@@ -775,6 +788,9 @@ public sealed class GhSweepManager : IDisposable
                 $"lap {_sortLapCount}: forgetting {_fullRooms.Count} full room(s) so any that have "
                 + "since freed up get used again");
             _fullRooms.Clear();
+            // The map's amber "out of space" rings read FullRooms on PhaseChanged;
+            // without this they'd linger a full lap on rooms we just forgot.
+            PhaseChanged?.Invoke();
         }
 
         int movedNow = _movedSoFar.Count;
@@ -1095,14 +1111,19 @@ public sealed class GhSweepManager : IDisposable
                 || ParseRoom(entry.From) is not { } from
                 || ParseRoom(entry.To) is not { } to) continue;
 
-            if (!carried.Any(held => SameItem(name, held))) { gone++; continue; }
+            int held = HeldCount(name, carried);
+            if (held == 0) { gone++; continue; }
 
             _pending.Add(new PendingSortMove
             {
                 From = from,
                 To = to,
                 ItemName = name,
-                Count = Math.Max(1, entry.Count),
+                // Clamp to what the pack ACTUALLY holds. The manifest's count is last
+                // session's record; a stack sold or dropped down since would otherwise
+                // queue a drop for units that aren't there — and the game partial-
+                // matches that surplus drop onto a DIFFERENT item we still hold.
+                Count = Math.Min(Math.Max(1, entry.Count), held),
                 RequiresSearch = false,
                 IsCarried = true,
             });
@@ -1115,37 +1136,54 @@ public sealed class GhSweepManager : IDisposable
     }
 
     // Rebuild the suspended queue from the persisted record, for a Resume in a
-    // session that never ran the sweep that made it. Carried entries are NOT
-    // verified here — Resume routes them through the same delivery path as any
-    // other carried move, and a drop for something we no longer hold is caught by
-    // the refusal handling (which re-checks inventory) rather than by trusting the
-    // record. Unparseable rows are skipped rather than failing the whole restore.
+    // session that never ran the sweep that made it. Carried entries honour the same
+    // invariant a fresh Start does — never queue a delivery for an item the pack no
+    // longer holds: when a live inventory read is available it's verified here (gone
+    // entries dropped, partially-sold stacks clamped) rather than issued and unwound
+    // by delivery-time refusal. Only when inventory hasn't been read do we adopt a
+    // carried entry unverified and lean on that refusal path. Uncollected entries are
+    // planned work, re-verified by their own get. Unparseable rows are skipped.
     private List<PendingSortMove>? RehydrateSuspended()
     {
         if (_suspendedStore is null) return null;
         IReadOnlyList<GhSuspendedMove> saved = _suspendedStore.Load();
         if (saved.Count == 0) return null;
 
+        IReadOnlyList<string>? carried =
+            _inventory is { IsLoaded: true } ? _inventory.Snapshot.CarriedItems : null;
+
         List<PendingSortMove> restored = new();
+        int droppedFromManifest = 0;
         foreach (GhSuspendedMove entry in saved)
         {
             if (entry.Item is not { Length: > 0 } name
                 || ParseRoom(entry.From) is not { } from
                 || ParseRoom(entry.To) is not { } to) continue;
 
+            int count = Math.Max(1, entry.Count);
+            if (entry.Carried && carried is not null)
+            {
+                int held = HeldCount(name, carried);
+                if (held == 0) { droppedFromManifest++; continue; }
+                count = Math.Min(count, held);
+            }
+
             restored.Add(new PendingSortMove
             {
                 From = from,
                 To = to,
                 ItemName = name,
-                Count = Math.Max(1, entry.Count),
+                Count = count,
                 RequiresSearch = entry.Hidden,
                 IsCarried = entry.Carried,
             });
         }
 
         _log?.Info(LogCategory,
-            $"rehydrated {restored.Count} unfinished move(s) from the last session's sweep");
+            $"rehydrated {restored.Count} unfinished move(s) from the last session's sweep"
+            + (droppedFromManifest > 0
+                ? $"; {droppedFromManifest} carried item(s) no longer in the pack and dropped from the manifest"
+                : string.Empty));
         return restored.Count > 0 ? restored : null;
     }
 
@@ -1753,7 +1791,7 @@ public sealed class GhSweepManager : IDisposable
 
     private void ResolveConfirm(string token, bool isDrop)
     {
-        (_, string name) = CountedCommand.SplitLeadingCount(token);
+        (int unitsThisLine, string name) = CountedCommand.SplitLeadingCount(token);
         if (_tracker.State.CurrentRoom is not { } current) return;
         if (_dispatchRoom is not { } dispatchRoom || !dispatchRoom.Equals(current.Key))
         {
@@ -1779,11 +1817,14 @@ public sealed class GhSweepManager : IDisposable
             return;
         }
 
-        // One confirmation is one UNIT, not one move. Stock sends a 3x move as
-        // three commands and answers with three lines; completing on the first
-        // left two orphans, and an orphan is then misread as somebody else's drop
-        // — which deletes an unrelated carried move and loses a real item.
-        match.ConfirmedUnits++;
+        // One confirmation line reports however many UNITS that command moved, not
+        // one move. Stock sends a 3x move as three separate commands answered by three
+        // count-less lines (1 unit each); Paradigm sends it as one bulk `drop 3 orc-head`
+        // answered by a single count-prefixed line (3 units at once). Add the line's own
+        // count: a raw ++ left a Paradigm bulk move stuck at 1/3 forever, and on Stock
+        // completing on the first line left two orphans that get misread as someone
+        // else's drop — deleting an unrelated carried move and losing a real item.
+        match.ConfirmedUnits += unitsThisLine;
         if (match.ConfirmedUnits < match.Count)
         {
             _log?.Debug(LogCategory,
@@ -2225,6 +2266,14 @@ public sealed class GhSweepManager : IDisposable
             return leftNumber.Value == rightNumber.Value;
         return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     }
+
+    // How many of `name` a live 'i' read still shows carried. The carried list holds
+    // one entry per unit (InventoryManager decrements it a unit at a time), so this is
+    // the real held quantity — 0 means gone, a value below the manifest's count means
+    // the stack was partially reduced. Used to clamp a re-adopted carried move to what
+    // the pack actually holds.
+    private int HeldCount(string name, IReadOnlyList<string> carried)
+        => carried.Count(held => SameItem(name, held));
 
     private bool WasObservedHidden(RoomKey room, string itemName) =>
         _hiddenByRoom.TryGetValue(room, out List<string>? hidden)

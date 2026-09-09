@@ -5109,11 +5109,13 @@ public sealed class AppServices
         Recovery.TryResyncOnce = (reason, onResolved, onFailed) =>
             !MazeSolver.Active
             && (ParadigmResync.RequestResyncOnce(reason, onResolved, onFailed)
-                // Sysop mirror of the loop/replan one-shot `rm`. forRecovery because
-                // this fires when a loop is blocked at source — the stall watchdog
-                // escalates every 10s, so the default throttle would deny the retry
-                // every time and drop us to a backtrack that can't converge in a
-                // gang house of identically-named rooms.
+                // Sysop mirror of the loop/replan one-shot `rm`. forRecovery bypasses
+                // the locate throttle: a loop blocked at source re-enters recovery on
+                // the 2s attempt spacing (stock-20260904-143436 showed three reroutes
+                // in one second before that spacing existed), so the 15s convenience
+                // throttle would deny every retry after the first and drop us to a
+                // backtrack that can't converge in a gang house of identically-named
+                // rooms.
                 || SysopLocate.RequestLocateOnce(reason, onResolved, onFailed, forRecovery: true));
         // Engine-less resync gap: the recovery gate above asks for an `rm` on a
         // mid-walk mismatch, but no-ops with no engine attached. A manual boat ride
@@ -5659,6 +5661,12 @@ public sealed class AppServices
             // still in the pack with only its queue knowing where each belonged,
             // and its remaining plan is a full lap of the circuit to rebuild.
             suspendedStore: GhSuspendedSweep);
+
+        // The sweep manager is app-scoped but a resumable sweep is per-character:
+        // drop the in-memory leftover on a character switch so Resume doesn't offer
+        // one character's load to the next (the persisted manifest is already keyed
+        // per profile). Same reset intent as SysStatus.ResetAutoDisable above.
+        Profile.ProfileLoaded += _ => GhSweep.OnProfileLoaded();
 
         // A manually-typed movement step (one the walker / loop / auto-lair didn't
         // send — RoomTracker's echo-claim tells them apart) pauses the active nav

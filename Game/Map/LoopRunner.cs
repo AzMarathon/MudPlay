@@ -1767,6 +1767,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // later in the lap gets the full retry allowance again.
         DisarmStallWatchdog();
         _recoverAttempts = 0;
+        _lastRecoveryAttemptAt = DateTimeOffset.MinValue;   // reset the spacing clock with the budget
         _index++;
         Raise(new LoopEvent(LoopEventKind.StepCompleted, $"{_index}/{_expandedSteps.Count}"));
         SendNextStep();
@@ -2068,6 +2069,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _pausedFromApproach = false;
         _approachFinishedWhilePaused = false;
         _recoverAttempts = 0;
+        _lastRecoveryAttemptAt = DateTimeOffset.MinValue;   // reset the spacing clock with the budget
         _lapDurations.Clear();
         _completedLaps = 0;
         _lapStartedAt = default;
