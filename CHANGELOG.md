@@ -1,5 +1,9 @@
 # Version history
 
+## 3.59.1
+
+- Combat → Room thresholds: new "Kill all engaged" checkbox — once a room is engaged because its count met Min. monsters, keep fighting it per your combat settings until cleared, instead of moving on when kills drop the count below Min. monsters (for areas where mixed HP pools leave the tanky ones alive); off (default) = current behavior, move on from the leftovers
+
 ## 3.59.0
 
 - New **Profile Management** window (View menu + toolbar) — one place to add / rename / delete / load characters, move a character to another BBS, and add / remove / rename BBSes

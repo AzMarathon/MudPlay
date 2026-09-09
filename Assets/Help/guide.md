@@ -1354,6 +1354,12 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 **What it does:** Skips engaging a room entirely if the number of hostile monsters in it falls outside this range — too few to bother stopping for, or too many to be safe. The defaults are effectively a no-op (rooms cap at 20 monsters anyway); you opt in by tightening either bound.
 **Important notes:** Only applies while you're actively walking through rooms (a route, loop, or lair run) — if you're just standing still with nothing else queued, you fight regardless of count, since standing undefended is worse. While in a party, the Party tab's own monster cap overrides this Max (the Min still comes from here).
 
+### Kill all engaged
+
+**Default:** Off
+**What it does:** Sits right below the Min/Max pickers. Once a room has been **engaged** because its hostile count met **Min. monsters**, it keeps fighting per your combat settings until the room is cleared — instead of moving on when kills drop the count below **Min. monsters**. Useful for areas where monsters have **different HP pools**, so the first wave leaves the tanky ones alive. Off (the default) is the current behavior: if you engage a room of 8 with Min set to 3 and kill 6, it leaves the 2 survivors and moves on. On, the engine stays and clears the room to empty, then the walker continues.
+**Important notes:** Only bypasses the **minimum** — the **maximum** (too-crowded room) and every other gate still apply — and only for rooms you actually **engaged** (a room whose count never met the floor is skipped as before). An HP/MA flee still overrides it, so a survivor that's beating on you will still trigger your run threshold.
+
 ### Do BS attacks (backstab)
 
 **Default:** Off

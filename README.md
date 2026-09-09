@@ -1,14 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.59.0**
-> - New **Profile Management** window (View menu + toolbar) — one place to add / rename / delete / load characters, move a character to another BBS, and add / remove / rename BBSes
-> - **Load** is multi-select: tick several characters and the first loads into this client while the rest each open in their own new client — a whole stable online in one click (a connected client is left alone; all selected open new)
-> - File menu's New / Open / Save / Save As collapsed into a single **Profile Management** entry (the Ctrl+N/O/S/Shift+S shortcuts still work)
-> - Characters can now be **renamed and deleted**, and moved between BBSes via an explicit **Assign to BBS**
-> - BBS add / remove moved out of Settings → BBS + Display into the new window; that tab keeps the BBS list for selecting and editing a board's connection/display fields
-> - Selecting a BBS in Settings no longer silently re-homes your loaded character
-> - New Settings → General picker for how many recent profiles the File menu lists (0–10, default 5)
+> **Version 3.59.1**
+> - Combat → Room thresholds: new "Kill all engaged" checkbox — once a room is engaged because its count met Min. monsters, keep fighting it per your combat settings until cleared, instead of moving on when kills drop the count below Min. monsters (for areas where mixed HP pools leave the tanky ones alive); off (default) keeps today's behavior of moving on from the leftovers
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

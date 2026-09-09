@@ -118,6 +118,12 @@ public sealed class CombatStateTracker : IDisposable
     // this gate existed.
     private Func<bool>? _isMovementActive;
 
+    // Reports whether we've committed to fighting the current room (its count met
+    // the engage window) — CombatManager.HasCommittedToCurrentRoom. Drives the
+    // "Kill all engaged" below-floor override in IsWithinMonsterCountWindow. Null
+    // (unwired) → false (no override; the Min floor behaves exactly as before).
+    private Func<bool>? _roomCommitted;
+
     // Reports whether we're standing in a too-dark room (RoomTracker.IsInDarkRoom).
     // Gates the idle-stall watchdog's resync CR: a CR in the dark re-emits no
     // "Also here:" line (nothing to re-observe) AND its "you can't see anything"
@@ -317,6 +323,15 @@ public sealed class CombatStateTracker : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isMovementActive);
         _isMovementActive = isMovementActive;
+    }
+
+    // Wire the "we've committed to this room" probe (CombatManager
+    // .HasCommittedToCurrentRoom) so the "Kill all engaged" override can hold the
+    // walker below the Min floor to finish an engaged room's survivors.
+    public void SetRoomCommittedGate(Func<bool> roomCommitted)
+    {
+        ArgumentNullException.ThrowIfNull(roomCommitted);
+        _roomCommitted = roomCommitted;
     }
 
     // Wire path for the break-before-run disengage. Bound at connect time (the
@@ -617,8 +632,11 @@ public sealed class CombatStateTracker : IDisposable
         CombatSettings settings = _readSettings();
         int min = Math.Max(0, settings.MinMonstersInRoom);
         int max = settings.MaxMonstersInRoom > 0 ? settings.MaxMonstersInRoom : int.MaxValue;
-        if (min > max) return true;                       // misconfig — no gate
-        return targetable >= min && targetable <= max;
+        // Shared with CombatManager's own gate (MonsterCountGate) so the two can't
+        // diverge. "Kill all engaged" holds the walker below the floor only while
+        // we've committed to this room — finish the survivors instead of moving on.
+        return MonsterCountGate.WithinWindow(
+            targetable, min, max, settings.KillAllEngaged, _roomCommitted?.Invoke() ?? false);
     }
 
     // Engageable = Enemy (the default for a resolved-but-untagged monster) OR a Neutral

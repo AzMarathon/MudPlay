@@ -184,6 +184,14 @@ public sealed partial class CombatManager : IDisposable
 
     private string? _currentTarget;
 
+    // True once this room's hostile count met the [min..max] engage window, i.e.
+    // we committed to fighting here. Drives the "Kill all engaged" override: once
+    // committed, we finish the room to empty even after kills drop the count below
+    // the Min floor (see MonsterCountGate). Reset on a physical room change
+    // (NotePreMove); exposed for CombatStateTracker's mirror of the same gate.
+    private bool _committedToRoom;
+    public bool HasCommittedToCurrentRoom => _committedToRoom;
+
     // Guard-redirect memory. MajorMUD "guarded" monsters (a brigand chief guarded
     // by brigands) can't be hit directly while a guard is in the room — each swing
     // we aim at the chief is redirected to a guard, announced by "<guard> moves to
@@ -1331,14 +1339,36 @@ public sealed partial class CombatManager : IDisposable
                 _log?.Warn(LogCategory,
                     $"MinMonsters={min} > MaxMonsters={max} — gate disabled for this observation");
             }
-            else if (engageable.Count < min || engageable.Count > max)
+            else
             {
-                _log?.Combat(LogCategory,
-                    $"min/max gate skip — count={engageable.Count} window=[{min}..{max}]");
-                // Clear target so we don't keep swinging at an old pick
-                // that's now out-of-window after a kill.
-                _currentTarget = null;
-                return;
+                // We engaged this room because its count met the [min..max] window —
+                // remember that so "Kill all engaged" can hold us here to finish the
+                // survivors even after kills drop the count below the Min floor.
+                if (engageable.Count >= min && engageable.Count <= max)
+                    _committedToRoom = true;
+
+                if (!MonsterCountGate.WithinWindow(
+                        engageable.Count, min, max,
+                        settings.KillAllEngaged, _committedToRoom))
+                {
+                    _log?.Combat(LogCategory,
+                        $"min/max gate skip — count={engageable.Count} window=[{min}..{max}]");
+                    // Clear target so we don't keep swinging at an old pick
+                    // that's now out-of-window after a kill.
+                    _currentTarget = null;
+                    return;
+                }
+
+                if (settings.KillAllEngaged && _committedToRoom
+                    && engageable.Count < min && engageable.Count > 0)
+                {
+                    // "Kill all engaged" is holding us here: we committed to this room
+                    // above the Min floor and it's now below it, but we finish the
+                    // survivors per normal combat settings instead of moving on
+                    // (mixed HP pools left the tanky ones alive after the engage).
+                    _log?.Combat(LogCategory,
+                        $"kill-all-engaged: finishing {engageable.Count} leftover(s) below min {min} (engaged this room)");
+                }
             }
         }
 
@@ -1746,6 +1776,9 @@ public sealed partial class CombatManager : IDisposable
     public void NotePreMove()
     {
         _spellChooser.ResetForNewRoom();
+        // Leaving the room ends our commitment to it — the next room re-earns
+        // the "Kill all engaged" hold by meeting the engage window again.
+        _committedToRoom = false;
         // Leaving the room drops any debuff still awaiting a rejection — its mark is
         // gone with the room reset, so there's nothing left to roll back.
         _debuffAwaitingConfirm = null;
