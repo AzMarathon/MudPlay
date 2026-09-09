@@ -426,4 +426,35 @@ public sealed class AutoLairManagerTests : IDisposable
 
         Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
     }
+
+    [Fact]
+    public void Engaging_EmptyLair_UsesAShortWindowNotTheEngageTimeout()
+    {
+        // Walking into a lair that hasn't respawned used to cost the full 30s
+        // engage timeout — most of the idle time in report stock-20260908-192900.
+        // Entering already burned the lair's timer, so there's nothing to gain by
+        // standing in an empty room.
+        using Harness h = Engaging(NewHarness());
+
+        Assert.True(h.Roam.EngageWindowForTests < TimeSpan.FromSeconds(h.Roam.EngageTimeoutSeconds));
+
+        h.Roam.FireEngageTimerForTests();
+
+        Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
+    }
+
+    [Fact]
+    public void Engaging_FightStarts_WidensTheWindowToTheEngageTimeout()
+    {
+        // Once there IS a fight, the short empty-lair window must not cut it off —
+        // the kill gets the full engage budget.
+        using Harness h = Engaging(NewHarness());
+        TimeSpan empty = h.Roam.EngageWindowForTests;
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");
+
+        Assert.True(h.Roam.EngageWindowForTests > empty);
+        Assert.Equal(TimeSpan.FromSeconds(h.Roam.EngageTimeoutSeconds), h.Roam.EngageWindowForTests);
+        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
+    }
 }

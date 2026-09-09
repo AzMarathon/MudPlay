@@ -27,11 +27,12 @@ namespace MudPlay.Game.Map;
 //                 targets and walk to a different wait-room.
 //   Entering    — single walker leg from wait-room into the lair,
 //                 dispatched on the entry tick.
-//   Engaging    — player is in the lair fighting. Leaves for the next pick as
-//                 soon as the fight is over and its loot is in hand (the
+//   Engaging    — stepped into the lair. Two exits, both prompt: if a fight
+//                 starts, leave once it's over and its loot is in hand (the
 //                 Combat then Acquisition gates clearing — OnGatesChanged),
-//                 with EngageTimeoutSeconds as the upper bound for a fight
-//                 that never resolves or a lair that turned out empty.
+//                 bounded by EngageTimeoutSeconds for a fight that never
+//                 resolves; if no fight starts within EmptyLairGrace, the lair
+//                 hadn't respawned, so leave and pick another.
 //
 // Why no built-in pause: the walker honours its own MovementCoordinator
 // pause gates. When the walker pauses (HP threshold, encumbrance,
@@ -75,10 +76,20 @@ public sealed class AutoLairManager : IDisposable
     // from AutoLairSettings is wired in.
     public ITravelCostModel TravelCostModel { get; set; } = new FlatTravelCostModel();
 
-    // How long to stay in Engaging after entering a lair before the
-    // scheduler picks the next target. Stop-gap until a combat "ended"
-    // signal is available to subscribe to. Default 30 s.
+    // Upper bound on a single engagement: how long to stay in a lair when the
+    // fight never resolves on its own. The normal exit is the combat-ended
+    // signal (OnGatesChanged), so this only catches a monster we can't kill, one
+    // that ran, or a missed clear-signal.
     public int EngageTimeoutSeconds { get; set; } = 30;
+
+    // How long to wait, after stepping in, for a fight to start before deciding
+    // the lair hadn't respawned. Short because the answer arrives with the room
+    // display that the entering move itself returns — this is settle time, not a
+    // guess at the respawn. Deliberately not the engage timeout: waiting 30 s in
+    // an empty room was most of the idle time in report stock-20260908-192900,
+    // and entering has already burned the lair's timer, so there is nothing to
+    // gain by standing in it.
+    private static readonly TimeSpan EmptyLairGrace = TimeSpan.FromSeconds(3);
 
     // Scoring heuristic. Default = idle-penalised; Throughput = wasted-only.
     public AutoLairHeuristic Heuristic { get; set; } = AutoLairHeuristic.Default;
@@ -639,11 +650,17 @@ public sealed class AutoLairManager : IDisposable
     {
         SetPhase(AutoLairPhase.Engaging);
         _engageSawCombat = false;
+        // Arm the SHORT window first. Until a fight starts we're only waiting to
+        // find out whether there's anything here at all, and a lair that hasn't
+        // respawned should cost seconds, not the full engage timeout — that was
+        // most of the idle time in report stock-20260908-192900. The window
+        // becomes EngageTimeoutSeconds the moment combat actually starts.
         _engageTimer.Stop();
-        _engageTimer.Interval = TimeSpan.FromSeconds(Math.Max(1, EngageTimeoutSeconds));
+        _engageTimer.Interval = EmptyLairGrace;
         _engageTimer.Start();
         _log?.Info("AutoLair",
-            $"engaging — leaving when the fight ends, or in {EngageTimeoutSeconds}s.");
+            $"engaging — leaving when the fight ends, "
+            + $"or in {EmptyLairGrace.TotalSeconds:0}s if the lair is empty.");
     }
 
     // Combat gate asserted/cleared, or loot finished — see OnGatesChanged for why
@@ -662,14 +679,22 @@ public sealed class AutoLairManager : IDisposable
         // several times per kill (GAME_MECHANICS, "Monster-kill message order").
         if (_coordinator.IsGateAsserted(MovementCoordinator.CombatGate))
         {
-            _engageSawCombat = true;
+            if (!_engageSawCombat)
+            {
+                // A fight started, so the short empty-lair window no longer
+                // applies — give the kill the full engage budget.
+                _engageSawCombat = true;
+                _engageTimer.Stop();
+                _engageTimer.Interval = TimeSpan.FromSeconds(Math.Max(1, EngageTimeoutSeconds));
+                _engageTimer.Start();
+            }
             return;
         }
 
         // Entering a lair asserts nothing until a monster is actually seen, so an
         // un-asserted gate right after entry means "combat hasn't started", not
-        // "combat is over". Leaving on that would walk straight back out. Wait for
-        // a fight to have existed; an empty lair falls through to the timer.
+        // "combat is over". Leaving on that would walk straight back out. The
+        // empty-lair window below is what handles "nothing ever showed up".
         if (!_engageSawCombat) return;
 
         // The kill's drops are still being picked up — auto-get/cash asserts this
@@ -682,14 +707,22 @@ public sealed class AutoLairManager : IDisposable
 
     private void OnEngageTimerFired()
     {
-        // Upper bound only: a fight that never resolves (a monster we can't kill,
-        // one that fled, a missed clear-signal) must not park the scheduler here.
-        FinishEngagement($"engage timeout ({EngageTimeoutSeconds}s)");
+        // Which window just expired depends on whether a fight ever started.
+        FinishEngagement(_engageSawCombat
+            // A fight that never resolves — unkillable, fled, or a missed
+            // clear-signal — must not park the scheduler here forever.
+            ? $"engage timeout ({EngageTimeoutSeconds}s)"
+            // Nothing turned up in the grace window, so the lair hadn't respawned.
+            // Entering already burned its timer, so there's nothing to gain by
+            // standing here; go find one that's ready.
+            : $"lair empty after {EmptyLairGrace.TotalSeconds:0}s — nothing to fight");
     }
 
-    // Test seam: the Engaging phase is normally reached through DispatcherTimer
+    // Test seams: the Engaging phase is normally reached through DispatcherTimer
     // ticks, which the unit tests don't pump.
     internal void StartEngagementForTests() => StartEngagement();
+    internal TimeSpan EngageWindowForTests => _engageTimer.Interval;
+    internal void FireEngageTimerForTests() => OnEngageTimerFired();
 
     private void FinishEngagement(string why)
     {

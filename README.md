@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.8**
-> - Auto-Lair leaves a lair as soon as the fight is over and the loot is collected, instead of always sitting out the full 30-second engage timeout (which is now just an upper bound)
+> **Version 3.58.9**
+> - Auto-Lair moves on within seconds when it walks into a lair that hasn't respawned, instead of standing in the empty room for the full engage timeout
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
