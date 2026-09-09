@@ -1,5 +1,11 @@
 # Version history
 
+## 3.58.18
+
+- Auto-Lair routing-heuristic option now spells "minimize" (was the British "minimise")
+- Map legend rewritten to match what the map actually draws: current room now shows its bright ring + centre dot (not a flat swatch), and the walk-to destination, up+down exit rooms, deathpile skull, boss crown (plus stop-before-boss halt ring), trainer chevrons, gang-house robot, avoid/stash X-marks, and the @where result flash are all keyed now (route-line colours stay in Settings → General since they're recolourable)
+- Custom monster spawn lines with no "into the room"/"from <dir>" wording (e.g. "A muckworm darts out of the mud!") are now recognized: the client spots the yellow-tagged monster name and engages the room a round before the spawn's first swing, instead of only reacting once it hits you
+
 ## 3.58.15
 
 - Equipment Manager's gear-set list is taller so all sets (Default, Backstab, Pre-rest HP/Mana, While Moving, Bossing) show at once without a scrollbar

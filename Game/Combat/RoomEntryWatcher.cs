@@ -9,6 +9,19 @@ namespace MudPlay.Game.Combat;
 // when a monster spawns (server-driven respawn or script spawn) OR when a player
 // walks into our room without us triggering a full room re-display.
 //
+// Some monsters carry a CUSTOM, per-monster spawn line with no "into the room" /
+// "from <dir>" marker at all — "A muckworm darts out of the mud!" — so the two
+// structured patterns above can't match them (the wording is arbitrary and
+// unexported). Those are caught by a colour scan instead (OnLineScan): every
+// monster-enter line paints the monster's NAME the yellow palette index (3/11) —
+// the one signal that's server-set and survives the user's client palette — so a
+// line that ISN'T already claimed by a structured pattern, whose fully-yellow
+// word span resolves to a known monster not already in the room, is treated as an
+// arrival. The colour is read as the palette INDEX, not the rendered RGB, so a
+// custom palette that remaps yellow doesn't change recognition; a plain room
+// description (default-colour, even if it names a monster) never matches because
+// the name isn't yellow-indexed.
+//
 // Critical for combat / health gating: without this watcher, CombatStateTracker
 // only re-evaluates the Combat gate on Also-Here observations. A mob spawning
 // into our room mid-walk would NOT pause the walker until the next move's room
@@ -37,6 +50,7 @@ public sealed class RoomEntryWatcher : IDisposable
     private static readonly string[] LeadingArticles =
         new[] { "A ", "An ", "The " };
 
+    private readonly MessageRouter _router;
     private readonly RoomEntityClassifier _classifier;
     private readonly LogService? _log;
     private readonly IDisposable _arrivalSub;
@@ -56,10 +70,13 @@ public sealed class RoomEntryWatcher : IDisposable
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(classifier);
+        _router = router;
         _classifier = classifier;
         _log = log;
         _arrivalSub = router.Subscribe(KnownPatterns.RoomEntryArrival, OnArrival);
         _sneakArrivalSub = router.Subscribe(KnownPatterns.SneakArrivalNotice, OnSneakArrival);
+        // Colour-scan fallback for custom, unstructured spawn lines (see class note).
+        _router.LineDispatched += OnLineScan;
     }
 
     private void OnArrival(MatchResult match)
@@ -172,6 +189,123 @@ public sealed class RoomEntryWatcher : IDisposable
             Name: name, Kind: EntityKind.Player, Direction: direction, At: DateTimeOffset.Now));
     }
 
+    // Colour-scan fallback (see class note). Fires for a custom, unstructured
+    // spawn line — no "into the room" / "from <dir>", so the structured patterns
+    // miss it — by finding a fully-yellow known-monster name on a line no other
+    // pattern claims. Runs on EVERY dispatched line, so it's ordered cheap-guard
+    // first: bail immediately unless the line carries a yellow-indexed cell (nearly
+    // every line doesn't), only then pay for the AnyPatternMatches / name scan.
+    internal void OnLineScan(LineExtractor.EmittedLine line)
+    {
+        if (_disposed) return;
+        string text = line.Text;
+        if (text.Length == 0) return;
+
+        // The one palette-stable signal: the monster name is painted the yellow
+        // index. No yellow cell → nothing to find.
+        if (!HasYellowCell(line)) return;
+
+        // A line a structured pattern already owns (the two arrival patterns, chat,
+        // prompts, combat status, …) is handled elsewhere — don't double-process.
+        if (_router.AnyPatternMatches(line)) return;
+
+        // The roster + look-notice lines can carry a monster name; skip them
+        // explicitly so a palette that tinted their name yellow can't leak in
+        // (Also-Here is the classifier's own job; "You notice" is a reveal/notice).
+        if (text.StartsWith("Also here:", StringComparison.Ordinal)
+            || text.StartsWith("You notice ", StringComparison.Ordinal)) return;
+
+        if (!TryFindYellowMonster(line, out RoomEntity monster)) return;
+
+        // A later yellow mention of a monster already in the room isn't a new
+        // arrival — only append one we don't already have.
+        if (AlreadyPresent(monster)) return;
+
+        _classifier.AppendArrivalEntity(monster, rawWireLine: text);
+        _log?.Info(LogCategory,
+            $"colour-scan arrival kind=Monster name={monster.ResolvedName} (custom spawn line)");
+        ArrivalObserved?.Invoke(new RoomEntryArrivalEvent(
+            Name: monster.ResolvedName, Kind: EntityKind.Monster, Direction: "nowhere", At: DateTimeOffset.Now));
+    }
+
+    // Scan for a monster name whose cells are ALL yellow-indexed. The name may be
+    // the only yellow span (name-yellow constructor) or sit inside an all-yellow
+    // line (whole-line-yellow constructor); either way only a window of consecutive
+    // fully-yellow words is tried, so a default-colour room-description mention of
+    // the same monster is never matched. Windows are 1–4 words (monster names are
+    // short); Classify's single-arg overload is used so failed probes don't spam
+    // the unknown-entity log.
+    private bool TryFindYellowMonster(LineExtractor.EmittedLine line, out RoomEntity monster)
+    {
+        monster = default!;
+        string text = line.Text;
+
+        // Split into words, tagging each as fully-yellow or not.
+        List<(string Word, bool Yellow)> words = new();
+        int i = 0;
+        while (i < text.Length)
+        {
+            if (text[i] == ' ') { i++; continue; }
+            int start = i;
+            while (i < text.Length && text[i] != ' ') i++;
+            bool allYellow = true;
+            for (int k = start; k < i; k++)
+                if (!IsYellow(line, k)) { allYellow = false; break; }
+            words.Add((text[start..i], allYellow));
+        }
+
+        // Slide 1–4-word windows over each run of consecutive yellow words.
+        int w = 0;
+        while (w < words.Count)
+        {
+            if (!words[w].Yellow) { w++; continue; }
+            int runStart = w;
+            while (w < words.Count && words[w].Yellow) w++;
+            int runEnd = w;   // exclusive
+
+            for (int a = runStart; a < runEnd; a++)
+            {
+                for (int len = 1; len <= 4 && a + len <= runEnd; len++)
+                {
+                    string candidate = string.Join(' ', words.GetRange(a, len).ConvertAll(x => x.Word));
+                    candidate = StripLeadingArticle(candidate).TrimEnd('.', '!', ',', ';', ':');
+                    if (candidate.Length == 0) continue;
+                    RoomEntity e = _classifier.Classify(candidate);
+                    if (e.Kind == EntityKind.Monster) { monster = e; return true; }
+                }
+            }
+        }
+        return false;
+    }
+
+    private bool AlreadyPresent(RoomEntity monster)
+    {
+        if (_classifier.Current is not { } cur) return false;
+        foreach (RoomEntity e in cur.Entities)
+        {
+            if (e.Kind != EntityKind.Monster) continue;
+            if (monster.MonsterNumber is not null && e.MonsterNumber == monster.MonsterNumber) return true;
+            if (string.Equals(e.ResolvedName, monster.ResolvedName, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static bool HasYellowCell(LineExtractor.EmittedLine line)
+    {
+        for (int i = 0; i < line.Attributes.Length; i++)
+            if (IsYellow(line, i)) return true;
+        return false;
+    }
+
+    // The yellow monster hue is palette index 3 (standard) or 11 (bright). Read as
+    // the stored INDEX, not the rendered colour, so a custom palette can't shift it.
+    private static bool IsYellow(LineExtractor.EmittedLine line, int i)
+    {
+        if (i >= line.Attributes.Length) return false;
+        TerminalColor fg = line.Attributes[i].Foreground;
+        return fg.Kind == ColorKind.Indexed && (fg.Value == 3 || fg.Value == 11);
+    }
+
     // Read the foreground of the first non-space cell off the line's attribute
     // strip. Returns Monster for yellow (indexed 3 or 11), Player for red
     // (indexed 1 or 9), Unknown for anything else (including default-colour / RGB
@@ -214,6 +348,7 @@ public sealed class RoomEntryWatcher : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _router.LineDispatched -= OnLineScan;
         _arrivalSub.Dispose();
         _sneakArrivalSub.Dispose();
     }

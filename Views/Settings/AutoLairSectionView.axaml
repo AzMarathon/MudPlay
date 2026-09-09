@@ -46,8 +46,8 @@
             <RadioButton Content="Default — balance wasted respawn vs idle wait"
                          GroupName="Heuristic"
                          IsChecked="{Binding IsDefaultHeuristic, Mode=TwoWay}"
-                         ToolTip.Tip="Picks the lair that minimises max(0, slack) + max(0, -slack) × idlePenalty. Slack = entry-arrival minus ready-at; positive = wasted respawn, negative = idle wait."/>
-            <RadioButton Content="Throughput — minimise wasted respawn only"
+                         ToolTip.Tip="Picks the lair that minimizes max(0, slack) + max(0, -slack) × idlePenalty. Slack = entry-arrival minus ready-at; positive = wasted respawn, negative = idle wait."/>
+            <RadioButton Content="Throughput — minimize wasted respawn only"
                          GroupName="Heuristic"
                          IsChecked="{Binding IsThroughputHeuristic, Mode=TwoWay}"
                          ToolTip.Tip="Treats idle wait as free; always chases the soonest-ready lair. Best when the player doesn't mind standing in a wait-room for a while."/>

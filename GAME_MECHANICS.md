@@ -340,6 +340,25 @@ it isn't here and you're unsure, ask.
   `(?!You notice )` guard so it doesn't also grab `"You notice <name>"` as a null-numbered
   Monster — which previously held the combat gate open and froze the loop.
 
+**Monster arrival lines carry a yellow-indexed name** *([CONFIRMED] 2026-09-09, user)*
+- A monster entering the room prints an arrival line; the wording is **per-monster and NOT
+  exported** — it can be the structured `"<name> <verb> into the room from <dir>."` form OR an
+  arbitrary custom line with no such marker (e.g. `"A muckworm darts out of the mud!"`). What is
+  **constant across every monster** is that the **monster's NAME is tagged the yellow ANSI colour
+  index** (standard 3 / bright 11) — sometimes just the name, sometimes the whole line.
+- **This is an index, not a rendered colour.** The user confirmed the arrival name's yellow index
+  is **not remapped or stripped by the client palette** — a custom palette only changes how index 3
+  *looks*, not that the cell carries index 3. So the index is the one palette-stable signal.
+- **Do NOT record a colour→line-type table as game truth.** Other lines' rendered colours (the
+  `You notice` floor line, the `Also here:` roster, prompts, room descriptions) **vary by the
+  user's palette** and are not reliable identifiers. Only the yellow *index* on an arrival name is
+  dependable; a plain room description that happens to name a monster is default-colour (no yellow
+  index), so it isn't an arrival.
+- **Client note:** `RoomEntryWatcher.OnLineScan` recognizes the unstructured custom spawns the two
+  regex patterns miss — on a line no structured pattern claims, a run of fully-yellow-indexed words
+  that resolves to a known monster (not already in the room) is appended as an arrival, tripping the
+  combat gate a round before the spawn's first swing. Keys on the palette index (3/11), never the RGB.
+
 **Sneak vs hide — both enable backstab** *([CONFIRMED])*
 - **Sneaking** and **hidden** are distinct stealth states and **either one enables a backstab**:
   - *Sneaking* lets you **move** silently and open on a target you approach, but does **not** remove
