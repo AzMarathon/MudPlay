@@ -206,6 +206,31 @@ public sealed class ConditionTrackerTests
     }
 
     [Fact]
+    public void ConfuseFumbleLine_FiresActionFailed_EvenWithoutADedicatedLastActionFailedRecord()
+    {
+        // The shipped "convulsions" record carries Confused + ConfuseFumbleLine but
+        // no separate LastActionFailed-flagged record for its fumble wordings (no
+        // shipped record ever has). A fumble line must still re-send the swing:
+        // report paradigm-20260908-211659, "sit here and get beat on".
+        using Harness h = new();
+        h.Messages.Messages.Add(new MessageRecord(
+            Id: "conv", Name: "convulsions",
+            Flags: MessageFlags.Confused, RawFlagsHex: 2,
+            CasterMessage: "", TargetMessage: "", WitnessMessage: "",
+            AppliedMessage: "You are in convulsions!", AppliedEndsWith: "Your body returns to normal.",
+            Links: null,
+            ConfuseFumbleLine: "You fumble in confusion!\nYou convulse violently"));
+
+        h.Feed("You are in convulsions!");
+        h.Feed("You convulse violently!");
+        h.Feed("You convulse violently!");
+
+        Assert.True(h.Tracker.IsConfused);
+        Assert.Equal(2, h.ActionFailed.Count);        // every fumble line, not deduped
+        Assert.All(h.ActionFailed, r => Assert.Equal("convulsions", r.Name));
+    }
+
+    [Fact]
     public void Fumble_FiresEveryLine_NotJustFirst()
     {
         // Confusion fumbles command after command while it lasts; the condition

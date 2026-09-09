@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.58.11**
-> - Auto-Lair moves on within seconds when it walks into a lair that hasn't respawned, instead of standing in the empty room for the full engage timeout
+> **Version 3.58.12**
+> - Confusion/convulsion fumbles no longer leave you stuck: a fumble eats the command the client just sent, so the client now re-sends it — weapon swings, attack spells (immediately, not on the next round), item uses, and other client-sent commands alike — instead of sitting there (e.g. getting beat on while convulsing)
+> - Commands you typed yourself are never auto-repeated (that stays your call), and a fumbled movement step self-recovers as before
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

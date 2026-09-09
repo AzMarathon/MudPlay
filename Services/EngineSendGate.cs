@@ -36,6 +36,15 @@ public sealed class EngineSendGate
 {
     private readonly HashSet<string> _holds = new(StringComparer.Ordinal);
 
+    // The last command the client actually put on the wire (a non-locked engine
+    // send) and the sender that sent it, so a confusion fumble — which eats the
+    // just-sent command without executing it — can re-send it (ReplayLastClientCommand).
+    // Only CLIENT sends are tracked: user-typed input never flows through the wrapped
+    // path (see the class comment), so re-firing only ever repeats the client's own
+    // automatic commands, never something the user typed.
+    private byte[]? _lastClientCommand;
+    private Action<byte[]>? _replaySender;
+
     // True while any hold is active — engine wire-sends drop on the floor.
     public bool IsLocked => _holds.Count > 0;
 
@@ -69,6 +78,40 @@ public sealed class EngineSendGate
         {
             if (IsLocked) return;
             rawSender(bytes);
+            // Remember the just-sent client command so a confusion fumble can re-fire
+            // it. The replay goes back through THIS sender (they all funnel to the same
+            // SendUserInput), so re-firing lands on the wire exactly as the original did.
+            _lastClientCommand = bytes;
+            _replaySender = rawSender;
         };
+    }
+
+    // Re-send the last client command — a confusion fumble consumed it without it
+    // executing (GAME_MECHANICS "Confusion fumbles"), so re-sending is what performs
+    // the intended action. Driven by ConditionTracker.ActionFailed. No-op while a hold
+    // is up, before any client send, or when the last command was a bare MOVEMENT step:
+    // a fumbled move is already recovered by MovementRefusalDetector's revert + the
+    // walker's own re-send, so re-firing it here would double-step and desync position.
+    // (Combat weapon swings are re-sent by CombatManager with its engage bookkeeping; the
+    // AppServices coordinator only falls through to this for the non-weapon cases —
+    // attack spells, item uses, and other client commands.)
+    public void ReplayLastClientCommand()
+    {
+        if (IsLocked) return;
+        if (_lastClientCommand is not { Length: > 0 } cmd) return;
+        if (_replaySender is not { } send) return;
+        if (IsBareMovementCommand(cmd)) return;
+        send(cmd);
+    }
+
+    // True when the bytes are just a bare movement direction (with its trailing CR) —
+    // "n", "ne", "up", "south", etc. Door/item/attack commands ("bash n", "use x",
+    // "a mob") are multi-token and never match, so they still re-fire.
+    private static bool IsBareMovementCommand(byte[] bytes)
+    {
+        string cmd = System.Text.Encoding.Latin1.GetString(bytes).Trim().ToLowerInvariant();
+        return cmd is "n" or "s" or "e" or "w" or "ne" or "nw" or "se" or "sw" or "u" or "d"
+            or "north" or "south" or "east" or "west"
+            or "northeast" or "northwest" or "southeast" or "southwest" or "up" or "down";
     }
 }
