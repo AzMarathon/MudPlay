@@ -94,4 +94,10 @@ public sealed class BuffSlot
     // value (the min gate). null = rerolling off even if RerollCount > 0. On Paradigm
     // this is read from `abil 145`; on Stock it's a 0-100% of the best-possible tick.
     public int? RerollThreshold { get; set; }
+
+    // Roll spells: reroll without a cap — keep re-casting until the roll clears the
+    // threshold (or the mana floor suspends the cycle, resuming as mana recovers).
+    // Spares the user from setting an obscene RerollCount to approximate "unlimited";
+    // when true, RerollCount is ignored.
+    public bool RerollInfinite { get; set; }
 }

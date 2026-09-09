@@ -3763,7 +3763,8 @@ public sealed class AppServices
             readConfig: () =>
             {
                 Models.Profile.BuffSlot? slot = ManaRegenRerollSlot();
-                return new Game.Spells.ManaRegenRerollConfig(slot?.RerollThreshold, slot?.RerollCount ?? 0);
+                return new Game.Spells.ManaRegenRerollConfig(
+                    slot?.RerollThreshold, slot?.RerollCount ?? 0, slot?.RerollInfinite ?? false);
             },
             sendAbilQuery: () =>
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
@@ -6997,17 +6998,33 @@ public sealed class AppServices
         ManaRegen.OnRollSpellLanded(maRegen);
     }
 
-    // The unified-list slot that drives mana-regen rerolling: a CastOnSelf slot whose
-    // spell is a code-145 rolled regen-rate spell (nature tap / mana flux / prfl). One
-    // per character; null when none is configured. (The reroll config — threshold /
-    // count — rides on this slot.)
+    // The unified-list slot that drives mana-regen rerolling: a slot whose spell is a
+    // code-145 rolled regen-rate spell (nature tap / mana flux / prfl). One per
+    // character; null when none is configured. (The reroll config — threshold / count /
+    // infinite — rides on this slot.) NOT gated on CastOnSelf: these roll spells are
+    // self-only casts (they can't target others), so the CASTER always receives the
+    // roll whenever the slot fires — rerolling must not hinge on a target flag the user
+    // may have left on whole-party (report paradigm-20260909-113655).
     private Models.Profile.BuffSlot? ManaRegenRerollSlot()
     {
         if (Profile.Current?.PartyBuffs is not { } buffs) return null;
         foreach (Models.Profile.BuffSlot s in buffs.Slots)
-            if (s.CastOnSelf && !string.IsNullOrWhiteSpace(s.Spell) && IsManaRegenRollSpell(s.Spell.Trim()))
+            if (!string.IsNullOrWhiteSpace(s.Spell) && IsManaRegenRollSpell(s.Spell.Trim()))
                 return s;
         return null;
+    }
+
+    // A reroll-config edit may now warrant rerolling the roll spell that's already up
+    // (report paradigm-20260909-113655: user bumped flux 0→20 expecting the active -2 to
+    // reroll). Only re-roll a spell that is CURRENTLY active — we're improving a live
+    // roll, not spawning a fresh cast. Self-buff timers key on "" (self target).
+    public void ReconsiderManaRegenRerollAfterConfigChange()
+    {
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } shortCode) return;
+        bool active = CastDirector.SnapshotActiveBuffs()
+            .Any(t => string.Equals(t.Short, shortCode, System.StringComparison.OrdinalIgnoreCase));
+        if (!active) return;
+        ManaRegen.ReconsiderActiveRoll(shortCode);
     }
 
     // Live worst/best passive mana-regen TICK for a mana-regen roll spell at the

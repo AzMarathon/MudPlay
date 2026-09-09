@@ -567,7 +567,15 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         dto.CastBeforeRestingForMana = r.CastBeforeRestingForMana;
         dto.RerollCount = r.RerollCount;
         dto.RerollThreshold = r.RerollThreshold;
+        dto.RerollInfinite = r.RerollInfinite;
     }
+
+    // A slot's reroll aggression as (threshold, cap), so an edit can tell whether it
+    // LOOSENED (higher threshold or bigger cap → re-evaluate an already-active roll). A
+    // null threshold (rerolling off) sorts below everything; infinite sorts above any
+    // finite cap.
+    private static (int Threshold, int Cap) RerollAggression(BuffSlot s) =>
+        (s.RerollThreshold ?? int.MinValue, s.RerollInfinite ? int.MaxValue : s.RerollCount);
 
     // Open the Add-buff dialog (spell + recast + conditions). On OK, add the slot;
     // targeting (self / all-members / member checklist) is then chosen in the row.
@@ -595,6 +603,10 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
         Persist();
+        // A freshly-added roll spell with rerolling on can re-evaluate a roll already up
+        // (same intent as the edit path).
+        if (IsRollSpell(dto.Spell) && (dto.RerollInfinite || dto.RerollCount > 0))
+            AppServices.Current.ReconsiderManaRegenRerollAfterConfigChange();
     }
 
     // Bulk-add EVERY bless candidate — self and whole-party alike (see
@@ -683,7 +695,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         BuffSlot d = row.Dto;
         AddBuffResult initial = new(
             d.Spell ?? string.Empty, d.RecastMarginSec, d.OnlyWhenHpFull, d.OnlyWhenMaFull,
-            d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold);
+            d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold, d.RerollInfinite);
         AddBuffDialogViewModel dlg = new(
             options, IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickRange, initial);
@@ -691,12 +703,20 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
 
+        (int Threshold, int Cap) beforeReroll = RerollAggression(row.Dto);
         ApplyResult(row.Dto, r);
         RefreshBuffPicks();   // a changed spell frees/consumes picker entries
         row.Refresh();   // re-derive header + whole-party/single-target after a spell change
         row.RebuildMemberTargets(CurrentMembers());
         ResortRow(row);   // a changed spell may have moved it to a different category block
         Persist();
+        // If the edit LOOSENED rerolling for a roll spell (higher threshold / bigger cap /
+        // infinite on), re-evaluate a roll that's already up so the change acts on it now
+        // instead of only the next cast (report paradigm-20260909-113655).
+        (int Threshold, int Cap) afterReroll = RerollAggression(row.Dto);
+        if (IsRollSpell(row.Dto.Spell)
+            && (afterReroll.Cap > beforeReroll.Cap || afterReroll.Threshold > beforeReroll.Threshold))
+            AppServices.Current.ReconsiderManaRegenRerollAfterConfigChange();
     }
 
     [RelayCommand]

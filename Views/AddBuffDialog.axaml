@@ -109,9 +109,12 @@
                                    FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"/>
                         <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
                                        Value="{Binding RerollCount, Mode=TwoWay}"
+                                       IsEnabled="{Binding RerollCountEnabled}"
                                        Minimum="0" Maximum="20" Increment="1" FormatString="0"
                                        ToolTip.Tip="Most re-casts per cycle chasing a better roll before accepting what landed."/>
                     </Grid>
+                    <CheckBox Content="Reroll infinite" IsChecked="{Binding RerollInfinite, Mode=TwoWay}"
+                              ToolTip.Tip="Keep re-casting until the roll clears the threshold, with no cap — resuming as mana recovers if it runs dry. Ignores Max rerolls."/>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
