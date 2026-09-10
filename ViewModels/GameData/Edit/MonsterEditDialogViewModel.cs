@@ -33,28 +33,39 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     private MonsterRelationship _relationship = MonsterRelationship.Enemy;
     [ObservableProperty] private MonsterAttackPriority _priority = MonsterAttackPriority.Normal;
 
+    // ----- Debuff (single target) rung -----
     [ObservableProperty] private string _preAttackSpellId = string.Empty;
     // Per-room cast cap — null (blank) = unlimited, matching CombatSpellSlot.MaxCastsPerRoom
     // and the Settings → Combat NumericUpDown.
     [ObservableProperty] private int? _preAttackCount;
-    // Minimum mana to cast the override pre-attack — 0 = no floor. Interpreted per the
-    // char's Combat-tab mana mode; SpellManaMax + PreAttackMinManaConverted mirror the
-    // Settings → Combat spell-slot control. Mirrors CombatSpellSlot.MinManaPerCast.
+    // Minimum mana to cast — 0 = no floor. Interpreted per the char's Combat-tab mana
+    // mode; SpellManaMax + PreAttackMinManaConverted mirror the Settings → Combat
+    // spell-slot control. Mirrors CombatSpellSlot.MinManaPerCast.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PreAttackMinManaConverted))]
     private int _preAttackMinMana;
-    // "Override Attack" holds a Spell.Number, OR a spell cast-code that resolves
-    // to one (both land on the mana-gated spell rung; Max is an optional per-room
-    // cap, blank = unlimited), OR a raw verb like "attack"/"bash" that doesn't
-    // resolve to any spell (sent as-is, no gating). See ParseAttackOverride.
-    [ObservableProperty] private string _attackOverride = string.Empty;
-    // Per-room cast cap — null (blank) = unlimited (matches Combat's NumericUpDown).
-    [ObservableProperty] private int? _attackCount;
-    // Minimum mana to cast the override attack (same interpretation as pre-attack);
-    // ignored when the override resolves to a raw command rather than a spell.
+
+    // ----- Normal attack spell rung -----
+    // Spell-only: a Spell.Number, or a cast-code that resolves to one (see
+    // ResolveSpellOverride). A raw attack verb belongs in the Physical attack box.
+    [ObservableProperty] private string _normalSpellId = string.Empty;
+    [ObservableProperty] private int? _normalCount;
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AttackMinManaConverted))]
-    private int _attackMinMana;
+    [NotifyPropertyChangedFor(nameof(NormalMinManaConverted))]
+    private int _normalMinMana;
+
+    // ----- Alternate attack spell rung -----
+    // Spell-only, same as Normal — occupies the alternate rung of the same cascade.
+    [ObservableProperty] private string _altSpellId = string.Empty;
+    [ObservableProperty] private int? _altCount;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AltMinManaConverted))]
+    private int _altMinMana;
+
+    // ----- Physical attack rung -----
+    // A raw verb ("attack", "bash") that replaces the weapon command on a round the
+    // engine already chose physical. No mana / cap gating.
+    [ObservableProperty] private string _physicalCommand = string.Empty;
 
     // Min-mana control parity with Settings → Combat: SpellManaMax caps the NumericUpDown
     // (100 in % mode, the absolute ceiling in Value mode) and the Converted strings show
@@ -64,7 +75,8 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
 
     public decimal SpellManaMax => _manaModePercentage ? 100 : 100_000;
     public string PreAttackMinManaConverted => FormatMana(PreAttackMinMana);
-    public string AttackMinManaConverted    => FormatMana(AttackMinMana);
+    public string NormalMinManaConverted    => FormatMana(NormalMinMana);
+    public string AltMinManaConverted        => FormatMana(AltMinMana);
 
     // Percentage mode shows the absolute mana equivalent ("54/66"); Value mode shows the
     // percentage ("82%"). Empty until a prompt has given us a live max mana. Same rule as
@@ -77,9 +89,10 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
             : $"{(int)System.Math.Round(value * 100.0 / _liveMaxMa)}%";
     }
 
-    // Spell typeahead for the two override pickers — the character's castable spells
-    // (SpellbookState.AvailablePicks), same source the Settings → Combat spell slots
-    // use. Empty in headless tests. The box commits the pick's Short cast-code.
+    // Spell typeahead for the three spell-override pickers (debuff / normal / alternate)
+    // — the character's castable spells (SpellbookState.AvailablePicks), same source the
+    // Settings → Combat spell slots use. Empty in headless tests. The box commits the
+    // pick's Short cast-code.
     public IReadOnlyList<SpellPick> SpellSuggestions { get; }
 
     // Match typed text against either the cast-code or the spell name, so a slot is
@@ -176,51 +189,57 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         Relationship = existing?.Relationship ?? MonsterRelationship.Enemy;
         Priority     = existing?.Priority     ?? MonsterAttackPriority.Normal;
 
-        PreAttackSpellId = (existing?.OverridePreAttackSpellId is { } pi) ? pi.ToString() : string.Empty;
+        // Show a stored spell override as its cast-code — round-trips a typed "agon"
+        // back to "agon" rather than the internal number (report
+        // paradigm-20260813-131658) — falling back to the bare number when it can't be
+        // resolved (the game-data set changed since the override was saved).
+        string SpellBox(int? id) => id is { } n
+            ? (_resolveSpellNumber?.Invoke(n) ?? n.ToString())
+            : string.Empty;
+
+        PreAttackSpellId = SpellBox(existing?.OverridePreAttackSpellId);
         PreAttackCount   = existing?.OverridePreAttackCount;
         PreAttackMinMana = existing?.OverridePreAttackMinMana ?? 0;
-        // A command override wins the box display; else show the spell's cast-code
-        // when it resolves (round-trips a typed "agon" back to "agon", not its
-        // internal number), falling back to the bare number when it doesn't.
-        AttackOverride   = existing?.OverrideAttackCommand is { Length: > 0 } cmd
-            ? cmd
-            : (existing?.OverrideAttackSpellId is { } ai
-                ? (_resolveSpellNumber?.Invoke(ai) ?? ai.ToString())
-                : string.Empty);
-        AttackCount      = existing?.OverrideAttackCount;
-        AttackMinMana    = existing?.OverrideAttackMinMana ?? 0;
+
+        NormalSpellId = SpellBox(existing?.OverrideAttackSpellId);
+        NormalCount   = existing?.OverrideAttackCount;
+        NormalMinMana = existing?.OverrideAttackMinMana ?? 0;
+
+        AltSpellId = SpellBox(existing?.OverrideAltAttackSpellId);
+        AltCount   = existing?.OverrideAltAttackCount;
+        AltMinMana = existing?.OverrideAltAttackMinMana ?? 0;
+
+        PhysicalCommand = existing?.OverridePhysicalCommand ?? string.Empty;
 
         DontBackstab = existing?.DontBackstab ?? false;
         KillOnSight  = existing?.KillOnSight  ?? false;
 
         // What Compose would produce from the installed-defaults values, derived with
-        // the SAME fallbacks the field init above uses — so an unedited (or edited-back)
-        // record compares equal to it.
-        _defaultsBaseline = Compose(
+        // the SAME SpellBox round-trip the field init above uses — so an unedited (or
+        // edited-back) record compares equal to it.
+        _defaultsBaseline = Compose(new OverlayFields(
             installedDefaults?.Name ?? mdbName,
             installedDefaults?.Relationship ?? MonsterRelationship.Enemy,
             installedDefaults?.Priority ?? MonsterAttackPriority.Normal,
-            installedDefaults?.OverridePreAttackSpellId?.ToString() ?? string.Empty,
+            SpellBox(installedDefaults?.OverridePreAttackSpellId),
             installedDefaults?.OverridePreAttackCount,
             installedDefaults?.OverridePreAttackMinMana ?? 0,
-            installedDefaults?.OverrideAttackCommand is { Length: > 0 } dc
-                ? dc
-                : (installedDefaults?.OverrideAttackSpellId is { } dai
-                    ? (_resolveSpellNumber?.Invoke(dai) ?? dai.ToString())
-                    : string.Empty),
+            SpellBox(installedDefaults?.OverrideAttackSpellId),
             installedDefaults?.OverrideAttackCount,
             installedDefaults?.OverrideAttackMinMana ?? 0,
+            SpellBox(installedDefaults?.OverrideAltAttackSpellId),
+            installedDefaults?.OverrideAltAttackCount,
+            installedDefaults?.OverrideAltAttackMinMana ?? 0,
+            installedDefaults?.OverridePhysicalCommand ?? string.Empty,
             installedDefaults?.DontBackstab ?? false,
-            installedDefaults?.KillOnSight ?? false,
+            installedDefaults?.KillOnSight ?? false),
             _resolveSpellShort);
     }
 
     [RelayCommand]
     private void Save()
     {
-        MonsterOverlay overlay = Compose(
-            Name, Relationship, Priority, PreAttackSpellId, PreAttackCount, PreAttackMinMana,
-            AttackOverride, AttackCount, AttackMinMana, DontBackstab, KillOnSight, _resolveSpellShort);
+        MonsterOverlay overlay = Compose(LiveFields(), _resolveSpellShort);
 
         // A record (value-equal) comparison against the defaults baseline: true means
         // the user dragged everything back to the seed, so the caller clears the tier's
@@ -229,66 +248,66 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         CloseRequested?.Invoke(new MonsterEditResult(WccNoStr, overlay, UseTier, equalsInstalledDefaults));
     }
 
+    private OverlayFields LiveFields() => new(
+        Name, Relationship, Priority,
+        PreAttackSpellId, PreAttackCount, PreAttackMinMana,
+        NormalSpellId, NormalCount, NormalMinMana,
+        AltSpellId, AltCount, AltMinMana,
+        PhysicalCommand, DontBackstab, KillOnSight);
+
     // Single overlay construction, shared by Save (live fields) and the ctor's
     // defaults-baseline capture, so the two are guaranteed to compare apples-to-apples.
-    private static MonsterOverlay Compose(
-        string name, MonsterRelationship relationship, MonsterAttackPriority priority,
-        string preAttackSpellId, int? preAttackCount, int preAttackMinMana,
-        string attackOverride, int? attackCount, int attackMinMana,
-        bool dontBackstab, bool killOnSight, Func<string, int?>? resolveSpellShort)
+    // The three spell boxes are spell-only (ResolveSpellOverride → Spell.Number); the
+    // physical box is a raw command trimmed to null when blank.
+    private static MonsterOverlay Compose(OverlayFields f, Func<string, int?>? resolveSpellShort)
     {
-        (int? attackSpellId, string? attackCommand) = ParseAttackOverride(attackOverride, resolveSpellShort);
+        string? physical = string.IsNullOrWhiteSpace(f.PhysicalCommand) ? null : f.PhysicalCommand.Trim();
         return new MonsterOverlay
         {
-            Name                     = string.IsNullOrWhiteSpace(name) ? null : name,
-            Relationship             = relationship,
-            Priority                 = priority,
-            OverridePreAttackSpellId = ParseNullableInt(preAttackSpellId),
-            OverridePreAttackCount   = preAttackCount,
-            OverridePreAttackMinMana = preAttackMinMana > 0 ? preAttackMinMana : null,
-            OverrideAttackSpellId    = attackSpellId,
-            OverrideAttackCount      = attackCount,
-            OverrideAttackMinMana    = attackMinMana > 0 ? attackMinMana : null,
-            OverrideAttackCommand    = attackCommand,
-            DontBackstab             = dontBackstab,
-            KillOnSight              = killOnSight,
+            Name                     = string.IsNullOrWhiteSpace(f.Name) ? null : f.Name,
+            Relationship             = f.Relationship,
+            Priority                 = f.Priority,
+            OverridePreAttackSpellId = ResolveSpellOverride(f.PreAttackSpellId, resolveSpellShort),
+            OverridePreAttackCount   = f.PreAttackCount,
+            OverridePreAttackMinMana = f.PreAttackMinMana > 0 ? f.PreAttackMinMana : null,
+            OverrideAttackSpellId    = ResolveSpellOverride(f.NormalSpellId, resolveSpellShort),
+            OverrideAttackCount      = f.NormalCount,
+            OverrideAttackMinMana    = f.NormalMinMana > 0 ? f.NormalMinMana : null,
+            OverrideAltAttackSpellId = ResolveSpellOverride(f.AltSpellId, resolveSpellShort),
+            OverrideAltAttackCount   = f.AltCount,
+            OverrideAltAttackMinMana = f.AltMinMana > 0 ? f.AltMinMana : null,
+            OverridePhysicalCommand  = physical,
+            DontBackstab             = f.DontBackstab,
+            KillOnSight              = f.KillOnSight,
         };
     }
 
     [RelayCommand]
     private void Cancel() => CloseRequested?.Invoke(null);
 
-    private static int? ParseNullableInt(string? text)
-        => int.TryParse(text, out int n) ? n : null;
-
-    // The "Override Attack" box holds EITHER a Spell.Number (routed through the
-    // mana-gated attack-spell rung — needs a Max cast count) OR a raw command /
-    // verb like "attack" or "bash" (sent verbatim, no gating). A positive
-    // integer reads as a spell id directly; blank is no override.
-    //
-    // For any other text, resolveSpellShort (when supplied) gets first look: a
-    // typed cast-code that matches a known spell (e.g. "turn") resolves to that
-    // spell's Number and lands on the SAME mana-gated, cascading rung as typing
-    // the number directly — someone reasonably types the code they'd actually
-    // cast in-game, not an internal database id they have no way to know,
-    // and shouldn't silently lose mana/cap gating for it (report
-    // paradigm-20260813-070249: "it just means you use a different spell",
-    // not "ignore combat settings completely"). Only text that resolves to no
-    // known spell falls through to the raw command path — this is also why
-    // typing "attack" persists as a command instead of being silently dropped
-    // by an int-only parse (report paradigm-20260809-131642).
-    //
-    // Exactly one of the pair is set (or both null) — the two are kept mutually
-    // exclusive so a species never carries both an id and a command.
-    public static (int? SpellId, string? Command) ParseAttackOverride(
-        string? text, Func<string, int?>? resolveSpellShort = null)
+    // Resolve a spell box's text to a Spell.Number, or null when blank / not a spell.
+    // A positive integer is a Spell.Number directly; other text is looked up as a
+    // cast-code via resolveSpellShort — someone types the code they'd actually cast
+    // in-game (e.g. "agon"), not an internal database id they have no way to know
+    // (report paradigm-20260813-070249). SPELL-ONLY: text that matches no known spell
+    // yields null (no override) — raw attack verbs belong in the Physical attack box,
+    // not a spell rung.
+    public static int? ResolveSpellOverride(string? text, Func<string, int?>? resolveSpellShort = null)
     {
-        if (string.IsNullOrWhiteSpace(text)) return (null, null);
+        if (string.IsNullOrWhiteSpace(text)) return null;
         string trimmed = text.Trim();
-        if (int.TryParse(trimmed, out int n) && n > 0) return (n, null);
-        if (resolveSpellShort?.Invoke(trimmed) is { } resolved) return (resolved, null);
-        return (null, trimmed);
+        if (int.TryParse(trimmed, out int n)) return n > 0 ? n : null;
+        return resolveSpellShort?.Invoke(trimmed);
     }
+
+    // Bundles the editable fields so Save (live) and the ctor's defaults-baseline
+    // capture run through the exact same Compose.
+    private readonly record struct OverlayFields(
+        string Name, MonsterRelationship Relationship, MonsterAttackPriority Priority,
+        string PreAttackSpellId, int? PreAttackCount, int PreAttackMinMana,
+        string NormalSpellId, int? NormalCount, int NormalMinMana,
+        string AltSpellId, int? AltCount, int AltMinMana,
+        string PhysicalCommand, bool DontBackstab, bool KillOnSight);
 }
 
 // Returned by MonsterEditDialogViewModel on Save. WccNoStr is the monster's WCC No as a

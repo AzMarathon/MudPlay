@@ -99,13 +99,7 @@ public sealed class CombatManagerSpellsTests
             Combat.SetBackstabHooks(() => Sneaking, n => SeeHidden.Contains(n));
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
             Combat.SetSpellShortResolver(
-                n => SpellShorts.TryGetValue(n, out string? s) ? s : null,
-                code =>
-                {
-                    foreach ((int number, string s) in SpellShorts)
-                        if (string.Equals(s, code, StringComparison.OrdinalIgnoreCase)) return number;
-                    return null;
-                });
+                n => SpellShorts.TryGetValue(n, out string? s) ? s : null);
             // Store the settle callback instead of running a real timer so a test
             // controls when the window elapses (FireSettle). Only arms on arrival
             // observations, so the existing Also-Here tests are unaffected.
@@ -1234,6 +1228,21 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("a giant rat", h.LastSent);
     }
 
+    [Fact]
+    public void AltAttackOverride_CastsOnAltRung_WhenNormalUnconfigured()
+    {
+        using Harness h = new();
+        // No normal attack spell; the alternate rung is supplied by a per-monster
+        // override (Spell.Number 55 → its Short cast-code).
+        h.SpellShorts[55] = "iceball";
+        h.Overlays[1] = new MonsterOverlay { OverrideAltAttackSpellId = 55, OverrideAltAttackCount = 2 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+
+        Assert.Equal("iceball giant rat", h.LastSent);
+    }
+
     // ----- physical-first: weapon exhausted before spells -------------
 
     [Fact]
@@ -1978,43 +1987,41 @@ public sealed class CombatManagerSpellsTests
     }
 
     // ----- 0-mana: stand down only from MANA-COSTING actions ------------
-    // Report paradigm-20260813-064159: a forced attack COMMAND that is really a
-    // spell cast-code (a legacy override saved before cast-codes auto-routed to the
-    // spell rung) costs mana; the server silently no-ops it at 0 mana, so the engine
-    // kept re-sending it while the player stood there getting hit. At 0 mana the
-    // engine now falls back to the physical weapon for mana-costing actions — but
-    // NOT for a free verb, which costs no mana and must still fire.
+    // ----- per-monster PHYSICAL override (replaces the weapon command) -----
+    // The physical override swaps the weapon command on a round the engine already
+    // chose physical — it does NOT force physical or suppress the spell rungs.
 
     [Fact]
-    public void OutOfMana_ForcedCommandIsSpellCastCode_FallsBackToWeapon()
+    public void PhysicalOverride_ReplacesWeaponCommand_OnPhysicalRound()
     {
         using Harness h = new();
         h.Settings.NormalAttackCommand = "attack";
-        h.SpellShorts[18] = "turn";   // "turn" is a real spell cast-code → costs mana
         h.AddMonster(1, "large zombie");
-        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "turn" };
-        h.Ma = 0;
+        h.Overlays[1] = new MonsterOverlay { OverridePhysicalCommand = "bash" };
 
         h.Feed("Also here: large zombie.");
 
-        Assert.Equal("attack large zombie", h.LastSent);
+        // No attack spell configured → the engine landed on physical; the per-monster
+        // physical override replaces the configured "attack" command.
+        Assert.Equal("bash large zombie", h.LastSent);
     }
 
     [Fact]
-    public void OutOfMana_ForcedCommandIsFreeVerb_StillFires()
+    public void PhysicalOverride_DoesNotForcePhysical_SpellStillCastsOnSpellRound()
     {
-        // "bash" isn't a spell cast-code, so it costs no mana — the 0-mana fallback
-        // must NOT swallow it (the whole point of scoping the guard to mana-costing
-        // actions rather than every command).
         using Harness h = new();
         h.Settings.NormalAttackCommand = "attack";
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm" };
         h.AddMonster(1, "large zombie");
-        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "bash" };
-        h.Ma = 0;
+        h.Overlays[1] = new MonsterOverlay { OverridePhysicalCommand = "bash" };
+        h.Ma = 100;
 
         h.Feed("Also here: large zombie.");
 
-        Assert.Equal("bash large zombie", h.LastSent);
+        // SpellsFirst (default) + a configured normal spell → the spell rung fires;
+        // the physical override does not force a physical round.
+        Assert.Equal("harm large zombie", h.LastSent);
+        Assert.DoesNotContain(h.AllSent, s => s == "bash large zombie");
     }
 
     [Fact]
@@ -2031,42 +2038,6 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat.");
 
         Assert.Equal("attack giant rat", h.LastSent);
-    }
-
-    [Fact]
-    public void HasMana_ForcedCommandIsSpellCastCode_UsesOverride()
-    {
-        // Sanity: the guard is mana-gated, not a blanket bypass of the override.
-        using Harness h = new();
-        h.Settings.NormalAttackCommand = "attack";
-        h.SpellShorts[18] = "turn";
-        h.AddMonster(1, "large zombie");
-        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "turn" };
-        h.Ma = 40;
-
-        h.Feed("Also here: large zombie.");
-
-        Assert.Equal("turn large zombie", h.LastSent);
-    }
-
-    [Fact]
-    public void OutOfMana_ForcedCommandIsSpellCastCode_ResumesOnceManaRecovers()
-    {
-        using Harness h = new();
-        h.Settings.ActionOrder = CombatActionOrder.AlternateSpellPhysical;
-        h.Settings.NormalAttackCommand = "attack";
-        h.SpellShorts[18] = "turn";
-        h.AddMonster(1, "large zombie");
-        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "turn" };
-        h.Ma = 0;
-
-        h.Feed("Also here: large zombie.");
-        Assert.Equal("attack large zombie", h.LastSent);
-
-        h.Ma = 40;
-        h.Tick();
-
-        Assert.Equal("turn large zombie", h.LastSent);
     }
 
     // ----- user-engaged passive-neutral takeover (report paradigm-20260814) -----

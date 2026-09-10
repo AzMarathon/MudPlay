@@ -1,17 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.62.0**
-> - Buff/heal/cure maintenance no longer sits idle forever while Sneaking or Hidden — casting breaks stealth, but that's handled now instead of silently blocking the cast
-> - New **sneak-aware casting** (when Auto-Sneak is on): after any auto-cast the client re-sneaks in place, and while sneaking with Auto-Combat off a due buff/cure/heal waits for the next empty room (then casts + re-sneaks) instead of stripping sneak in a room you're passing through; a see-hidden room cleared for you catches up the held casts there
-> - Emergency survival (life-threatening heal, flee, emergency hangup) always fires immediately; Auto-Sneak off reverts to casting on schedule
-> - Buff Watchdog: unchecking a whole-party buff's **Party** master now clears Solo and stops every future cast, including while alone
-> - **Add all blesses** leaves whole-party buffs fully off until you explicitly enable them
-> - Buff Watchdog: the inline checkboxes and buttons are clickable again — the row drag-reorder handler was swallowing every click in the panel
-> - Buff Watchdog: a buff stripped by a newly-cast buff that removes it has its timer cleared when the clobbering buff lands — each spell respects its literal Removes list (casting greater bless clears an active chant; casting chant leaves greater bless alone)
-> - Buff Watchdog: re-casting a buff that was earlier stripped now clears whatever replaced it (e.g. re-cast greater bless drops an active chant instead of leaving it stuck on "conflict")
-> - Buff Watchdog: a configured buff that another configured buff permanently removes one-directionally (e.g. greater bless removes chant) is no longer cast or timed — it shows "covered by" the winner (Paradigm only; mutual pairs stay last-cast-wins)
-> - **Save profile** put back on the File menu with a floppy-disk toolbar icon; New / Open / Save-as profile retired into Profile Management, which gained a **Ctrl+P** shortcut
+> **Version 3.63.0**
+> - Per-monster **combat overrides** in Game Data now cover the whole single-target chain: **Debuff (single target)**, **Normal attack spell**, **Alternate attack spell**, and a new **Physical attack** command — pin an exact loadout against a specific monster
+> - Override spells now **substitute into their rung and run the same gates** as the configured Combat-tab slot (Max cap, Mana floor, and the immunity / level / element-resist skip) — no longer a blanket bypass, so an override the target can't be hit by falls down the cascade instead of wasting the round
+> - New **Physical attack** override replaces the weapon command only on a round the engine already chose physical — it doesn't force physical or suppress the spell rungs
+> - The old "Override Attack" raw-verb command moved to the **Physical attack** box (existing data migrates automatically); the spell boxes are now spell-only
+> - Monster editor relabelled to mirror the Settings → Combat grid
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

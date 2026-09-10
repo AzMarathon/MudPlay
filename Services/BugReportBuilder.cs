@@ -439,12 +439,14 @@ public static class BugReportBuilder
             if (!string.IsNullOrWhiteSpace(o.Name)) parts.Add($"name \"{o.Name}\"");
             if (o.Relationship is { } rel) parts.Add($"relationship {rel}");
             if (o.Priority is { } prio) parts.Add($"priority {prio}");
-            if (!string.IsNullOrWhiteSpace(o.OverrideAttackCommand))
-                parts.Add($"attack-cmd \"{o.OverrideAttackCommand}\"");
-            if (o.OverrideAttackSpellId is { } atk and > 0)
-                parts.Add($"attack-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}{ManaSuffix(o.OverrideAttackMinMana)}");
             if (o.OverridePreAttackSpellId is { } pre and > 0)
-                parts.Add($"pre-attack {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}{ManaSuffix(o.OverridePreAttackMinMana)}");
+                parts.Add($"debuff {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}{ManaSuffix(o.OverridePreAttackMinMana)}");
+            if (o.OverrideAttackSpellId is { } atk and > 0)
+                parts.Add($"normal-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}{ManaSuffix(o.OverrideAttackMinMana)}");
+            if (o.OverrideAltAttackSpellId is { } alt and > 0)
+                parts.Add($"alt-spell {SpellLabel(svc, alt)}{CountSuffix(o.OverrideAltAttackCount)}{ManaSuffix(o.OverrideAltAttackMinMana)}");
+            if (!string.IsNullOrWhiteSpace(o.OverridePhysicalCommand))
+                parts.Add($"physical-cmd \"{o.OverridePhysicalCommand}\"");
             if (o.DontBackstab == true) parts.Add("dontBackstab");
             if (o.KillOnSight == true) parts.Add("killOnSight");
             if (parts.Count == 0) parts.Add("(no live fields)");
