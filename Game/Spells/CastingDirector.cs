@@ -1102,6 +1102,17 @@ public sealed class CastingDirector : IDisposable
         if (string.IsNullOrWhiteSpace(shortCode)
             || string.Equals(shortCode, clobberedBy, StringComparison.OrdinalIgnoreCase))
             return;
+
+        // The clobbering buff strips this one in-game, so release its applied-latch in
+        // the ConditionTracker too — not just the timer below. A latched applied line
+        // is deduped, so if the clobbered buff is later RE-CAST its confirm would never
+        // re-fire, and that re-cast could then never drive its own clobber-clear
+        // (report paradigm-20260910-012303: a re-cast greater bless never dropped an
+        // active chant because gbls stayed latched from before chant clobbered it).
+        if (_conditions is not null && _shortFromAppliedRecord is { } resolve)
+            _conditions.ReleaseApplied(rec =>
+                string.Equals(resolve(rec), shortCode, StringComparison.OrdinalIgnoreCase));
+
         List<(string Target, string Short)>? doomed = null;
         foreach ((string Target, string Short) key in _activeUntil.Keys)
             if (string.Equals(key.Short, shortCode, StringComparison.OrdinalIgnoreCase))

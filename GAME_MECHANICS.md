@@ -1317,7 +1317,17 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
   bless**. So the client can't read chant→greater-bless off chant's own removes-list; it infers it from
   the family's mutual-removal (bless ↔ greater bless each list the other, so they're one slot, and chant
   clearing bless clears greater bless too). `AppServices.ExpandMutualExclusionFamily` does this expansion
-  for both the ⚠ conflict warning and the clobbered-timer clear.
+  for both the ⚠ conflict warning and the clobbered-timer clear. The reverse direction (**greater bless
+  strips chant**) needs no inference — gbls #146's removes-list carries chant (#23) directly.
+- **Two `chant` records share cast code `chan`**: **#23** is the learnable one (`Learnable`, all classes,
+  the one a player casts and the one gbls/curse/blight list); **#825** is a non-learnable room-cast
+  duplicate (`Casted By = Room …`). The clobber math keys off #23.
+- **Applied-latch gotcha** *(report paradigm-20260910-012303)*: `ConditionTracker` dedups a repeated
+  applied line (each spell's "You feel …" latches once until its wear-off). A clobber clears the victim's
+  *timer* but the game sends no distinct wear-off for it (the shared family wear-off is ignored), so the
+  victim's applied-latch survived — and a later **re-cast** of that victim was deduped, never re-confirmed,
+  and so never drove its own clobber-clear (a re-cast greater bless never dropped an active chant). Fixed
+  by `ConditionTracker.ReleaseApplied`, called from the clobber-clear so the victim's latch is dropped too.
 
 **On-death effect wipe** *([CONFIRMED])*
 - Death removes **all active effects — buffs and debuffs alike**. A poison ticking at the moment of

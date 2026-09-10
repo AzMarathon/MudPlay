@@ -9,6 +9,7 @@
 > - **Add all blesses** leaves whole-party buffs fully off until you explicitly enable them
 > - Buff Watchdog: the inline checkboxes and buttons are clickable again — the row drag-reorder handler was swallowing every click in the panel
 > - Buff Watchdog: a buff stripped by a newly-cast buff that removes it has its timer cleared when the clobbering buff lands — now following the bless-family exclusivity slot too, so chant clears a greater-bless timer even though chant's data only lists plain bless
+> - Buff Watchdog: re-casting a buff that was earlier stripped now clears whatever replaced it (e.g. re-cast greater bless drops an active chant instead of leaving it stuck on "conflict")
 > - **Save profile** put back on the File menu with a floppy-disk toolbar icon; New / Open / Save-as profile retired into Profile Management, which gained a **Ctrl+P** shortcut
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
