@@ -88,7 +88,7 @@
                     <CheckBox Grid.Column="2" MinHeight="0" HorizontalAlignment="Center"
                               IsVisible="{Binding IsWholeParty}"
                               IsChecked="{Binding WholePartyOn, Mode=TwoWay}"
-                              ToolTip.Tip="Cast on the whole party in one go."/>
+                              ToolTip.Tip="Enable this whole-party buff. Untick to stop every future cast, including while solo."/>
 
                     <ItemsControl Grid.Column="3" ItemsSource="{Binding MemberTargets}"
                                   IsVisible="{Binding ShowMemberTargets}">
@@ -110,13 +110,14 @@
                         <TextBlock Text="Party" Margin="4,0,0,0" FontSize="11"
                                    VerticalAlignment="Center"
                                    Foreground="{StaticResource ChromeFgBrush}"/>
-                        <!-- Solo: also cast this whole-party buff while alone. The
-                             on/off checkbox in the All-none column stays as the "cast it
-                             party-wide while in a party" toggle. -->
+                        <!-- Solo is subordinate to the master Party checkbox in the
+                             All/None column: it can extend an enabled buff to solo play,
+                             but never re-enable a row whose master is off. -->
                         <CheckBox Content="Solo" MinHeight="0" FontSize="11"
                                   VerticalAlignment="Center"
+                                  IsEnabled="{Binding CanCastSolo}"
                                   IsChecked="{Binding CastSolo, Mode=TwoWay}"
-                                  ToolTip.Tip="Also cast this whole-party buff while you're solo — a lone character is a party of one, so it still lands on you."/>
+                                  ToolTip.Tip="While the Party toggle is enabled, also cast this buff while you're solo — a lone character is a party of one, so it still lands on you."/>
                     </StackPanel>
 
                     <!-- Drag-reorder feedback (hit-test-invisible so they never eat the

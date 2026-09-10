@@ -574,6 +574,22 @@ public static class BugReportBuilder
         }
         sb.Append('\n');
 
+        // Buffs a configured winner PERMANENTLY removes one-directionally (Paradigm continuous
+        // removal) — never maintained, shown "covered by" in the Watchdog. Surfaced so a
+        // "why isn't <buff> casting / holding a timer" report shows it's a deliberate skip.
+        IReadOnlyDictionary<string, string> suppressed = svc.CastDirector.CurrentSuppressedBuffs();
+        sb.Append("**Suppressed buffs (permanently removed by a configured buff)**\n\n");
+        if (suppressed.Count == 0)
+        {
+            sb.Append("(none)\n");
+        }
+        else
+        {
+            foreach (KeyValuePair<string, string> kv in suppressed)
+                sb.Append($"- {kv.Key}: not maintained — covered by {kv.Value}\n");
+        }
+        sb.Append('\n');
+
         // Mana-regen reroll engine state — so a "flux stuck at a bad value" report
         // (paradigm-20260830-110918) shows the roll quality it judges from and its
         // cycle, not just the configured threshold in the buff plan above.
@@ -646,7 +662,7 @@ public static class BugReportBuilder
             string heading = unifiedBuffs.ManualOrder || unifiedBuffs.PriorityTopDown
                 ? $"Buffs (layout: {(unifiedBuffs.ManualOrder ? "manual" : "auto")}; priority: {(unifiedBuffs.PriorityTopDown ? "top→bottom" : "default")})"
                 : "Buffs";
-            Group(heading, unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(s)}]", s.Spell)));
+            Group(heading, unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(svc, s)}]", s.Spell)));
         }
 
         if (shown == 0) sb.Append("_(no spells configured)_\n");
@@ -675,16 +691,35 @@ public static class BugReportBuilder
     }
 
     // A unified buff slot's targeting + condition summary for the report label —
-    // e.g. "self", "all", "Bob,Sue", "party-wide", with "+hp-full" / "+ma-full" when
-    // a downtime condition is set. Derived from the slot's flags (whole-party is left
-    // to WholePartyOn since the classifier isn't reachable here).
-    private static string BuffScope(Models.Profile.BuffSlot s)
+    // e.g. "self", "all", "Bob,Sue", "party-wide+solo", with "+hp-full" /
+    // "+ma-full" when a downtime condition is set. Whole-party scope is resolved from
+    // the same live spellbook data as the UI so the report exposes both master + option.
+    private static string BuffScope(AppServices svc, Models.Profile.BuffSlot s)
     {
         List<string> who = new();
-        if (s.CastOnSelf) who.Add("self");
-        if (s.AllMembers) who.Add("all");
-        else if (s.Targets.Count > 0) who.Add(string.Join(",", s.Targets));
-        else if (s.WholePartyOn) who.Add("party-wide?");
+        string code = s.Spell?.Trim() ?? string.Empty;
+        bool wholeParty = Game.Spells.ItemCastToken.IsToken(code)
+            ? svc.Spellbook.IsTokenWholeParty(code)
+            : svc.Spellbook.FindByCastCode(code) is { } spell
+              && Game.Spells.BuffClassifier.IsWholeParty(spell.Targets);
+        if (wholeParty)
+        {
+            if (s.WholePartyOn)
+            {
+                who.Add("party-wide");
+                who.Add(s.CastSolo ? "solo" : "party-only");
+            }
+            else
+            {
+                who.Add("off");
+            }
+        }
+        else
+        {
+            if (s.CastOnSelf) who.Add("self");
+            if (s.AllMembers) who.Add("all");
+            else if (s.Targets.Count > 0) who.Add(string.Join(",", s.Targets));
+        }
         string scope = who.Count > 0 ? string.Join("+", who) : "unset";
         if (s.OnlyWhenHpFull) scope += " +hp-full";
         if (s.OnlyWhenMaFull) scope += " +ma-full";

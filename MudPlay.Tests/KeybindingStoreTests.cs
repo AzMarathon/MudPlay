@@ -13,7 +13,8 @@ public sealed class KeybindingStoreTests
         KeybindingStore store = new();
         Assert.Equal(new KeyChord(Key.C, Alt: true), store.Get(BuiltInAction.OpenConversation));
         Assert.Equal(new KeyChord(Key.F3), store.Get(BuiltInAction.OpenGameDataBrowser));
-        Assert.Equal(new KeyChord(Key.S, Ctrl: true, Shift: true), store.Get(BuiltInAction.SaveProfileAs));
+        Assert.Equal(new KeyChord(Key.S, Ctrl: true), store.Get(BuiltInAction.SaveProfile));
+        Assert.Equal(new KeyChord(Key.P, Ctrl: true), store.Get(BuiltInAction.OpenProfileManager));
         // OpenParty ships unbound — F3 now opens the Game Data Browser.
         Assert.Equal(KeyChord.Empty, store.Get(BuiltInAction.OpenParty));
     }

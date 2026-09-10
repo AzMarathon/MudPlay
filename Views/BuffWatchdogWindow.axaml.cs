@@ -108,6 +108,15 @@ public partial class BuffWatchdogWindow : Window
 
     private void OnRowPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        // Only act when a grip-drag is actually in progress (a grip press set
+        // _dragRow and captured the pointer). This is a TUNNEL handler on the whole
+        // rows list, so it fires for every release in the panel — a checkbox / button
+        // / ✎ click included. Releasing the pointer capture unconditionally cancelled
+        // that control's OWN capture before it could register its click (Avalonia
+        // flips IsPressed off on capture-loss), which silently broke every inline
+        // checkbox and button. A non-grip press never captured, so there's nothing to
+        // release — leave the click alone.
+        if (_dragRow is null) return;
         if (_dragActive && _dragRow is { } src && _buffRows is not null && _vm?.Buffs is { } buffs
             && RowUnder(e.GetPosition(_buffRows)) is { } hit)
             buffs.MoveRowToIndex(src, hit.bottom ? hit.index + 1 : hit.index);

@@ -1,10 +1,17 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.61.1**
-> - Switching profiles no longer strands the new character at the game main menu — a stale low-HP hangup from the previous character was suppressing realm auto-entry
-> - Switching profiles clears the outgoing character's live HP so it can't trip a spurious low-HP hangup on the swap
-> - Login "quest available" announcements only fire once you're actually in the realm, not while sitting at the login menu
+> **Version 3.62.0**
+> - Buff/heal/cure maintenance no longer sits idle forever while Sneaking or Hidden — casting breaks stealth, but that's handled now instead of silently blocking the cast
+> - New **sneak-aware casting** (when Auto-Sneak is on): after any auto-cast the client re-sneaks in place, and while sneaking with Auto-Combat off a due buff/cure/heal waits for the next empty room (then casts + re-sneaks) instead of stripping sneak in a room you're passing through; a see-hidden room cleared for you catches up the held casts there
+> - Emergency survival (life-threatening heal, flee, emergency hangup) always fires immediately; Auto-Sneak off reverts to casting on schedule
+> - Buff Watchdog: unchecking a whole-party buff's **Party** master now clears Solo and stops every future cast, including while alone
+> - **Add all blesses** leaves whole-party buffs fully off until you explicitly enable them
+> - Buff Watchdog: the inline checkboxes and buttons are clickable again — the row drag-reorder handler was swallowing every click in the panel
+> - Buff Watchdog: a buff stripped by a newly-cast buff that removes it has its timer cleared when the clobbering buff lands — each spell respects its literal Removes list (casting greater bless clears an active chant; casting chant leaves greater bless alone)
+> - Buff Watchdog: re-casting a buff that was earlier stripped now clears whatever replaced it (e.g. re-cast greater bless drops an active chant instead of leaving it stuck on "conflict")
+> - Buff Watchdog: a configured buff that another configured buff permanently removes one-directionally (e.g. greater bless removes chant) is no longer cast or timed — it shows "covered by" the winner (Paradigm only; mutual pairs stay last-cast-wins)
+> - **Save profile** put back on the File menu with a floppy-disk toolbar icon; New / Open / Save-as profile retired into Profile Management, which gained a **Ctrl+P** shortcut
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

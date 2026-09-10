@@ -34,8 +34,8 @@ public sealed class KeybindRegistryTests
         Assert.True(KeybindRegistry.IsReserved(store, Key.F3, false, false, false, out action));
         Assert.Equal("Game Data Browser", action);
 
-        Assert.True(KeybindRegistry.IsReserved(store, Key.S, true, true, false, out action));
-        Assert.Equal("Save profile as", action);
+        Assert.True(KeybindRegistry.IsReserved(store, Key.P, true, false, false, out action));
+        Assert.Equal("Profile Management", action);
     }
 
     [Fact]

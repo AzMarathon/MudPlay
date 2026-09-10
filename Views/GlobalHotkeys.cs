@@ -130,14 +130,12 @@ public static class GlobalHotkeys
         return vm.GetType().GetProperty(commandName)?.GetValue(vm) as System.Windows.Input.ICommand;
     }
 
-    // Command-property names for the File-menu actions that have no toolbar catalogue entry.
+    // Command-property names for the File-menu actions that have no toolbar
+    // catalogue entry. (Save profile has a catalogue entry now; only Quit needs
+    // this fallback.)
     private static string? FileMenuCommandName(BuiltInAction action) => action switch
     {
-        BuiltInAction.NewProfile    => "NewProfileCommand",
-        BuiltInAction.OpenProfile   => "OpenProfileCommand",
-        BuiltInAction.SaveProfile   => "SaveProfileCommand",
-        BuiltInAction.SaveProfileAs => "SaveProfileAsCommand",
-        BuiltInAction.Quit          => "QuitCommand",
-        _                           => null,
+        BuiltInAction.Quit => "QuitCommand",
+        _                  => null,
     };
 }

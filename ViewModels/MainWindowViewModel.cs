@@ -231,10 +231,8 @@ public partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ConnectionLabel))]
     [NotifyPropertyChangedFor(nameof(ConnectionStatusText))]
     // Swapping the active profile mid-session desyncs it from the live game
-    // state, so New / Open / Open-recent are disconnected-only (Save / Save-as
-    // stay available). Re-evaluate their CanExecute when the wire flips.
-    [NotifyCanExecuteChangedFor(nameof(NewProfileCommand))]
-    [NotifyCanExecuteChangedFor(nameof(OpenProfileCommand))]
+    // state, so opening a recent profile is disconnected-only (Save stays
+    // available). Re-evaluate its CanExecute when the wire flips.
     [NotifyCanExecuteChangedFor(nameof(OpenRecentProfileCommand))]
     private bool _isConnected;
 
@@ -3569,49 +3567,13 @@ public partial class MainWindowViewModel : ObservableObject
     // is down. Loading a different (or blank) profile mid-session would fire
     // ProfileLoaded and reload every per-character service against the new
     // scope while still connected to the old character's game, desyncing
-    // settings / party / game-data state. Gates New / Open / Open-recent;
-    // Save / Save-as don't swap the active profile, so they stay available.
+    // settings / party / game-data state. Gates opening a recent profile;
+    // Save doesn't swap the active profile, so it stays available.
     private bool CanSwapProfile => IsDisconnected;
-
-    // Return to the default profile. The outgoing profile is auto-saved first
-    // (handled inside ProfileService.LoadDefaultProfile), then Current is
-    // replaced with the Global default profile — the user's saved defaults, or
-    // installed defaults on a fresh install. From there File → Save As names a
-    // copy as an actual character; File → Save persists edits back to the default.
-    [RelayCommand(CanExecute = nameof(CanSwapProfile))]
-    private void NewProfile()
-    {
-        AppServices.Current.Profile.LoadDefaultProfile();
-        SyncProfileMenuState();
-    }
-
-    [RelayCommand(CanExecute = nameof(CanSwapProfile))]
-    private async Task OpenProfileAsync()
-    {
-        ProfileService profile = AppServices.Current.Profile;
-        MudPlay.ViewModels.Profile.ProfilePickerDialogViewModel vm =
-            new(profile.ListAll());
-
-        ProfileRef? picked = await AppServices.Current.Dialogs.OpenWindowAsync<
-            MudPlay.ViewModels.Profile.ProfilePickerDialogViewModel, ProfileRef>(vm);
-        if (picked is null) return;
-
-        try
-        {
-            profile.Load(picked.Bbs, picked.Name);
-            PromoteRecent(picked);
-            SyncProfileMenuState();
-        }
-        catch (Exception ex)
-        {
-            AppServices.Current.Log.Error("Profile",
-                $"Failed to load '{picked.Name}' on '{picked.Bbs}': {ex.Message}");
-        }
-    }
 
     // File → Save. Persists the loaded profile in place: a named character to its
     // own file, the default profile to the Global default-profile file. Naming a
-    // brand-new character is the separate File → Save As command.
+    // brand-new character is done through the Profile Management window.
     [RelayCommand]
     private void SaveProfile()
     {
@@ -3627,7 +3589,19 @@ public partial class MainWindowViewModel : ObservableObject
             : "Saved the default profile.");
     }
 
-    [RelayCommand]
+    // Return to the default (blank) profile — the "new blank character" action
+    // exposed by the Profile Management window. The outgoing profile is auto-saved
+    // first (inside LoadDefaultProfile), then Current becomes the Global default.
+    // Not a menu/keybind command any more; Profile Management gates it on its own
+    // disconnected check.
+    private void NewProfile()
+    {
+        AppServices.Current.Profile.LoadDefaultProfile();
+        SyncProfileMenuState();
+    }
+
+    // "Save as" from the Profile Management window: name the loaded profile (e.g. a
+    // fresh {default} draft) and write it under a BBS. Prompts for the name.
     private async Task SaveProfileAsAsync()
     {
         ProfileService profile = AppServices.Current.Profile;
@@ -3640,8 +3614,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Profiles are BBS-scoped. Prefer the explicitly-pinned BBS, but fall
         // back to the active BBS shown in the title bar (ResolveActiveBbs) so a
         // fresh {default} draft can be named against the BBS the user is looking
-        // at — hitting Save on an unnamed draft should reach the name prompt,
-        // not silently no-op. Only a truly BBS-less install has nowhere to save.
+        // at. Only a truly BBS-less install has nowhere to save.
         string? bbs = profile.CurrentBbsName ?? ResolveActiveBbs()?.Name;
         if (string.IsNullOrWhiteSpace(bbs))
         {
@@ -4939,10 +4912,7 @@ public partial class MainWindowViewModel : ObservableObject
     public string SettingsGesture         => GetGesture(Models.Profile.BuiltInAction.OpenSettings);
     public string GameDataBrowserGesture  => GetGesture(Models.Profile.BuiltInAction.OpenGameDataBrowser);
     public string ToggleConnectionGesture => GetGesture(Models.Profile.BuiltInAction.ToggleConnection);
-    public string NewProfileGesture       => GetGesture(Models.Profile.BuiltInAction.NewProfile);
-    public string OpenProfileGesture      => GetGesture(Models.Profile.BuiltInAction.OpenProfile);
     public string SaveProfileGesture      => GetGesture(Models.Profile.BuiltInAction.SaveProfile);
-    public string SaveProfileAsGesture    => GetGesture(Models.Profile.BuiltInAction.SaveProfileAs);
     public string QuitGesture             => GetGesture(Models.Profile.BuiltInAction.Quit);
 
     private static string GetGesture(Models.Profile.BuiltInAction action)
@@ -4964,10 +4934,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SettingsGesture));
         OnPropertyChanged(nameof(GameDataBrowserGesture));
         OnPropertyChanged(nameof(ToggleConnectionGesture));
-        OnPropertyChanged(nameof(NewProfileGesture));
-        OnPropertyChanged(nameof(OpenProfileGesture));
         OnPropertyChanged(nameof(SaveProfileGesture));
-        OnPropertyChanged(nameof(SaveProfileAsGesture));
         OnPropertyChanged(nameof(QuitGesture));
     }
 

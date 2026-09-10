@@ -1,5 +1,20 @@
 # Version history
 
+## 3.62.0
+
+- Buff/heal/cure maintenance no longer sits idle forever while Sneaking or Hidden — casting breaks stealth, but that's handled now instead of silently blocking the cast
+- New **sneak-aware casting** (whenever Auto-Sneak is on): after any auto-cast the client re-sneaks in place, and while sneaking with Auto-Combat off a due buff/cure/heal waits for the next empty room (then casts + re-sneaks) rather than stripping sneak in a room you're passing through
+- A see-hidden room cleared by *Clear hostiles when sneak broken by see-hidden monster* now catches up the held casts there, then re-sneaks and continues
+- Emergency survival (life-threatening heal, flee, emergency hangup) always fires immediately; Auto-Sneak off reverts to casting on schedule wherever you are
+- Buff Watchdog: unchecking a whole-party buff's **Party** master now clears Solo and stops every future cast, including while alone
+- **Add all blesses** now adds whole-party rows fully off (both Party and Solo), matching the UI promise that bulk-added party buffs never start casting until you opt in
+- Buff Watchdog: the inline checkboxes and buttons (Self, members, All/None, ▲▼, ✎) are clickable again — the row drag-reorder handler was swallowing every click in the panel
+- Buff Watchdog: a buff stripped by a newly-cast buff that removes it now has its timer cleared when the clobbering buff lands, instead of lingering as though it's still up — each spell respects its literal Removes list (e.g. casting greater bless clears an active chant; casting chant leaves greater bless alone)
+- Buff Watchdog: re-casting a buff that had earlier been stripped now correctly drops whatever replaced it (e.g. re-casting greater bless while a chant is up now clears the chant instead of leaving it stuck on "conflict") — the stripped buff's applied-latch is released on clobber so its re-cast re-confirms
+- Buff Watchdog: when you've configured both a buff and one it permanently removes one-directionally (e.g. greater bless removes chant, but chant doesn't remove greater bless), the loser is no longer cast or timed on anyone — it reads "covered by" the winner instead of a stuck "conflict" (Paradigm only, where an active buff re-strips its removes continuously; mutual pairs like bless ↔ greater bless stay last-cast-wins)
+- **Save profile** put back on the File menu with a floppy-disk toolbar icon (quick one-click write of the current profile + settings); New / Open / Save-as profile retired from the menus and shortcut list (Profile Management covers them), and Profile Management gained a **Ctrl+P** shortcut
+- bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119, paradigm-20260909-220212, paradigm-20260910-000144, paradigm-20260910-001023, paradigm-20260910-012303
+
 ## 3.61.1
 
 - Switching profiles no longer strands the new character at the game main menu — a stale low-HP hangup from the previous character was suppressing realm auto-entry

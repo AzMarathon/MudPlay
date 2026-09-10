@@ -499,4 +499,49 @@ public sealed class ConditionTrackerTests
         Assert.False(h.Tracker.IsPoisoned);
         Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
     }
+
+    // ----- clobber-clear latch release -------------------------------
+
+    [Fact]
+    public void ReleaseApplied_LetsAReCastReConfirm()
+    {
+        // A fresh-cast applied line latches once; an identical repeat is deduped (fires
+        // nothing) while the record stays active. But when a landing buff clobbers this
+        // one (RemovesSpell), the CastingDirector releases its latch — and the buff's
+        // RE-CAST must then re-confirm, so it can drive its own clobber-clear against
+        // whatever replaced it. Report paradigm-20260910-012303: a re-cast greater bless
+        // never dropped an active chant because gbls stayed latched from before chant
+        // clobbered it, so its "You feel VERY lucky!" re-cast was deduped forever.
+        using Harness h = new();
+        MessageRecord gbls = MakeRecord("greater bless", MessageFlags.None,
+            applied: "You feel VERY lucky!", endsWith: "");
+        h.Messages.Messages.Add(gbls);
+
+        h.Feed("You feel VERY lucky!");                    // first cast — latches, fires
+        Assert.Single(h.Applied);
+
+        h.Feed("You feel VERY lucky!");                    // re-cast while latched — deduped
+        Assert.Single(h.Applied);
+
+        h.Tracker.ReleaseApplied(r => r.Id == gbls.Id);    // a clobber released the latch
+
+        h.Feed("You feel VERY lucky!");                    // re-cast now re-confirms
+        Assert.Equal(2, h.Applied.Count);
+    }
+
+    [Fact]
+    public void ReleaseApplied_NonMatch_LeavesLatchIntact()
+    {
+        using Harness h = new();
+        MessageRecord gbls = MakeRecord("greater bless", MessageFlags.None,
+            applied: "You feel VERY lucky!", endsWith: "");
+        h.Messages.Messages.Add(gbls);
+
+        h.Feed("You feel VERY lucky!");
+        Assert.Single(h.Applied);
+
+        h.Tracker.ReleaseApplied(_ => false);              // nothing matches
+        h.Feed("You feel VERY lucky!");                    // still latched → still deduped
+        Assert.Single(h.Applied);
+    }
 }

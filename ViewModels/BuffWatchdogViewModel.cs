@@ -297,6 +297,10 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         // In a party, a self-buff a configured party-wide buff removes shows "covered by"
         // that buff instead of a timer (the director suppresses self-casting it).
         IReadOnlyDictionary<string, string> coverage = _castDirector.CurrentSelfBuffCoverage();
+        // Buffs a configured winner PERMANENTLY removes (Paradigm continuous removal, one-
+        // directional) are never maintained — show them "covered by" the winner on every
+        // row (self + members) instead of a stale timer or a stuck "conflict".
+        IReadOnlyDictionary<string, string> suppressed = _castDirector.CurrentSuppressedBuffs();
         IReadOnlyCollection<string> hidden = _castDirector.HiddenPartyTargets;
 
         // Generalized RemovesSpell conflict pairing across ALL slot shapes (self-self,
@@ -333,6 +337,17 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         {
             (string? removedBy, string? removes) = Game.Spells.BuffConflictAnalyzer.Resolve(overwritePairs, row.CastCode);
             row.SetOverwriteWarning(Game.Spells.BuffConflictAnalyzer.FormatTooltip(removedBy, removes));
+
+            // Permanently removed by a configured winner (one-directional, Paradigm): the
+            // engine never maintains it, so every row of it (self + members) reads
+            // "covered by" the winner rather than a stale timer or a stuck "conflict".
+            if (suppressed.TryGetValue(row.CastCode, out string? suppressedBy))
+            {
+                row.SetOverwriteWarning(null);
+                row.Update(null, now, coveredBy: suppressedBy);
+                continue;
+            }
+
             bool isConflicted = clobbered.Contains((row.CastCode.ToLowerInvariant(), row.MemberKey));
 
             // Single-target member row (keyed by their given name). A member who's HIDING

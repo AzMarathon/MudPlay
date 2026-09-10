@@ -3613,9 +3613,6 @@ public sealed class AppServices
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             isEnabled: () => ReadAutoModeFlag(d => d.AutoHealRest),
             log: Log);
-        // Stealth gate — buff casts suppressed while
-        // sneaking or hidden so we don't break the backstab window.
-        CastDirector.SetStealthGate(() => Stealth.IsStealthed);
         // Survival casts (heal / cure / buff / party heal) skip any spell the
         // player can't afford — the cost comes from the game-data Spells table
         // via the live spellbook. Combat-tab spells keep their own
@@ -3638,6 +3635,19 @@ public sealed class AppServices
         // burn mana on a buff the room tears straight back off.
         CastDirector.SetBuffStripRoomGate(
             () => RoomBuffStrip.StripsBuffs(RoomTracker.State.CurrentRoom?.Spell ?? 0));
+        // Sneak-maintenance defer — hold buffs / cures for the next empty room when
+        // a stealth runner is walking combat-off through an occupied room, so the
+        // cast (which breaks sneak) can be followed by a re-sneak instead of
+        // stripping sneak in a room it's only passing through. Conditioned entirely
+        // on auto-sneak: off ⇒ this never fires and casts go out immediately. The
+        // auto-combat term matches the Combat gate's "effectively engaging here"
+        // (global AutoCombat AND not per-room-suppressed) — if combat WILL clear the
+        // room there's no sneak to preserve. NPC presence is the hard blocker: you
+        // can't re-sneak with a monster in the room.
+        CastDirector.SetStealthMaintenanceDeferGate(
+            () => ReadAutoModeFlag(d => d.AutoSneak)
+               && !(ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom())
+               && CombatTracker.HasRoomNpc);
         // Suppress ALL auto-casts while the `train stats` full-screen menu has
         // character-mode input armed — otherwise a cast's letters get typed raw
         // into the character-creation form (the "bles" family-name corruption).
@@ -3671,6 +3681,10 @@ public sealed class AppServices
         // self-buff (RemovesSpell) covers us, so the director stops self-casting the
         // removed one — the Buff Watchdog shows that slot "covered by" the party buff.
         CastDirector.SetSelfBuffCoverage(SelfBuffCoverage);
+        // A buff a configured winner PERMANENTLY removes one-directionally (Paradigm
+        // continuous removal — e.g. greater bless keeps stripping chant) is never
+        // maintained on any target; the Buff Watchdog shows it "covered by" the winner.
+        CastDirector.SetSuppressedBuffs(SuppressedBuffCoverage);
         // Downed-ally rescue heal. A dropped ally leaves `par`, so PickPartyHeal's
         // roster walk can't see them — the AllyDroppedHandler feeds each aided
         // downed ally back in here as the top-priority name-targeted heal until
@@ -3843,6 +3857,11 @@ public sealed class AppServices
         // engine resume the weapon attack on the resulting *Combat Off*
         // instead of idling until the next round.
         CastDirector.CastFired += Combat.NoteBetweenRoundCast;
+        // A cast breaks sneak / hide (GAME_MECHANICS) with no line to latch, so after
+        // an out-of-combat auto-cast re-establish sneak in place — StealthManager
+        // self-gates on auto-sneak being on, being out of combat, and no NPC present,
+        // so this no-ops for a non-stealth character or an in-combat cast.
+        CastDirector.CastFired += () => Stealth.ReSneakAfterCast();
         // The round after a survival cast belongs to the attack spell it
         // interrupted — CastDirector must sit out until that resume lands, or it
         // just re-claims the round the instant HP dips again and the attack never
@@ -6742,12 +6761,44 @@ public sealed class AppServices
         return map;
     }
 
+    // Configured buffs that can never stay up because another configured buff PERMANENTLY
+    // removes them: loser cast code → the winning buff's name (for a "covered by" label).
+    // A one-directional conflict only (Y removes X, X does NOT remove Y back) — Y is up, so
+    // X is stripped and re-stripped forever; the client shouldn't waste casts maintaining it
+    // or show a live timer for it. Mutual pairs (each removes the other, e.g. bless ↔ greater
+    // bless) are NOT suppressed — those are last-cast-wins, left to the normal clobber-clear.
+    //
+    // PARADIGM ONLY: Paradigm re-enforces a buff's RemovesSpell continuously (~3s), so the
+    // loser truly can't coexist. Stock is unverified (it may pace removes on cast, letting
+    // both stay), so this returns empty off Paradigm — don't suppress there.
+    //
+    // Distinct from SelfBuffCoverage (which is the in-party, whole-party-covers-self case,
+    // including mutual pairs): this is the general one-directional winner, self-cast winners
+    // and solo included. The picker skips a suppressed slot for ANY target; the Buff Watchdog
+    // shows the loser as "covered by" instead of a stuck "conflict".
+    public IReadOnlyDictionary<string, string> SuppressedBuffCoverage()
+    {
+        // PARADIGM ONLY: only there is a buff's RemovesSpell re-enforced continuously (~3s),
+        // so the one-directional loser truly can't coexist. Stock is unverified (may pace on
+        // cast, letting both stay), so suppress nothing there.
+        if (GameData.ActiveRealm != Game.RealmType.ParaMud)
+            return new Dictionary<string, string>();
+        return Game.Spells.BuffConflictAnalyzer.OneDirectionalLosers(BuffSlotOverwritePairs());
+    }
+
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
-    // effect the Spell Book renders as "Removes <spell>").
-    private HashSet<int> RemovedSpellNumbers(string castCode) =>
-        Spellbook.FindByCastCode(castCode.Trim()) is { } s
-            ? Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula)
-            : new HashSet<int>();
+    // effect the Spell Book renders as "Removes <spell>"). LITERAL: a spell strips exactly
+    // the spells its own list names, with no transitive/family inference. The game data is
+    // authoritative here — chant removes bless/curse/blight but NOT greater bless, even
+    // though bless and greater bless remove each other (so casting chant leaves an active
+    // greater bless alone; greater bless removes chant directly). An earlier "bless-family
+    // exclusivity slot" expansion inferred chant→greater-bless transitively and was wrong
+    // (user-confirmed in-game, Paradigm — report paradigm-20260910-012303 follow-up).
+    private HashSet<int> RemovedSpellNumbers(string castCode)
+    {
+        if (Spellbook.FindByCastCode(castCode.Trim()) is not { } s) return new HashSet<int>();
+        return Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula);
+    }
 
     // Every pair of configured, resolvable buff slots where one's spell removes the
     // other's via RemovesSpell (Abil 122) and their targeting can land on the same
@@ -6902,9 +6953,11 @@ public sealed class AppServices
     // share the wear-off message, so the shared line can't disambiguate on its own).
     private IReadOnlyCollection<string> RemovesShortsFor(string castShort)
     {
-        if (string.IsNullOrWhiteSpace(castShort)
-            || Spellbook.FindByCastCode(castShort.Trim()) is not { } spell) return System.Array.Empty<string>();
-        HashSet<int> removed = Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(spell.Formula);
+        if (string.IsNullOrWhiteSpace(castShort)) return System.Array.Empty<string>();
+        // Expanded through the bless-family exclusivity slot (see RemovedSpellNumbers /
+        // ExpandMutualExclusionFamily) so a clobber-clear catches a mutually-exclusive
+        // buff the spell strips in-game but doesn't list directly (chant → greater bless).
+        HashSet<int> removed = RemovedSpellNumbers(castShort);
         if (removed.Count == 0) return System.Array.Empty<string>();
         List<string> shorts = new();
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
@@ -7178,8 +7231,17 @@ public sealed class AppServices
             if (string.IsNullOrWhiteSpace(s.Spell)) { Log.Info("Buffs", $"  {n}. (empty)"); continue; }
 
             System.Collections.Generic.List<string> who = new();
+            bool wholeParty = IsPartyWideBuff(s.Spell);
             if (s.CastOnSelf) who.Add("self");
-            if (s.WholePartyOn && IsPartyWideBuff(s.Spell)) who.Add("party-wide");
+            if (s.WholePartyOn && wholeParty)
+            {
+                who.Add("party-wide");
+                who.Add(s.CastSolo ? "solo" : "party-only");
+            }
+            else if (wholeParty)
+            {
+                who.Add("off");
+            }
             if (s.AllMembers) who.Add("all-members");
             else if (s.Targets.Count > 0) who.Add(string.Join("+", s.Targets));
 

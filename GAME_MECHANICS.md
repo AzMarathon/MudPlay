@@ -420,6 +420,13 @@ it isn't here and you're unsure, ask.
 - **Ideally used solo.** Resting while hidden un-targets you from party single-target heals/buffs
   (same reason auto-hide is party-suppressed above), so ShadowRest resting is a solo behavior.
 
+**Casting breaks both Sneak and Hide** *([CONFIRMED] 2026-09-09, user)*
+- Casting a spell — self buff/heal/cure, party buff, anything — breaks Sneak **and** Hide alike.
+  This is an accepted cost, not a reason to withhold the cast: the buff-maintenance automation casts
+  a due buff/heal/cure regardless of stealth state rather than silently sitting on it to preserve
+  Sneak or Hide (`CastingDirector` does not gate casts on `StealthManager.IsStealthed`). Only the
+  backstab opener still reads combined stealth state, since either Sneaking or Hidden opens it.
+
 ## Combat & backstab
 
 ### Attack-prevented states *([CONFIRMED] 2026-09-03, user)*
@@ -1300,6 +1307,36 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
   10 / 1 copper-farthing ratio ladder. The deathpile display lists each denomination the character
   held by its own count (e.g. `100 gold crowns` + `1 platinum piece`), **not** re-bucketed into a
   consolidated wealth total.
+
+**RemovesSpell is LITERAL — no family/transitive inference** *([CONFIRMED] 2026-09-10, user, Paradigm)*
+- A buff strips **exactly** the spells its own `RemovesSpell` (Abil-122) list names — nothing more. There
+  is NO "family exclusivity slot": the fact that bless removes both chant and greater bless, and that bless
+  ↔ greater bless remove each other, does NOT make chant remove greater bless. Concretely, the bless family:
+  - **greater bless #146** removes: greater curse #61, bless #14, curse #15, **chant #23**, divine favour
+    #62, ashwood wand #668.
+  - **chant #23** removes: blight #75, curse #15, bless #14 — **NOT greater bless.**
+  - So it's **asymmetric**: casting **greater bless strips an active chant** (gbls lists chant directly),
+    but casting **chant leaves an active greater bless alone** (chant's list omits it).
+  - (An earlier build inferred chant→greater-bless transitively via a "family slot" — that was WRONG and
+    was reverted; the user verified in-game that chant does not strip greater bless.)
+- **Two `chant` records share cast code `chan`**: **#23** is the learnable one (`Learnable`, all classes,
+  the one a player casts and the one gbls/curse/blight reference); **#825** is a non-learnable room-cast
+  duplicate (`Casted By = Room …`). The clobber math keys off #23.
+- **Paradigm enforces removes CONTINUOUSLY (~3s tick), not just on cast** *(user-tested, Paradigm)*: while a
+  buff is up it re-strips everything in its list every few seconds. So under an active greater bless you
+  cannot keep a chant up at all — gbls re-removes it within ~3s. (Casting order therefore doesn't let you
+  "keep both" in Paradigm.) **Stock is UNVERIFIED** — it may pace removes only on cast (which would let both
+  stay); do not assume the continuous behaviour for stock. When two configured buffs conflict one-directionally
+  (Y removes X, X doesn't remove Y), Y is the permanent winner (X can never stay up under Y); if both mutually
+  remove each other (e.g. bless ↔ greater bless), **whichever is cast LAST wins** — the later cast strips the
+  earlier (standard last-cast-clobbers, already handled by the direct clobber-clear). Largely academic for a
+  player who'd run only one of a mutual pair.
+- **Applied-latch gotcha** *(report paradigm-20260910-012303)*: `ConditionTracker` dedups a repeated applied
+  line (each spell's "You feel …" latches once until its wear-off). A clobber clears the victim's *timer* but
+  the game sends no distinct wear-off for it (the shared family wear-off is ignored), so the victim's
+  applied-latch survived — and a later **re-cast** of that victim was deduped, never re-confirmed, and so
+  never drove its own clobber-clear (a re-cast greater bless never dropped an active chant). Fixed by
+  `ConditionTracker.ReleaseApplied`, called from the clobber-clear so the victim's latch is dropped too.
 
 **On-death effect wipe** *([CONFIRMED])*
 - Death removes **all active effects — buffs and debuffs alike**. A poison ticking at the moment of
@@ -3519,7 +3556,10 @@ glass jug               5               2 gold crowns
   gates for a `WholePartyOn` slot when `!PartyState.IsInParty`, instead of holding it forever behind
   "must be in a party" (report `paradigm-20260906-150624`: a whole-party item-cast buff, `platinum
   sceptre`, never fired outside a party). A **single-target** slot genuinely still needs an actual party
-  member to aim at, so that branch is unaffected.)
+  member to aim at, so that branch is unaffected.) **`WholePartyOn` remains the master enable**: the
+  per-slot `CastSolo` option only extends an enabled slot to solo play and must not bypass an unchecked
+  Party box. (2026-09-09, report `paradigm-20260909-220212`: unchecked whole-party rows kept casting
+  solo through their default `CastSolo=true`, draining mana while the rest of the UI reported them off.)
   **Scope classification** (confirmed against stock + Paradigm data), gated first on **`EnergyCost == 0`**
   (a buff, not an attack):
   - **`Spells.Targets` = 2** (Self or User) → a **single-target** beneficial buff cast on ONE other member

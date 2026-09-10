@@ -25,10 +25,6 @@ public sealed class ToolbarRowViewModelTests
     }
 
     [Theory]
-    [InlineData("NewProfile",    BuiltInAction.NewProfile)]
-    [InlineData("OpenProfile",   BuiltInAction.OpenProfile)]
-    [InlineData("SaveProfile",   BuiltInAction.SaveProfile)]
-    [InlineData("SaveProfileAs", BuiltInAction.SaveProfileAs)]
     [InlineData("Quit",          BuiltInAction.Quit)]
     public void FileMenuAction_IsKeybindOnly_NoIcon_FriendlyLabel(string actionId, BuiltInAction expected)
     {

@@ -396,6 +396,31 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             $"condition {verb} — {records.Count} records matched one line (names: {names}) flags={flags}");
     }
 
+    // Drop the applied-latch for every currently-active record the predicate picks.
+    // Called when a buff is clobber-cleared elsewhere (CastingDirector, when a landing
+    // buff strips one it removes per RemovesSpell): the game removed the effect, so its
+    // condition is no longer up. Without this the record stays in _active, and a later
+    // RE-CAST of that same buff is deduped as "already applied" (see OnLine) — its
+    // ConditionApplied never re-fires, so the re-cast can't drive its own clobber-clear.
+    // That stranded a re-cast greater bless from ever dropping an active chant, because
+    // gbls's applied-latch survived chant's earlier clobber of gbls
+    // (report paradigm-20260910-012303). Matches against the applied index (the only
+    // records that can be latched); RecomputeFlags after so a flag the released record
+    // carried clears with it.
+    public void ReleaseApplied(Func<MessageRecord, bool> match)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        if (_active.Count == 0) return;
+        List<string>? drop = null;
+        foreach ((_, MessageRecord r) in _appliedIndex)
+            if (_active.Contains(r.Id) && match(r))
+                (drop ??= new()).Add(r.Id);
+        if (drop is null) return;
+        foreach (string id in drop) _active.Remove(id);
+        RecomputeFlags();
+        _log?.Info(LogCategory, $"applied-latch released for {drop.Count} record(s) (clobber-cleared)");
+    }
+
     private void RecomputeFlags()
     {
         MessageFlags flags = MessageFlags.None;

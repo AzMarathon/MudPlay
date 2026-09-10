@@ -90,6 +90,9 @@
                           IsChecked="{Binding IsDisableHangupsActive, Mode=TwoWay}"
                           ToolTip.Tip="Block every automatic disconnect — only you can hang up (hotkey / toolbar / menu)"/>
                 <Separator/>
+                <MenuItem Header="_Save profile" InputGesture="{Binding SaveProfileGesture}"
+                          Command="{Binding SaveProfileCommand}"
+                          ToolTip.Tip="Write the current profile and its settings to disk"/>
                 <MenuItem Header="_Profile Management…" InputGesture="{Binding ProfileManagerGesture}"
                           Command="{Binding OpenProfileManagerCommand}"/>
                 <Separator/>

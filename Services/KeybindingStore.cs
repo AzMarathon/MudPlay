@@ -94,18 +94,14 @@ public sealed class KeybindingStore
     // Friendly label for the action — used in conflict messages and the
     // Settings → Toolbar + Shortcuts panel. Toolbar/Action-menu actions pull
     // their label from ToolbarItemCatalogue (single source of truth, no
-    // drift); File-menu actions, which have no catalogue entry, fall back to
-    // the explicit map below.
+    // drift); Quit, the only File-menu action with no catalogue entry, falls
+    // back to the explicit map below.
     public static string ActionLabel(BuiltInAction action)
         => ToolbarItemCatalogue.Find(action.ToString())?.Label
            ?? action switch
            {
-               BuiltInAction.NewProfile    => "New profile",
-               BuiltInAction.OpenProfile   => "Open profile",
-               BuiltInAction.SaveProfile   => "Save profile",
-               BuiltInAction.SaveProfileAs => "Save profile as",
-               BuiltInAction.Quit          => "Quit",
-               _                           => action.ToString(),
+               BuiltInAction.Quit => "Quit",
+               _                  => action.ToString(),
            };
 
     // Hardcoded seed chords — mirror the chords that used to live as literals
@@ -130,11 +126,10 @@ public sealed class KeybindingStore
             [BuiltInAction.OpenGameDataBrowser] = new(Key.F3),
             [BuiltInAction.OpenLogPane]         = new(Key.F4),
             [BuiltInAction.OpenWireInspector]   = new(Key.F5),
-            // Ctrl cluster — the File-menu profile + quit actions (unchanged).
-            [BuiltInAction.NewProfile]          = new(Key.N,        Ctrl: true),
-            [BuiltInAction.OpenProfile]         = new(Key.O,        Ctrl: true),
+            // Ctrl cluster — quick profile save, the Profile Management window,
+            // and quit. (New / Open / Save-as were retired into Profile Management.)
             [BuiltInAction.SaveProfile]         = new(Key.S,        Ctrl: true),
-            [BuiltInAction.SaveProfileAs]       = new(Key.S,        Ctrl: true, Shift: true),
+            [BuiltInAction.OpenProfileManager]  = new(Key.P,        Ctrl: true),
             [BuiltInAction.Quit]                = new(Key.Q,        Ctrl: true),
             // OpenParty, OpenSessionStats and OpenSettings have no default
             // chord — F3 now opens the Game Data Browser, and the function keys

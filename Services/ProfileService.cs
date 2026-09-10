@@ -492,11 +492,10 @@ public sealed class ProfileService
         ProfileClosed?.Invoke();
     }
 
-    // Save the in-memory profile as profileName under bbsName. Used by
-    // File → New profile (to name a fresh blank), File → Save As, and the "name
-    // your draft" path of File → Save when the loaded profile doesn't have a
-    // name yet. Replaces an existing file at that path without asking — the
-    // caller owns the confirm-overwrite UX.
+    // Save the in-memory profile as profileName under bbsName. The "Save as"
+    // action in the Profile Management window: names the loaded profile (e.g. a
+    // fresh {default} draft) and writes it. Replaces an existing file at that
+    // path without asking — the caller owns the confirm-overwrite UX.
     public void SaveAs(string bbsName, string profileName)
     {
         if (string.IsNullOrWhiteSpace(bbsName))
