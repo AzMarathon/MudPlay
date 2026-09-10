@@ -574,6 +574,22 @@ public static class BugReportBuilder
         }
         sb.Append('\n');
 
+        // Buffs a configured winner PERMANENTLY removes one-directionally (Paradigm continuous
+        // removal) — never maintained, shown "covered by" in the Watchdog. Surfaced so a
+        // "why isn't <buff> casting / holding a timer" report shows it's a deliberate skip.
+        IReadOnlyDictionary<string, string> suppressed = svc.CastDirector.CurrentSuppressedBuffs();
+        sb.Append("**Suppressed buffs (permanently removed by a configured buff)**\n\n");
+        if (suppressed.Count == 0)
+        {
+            sb.Append("(none)\n");
+        }
+        else
+        {
+            foreach (KeyValuePair<string, string> kv in suppressed)
+                sb.Append($"- {kv.Key}: not maintained — covered by {kv.Value}\n");
+        }
+        sb.Append('\n');
+
         // Mana-regen reroll engine state — so a "flux stuck at a bad value" report
         // (paradigm-20260830-110918) shows the roll quality it judges from and its
         // cycle, not just the configured threshold in the buff plan above.

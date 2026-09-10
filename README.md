@@ -10,6 +10,7 @@
 > - Buff Watchdog: the inline checkboxes and buttons are clickable again — the row drag-reorder handler was swallowing every click in the panel
 > - Buff Watchdog: a buff stripped by a newly-cast buff that removes it has its timer cleared when the clobbering buff lands — each spell respects its literal Removes list (casting greater bless clears an active chant; casting chant leaves greater bless alone)
 > - Buff Watchdog: re-casting a buff that was earlier stripped now clears whatever replaced it (e.g. re-cast greater bless drops an active chant instead of leaving it stuck on "conflict")
+> - Buff Watchdog: a configured buff that another configured buff permanently removes one-directionally (e.g. greater bless removes chant) is no longer cast or timed — it shows "covered by" the winner (Paradigm only; mutual pairs stay last-cast-wins)
 > - **Save profile** put back on the File menu with a floppy-disk toolbar icon; New / Open / Save-as profile retired into Profile Management, which gained a **Ctrl+P** shortcut
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

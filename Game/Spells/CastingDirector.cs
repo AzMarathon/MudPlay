@@ -272,6 +272,10 @@ public sealed class CastingDirector : IDisposable
     // Self-buff cast code → the party-wide party buff that removes (supersedes) it while
     // in a party. PickSelfBuff skips a covered slot; the Buff Watchdog labels it.
     private Func<IReadOnlyDictionary<string, string>>? _selfBuffCoverage;
+    // Configured buffs another configured buff PERMANENTLY removes (Paradigm continuous
+    // removal, one-directional): loser cast code → winning buff name. Never maintained (the
+    // winner keeps stripping them), for ANY target; the watchdog labels them "covered by".
+    private Func<IReadOnlyDictionary<string, string>>? _suppressedBuffs;
     private Action<string>? _selfBuffCastSink;
     private Func<DateTime> _now = () => DateTime.UtcNow;
     private LineExtractor? _lines;
@@ -635,6 +639,22 @@ public sealed class CastingDirector : IDisposable
     // solo or unwired.
     public IReadOnlyDictionary<string, string> CurrentSelfBuffCoverage()
         => _selfBuffCoverage?.Invoke() ?? _emptyCoverage;
+
+    // Wire the permanently-suppressed-buff source: loser cast code → winning buff name for
+    // one-directional conflicts (Paradigm continuous removal). PickUnifiedBuff skips a
+    // suppressed slot for any target so we never waste rounds casting a buff the winner
+    // re-strips; the Buff Watchdog labels it "covered by".
+    public void SetSuppressedBuffs(Func<IReadOnlyDictionary<string, string>> suppressed)
+    {
+        ArgumentNullException.ThrowIfNull(suppressed);
+        _suppressedBuffs = suppressed;
+    }
+
+    // The current permanently-suppressed-buff map (loser code → winning buff name) — the
+    // Buff Watchdog reads this to label a suppressed buff "covered by". Empty off Paradigm
+    // or unwired.
+    public IReadOnlyDictionary<string, string> CurrentSuppressedBuffs()
+        => _suppressedBuffs?.Invoke() ?? _emptyCoverage;
 
     private static readonly IReadOnlyDictionary<string, string> _emptyCoverage =
         new Dictionary<string, string>();
@@ -2019,6 +2039,12 @@ public sealed class CastingDirector : IDisposable
         // bless) is left to that party buff — skip self-casting the superseded spell.
         IReadOnlyDictionary<string, string>? covered = _selfBuffCoverage?.Invoke();
 
+        // A buff another configured buff PERMANENTLY removes (one-directional, Paradigm
+        // continuous removal — e.g. greater bless keeps stripping chant) is never
+        // maintained on ANY target: the winner re-strips it, so casting it just burns
+        // rounds. Empty off Paradigm and for mutual pairs (those are last-cast-wins).
+        IReadOnlyDictionary<string, string>? suppressed = _suppressedBuffs?.Invoke();
+
         // Cast-priority order. Default (PriorityTopDown off) walks the list grouped
         // by type (self → whole-party → item) regardless of how the config rows are
         // arranged; top-to-bottom priority (and only once the user hand-arranged the
@@ -2033,6 +2059,10 @@ public sealed class CastingDirector : IDisposable
         foreach (Models.Profile.BuffSlot slot in ordered)
         {
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
+
+            // Permanently removed by another configured buff — never maintain it (the
+            // winner keeps stripping it). Skips self, member, and whole-party casts alike.
+            if (suppressed is not null && suppressed.ContainsKey(slot.Spell)) continue;
 
             // Only-when-dark light spells are cast reactively by the auto-light system
             // on entering a dark room, not maintained here — skip them entirely.

@@ -125,6 +125,28 @@ public static class BuffConflictAnalyzer
         return (removedBy, removes);
     }
 
+    // From a set of configured overwrite pairs, the buffs that a PERMANENT winner removes
+    // one-directionally: loser cast code → winning buff name. X is a permanent loser when
+    // some Y removes X AND X does NOT remove Y back — Y stays up and re-strips X, so X can
+    // never hold. Mutual pairs (each removes the other, e.g. bless ↔ greater bless) are
+    // excluded: those are last-cast-wins, not a permanent loss. Case-insensitive on codes;
+    // first winner encountered per loser wins the label. Pure — the CALLER decides whether
+    // to apply it (AppServices gates on the Paradigm realm, where removes re-fire ~3s).
+    public static IReadOnlyDictionary<string, string> OneDirectionalLosers(
+        IReadOnlyList<BuffOverwritePair> pairs)
+    {
+        Dictionary<string, string> losers = new(StringComparer.OrdinalIgnoreCase);
+        bool Removes(string remover, string removed) =>
+            pairs.Any(q => string.Equals(q.RemovingCode, remover, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(q.RemovedCode, removed, StringComparison.OrdinalIgnoreCase));
+        foreach (BuffOverwritePair p in pairs)
+        {
+            if (Removes(p.RemovedCode, p.RemovingCode)) continue;   // mutual → last-cast-wins
+            if (!losers.ContainsKey(p.RemovedCode)) losers[p.RemovedCode] = p.RemovingName;
+        }
+        return losers;
+    }
+
     // One combined tooltip covering both directions, or null when neither applies.
     public static string? FormatTooltip(string? removedBy, string? removes)
     {

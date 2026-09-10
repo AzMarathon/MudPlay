@@ -277,4 +277,37 @@ public sealed class BuffConflictAnalyzerTests
     private static BuffAffectSet SelfAffect() => BuffAffectSet.From(
         isWholePartySpell: false, wholePartyOn: false, castOnSelf: true, allMembers: false,
         targets: Array.Empty<string>());
+
+    // ----- OneDirectionalLosers (permanent-winner suppression) -----
+
+    [Fact]
+    public void OneDirectionalLosers_SuppressesTheOneWayLoser()
+    {
+        // greater bless removes chant; chant does NOT remove greater bless → chant is a
+        // permanent loser under gbls (Paradigm re-strips it every ~3s), covered by gbls.
+        List<BuffOverwritePair> pairs = new()
+        {
+            new BuffOverwritePair("gbls", "greater bless", "chan", "chant"),
+        };
+
+        IReadOnlyDictionary<string, string> losers = BuffConflictAnalyzer.OneDirectionalLosers(pairs);
+
+        Assert.True(losers.ContainsKey("chan"));
+        Assert.Equal("greater bless", losers["chan"]);
+        Assert.False(losers.ContainsKey("gbls"));   // the winner is never a loser
+    }
+
+    [Fact]
+    public void OneDirectionalLosers_ExcludesMutualPairs()
+    {
+        // bless ↔ greater bless each remove the other → mutual (last-cast-wins), so neither
+        // is a permanent loser — nothing suppressed.
+        List<BuffOverwritePair> pairs = new()
+        {
+            new BuffOverwritePair("gbls", "greater bless", "bles", "bless"),
+            new BuffOverwritePair("bles", "bless", "gbls", "greater bless"),
+        };
+
+        Assert.Empty(BuffConflictAnalyzer.OneDirectionalLosers(pairs));
+    }
 }

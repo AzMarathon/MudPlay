@@ -3681,6 +3681,10 @@ public sealed class AppServices
         // self-buff (RemovesSpell) covers us, so the director stops self-casting the
         // removed one — the Buff Watchdog shows that slot "covered by" the party buff.
         CastDirector.SetSelfBuffCoverage(SelfBuffCoverage);
+        // A buff a configured winner PERMANENTLY removes one-directionally (Paradigm
+        // continuous removal — e.g. greater bless keeps stripping chant) is never
+        // maintained on any target; the Buff Watchdog shows it "covered by" the winner.
+        CastDirector.SetSuppressedBuffs(SuppressedBuffCoverage);
         // Downed-ally rescue heal. A dropped ally leaves `par`, so PickPartyHeal's
         // roster walk can't see them — the AllyDroppedHandler feeds each aided
         // downed ally back in here as the top-priority name-targeted heal until
@@ -6755,6 +6759,31 @@ public sealed class AppServices
                     map[code] = pslot.Spell.Trim();
         }
         return map;
+    }
+
+    // Configured buffs that can never stay up because another configured buff PERMANENTLY
+    // removes them: loser cast code → the winning buff's name (for a "covered by" label).
+    // A one-directional conflict only (Y removes X, X does NOT remove Y back) — Y is up, so
+    // X is stripped and re-stripped forever; the client shouldn't waste casts maintaining it
+    // or show a live timer for it. Mutual pairs (each removes the other, e.g. bless ↔ greater
+    // bless) are NOT suppressed — those are last-cast-wins, left to the normal clobber-clear.
+    //
+    // PARADIGM ONLY: Paradigm re-enforces a buff's RemovesSpell continuously (~3s), so the
+    // loser truly can't coexist. Stock is unverified (it may pace removes on cast, letting
+    // both stay), so this returns empty off Paradigm — don't suppress there.
+    //
+    // Distinct from SelfBuffCoverage (which is the in-party, whole-party-covers-self case,
+    // including mutual pairs): this is the general one-directional winner, self-cast winners
+    // and solo included. The picker skips a suppressed slot for ANY target; the Buff Watchdog
+    // shows the loser as "covered by" instead of a stuck "conflict".
+    public IReadOnlyDictionary<string, string> SuppressedBuffCoverage()
+    {
+        // PARADIGM ONLY: only there is a buff's RemovesSpell re-enforced continuously (~3s),
+        // so the one-directional loser truly can't coexist. Stock is unverified (may pace on
+        // cast, letting both stay), so suppress nothing there.
+        if (GameData.ActiveRealm != Game.RealmType.ParaMud)
+            return new Dictionary<string, string>();
+        return Game.Spells.BuffConflictAnalyzer.OneDirectionalLosers(BuffSlotOverwritePairs());
     }
 
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
