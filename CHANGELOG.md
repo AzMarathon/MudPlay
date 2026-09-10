@@ -1,5 +1,9 @@
 # Version history
 
+## 3.63.1
+
+- The pre-engage "can I kill this?" check now weighs per-monster spell overrides, so the walker no longer skips a monster its weapons can't hit but an override spell can (a mana-blocked override reads as wait-for-mana, not unkillable)
+
 ## 3.63.0
 
 - Per-monster **combat overrides** in Game Data now cover the whole single-target chain, not just two slots: **Debuff (single target)**, **Normal attack spell**, **Alternate attack spell**, and a new **Physical attack** command — each pinnable against an exact monster

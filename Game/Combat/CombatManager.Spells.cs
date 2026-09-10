@@ -1714,61 +1714,74 @@ public sealed partial class CombatManager
 
         (int ma, int maxMa) = _readMana!();
         IReadOnlySet<CombatSpellAction>? immune = _attackSpellImmuneSpecies.GetValueOrDefault(species);
-        // Engageability weighs only the CONFIGURED attack slots (as the loop below
-        // iterates), not per-monster overrides — same as before this feature. An
-        // override spell that could kill a weapon-immune, config-blocked monster is a
-        // known gap (the walker may move on); the live combat cascade still honours it.
+
+        // Effective single-target kill spell per rung: the per-monster override when
+        // set, else the configured slot — so a monster only an override could kill is
+        // still assessed as actionable, not skipped by the walker. The override code
+        // is resolved mana-INDEPENDENTLY; its own floor feeds the reserve check below,
+        // so a mana-blocked override reads StuckOnMana (transient), never Unkillable.
+        // (When both an override and a lower-floor configured slot are set for one
+        // rung, engageability follows the override — the user's authoritative pick.)
+        MonsterOverlay overlay = ResolveOverlay(monsterNumber);
+        (string? normalCode, int normalFloor) = EffectiveKillSpell(
+            overlay.OverrideAttackSpellId, overlay.OverrideAttackMinMana, settings.NormalAttackSpell);
+        (string? altCode, int altFloor) = EffectiveKillSpell(
+            overlay.OverrideAltAttackSpellId, overlay.OverrideAltAttackMinMana, settings.AlternateAttackSpell);
+
+        // Level / element-resist blocks weigh the EFFECTIVE spell too — an override is
+        // gated on its own ReqLevel / element. The single-debuff code is not a kill
+        // means, so it never decides this verdict.
         IReadOnlySet<CombatSpellAction>? levelBlocked = LevelBlockedFor(monsterNumber,
-            settings.SingleTargetDebuffSpell.SpellName, settings.NormalAttackSpell.SpellName,
-            settings.AlternateAttackSpell.SpellName);
-        IReadOnlySet<CombatSpellAction>? resistBlocked = ResistBlockedFor(monsterNumber,
-            settings.NormalAttackSpell.SpellName, settings.AlternateAttackSpell.SpellName);
+            NullIfBlank(settings.SingleTargetDebuffSpell.SpellName), normalCode, altCode);
+        IReadOnlySet<CombatSpellAction>? resistBlocked = ResistBlockedFor(monsterNumber, normalCode, altCode);
 
         bool anyUnaffordable = false;
-        foreach ((CombatSpellSlot slot, CombatSpellAction action) in AttackSpellSlots(settings))
+        ThresholdMode manaMode = settings.SpellManaThresholdMode;
+
+        // A rung is castable this round unless its spell is unconfigured, observed-
+        // immune, level- or resist-blocked, or unaffordable (which marks the transient
+        // mana stall rather than a permanent block). Shared by the normal + alternate
+        // rungs so the effective-spell gating stays in one place.
+        EngageAssessment? RungVerdict(string? code, int floor, CombatSpellAction action)
         {
-            if (string.IsNullOrWhiteSpace(slot.SpellName)) continue;          // unconfigured
-            if (immune?.Contains(action) == true) continue;                  // observed immune
-            if (levelBlocked?.Contains(action) == true) continue;            // level-blocked
-            if (resistBlocked?.Contains(action) == true) continue;           // element-resisted
-            if (!ManaMeets(slot, ma, maxMa, settings.SpellManaThresholdMode))
+            if (string.IsNullOrWhiteSpace(code)) return null;
+            if (immune?.Contains(action) == true) return null;
+            if (levelBlocked?.Contains(action) == true) return null;
+            if (resistBlocked?.Contains(action) == true) return null;
+            if (!CombatSpellChooser.ManaMeetsReserve(floor, ma, maxMa, manaMode))
             {
-                anyUnaffordable = true;                                        // would work with more MA
-                continue;
+                anyUnaffordable = true;
+                return null;
             }
-            return EngageAssessment.CanAct;                                   // castable this round
+            return EngageAssessment.CanAct;
         }
+
+        if (RungVerdict(normalCode, normalFloor, CombatSpellAction.NormalAttackSpell) is { } nv) return nv;
+        if (RungVerdict(altCode, altFloor, CombatSpellAction.AlternateAttackSpell) is { } av) return av;
 
         // Nothing castable now: unaffordable-only means a mana tick fixes it
         // (transient); otherwise every spell is permanently blocked / unconfigured.
         return anyUnaffordable ? EngageAssessment.StuckOnMana : EngageAssessment.Unkillable;
     }
 
-    // The single-target attack-spell slots, in cascade order — the kill means the
-    // affordability check weighs. Multi-attack (a room nuke gated on enemy count)
-    // isn't a reliable single-target kill means, so it's excluded here, matching
-    // the observed-immunity map which only records the single-target slots.
-    private static IEnumerable<(CombatSpellSlot Slot, CombatSpellAction Action)> AttackSpellSlots(
-        CombatSettings settings)
+    // The effective single-target kill spell for a rung — the per-monster override
+    // (resolved mana-independently) when set, else the configured slot — paired with
+    // the mana floor that applies (the override's own, or the slot's).
+    private (string? Code, int Floor) EffectiveKillSpell(
+        int? overrideSpellId, int? overrideMinMana, CombatSpellSlot configured)
     {
-        yield return (settings.NormalAttackSpell, CombatSpellAction.NormalAttackSpell);
-        yield return (settings.AlternateAttackSpell, CombatSpellAction.AlternateAttackSpell);
+        if (ResolveSpellOverride(overrideSpellId, null).Spell is { } code)
+            return (code, overrideMinMana ?? 0);
+        return (NullIfBlank(configured.SpellName), configured.MinManaPerCast);
     }
-
-    // Whether the live MA meets a slot's per-cast mana floor — the SAME gate the
-    // chooser applies (shared CombatSpellChooser.ManaMeetsReserve, which compares
-    // the percentage reserve against its rounded absolute equivalent so it matches
-    // the Settings conversion label), lifted here so the actionability assessment
-    // can tell a transient mana stall from a permanent block.
-    private static bool ManaMeets(CombatSpellSlot slot, int ma, int maxMa, ThresholdMode mode) =>
-        CombatSpellChooser.ManaMeetsReserve(slot.MinManaPerCast, ma, maxMa, mode);
 
     // The reason we can't kill monsterNumber, or null when it's actionable.
     // Physical eligibility is checked first (deterministic, fails open); only when
-    // both weapons are proven unable to hit do we consult the attack-spell slots.
-    // An attack spell counts as a kill means when it's configured and either the
-    // monster has no spell immunity or the spell's ReqLevel clears it. Area /
-    // single-target debuffs are NOT kill means and never count here.
+    // both weapons are proven unable to hit do we consult the attack-spell rungs.
+    // An attack spell counts as a kill means when it's present (a per-monster
+    // override, else the configured slot) and either the monster has no spell
+    // immunity or the spell's ReqLevel clears it. Area / single-target debuffs are
+    // NOT kill means and never count here.
     private string? UnengageableReason(CombatSettings settings, int monsterNumber)
     {
         if (_monsterMagic is null || _itemMagic is null) return null;   // unwired → fail open
@@ -1785,27 +1798,33 @@ public sealed partial class CombatManager
         if (altHit < 0) return null;                                    // unknown alt weapon → fail open
         if (altHit >= magical) return null;                             // alt hits
 
-        // Neither weapon can hit. The monster is actionable only if some
-        // configured attack spell can still land on it.
+        // Neither weapon can hit. The monster is actionable only if some attack
+        // spell can still land on it — weighing the per-monster override (resolved
+        // mana-independently) ahead of the configured slot for the normal/alternate
+        // rungs, so an override that clears the immunity keeps the monster killable.
         if (_spellReqLevel is null) return null;                        // can't prove spell-blocked → fail open
         int immu = _monsterMagic.SpellImmunity(monsterNumber);
-        if (AttackSpellCanLand(settings.NormalAttackSpell, immu)) return null;
-        if (AttackSpellCanLand(settings.AlternateAttackSpell, immu)) return null;
-        if (AttackSpellCanLand(settings.MultiAttackSpell, immu)) return null;
+        MonsterOverlay overlay = ResolveOverlay(monsterNumber);
+        string? normalEff = ResolveSpellOverride(overlay.OverrideAttackSpellId, null).Spell
+                            ?? NullIfBlank(settings.NormalAttackSpell.SpellName);
+        string? altEff = ResolveSpellOverride(overlay.OverrideAltAttackSpellId, null).Spell
+                         ?? NullIfBlank(settings.AlternateAttackSpell.SpellName);
+        if (AttackSpellCanLand(normalEff, immu)) return null;
+        if (AttackSpellCanLand(altEff, immu)) return null;
+        if (AttackSpellCanLand(NullIfBlank(settings.MultiAttackSpell.SpellName), immu)) return null;
 
         return $"weapons HitMagic<{magical} (normal={normalHit} alt={altHit}) " +
                $"and no eligible attack spell (SpellImmu={immu})";
     }
 
-    // True when slot holds a configured attack spell that can land on a monster
-    // with spell-immunity immu: unconfigured slots are not a kill means; an
-    // unknown spell fails open (assume it works); otherwise the spell lands iff
-    // its ReqLevel is ≥ the immunity. Assumes _spellReqLevel is wired (the only
-    // caller checks first).
-    private bool AttackSpellCanLand(CombatSpellSlot slot, int immu)
+    // True when code is an attack spell that can land on a monster with spell-
+    // immunity immu: a null/blank code is not a kill means; an unknown spell fails
+    // open (assume it works); otherwise the spell lands iff its ReqLevel is ≥ the
+    // immunity. Assumes _spellReqLevel is wired (the only caller checks first).
+    private bool AttackSpellCanLand(string? code, int immu)
     {
-        if (string.IsNullOrWhiteSpace(slot.SpellName)) return false;    // unconfigured → not a kill means
-        int req = _spellReqLevel!.ReqLevel(slot.SpellName);
+        if (string.IsNullOrWhiteSpace(code)) return false;              // no spell → not a kill means
+        int req = _spellReqLevel!.ReqLevel(code);
         if (req < 0) return true;                                       // unknown spell → fail open
         if (immu <= 0) return true;                                     // no immunity → any spell lands
         return req >= immu;                                             // eligible iff ReqLevel ≥ SpellImmu

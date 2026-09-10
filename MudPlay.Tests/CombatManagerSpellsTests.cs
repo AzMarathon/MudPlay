@@ -1297,6 +1297,73 @@ public sealed class CombatManagerSpellsTests
         Assert.True(h.Combat.CanEngageMonster(1));                  // castable again → retry
     }
 
+    // ----- engageability weighs per-monster overrides -------------------
+
+    [Fact]
+    public void Engage_OverrideSpell_MakesWeaponImmuneMonsterKillable()
+    {
+        // Both weapons proven ineffective AND no configured attack spell — but a
+        // per-monster override spell can land. The pre-engage gate must treat the
+        // monster as actionable, else the walker skips a monster the override kills.
+        using Harness h = new();
+        h.Settings.NormalWeapon = "sword";
+        h.Settings.AlternateWeapon = "hammer";
+        h.Settings.AlternateAttackCommand = "aa";
+        h.SpellShorts[42] = "fireball";
+        h.Overlays[1] = new MonsterOverlay { OverrideAttackSpellId = 42 };
+        h.Ma = 100; h.MaxMa = 100;
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+        h.Feed("Your weapon has no effect against this monster!");   // normal → alt
+        h.Feed("Your weapon has no effect against this monster!");   // alt retry
+        h.Feed("Your weapon has no effect against this monster!");   // alt out → weapons exhausted
+
+        Assert.True(h.Combat.CanEngageMonster(1));
+    }
+
+    [Fact]
+    public void Engage_NoKillMeans_WeaponsOutNoSpell_StaysUnkillable()
+    {
+        // Negative control: same weapons-out setup with NO override and NO configured
+        // attack spell → genuinely unkillable, so the walker still moves on.
+        using Harness h = new();
+        h.Settings.NormalWeapon = "sword";
+        h.Settings.AlternateWeapon = "hammer";
+        h.Settings.AlternateAttackCommand = "aa";
+        h.Ma = 100; h.MaxMa = 100;
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+        h.Feed("Your weapon has no effect against this monster!");
+        h.Feed("Your weapon has no effect against this monster!");
+        h.Feed("Your weapon has no effect against this monster!");
+
+        Assert.False(h.Combat.CanEngageMonster(1));
+    }
+
+    [Fact]
+    public void Engage_OverrideSpellManaBlocked_StuckNotUnkillable()
+    {
+        // Weapons out, only an override spell, MA below the override's own floor:
+        // actionable-once-mana-returns (StuckOnMana → not engageable now), but NOT
+        // written off — a mana tick makes it engageable again.
+        using Harness h = new();
+        h.Settings.NormalWeapon = "sword";
+        h.Settings.AlternateWeapon = "hammer";
+        h.Settings.AlternateAttackCommand = "aa";
+        h.SpellShorts[42] = "fireball";
+        h.Overlays[1] = new MonsterOverlay { OverrideAttackSpellId = 42, OverrideAttackMinMana = 50 };
+        h.Ma = 10; h.MaxMa = 100;                                    // below the override floor
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+        h.Feed("Your weapon has no effect against this monster!");
+        h.Feed("Your weapon has no effect against this monster!");
+        h.Feed("Your weapon has no effect against this monster!");
+
+        Assert.False(h.Combat.CanEngageMonster(1));                  // stuck on mana → move on for now
+        h.Ma = 100;                                                 // MA regenerates
+        Assert.True(h.Combat.CanEngageMonster(1));                  // override can land → actionable
+    }
+
     // ----- announce once; the server auto-repeats -----------------------
 
     [Fact]
