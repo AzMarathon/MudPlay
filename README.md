@@ -7,6 +7,7 @@
 > - Emergency survival (life-threatening heal, flee, emergency hangup) always fires immediately; Auto-Sneak off reverts to casting on schedule
 > - Buff Watchdog: unchecking a whole-party buff's **Party** master now clears Solo and stops every future cast, including while alone
 > - **Add all blesses** leaves whole-party buffs fully off until you explicitly enable them
+> - Buff Watchdog: the inline checkboxes and buttons are clickable again — the row drag-reorder handler was swallowing every click in the panel
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
