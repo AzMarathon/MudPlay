@@ -47,8 +47,8 @@
                  Combat tab; they're not duplicated here. -->
             <Grid ColumnDefinitions="140,Auto,Auto,Auto,*" RowDefinitions="Auto" Margin="0,2,0,0">
 
-                <!-- Rank: Front / Mid / Back. Persisted; not yet consumed
-                     (Phase 12 CombatManager will read it for target ordering). -->
+                <!-- Rank: Front / Mid / Back. Persisted; not yet consumed for
+                     combat target ordering. -->
                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rank"/>
                 <RadioButton Grid.Row="0" Grid.Column="1" GroupName="Rank" Content="Front"
                              IsChecked="{Binding RankFront, Mode=TwoWay}"

@@ -50,14 +50,11 @@
             <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
         </Style>
         <!-- The Default set's four weapon rows are the active combat profile's
-             weapons — tint them the profile accent (amber) so it's clear they swap
-             with the combat profile chip on the Combat settings tab. -->
+             weapons — tinted the active profile's colour (SyncBrush, bound per row)
+             so it's clear they swap with the combat profile chip on the Combat tab. -->
         <Style Selector="Border.slotRow">
             <Setter Property="CornerRadius" Value="3"/>
             <Setter Property="Padding" Value="3,0"/>
-        </Style>
-        <Style Selector="Border.slotRow.profileSynced">
-            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
         </Style>
     </UserControl.Styles>
 
@@ -170,12 +167,12 @@
                              tab's profile chips. -->
                         <Border Grid.Row="0" Margin="10,8,10,4" Padding="8,4"
                                 CornerRadius="4"
-                                Background="{StaticResource AccentAmberSoftBrush}"
-                                BorderBrush="{StaticResource AccentAmberBrush}"
+                                Background="{Binding ActiveProfileAccentSoftBrush}"
+                                BorderBrush="{Binding ActiveProfileAccentBrush}"
                                 BorderThickness="1"
                                 IsVisible="{Binding ShowCombatProfileMarker}">
                             <TextBlock Text="{Binding CombatProfileMarker}"
-                                       Foreground="{StaticResource AccentAmberBrush}"
+                                       Foreground="{Binding ActiveProfileAccentBrush}"
                                        FontSize="{StaticResource FontSizeSm}"
                                        FontWeight="SemiBold"
                                        ToolTip.Tip="The Weapon / Off-Hand / Alt-Weapon / Alt-Off-Hand rows below are this combat profile's weapons — editing them here is the same as editing the profile's weapon pickers on the Combat settings tab. Switching the profile swaps them."/>
@@ -191,7 +188,7 @@
                             <ItemsControl ItemsSource="{Binding Rows}" Margin="10,0,10,8">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="vm:EquipmentSlotRowViewModel">
-                                        <Border Classes="slotRow" Classes.profileSynced="{Binding ProfileSynced}"
+                                        <Border Classes="slotRow" Background="{Binding SyncBrush}"
                                                 Margin="0,1" IsVisible="{Binding Applies}">
                                             <Grid ColumnDefinitions="128,*,Auto">
                                                 <TextBlock Grid.Column="0" Classes="Field"

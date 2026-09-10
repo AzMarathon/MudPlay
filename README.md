@@ -2,11 +2,12 @@
 
 <!-- current-version:start -->
 > **Version 3.65.0**
-> - Combat profiles expanded from spell-only snapshots to full quick-swap loadouts: each now also carries the attack commands, room thresholds (min/max monsters, run distance), the primary/alternate weapons (+ off-hands), and the entire Health tab
-> - Every per-profile settings group on the Combat and Health tabs is wrapped in an amber "Combat profile: <name>" border; shared settings (targeting, backstab, action order, run-away, display) stay outside
+> - Combat profiles expanded from spell-only snapshots to full quick-swap loadouts: each now also carries the attack commands, room thresholds (min/max monsters, run distance), the primary/alternate weapons (+ off-hands), the entire Health tab, and the Spells tab's between-round priority order + healing/regen picks
+> - Every per-profile settings group on the Combat, Health and Spells tabs is wrapped in a "Combat profile: <name>" border; shared settings stay outside
+> - Each profile now has its own distinct colour — chip, bordered groups (all three tabs), and the Workshop's Default-set weapon rows — so profiles are visually distinct
 > - New weapon pickers on the Combat tab; a profile's weapons live in the Workshop Default gear set and switch with the profile, so the equipped weapon changes on swap
-> - The Equipment Manager marks the Default set's weapon rows with the active profile name and tints them amber to show they're synced
 > - The chip selector moved to the top of the Combat tab; @profile / the toolbar cycle / the Action menu now swap the whole loadout
+> - Removed stale "wires in PR 9.x" / phase-plan references from Settings tooltips
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

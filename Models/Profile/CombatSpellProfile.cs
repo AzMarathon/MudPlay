@@ -59,6 +59,13 @@ public sealed class CombatSpellProfile
     // live Settings["Health"] to a clone of this.
     public HealthSettings Health { get; set; } = new();
 
+    // The Spells-tab subset a profile carries — the between-round category priority
+    // order + the self-heal / HP-regen picks. The rest of Settings["Spells"] (cures,
+    // bless timing, ailment gates, the Buff Watchdog self-bless slots) stays
+    // per-character and is preserved across a switch (WriteInto touches only these
+    // fields).
+    public CombatProfileSpells Spells { get; set; } = new();
+
     // Snapshot the Combat-tab + Health-tab fields into a fresh profile. Weapons are
     // NOT captured here — they live in the gear set, so the caller (the manager)
     // fills them from the Default set via EquipmentWeaponSync.CaptureDefaultWeapons.
@@ -159,5 +166,73 @@ public sealed class CombatSpellProfile
         AlternateWeapon = AlternateWeapon,
         AlternateOffHand = AlternateOffHand,
         Health = Health.Clone(),
+        Spells = Spells.Clone(),
+    };
+}
+
+// The Spells-tab subset a combat profile carries: the between-round category
+// priority order (1-7 per category) + the self-heal / HP-regen picks. Everything
+// else on the Spells tab (cures, self-bless timing, ailment gates) and the Buff
+// Watchdog self-bless slots stay per-character — WriteInto touches only these
+// fields, so a switch never disturbs them.
+public sealed class CombatProfileSpells
+{
+    public int PriorityMinorPartyHeal { get; set; } = 1;
+    public int PriorityMajorPartyHeal { get; set; } = 2;
+    public int PriorityMinorSelfHeal { get; set; } = 3;
+    public int PriorityMajorSelfHeal { get; set; } = 4;
+    public int PriorityCuring { get; set; } = 5;
+    public int PriorityBuffing { get; set; } = 6;
+    public int PriorityDebuffing { get; set; } = 7;
+
+    public string? MinorHealSpell { get; set; }
+    public string? MajorHealSpell { get; set; }
+    public string? HpRegenSpell { get; set; }
+
+    // Snapshot the profile-owned fields off a live SpellsSettings.
+    public void CaptureFrom(SpellsSettings src)
+    {
+        ArgumentNullException.ThrowIfNull(src);
+        PriorityMinorPartyHeal = src.PriorityMinorPartyHeal;
+        PriorityMajorPartyHeal = src.PriorityMajorPartyHeal;
+        PriorityMinorSelfHeal = src.PriorityMinorSelfHeal;
+        PriorityMajorSelfHeal = src.PriorityMajorSelfHeal;
+        PriorityCuring = src.PriorityCuring;
+        PriorityBuffing = src.PriorityBuffing;
+        PriorityDebuffing = src.PriorityDebuffing;
+        MinorHealSpell = src.MinorHealSpell;
+        MajorHealSpell = src.MajorHealSpell;
+        HpRegenSpell = src.HpRegenSpell;
+    }
+
+    // Overlay them onto a live SpellsSettings, leaving every per-character field
+    // (cures, bless timing, ailment gates, the self-bless slots) untouched.
+    public void WriteInto(SpellsSettings dst)
+    {
+        ArgumentNullException.ThrowIfNull(dst);
+        dst.PriorityMinorPartyHeal = PriorityMinorPartyHeal;
+        dst.PriorityMajorPartyHeal = PriorityMajorPartyHeal;
+        dst.PriorityMinorSelfHeal = PriorityMinorSelfHeal;
+        dst.PriorityMajorSelfHeal = PriorityMajorSelfHeal;
+        dst.PriorityCuring = PriorityCuring;
+        dst.PriorityBuffing = PriorityBuffing;
+        dst.PriorityDebuffing = PriorityDebuffing;
+        dst.MinorHealSpell = MinorHealSpell;
+        dst.MajorHealSpell = MajorHealSpell;
+        dst.HpRegenSpell = HpRegenSpell;
+    }
+
+    public CombatProfileSpells Clone() => new()
+    {
+        PriorityMinorPartyHeal = PriorityMinorPartyHeal,
+        PriorityMajorPartyHeal = PriorityMajorPartyHeal,
+        PriorityMinorSelfHeal = PriorityMinorSelfHeal,
+        PriorityMajorSelfHeal = PriorityMajorSelfHeal,
+        PriorityCuring = PriorityCuring,
+        PriorityBuffing = PriorityBuffing,
+        PriorityDebuffing = PriorityDebuffing,
+        MinorHealSpell = MinorHealSpell,
+        MajorHealSpell = MajorHealSpell,
+        HpRegenSpell = HpRegenSpell,
     };
 }

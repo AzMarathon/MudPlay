@@ -4497,6 +4497,14 @@ public sealed class AppServices
                 p.Settings["Health"] = System.Text.Json.JsonSerializer.SerializeToElement(health);
                 Profile.Save();
             },
+            readSpells: () => ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells"),
+            writeSpells: spells =>
+            {
+                if (Profile.Current is not { } p) return;
+                p.Settings ??= new();
+                p.Settings["Spells"] = System.Text.Json.JsonSerializer.SerializeToElement(spells);
+                Profile.Save();
+            },
             // Ensure the blob exists so a profile's weapon writes land on a live
             // reference Save persists — the Equipment Manager seeds an empty one the
             // same way. Null only when no profile is loaded.

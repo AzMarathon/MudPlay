@@ -21,15 +21,13 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!-- Casting spell profile chips: a compact numbered button; the active
-             profile's chip fills gold (mirrors the toolbar's Active state). -->
+        <!-- Combat-profile chips: a compact numbered button tinted its own profile
+             colour (Background / Foreground / BorderBrush bound per-item), so the
+             profiles read as distinct; the active chip gets a solid-colour ring. -->
         <Style Selector="Button.ProfileChip">
             <Setter Property="Padding" Value="9,2"/>
             <Setter Property="MinWidth" Value="30"/>
-        </Style>
-        <Style Selector="Button.ProfileChip.Active">
-            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
         </Style>
 
         <!-- Unlearned dropdown row: struck through + dimmed. -->
@@ -53,19 +51,18 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,16,0,6"/>
         </Style>
-        <!-- Per-combat-profile settings group: a soft amber panel (the active-
-             profile accent) with the profile name in the header, so it reads as
-             "this group swaps with the combat profile chip above". -->
+        <!-- Per-combat-profile settings group: a soft panel tinted the ACTIVE
+             profile's accent (bound per-instance to ActiveProfileAccentSoftBrush /
+             ActiveProfileAccentBrush, so it recolours on a chip switch) with the
+             profile name in the header — it reads as "this group swaps with the
+             combat profile chip above". -->
         <Style Selector="Border.ProfileGroup">
-            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="Padding" Value="10,8"/>
             <Setter Property="Margin" Value="0,6,0,4"/>
         </Style>
         <Style Selector="TextBlock.ProfileGroupHeader">
-            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,6"/>
@@ -132,6 +129,9 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vmroot:CombatProfileMenuItem">
                                     <Button Classes="ProfileChip" Classes.Active="{Binding IsActive}"
+                                            Background="{Binding ChipBackground}"
+                                            Foreground="{Binding ChipForeground}"
+                                            BorderBrush="{Binding ChipBorder}"
                                             Content="{Binding Number}" Command="{Binding SwitchCommand}"
                                             ToolTip.Tip="{Binding Display}"/>
                                 </DataTemplate>
@@ -201,9 +201,12 @@
                            Margin="180,2,0,0"/>
 
                 <!-- ============ Weapons & attack commands (per profile) ============ -->
-                <Border Classes="ProfileGroup">
+                <Border Classes="ProfileGroup"
+                        Background="{Binding ActiveProfileAccentSoftBrush}"
+                        BorderBrush="{Binding ActiveProfileAccentBrush}">
                     <StackPanel Spacing="2">
-                        <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"/>
+                        <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                   Foreground="{Binding ActiveProfileAccentBrush}"/>
                         <TextBlock Text="Primary / alternate weapons and their attack commands, per profile. The active profile's weapons live in the Workshop → Equipment Manager Default gear set (the combat engine reads them there), so editing here and editing the Default set's weapon rows are the same loadout, kept in sync. Backstab gear stays global on the Backstab set."
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
                                    FontSize="{StaticResource FontSizeSm}"
@@ -321,7 +324,7 @@
                 <StackPanel Spacing="2">
                     <CheckBox Content="Do BS attacks"
                               IsChecked="{Binding DoBackstab, Mode=TwoWay}"
-                              ToolTip.Tip="Off by default. Stealth-window gating handled by StealthManager (PR 9.F) once it lands."/>
+                              ToolTip.Tip="Attempt a backstab when entering a room with an eligible target. Off by default — an explicit opt-in even on stealth-capable classes."/>
                     <CheckBox Content="Don't BS if multi-attack room spell is firing"
                               IsChecked="{Binding SkipBackstabIfMultiAttack, Mode=TwoWay}"
                               ToolTip.Tip="Skip the BS attempt when the multi-attack room spell is going off this round."/>
@@ -335,9 +338,12 @@
 
                 <!-- ============ Room thresholds (per profile) ============ -->
                 <TextBlock Classes="SectionHeader" Text="Room thresholds"/>
-                <Border Classes="ProfileGroup">
+                <Border Classes="ProfileGroup"
+                        Background="{Binding ActiveProfileAccentSoftBrush}"
+                        BorderBrush="{Binding ActiveProfileAccentBrush}">
                     <StackPanel Spacing="2">
-                        <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"/>
+                        <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                   Foreground="{Binding ActiveProfileAccentBrush}"/>
                         <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto">
                             <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Min. monsters"/>
                             <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -378,9 +384,12 @@
 
                 <!-- ============ Spell combat (per profile) ============ -->
                 <TextBlock Classes="SectionHeader" Text="Spell combat"/>
-                <Border Classes="ProfileGroup">
+                <Border Classes="ProfileGroup"
+                        Background="{Binding ActiveProfileAccentSoftBrush}"
+                        BorderBrush="{Binding ActiveProfileAccentBrush}">
                   <StackPanel Spacing="4">
-                    <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"/>
+                    <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                               Foreground="{Binding ActiveProfileAccentBrush}"/>
 
                 <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
                     <TextBlock Classes="FieldLabel" Text="Minimum mana per cast:"/>
@@ -601,7 +610,7 @@
                 <TextBlock Classes="SectionHeader" Text="Display"/>
                 <CheckBox Content="Show combat round totals"
                           IsChecked="{Binding ShowCombatRoundTotals, Mode=TwoWay}"
-                          ToolTip.Tip="Append the per-round damage roll-up to the terminal canvas after each round. CombatManager (PR 9.A)."/>
+                          ToolTip.Tip="Append the per-round damage roll-up to the terminal after each round."/>
 
             </StackPanel>
         </Grid>

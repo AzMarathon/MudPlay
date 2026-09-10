@@ -130,6 +130,13 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     // re-labels the marker while the Workshop is open.
     private readonly Game.Combat.CombatProfileManager? _combatProfiles = AppServices.CurrentOrNull?.CombatProfiles;
 
+    // The active combat profile's accent colour — the marker label + border use it so
+    // the Workshop matches the Combat tab's per-profile colouring. 1-based number.
+    public Avalonia.Media.IBrush ActiveProfileAccentBrush =>
+        ViewModels.CombatProfilePalette.SolidBrush((_combatProfiles?.ActiveIndex ?? 0) + 1);
+    public Avalonia.Media.IBrush ActiveProfileAccentSoftBrush =>
+        ViewModels.CombatProfilePalette.SoftBrush((_combatProfiles?.ActiveIndex ?? 0) + 1);
+
     // The "Don't swap to default upon entering combat" checkbox — the inverse of the
     // persisted EquipmentSettings.SwapToDefaultOnCombat, so the checkbox reads true
     // (checked) for the long-standing default (keep the pre-rest loadout through a
@@ -200,12 +207,12 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     }
 
     // A combat-profile switch (or an Apply that re-labels the profiles) — refresh the
-    // Default-set marker so it names the now-active profile.
+    // Default-set marker so it names + recolours to the now-active profile.
     private void OnCombatProfilesChanged() => RefreshCombatProfileMarker();
 
     // The Default set's weapon slots mirror the active combat profile; every other
-    // set / slot is unmarked. Drives the "Combat profile: <name>" label + the amber
-    // tint on the four weapon rows.
+    // set / slot is unmarked. Drives the "Combat profile: <name>" label + the
+    // active-profile-colour tint on the four weapon rows.
     private void RefreshCombatProfileMarker()
     {
         bool isDefault = SelectedSet?.Trigger == EquipTriggerType.Default;
@@ -213,8 +220,10 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         CombatProfileMarker = isDefault && _combatProfiles?.Active is { } p
             ? $"Combat profile: {(string.IsNullOrWhiteSpace(p.Name) ? $"Profile {_combatProfiles.ActiveIndex + 1}" : p.Name.Trim())}"
             : string.Empty;
+        OnPropertyChanged(nameof(ActiveProfileAccentBrush));
+        OnPropertyChanged(nameof(ActiveProfileAccentSoftBrush));
         foreach (EquipmentSlotRowViewModel row in Rows)
-            row.ProfileSynced = isDefault && IsWeaponSlot(row.Slot);
+            row.SyncBrush = isDefault && IsWeaponSlot(row.Slot) ? ActiveProfileAccentSoftBrush : null;
     }
 
     private static bool IsWeaponSlot(EquipmentSlot slot) => slot is

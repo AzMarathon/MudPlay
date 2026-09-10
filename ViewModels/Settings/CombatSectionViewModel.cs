@@ -388,11 +388,19 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // The active profile's name — the textbox below the chips. Staged like the rest.
     [ObservableProperty] private string _activeProfileName = string.Empty;
 
-    // Header shown on every amber "this group is per combat profile" border, on both
-    // the Combat and Health tabs. Tracks the active profile so a chip switch / rename
+    // Header shown on every "this group is per combat profile" border, on both the
+    // Combat and Health tabs. Tracks the active profile so a chip switch / rename
     // re-labels the borders live.
     public string ActiveProfileLabel =>
         $"Combat profile: {(string.IsNullOrWhiteSpace(ActiveProfileName) ? $"Profile {_session.ActiveIndex + 1}" : ActiveProfileName.Trim())}";
+
+    // The active profile's distinct accent colour — each profile reads as its own,
+    // so the per-profile borders + header recolour on a chip switch to match the
+    // active chip. Raised alongside ActiveProfileLabel from RebuildProfileChips.
+    public Avalonia.Media.IBrush ActiveProfileAccentBrush =>
+        CombatProfilePalette.SolidBrush(_session.ActiveIndex + 1);
+    public Avalonia.Media.IBrush ActiveProfileAccentSoftBrush =>
+        CombatProfilePalette.SoftBrush(_session.ActiveIndex + 1);
 
     partial void OnActiveProfileNameChanged(string value)
     {
@@ -414,6 +422,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
                 switchCommand: new RelayCommand(() => _session.SwitchTo(index))));
         }
         OnPropertyChanged(nameof(ActiveProfileLabel));
+        OnPropertyChanged(nameof(ActiveProfileAccentBrush));
+        OnPropertyChanged(nameof(ActiveProfileAccentSoftBrush));
     }
 
     // Fold the Combat tab's boxes (spells + verbs + room + weapons + name) into the

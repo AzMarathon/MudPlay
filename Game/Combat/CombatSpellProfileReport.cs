@@ -68,7 +68,19 @@ public static class CombatSpellProfileReport
         string weapons = $"wpn={Weapon(profile.NormalWeapon, profile.NormalOffHand)}" +
                          $" · alt={Weapon(profile.AlternateWeapon, profile.AlternateOffHand)}";
 
-        return $"{label}: {slots} · {knobs} · {verbs} · {room} · {weapons} · {DescribeHealth(profile.Health)}";
+        return $"{label}: {slots} · {knobs} · {verbs} · {room} · {weapons}" +
+               $" · {DescribeHealth(profile.Health)} · {DescribeSpells(profile.Spells)}";
+    }
+
+    // Compact per-profile Spells-tab subset — the between-round category priority
+    // order (by rank) + the self-heal / HP-regen picks (cast codes).
+    private static string DescribeSpells(CombatProfileSpells? s)
+    {
+        if (s is null) return "spells —";
+        return $"spells[prio mph{s.PriorityMinorPartyHeal}/Mph{s.PriorityMajorPartyHeal}/" +
+               $"msh{s.PriorityMinorSelfHeal}/Msh{s.PriorityMajorSelfHeal}/" +
+               $"cure{s.PriorityCuring}/buff{s.PriorityBuffing}/deb{s.PriorityDebuffing}" +
+               $" · minheal={s.MinorHealSpell ?? "—"} majheal={s.MajorHealSpell ?? "—"} hpregen={s.HpRegenSpell ?? "—"}]";
     }
 
     // "main+off" (main only when no off-hand), "—" when the slot is empty.

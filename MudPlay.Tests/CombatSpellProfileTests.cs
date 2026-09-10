@@ -220,6 +220,8 @@ public sealed class CombatSpellProfileTests
             AlternateWeapon = "great axe", AlternateOffHand = null,
         };
         prof.Health.RestMaxHp = 77;
+        prof.Spells.MinorHealSpell = "mihe";
+        prof.Spells.PriorityCuring = 2;
 
         CombatSpellProfile copy = prof.Clone(newIdentity: true);
         Assert.NotEqual(prof.Id, copy.Id);              // new identity
@@ -227,12 +229,49 @@ public sealed class CombatSpellProfileTests
         Assert.Equal("buckler", copy.NormalOffHand);
         Assert.Equal("great axe", copy.AlternateWeapon);
         Assert.Equal(77, copy.Health.RestMaxHp);
+        Assert.Equal("mihe", copy.Spells.MinorHealSpell);
+        Assert.Equal(2, copy.Spells.PriorityCuring);
 
-        // Independent Health + weapon fields.
+        // Independent Health + weapon + spell fields.
         copy.Health.RestMaxHp = 1;
         copy.NormalWeapon = "dagger";
+        copy.Spells.MinorHealSpell = "cure";
         Assert.Equal(77, prof.Health.RestMaxHp);
         Assert.Equal("long sword", prof.NormalWeapon);
+        Assert.Equal("mihe", prof.Spells.MinorHealSpell);
+    }
+
+    [Fact]
+    public void ProfileSpells_CaptureFrom_WriteInto_RoundTrips_AndPreservesPerCharacter()
+    {
+        // The profile subset captures the priority order + self-heal / HP-regen picks.
+        var live = new SpellsSettings
+        {
+            PriorityMinorPartyHeal = 3, PriorityCuring = 1, PriorityDebuffing = 7,
+            MinorHealSpell = "mihe", MajorHealSpell = "cs", HpRegenSpell = "rege",
+        };
+        var subset = new CombatProfileSpells();
+        subset.CaptureFrom(live);
+        Assert.Equal(3, subset.PriorityMinorPartyHeal);
+        Assert.Equal(1, subset.PriorityCuring);
+        Assert.Equal("mihe", subset.MinorHealSpell);
+        Assert.Equal("rege", subset.HpRegenSpell);
+
+        // WriteInto overlays the subset but leaves per-character fields intact.
+        var dst = new SpellsSettings
+        {
+            CurePoisonSpell = "cure", SelfBlessDuringCombat = true, IgnorePoison = true,
+            PriorityMinorPartyHeal = 99, MinorHealSpell = "wrong",   // per-profile — will be overwritten
+        };
+        dst.BlessSlots[1] = "prot";
+        subset.WriteInto(dst);
+
+        Assert.Equal(3, dst.PriorityMinorPartyHeal);   // per-profile overwritten
+        Assert.Equal("mihe", dst.MinorHealSpell);
+        Assert.Equal("cure", dst.CurePoisonSpell);     // per-character preserved
+        Assert.True(dst.SelfBlessDuringCombat);
+        Assert.True(dst.IgnorePoison);
+        Assert.Equal("prot", dst.BlessSlots[1]);       // self-bless slots untouched
     }
 
     [Fact]
@@ -313,6 +352,57 @@ public sealed class CombatSpellProfileTests
         Assert.Equal("shield", readBack.NormalOffHand);
         Assert.Equal("bow", readBack.AlternateWeapon);
         Assert.Equal("quiver", readBack.AlternateOffHand);
+    }
+
+    [Fact]
+    public void EnsureSeeded_MigratesPreLoadoutProfiles_BackfillsFromLiveSharedSettings()
+    {
+        // A profile blob from before combat profiles became a full loadout: two
+        // profiles carrying only spell config (default Health / weapons / spells),
+        // SchemaVersion 0. Before the upgrade they shared the one live Health /
+        // Spells section + Default gear set.
+        var profile = new CharacterProfile
+        {
+            CombatProfiles = new CombatProfileSettings
+            {
+                Profiles = { new CombatSpellProfile { Name = "A" }, new CombatSpellProfile { Name = "B" } },
+                SchemaVersion = 0,
+            },
+        };
+        profile.CombatProfiles.ActiveId = profile.CombatProfiles.Profiles[0].Id;
+
+        var liveHealth = new HealthSettings { RestMaxHp = 88 };
+        var liveSpells = new SpellsSettings { MinorHealSpell = "mihe", PriorityCuring = 1 };
+        var equip = new EquipmentSettings();
+        EquipmentWeaponSync.WriteProfileWeapons(equip, new CombatSpellProfile { NormalWeapon = "long sword" });
+
+        var mgr = new CombatProfileManager(
+            profile: () => profile,
+            readCombat: () => new CombatSettings(),
+            writeCombat: _ => { },
+            readHealth: () => liveHealth,
+            writeHealth: _ => { },
+            readSpells: () => liveSpells,
+            writeSpells: _ => { },
+            equipment: () => equip,
+            save: () => { });
+
+        mgr.EnsureSeeded();
+
+        Assert.Equal(CombatProfileSettings.FullLoadoutVersion, profile.CombatProfiles.SchemaVersion);
+        foreach (CombatSpellProfile p in profile.CombatProfiles.Profiles)
+        {
+            Assert.Equal(88, p.Health.RestMaxHp);          // health back-filled (not the 95 default)
+            Assert.Equal("mihe", p.Spells.MinorHealSpell); // spell subset back-filled
+            Assert.Equal(1, p.Spells.PriorityCuring);
+            Assert.Equal("long sword", p.NormalWeapon);    // weapons back-filled from the Default set
+        }
+
+        // Idempotent: a second pass (already stamped) leaves the profiles alone even
+        // if the live values change.
+        liveHealth.RestMaxHp = 5;
+        mgr.EnsureSeeded();
+        Assert.Equal(88, profile.CombatProfiles.Profiles[0].Health.RestMaxHp);
     }
 
     [Fact]

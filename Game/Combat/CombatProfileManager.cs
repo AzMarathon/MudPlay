@@ -34,6 +34,8 @@ public sealed class CombatProfileManager
     private readonly Action<CombatSettings> _writeCombat;   // serialize Settings["Combat"] + Save
     private readonly Func<HealthSettings> _readHealth;
     private readonly Action<HealthSettings> _writeHealth;   // serialize Settings["Health"] + Save
+    private readonly Func<SpellsSettings> _readSpells;
+    private readonly Action<SpellsSettings> _writeSpells;   // serialize Settings["Spells"] + Save
     private readonly Func<EquipmentSettings?> _equipment;   // the live per-char Equipment blob (mutated in place, persisted by Save)
     private readonly Action _save;                           // Save only (metadata-only changes)
     private readonly LogService? _log;
@@ -51,6 +53,8 @@ public sealed class CombatProfileManager
         Action<CombatSettings> writeCombat,
         Func<HealthSettings> readHealth,
         Action<HealthSettings> writeHealth,
+        Func<SpellsSettings> readSpells,
+        Action<SpellsSettings> writeSpells,
         Func<EquipmentSettings?> equipment,
         Action save,
         LogService? log = null)
@@ -60,6 +64,8 @@ public sealed class CombatProfileManager
         _writeCombat = writeCombat ?? throw new ArgumentNullException(nameof(writeCombat));
         _readHealth = readHealth ?? throw new ArgumentNullException(nameof(readHealth));
         _writeHealth = writeHealth ?? throw new ArgumentNullException(nameof(writeHealth));
+        _readSpells = readSpells ?? throw new ArgumentNullException(nameof(readSpells));
+        _writeSpells = writeSpells ?? throw new ArgumentNullException(nameof(writeSpells));
         _equipment = equipment ?? throw new ArgumentNullException(nameof(equipment));
         _save = save ?? throw new ArgumentNullException(nameof(save));
         _log = log;
@@ -76,11 +82,12 @@ public sealed class CombatProfileManager
         {
             CombatSpellProfile seed = CombatSpellProfile.Capture(string.Empty, _readCombat(), _readHealth());
             if (_equipment() is { } eq) EquipmentWeaponSync.CaptureDefaultWeapons(eq, seed);
+            seed.Spells.CaptureFrom(_readSpells());
             store.Profiles.Add(seed);
             store.ActiveId = seed.Id;
             changed = true;
             _log?.Log(LogSeverity.Info, "CombatProfiles",
-                "Seeded first combat profile from live combat + health settings and the Default-set weapons");
+                "Seeded first combat profile from live combat + health + spell settings and the Default-set weapons");
         }
         else if (IndexOfActive(store) < 0)
         {
@@ -89,8 +96,34 @@ public sealed class CombatProfileManager
             _log?.Log(LogSeverity.Info, "CombatProfiles",
                 $"Active combat profile pointer was stale; reset to profile 1 of {store.Profiles.Count}");
         }
+        if (MigrateToFullLoadout(store)) changed = true;
         if (changed) _save();
         Changed?.Invoke();
+    }
+
+    // One-time back-fill for profiles created before combat profiles became a full
+    // loadout: those carry only the spell config, so their Health / weapon / spell
+    // subset default to blank. Before the upgrade all profiles shared the one live
+    // Health / Spells section + Default gear set, so seed EVERY profile from those
+    // live values — otherwise the first switch would overwrite the character's real
+    // settings with blanks. Runs once (stamped by SchemaVersion).
+    private bool MigrateToFullLoadout(CombatProfileSettings store)
+    {
+        if (store.SchemaVersion >= CombatProfileSettings.FullLoadoutVersion) return false;
+
+        HealthSettings liveHealth = _readHealth();
+        SpellsSettings liveSpells = _readSpells();
+        EquipmentSettings? eq = _equipment();
+        foreach (CombatSpellProfile prof in store.Profiles)
+        {
+            prof.Health = liveHealth.Clone();
+            prof.Spells.CaptureFrom(liveSpells);
+            if (eq is not null) EquipmentWeaponSync.CaptureDefaultWeapons(eq, prof);
+        }
+        store.SchemaVersion = CombatProfileSettings.FullLoadoutVersion;
+        _log?.Log(LogSeverity.Info, "CombatProfiles",
+            $"Migrated {store.Profiles.Count} combat profile(s) to full loadout — back-filled Health / weapons / spell picks from the live (previously shared) settings");
+        return true;
     }
 
     public IReadOnlyList<CombatSpellProfile> Profiles =>
@@ -130,14 +163,16 @@ public sealed class CombatProfileManager
         CombatSpellProfile target = s.Profiles[index];
         EquipmentSettings? eq = _equipment();
 
-        // Snapshot the OUTGOING profile's live weapons out of the Default set first,
-        // so a Workshop weapon edit made while it was active is remembered before
-        // the incoming profile overwrites the set (the active profile's weapons ARE
-        // the Default-set slots).
-        if (eq is not null)
+        // Snapshot the OUTGOING profile's live weapons + spell subset out first, so a
+        // Workshop weapon edit or a live Settings["Spells"] tweak made while it was
+        // active is remembered before the incoming profile overwrites them (the active
+        // profile's weapons ARE the Default-set slots; its spell subset lives in the
+        // live Settings["Spells"]).
+        int prev = IndexOfActive(s);
+        if (prev >= 0 && prev != index)
         {
-            int prev = IndexOfActive(s);
-            if (prev >= 0 && prev != index) EquipmentWeaponSync.CaptureDefaultWeapons(eq, s.Profiles[prev]);
+            if (eq is not null) EquipmentWeaponSync.CaptureDefaultWeapons(eq, s.Profiles[prev]);
+            s.Profiles[prev].Spells.CaptureFrom(_readSpells());
         }
 
         s.ActiveId = target.Id;
@@ -145,6 +180,14 @@ public sealed class CombatProfileManager
         target.ApplyTo(combat);
         _writeCombat(combat);                 // Save persists Settings["Combat"], the active pointer + the snapshot-out
         _writeHealth(target.Health.Clone());  // Save persists Settings["Health"] (clone so the profile keeps its own copy)
+
+        // Overlay the incoming profile's spell subset onto the live Spells section,
+        // leaving the per-character fields (cures, bless timing, ailments, self-bless
+        // slots) intact.
+        SpellsSettings spells = _readSpells();
+        target.Spells.WriteInto(spells);
+        _writeSpells(spells);
+
         if (eq is not null)
         {
             EquipmentWeaponSync.WriteProfileWeapons(eq, target);

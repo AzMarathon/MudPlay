@@ -30,10 +30,17 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // edit and a Combat edit save as one unit and a chip switch swaps both.
     public override bool IsDirty => _session.IsDirty;
 
-    // Header shown on the amber "this whole tab is per combat profile" border —
-    // tracks the active profile so a chip switch on the Combat tab re-labels it.
+    // Header shown on the "this whole tab is per combat profile" border — tracks the
+    // active profile so a chip switch on the Combat tab re-labels it.
     public string ActiveProfileLabel =>
         $"Combat profile: {(string.IsNullOrWhiteSpace(_session.Active.Name) ? $"Profile {_session.ActiveIndex + 1}" : _session.Active.Name.Trim())}";
+
+    // The active profile's accent colour — the Health-tab border recolours on a chip
+    // switch to match the active chip on the Combat tab.
+    public Avalonia.Media.IBrush ActiveProfileAccentBrush =>
+        CombatProfilePalette.SolidBrush(_session.ActiveIndex + 1);
+    public Avalonia.Media.IBrush ActiveProfileAccentSoftBrush =>
+        CombatProfilePalette.SoftBrush(_session.ActiveIndex + 1);
 
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
@@ -207,7 +214,12 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
 
     private void OnSessionCommitted() => OnPropertyChanged(nameof(IsDirty));
 
-    private void OnSessionChipsChanged() => OnPropertyChanged(nameof(ActiveProfileLabel));
+    private void OnSessionChipsChanged()
+    {
+        OnPropertyChanged(nameof(ActiveProfileLabel));
+        OnPropertyChanged(nameof(ActiveProfileAccentBrush));
+        OnPropertyChanged(nameof(ActiveProfileAccentSoftBrush));
+    }
 
     // The Health section from the current boxes — shared by the session's Capture
     // fold (into the working profile) and the eventual Commit.

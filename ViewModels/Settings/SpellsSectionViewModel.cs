@@ -27,16 +27,31 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     private readonly ProfileService _profile;
     private readonly Game.Spells.SpellbookState _spellbook;
+    private readonly CombatProfileStagingSession _session;
     private Control? _view;
     private bool _suppressDirty;
-    private bool _dirty;
 
     public override string Id => "spells";
     // Display header only — the persistence key stays "Spells" (TabKey / Id)
     // so renaming the tab never orphans saved settings. The tab owns the
     // ailment-handling + coordination toggles as well as the spell picks.
     public override string Title => "Spells + Ailments";
-    public override bool IsDirty => _dirty;
+
+    // The spell-priority order + the self-heal / HP-regen picks are PER COMBAT
+    // PROFILE (they swap with the chip on the Combat tab); the rest of this tab
+    // (cures, bless timing, ailment gates) stays per-character. Dirtiness + commit
+    // are owned by the shared staging session so a Spells edit saves as one unit
+    // with the Combat / Health tabs.
+    public override bool IsDirty => _session.IsDirty;
+
+    // Header + accent for the amber "this group is per combat profile" borders on
+    // the priority + healing/regen sections — tracks the active profile's colour.
+    public string ActiveProfileLabel =>
+        $"Combat profile: {(string.IsNullOrWhiteSpace(_session.Active.Name) ? $"Profile {_session.ActiveIndex + 1}" : _session.Active.Name.Trim())}";
+    public Avalonia.Media.IBrush ActiveProfileAccentBrush =>
+        CombatProfilePalette.SolidBrush(_session.ActiveIndex + 1);
+    public Avalonia.Media.IBrush ActiveProfileAccentSoftBrush =>
+        CombatProfilePalette.SoftBrush(_session.ActiveIndex + 1);
 
     public bool HasProfile => _profile.Current is not null;
 
@@ -153,27 +168,130 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _doNotAnnounceConfusion;
     [ObservableProperty] private bool _doNotAnnounceDiseased;
 
+    // Standalone session for the parameterless (design-time) path; the Settings
+    // window builds the shared instance and injects it.
     public SpellsSectionViewModel()
-        : this(AppServices.Current.Profile) { }
+        : this(AppServices.Current.Profile, CreateStandaloneSession()) { }
 
-    public SpellsSectionViewModel(ProfileService profile)
+    public SpellsSectionViewModel(CombatProfileStagingSession session)
+        : this(AppServices.Current.Profile, session) { }
+
+    public SpellsSectionViewModel(ProfileService profile, CombatProfileStagingSession session)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(session);
         _profile = profile;
+        _session = session;
         _spellbook = AppServices.Current.Spellbook;
         Priority = new PriorityRankingViewModel(MarkDirty);
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
         _spellbook.Changed += OnSpellbookChanged;
+
+        // This tab owns the FULL Settings["Spells"] DTO; the session folds / loads
+        // its PER-PROFILE subset (priority + self-heal / HP-regen picks) on the same
+        // events the Combat tab drives.
+        _session.BuildFullSpells = BuildDto;
+        _session.CaptureRequested += CaptureSpellBoxesToActive;
+        _session.LoadRequested += OnSessionLoadPerProfile;
+        _session.ReloadAllRequested += OnSessionReloadAll;
+        _session.ChipsChanged += OnSessionChipsChanged;
+        _session.Committed += OnSessionCommitted;
+
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
             _spellbook.Changed -= OnSpellbookChanged;
+            _session.BuildFullSpells = null;
+            _session.CaptureRequested -= CaptureSpellBoxesToActive;
+            _session.LoadRequested -= OnSessionLoadPerProfile;
+            _session.ReloadAllRequested -= OnSessionReloadAll;
+            _session.ChipsChanged -= OnSessionChipsChanged;
+            _session.Committed -= OnSessionCommitted;
         });
         _suppressDirty = true;
-        LoadFromProfile();
+        LoadFromProfile();                       // full: per-character from Settings["Spells"]
+        LoadPerProfileBoxesFromActive();         // per-profile from the session's active profile
         _suppressDirty = false;
+    }
+
+    private static CombatProfileStagingSession CreateStandaloneSession() =>
+        new(AppServices.Current.CombatProfiles, AppServices.Current.Profile,
+            () => AppServices.Current.Profile.Current?.Equipment);
+
+    // ----- Shared-session participation -----------------------------
+
+    // Fold the per-profile boxes (priority ranks + self-heal / HP-regen picks) into
+    // the active working profile — mutates in place, leaving the profile's other
+    // sections (its Health / Combat / weapons) untouched.
+    private void CaptureSpellBoxesToActive()
+    {
+        Models.Profile.CombatProfileSpells s = _session.Active.Spells;
+        s.PriorityMinorPartyHeal = Priority.RankOf("MinorPartyHeal");
+        s.PriorityMajorPartyHeal = Priority.RankOf("MajorPartyHeal");
+        s.PriorityMinorSelfHeal  = Priority.RankOf("MinorSelfHeal");
+        s.PriorityMajorSelfHeal  = Priority.RankOf("MajorSelfHeal");
+        s.PriorityCuring         = Priority.RankOf("Curing");
+        s.PriorityBuffing        = Priority.RankOf("Buffing");
+        s.PriorityDebuffing      = Priority.RankOf("Debuffing");
+        s.MinorHealSpell = NullIfBlank(MinorHealSpell);
+        s.MajorHealSpell = NullIfBlank(MajorHealSpell);
+        s.HpRegenSpell   = NullIfBlank(HpRegenSpell);
+    }
+
+    // Chip switch: load only the per-profile boxes from the active profile, leaving
+    // the per-character boxes (cures / bless timing / ailments) as they are.
+    private void OnSessionLoadPerProfile()
+    {
+        _suppressDirty = true;
+        LoadPerProfileBoxesFromActive();
+        _suppressDirty = false;
+    }
+
+    // Profile swap / discard: reload everything (per-character from the new
+    // Settings["Spells"], per-profile from the re-seeded active profile).
+    private void OnSessionReloadAll()
+    {
+        _suppressDirty = true;
+        LoadFromProfile();
+        LoadPerProfileBoxesFromActive();
+        _suppressDirty = false;
+    }
+
+    private void LoadPerProfileBoxesFromActive()
+    {
+        Models.Profile.CombatProfileSpells s = _session.Active.Spells;
+        Priority.Load(_priorityDefs, key => key switch
+        {
+            "MinorPartyHeal" => s.PriorityMinorPartyHeal,
+            "MajorPartyHeal" => s.PriorityMajorPartyHeal,
+            "MinorSelfHeal"  => s.PriorityMinorSelfHeal,
+            "MajorSelfHeal"  => s.PriorityMajorSelfHeal,
+            "Curing"         => s.PriorityCuring,
+            "Buffing"        => s.PriorityBuffing,
+            "Debuffing"      => s.PriorityDebuffing,
+            _                => 99,
+        });
+        MinorHealSpell = s.MinorHealSpell;
+        MajorHealSpell = s.MajorHealSpell;
+        HpRegenSpell   = s.HpRegenSpell;
+    }
+
+    private void OnSessionChipsChanged()
+    {
+        OnPropertyChanged(nameof(ActiveProfileLabel));
+        OnPropertyChanged(nameof(ActiveProfileAccentBrush));
+        OnPropertyChanged(nameof(ActiveProfileAccentSoftBrush));
+    }
+
+    private void OnSessionCommitted()
+    {
+        // The live ailment engines re-read the per-character gates on commit — a
+        // toggle taken mid-affliction must re-balance the @wait / movement hold.
+        AppServices.Current.AilmentSync.ReevaluateWaits();
+        AppServices.Current.SelfConfusion.Reevaluate();
+        OnPropertyChanged(nameof(IsDirty));
     }
 
     private void OnSpellbookChanged()
@@ -189,80 +307,65 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(CureBlindnessSpellUnlearned));
     }
 
-    public override void Apply()
+    // The FULL Settings["Spells"] DTO from the current boxes — the per-character
+    // fields (cures / bless timing / ailments) plus the per-profile priority + heal
+    // subset (which the boxes show for the active profile). The session's commit
+    // writes this; the per-profile subset also lands on the profile blob.
+    private SpellsSettings BuildDto() => new()
     {
-        if (_profile.Current is not { } profile) return;
+        PriorityMinorPartyHeal = Priority.RankOf("MinorPartyHeal"),
+        PriorityMajorPartyHeal = Priority.RankOf("MajorPartyHeal"),
+        PriorityMinorSelfHeal  = Priority.RankOf("MinorSelfHeal"),
+        PriorityMajorSelfHeal  = Priority.RankOf("MajorSelfHeal"),
+        PriorityCuring         = Priority.RankOf("Curing"),
+        PriorityBuffing        = Priority.RankOf("Buffing"),
+        PriorityDebuffing      = Priority.RankOf("Debuffing"),
 
-        SpellsSettings dto = new()
-        {
-            PriorityMinorPartyHeal = Priority.RankOf("MinorPartyHeal"),
-            PriorityMajorPartyHeal = Priority.RankOf("MajorPartyHeal"),
-            PriorityMinorSelfHeal  = Priority.RankOf("MinorSelfHeal"),
-            PriorityMajorSelfHeal  = Priority.RankOf("MajorSelfHeal"),
-            PriorityCuring         = Priority.RankOf("Curing"),
-            PriorityBuffing        = Priority.RankOf("Buffing"),
-            PriorityDebuffing      = Priority.RankOf("Debuffing"),
+        MinorHealSpell    = NullIfBlank(MinorHealSpell),
+        MajorHealSpell    = NullIfBlank(MajorHealSpell),
+        HpRegenSpell      = NullIfBlank(HpRegenSpell),
 
-            MinorHealSpell    = NullIfBlank(MinorHealSpell),
-            MajorHealSpell    = NullIfBlank(MajorHealSpell),
-            HpRegenSpell      = NullIfBlank(HpRegenSpell),
+        CureHoldsSpell     = NullIfBlank(CureHoldsSpell),
+        CurePoisonSpell    = NullIfBlank(CurePoisonSpell),
+        CureDiseaseSpell   = NullIfBlank(CureDiseaseSpell),
+        CureBlindnessSpell = NullIfBlank(CureBlindnessSpell),
 
-            CureHoldsSpell     = NullIfBlank(CureHoldsSpell),
-            CurePoisonSpell    = NullIfBlank(CurePoisonSpell),
-            CureDiseaseSpell   = NullIfBlank(CureDiseaseSpell),
-            CureBlindnessSpell = NullIfBlank(CureBlindnessSpell),
+        SelfBlessWhileResting = SelfBlessWhileResting,
+        SelfBlessDuringCombat = SelfBlessDuringCombat,
 
-            SelfBlessWhileResting = SelfBlessWhileResting,
-            SelfBlessDuringCombat = SelfBlessDuringCombat,
+        IgnorePoison    = IgnorePoison,
+        IgnoreBlindness = IgnoreBlindness,
+        IgnoreConfusion = IgnoreConfusion,
+        IgnoreDiseased  = IgnoreDiseased,
 
-            IgnorePoison    = IgnorePoison,
-            IgnoreBlindness = IgnoreBlindness,
-            IgnoreConfusion = IgnoreConfusion,
-            IgnoreDiseased  = IgnoreDiseased,
+        DoNotAnnouncePoison    = DoNotAnnouncePoison,
+        DoNotAnnounceBlindness = DoNotAnnounceBlindness,
+        DoNotAnnounceConfusion = DoNotAnnounceConfusion,
+        DoNotAnnounceDiseased  = DoNotAnnounceDiseased,
+    };
 
-            DoNotAnnouncePoison    = DoNotAnnouncePoison,
-            DoNotAnnounceBlindness = DoNotAnnounceBlindness,
-            DoNotAnnounceConfusion = DoNotAnnounceConfusion,
-            DoNotAnnounceDiseased  = DoNotAnnounceDiseased,
-        };
+    // Commit through the shared session (folds every tab + persists Settings
+    // ["Combat"] + ["Spells"] + ["Health"] + the profile blob + weapons as one unit).
+    // The live ailment engines are re-balanced in OnSessionCommitted.
+    public override void Apply() => _session.CommitIfDirty();
 
-        profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
-        _profile.Save();
-
-        // Push the Ignore<X> gates at the live ailment engine so a toggle taken
-        // mid-affliction re-balances the @wait it already placed — otherwise
-        // enabling IgnorePoison while poisoned leaves the party paused.
-        AppServices.Current.AilmentSync.ReevaluateWaits();
-        // Same reconcile for our own local confusion hold — a mid-confusion
-        // Ignore Confusion toggle must place or lift the movement gate, not leave
-        // the onset-time decision latched.
-        AppServices.Current.SelfConfusion.Reevaluate();
-
-        ClearDirty();
-    }
-
-    public override void Discard()
-    {
-        _suppressDirty = true;
-        LoadFromProfile();
-        _suppressDirty = false;
-        ClearDirty();
-    }
+    public override void Discard() => _session.DiscardAndReset();
 
     private static string? NullIfBlank(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
-    private void OnProfileChanged(CharacterProfile _) => ReloadAfterProfileSwap();
-    private void OnProfileClosedExternally() => ReloadAfterProfileSwap();
-
-    private void ReloadAfterProfileSwap()
+    // The shared session (constructed first) reseeds + drives the box reload via
+    // ReloadAllRequested on a profile swap; this handler only refreshes the
+    // non-staging HasProfile gate + the dirty flag.
+    private void OnProfileChanged(CharacterProfile _)
     {
-        _suppressDirty = true;
-        LoadFromProfile();
-        _suppressDirty = false;
-        ClearDirty();
         OnPropertyChanged(nameof(HasProfile));
+        OnPropertyChanged(nameof(IsDirty));
+    }
+    private void OnProfileClosedExternally()
+    {
+        OnPropertyChanged(nameof(HasProfile));
+        OnPropertyChanged(nameof(IsDirty));
     }
 
     private void LoadFromProfile()
@@ -322,17 +425,13 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     // ----- IsDirty plumbing -----------------------------------------
 
-    private void ClearDirty()
-    {
-        _dirty = false;
-        OnPropertyChanged(nameof(IsDirty));
-    }
-
+    // Route every box edit into the shared session's single dirty flag (a combat
+    // profile spans this tab + the Combat / Health tabs). The session clears it on
+    // Commit / Discard; this VM just re-raises IsDirty for the Save-button gate.
     private void MarkDirty()
     {
         if (_suppressDirty) return;
-        if (_dirty) return;
-        _dirty = true;
+        _session.MarkDirty();
         OnPropertyChanged(nameof(IsDirty));
     }
 

@@ -45,6 +45,12 @@ public sealed class CombatProfileStagingSession : IDisposable
     // Commit; both tabs are constructed before any commit can run.
     public Func<CombatSettings>? BuildFullCombat { get; set; }
 
+    // Set by the Spells tab: builds the FULL Settings["Spells"] DTO — the
+    // per-character fields (cures / bless timing / ailment gates) plus the active
+    // profile's priority + heal subset — from its live boxes. Null when the Spells
+    // tab isn't wired (standalone session); the commit then leaves Settings["Spells"].
+    public Func<SpellsSettings>? BuildFullSpells { get; set; }
+
     // Fold a participating tab's boxes into the active working profile (mutate in
     // place — never replace the object, or one tab clobbers the other's fold).
     public event Action? CaptureRequested;
@@ -165,6 +171,8 @@ public sealed class CombatProfileStagingSession : IDisposable
         profile.Settings ??= new();
         if (BuildFullCombat is { } build)
             profile.Settings["Combat"] = JsonSerializer.SerializeToElement(build());
+        if (BuildFullSpells is { } buildSpells)
+            profile.Settings["Spells"] = JsonSerializer.SerializeToElement(buildSpells());
         profile.Settings["Health"] = JsonSerializer.SerializeToElement(Active.Health.Clone());
         profile.CombatProfiles = new CombatProfileSettings
         {

@@ -1422,9 +1422,12 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 - the **attack commands** (normal / alternate);
 - the **room thresholds** — min / max monsters and run distance;
 - the **primary & alternate weapons** (+ their off-hands);
-- the **entire Health tab** — rest / heal / flee / hangup thresholds, meditate / shadowrest, the emergency escape, and the pre-/post-rest commands.
+- the **entire Health tab** — rest / heal / flee / hangup thresholds, meditate / shadowrest, the emergency escape, and the pre-/post-rest commands;
+- on the **Spells tab**, the **between-round spell-type priority order** and the **healing / regeneration picks** (Minor heal, Major heal, HP Regen). The rest of the Spells tab (cures, bless timing, ailment gates) and the Buff Watchdog self-bless slots stay per-character.
 
-Every group that swaps with the profile is wrapped in an **amber "Combat profile: `<name>`" border** on the Combat and Health tabs, so you can see at a glance which settings are per-profile. Everything *outside* those borders (targeting, backstab, action order, run-away direction, display) is **shared** across profiles.
+Every group that swaps with the profile is wrapped in a **coloured "Combat profile: `<name>`" border** on the Combat, Health and Spells tabs, so you can see at a glance which settings are per-profile. Everything *outside* those borders (targeting, backstab, action order, run-away direction, display; and on the Spells tab the cures / bless timing / ailment gates) is **shared** across profiles.
+
+**Each profile has its own colour.** Add a second profile and its chip picks up a distinct colour; the third another, and so on. That colour tints the profile's chip, all of its bordered groups (across the Combat, Health and Spells tabs), and the Workshop's Default-set weapon rows — so it's always obvious which profile you're looking at.
 
 **Weapons — how they stay in sync:** a profile's weapons *are* the Workshop → Equipment Manager **Default** gear set's weapon slots (the surface the combat engine actually reads). So editing a profile's weapon pickers here and editing the Default set's Weapon / Off-Hand / Alt rows in the Workshop are the **same loadout, kept in sync** — and the Workshop shows a matching amber "Combat profile: `<name>`" marker over those rows. Switching a profile writes its stored weapons into the Default set, so your equipped weapon changes with the profile. (Backstab gear stays global on the Backstab set.)
 

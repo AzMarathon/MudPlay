@@ -254,7 +254,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         };
         bbsSection.SysopGotos.CollectionChanged += (_, _) => healthSection.NotifyLiveSysGotoChanged();
 
-        Sections.Add(new SpellsSectionViewModel());
+        Sections.Add(new SpellsSectionViewModel(_profileSession));
         Sections.Add(new CombatSectionViewModel(_profileSession));
         Sections.Add(new PartySectionViewModel());
         Sections.Add(new CashSectionViewModel());

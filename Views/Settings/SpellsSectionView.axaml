@@ -45,6 +45,21 @@
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        <!-- The spell-priority order + healing/regen picks are per combat profile:
+             a soft panel tinted the active profile's accent (bound per-instance,
+             matching the Combat tab's chips + borders). The cures, bless timing and
+             ailment gates below stay per-character (unbordered). -->
+        <Style Selector="Border.ProfileGroup">
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Margin" Value="0,6,0,4"/>
+        </Style>
+        <Style Selector="TextBlock.ProfileGroupHeader">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
@@ -76,19 +91,33 @@
 
 
 
-                <!-- ============ Spell type priority ============ -->
+                <!-- ============ Spell type priority (per profile) ============ -->
                 <TextBlock Classes="SectionHeader" Text="Spell type priority (between-round casting order)"/>
-                <TextBlock Text="Use the arrows to reorder. Higher in the list = cast earlier. CastingDirector evaluates categories top-to-bottom each tick."
-                           Foreground="{StaticResource ChromeFgMutedBrush}"
-                           FontSize="{StaticResource FontSizeSm}"
-                           FontStyle="Italic"
-                           TextWrapping="Wrap"
-                           Margin="0,0,0,4"/>
-                <settings:PriorityRankingView DataContext="{Binding Priority}"
-                                              HorizontalAlignment="Left"/>
+                <Border Classes="ProfileGroup"
+                        Background="{Binding ActiveProfileAccentSoftBrush}"
+                        BorderBrush="{Binding ActiveProfileAccentBrush}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                   Foreground="{Binding ActiveProfileAccentBrush}"/>
+                        <TextBlock Text="Use the arrows to reorder. Higher in the list = cast earlier. The between-round cast engine evaluates categories top-to-bottom each tick."
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   FontSize="{StaticResource FontSizeSm}"
+                                   FontStyle="Italic"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,4"/>
+                        <settings:PriorityRankingView DataContext="{Binding Priority}"
+                                                      HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </Border>
 
-                <!-- ============ Healing / regeneration ============ -->
+                <!-- ============ Healing / regeneration (per profile) ============ -->
                 <TextBlock Classes="SectionHeader" Text="Healing / regeneration"/>
+                <Border Classes="ProfileGroup"
+                        Background="{Binding ActiveProfileAccentSoftBrush}"
+                        BorderBrush="{Binding ActiveProfileAccentBrush}">
+                  <StackPanel Spacing="2">
+                    <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                               Foreground="{Binding ActiveProfileAccentBrush}"/>
                 <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Minor heal"/>
                     <AutoCompleteBox Grid.Row="0" Grid.Column="1"
@@ -126,6 +155,8 @@
                                      Width="260" HorizontalAlignment="Left"
                                      ToolTip.Tip="HP-regen HoT (e.g. regeneration) used as assisted healing: when the Minor heal threshold trips, this is cast FIRST — ahead of the single-target minor heal — unless HP is already in life-threat range or the HoT is still ticking. Want it kept always-up instead? Put it in a Bless slot."/>
                 </Grid>
+                  </StackPanel>
+                </Border>
 
                 <!-- ============ Other spells ============ -->
                 <TextBlock Classes="SectionHeader" Text="Other spells"/>

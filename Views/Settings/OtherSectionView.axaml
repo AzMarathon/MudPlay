@@ -103,7 +103,7 @@
                                Minimum="1" Maximum="50" Increment="1"
                                FormatString="0" ShowButtonSpinner="True"
                                Width="120" MinWidth="120"
-                               ToolTip.Tip="Caps the `disarm trap &lt;dir&gt;` retry loop after the trap has been spotted. Default 5. Damage-aware abort (stop early on HP loss) ships with the Phase 13 HealthManager wiring."/>
+                               ToolTip.Tip="Caps the `disarm trap &lt;dir&gt;` retry loop after the trap has been spotted. Default 5."/>
             </Grid>
 
             <!-- Walker door pick cap + verb preference. Bashing has no cap: a
