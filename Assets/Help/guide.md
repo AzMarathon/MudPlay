@@ -19,8 +19,8 @@ A **profile** is one character's workspace — its BBS login, macros, triggers, 
 
 Everything to do with characters and BBSes now lives in one place: **File → Profile Management** (also on the View menu and the toolbar). See the **Profile Management** section just below for the full walkthrough.
 
-- **New profile** (Ctrl+N) starts a blank draft; set up its BBS + credentials (below), then **Save** (Ctrl+S) to name it. (New / Open / Save / Save As all live in the Profile Management window now, but the keyboard shortcuts still work app-wide.)
-- **Open (swap to) a profile** (Ctrl+O) loads a saved one — do it from the Profile Management window's character list.
+- **New profile** starts a blank draft; set up its BBS + credentials (below), then **Save** to name it. New / Open / Save As all live in the **Profile Management** window now (**Ctrl+P** opens it, and it has a toolbar button). A quick **Save profile** (write the loaded character + settings) stayed on the **File** menu — **Ctrl+S**, or the floppy-disk toolbar button.
+- **Open (swap to) a profile** loads a saved one — do it from the Profile Management window's character list.
 - **Auto-load last profile** (File menu — *Auto-load last profile on startup*) reopens the profile you used last on every launch.
 - **Launch straight into a profile** from the command line with `--profile`, so a shortcut or script can open you right where you want. Naming **more than one loads more than one** — each name opens its own window (one instance per profile), which is the easy way to run several characters at once. A name can be **bare** (`Fujin`) when only one of your saved profiles uses it; if the same character name exists on two BBSes, qualify it as **`BBS/Name`** (e.g. `Playpen/Fujin`) since a profile is really the BBS + character pair.
 
@@ -53,7 +53,7 @@ Settings live in four tiers — **Defaults → Global → BBS → Character** �
 
 Open **Profile Management** from **File**, the **View** menu, or its toolbar button — it's the single home for your characters and your BBSes. Re-selecting the menu item (or toolbar button) toggles it closed. The window has three parts:
 
-- **The current profile** (top strip) shows which character is loaded and gives you **New…**, **Save**, and **Save As…** — the same actions the File menu used to carry (their Ctrl+N / Ctrl+S / Ctrl+Shift+S shortcuts still work anywhere in the app).
+- **The current profile** (top strip) shows which character is loaded and gives you **New…**, **Save**, and **Save As…** — the same actions the File menu used to carry. A quick **Save profile** stayed on the File menu as well (**Ctrl+S**, or the floppy-disk toolbar button), and **Ctrl+P** opens this window from anywhere.
 - **BBSes** (left) — every saved board. **Add** creates a new one (fill in its host/port and the rest over in **Settings → BBS + Display**), **Rename** retitles it (carrying its characters and your saved logins with it), and **Remove** deletes it. Removing a BBS deletes **every character saved under it**, so the confirm names how many will go.
 - **Characters** (right) — the characters saved under the selected BBS (multi-select). **Add** creates a new one, **Rename** retitles it, **Delete** removes it, **Assign to BBS** moves a character to a different board (pick the destination in the **Move to** dropdown; if that board already has a character by the same name you're asked for a new one), and **Load** brings the selection online. The character you currently have loaded is shown in **bold** and marked *loaded*.
 - **Load** is selection-aware, so you can bring a whole stable up at once: tick several characters and hit Load and you end up with one running client per character. The **first** selected character loads into **this** client when it's idle (a straight swap); each of the **rest** opens in its own new client instance. If this client is **actively connected**, it's left alone entirely — *every* selected character opens in a new client, so you never get the jarring disconnect → swap → reconnect just to launch alts. (Launching new clients uses the same multi-instance mechanism as the `--profile` command line.)
@@ -1046,7 +1046,7 @@ Not its own Settings tab — the rebind editor is a small popup dialog opened fr
 
 ### What's rebindable
 
-Every built-in action that has (or can have) a keyboard shortcut: connection toggle, opening the Navigation/Backscroll/Conversation windows, movement start/pause/stop, capture toggle, the function-key row (Player Workshop, Spell Book, Game Data Browser, Program Log, Wire Inspector), and the Ctrl-cluster File-menu actions (New/Open/Save/Save As profile, Quit). A few actions (Open Party, Open Session Stats, Open Settings) ship with **no** default shortcut — you can only reach them via their toolbar button or menu until you assign one yourself.
+Every built-in action that has (or can have) a keyboard shortcut: connection toggle, opening the Navigation/Backscroll/Conversation windows, movement start/pause/stop, capture toggle, the function-key row (Player Workshop, Spell Book, Game Data Browser, Program Log, Wire Inspector), and the Ctrl-cluster actions (Save profile Ctrl+S, Profile Management Ctrl+P, Quit Ctrl+Q). A few actions (Open Party, Open Session Stats, Open Settings) ship with **no** default shortcut — you can only reach them via their toolbar button or menu until you assign one yourself.
 
 ### Default shortcuts out of the box
 
@@ -1065,10 +1065,8 @@ Every built-in action that has (or can have) a keyboard shortcut: connection tog
 | Game Data Browser | F3 |
 | Program Log | F4 |
 | Wire Inspector | F5 |
-| New profile | Ctrl+N |
-| Open profile | Ctrl+O |
 | Save profile | Ctrl+S |
-| Save profile as | Ctrl+Shift+S |
+| Profile Management | Ctrl+P |
 | Quit | Ctrl+Q |
 
 ### How rebinding works
