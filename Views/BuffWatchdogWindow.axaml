@@ -27,30 +27,46 @@
                     BorderThickness="0,0,0,1" Padding="6,3" Cursor="Hand"
                     ToolTip.Tip="Double-click to edit this buff's spell / recast / conditions"
                     DoubleTapped="OnBuffRowDoubleTapped">
-                <Grid ColumnDefinitions="240,40,56,*">
-                    <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto,*,Auto,Auto"
+                <Grid ColumnDefinitions="276,40,56,*">
+                    <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto"
                           VerticalAlignment="Center" Margin="0,0,10,0">
-                        <Button Grid.Column="0" Content="✎" Width="20" Height="20" Padding="0" FontSize="11"
+                        <!-- Drag grip: drag ONLY starts here (Tag-gated in code-behind) so
+                             it doesn't fight the checkboxes / double-click-to-edit. -->
+                        <TextBlock Grid.Column="0" Tag="dragHandle" Text="⠿" FontSize="13" Cursor="SizeAll"
+                                   VerticalAlignment="Center" Margin="0,0,2,0"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   ToolTip.Tip="Drag to re-arrange this buff (or use the ▲ ▼ buttons)"/>
+                        <Button Grid.Column="1" Content="▲" Width="20" Height="20" Padding="0" FontSize="9"
+                                ToolTip.Tip="Move up"
+                                IsEnabled="{Binding CanMoveUp}"
+                                Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).MoveBuffUpCommand}"
+                                CommandParameter="{Binding}"/>
+                        <Button Grid.Column="2" Content="▼" Width="20" Height="20" Padding="0" FontSize="9" Margin="2,0,0,0"
+                                ToolTip.Tip="Move down"
+                                IsEnabled="{Binding CanMoveDown}"
+                                Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).MoveBuffDownCommand}"
+                                CommandParameter="{Binding}"/>
+                        <Button Grid.Column="3" Content="✎" Width="20" Height="20" Padding="0" FontSize="11" Margin="4,0,0,0"
                                 ToolTip.Tip="Edit this buff / recast timer"
                                 Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).EditBuffCommand}"
                                 CommandParameter="{Binding}"/>
-                        <Button Grid.Column="1" Content="⨯" Width="20" Height="20" Padding="0" Margin="2,0,0,0"
+                        <Button Grid.Column="4" Content="⨯" Width="20" Height="20" Padding="0" Margin="2,0,0,0"
                                 ToolTip.Tip="Remove this buff slot"
                                 Command="{Binding $parent[ItemsControl].((vm:BuffPanelViewModel)DataContext).RemoveBuffCommand}"
                                 CommandParameter="{Binding}"/>
-                        <TextBlock Grid.Column="2" Text="{Binding HeaderText}" FontWeight="SemiBold" Margin="4,0,0,0"
+                        <TextBlock Grid.Column="5" Text="{Binding HeaderText}" FontWeight="SemiBold" Margin="4,0,0,0"
                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         <!-- Warning marker: this buff and another configured slot remove
                              each other via RemovesSpell whenever they can land on the
                              same character — see AppServices.BuffSlotOverwritePairs. -->
-                        <TextBlock Grid.Column="3" Text="⚠" VerticalAlignment="Center" Margin="4,0,0,0"
+                        <TextBlock Grid.Column="6" Text="⚠" VerticalAlignment="Center" Margin="4,0,0,0"
                                    Foreground="{StaticResource AccentRedBrush}"
                                    IsVisible="{Binding HasOverwriteWarning}"
                                    ToolTip.Tip="{Binding OverwriteWarningTooltip}"/>
                         <!-- "Add all blesses" can list a buff the class can learn that
                              this character hasn't trained yet — flag it the same way
                              the read-only timer bars already do. -->
-                        <Border Grid.Column="4" Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}"
+                        <Border Grid.Column="7" Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}"
                                 ToolTip.Tip="Not learned yet — checking this won't cast until you've trained it.">
                             <TextBlock Text="unlearned"/>
                         </Border>
@@ -218,6 +234,20 @@
                                     ToolTip.Tip="Print to the terminal every spell your class hasn't learned yet that's within reach — castable now, plus everything up to 5 levels ahead — each as [Spell name - Unlearned, Requires Level XX]."/>
                         </StackPanel>
 
+                        <!-- Cast-priority toggle (independent of the row layout) + reset-layout.
+                             Drag the grip / use ▲▼ on a row to re-arrange; this button decides
+                             whether the engine casts by type (default) or in the shown order. -->
+                        <StackPanel Orientation="Horizontal" Margin="8,0,8,4" Spacing="6"
+                                    IsVisible="{Binding HasSlots}">
+                            <Button Content="{Binding PriorityModeLabel}" Padding="8,2"
+                                    Command="{Binding TogglePriorityModeCommand}"
+                                    ToolTip.Tip="Click to switch cast priority. Default (by type): the engine casts due buffs in the standard order — self / single-target, then whole-party, then item buffs — no matter how you arrange the rows. Top → bottom (your order): the engine casts them in the exact order shown here, top first. The two modes are identical until you re-arrange the rows."/>
+                            <Button Content="↺ Reset order" Padding="8,2"
+                                    IsVisible="{Binding HasManualOrder}"
+                                    Command="{Binding ResetBuffOrderCommand}"
+                                    ToolTip.Tip="Return the rows to the automatic grouping (self / single-target, then whole-party, then item buffs). Doesn't change your cast-priority choice."/>
+                        </StackPanel>
+
                         <!-- Live mana-budget readout, both sides per passive regen tick
                              (30s — the "MP +N after ~30s" cadence, so they compare directly):
                              what the character gains per tick vs what every currently-CHECKED
@@ -247,7 +277,7 @@
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Disabled">
                             <StackPanel>
-                                <Grid ColumnDefinitions="240,40,56,*" Margin="6,0,6,2">
+                                <Grid ColumnDefinitions="276,40,56,*" Margin="6,0,6,2">
                                     <TextBlock Grid.Column="0" Text="Buff" FontSize="10"
                                                VerticalAlignment="Bottom"
                                                Foreground="{StaticResource ChromeFgBrush}"/>
@@ -274,13 +304,13 @@
                                     </ItemsControl>
                                 </Grid>
 
-                                <!-- The whole buff list in one ItemsControl, kept in a single
-                                     order (buffs you aim first, then whole-party, then item
-                                     "on use" buffs) inside Slots itself — see InsertSorted.
-                                     Bound straight to the ObservableCollection so a single
-                                     add / remove touches one row instead of rebuilding the
-                                     whole list. -->
-                                <ItemsControl ItemsSource="{Binding Slots}"
+                                <!-- The whole buff list in one ItemsControl. Default layout
+                                     auto-groups by type; drag a row's grip / use ▲▼ to
+                                     re-arrange (switches to the user's manual order). Bound
+                                     straight to the ObservableCollection so a single add /
+                                     remove touches one row instead of rebuilding the list. -->
+                                <ItemsControl x:Name="BuffRowsList"
+                                              ItemsSource="{Binding Slots}"
                                               ItemTemplate="{StaticResource BuffSlotRowTemplate}"/>
                             </StackPanel>
                         </ScrollViewer>

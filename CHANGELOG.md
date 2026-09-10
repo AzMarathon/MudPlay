@@ -1,5 +1,11 @@
 # Version history
 
+## 3.61.0
+
+- Buff Watchdog config list: re-arrange buff rows by drag (grip handle) or ▲/▼ buttons; the order persists
+- New **Cast priority** toggle — Default (by type) casts self→whole-party→item regardless of arrangement; Top→bottom casts in the exact order shown (identical until you re-arrange)
+- Once re-arranged, new buffs append at the bottom instead of auto-sorting; **↺ Reset order** restores the automatic grouping
+
 ## 3.60.0
 
 - Loops: per-room **"Do not attack here"** flag — the loop skips combat in that room as if auto-combat were off, but a triggered rest still clears it
