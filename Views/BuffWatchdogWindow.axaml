@@ -243,9 +243,9 @@
                                     Command="{Binding TogglePriorityModeCommand}"
                                     ToolTip.Tip="Click to switch cast priority. Default (by type): the engine casts due buffs in the standard order — self / single-target, then whole-party, then item buffs — no matter how you arrange the rows. Top → bottom (your order): the engine casts them in the exact order shown here, top first. The two modes are identical until you re-arrange the rows."/>
                             <Button Content="↺ Reset order" Padding="8,2"
-                                    IsVisible="{Binding HasManualOrder}"
+                                    IsEnabled="{Binding HasManualOrder}"
                                     Command="{Binding ResetBuffOrderCommand}"
-                                    ToolTip.Tip="Return the rows to the automatic grouping (self / single-target, then whole-party, then item buffs). Doesn't change your cast-priority choice."/>
+                                    ToolTip.Tip="Return the rows to the automatic grouping (self / single-target, then whole-party, then item buffs). Enabled only once you've re-arranged the rows. Doesn't change your cast-priority choice."/>
                         </StackPanel>
 
                         <!-- Live mana-budget readout, both sides per passive regen tick
@@ -310,6 +310,7 @@
                                      straight to the ObservableCollection so a single add /
                                      remove touches one row instead of rebuilding the list. -->
                                 <ItemsControl x:Name="BuffRowsList"
+                                              DragDrop.AllowDrop="True"
                                               ItemsSource="{Binding Slots}"
                                               ItemTemplate="{StaticResource BuffSlotRowTemplate}"/>
                             </StackPanel>
