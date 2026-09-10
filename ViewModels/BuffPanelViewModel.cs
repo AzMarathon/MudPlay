@@ -624,15 +624,36 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         bool hasParty = members.Count > 0;
         List<Game.Spells.BuffManaUpkeepCalculator.SlotUpkeep> upkeep = new();
 
+        // A Paradigm-suppressed loser is never maintained (cost 0); a STOCK collision-
+        // order loser is re-cast on its remover's cadence, so its effective duration is
+        // capped at the remover's. Both are empty off their respective realm.
+        IReadOnlyDictionary<string, string> suppressed = AppServices.Current.SuppressedBuffCoverage();
+        IReadOnlyDictionary<string, string> collisionOrder = AppServices.Current.CollisionOrderConstraints();
+        double DurationSecondsOf(string c) =>
+            ResolveSpellOrItem(c) is { } rr
+                ? Game.Spells.SpellCalculator.Duration(rr.Formula, _spellbook.Level)
+                    * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock
+                : 0;
+
         foreach (BuffSlot dto in _settings.Slots)
         {
             if (string.IsNullOrWhiteSpace(dto.Spell)) continue;
             string code = dto.Spell.Trim();
             if (ResolveSpellOrItem(code) is not { } r) continue;
 
+            // Suppressed (Paradigm): the winner keeps stripping it, so we never cast it —
+            // it adds nothing to the mana budget.
+            if (suppressed.ContainsKey(code)) continue;
+
             long manaCost = Game.Spells.SpellCalculator.ManaCost(r.Formula);
             double durationSeconds = Game.Spells.SpellCalculator.Duration(r.Formula, _spellbook.Level)
                 * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock;
+
+            // Stock collision-order loser: each remover refresh strips and re-casts it, so
+            // budget it at the shorter of its own and the remover's duration.
+            if (collisionOrder.TryGetValue(code, out string? removerCode))
+                durationSeconds = Game.Spells.BuffManaUpkeepCalculator.EffectiveMaintenanceSeconds(
+                    durationSeconds, DurationSecondsOf(removerCode));
 
             int casts;
             if (BuffClassifier.IsWholeParty(r.Targets))

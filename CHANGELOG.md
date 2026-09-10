@@ -5,6 +5,7 @@
 - Stock: two configured buffs that conflict one-directionally (e.g. greater bless removes chant, but chant doesn't remove greater bless) are now **both kept** — the Buff Watchdog casts the remover first and re-applies the removed buff after each remover recast, instead of letting the wrong cast order silently knock one off
 - Only on stock, where a buff's removal fires just at cast; Paradigm (continuous re-strip) still suppresses the loser per #540, and mutual pairs stay last-cast-wins on either realm
 - The kept buff's row shows "both kept" instead of a stuck conflict; bug report lists the collision-ordered buffs
+- The "mana to maintain" readout now accounts for it — a collision-ordered loser is budgeted at its remover's (shorter) duration since each remover recast re-casts it, and a suppressed loser costs nothing
 
 ## 3.63.1
 

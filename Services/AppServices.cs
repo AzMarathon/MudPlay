@@ -6970,9 +6970,10 @@ public sealed class AppServices
     private IReadOnlyCollection<string> RemovesShortsFor(string castShort)
     {
         if (string.IsNullOrWhiteSpace(castShort)) return System.Array.Empty<string>();
-        // Expanded through the bless-family exclusivity slot (see RemovedSpellNumbers /
-        // ExpandMutualExclusionFamily) so a clobber-clear catches a mutually-exclusive
-        // buff the spell strips in-game but doesn't list directly (chant → greater bless).
+        // LITERAL removes (RemovedSpellNumbers) — a spell strips exactly the spells its
+        // own RemovesSpell list names, no family inference. Realm-agnostic: it's what lets
+        // a landed remover clear its victim's timer on ANY realm (so on stock a collision-
+        // order loser is re-cast after the remover, even if the loser wasn't otherwise due).
         HashSet<int> removed = RemovedSpellNumbers(castShort);
         if (removed.Count == 0) return System.Array.Empty<string>();
         List<string> shorts = new();
