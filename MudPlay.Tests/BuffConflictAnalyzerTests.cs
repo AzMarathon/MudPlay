@@ -26,52 +26,6 @@ public sealed class BuffConflictAnalyzerTests
     private static BuffAffectSet Inert() =>
         BuffAffectSet.From(isWholePartySpell: false, wholePartyOn: false, castOnSelf: false, allMembers: false, targets: System.Array.Empty<string>());
 
-    // A minimal spell formula carrying only a RemovesSpell (Abil-122) list.
-    private static SpellFormulaInput Formula(int number, params int[] removes) =>
-        new() { Number = number, Abilities = removes.Select(r => new SpellAbility(122, r)).ToList() };
-
-    [Fact]
-    public void ExpandMutualExclusion_AddsMutuallyExclusiveFamilyMember()
-    {
-        // chant removes bless directly; bless & greater bless remove EACH OTHER (one
-        // exclusive slot), so chant also clears greater bless — even though chant's own
-        // removes-list omits it (report paradigm-20260910-003957).
-        Dictionary<int, SpellFormulaInput> f = new()
-        {
-            [23]  = Formula(23, 14),        // chant → bless
-            [14]  = Formula(14, 23, 146),   // bless → chant, greater bless
-            [146] = Formula(146, 14),       // greater bless → bless
-        };
-        SpellFormulaInput? Lookup(int n) => f.TryGetValue(n, out SpellFormulaInput v) ? v : null;
-
-        HashSet<int> expanded = BuffConflictAnalyzer.ExpandMutualExclusion(
-            new HashSet<int> { 14 }, selfNumber: 23, Lookup);
-
-        Assert.Contains(14, expanded);       // direct
-        Assert.Contains(146, expanded);      // via bless ↔ greater-bless mutual exclusivity
-        Assert.DoesNotContain(23, expanded); // never adds the caster itself
-    }
-
-    [Fact]
-    public void ExpandMutualExclusion_OneDirectionalRemoval_DoesNotOverExpand()
-    {
-        // Spell 1 removes 2, and 2 removes 3 — but neither is mutual (2 doesn't remove 1,
-        // 3 doesn't remove 2), so nothing extra is pulled in. A one-directional "removes"
-        // is not a shared exclusive slot.
-        Dictionary<int, SpellFormulaInput> f = new()
-        {
-            [1] = Formula(1, 2),
-            [2] = Formula(2, 3),
-            [3] = Formula(3),
-        };
-        SpellFormulaInput? Lookup(int n) => f.TryGetValue(n, out SpellFormulaInput v) ? v : null;
-
-        HashSet<int> expanded = BuffConflictAnalyzer.ExpandMutualExclusion(
-            new HashSet<int> { 2 }, selfNumber: 1, Lookup);
-
-        Assert.Equal(new[] { 2 }, expanded.OrderBy(x => x).ToArray());
-    }
-
     [Fact]
     public void TwoSelfCastSlots_CoLand()
     {

@@ -9,10 +9,10 @@
 - Buff Watchdog: unchecking a whole-party buff's **Party** master now clears Solo and stops every future cast, including while alone
 - **Add all blesses** now adds whole-party rows fully off (both Party and Solo), matching the UI promise that bulk-added party buffs never start casting until you opt in
 - Buff Watchdog: the inline checkboxes and buttons (Self, members, All/None, ▲▼, ✎) are clickable again — the row drag-reorder handler was swallowing every click in the panel
-- Buff Watchdog: a buff stripped by a newly-cast buff that removes it now has its timer cleared when the clobbering buff lands, instead of lingering as though it's still up — this now also follows the bless-family exclusivity slot, so casting chant clears a greater-bless timer even though chant's data only lists plain bless
+- Buff Watchdog: a buff stripped by a newly-cast buff that removes it now has its timer cleared when the clobbering buff lands, instead of lingering as though it's still up — each spell respects its literal Removes list (e.g. casting greater bless clears an active chant; casting chant leaves greater bless alone)
 - Buff Watchdog: re-casting a buff that had earlier been stripped now correctly drops whatever replaced it (e.g. re-casting greater bless while a chant is up now clears the chant instead of leaving it stuck on "conflict") — the stripped buff's applied-latch is released on clobber so its re-cast re-confirms
 - **Save profile** put back on the File menu with a floppy-disk toolbar icon (quick one-click write of the current profile + settings); New / Open / Save-as profile retired from the menus and shortcut list (Profile Management covers them), and Profile Management gained a **Ctrl+P** shortcut
-- bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119, paradigm-20260909-220212, paradigm-20260910-000144, paradigm-20260910-001023, paradigm-20260910-003957, paradigm-20260910-012303
+- bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119, paradigm-20260909-220212, paradigm-20260910-000144, paradigm-20260910-001023, paradigm-20260910-012303
 
 ## 3.61.1
 

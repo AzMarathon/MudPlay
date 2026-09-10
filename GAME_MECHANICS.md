@@ -1308,26 +1308,33 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
   held by its own count (e.g. `100 gold crowns` + `1 platinum piece`), **not** re-bucketed into a
   consolidated wealth total.
 
-**Bless-family exclusivity slot** *([CONFIRMED] 2026-09-10, user, Paradigm — report paradigm-20260910-003957)*
-- The bless-family buffs (bless, greater bless, divine favour, chant, and the opposing curse / blight)
-  share **one exclusive effect slot** — only one can be up, and casting any of them clears whichever is
-  there. The game data encodes this MUTUALLY (each family member's `RemovesSpell` / Abil-122 lists the
-  others), but not always symmetrically per spell: **chant's** removes-list carries bless (#14) / curse
-  (#15) / blight (#75) but **omits greater bless (#146)** — yet in-game **casting chant strips greater
-  bless**. So the client can't read chant→greater-bless off chant's own removes-list; it infers it from
-  the family's mutual-removal (bless ↔ greater bless each list the other, so they're one slot, and chant
-  clearing bless clears greater bless too). `AppServices.ExpandMutualExclusionFamily` does this expansion
-  for both the ⚠ conflict warning and the clobbered-timer clear. The reverse direction (**greater bless
-  strips chant**) needs no inference — gbls #146's removes-list carries chant (#23) directly.
+**RemovesSpell is LITERAL — no family/transitive inference** *([CONFIRMED] 2026-09-10, user, Paradigm)*
+- A buff strips **exactly** the spells its own `RemovesSpell` (Abil-122) list names — nothing more. There
+  is NO "family exclusivity slot": the fact that bless removes both chant and greater bless, and that bless
+  ↔ greater bless remove each other, does NOT make chant remove greater bless. Concretely, the bless family:
+  - **greater bless #146** removes: greater curse #61, bless #14, curse #15, **chant #23**, divine favour
+    #62, ashwood wand #668.
+  - **chant #23** removes: blight #75, curse #15, bless #14 — **NOT greater bless.**
+  - So it's **asymmetric**: casting **greater bless strips an active chant** (gbls lists chant directly),
+    but casting **chant leaves an active greater bless alone** (chant's list omits it).
+  - (An earlier build inferred chant→greater-bless transitively via a "family slot" — that was WRONG and
+    was reverted; the user verified in-game that chant does not strip greater bless.)
 - **Two `chant` records share cast code `chan`**: **#23** is the learnable one (`Learnable`, all classes,
-  the one a player casts and the one gbls/curse/blight list); **#825** is a non-learnable room-cast
+  the one a player casts and the one gbls/curse/blight reference); **#825** is a non-learnable room-cast
   duplicate (`Casted By = Room …`). The clobber math keys off #23.
-- **Applied-latch gotcha** *(report paradigm-20260910-012303)*: `ConditionTracker` dedups a repeated
-  applied line (each spell's "You feel …" latches once until its wear-off). A clobber clears the victim's
-  *timer* but the game sends no distinct wear-off for it (the shared family wear-off is ignored), so the
-  victim's applied-latch survived — and a later **re-cast** of that victim was deduped, never re-confirmed,
-  and so never drove its own clobber-clear (a re-cast greater bless never dropped an active chant). Fixed
-  by `ConditionTracker.ReleaseApplied`, called from the clobber-clear so the victim's latch is dropped too.
+- **Paradigm enforces removes CONTINUOUSLY (~3s tick), not just on cast** *(user-tested, Paradigm)*: while a
+  buff is up it re-strips everything in its list every few seconds. So under an active greater bless you
+  cannot keep a chant up at all — gbls re-removes it within ~3s. (Casting order therefore doesn't let you
+  "keep both" in Paradigm.) **Stock is UNVERIFIED** — it may pace removes only on cast (which would let both
+  stay); do not assume the continuous behaviour for stock. When two configured buffs conflict one-directionally
+  (Y removes X, X doesn't remove Y), Y is the permanent winner; if both mutually remove each other, whichever
+  is cast first wins (largely theoretical — no known live pair a player would run together).
+- **Applied-latch gotcha** *(report paradigm-20260910-012303)*: `ConditionTracker` dedups a repeated applied
+  line (each spell's "You feel …" latches once until its wear-off). A clobber clears the victim's *timer* but
+  the game sends no distinct wear-off for it (the shared family wear-off is ignored), so the victim's
+  applied-latch survived — and a later **re-cast** of that victim was deduped, never re-confirmed, and so
+  never drove its own clobber-clear (a re-cast greater bless never dropped an active chant). Fixed by
+  `ConditionTracker.ReleaseApplied`, called from the clobber-clear so the victim's latch is dropped too.
 
 **On-death effect wipe** *([CONFIRMED])*
 - Death removes **all active effects — buffs and debuffs alike**. A poison ticking at the moment of

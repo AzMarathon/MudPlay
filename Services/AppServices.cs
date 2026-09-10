@@ -6758,28 +6758,17 @@ public sealed class AppServices
     }
 
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
-    // effect the Spell Book renders as "Removes <spell>"), expanded through the
-    // bless-family exclusivity slot (see ExpandMutualExclusionFamily).
+    // effect the Spell Book renders as "Removes <spell>"). LITERAL: a spell strips exactly
+    // the spells its own list names, with no transitive/family inference. The game data is
+    // authoritative here — chant removes bless/curse/blight but NOT greater bless, even
+    // though bless and greater bless remove each other (so casting chant leaves an active
+    // greater bless alone; greater bless removes chant directly). An earlier "bless-family
+    // exclusivity slot" expansion inferred chant→greater-bless transitively and was wrong
+    // (user-confirmed in-game, Paradigm — report paradigm-20260910-012303 follow-up).
     private HashSet<int> RemovedSpellNumbers(string castCode)
     {
         if (Spellbook.FindByCastCode(castCode.Trim()) is not { } s) return new HashSet<int>();
-        return ExpandMutualExclusionFamily(
-            Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula), s.Number);
-    }
-
-    // Expand a spell's direct RemovesSpell set through the bless-family exclusivity slot
-    // (see BuffConflictAnalyzer.ExpandMutualExclusion + GAME_MECHANICS.md) so chant→greater
-    // bless is caught even though chant's own removes-list omits it.
-    private HashSet<int> ExpandMutualExclusionFamily(HashSet<int> direct, int selfNumber) =>
-        Game.Spells.BuffConflictAnalyzer.ExpandMutualExclusion(direct, selfNumber, FormulaOfNumber);
-
-    // A spell number → its formula (null when the class doesn't know it). KnownSpell is a
-    // value type, so this can't fold into a FirstOrDefault?. expression.
-    private Game.Spells.SpellFormulaInput? FormulaOfNumber(int number)
-    {
-        foreach (Game.Spells.KnownSpell s in Spellbook.Available)
-            if (s.Number == number) return s.Formula;
-        return null;
+        return Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula);
     }
 
     // Every pair of configured, resolvable buff slots where one's spell removes the
