@@ -1308,6 +1308,17 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
   held by its own count (e.g. `100 gold crowns` + `1 platinum piece`), **not** re-bucketed into a
   consolidated wealth total.
 
+**Bless-family exclusivity slot** *([CONFIRMED] 2026-09-10, user, Paradigm — report paradigm-20260910-003957)*
+- The bless-family buffs (bless, greater bless, divine favour, chant, and the opposing curse / blight)
+  share **one exclusive effect slot** — only one can be up, and casting any of them clears whichever is
+  there. The game data encodes this MUTUALLY (each family member's `RemovesSpell` / Abil-122 lists the
+  others), but not always symmetrically per spell: **chant's** removes-list carries bless (#14) / curse
+  (#15) / blight (#75) but **omits greater bless (#146)** — yet in-game **casting chant strips greater
+  bless**. So the client can't read chant→greater-bless off chant's own removes-list; it infers it from
+  the family's mutual-removal (bless ↔ greater bless each list the other, so they're one slot, and chant
+  clearing bless clears greater bless too). `AppServices.ExpandMutualExclusionFamily` does this expansion
+  for both the ⚠ conflict warning and the clobbered-timer clear.
+
 **On-death effect wipe** *([CONFIRMED])*
 - Death removes **all active effects — buffs and debuffs alike**. A poison ticking at the moment of
   death clears with it: the death sequence carries `The effects of the poison wear off!` right

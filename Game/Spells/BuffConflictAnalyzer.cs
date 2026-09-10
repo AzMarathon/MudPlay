@@ -93,6 +93,34 @@ public static class BuffConflictAnalyzer
         return nums;
     }
 
+    // Expand a spell's DIRECT RemovesSpell set through the bless-family exclusivity slot.
+    // MajorMUD's bless-family buffs share one exclusive slot (bless / greater bless /
+    // divine favour / curse / blight all remove one another), so casting any of them
+    // clears whichever is up. The data encodes this MUTUALLY but not always symmetrically
+    // per spell (chant lists bless but omits greater bless, yet in-game chant strips
+    // greater bless — see GAME_MECHANICS.md). Bridge it from the mutual-removal: for each
+    // directly-removed spell X, also include any Y that MUTUALLY removes X (X removes Y AND
+    // Y removes X — a genuine exclusive pair). Mutual-only, so a one-directional removal
+    // never over-expands. formulaOf resolves a spell number to its formula (null = unknown,
+    // skipped); selfNumber is the casting spell, never added to its own removed set.
+    public static HashSet<int> ExpandMutualExclusion(
+        HashSet<int> direct, int selfNumber, Func<int, SpellFormulaInput?> formulaOf)
+    {
+        if (direct.Count == 0) return direct;
+        HashSet<int> result = new(direct);
+        foreach (int x in direct)
+        {
+            if (formulaOf(x) is not { } fx) continue;
+            foreach (int y in RemovedSpellNumbers(fx))
+            {
+                if (y == selfNumber || result.Contains(y)) continue;
+                if (formulaOf(y) is { } fy && RemovedSpellNumbers(fy).Contains(x))
+                    result.Add(y);   // x and y mutually exclude → same family slot
+            }
+        }
+        return result;
+    }
+
     // True when two slots' targeting could ever land on the same character — the
     // precondition for a RemovesSpell relation between their spells to matter.
     public static bool CanCoLand(in BuffAffectSet a, in BuffAffectSet b)

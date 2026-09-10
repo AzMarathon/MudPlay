@@ -6758,11 +6758,29 @@ public sealed class AppServices
     }
 
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
-    // effect the Spell Book renders as "Removes <spell>").
-    private HashSet<int> RemovedSpellNumbers(string castCode) =>
-        Spellbook.FindByCastCode(castCode.Trim()) is { } s
-            ? Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula)
-            : new HashSet<int>();
+    // effect the Spell Book renders as "Removes <spell>"), expanded through the
+    // bless-family exclusivity slot (see ExpandMutualExclusionFamily).
+    private HashSet<int> RemovedSpellNumbers(string castCode)
+    {
+        if (Spellbook.FindByCastCode(castCode.Trim()) is not { } s) return new HashSet<int>();
+        return ExpandMutualExclusionFamily(
+            Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula), s.Number);
+    }
+
+    // Expand a spell's direct RemovesSpell set through the bless-family exclusivity slot
+    // (see BuffConflictAnalyzer.ExpandMutualExclusion + GAME_MECHANICS.md) so chant→greater
+    // bless is caught even though chant's own removes-list omits it.
+    private HashSet<int> ExpandMutualExclusionFamily(HashSet<int> direct, int selfNumber) =>
+        Game.Spells.BuffConflictAnalyzer.ExpandMutualExclusion(direct, selfNumber, FormulaOfNumber);
+
+    // A spell number → its formula (null when the class doesn't know it). KnownSpell is a
+    // value type, so this can't fold into a FirstOrDefault?. expression.
+    private Game.Spells.SpellFormulaInput? FormulaOfNumber(int number)
+    {
+        foreach (Game.Spells.KnownSpell s in Spellbook.Available)
+            if (s.Number == number) return s.Formula;
+        return null;
+    }
 
     // Every pair of configured, resolvable buff slots where one's spell removes the
     // other's via RemovesSpell (Abil 122) and their targeting can land on the same
@@ -6917,9 +6935,11 @@ public sealed class AppServices
     // share the wear-off message, so the shared line can't disambiguate on its own).
     private IReadOnlyCollection<string> RemovesShortsFor(string castShort)
     {
-        if (string.IsNullOrWhiteSpace(castShort)
-            || Spellbook.FindByCastCode(castShort.Trim()) is not { } spell) return System.Array.Empty<string>();
-        HashSet<int> removed = Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(spell.Formula);
+        if (string.IsNullOrWhiteSpace(castShort)) return System.Array.Empty<string>();
+        // Expanded through the bless-family exclusivity slot (see RemovedSpellNumbers /
+        // ExpandMutualExclusionFamily) so a clobber-clear catches a mutually-exclusive
+        // buff the spell strips in-game but doesn't list directly (chant → greater bless).
+        HashSet<int> removed = RemovedSpellNumbers(castShort);
         if (removed.Count == 0) return System.Array.Empty<string>();
         List<string> shorts = new();
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
