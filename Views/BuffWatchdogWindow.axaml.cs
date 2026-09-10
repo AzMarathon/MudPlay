@@ -28,15 +28,13 @@ public partial class BuffWatchdogWindow : Window
     private BuffWatchdogViewModel? _vm;
     private INotifyPropertyChanged? _buffsNotifier;
 
-    // Drag-to-reorder of the config buff rows. In-process object reference carried
-    // by the drag session (Avalonia 12's DataTransfer replaced the legacy DataObject).
-    // A drag starts ONLY from a row's grip handle so it doesn't hijack the inline
-    // checkboxes, the horizontal scroll, or the double-click-to-edit gesture.
-    private static readonly DataFormat<BuffSlotRowViewModel> RowFormat =
-        DataFormat.CreateInProcessFormat<BuffSlotRowViewModel>("mudplay-buffrow");
-    private BuffSlotRowViewModel? _pressedRow;
-    private Point _pressOrigin;
-    private PointerPressedEventArgs? _pressArgs;
+    // Manual pointer drag-to-reorder of the config buff rows. A drag starts ONLY
+    // from a row's grip handle (so it doesn't hijack the inline checkboxes, the
+    // horizontal scroll, or double-click-to-edit) and shows a live insertion line.
+    // Manual (not DragDrop) so it's repeatable and can paint where the row will land.
+    private BuffSlotRowViewModel? _dragRow;
+    private bool _dragActive;
+    private Point _dragStart;
 
     // Last-applied zone state, so a reflow only happens when it genuinely needs to and
     // preserves what the user dragged. _configExtent is the config pane's fixed size (a
@@ -66,12 +64,11 @@ public partial class BuffWatchdogWindow : Window
             // Tunnel so the grip press is seen before the row's inner controls.
             rows.AddHandler(PointerPressedEvent, OnRowPointerPressed, RoutingStrategies.Tunnel);
             rows.AddHandler(PointerMovedEvent, OnRowPointerMoved, RoutingStrategies.Tunnel);
-            rows.AddHandler(DragDrop.DragOverEvent, OnRowDragOver);
-            rows.AddHandler(DragDrop.DropEvent, OnRowDrop);
+            rows.AddHandler(PointerReleasedEvent, OnRowPointerReleased, RoutingStrategies.Tunnel);
         }
     }
 
-    // ----- drag-to-reorder of the config buff rows -------------------
+    // ----- drag-to-reorder of the config buff rows (manual pointer) ---
 
     private void OnRowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -79,49 +76,72 @@ public partial class BuffWatchdogWindow : Window
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
             || !StartedOnGrip(e.Source as StyledElement))
         {
-            _pressedRow = null;
-            _pressArgs = null;
+            _dragRow = null;
             return;
         }
-        _pressedRow = RowOf(e.Source as StyledElement);
-        _pressOrigin = e.GetPosition(this);
-        _pressArgs = e;
+        _dragRow = RowOf(e.Source as StyledElement);
+        _dragStart = e.GetPosition(this);
+        _dragActive = false;
     }
 
-    private async void OnRowPointerMoved(object? sender, PointerEventArgs e)
+    private void OnRowPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (_pressedRow is null || _pressArgs is null) return;
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            _pressedRow = null;
-            _pressArgs = null;
-            return;
-        }
+        if (_dragRow is null) return;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) { ClearDrag(); return; }
+
         Point now = e.GetPosition(this);
-        if (Math.Abs(now.X - _pressOrigin.X) < 4 && Math.Abs(now.Y - _pressOrigin.Y) < 4)
+        if (!_dragActive
+            && Math.Abs(now.X - _dragStart.X) < 4 && Math.Abs(now.Y - _dragStart.Y) < 4)
             return;
-
-        BuffSlotRowViewModel row = _pressedRow;
-        PointerPressedEventArgs trigger = _pressArgs;
-        _pressedRow = null;
-        _pressArgs = null;
-
-        var data = new DataTransfer();
-        data.Add(DataTransferItem.Create(RowFormat, row));
-        await DragDrop.DoDragDropAsync(trigger, data, DragDropEffects.Move);
+        _dragActive = true;
+        _dragRow.IsDragging = true;
+        PaintInsertion(e.Source as StyledElement, e);
     }
 
-    private void OnRowDragOver(object? sender, DragEventArgs e)
-        => e.DragEffects = e.DataTransfer.Contains(RowFormat)
-            ? DragDropEffects.Move
-            : DragDropEffects.None;
+    private void OnRowPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_dragActive && _dragRow is { } src && _vm?.Buffs is { } buffs
+            && DropIndex(e.Source as StyledElement, e) is int idx && idx >= 0)
+            buffs.MoveRowToIndex(src, idx);
+        ClearDrag();
+    }
 
-    private void OnRowDrop(object? sender, DragEventArgs e)
+    // Clear the drag state + every row's insertion / dragging indicator.
+    private void ClearDrag()
+    {
+        if (_dragRow is not null) _dragRow.IsDragging = false;
+        _dragRow = null;
+        _dragActive = false;
+        if (_vm?.Buffs is { } buffs)
+            foreach (BuffSlotRowViewModel r in buffs.Slots) { r.DropAbove = false; r.DropBelow = false; }
+    }
+
+    // Paint the insertion line at the boundary nearest the pointer.
+    private void PaintInsertion(StyledElement? src, PointerEventArgs e)
     {
         if (_vm?.Buffs is not { } buffs) return;
-        if (e.DataTransfer.TryGetValue(RowFormat) is not { } source) return;
-        if (RowOf(e.Source as StyledElement) is not { } target) return;
-        buffs.MoveRowToTarget(source, target);
+        foreach (BuffSlotRowViewModel r in buffs.Slots) { r.DropAbove = false; r.DropBelow = false; }
+
+        if (RowContainerOf(src) is not { } container
+            || container.DataContext is not BuffSlotRowViewModel target) return;
+        int ti = buffs.Slots.IndexOf(target);
+        if (ti < 0) return;
+        bool bottom = e.GetPosition(container).Y >= container.Bounds.Height / 2;
+        if (!bottom) target.DropAbove = true;
+        else if (ti == buffs.Slots.Count - 1) target.DropBelow = true;
+        else buffs.Slots[ti + 1].DropAbove = true;
+    }
+
+    // The FINAL insert index (0..Count) for the row under the pointer, or -1.
+    private int DropIndex(StyledElement? src, PointerEventArgs e)
+    {
+        if (_vm?.Buffs is not { } buffs) return -1;
+        if (RowContainerOf(src) is not { } container
+            || container.DataContext is not BuffSlotRowViewModel target) return -1;
+        int ti = buffs.Slots.IndexOf(target);
+        if (ti < 0) return -1;
+        bool bottom = e.GetPosition(container).Y >= container.Bounds.Height / 2;
+        return bottom ? ti + 1 : ti;
     }
 
     // True when the pressed element (or an ancestor) is a row's drag grip.
@@ -138,6 +158,19 @@ public partial class BuffWatchdogWindow : Window
         for (StyledElement? e = src; e is not null; e = e.Parent)
             if (e.DataContext is BuffSlotRowViewModel row) return row;
         return null;
+    }
+
+    // The OUTERMOST element still carrying a row's DataContext (the row container),
+    // so its Bounds give the full row height for the top/bottom-half hit test.
+    private static Visual? RowContainerOf(StyledElement? src)
+    {
+        Visual? container = null;
+        for (StyledElement? e = src; e is not null; e = e.Parent)
+        {
+            if (e.DataContext is BuffSlotRowViewModel) container = e as Visual;
+            else if (container is not null) break;   // DataContext changed past the row
+        }
+        return container;
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)

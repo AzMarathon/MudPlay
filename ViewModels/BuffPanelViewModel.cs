@@ -205,12 +205,15 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         Persist();
     }
 
-    // Drag entry point: drop source onto target's position.
-    public void MoveRowToTarget(BuffSlotRowViewModel source, BuffSlotRowViewModel target)
+    // Drag entry point: move a row to a FINAL insert index (0..Count) — the drop
+    // handler computes it from where the insertion line landed. Converts the insert
+    // index to a Move target, accounting for the removal shift when moving downward.
+    public void MoveRowToIndex(BuffSlotRowViewModel row, int insertIndex)
     {
-        int from = Slots.IndexOf(source);
-        int to = Slots.IndexOf(target);
-        if (from < 0 || to < 0) return;
+        int from = Slots.IndexOf(row);
+        if (from < 0) return;
+        int to = from < insertIndex ? insertIndex - 1 : insertIndex;
+        to = System.Math.Clamp(to, 0, Slots.Count - 1);
         MoveTo(from, to);
     }
 

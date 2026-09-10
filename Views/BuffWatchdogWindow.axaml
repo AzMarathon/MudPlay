@@ -118,6 +118,18 @@
                                   IsChecked="{Binding CastSolo, Mode=TwoWay}"
                                   ToolTip.Tip="Also cast this whole-party buff while you're solo — a lone character is a party of one, so it still lands on you."/>
                     </StackPanel>
+
+                    <!-- Drag-reorder feedback (hit-test-invisible so they never eat the
+                         grip / drop pointer events): a scrim over the row being moved,
+                         and a cyan insertion line above / below where it will land. -->
+                    <Border Grid.Column="0" Grid.ColumnSpan="4" Background="#40000000"
+                            IsHitTestVisible="False" IsVisible="{Binding IsDragging}"/>
+                    <Border Grid.Column="0" Grid.ColumnSpan="4" Height="2" VerticalAlignment="Top"
+                            Background="{StaticResource AccentCyanBrush}"
+                            IsHitTestVisible="False" IsVisible="{Binding DropAbove}"/>
+                    <Border Grid.Column="0" Grid.ColumnSpan="4" Height="2" VerticalAlignment="Bottom"
+                            Background="{StaticResource AccentCyanBrush}"
+                            IsHitTestVisible="False" IsVisible="{Binding DropBelow}"/>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -310,7 +322,6 @@
                                      straight to the ObservableCollection so a single add /
                                      remove touches one row instead of rebuilding the list. -->
                                 <ItemsControl x:Name="BuffRowsList"
-                                              DragDrop.AllowDrop="True"
                                               ItemsSource="{Binding Slots}"
                                               ItemTemplate="{StaticResource BuffSlotRowTemplate}"/>
                             </StackPanel>

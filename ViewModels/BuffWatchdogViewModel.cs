@@ -402,7 +402,13 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
         if (buffs is not null)
         {
-            foreach (BuffSlot p in buffs.Slots)
+            // Walk the slots in the SAME order the config table shows them (manual
+            // arrangement, else grouped by type), so each player's timer bars line up
+            // with the config rows — see BuffPriorityOrder.InDisplayOrder.
+            IReadOnlyList<BuffSlot> ordered = BuffPriorityOrder.InDisplayOrder(
+                buffs.Slots, buffs.ManualOrder,
+                s => BuffPriorityOrder.Category(ItemCastToken.IsToken(s.Spell), IsWholePartySlot(s.Spell)));
+            foreach (BuffSlot p in ordered)
             {
                 if (string.IsNullOrWhiteSpace(p.Spell)) continue;
                 string code = p.Spell.Trim();

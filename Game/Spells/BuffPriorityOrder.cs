@@ -25,4 +25,12 @@ public static class BuffPriorityOrder
         if (priorityTopDown && manualOrder) return slots;
         return slots.OrderBy(categoryOf).ToList();
     }
+
+    // The order the config table SHOWS the list in — the user's arrangement once
+    // hand-arranged, otherwise grouped by category. (Distinct from InPriorityOrder,
+    // which also weighs PriorityTopDown.) The read-only timer bars follow this so
+    // they line up with the config rows.
+    public static IReadOnlyList<BuffSlot> InDisplayOrder(
+        IReadOnlyList<BuffSlot> slots, bool manualOrder, Func<BuffSlot, int> categoryOf)
+        => manualOrder ? slots : slots.OrderBy(categoryOf).ToList();
 }
