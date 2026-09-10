@@ -1322,15 +1322,22 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
 - **Two `chant` records share cast code `chan`**: **#23** is the learnable one (`Learnable`, all classes,
   the one a player casts and the one gbls/curse/blight reference); **#825** is a non-learnable room-cast
   duplicate (`Casted By = Room …`). The clobber math keys off #23.
-- **Paradigm enforces removes CONTINUOUSLY (~3s tick), not just on cast** *(user-tested, Paradigm)*: while a
-  buff is up it re-strips everything in its list every few seconds. So under an active greater bless you
-  cannot keep a chant up at all — gbls re-removes it within ~3s. (Casting order therefore doesn't let you
-  "keep both" in Paradigm.) **Stock is UNVERIFIED** — it may pace removes only on cast (which would let both
-  stay); do not assume the continuous behaviour for stock. When two configured buffs conflict one-directionally
-  (Y removes X, X doesn't remove Y), Y is the permanent winner (X can never stay up under Y); if both mutually
-  remove each other (e.g. bless ↔ greater bless), **whichever is cast LAST wins** — the later cast strips the
-  earlier (standard last-cast-clobbers, already handled by the direct clobber-clear). Largely academic for a
-  player who'd run only one of a mutual pair.
+- **Removal TIMING differs by realm — this is why #540's suppression is Paradigm-only** *([CONFIRMED]
+  2026-09-10, user)*:
+  - **Stock** — a buff's RemovesSpell fires ONLY when that spell is cast (one-time; no ongoing re-check). So a
+    ONE-WAY pair cast in non-colliding order holds **both, durably**: cast **greater bless first, then chant**
+    and both stay (gbls's strip already fired with no chant present; chant doesn't list gbls). Reverse order
+    (chant then gbls) leaves only gbls. (Also subject to the 10-affect cap below.)
+  - **Paradigm** — an ACTIVE remover keeps stripping its removes on an ongoing **~3-second tick**, not just at
+    its own cast, so a one-way-removed buff CANNOT coexist with an active remover regardless of cast order: an
+    active greater bless re-strips chant every few seconds. This is exactly why **#540's "suppress the loser" is correct on Paradigm**
+    (don't waste rounds maintaining chant under a maintained gbls) and **correctly does nothing on stock**
+    (where cast-order lets you hold both). A stock "cast in non-colliding order to keep both" helper is a
+    possible future enhancement, not built.
+  - Mutual pairs (bless ↔ greater bless — each lists the other) are last-cast-wins in both realms.
+- **Stock: "10 spelling" affect cap** *([CONFIRMED] 2026-09-10, user, Stock)*: Paradigm has unlimited
+  buff/affect slots; **stock caps active affects at 10** (buffs + debuffs combined). Casting/receiving an 11th
+  pushes an existing affect off — the exact eviction rule is not yet known. Not modelled in the client yet.
 - **Applied-latch gotcha** *(report paradigm-20260910-012303)*: `ConditionTracker` dedups a repeated applied
   line (each spell's "You feel …" latches once until its wear-off). A clobber clears the victim's *timer* but
   the game sends no distinct wear-off for it (the shared family wear-off is ignored), so the victim's

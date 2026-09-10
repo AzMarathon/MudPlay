@@ -1283,17 +1283,21 @@ public sealed class CombatSpellChooserTests
 
     // ----- Per-monster spell overrides ----------------------------------
     // A per-monster override substitutes its cast-code at the matching rung
-    // (attack → NormalAttackSpell, pre-attack → SingleTargetDebuffSpell),
-    // bypassing the effectiveness gates (immunity / level / resist) but keeping
-    // the physical constraints (mana floor, once-per-target, cast cap).
+    // (attack → NormalAttackSpell, alt → AlternateAttackSpell, pre-attack →
+    // SingleTargetDebuffSpell) and runs the SAME effectiveness gates the configured
+    // slot does — observed immunity / level / element resist all still block it —
+    // while keeping the physical constraints (mana affordability, once-per-target,
+    // cast cap). It is NOT a bypass: the user picks WHICH spell fills the rung.
 
     private static CombatSpellContext OverrideCtx(
         string? attackOverride = null, int? attackCap = null,
+        string? altOverride = null, int? altCap = null,
         string? preOverride = null, int? preCap = null,
         string target = "a rat", int mana = 100, int maxMana = 100,
         IReadOnlySet<CombatSpellAction>? immune = null,
         IReadOnlySet<CombatSpellAction>? levelBlocked = null,
-        IReadOnlySet<CombatSpellAction>? resistBlocked = null) =>
+        IReadOnlySet<CombatSpellAction>? resistBlocked = null,
+        System.Func<string, int?>? manaCostOf = null) =>
         new(EnemyCount: 1, TargetRawName: target, Mana: mana, MaxMana: maxMana,
             BackstabPending: false,
             ImmuneAttackSpells: immune,
@@ -1302,7 +1306,10 @@ public sealed class CombatSpellChooserTests
             OverrideAttackSpell: attackOverride,
             OverrideAttackMaxCasts: attackCap,
             OverridePreAttackSpell: preOverride,
-            OverridePreAttackMaxCasts: preCap);
+            OverridePreAttackMaxCasts: preCap,
+            OverrideAltAttackSpell: altOverride,
+            OverrideAltAttackMaxCasts: altCap,
+            ManaCostOf: manaCostOf);
 
     [Fact]
     public void Choose_AttackOverride_SubstitutesForNormalSlot()
@@ -1318,7 +1325,7 @@ public sealed class CombatSpellChooserTests
     }
 
     [Fact]
-    public void Choose_AttackOverride_BypassesImmuneLevelResistGates()
+    public void Choose_AttackOverride_RespectsGates_FallsToAlternate()
     {
         CombatSpellChooser sut = new();
         CombatSettings settings = new()
@@ -1327,9 +1334,10 @@ public sealed class CombatSpellChooserTests
             AlternateAttackSpell = Slot("flame"),
         };
 
-        // The normal rung is flagged immune AND level-blocked AND resist-blocked
-        // — all three would push a configured slot down the cascade. The override
-        // ignores them and fires anyway (the user vouched it works).
+        // The normal rung is flagged immune AND level-blocked AND resist-blocked —
+        // all three block the override the same as a configured slot (the block is
+        // computed against the override spell in the manager). The cascade then falls
+        // to the alternate rung ("flame"), which carries no gate here.
         CombatSpellContext ctx = OverrideCtx(
             attackOverride: "fireball", attackCap: 5,
             immune: new HashSet<CombatSpellAction> { CombatSpellAction.NormalAttackSpell },
@@ -1338,8 +1346,51 @@ public sealed class CombatSpellChooserTests
 
         CombatSpellDecision d = sut.Choose(settings, ctx);
 
-        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
-        Assert.Equal("fireball", d.Spell);
+        Assert.Equal(CombatSpellAction.AlternateAttackSpell, d.Action);
+        Assert.Equal("flame", d.Spell);
+    }
+
+    [Fact]
+    public void Choose_AltAttackOverride_SubstitutesForAltSlot()
+    {
+        CombatSpellChooser sut = new();
+        // Normal rung blocked so the cascade reaches the alternate rung, where a
+        // per-monster override supplies the spell.
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("harm"),
+            AlternateAttackSpell = Slot("flame"),
+        };
+        CombatSpellContext ctx = OverrideCtx(
+            altOverride: "iceball", altCap: 3,
+            levelBlocked: new HashSet<CombatSpellAction> { CombatSpellAction.NormalAttackSpell });
+
+        CombatSpellDecision d = sut.Choose(settings, ctx);
+
+        Assert.Equal(CombatSpellAction.AlternateAttackSpell, d.Action);
+        Assert.Equal("iceball", d.Spell);   // the alt override, not the configured "flame"
+    }
+
+    [Fact]
+    public void Choose_AltAttackOverride_RespectsGates_FallsToWeapon()
+    {
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new()
+        {
+            NormalAttackSpell = Slot("harm"),
+            AlternateAttackSpell = Slot("flame"),
+        };
+        // Both rungs blocked (normal by config, alternate by the override's own gate)
+        // → nothing castable → weapon.
+        CombatSpellContext ctx = OverrideCtx(
+            altOverride: "iceball", altCap: 3,
+            levelBlocked: new HashSet<CombatSpellAction>
+            {
+                CombatSpellAction.NormalAttackSpell,
+                CombatSpellAction.AlternateAttackSpell,
+            });
+
+        Assert.Equal(CombatSpellAction.WeaponAttack, sut.Choose(settings, ctx).Action);
     }
 
     [Fact]
@@ -1365,24 +1416,27 @@ public sealed class CombatSpellChooserTests
     }
 
     [Fact]
-    public void Choose_AttackOverride_HonoursNormalSlotManaFloor()
+    public void Choose_AttackOverride_BlockedByAffordability()
     {
+        // The override's own MinManaPerCast reserve is applied UPSTREAM (in the
+        // manager), so the chooser only enforces the hard affordability floor — and
+        // against the OVERRIDE spell's own cost, not the configured slot's. Below cost
+        // → can't fire → weapon; at/above cost → fires.
         CombatSpellChooser sut = new();
         CombatSettings settings = new()
         {
             SpellManaThresholdMode = ThresholdMode.Absolute,
-            NormalAttackSpell = Slot("harm", minMana: 30),
+            NormalAttackSpell = Slot("harm"),
         };
+        int? Cost(string code) => code == "fireball" ? 30 : null;
 
-        // Below the rung's mana floor → override can't fire → weapon.
         Assert.Equal(CombatSpellAction.WeaponAttack,
             sut.Choose(settings, OverrideCtx(
-                attackOverride: "fireball", attackCap: 5, mana: 20, maxMana: 200)).Action);
+                attackOverride: "fireball", attackCap: 5, mana: 20, maxMana: 200, manaCostOf: Cost)).Action);
 
-        // At/above the floor → override fires.
         Assert.Equal("fireball",
             sut.Choose(settings, OverrideCtx(
-                attackOverride: "fireball", attackCap: 5, mana: 40, maxMana: 200)).Spell);
+                attackOverride: "fireball", attackCap: 5, mana: 40, maxMana: 200, manaCostOf: Cost)).Spell);
     }
 
     [Fact]
@@ -1399,19 +1453,19 @@ public sealed class CombatSpellChooserTests
     }
 
     [Fact]
-    public void ChooseDebuff_PreAttackOverride_BypassesLevelBlock()
+    public void ChooseDebuff_PreAttackOverride_RespectsLevelBlock()
     {
         CombatSpellChooser sut = new();
         CombatSettings settings = new() { SingleTargetDebuffSpell = Slot("weaken") };
 
+        // The target's SpellImmu level blocks the debuff rung (computed against the
+        // override spell in the manager) → the override is skipped like a configured
+        // debuff would be.
         CombatSpellContext ctx = OverrideCtx(
             preOverride: "curse", preCap: 3,
             levelBlocked: new HashSet<CombatSpellAction> { CombatSpellAction.SingleDebuff });
 
-        CombatSpellDecision? d = sut.ChooseDebuff(settings, ctx);
-
-        Assert.Equal(CombatSpellAction.SingleDebuff, d?.Action);
-        Assert.Equal("curse", d?.Spell);
+        Assert.Null(sut.ChooseDebuff(settings, ctx));
     }
 
     [Fact]
@@ -1575,16 +1629,33 @@ public sealed class CombatSpellChooserTests
     }
 
     [Fact]
-    public void Alternation_PhysicalPhase_AttackOverrideStillFires()
+    public void Alternation_SpellPhase_AttackOverrideFires()
     {
-        // report paradigm-20260904-220509: a per-monster attack-spell override
-        // must win over the round-alternation's physical phase the same way a
-        // per-monster attack-COMMAND override already does — the whole point of
-        // an "override" is that it isn't subject to the general ActionOrder
-        // setting. Previously the override was only ever consulted when
-        // preferSpell was already true, so half the rounds under an
-        // Alternate*/CustomRoundCycle order silently fell back to the weapon
-        // even with the override's cap nowhere near spent.
+        // On a spell-phase round the per-monster override fills the normal rung and
+        // fires like a configured attack spell (fully gated).
+        CombatSpellChooser sut = new();
+        CombatSettings settings = new() { NormalAttackSpell = Slot("harm") };
+        CombatSpellContext ctx = new(
+            EnemyCount: 1, TargetRawName: "big blood skeleton", Mana: 100, MaxMana: 100,
+            BackstabPending: false,
+            OverrideAttackSpell: "disr", OverrideAttackMaxCasts: 3,
+            AlternationPreferSpell: true);   // spell-phase round
+
+        CombatSpellDecision d = sut.Choose(settings, ctx);
+
+        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
+        Assert.Equal("disr", d.Spell);
+    }
+
+    [Fact]
+    public void Alternation_PhysicalPhase_AttackOverride_YieldsToPhysical()
+    {
+        // Exact-mirror model: an attack-spell override fills the SPELL rung and fires
+        // on spell-phase rounds like a configured spell — it no longer wins the round's
+        // PHYSICAL phase. A per-monster Physical override owns the physical rounds
+        // instead (in the manager). This supersedes the earlier unconditional
+        // behaviour (report paradigm-20260904-220509), now that a dedicated Physical
+        // override exists.
         CombatSpellChooser sut = new();
         CombatSettings settings = new() { NormalAttackSpell = Slot("harm") };
         CombatSpellContext ctx = new(
@@ -1593,33 +1664,7 @@ public sealed class CombatSpellChooserTests
             OverrideAttackSpell: "disr", OverrideAttackMaxCasts: 3,
             AlternationPreferSpell: false);   // physical-phase round
 
-        CombatSpellDecision d = sut.Choose(settings, ctx);
-
-        Assert.Equal(CombatSpellAction.NormalAttackSpell, d.Action);
-        Assert.Equal("disr", d.Spell);   // the override, not a weapon swing
-    }
-
-    [Fact]
-    public void Alternation_PhysicalPhase_AttackOverrideCapSpent_FallsToWeapon()
-    {
-        // Once the override's own cap is spent, a physical-phase round falls back
-        // to the weapon exactly as before — the fix only removes the alternation
-        // gate on an override that's still eligible, it doesn't make the override
-        // unconditional.
-        CombatSpellChooser sut = new();
-        CombatSettings settings = new() { NormalAttackSpell = Slot("harm") };
-        CombatSpellContext ctx = new(
-            EnemyCount: 1, TargetRawName: "big blood skeleton", Mana: 100, MaxMana: 100,
-            BackstabPending: false,
-            OverrideAttackSpell: "disr", OverrideAttackMaxCasts: 1,
-            AlternationPreferSpell: false);
-
-        sut.MarkCast(new CombatSpellDecision(CombatSpellAction.NormalAttackSpell, "disr"),
-            "big blood skeleton");   // spend the cap (1)
-
-        CombatSpellDecision d = sut.Choose(settings, ctx);
-
-        Assert.Equal(CombatSpellAction.WeaponAttack, d.Action);
+        Assert.Equal(CombatSpellAction.WeaponAttack, sut.Choose(settings, ctx).Action);
     }
 
     // ----- Drain (life-steal) override ----------------------------------

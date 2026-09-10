@@ -215,23 +215,15 @@ public sealed class CombatSpellChooser
         // spell, so we ignore the latch and wait for mana).
         bool singleTargetSpent = _attackSpellLatchedOff && !ctx.WeaponIneffective;
 
-        // A per-monster attack-SPELL override wins over the entire normal flow the
-        // same way a per-monster attack-COMMAND override already does (see
-        // CombatManager.Spells.cs's AttackCommandOverrideFor path, whose own
-        // comment already claims to mirror this contract) — it isn't subject to
-        // ActionOrder/alternation's preferSpell gate, only its own cap and mana
-        // floor. Previously it only ever got tried when preferSpell happened to
-        // already be true that round, so an Alternate*/CustomRoundCycle order
-        // silently skipped a still-available override on every physical-phase
-        // round, falling back to a plain weapon swing instead (report
-        // paradigm-20260904-220509).
-        if (!singleTargetSpent
-            && ctx.SpellsAvailable
-            && ctx.OverrideAttackSpell is { } overrideSpell
-            && CastsOk(ctx.OverrideAttackMaxCasts, _normalAttackCasts)
-            && ManaOk(settings.NormalAttackSpell, ctx, settings.SpellManaThresholdMode))
-            return new CombatSpellDecision(CombatSpellAction.NormalAttackSpell, overrideSpell);
-
+        // A per-monster attack-spell override no longer wins the round regardless of
+        // ActionOrder — it SUBSTITUTES into the normal/alternate rung inside
+        // TryAttackSpell and fires on a spell-phase round exactly like a configured
+        // attack spell would (fully gated). A physical-phase round does physical: the
+        // per-monster Physical override (or the weapon) owns it in the manager's
+        // WeaponAttack branch. This is the "exact mirror" the four override slots are
+        // meant to be — the earlier unconditional-override behaviour (report
+        // paradigm-20260904-220509) is superseded now that a dedicated Physical
+        // override exists for the physical rounds.
         if (preferSpell
             && ctx.SpellsAvailable
             && TryAttackSpell(settings, ctx, settings.SpellManaThresholdMode, singleTargetSpent) is { } spell)
@@ -305,14 +297,18 @@ public sealed class CombatSpellChooser
         CombatSpellSlot single = settings.SingleTargetDebuffSpell;
         if (ctx.OverridePreAttackSpell is { } preAttackOverride)
         {
-            // Per-monster pre-attack override occupies the single-target debuff
-            // rung: bypass the level gate (user vouched for it) but keep the
-            // once-per-target guard, the slot's mana floor, and the override's
-            // own per-room cast cap. Shares the single-debuff counter / target
-            // set (override and configured slot are mutually exclusive here).
-            if (!_singleDebuffedTargets.Contains(ctx.TargetRawName)
+            // Per-monster debuff override occupies the single-target debuff rung and
+            // runs the SAME gates as the configured slot — the target's SpellImmu
+            // level can still block it (LevelBlockedFor computes the block against the
+            // override spell), plus the once-per-target guard and the override's own
+            // per-room cast cap. Its mana floor was applied upstream, so only the hard
+            // affordability floor is checked here, against the override spell. Shares
+            // the single-debuff counter / target set (override and configured slot are
+            // mutually exclusive for this monster).
+            if (!IsLevelBlocked(ctx, CombatSpellAction.SingleDebuff)
+                && !_singleDebuffedTargets.Contains(ctx.TargetRawName)
                 && CastsOk(ctx.OverridePreAttackMaxCasts, _singleDebuffCasts)
-                && ManaOk(single, ctx, mode))
+                && ManaOk(preAttackOverride, ctx))
                 return new CombatSpellDecision(CombatSpellAction.SingleDebuff, preAttackOverride);
             return null;
         }
@@ -420,31 +416,36 @@ public sealed class CombatSpellChooser
         // reserve is spent or its MaxCasts rounds elapsed) — skip to the weapon.
         if (singleTargetSpent) return null;
 
-        // A per-monster attack-spell override occupies the normal-attack rung and
-        // is mutually exclusive with the configured NormalAttackSpell slot for
-        // this monster — Choose already attempted it (unconditionally, ahead of
-        // preferSpell) before ever calling here, so reaching this method with an
-        // override still configured means it was already rejected this round
-        // (cap spent / mana short). Skip straight to the alternate slot below
-        // rather than firing the unrelated global NormalAttackSpell instead.
+        // Normal-attack rung. A per-monster override spell (ctx.OverrideAttackSpell)
+        // SUBSTITUTES for the configured NormalAttackSpell here and runs the exact
+        // same effectiveness gates — the user picks WHICH spell occupies the rung,
+        // not a licence to cast one the target is immune / level / resist-blocked
+        // from (those blocks are computed against the override spell in the manager).
+        // When an override is set the global slot is never used for this monster
+        // (mutually exclusive); the cap is the override's, and mana is the override
+        // spell's affordability (its reserve floor was applied upstream).
         CombatSpellSlot normal = settings.NormalAttackSpell;
-        if (ctx.OverrideAttackSpell is null
-            && IsConfigured(normal)
+        bool normalOverridden = ctx.OverrideAttackSpell is not null;
+        string? normalCode = ctx.OverrideAttackSpell ?? (IsConfigured(normal) ? normal.SpellName : null);
+        if (normalCode is not null
             && !IsImmune(ctx, CombatSpellAction.NormalAttackSpell)
             && !IsLevelBlocked(ctx, CombatSpellAction.NormalAttackSpell)
             && !IsResistBlocked(ctx, CombatSpellAction.NormalAttackSpell)
-            && CastsOk(normal, _normalAttackCasts)
-            && ManaOk(normal, ctx, mode))
-            return new CombatSpellDecision(CombatSpellAction.NormalAttackSpell, normal.SpellName!);
+            && CastsOk(normalOverridden ? ctx.OverrideAttackMaxCasts : normal.MaxCastsPerRoom, _normalAttackCasts)
+            && (normalOverridden ? ManaOk(normalCode, ctx) : ManaOk(normal, ctx, mode)))
+            return new CombatSpellDecision(CombatSpellAction.NormalAttackSpell, normalCode);
 
+        // Alternate-attack rung — same substitution contract as Normal, one rung down.
         CombatSpellSlot alt = settings.AlternateAttackSpell;
-        if (IsConfigured(alt)
+        bool altOverridden = ctx.OverrideAltAttackSpell is not null;
+        string? altCode = ctx.OverrideAltAttackSpell ?? (IsConfigured(alt) ? alt.SpellName : null);
+        if (altCode is not null
             && !IsImmune(ctx, CombatSpellAction.AlternateAttackSpell)
             && !IsLevelBlocked(ctx, CombatSpellAction.AlternateAttackSpell)
             && !IsResistBlocked(ctx, CombatSpellAction.AlternateAttackSpell)
-            && CastsOk(alt, _alternateAttackCasts)
-            && ManaOk(alt, ctx, mode))
-            return new CombatSpellDecision(CombatSpellAction.AlternateAttackSpell, alt.SpellName!);
+            && CastsOk(altOverridden ? ctx.OverrideAltAttackMaxCasts : alt.MaxCastsPerRoom, _alternateAttackCasts)
+            && (altOverridden ? ManaOk(altCode, ctx) : ManaOk(alt, ctx, mode)))
+            return new CombatSpellDecision(CombatSpellAction.AlternateAttackSpell, altCode);
 
         return null;
     }
@@ -571,6 +572,16 @@ public sealed class CombatSpellChooser
         return true;
     }
 
+    // Mana gate for a per-monster override spell substituting into a rung. Its own
+    // MinManaPerCast reserve was applied upstream (the manager's *OverrideFor resolvers
+    // return no override below the floor), so here only the hard affordability floor
+    // applies — and against the OVERRIDE spell's own cost, not the configured slot's.
+    private static bool ManaOk(string spellCode, in CombatSpellContext ctx)
+    {
+        if (ctx.ManaCostOf?.Invoke(spellCode) is { } cost && ctx.Mana < cost) return false;
+        return true;
+    }
+
     // Whether live MA meets a slot's per-cast mana reserve. In Percentage mode the
     // reserve is compared against the ROUNDED absolute equivalent — the exact value
     // the Settings "= mana / %" conversion label shows the user — NOT the raw
@@ -647,16 +658,20 @@ public readonly record struct CombatSpellDecision(CombatSpellAction Action, stri
 // leaves the choice to settings.ActionOrder, so the fixed orders and unwired
 // callers / tests behave as before.
 //
-// The four Override* fields carry the current target's per-monster spell
+// The six Override* fields carry the current target's per-monster spell
 // overrides (game-data Monster overlay), already resolved from Spell.Number to
-// the Short cast-code. OverrideAttackSpell substitutes at the NormalAttackSpell
-// rung and OverridePreAttackSpell at the SingleTargetDebuffSpell rung; when set,
-// the effectiveness gates (observed immunity / level / element resist) are
-// bypassed — the user hand-picked the spell for this species — while the
-// physical constraints (the slot's mana floor, once-per-target for the debuff)
-// still apply. The paired *MaxCasts values are the per-room cast caps the user
-// configured (always positive when the spell is set; a null/zero configured
-// count leaves the override spell null so the global slot is used unchanged).
+// the Short cast-code. OverridePreAttackSpell substitutes at the
+// SingleTargetDebuffSpell rung, OverrideAttackSpell at the NormalAttackSpell
+// rung, and OverrideAltAttackSpell at the AlternateAttackSpell rung. A set
+// override SUBSTITUTES its spell into the matching rung and runs the exact same
+// gated cascade the configured slot does — observed immunity, SpellImmu level,
+// and element resist all still apply (computed against the override spell in the
+// manager's LevelBlockedFor / ResistBlockedFor). It is NOT a bypass: the user
+// picks WHICH spell occupies the rung, not a licence to cast one the target is
+// immune to. The paired *MaxCasts values are the per-room cast caps the user
+// configured; the override's own mana floor is applied upstream (in the manager),
+// so the chooser only enforces the hard affordability floor against the override
+// spell. When an override is set the global slot is not used for this monster.
 public readonly record struct CombatSpellContext(
     int EnemyCount,
     string TargetRawName,
@@ -673,6 +688,8 @@ public readonly record struct CombatSpellContext(
     int? OverrideAttackMaxCasts = null,
     string? OverridePreAttackSpell = null,
     int? OverridePreAttackMaxCasts = null,
+    string? OverrideAltAttackSpell = null,
+    int? OverrideAltAttackMaxCasts = null,
     bool WeaponIneffective = false,
     bool? AlternationPreferSpell = null,
     // Drain-life gating (see DrainApplies). HpBelowDrainTrigger is true when live HP

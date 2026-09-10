@@ -4004,7 +4004,7 @@ public sealed class AppServices
         // Short. Wire the resolver so the chooser can substitute a numbered
         // override in place of the global Combat-tab cast-code slot.
         SpellShort = new Game.Combat.SpellShortIndex(GameData);
-        Combat.SetSpellShortResolver(SpellShort.ShortByNumber, SpellShort.NumberByShort);
+        Combat.SetSpellShortResolver(SpellShort.ShortByNumber);
 
         // Shared monster-record opener — opens the monster edit dialog by Number from any
         // surface (the Navigation Room Info panel), reusing the browser's read-only "Other
