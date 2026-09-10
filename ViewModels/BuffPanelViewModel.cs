@@ -300,6 +300,16 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         // that has no party-buff spells at all.
         int pruned = _settings.Slots.RemoveAll(s => string.IsNullOrWhiteSpace(s.Spell));
 
+        // A master-disabled row must not retain a checked Solo option: it is inert
+        // in the engine and makes the editor look like the spell is still enabled.
+        int normalizedSoloOptions = 0;
+        foreach (BuffSlot slot in _settings.Slots)
+            if (!slot.WholePartyOn && slot.CastSolo)
+            {
+                slot.CastSolo = false;
+                normalizedSoloOptions++;
+            }
+
         Slots.Clear();
         foreach (BuffSlot dto in _settings.Slots)
         {
@@ -318,7 +328,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsPriorityTopDown));
         OnPropertyChanged(nameof(PriorityModeLabel));
 
-        if (pruned > 0) Persist();
+        if (pruned > 0 || normalizedSoloOptions > 0) Persist();
     }
 
     private BuffSlotRowViewModel MakeRow(BuffSlot dto) =>
@@ -557,8 +567,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             if (string.IsNullOrWhiteSpace(dto.Spell)) continue;
             if (ResolveSpellOrItem(dto.Spell.Trim()) is not { } r) continue;
             Game.Spells.BuffAffectSet affect = Game.Spells.BuffAffectSet.From(
-                BuffClassifier.IsWholeParty(r.Targets), dto.WholePartyOn, dto.CastOnSelf, dto.AllMembers, dto.Targets,
-                castSolo: dto.CastSolo);
+                BuffClassifier.IsWholeParty(r.Targets), dto.WholePartyOn, dto.CastOnSelf, dto.AllMembers, dto.Targets);
             existing.Add(new Game.Spells.ExistingBuffSlot(
                 r.Number, affect, Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(r.Formula)));
         }
@@ -750,7 +759,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             toAdd.Add((new BuffSlot { Spell = pick.Candidate.CastCode, CastOnSelf = pick.Recommended },
                 pick.Candidate.ReqLevel, pick.Candidate.Name));
         foreach (Game.Spells.SelfBlessCandidate cand in _partyBlessCandidates)
-            toAdd.Add((new BuffSlot { Spell = cand.CastCode, WholePartyOn = false },
+            toAdd.Add((new BuffSlot { Spell = cand.CastCode, WholePartyOn = false, CastSolo = false },
                 cand.ReqLevel, cand.Name));
 
         foreach ((BuffSlot dto, _, _) in toAdd.OrderBy(x => x.ReqLevel).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase))

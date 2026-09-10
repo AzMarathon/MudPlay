@@ -2023,14 +2023,16 @@ public sealed class CastingDirector : IDisposable
             // One untargeted, self-landing cast covers a whole-party buff AND a plain
             // self-cast — they're the same command (no target, keyed "" since it confirms
             // under its own cast code), so a single path decides both. A whole-party spell
-            // fires party-wide while in a party (WholePartyOn) and, solo, as a self-cast
-            // when CastSolo is set — a lone character is a party of one, so a whole-party
-            // cast still lands on us alone (GAME_MECHANICS.md). A self / single-target
-            // spell fires on CastOnSelf. The `covered` supersession skip applies only to a
-            // self-cast (a whole-party cast IS the covering buff, never superseded). Self is
-            // resolved BEFORE the per-member loop below, so we always bless ourselves first.
+            // fires only while its master Party toggle (WholePartyOn) is enabled. CastSolo
+            // then decides whether that enabled buff also fires while alone — it must never
+            // bypass an unchecked master toggle (report paradigm-20260909-220212). A lone
+            // character is a party of one, so an enabled whole-party cast still lands on us.
+            // A self / single-target spell fires on CastOnSelf. The `covered` supersession
+            // skip applies only to a self-cast (a whole-party cast IS the covering buff,
+            // never superseded). Self is resolved BEFORE the per-member loop below, so we
+            // always bless ourselves first.
             bool wantSelfCast = partyWide
-                ? (inParty ? slot.WholePartyOn && partyAllowed : slot.CastSolo && selfEligible)
+                ? slot.WholePartyOn && (inParty ? partyAllowed : slot.CastSolo && selfEligible)
                 : slot.CastOnSelf && selfEligible && (covered is null || !covered.ContainsKey(slot.Spell));
             if (wantSelfCast && IsRecastDue("", slot.Spell))
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);

@@ -7193,8 +7193,17 @@ public sealed class AppServices
             if (string.IsNullOrWhiteSpace(s.Spell)) { Log.Info("Buffs", $"  {n}. (empty)"); continue; }
 
             System.Collections.Generic.List<string> who = new();
+            bool wholeParty = IsPartyWideBuff(s.Spell);
             if (s.CastOnSelf) who.Add("self");
-            if (s.WholePartyOn && IsPartyWideBuff(s.Spell)) who.Add("party-wide");
+            if (s.WholePartyOn && wholeParty)
+            {
+                who.Add("party-wide");
+                who.Add(s.CastSolo ? "solo" : "party-only");
+            }
+            else if (wholeParty)
+            {
+                who.Add("off");
+            }
             if (s.AllMembers) who.Add("all-members");
             else if (s.Targets.Count > 0) who.Add(string.Join("+", s.Targets));
 

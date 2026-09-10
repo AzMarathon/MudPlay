@@ -646,7 +646,7 @@ public static class BugReportBuilder
             string heading = unifiedBuffs.ManualOrder || unifiedBuffs.PriorityTopDown
                 ? $"Buffs (layout: {(unifiedBuffs.ManualOrder ? "manual" : "auto")}; priority: {(unifiedBuffs.PriorityTopDown ? "top→bottom" : "default")})"
                 : "Buffs";
-            Group(heading, unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(s)}]", s.Spell)));
+            Group(heading, unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(svc, s)}]", s.Spell)));
         }
 
         if (shown == 0) sb.Append("_(no spells configured)_\n");
@@ -675,16 +675,35 @@ public static class BugReportBuilder
     }
 
     // A unified buff slot's targeting + condition summary for the report label —
-    // e.g. "self", "all", "Bob,Sue", "party-wide", with "+hp-full" / "+ma-full" when
-    // a downtime condition is set. Derived from the slot's flags (whole-party is left
-    // to WholePartyOn since the classifier isn't reachable here).
-    private static string BuffScope(Models.Profile.BuffSlot s)
+    // e.g. "self", "all", "Bob,Sue", "party-wide+solo", with "+hp-full" /
+    // "+ma-full" when a downtime condition is set. Whole-party scope is resolved from
+    // the same live spellbook data as the UI so the report exposes both master + option.
+    private static string BuffScope(AppServices svc, Models.Profile.BuffSlot s)
     {
         List<string> who = new();
-        if (s.CastOnSelf) who.Add("self");
-        if (s.AllMembers) who.Add("all");
-        else if (s.Targets.Count > 0) who.Add(string.Join(",", s.Targets));
-        else if (s.WholePartyOn) who.Add("party-wide?");
+        string code = s.Spell?.Trim() ?? string.Empty;
+        bool wholeParty = Game.Spells.ItemCastToken.IsToken(code)
+            ? svc.Spellbook.IsTokenWholeParty(code)
+            : svc.Spellbook.FindByCastCode(code) is { } spell
+              && Game.Spells.BuffClassifier.IsWholeParty(spell.Targets);
+        if (wholeParty)
+        {
+            if (s.WholePartyOn)
+            {
+                who.Add("party-wide");
+                who.Add(s.CastSolo ? "solo" : "party-only");
+            }
+            else
+            {
+                who.Add("off");
+            }
+        }
+        else
+        {
+            if (s.CastOnSelf) who.Add("self");
+            if (s.AllMembers) who.Add("all");
+            else if (s.Targets.Count > 0) who.Add(string.Join(",", s.Targets));
+        }
         string scope = who.Count > 0 ? string.Join("+", who) : "unset";
         if (s.OnlyWhenHpFull) scope += " +hp-full";
         if (s.OnlyWhenMaFull) scope += " +ma-full";

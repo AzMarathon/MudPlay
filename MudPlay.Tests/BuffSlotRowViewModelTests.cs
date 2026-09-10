@@ -109,6 +109,25 @@ public sealed class BuffSlotRowViewModelTests
     }
 
     [Fact]
+    public void UncheckingWholePartyMaster_ClearsSoloOptionAndPersistsOnce()
+    {
+        int persists = 0;
+        var dto = new BuffSlot { Spell = "chan", WholePartyOn = true, CastSolo = true };
+        var row = new BuffSlotRowViewModel(
+            dto, _ => BuffSlotScope.WholeParty, s => s ?? string.Empty,
+            _ => (null, null), () => persists++);
+
+        Assert.True(row.CanCastSolo);
+        row.WholePartyOn = false;
+
+        Assert.False(row.CanCastSolo);
+        Assert.False(row.CastSolo);
+        Assert.False(dto.WholePartyOn);
+        Assert.False(dto.CastSolo);
+        Assert.Equal(1, persists);
+    }
+
+    [Fact]
     public void OverwriteWarning_NoConflict_HiddenAndNullTooltip()
     {
         var row = Row(new BuffSlot { Spell = "bless" });

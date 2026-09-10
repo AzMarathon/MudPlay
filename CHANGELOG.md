@@ -6,7 +6,9 @@
 - New **sneak-aware casting** (whenever Auto-Sneak is on): after any auto-cast the client re-sneaks in place, and while sneaking with Auto-Combat off a due buff/cure/heal waits for the next empty room (then casts + re-sneaks) rather than stripping sneak in a room you're passing through
 - A see-hidden room cleared by *Clear hostiles when sneak broken by see-hidden monster* now catches up the held casts there, then re-sneaks and continues
 - Emergency survival (life-threatening heal, flee, emergency hangup) always fires immediately; Auto-Sneak off reverts to casting on schedule wherever you are
-- bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119
+- Buff Watchdog: unchecking a whole-party buff's **Party** master now clears Solo and stops every future cast, including while alone
+- **Add all blesses** now adds whole-party rows fully off (both Party and Solo), matching the UI promise that bulk-added party buffs never start casting until you opt in
+- bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119, paradigm-20260909-220212
 
 ## 3.61.1
 

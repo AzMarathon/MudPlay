@@ -3044,6 +3044,22 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PartyBless_WholePartyOff_SoloOptionOn_NoCast()
+    {
+        // Regression: the Solo option used to bypass the unchecked Party master and
+        // cast every bulk-added whole-party buff while alone, draining the mana pool.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddWholePartySlot("chan", on: false);
+        slot.CastSolo = true;
+        h.Party.IsInParty = false;
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
     public void PartyBless_WholeParty_Solo_StillCasts()
     {
         // MajorMUD treats a lone character as a party of one — a whole-party cast

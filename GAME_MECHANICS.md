@@ -3526,7 +3526,10 @@ glass jug               5               2 gold crowns
   gates for a `WholePartyOn` slot when `!PartyState.IsInParty`, instead of holding it forever behind
   "must be in a party" (report `paradigm-20260906-150624`: a whole-party item-cast buff, `platinum
   sceptre`, never fired outside a party). A **single-target** slot genuinely still needs an actual party
-  member to aim at, so that branch is unaffected.)
+  member to aim at, so that branch is unaffected.) **`WholePartyOn` remains the master enable**: the
+  per-slot `CastSolo` option only extends an enabled slot to solo play and must not bypass an unchecked
+  Party box. (2026-09-09, report `paradigm-20260909-220212`: unchecked whole-party rows kept casting
+  solo through their default `CastSolo=true`, draining mana while the rest of the UI reported them off.)
   **Scope classification** (confirmed against stock + Paradigm data), gated first on **`EnergyCost == 0`**
   (a buff, not an attack):
   - **`Spells.Targets` = 2** (Self or User) → a **single-target** beneficial buff cast on ONE other member
