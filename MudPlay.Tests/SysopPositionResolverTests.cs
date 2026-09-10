@@ -113,7 +113,17 @@ public sealed class SysopPositionResolverTests : IDisposable
 
         private static async Task SettleUntil(Func<bool> done)
         {
-            for (int i = 0; i < 2000 && !done(); i++) await Task.Yield();
+            // Wait for the probe's completion continuation to run. A short burst of
+            // yields catches the common case cheaply; then fall back to real short
+            // delays. A pure Task.Yield spin re-queues onto the SAME thread-pool work
+            // queue the continuation needs, so under a saturated pool (the full suite
+            // under release-build load) it competes with the continuation and can give
+            // up before it runs — flaking ConsecutiveRecoveryLocatesAreNotThrottledOut
+            // and friends. Task.Delay parks on the timer queue instead, freeing a pool
+            // thread for the continuation. ~1s of real budget only ever elapses on a
+            // genuine failure; the happy path returns immediately.
+            for (int i = 0; i < 100 && !done(); i++) await Task.Yield();
+            for (int i = 0; i < 500 && !done(); i++) await Task.Delay(2);
         }
 
         public void Dispose() => Probe.Dispose();
