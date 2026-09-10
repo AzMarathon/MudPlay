@@ -25,6 +25,11 @@ public sealed class QuestAvailabilityAnnouncer : IDisposable
     private readonly ProfileService _profile;
     private readonly Func<int> _currentLevel;
     private readonly Func<int, IReadOnlyList<QuestAvailabilityInfo>> _eligibleAtLevel;
+    // True only once the character is actually in the realm (an in-game status
+    // line has been observed). Gates the login dump so it can't fire while still
+    // parked at the character-select / main menu. Null in tests → treated as
+    // in-realm so existing announce tests behave unchanged.
+    private readonly Func<bool>? _isInRealm;
     private readonly LogService? _log;
 
     // Quests already announced OR silently baselined this character-session.
@@ -39,7 +44,8 @@ public sealed class QuestAvailabilityAnnouncer : IDisposable
 
     public QuestAvailabilityAnnouncer(
         StatParser statParser, ProfileService profile, Func<int> currentLevel,
-        Func<int, IReadOnlyList<QuestAvailabilityInfo>> eligibleAtLevel, LogService? log = null)
+        Func<int, IReadOnlyList<QuestAvailabilityInfo>> eligibleAtLevel,
+        Func<bool>? isInRealm = null, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(statParser);
         ArgumentNullException.ThrowIfNull(profile);
@@ -49,6 +55,7 @@ public sealed class QuestAvailabilityAnnouncer : IDisposable
         _profile = profile;
         _currentLevel = currentLevel;
         _eligibleAtLevel = eligibleAtLevel;
+        _isInRealm = isInRealm;
         _log = log;
 
         _statParser.ScreenParsed += OnScreenParsed;
@@ -96,6 +103,17 @@ public sealed class QuestAvailabilityAnnouncer : IDisposable
     // polls don't re-announce.
     public void AnnounceLoginAvailable()
     {
+        // Don't dump login quests unless we're actually in the realm. Login
+        // automation completes at the character-select / main menu; this dump is
+        // scheduled a few seconds later on the assumption we've entered by then.
+        // If realm auto-entry was suppressed or is slow, that timer would
+        // otherwise announce quests while still parked at the menu, not yet in
+        // the game (paradigm-20260909-172633).
+        if (_isInRealm?.Invoke() == false)
+        {
+            _log?.Info("Quests", "Login quest dump skipped — not in the realm yet.");
+            return;
+        }
         int level = _currentLevel();
         if (level <= 0) return;
         bool enabled = AnnounceEnabled();

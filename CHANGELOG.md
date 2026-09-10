@@ -1,5 +1,12 @@
 # Version history
 
+## 3.61.1
+
+- Switching profiles no longer strands the new character at the game main menu — a stale low-HP hangup from the previous character was suppressing realm auto-entry
+- Switching profiles clears the outgoing character's live HP so it can't trip a spurious low-HP hangup on the swap
+- Login "quest available" announcements only fire once you're actually in the realm, not while sitting at the login menu
+- bug reports addressed: paradigm-20260909-172633
+
 ## 3.61.0
 
 - Buff Watchdog config list: re-arrange buff rows by drag (grip handle) or ▲/▼ buttons; the order persists

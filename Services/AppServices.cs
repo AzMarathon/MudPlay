@@ -2329,6 +2329,20 @@ public sealed class AppServices
         // the first live `stat` reconfirms.
         Profile.ProfileLoaded += p =>
         {
+            // Wipe the OUTGOING character's live status state before hydrating
+            // the incoming one. Otherwise the previous character's current HP
+            // lingers in PlayerState while the new character's MaxHp is
+            // re-seeded below (ApplyStatScreenMax), and any HP-driven engine —
+            // notably the low-HP emergency hangup — acts on that mismatched body
+            // the instant the swap runs (paradigm-20260909-172633: Fujin's 66 HP
+            // measured against FujinPVP's 324 max fired a hangup while already
+            // disconnected). Also drop any pending hangup intent: it belonged to
+            // the character that hung up, and a stale suppress-entry flag would
+            // otherwise make the next connect skip realm auto-entry for THIS,
+            // different, character.
+            Player.ResetForProfileSwap();
+            if (HangupSignal.Reset())
+                Log.Info("HangupSignal", "Cleared stale hangup intent on profile swap.");
             // Capture the persisted learned set before seeding fires Changed —
             // the restore below re-applies it once the class list exists.
             List<string>? learned = p.LearnedSpells is { Count: > 0 } ls
@@ -5868,6 +5882,9 @@ public sealed class AppServices
                     ? ViewModels.CharacterWorkshop.QuestTextFormatter.FallbackTitle(q)
                     : def.Name,
                 level),
+            // In the realm only once a status line has been observed — keeps the
+            // login dump off the character-select / main menu.
+            isInRealm: () => PlayerState.HasPromptData,
             log: Log);
 
         AutoDeposit = new Game.Cash.AutoDepositManager(

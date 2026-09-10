@@ -22,6 +22,10 @@ public sealed class QuestAvailabilityAnnouncerTests
         public QuestAvailabilityAnnouncer Announcer { get; }
         public List<string> Announced { get; } = new();
         public int LoginLevel { get; set; }
+        // Simulated in-realm state — defaults true so existing tests behave as
+        // before; the login-dump gate test flips it false to model still being
+        // parked at the character-select / main menu.
+        public bool InRealm { get; set; } = true;
         private readonly List<FakeQuest> _quests;
 
         public Harness(params FakeQuest[] quests)
@@ -35,7 +39,8 @@ public sealed class QuestAvailabilityAnnouncerTests
                 eligibleAtLevel: level => _quests
                     .Where(q => q.MinLevel > 0 && q.MinLevel <= level)
                     .Select(q => new QuestAvailabilityInfo(q.Flag, 0, q.Name))
-                    .ToList());
+                    .ToList(),
+                isInRealm: () => InRealm);
             Announcer.QuestBecameAvailable += Announced.Add;
         }
 
@@ -95,6 +100,33 @@ public sealed class QuestAvailabilityAnnouncerTests
         h.Announcer.AnnounceLoginAvailable();
 
         Assert.Equal(new[] { "A", "B" }, h.Announced);   // C's gate (25) not met
+    }
+
+    [Fact]
+    public void LoginDump_NotInRealm_AnnouncesNothing()
+    {
+        // The login dump is scheduled a few seconds after login automation
+        // completes (which happens at the character-select / main menu). If realm
+        // entry was suppressed or is slow, we must NOT announce quests while still
+        // parked at the menu (paradigm-20260909-172633).
+        using var h = new Harness(new FakeQuest(1, "A", 5), new FakeQuest(2, "B", 10))
+        { LoginLevel = 12, InRealm = false };
+
+        h.Announcer.AnnounceLoginAvailable();
+
+        Assert.Empty(h.Announced);
+    }
+
+    [Fact]
+    public void LoginDump_OnceInRealm_AnnouncesAsBefore()
+    {
+        // Gate open: in the realm, the dump fires normally.
+        using var h = new Harness(new FakeQuest(1, "A", 5), new FakeQuest(2, "B", 10))
+        { LoginLevel = 12, InRealm = true };
+
+        h.Announcer.AnnounceLoginAvailable();
+
+        Assert.Equal(new[] { "A", "B" }, h.Announced);
     }
 
     [Fact]
