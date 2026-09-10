@@ -239,6 +239,34 @@ public sealed class StealthManager : IDisposable
         }
     }
 
+    // Called after an automated out-of-combat cast fires (CastFired). A cast breaks
+    // both Sneak and Hide (GAME_MECHANICS) but the server emits no line we can latch,
+    // so the FSM would otherwise read stale-Sneaking and the next auto-sneak attempt
+    // (reactive or pre-move) would no-op on it. Drop the spent stealth to Idle, then
+    // re-attempt sneak IN PLACE so a character standing in a cleared room re-sneaks
+    // without waiting for its next move. No-op unless auto-sneak is on and we're out
+    // of combat — an in-combat cast never re-sneaks here (NoteCombatEndedStealthReset
+    // owns the combat-end reset), and TryBeginAutoSneak's own gates (settled state,
+    // no NPC present) decide whether the `sn` actually goes out.
+    public void ReSneakAfterCast()
+    {
+        if (_isAutoSneakEnabled?.Invoke() != true) return;
+        if (_state.InCombat) return;
+        if (_stateValue == StealthState.Sneaking)
+        {
+            _log?.Info(LogCategory, "cast spent sneak — resetting for re-sneak");
+            Transition(StealthState.Idle);
+            _state.IsSneaking = false;
+            _sneakConfirmedThisRoom = false;
+        }
+        else if (_stateValue == StealthState.Hidden)
+        {
+            _log?.Info(LogCategory, "cast spent hide — resetting stealth");
+            NoteHideBroken();
+        }
+        TryBeginAutoSneak("post-cast re-sneak");
+    }
+
     // Movement-engine pre-move hook — called by the walker / loop runner
     // immediately before a move's bytes go out (after any door / trap / hidden /
     // multi-action pre-steps) so the move itself is performed under sneak.

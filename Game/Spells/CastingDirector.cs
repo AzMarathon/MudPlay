@@ -96,6 +96,14 @@ public sealed class CastingDirector : IDisposable
     private Func<int>? _restRealMaxHp;
     private Func<bool>? _inputCaptured;
     private Func<bool>? _buffStripRoom;
+    // True when sneak-maintenance casts (buffs + cures) should be HELD for the
+    // next empty room: auto-sneak is on, auto-combat won't clear the current room,
+    // and an NPC is present. Casting breaks sneak (GAME_MECHANICS) and you can't
+    // re-sneak with an NPC in the room, so a stealth runner defers the cast until
+    // a room it can cast in and re-sneak. Null / unwired → never defer (tests +
+    // non-stealth play behave exactly as before). Emergency survival casts are
+    // never in this set.
+    private Func<bool>? _deferMaintenanceWhileStealthed;
     private Func<(string Spell, string? Target)?>? _combatDebuffSource;
     private Action? _combatDebuffCommit;
     private Func<string, int?>? _manaCostLookup;
@@ -511,6 +519,20 @@ public sealed class CastingDirector : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isBuffStripRoom);
         _buffStripRoom = isBuffStripRoom;
+    }
+
+    // Wire the sneak-maintenance defer gate. When the predicate returns true
+    // (auto-sneak on + auto-combat not clearing this room + an NPC present), the
+    // Buffing and Curing categories are HELD rather than cast — a stealth runner
+    // walking combat-off waits for an empty room so the cast (which breaks sneak)
+    // can be followed by a re-sneak, instead of stripping sneak in a room it's only
+    // passing through. Optional — until wired, maintenance never defers. The hold
+    // is additionally skipped while resting / meditating (a stationary recovery
+    // should cast normally) — that guard lives at the decision pass.
+    public void SetStealthMaintenanceDeferGate(Func<bool> shouldDefer)
+    {
+        ArgumentNullException.ThrowIfNull(shouldDefer);
+        _deferMaintenanceWhileStealthed = shouldDefer;
     }
 
     // Wire the item-cast buff bridge. A Bless slot may hold an ItemCastToken
@@ -1300,6 +1322,20 @@ public sealed class CastingDirector : IDisposable
             _log?.Combat(LogCategory,
                 "between-round non-heal categories held — HP unconfirmed on a damage-driven tick (prompt pending).");
 
+        // Sneak-maintenance defer: hold buffs + cures for the next empty room when
+        // a stealth runner is walking combat-off through an occupied room (the
+        // gate predicate folds auto-sneak + auto-combat-off + NPC-present). Casting
+        // breaks sneak and you can't re-sneak with an NPC here, so we wait for a
+        // room we can cast in and re-sneak — the re-sneak itself happens on CastFired
+        // (StealthManager.ReSneakAfterCast). Skipped while resting / meditating: a
+        // stationary recovery has already stopped, so a due cure/buff there should
+        // fire (not wait) — and it's the only place a maintenance heal casts anyway.
+        // Emergency survival (major heal / flee / hangup) and combat debuffs are
+        // never in the deferred set, so a low-HP character still heals/flees here.
+        bool deferSneakMaintenance =
+            _deferMaintenanceWhileStealthed?.Invoke() == true
+            && _state.Position is not (PlayerPosition.Resting or PlayerPosition.Meditating);
+
         foreach (SpellCategory category in PrioritisedCategories(spells))
         {
             if (holdNonHeal
@@ -1324,6 +1360,17 @@ public sealed class CastingDirector : IDisposable
 
             if (pick is not { } cand) continue;
             if (string.IsNullOrWhiteSpace(cand.Spell)) continue;
+
+            // Sneak-maintenance defer: a buff/cure came due, but we're sneak-walking
+            // combat-off through an occupied room — hold it for the next empty room
+            // so the cast can be followed by a re-sneak. Logged only here (where a
+            // candidate was actually produced) so the hold isn't spammed every poll.
+            if (deferSneakMaintenance && category is SpellCategory.Buffing or SpellCategory.Curing)
+            {
+                _log?.Combat(LogCategory,
+                    $"sneak-maintenance held: {cand.Spell} ({category}) — room occupied, waiting for a clear room to cast + re-sneak.");
+                continue;
+            }
 
             // Item-cast buff (#-token in a Bless slot): bypass the raw cast path
             // entirely — run the equip → use → re-equip sequence and key the

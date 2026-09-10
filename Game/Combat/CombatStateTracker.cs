@@ -531,7 +531,18 @@ public sealed class CombatStateTracker : IDisposable
             // InCombat stays stuck true and HealthManager never rests
             // (CombatStatus=Off is unreliable, see OnCombatStatus). A hostile
             // still here keeps InCombat true so we don't rest next to a mob.
-            if (targetable == 0 && _state.InCombat) _state.InCombat = false;
+            if (targetable == 0 && _state.InCombat)
+            {
+                _state.InCombat = false;
+                // A combat-OFF force-clear (a see-hidden / rest engage-to-clear) still
+                // SPENT sneak during the fight, but with no line to latch the FSM reads
+                // stale-Sneaking. Fire the same stealth reset the auto-attack-ON clear
+                // path uses so the pre-move / post-cast re-sneak isn't no-op'd on stale
+                // state — otherwise a stealth runner leaves a cleared see-hidden room
+                // unsneaked. Guarded on InCombat (true only after we engaged), so a pure
+                // walk-past of an un-actionable room never resets a sneak we still hold.
+                CombatSpentStealth?.Invoke();
+            }
             return;
         }
 

@@ -593,6 +593,12 @@ public sealed class CastingDirectorTests
         /// removes buffs on entry, so the Buffing category is suppressed.</summary>
         public bool BuffStripRoom { get; set; }
 
+        /// <summary>When true the sneak-maintenance defer gate reports we're a
+        /// stealth runner walking combat-off through an occupied room, so the
+        /// Buffing / Curing categories are held for the next empty room (unless
+        /// resting / meditating).</summary>
+        public bool DeferMaintenanceForStealth { get; set; }
+
         /// <summary>Test clock — buff-expiry math reads this so tests can
         /// advance time deterministically.</summary>
         public DateTime Now { get; set; } =
@@ -621,6 +627,7 @@ public sealed class CastingDirectorTests
             Director.SetAutoBlessGate(() => AutoBlessEnabled);
             Director.SetTriggeredRestGate(() => TriggeredRest);
             Director.SetBuffStripRoomGate(() => BuffStripRoom);
+            Director.SetStealthMaintenanceDeferGate(() => DeferMaintenanceForStealth);
             Director.SetCombatTickSource(() => CombatTickDamageDriven);
             Director.SetClock(() => Now);
             // Self buffs now live in the unified list. Fold the tests' self-bless
@@ -1907,6 +1914,85 @@ public sealed class CastingDirectorTests
         h.State.Ma = 80;
 
         h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    // ----- Sneak-maintenance defer (hold buffs/cures for an empty room) -------
+
+    [Fact]
+    public void Buff_SneakMaintenanceDefer_Held()
+    {
+        // A stealth runner walking combat-off through an occupied room: a due buff
+        // is HELD (not cast) so the cast doesn't strip sneak in a room we can't
+        // re-sneak in. It fires once the room clears (gate goes false).
+        using CureHarness h = new();
+        h.DeferMaintenanceForStealth = true;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_SneakMaintenanceDefer_Off_Casts()
+    {
+        // Control: with the defer gate off (not a stealth runner / empty room) the
+        // same due buff casts normally.
+        using CureHarness h = new();
+        h.DeferMaintenanceForStealth = false;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bless" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_SneakMaintenanceDefer_WhileResting_StillCasts()
+    {
+        // The defer is skipped while resting: a stationary recovery has already
+        // stopped, so a due buff/cure there should fire rather than wait for a
+        // room that never comes (you're not walking).
+        using CureHarness h = new();
+        h.DeferMaintenanceForStealth = true;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Resting;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bless" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Cure_SneakMaintenanceDefer_Held()
+    {
+        // Cures defer too (user chose max sneak preservation): a poison cure is
+        // held while sneak-walking an occupied room. The emergency survival tier
+        // (major heal / flee / hangup) is never in the deferred set, so a low-HP
+        // character still heals.
+        using CureHarness h = new();
+        h.DeferMaintenanceForStealth = true;
+        h.State.Position = PlayerPosition.Standing;
+        h.Spells.CurePoisonSpell = "neutralize";
+        h.RecordCondition("Poison", MessageFlags.Poisoned, "poisoned!");
+
+        h.FeedLine("You have been poisoned!");
 
         Assert.Empty(h.CastsSent);
     }

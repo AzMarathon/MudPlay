@@ -1,8 +1,11 @@
 # Version history
 
-## 3.61.4
+## 3.62.0
 
-- Buff/heal/cure maintenance no longer sits idle forever while Sneaking or Hidden — casting breaks both, but that's now an accepted cost instead of a silent block
+- Buff/heal/cure maintenance no longer sits idle forever while Sneaking or Hidden — casting breaks stealth, but that's handled now instead of silently blocking the cast
+- New **sneak-aware casting** (whenever Auto-Sneak is on): after any auto-cast the client re-sneaks in place, and while sneaking with Auto-Combat off a due buff/cure/heal waits for the next empty room (then casts + re-sneaks) rather than stripping sneak in a room you're passing through
+- A see-hidden room cleared by *Clear hostiles when sneak broken by see-hidden monster* now catches up the held casts there, then re-sneaks and continues
+- Emergency survival (life-threatening heal, flee, emergency hangup) always fires immediately; Auto-Sneak off reverts to casting on schedule wherever you are
 - bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119
 
 ## 3.61.1

@@ -389,6 +389,49 @@ public sealed class StealthManagerTests
         Assert.Empty(h.Sent);
     }
 
+    // ----- re-sneak after an out-of-combat cast ----------------------
+
+    [Fact]
+    public void ReSneakAfterCast_WhileSneaking_ResetsAndResends()
+    {
+        // A cast breaks sneak with no line to latch → FSM reads stale-Sneaking.
+        // ReSneakAfterCast drops the stale state and re-attempts sneak in place.
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Feed("Sneaking...");
+        Assert.True(h.State.IsSneaking);
+
+        h.Stealth.ReSneakAfterCast();
+
+        Assert.Equal("sn", h.LastSent());
+        Assert.Equal(StealthState.AttemptingSneak, h.Stealth.State);
+    }
+
+    [Fact]
+    public void ReSneakAfterCast_AutoSneakOff_NoSend()
+    {
+        // Everything sneak-aware is gated on auto-sneak: off ⇒ no re-sneak.
+        using AutoHarness h = new() { AutoSneakOn = false };
+        h.Feed("Sneaking...");
+
+        h.Stealth.ReSneakAfterCast();
+
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void ReSneakAfterCast_InCombat_NoSend()
+    {
+        // An in-combat cast never re-sneaks here — the combat-end reset owns that
+        // path, and you can't sneak mid-fight anyway.
+        using AutoHarness h = new() { AutoSneakOn = true };
+        h.Feed("Sneaking...");
+        h.State.InCombat = true;
+
+        h.Stealth.ReSneakAfterCast();
+
+        Assert.Empty(h.Sent);
+    }
+
     // ----- pre-move stealth hook (PR 4.b) ----------------------------
 
     [Fact]

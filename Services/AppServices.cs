@@ -3635,6 +3635,19 @@ public sealed class AppServices
         // burn mana on a buff the room tears straight back off.
         CastDirector.SetBuffStripRoomGate(
             () => RoomBuffStrip.StripsBuffs(RoomTracker.State.CurrentRoom?.Spell ?? 0));
+        // Sneak-maintenance defer — hold buffs / cures for the next empty room when
+        // a stealth runner is walking combat-off through an occupied room, so the
+        // cast (which breaks sneak) can be followed by a re-sneak instead of
+        // stripping sneak in a room it's only passing through. Conditioned entirely
+        // on auto-sneak: off ⇒ this never fires and casts go out immediately. The
+        // auto-combat term matches the Combat gate's "effectively engaging here"
+        // (global AutoCombat AND not per-room-suppressed) — if combat WILL clear the
+        // room there's no sneak to preserve. NPC presence is the hard blocker: you
+        // can't re-sneak with a monster in the room.
+        CastDirector.SetStealthMaintenanceDeferGate(
+            () => ReadAutoModeFlag(d => d.AutoSneak)
+               && !(ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom())
+               && CombatTracker.HasRoomNpc);
         // Suppress ALL auto-casts while the `train stats` full-screen menu has
         // character-mode input armed — otherwise a cast's letters get typed raw
         // into the character-creation form (the "bles" family-name corruption).
@@ -3840,6 +3853,11 @@ public sealed class AppServices
         // engine resume the weapon attack on the resulting *Combat Off*
         // instead of idling until the next round.
         CastDirector.CastFired += Combat.NoteBetweenRoundCast;
+        // A cast breaks sneak / hide (GAME_MECHANICS) with no line to latch, so after
+        // an out-of-combat auto-cast re-establish sneak in place — StealthManager
+        // self-gates on auto-sneak being on, being out of combat, and no NPC present,
+        // so this no-ops for a non-stealth character or an in-combat cast.
+        CastDirector.CastFired += () => Stealth.ReSneakAfterCast();
         // The round after a survival cast belongs to the attack spell it
         // interrupted — CastDirector must sit out until that resume lands, or it
         // just re-claims the round the instant HP dips again and the attack never
