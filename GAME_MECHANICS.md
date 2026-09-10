@@ -1327,8 +1327,10 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
   cannot keep a chant up at all — gbls re-removes it within ~3s. (Casting order therefore doesn't let you
   "keep both" in Paradigm.) **Stock is UNVERIFIED** — it may pace removes only on cast (which would let both
   stay); do not assume the continuous behaviour for stock. When two configured buffs conflict one-directionally
-  (Y removes X, X doesn't remove Y), Y is the permanent winner; if both mutually remove each other, whichever
-  is cast first wins (largely theoretical — no known live pair a player would run together).
+  (Y removes X, X doesn't remove Y), Y is the permanent winner (X can never stay up under Y); if both mutually
+  remove each other (e.g. bless ↔ greater bless), **whichever is cast LAST wins** — the later cast strips the
+  earlier (standard last-cast-clobbers, already handled by the direct clobber-clear). Largely academic for a
+  player who'd run only one of a mutual pair.
 - **Applied-latch gotcha** *(report paradigm-20260910-012303)*: `ConditionTracker` dedups a repeated applied
   line (each spell's "You feel …" latches once until its wear-off). A clobber clears the victim's *timer* but
   the game sends no distinct wear-off for it (the shared family wear-off is ignored), so the victim's
