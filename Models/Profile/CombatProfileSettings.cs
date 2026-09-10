@@ -17,4 +17,16 @@ public sealed class CombatProfileSettings
 
     // Id of the active profile. Empty / unknown resolves to the first profile.
     public string ActiveId { get; set; } = string.Empty;
+
+    // Schema version, so a one-time back-fill can run when the shape of a profile
+    // grows. Profiles from before combat profiles became a full loadout carry only
+    // the spell config; their Health / weapon / Spells-subset fields default to
+    // blank. Left at those defaults they would overwrite the character's real
+    // (previously shared) settings on the first switch, so CombatProfileManager
+    // back-fills every profile from the live sections once, then stamps this.
+    // 0 = pre-full-loadout; FullLoadoutVersion = migrated.
+    public int SchemaVersion { get; set; }
+
+    // The schema version once the full-loadout back-fill has run.
+    public const int FullLoadoutVersion = 1;
 }

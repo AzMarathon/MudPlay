@@ -1,13 +1,16 @@
 using System.Collections.Generic;
 using MudPlay.Game.Combat;
+using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
 using Xunit;
 
 namespace MudPlay.Tests;
 
-// Casting spell profiles: the pure @profile best-match resolver, the swap report,
-// and the capture/overlay round-trip. UI wiring (chips, Action menu, remote
-// handler) is smoke-tested via dotnet run per the no-VM-tests rule.
+// Combat profiles: the pure @profile best-match resolver, the swap report, the
+// capture/overlay round-trip (now a full posture — spells + verbs + room
+// thresholds + weapons + the whole Health tab), and the Default-set weapon
+// write-back. UI wiring (chips, Action menu, remote handler, cross-tab staging) is
+// smoke-tested via dotnet run per the no-VM-tests rule.
 public sealed class CombatSpellProfileTests
 {
     private static List<CombatSpellProfile> Named(params string[] names)
@@ -146,7 +149,7 @@ public sealed class CombatSpellProfileTests
         src.DrainsOverrideAoe = true;
         src.SpellManaThresholdMode = ThresholdMode.Absolute;
 
-        CombatSpellProfile prof = CombatSpellProfile.Capture("X", src);
+        CombatSpellProfile prof = CombatSpellProfile.Capture("X", src, new HealthSettings());
         Assert.Equal("mm", prof.NormalAttackSpell.SpellName);
         Assert.Equal(40, prof.NormalAttackSpell.MinManaPerCast);
         Assert.Equal("vamp", prof.DrainSpell.SpellName);
@@ -158,18 +161,267 @@ public sealed class CombatSpellProfileTests
         src.NormalAttackSpell.SpellName = "changed";
         Assert.Equal("mm", prof.NormalAttackSpell.SpellName);
 
-        // Overlay onto a fresh CombatSettings — spell fields land, non-spell fields
-        // (e.g. the attack verb) are untouched.
-        var dst = new CombatSettings { NormalAttackCommand = "z" };
+        // Overlay onto a fresh CombatSettings — the per-profile fields land; the
+        // SHARED fields ApplyTo doesn't own (e.g. backstab) are untouched.
+        var dst = new CombatSettings { DoBackstab = true };
         prof.ApplyTo(dst);
         Assert.Equal("mm", dst.NormalAttackSpell.SpellName);
         Assert.Equal("vamp", dst.DrainSpell.SpellName);
         Assert.Equal(33, dst.DrainHpTrigger);
         Assert.Equal(ThresholdMode.Absolute, dst.SpellManaThresholdMode);
-        Assert.Equal("z", dst.NormalAttackCommand);   // non-spell field untouched
+        Assert.True(dst.DoBackstab);   // shared field ApplyTo never writes
 
         // Overlay deep-copies too: editing the destination slot doesn't touch the profile.
         dst.NormalAttackSpell.SpellName = "q";
         Assert.Equal("mm", prof.NormalAttackSpell.SpellName);
+    }
+
+    [Fact]
+    public void CaptureThenApply_RoundTripsExpandedFields()
+    {
+        var src = new CombatSettings
+        {
+            NormalAttackCommand = "kick",
+            AlternateAttackCommand = "swing",
+            MinMonstersInRoom = 2,
+            MaxMonstersInRoom = 9,
+            RunDistance = 5,
+        };
+        var health = new HealthSettings { RestMaxHp = 88, RunIfBelowHp = 15, BlessIfAboveMa = 65 };
+
+        CombatSpellProfile prof = CombatSpellProfile.Capture("Boss", src, health);
+        Assert.Equal("kick", prof.NormalAttackCommand);
+        Assert.Equal("swing", prof.AlternateAttackCommand);
+        Assert.Equal(2, prof.MinMonstersInRoom);
+        Assert.Equal(9, prof.MaxMonstersInRoom);
+        Assert.Equal(5, prof.RunDistance);
+        // Health captured as an independent clone.
+        Assert.Equal(88, prof.Health.RestMaxHp);
+        health.RestMaxHp = 1;
+        Assert.Equal(88, prof.Health.RestMaxHp);
+
+        // ApplyTo writes the per-profile combat fields (commands + room), not health.
+        var dst = new CombatSettings();
+        prof.ApplyTo(dst);
+        Assert.Equal("kick", dst.NormalAttackCommand);
+        Assert.Equal("swing", dst.AlternateAttackCommand);
+        Assert.Equal(2, dst.MinMonstersInRoom);
+        Assert.Equal(9, dst.MaxMonstersInRoom);
+        Assert.Equal(5, dst.RunDistance);
+    }
+
+    [Fact]
+    public void Clone_DeepCopies_Weapons_And_Health()
+    {
+        var prof = new CombatSpellProfile
+        {
+            Name = "Melee",
+            NormalWeapon = "long sword", NormalOffHand = "buckler",
+            AlternateWeapon = "great axe", AlternateOffHand = null,
+        };
+        prof.Health.RestMaxHp = 77;
+        prof.Spells.MinorHealSpell = "mihe";
+        prof.Spells.PriorityCuring = 2;
+
+        CombatSpellProfile copy = prof.Clone(newIdentity: true);
+        Assert.NotEqual(prof.Id, copy.Id);              // new identity
+        Assert.Equal("long sword", copy.NormalWeapon);
+        Assert.Equal("buckler", copy.NormalOffHand);
+        Assert.Equal("great axe", copy.AlternateWeapon);
+        Assert.Equal(77, copy.Health.RestMaxHp);
+        Assert.Equal("mihe", copy.Spells.MinorHealSpell);
+        Assert.Equal(2, copy.Spells.PriorityCuring);
+
+        // Independent Health + weapon + spell fields.
+        copy.Health.RestMaxHp = 1;
+        copy.NormalWeapon = "dagger";
+        copy.Spells.MinorHealSpell = "cure";
+        Assert.Equal(77, prof.Health.RestMaxHp);
+        Assert.Equal("long sword", prof.NormalWeapon);
+        Assert.Equal("mihe", prof.Spells.MinorHealSpell);
+    }
+
+    [Fact]
+    public void ProfileSpells_CaptureFrom_WriteInto_RoundTrips_AndPreservesPerCharacter()
+    {
+        // The profile subset captures the priority order + self-heal / HP-regen picks.
+        var live = new SpellsSettings
+        {
+            PriorityMinorPartyHeal = 3, PriorityCuring = 1, PriorityDebuffing = 7,
+            MinorHealSpell = "mihe", MajorHealSpell = "cs", HpRegenSpell = "rege",
+        };
+        var subset = new CombatProfileSpells();
+        subset.CaptureFrom(live);
+        Assert.Equal(3, subset.PriorityMinorPartyHeal);
+        Assert.Equal(1, subset.PriorityCuring);
+        Assert.Equal("mihe", subset.MinorHealSpell);
+        Assert.Equal("rege", subset.HpRegenSpell);
+
+        // WriteInto overlays the subset but leaves per-character fields intact.
+        var dst = new SpellsSettings
+        {
+            CurePoisonSpell = "cure", SelfBlessDuringCombat = true, IgnorePoison = true,
+            PriorityMinorPartyHeal = 99, MinorHealSpell = "wrong",   // per-profile — will be overwritten
+        };
+        dst.BlessSlots[1] = "prot";
+        subset.WriteInto(dst);
+
+        Assert.Equal(3, dst.PriorityMinorPartyHeal);   // per-profile overwritten
+        Assert.Equal("mihe", dst.MinorHealSpell);
+        Assert.Equal("cure", dst.CurePoisonSpell);     // per-character preserved
+        Assert.True(dst.SelfBlessDuringCombat);
+        Assert.True(dst.IgnorePoison);
+        Assert.Equal("prot", dst.BlessSlots[1]);       // self-bless slots untouched
+    }
+
+    [Fact]
+    public void CaptureCombatFrom_LeavesHealthAndWeaponsIntact()
+    {
+        var prof = new CombatSpellProfile { NormalWeapon = "mace" };
+        prof.Health.RestMaxHp = 90;
+
+        var combat = new CombatSettings { NormalAttackCommand = "bash", MaxMonstersInRoom = 7 };
+        combat.NormalAttackSpell.SpellName = "mm";
+        prof.CaptureCombatFrom(combat);
+
+        Assert.Equal("bash", prof.NormalAttackCommand);
+        Assert.Equal(7, prof.MaxMonstersInRoom);
+        Assert.Equal("mm", prof.NormalAttackSpell.SpellName);
+        Assert.Equal("mace", prof.NormalWeapon);        // weapons untouched
+        Assert.Equal(90, prof.Health.RestMaxHp);        // health untouched
+    }
+
+    [Fact]
+    public void HealthSettings_Clone_IsIndependent()
+    {
+        var h = new HealthSettings { RestMaxHp = 95, PreRestCommand = "peer" };
+        HealthSettings c = h.Clone();
+        Assert.Equal(95, c.RestMaxHp);
+        Assert.Equal("peer", c.PreRestCommand);
+        c.RestMaxHp = 10;
+        Assert.Equal(95, h.RestMaxHp);
+    }
+
+    [Fact]
+    public void WriteProfileWeapons_WritesIntoDefaultSet_CreatingItWhenMissing()
+    {
+        var equip = new EquipmentSettings();   // no sets at all
+        var prof = new CombatSpellProfile
+        {
+            NormalWeapon = "long sword", NormalOffHand = "buckler",
+            AlternateWeapon = "great axe", AlternateOffHand = null,
+        };
+
+        EquipmentWeaponSync.WriteProfileWeapons(equip, prof);
+
+        // ApplyWeapons reads them straight back off the Default set — the live surface.
+        var combat = new CombatSettings();
+        EquipmentWeaponSync.ApplyWeapons(combat, equip);
+        Assert.Equal("long sword", combat.NormalWeapon);
+        Assert.Equal("buckler", combat.NormalOffHand);
+        Assert.Equal("great axe", combat.AlternateWeapon);
+        Assert.Null(combat.AlternateOffHand);           // null profile weapon = bare slot
+    }
+
+    [Fact]
+    public void WriteProfileWeapons_ClearingAWeapon_DropsTheSlot()
+    {
+        var equip = new EquipmentSettings();
+        EquipmentWeaponSync.WriteProfileWeapons(equip, new CombatSpellProfile { NormalWeapon = "sword" });
+        // Now switch to a no-weapon profile — the slot must clear, not linger.
+        EquipmentWeaponSync.WriteProfileWeapons(equip, new CombatSpellProfile());
+        var combat = new CombatSettings();
+        EquipmentWeaponSync.ApplyWeapons(combat, equip);
+        Assert.Null(combat.NormalWeapon);
+    }
+
+    [Fact]
+    public void CaptureDefaultWeapons_ReadsBackWhatWasWritten()
+    {
+        var equip = new EquipmentSettings();
+        var written = new CombatSpellProfile
+        {
+            NormalWeapon = "spear", NormalOffHand = "shield",
+            AlternateWeapon = "bow", AlternateOffHand = "quiver",
+        };
+        EquipmentWeaponSync.WriteProfileWeapons(equip, written);
+
+        var readBack = new CombatSpellProfile();
+        EquipmentWeaponSync.CaptureDefaultWeapons(equip, readBack);
+        Assert.Equal("spear", readBack.NormalWeapon);
+        Assert.Equal("shield", readBack.NormalOffHand);
+        Assert.Equal("bow", readBack.AlternateWeapon);
+        Assert.Equal("quiver", readBack.AlternateOffHand);
+    }
+
+    [Fact]
+    public void EnsureSeeded_MigratesPreLoadoutProfiles_BackfillsFromLiveSharedSettings()
+    {
+        // A profile blob from before combat profiles became a full loadout: two
+        // profiles carrying only spell config (default Health / weapons / spells),
+        // SchemaVersion 0. Before the upgrade they shared the one live Health /
+        // Spells section + Default gear set.
+        var profile = new CharacterProfile
+        {
+            CombatProfiles = new CombatProfileSettings
+            {
+                Profiles = { new CombatSpellProfile { Name = "A" }, new CombatSpellProfile { Name = "B" } },
+                SchemaVersion = 0,
+            },
+        };
+        profile.CombatProfiles.ActiveId = profile.CombatProfiles.Profiles[0].Id;
+
+        var liveHealth = new HealthSettings { RestMaxHp = 88 };
+        var liveSpells = new SpellsSettings { MinorHealSpell = "mihe", PriorityCuring = 1 };
+        var equip = new EquipmentSettings();
+        EquipmentWeaponSync.WriteProfileWeapons(equip, new CombatSpellProfile { NormalWeapon = "long sword" });
+
+        var mgr = new CombatProfileManager(
+            profile: () => profile,
+            readCombat: () => new CombatSettings(),
+            writeCombat: _ => { },
+            readHealth: () => liveHealth,
+            writeHealth: _ => { },
+            readSpells: () => liveSpells,
+            writeSpells: _ => { },
+            equipment: () => equip,
+            save: () => { });
+
+        mgr.EnsureSeeded();
+
+        Assert.Equal(CombatProfileSettings.FullLoadoutVersion, profile.CombatProfiles.SchemaVersion);
+        foreach (CombatSpellProfile p in profile.CombatProfiles.Profiles)
+        {
+            Assert.Equal(88, p.Health.RestMaxHp);          // health back-filled (not the 95 default)
+            Assert.Equal("mihe", p.Spells.MinorHealSpell); // spell subset back-filled
+            Assert.Equal(1, p.Spells.PriorityCuring);
+            Assert.Equal("long sword", p.NormalWeapon);    // weapons back-filled from the Default set
+        }
+
+        // Idempotent: a second pass (already stamped) leaves the profiles alone even
+        // if the live values change.
+        liveHealth.RestMaxHp = 5;
+        mgr.EnsureSeeded();
+        Assert.Equal(88, profile.CombatProfiles.Profiles[0].Health.RestMaxHp);
+    }
+
+    [Fact]
+    public void DescribeConfig_IncludesVerbs_Room_Weapons_AndHealth()
+    {
+        var prof = new CombatSpellProfile
+        {
+            Name = "Melee",
+            NormalAttackCommand = "kick", AlternateAttackCommand = "swing",
+            MinMonstersInRoom = 1, MaxMonstersInRoom = 8, RunDistance = 4,
+            NormalWeapon = "long sword", NormalOffHand = "buckler",
+        };
+        prof.Health.RestMaxHp = 90;
+
+        string r = CombatSpellProfileReport.DescribeConfig(prof, 1);
+        Assert.Contains("atk=kick/swing", r);
+        Assert.Contains("monsters=1-8", r);
+        Assert.Contains("run=4", r);
+        Assert.Contains("wpn=long sword+buckler", r);
+        Assert.Contains("health[", r);
     }
 }

@@ -234,8 +234,6 @@
                 <MenuItem Header="Auto Search"      ToggleType="CheckBox" IsChecked="{Binding IsAutoSearchActive,   Mode=TwoWay}"/>
                 <!-- Auto-train is toggled from Player Workshop → CP Allocation and
                      Settings → Auto-Trainer (not here). -->
-
-                <!-- Corpse-recovery actions land here when Phase 9 DEATH ships. -->
             </MenuItem>
 
             <!-- Game Data: dynamic set list at the top (rebuilt from
@@ -426,7 +424,7 @@
         </Border>
 
         <!-- ============ Status bar (two slots) ============ -->
-        <!-- Left  : room + confidence dot (Phase 7 wires the live values).
+        <!-- Left  : room + confidence dot.
              Mid   : tick countdowns — combat tick + HP (natural / rest) +
                      MA (natural / medi). Source-of-truth: TickEngine +
                      RegenTracker. -->
