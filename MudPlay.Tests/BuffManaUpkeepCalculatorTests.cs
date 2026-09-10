@@ -62,4 +62,31 @@ public sealed class BuffManaUpkeepCalculatorTests
     {
         Assert.Equal(0, BuffManaUpkeepCalculator.TotalManaPerSecond(new List<BuffManaUpkeepCalculator.SlotUpkeep>()));
     }
+
+    // ----- EffectiveMaintenanceSeconds (stock collision-order loser upkeep) -----
+
+    [Fact]
+    public void EffectiveMaintenance_RemoverShorter_CapsAtRemoverDuration()
+    {
+        // A stock loser (chant, 300s) kept under a shorter-duration remover (gbls, 60s) is
+        // re-cast every remover refresh, so its effective interval is the remover's 60s —
+        // it costs 5x what its own duration implies.
+        Assert.Equal(60, BuffManaUpkeepCalculator.EffectiveMaintenanceSeconds(ownSeconds: 300, removerSeconds: 60));
+    }
+
+    [Fact]
+    public void EffectiveMaintenance_RemoverLonger_KeepsOwnDuration()
+    {
+        // The remover outlasts the loser, so it never forces an early re-cast — the loser's
+        // own duration stands.
+        Assert.Equal(120, BuffManaUpkeepCalculator.EffectiveMaintenanceSeconds(ownSeconds: 120, removerSeconds: 300));
+    }
+
+    [Fact]
+    public void EffectiveMaintenance_NoRemover_KeepsOwnDuration()
+    {
+        // removerSeconds <= 0 means no collision constraint (off stock, or the remover
+        // isn't resolvable) — the own duration is used unchanged.
+        Assert.Equal(200, BuffManaUpkeepCalculator.EffectiveMaintenanceSeconds(ownSeconds: 200, removerSeconds: 0));
+    }
 }

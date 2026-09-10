@@ -147,6 +147,28 @@ public static class BuffConflictAnalyzer
         return losers;
     }
 
+    // The one-directional loser → REMOVER cast-code map, the ordering counterpart to
+    // OneDirectionalLosers (which returns the winner's NAME for display). Same relation
+    // — X is a one-way loser when some Y removes X and X doesn't remove Y back, mutual
+    // pairs excluded — but keyed to the remover's cast CODE so a caller can act on it
+    // (e.g. cast the remover before the loser). Used on STOCK, where removes fire only at
+    // cast: casting the remover first lets the loser coexist, so instead of dropping the
+    // loser (the Paradigm branch) the director orders the remover ahead of it.
+    public static IReadOnlyDictionary<string, string> OneDirectionalRemoverCodes(
+        IReadOnlyList<BuffOverwritePair> pairs)
+    {
+        Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
+        bool Removes(string remover, string removed) =>
+            pairs.Any(q => string.Equals(q.RemovingCode, remover, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(q.RemovedCode, removed, StringComparison.OrdinalIgnoreCase));
+        foreach (BuffOverwritePair p in pairs)
+        {
+            if (Removes(p.RemovedCode, p.RemovingCode)) continue;   // mutual → last-cast-wins
+            if (!map.ContainsKey(p.RemovedCode)) map[p.RemovedCode] = p.RemovingCode;
+        }
+        return map;
+    }
+
     // One combined tooltip covering both directions, or null when neither applies.
     public static string? FormatTooltip(string? removedBy, string? removes)
     {

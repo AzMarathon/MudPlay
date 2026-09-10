@@ -32,4 +32,16 @@ public static class BuffManaUpkeepCalculator
         foreach (SlotUpkeep s in slots) total += s.ManaPerSecond;
         return total;
     }
+
+    // The maintenance interval to budget a STOCK collision-order LOSER at — a
+    // one-directional loser the Buff Watchdog keeps up by casting its remover first.
+    // Every time the remover refreshes, its at-cast strip drops the loser and forces a
+    // re-cast, so the loser's EFFECTIVE interval is the SHORTER of its own duration and
+    // the remover's. When the remover's duration is shorter, the loser costs more mana
+    // per tick than its own duration implies — cap the duration used in the budget so
+    // "mana to maintain" stays honest. Returns ownSeconds when there's no remover
+    // (removerSeconds <= 0) or the remover lasts at least as long (never forces an early
+    // re-cast).
+    public static double EffectiveMaintenanceSeconds(double ownSeconds, double removerSeconds)
+        => removerSeconds > 0 && removerSeconds < ownSeconds ? removerSeconds : ownSeconds;
 }

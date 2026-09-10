@@ -1332,8 +1332,11 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
     its own cast, so a one-way-removed buff CANNOT coexist with an active remover regardless of cast order: an
     active greater bless re-strips chant every few seconds. This is exactly why **#540's "suppress the loser" is correct on Paradigm**
     (don't waste rounds maintaining chant under a maintained gbls) and **correctly does nothing on stock**
-    (where cast-order lets you hold both). A stock "cast in non-colliding order to keep both" helper is a
-    possible future enhancement, not built.
+    (where cast-order lets you hold both). The stock counterpart — **cast the remover before the loser so both
+    stay up** — is now BUILT: the Buff Watchdog re-orders its maintenance casts (remover before removed) on
+    stock only, keeping the loser maintained instead of dropping it (`BuffPriorityOrder.OrderRemoversFirst` +
+    `AppServices.CollisionOrderConstraints`, the stock branch of the same one-way removes graph #540 suppresses
+    on Paradigm). The clobber-clear re-applies the loser after each remover recast.
   - Mutual pairs (bless ↔ greater bless — each lists the other) are last-cast-wins in both realms.
 - **Stock: "10 spelling" affect cap** *([CONFIRMED] 2026-09-10, user, Stock)*: Paradigm has unlimited
   buff/affect slots; **stock caps active affects at 10** (buffs + debuffs combined). Casting/receiving an 11th

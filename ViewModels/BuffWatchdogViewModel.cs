@@ -301,6 +301,12 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         // directional) are never maintained — show them "covered by" the winner on every
         // row (self + members) instead of a stale timer or a stuck "conflict".
         IReadOnlyDictionary<string, string> suppressed = _castDirector.CurrentSuppressedBuffs();
+        // Stock counterpart: a one-directional loser the director KEEPS by casting the
+        // remover first (loser code → remover code). Its timer bar is genuine (it's still
+        // maintained), so we don't replace it — we annotate "both kept" and, because the
+        // ordering is deliberate, don't surface the transient remover-refresh clobber as a
+        // conflict. Empty off stock.
+        IReadOnlyDictionary<string, string> collisionKept = _castDirector.CurrentCollisionOrder();
         IReadOnlyCollection<string> hidden = _castDirector.HiddenPartyTargets;
 
         // Generalized RemovesSpell conflict pairing across ALL slot shapes (self-self,
@@ -349,6 +355,16 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
             }
 
             bool isConflicted = clobbered.Contains((row.CastCode.ToLowerInvariant(), row.MemberKey));
+
+            // Stock collision-order: this loser is deliberately kept alongside its remover
+            // (cast right after it), so a remover refresh briefly re-stripping it isn't a
+            // real conflict — annotate "both kept" and clear the transient flag.
+            if (collisionKept.ContainsKey(row.CastCode))
+            {
+                isConflicted = false;
+                if (removedBy is not null)
+                    row.SetOverwriteWarning($"Both kept: cast after {removedBy}");
+            }
 
             // Single-target member row (keyed by their given name). A member who's HIDING
             // (a cast came back "You do not see … here!") can't be reached — show that.

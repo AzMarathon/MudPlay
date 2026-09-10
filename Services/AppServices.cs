@@ -3685,6 +3685,9 @@ public sealed class AppServices
         // continuous removal — e.g. greater bless keeps stripping chant) is never
         // maintained on any target; the Buff Watchdog shows it "covered by" the winner.
         CastDirector.SetSuppressedBuffs(SuppressedBuffCoverage);
+        // Stock counterpart: instead of dropping a one-directional loser, order its remover
+        // ahead of it so both stay up (removes fire only at cast on stock). Empty on Paradigm.
+        CastDirector.SetCollisionOrder(CollisionOrderConstraints);
         // Downed-ally rescue heal. A dropped ally leaves `par`, so PickPartyHeal's
         // roster walk can't see them — the AllyDroppedHandler feeds each aided
         // downed ally back in here as the top-priority name-targeted heal until
@@ -6786,6 +6789,19 @@ public sealed class AppServices
         return Game.Spells.BuffConflictAnalyzer.OneDirectionalLosers(BuffSlotOverwritePairs());
     }
 
+    // STOCK ONLY: the stock counterpart to SuppressedBuffCoverage. On stock a buff's
+    // RemovesSpell fires only at cast (not the Paradigm ~3s re-enforcement), so a one-
+    // directional loser CAN coexist with its remover if the remover is cast first — and
+    // re-applied after each remover recast. This map (loser cast-code → remover cast-code)
+    // lets CastingDirector order the remover ahead of the loser instead of dropping it.
+    // Empty on Paradigm (SuppressedBuffCoverage owns that realm) and for mutual pairs.
+    public IReadOnlyDictionary<string, string> CollisionOrderConstraints()
+    {
+        if (GameData.ActiveRealm == Game.RealmType.ParaMud)
+            return new Dictionary<string, string>();
+        return Game.Spells.BuffConflictAnalyzer.OneDirectionalRemoverCodes(BuffSlotOverwritePairs());
+    }
+
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
     // effect the Spell Book renders as "Removes <spell>"). LITERAL: a spell strips exactly
     // the spells its own list names, with no transitive/family inference. The game data is
@@ -6954,9 +6970,10 @@ public sealed class AppServices
     private IReadOnlyCollection<string> RemovesShortsFor(string castShort)
     {
         if (string.IsNullOrWhiteSpace(castShort)) return System.Array.Empty<string>();
-        // Expanded through the bless-family exclusivity slot (see RemovedSpellNumbers /
-        // ExpandMutualExclusionFamily) so a clobber-clear catches a mutually-exclusive
-        // buff the spell strips in-game but doesn't list directly (chant → greater bless).
+        // LITERAL removes (RemovedSpellNumbers) — a spell strips exactly the spells its
+        // own RemovesSpell list names, no family inference. Realm-agnostic: it's what lets
+        // a landed remover clear its victim's timer on ANY realm (so on stock a collision-
+        // order loser is re-cast after the remover, even if the loser wasn't otherwise due).
         HashSet<int> removed = RemovedSpellNumbers(castShort);
         if (removed.Count == 0) return System.Array.Empty<string>();
         List<string> shorts = new();

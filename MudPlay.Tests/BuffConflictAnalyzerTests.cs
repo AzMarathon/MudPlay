@@ -310,4 +310,36 @@ public sealed class BuffConflictAnalyzerTests
 
         Assert.Empty(BuffConflictAnalyzer.OneDirectionalLosers(pairs));
     }
+
+    // ----- OneDirectionalRemoverCodes (stock collision-order source) -----
+
+    [Fact]
+    public void OneDirectionalRemoverCodes_MapsLoserToRemoverCode()
+    {
+        // Same one-way relation as OneDirectionalLosers, but keyed to the remover's cast
+        // CODE (for ordering) rather than its display name (for the "covered by" label).
+        List<BuffOverwritePair> pairs = new()
+        {
+            new BuffOverwritePair("gbls", "greater bless", "chan", "chant"),
+        };
+
+        IReadOnlyDictionary<string, string> map = BuffConflictAnalyzer.OneDirectionalRemoverCodes(pairs);
+
+        Assert.Equal("gbls", map["chan"]);          // loser chant → remover gbls (cast first)
+        Assert.False(map.ContainsKey("gbls"));       // the remover is never a loser
+    }
+
+    [Fact]
+    public void OneDirectionalRemoverCodes_ExcludesMutualPairs()
+    {
+        // Mutual pairs are last-cast-wins — you can't keep both by ordering, so they're
+        // excluded from the ordering constraint just as they are from suppression.
+        List<BuffOverwritePair> pairs = new()
+        {
+            new BuffOverwritePair("gbls", "greater bless", "bles", "bless"),
+            new BuffOverwritePair("bles", "bless", "gbls", "greater bless"),
+        };
+
+        Assert.Empty(BuffConflictAnalyzer.OneDirectionalRemoverCodes(pairs));
+    }
 }

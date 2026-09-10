@@ -85,4 +85,59 @@ public sealed class BuffPriorityOrderTests
             .Select(s => s.Spell).ToList();
         Assert.Equal(new[] { "a", "b" }, order);   // relative order preserved
     }
+
+    // ----- OrderRemoversFirst (stock collision-free ordering) -----
+
+    private static List<string?> RemoverOrder(List<BuffSlot> slots, Dictionary<string, string> loserToRemover)
+        => BuffPriorityOrder.OrderRemoversFirst(slots, loserToRemover).Select(s => s.Spell).ToList();
+
+    [Fact]
+    public void OrderRemoversFirst_EmptyMap_ReturnsUnchanged()
+    {
+        var slots = new List<BuffSlot> { new() { Spell = "chan" }, new() { Spell = "gbls" } };
+        Assert.Same(slots, BuffPriorityOrder.OrderRemoversFirst(slots, new Dictionary<string, string>()));
+    }
+
+    [Fact]
+    public void OrderRemoversFirst_LiftsRemoverAheadOfLoser()
+    {
+        // chant (loser) precedes greater bless (its remover) in the input — the reorder
+        // lifts gbls ahead so it's cast first and its at-cast strip doesn't drop chant.
+        var slots = new List<BuffSlot> { new() { Spell = "chan" }, new() { Spell = "gbls" } };
+        var map = new Dictionary<string, string> { ["chan"] = "gbls" };
+        Assert.Equal(new[] { "gbls", "chan" }, RemoverOrder(slots, map));
+    }
+
+    [Fact]
+    public void OrderRemoversFirst_AlreadyOrdered_Unchanged()
+    {
+        var slots = new List<BuffSlot> { new() { Spell = "gbls" }, new() { Spell = "chan" } };
+        var map = new Dictionary<string, string> { ["chan"] = "gbls" };
+        Assert.Equal(new[] { "gbls", "chan" }, RemoverOrder(slots, map));
+    }
+
+    [Fact]
+    public void OrderRemoversFirst_IsStableForUnconstrainedSlots()
+    {
+        // Only the constrained pair moves; unrelated slots keep their relative order.
+        var slots = new List<BuffSlot>
+        {
+            new() { Spell = "aaa" }, new() { Spell = "chan" }, new() { Spell = "bbb" }, new() { Spell = "gbls" },
+        };
+        var map = new Dictionary<string, string> { ["chan"] = "gbls" };
+        // Stable emit: aaa (no constraint) → chan defers (gbls not yet emitted) so bbb (no
+        // constraint) goes next → gbls → chan. Only the constrained pair is reordered;
+        // aaa/bbb keep their relative order.
+        Assert.Equal(new[] { "aaa", "bbb", "gbls", "chan" }, RemoverOrder(slots, map));
+    }
+
+    [Fact]
+    public void OrderRemoversFirst_RemoverNotConfigured_LoserStays()
+    {
+        // The remover isn't in the list, so there's nothing to order against — the loser
+        // keeps its place (it isn't dropped; it's just maintained normally).
+        var slots = new List<BuffSlot> { new() { Spell = "xxx" }, new() { Spell = "chan" } };
+        var map = new Dictionary<string, string> { ["chan"] = "gbls" };
+        Assert.Equal(new[] { "xxx", "chan" }, RemoverOrder(slots, map));
+    }
 }

@@ -592,6 +592,22 @@ public static class BugReportBuilder
         }
         sb.Append('\n');
 
+        // Stock counterpart: one-directional losers KEPT by casting the remover first
+        // (loser cast-code → remover cast-code). Surfaced so a "both won't hold on stock"
+        // report shows the ordering the director is applying. Empty off stock.
+        IReadOnlyDictionary<string, string> collisionKept = svc.CastDirector.CurrentCollisionOrder();
+        sb.Append("**Collision-ordered buffs (stock — kept by casting the remover first)**\n\n");
+        if (collisionKept.Count == 0)
+        {
+            sb.Append("(none)\n");
+        }
+        else
+        {
+            foreach (KeyValuePair<string, string> kv in collisionKept)
+                sb.Append($"- {kv.Key}: kept — cast after its remover {kv.Value}\n");
+        }
+        sb.Append('\n');
+
         // Mana-regen reroll engine state — so a "flux stuck at a bad value" report
         // (paradigm-20260830-110918) shows the roll quality it judges from and its
         // cycle, not just the configured threshold in the buff plan above.
