@@ -31,8 +31,9 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // Every configured buff row, bound STRAIGHT to the config ItemsControl (not through
     // a computed view) so an add / remove touches a single container instead of forcing
     // the whole list to rebuild — the source of the remove-a-buff lag when the list ran
-    // long. Kept in one category order — buffs you aim (self / single-target) first,
-    // then whole-party buffs, then item ("on use") buffs — via InsertSorted / ResortRow.
+    // long. Default layout auto-groups by category (buffs you aim, then whole-party,
+    // then item "on use") via InsertSorted / ResortRow; once the user re-arranges rows
+    // (ManualOrder) it mirrors the stored order 1:1 and new buffs append at the bottom.
     public ObservableCollection<BuffSlotRowViewModel> Slots { get; } = new();
 
     // Current party's non-self members as column headers (capitalised given names),
@@ -57,6 +58,18 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
     // True when no slot is configured yet — drives the empty-state hint.
     public bool HasSlots => Slots.Count > 0;
+
+    // True once the user hand-arranged the rows (layout customised) — gates the
+    // "Reset order" button that returns to the automatic category grouping.
+    public bool HasManualOrder => _settings.ManualOrder;
+
+    // The cast-priority toggle state + its label. Independent of the layout: the
+    // user can arrange rows however they like and still cast by the default type
+    // order, OR flip this so the engine casts top-to-bottom in the shown order.
+    public bool IsPriorityTopDown => _settings.PriorityTopDown;
+    public string PriorityModeLabel => _settings.PriorityTopDown
+        ? "Cast priority: top → bottom (your order)"
+        : "Cast priority: default (by type)";
 
     // Whether the Add button can do anything — every qualifying buff already
     // slotted leaves nothing to add.
@@ -120,10 +133,10 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     // Config-list order: buffs you aim (self / single-target) first, then whole-party
-    // buffs, then item ("on use") buffs. Item wins over whole-party, so a whole-party
-    // ITEM still sorts into the item block.
+    // buffs, then item ("on use") buffs. Shared with the casting engine's Default
+    // priority so display grouping and Default cast order agree (BuffPriorityOrder).
     private static int SlotCategory(BuffSlotRowViewModel r) =>
-        r.IsItemCast ? 2 : r.IsWholeParty ? 1 : 0;
+        BuffPriorityOrder.Category(r.IsItemCast, r.IsWholeParty);
 
     // Add a row at the END of its category block, keeping the groups contiguous and
     // order-within-group stable (Add all blesses adds level-sorted, so that survives).
@@ -148,6 +161,103 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         if (ordered) return;
         Slots.RemoveAt(cur);
         InsertSorted(row);
+    }
+
+    // ----- manual reorder + priority toggle --------------------------
+
+    // Refresh each row's ▲/▼ enable flags to its position. Called after every
+    // structural change to Slots (Load / add / remove / move).
+    private void Renumber()
+    {
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            Slots[i].CanMoveUp = i > 0;
+            Slots[i].CanMoveDown = i < Slots.Count - 1;
+        }
+    }
+
+    // First manual move: switch to custom layout and bake the CURRENT display order
+    // into the stored list so display and DTO are 1:1 from here on (every later move
+    // keeps them aligned). No-op once already manual.
+    private void EnterManualOrder()
+    {
+        if (_settings.ManualOrder) return;
+        List<BuffSlot> ordered = Slots.Select(r => r.Dto).ToList();
+        _settings.Slots.Clear();
+        _settings.Slots.AddRange(ordered);
+        _settings.ManualOrder = true;
+        OnPropertyChanged(nameof(HasManualOrder));
+    }
+
+    // Move a row from → to in both the display collection and the stored list (kept
+    // 1:1 once manual). Bounds-guarded no-op otherwise.
+    private void MoveTo(int from, int to)
+    {
+        if (from < 0 || from >= Slots.Count) return;
+        if (to < 0 || to >= Slots.Count) return;
+        if (from == to) return;
+        EnterManualOrder();
+        Slots.Move(from, to);
+        BuffSlot dto = _settings.Slots[from];
+        _settings.Slots.RemoveAt(from);
+        _settings.Slots.Insert(to, dto);
+        Renumber();
+        Persist();
+    }
+
+    // Drag entry point: move a row to a FINAL insert index (0..Count) — the drop
+    // handler computes it from where the insertion line landed. Converts the insert
+    // index to a Move target, accounting for the removal shift when moving downward.
+    public void MoveRowToIndex(BuffSlotRowViewModel row, int insertIndex)
+    {
+        int from = Slots.IndexOf(row);
+        if (from < 0) return;
+        int to = from < insertIndex ? insertIndex - 1 : insertIndex;
+        to = System.Math.Clamp(to, 0, Slots.Count - 1);
+        MoveTo(from, to);
+    }
+
+    [RelayCommand]
+    private void MoveBuffUp(BuffSlotRowViewModel? row)
+    {
+        if (row is null) return;
+        int i = Slots.IndexOf(row);
+        MoveTo(i, i - 1);
+    }
+
+    [RelayCommand]
+    private void MoveBuffDown(BuffSlotRowViewModel? row)
+    {
+        if (row is null) return;
+        int i = Slots.IndexOf(row);
+        MoveTo(i, i + 1);
+    }
+
+    // Flip the cast-priority mode (Default by-type ⟷ top-to-bottom). Purely a
+    // priority choice — the visual row arrangement is untouched.
+    [RelayCommand]
+    private void TogglePriorityMode()
+    {
+        _settings.PriorityTopDown = !_settings.PriorityTopDown;
+        OnPropertyChanged(nameof(IsPriorityTopDown));
+        OnPropertyChanged(nameof(PriorityModeLabel));
+        Persist();
+    }
+
+    // Return the layout to the automatic category grouping (self → whole-party →
+    // item). Priority mode is left as-is.
+    [RelayCommand]
+    private void ResetBuffOrder()
+    {
+        _settings.ManualOrder = false;
+        List<BuffSlotRowViewModel> rows = Slots.ToList();
+        Slots.Clear();
+        foreach (BuffSlotRowViewModel row in rows) InsertSorted(row);
+        _settings.Slots.Clear();
+        _settings.Slots.AddRange(Slots.Select(r => r.Dto));
+        Renumber();
+        OnPropertyChanged(nameof(HasManualOrder));
+        Persist();
     }
 
     // A full `i` dump changes which cast-items we own, so the owned-item gate on
@@ -192,13 +302,21 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
         Slots.Clear();
         foreach (BuffSlot dto in _settings.Slots)
-            InsertSorted(MakeRow(dto));
+        {
+            BuffSlotRowViewModel row = MakeRow(dto);
+            // Manual layout shows the stored order verbatim; default auto-groups.
+            if (_settings.ManualOrder) Slots.Add(row); else InsertSorted(row);
+        }
+        Renumber();
 
         RefreshBuffPicks();
         RefreshMemberTargets();
         RefreshOverwriteWarnings();
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
+        OnPropertyChanged(nameof(HasManualOrder));
+        OnPropertyChanged(nameof(IsPriorityTopDown));
+        OnPropertyChanged(nameof(PriorityModeLabel));
 
         if (pruned > 0) Persist();
     }
@@ -597,8 +715,10 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
                          || r.OnlyWhenDark || r.CastBeforeRestingForMana;
         _settings.Slots.Add(dto);
         BuffSlotRowViewModel row = MakeRow(dto);
-        InsertSorted(row);
+        // Manual layout appends new buffs at the bottom; default sorts into type.
+        if (_settings.ManualOrder) Slots.Add(row); else InsertSorted(row);
         row.RebuildMemberTargets(CurrentMembers());
+        Renumber();
         RefreshBuffPicks();   // the just-slotted spell drops out of the picker
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
@@ -637,9 +757,10 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         {
             _settings.Slots.Add(dto);
             BuffSlotRowViewModel row = MakeRow(dto);
-            InsertSorted(row);
+            if (_settings.ManualOrder) Slots.Add(row); else InsertSorted(row);
             row.RebuildMemberTargets(members);
         }
+        Renumber();
         RefreshBuffPicks();   // drops the just-slotted spells from both pickers
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));
@@ -708,7 +829,9 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         RefreshBuffPicks();   // a changed spell frees/consumes picker entries
         row.Refresh();   // re-derive header + whole-party/single-target after a spell change
         row.RebuildMemberTargets(CurrentMembers());
-        ResortRow(row);   // a changed spell may have moved it to a different category block
+        // Manual layout keeps the user's position; default re-sorts by the (possibly
+        // changed) category.
+        if (!_settings.ManualOrder) { ResortRow(row); Renumber(); }
         Persist();
         // If the edit LOOSENED rerolling for a roll spell (higher threshold / bigger cap /
         // infinite on), re-evaluate a roll that's already up so the change acts on it now
@@ -725,6 +848,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         if (row is null) return;
         _settings.Slots.Remove(row.Dto);
         Slots.Remove(row);
+        Renumber();
         RefreshBuffPicks();   // the freed spell returns to the picker
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(ShowPanel));

@@ -13,9 +13,25 @@ namespace MudPlay.Models.Profile;
 // them apply.
 public sealed class BuffSettings
 {
-    // The buff slots in priority order (the buff path walks them top to bottom).
-    // Dynamic — the user adds / removes slots in the Buff Watchdog.
+    // The buff slots in the user's config-list order. Dynamic — the user adds /
+    // removes / re-arranges slots in the Buff Watchdog. The cast-priority walk
+    // order is derived from this list per the two flags below (see
+    // BuffPriorityOrder.InPriorityOrder).
     public System.Collections.Generic.List<BuffSlot> Slots { get; set; } = new();
+
+    // Layout flag. false (default) = the config table auto-groups slots by type
+    // (self/single-target → whole-party → item-on-use) and new buffs sort into
+    // their group. true = the user hand-arranged the rows; the list is shown in
+    // its stored order and new buffs append at the bottom. Flips true the first
+    // time the user drags / moves a row.
+    public bool ManualOrder { get; set; }
+
+    // Cast-priority flag, INDEPENDENT of ManualOrder. false (default) = the
+    // engine casts due buffs in category order (self → whole-party → item)
+    // regardless of how the rows are arranged. true = the engine casts them in
+    // the exact stored list order (top to bottom). The two modes are identical
+    // until the rows are re-arranged.
+    public bool PriorityTopDown { get; set; }
 }
 
 // One buff slot (self and/or party). Mutable DTO so the Buff Watchdog UI two-way

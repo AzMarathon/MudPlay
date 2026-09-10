@@ -1945,7 +1945,18 @@ public sealed class CastingDirector : IDisposable
         // bless) is left to that party buff — skip self-casting the superseded spell.
         IReadOnlyDictionary<string, string>? covered = _selfBuffCoverage?.Invoke();
 
-        foreach (Models.Profile.BuffSlot slot in buffs.Slots)
+        // Cast-priority order. Default (PriorityTopDown off) walks the list grouped
+        // by type (self → whole-party → item) regardless of how the config rows are
+        // arranged; top-to-bottom priority (and only once the user hand-arranged the
+        // rows) walks the stored list as-is. Same category definition the config
+        // panel groups by — see BuffPriorityOrder.
+        IReadOnlyList<Models.Profile.BuffSlot> ordered = BuffPriorityOrder.InPriorityOrder(
+            buffs.Slots, buffs.PriorityTopDown, buffs.ManualOrder,
+            s => BuffPriorityOrder.Category(
+                ItemCastToken.IsToken(s.Spell),
+                s.Spell is { } sp && _isPartyWideBuff?.Invoke(sp) == true));
+
+        foreach (Models.Profile.BuffSlot slot in ordered)
         {
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
 

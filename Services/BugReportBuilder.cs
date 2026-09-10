@@ -639,7 +639,15 @@ public static class BugReportBuilder
         // report shows exactly what was configured.
         int buffNo = 0;
         if (svc.Profile.Current?.PartyBuffs is { } unifiedBuffs)
-            Group("Buffs", unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(s)}]", s.Spell)));
+        {
+            // Note the layout + cast-priority mode: the list is shown in display order,
+            // but the engine casts by category unless priority is top→bottom AND the
+            // rows were hand-arranged — so a "wrong buff fired first" report needs both.
+            string heading = unifiedBuffs.ManualOrder || unifiedBuffs.PriorityTopDown
+                ? $"Buffs (layout: {(unifiedBuffs.ManualOrder ? "manual" : "auto")}; priority: {(unifiedBuffs.PriorityTopDown ? "top→bottom" : "default")})"
+                : "Buffs";
+            Group(heading, unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(s)}]", s.Spell)));
+        }
 
         if (shown == 0) sb.Append("_(no spells configured)_\n");
         return sb.ToString();

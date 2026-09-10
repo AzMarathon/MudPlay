@@ -29,6 +29,18 @@ public sealed class BuffSlotRowViewModelTests
     }
 
     [Fact]
+    public void MoveFlags_DefaultFalse_AndSettable()
+    {
+        var row = Row(new BuffSlot { Spell = "bless" });
+        Assert.False(row.CanMoveUp);
+        Assert.False(row.CanMoveDown);
+        row.CanMoveUp = true;
+        row.CanMoveDown = true;
+        Assert.True(row.CanMoveUp);
+        Assert.True(row.CanMoveDown);
+    }
+
+    [Fact]
     public void UncheckingAll_LeavesSelfChecked()
     {
         var dto = new BuffSlot { Spell = "bless", CastOnSelf = true, AllMembers = true };

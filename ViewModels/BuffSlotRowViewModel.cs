@@ -37,6 +37,18 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     private readonly Func<string?, bool>? _resolveLearned;
     private bool _suppress;
 
+    // Manual-reorder ▲/▼ button enable flags — set by BuffPanelViewModel.Renumber
+    // to the row's position (top row can't move up, bottom can't move down).
+    [ObservableProperty] private bool _canMoveUp;
+    [ObservableProperty] private bool _canMoveDown;
+
+    // Live drag-reorder feedback (driven by the window's pointer handlers):
+    // IsDragging dims the row being moved; DropAbove / DropBelow draw the
+    // insertion line showing where it will land.
+    [ObservableProperty] private bool _isDragging;
+    [ObservableProperty] private bool _dropAbove;
+    [ObservableProperty] private bool _dropBelow;
+
     // Editable targeting only — spell + recast are fixed at add time.
     [ObservableProperty] private bool _castOnSelf;
     [ObservableProperty] private bool _wholePartyOn;
