@@ -32,6 +32,7 @@ public partial class BuffWatchdogWindow : Window
     // from a row's grip handle (so it doesn't hijack the inline checkboxes, the
     // horizontal scroll, or double-click-to-edit) and shows a live insertion line.
     // Manual (not DragDrop) so it's repeatable and can paint where the row will land.
+    private ItemsControl? _buffRows;
     private BuffSlotRowViewModel? _dragRow;
     private bool _dragActive;
     private Point _dragStart;
@@ -59,7 +60,8 @@ public partial class BuffWatchdogWindow : Window
         DataContextChanged += OnDataContextChanged;
         Closed += OnClosed;
 
-        if (this.FindControl<ItemsControl>("BuffRowsList") is { } rows)
+        _buffRows = this.FindControl<ItemsControl>("BuffRowsList");
+        if (_buffRows is { } rows)
         {
             // Tunnel so the grip press is seen before the row's inner controls.
             rows.AddHandler(PointerPressedEvent, OnRowPointerPressed, RoutingStrategies.Tunnel);
@@ -69,40 +71,47 @@ public partial class BuffWatchdogWindow : Window
     }
 
     // ----- drag-to-reorder of the config buff rows (manual pointer) ---
+    // The pointer is captured to the rows list on a grip press, and the target row
+    // is hit-tested by POINTER POSITION each move (not e.Source, which during a drag
+    // stays on the pressed element and made the insertion line stick to the source
+    // row). That lets the row land anywhere, including between rows below it.
 
     private void OnRowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         // Left button, and ONLY when the press starts on a row's grip handle.
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
+        if (_buffRows is null
+            || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
             || !StartedOnGrip(e.Source as StyledElement))
         {
             _dragRow = null;
             return;
         }
         _dragRow = RowOf(e.Source as StyledElement);
-        _dragStart = e.GetPosition(this);
+        _dragStart = e.GetPosition(_buffRows);
         _dragActive = false;
+        if (_dragRow is not null) e.Pointer.Capture(_buffRows);
     }
 
     private void OnRowPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (_dragRow is null) return;
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) { ClearDrag(); return; }
+        if (_dragRow is null || _buffRows is null) return;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) { e.Pointer.Capture(null); ClearDrag(); return; }
 
-        Point now = e.GetPosition(this);
+        Point now = e.GetPosition(_buffRows);
         if (!_dragActive
             && Math.Abs(now.X - _dragStart.X) < 4 && Math.Abs(now.Y - _dragStart.Y) < 4)
             return;
         _dragActive = true;
         _dragRow.IsDragging = true;
-        PaintInsertion(e.Source as StyledElement, e);
+        PaintInsertion(RowUnder(now));
     }
 
     private void OnRowPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (_dragActive && _dragRow is { } src && _vm?.Buffs is { } buffs
-            && DropIndex(e.Source as StyledElement, e) is int idx && idx >= 0)
-            buffs.MoveRowToIndex(src, idx);
+        if (_dragActive && _dragRow is { } src && _buffRows is not null && _vm?.Buffs is { } buffs
+            && RowUnder(e.GetPosition(_buffRows)) is { } hit)
+            buffs.MoveRowToIndex(src, hit.bottom ? hit.index + 1 : hit.index);
+        e.Pointer.Capture(null);
         ClearDrag();
     }
 
@@ -116,32 +125,48 @@ public partial class BuffWatchdogWindow : Window
             foreach (BuffSlotRowViewModel r in buffs.Slots) { r.DropAbove = false; r.DropBelow = false; }
     }
 
-    // Paint the insertion line at the boundary nearest the pointer.
-    private void PaintInsertion(StyledElement? src, PointerEventArgs e)
+    // Paint the insertion line at the boundary the pointer picked.
+    private void PaintInsertion((BuffSlotRowViewModel row, int index, bool bottom)? hit)
     {
         if (_vm?.Buffs is not { } buffs) return;
         foreach (BuffSlotRowViewModel r in buffs.Slots) { r.DropAbove = false; r.DropBelow = false; }
-
-        if (RowContainerOf(src) is not { } container
-            || container.DataContext is not BuffSlotRowViewModel target) return;
-        int ti = buffs.Slots.IndexOf(target);
-        if (ti < 0) return;
-        bool bottom = e.GetPosition(container).Y >= container.Bounds.Height / 2;
-        if (!bottom) target.DropAbove = true;
-        else if (ti == buffs.Slots.Count - 1) target.DropBelow = true;
-        else buffs.Slots[ti + 1].DropAbove = true;
+        if (hit is not { } h) return;
+        if (!h.bottom) h.row.DropAbove = true;
+        else if (h.index == buffs.Slots.Count - 1) h.row.DropBelow = true;
+        else buffs.Slots[h.index + 1].DropAbove = true;
     }
 
-    // The FINAL insert index (0..Count) for the row under the pointer, or -1.
-    private int DropIndex(StyledElement? src, PointerEventArgs e)
+    // The buff row whose realized container contains posInList's Y (or the nearest
+    // row when the pointer is above the first / below the last), + whether the pointer
+    // is in that row's bottom half. Hit-tested by geometry so it tracks the pointer
+    // regardless of which element the (captured) event reports as its source.
+    private (BuffSlotRowViewModel row, int index, bool bottom)? RowUnder(Point posInList)
     {
-        if (_vm?.Buffs is not { } buffs) return -1;
-        if (RowContainerOf(src) is not { } container
-            || container.DataContext is not BuffSlotRowViewModel target) return -1;
-        int ti = buffs.Slots.IndexOf(target);
-        if (ti < 0) return -1;
-        bool bottom = e.GetPosition(container).Y >= container.Bounds.Height / 2;
-        return bottom ? ti + 1 : ti;
+        if (_buffRows is null || _vm?.Buffs is not { } buffs) return null;
+        BuffSlotRowViewModel? nearest = null;
+        int nearestIndex = -1;
+        double nearestBottom = double.MaxValue;
+        bool nearestIsBottomHalf = false;
+        foreach (Control c in _buffRows.GetRealizedContainers())
+        {
+            if (c.DataContext is not BuffSlotRowViewModel row) continue;
+            if (c.TranslatePoint(new Point(0, 0), _buffRows) is not { } tl) continue;
+            int i = buffs.Slots.IndexOf(row);
+            if (i < 0) continue;
+            double top = tl.Y, h = c.Bounds.Height, mid = top + h / 2;
+            if (posInList.Y >= top && posInList.Y < top + h)
+                return (row, i, posInList.Y >= mid);
+            double dist = Math.Abs(posInList.Y - mid);
+            if (dist < nearestBottom)
+            {
+                nearestBottom = dist;
+                nearest = row;
+                nearestIndex = i;
+                nearestIsBottomHalf = posInList.Y >= mid;
+            }
+        }
+        // Above the first / below the last row → snap to the nearest row's edge.
+        return nearest is null ? null : (nearest, nearestIndex, nearestIsBottomHalf);
     }
 
     // True when the pressed element (or an ancestor) is a row's drag grip.
@@ -158,19 +183,6 @@ public partial class BuffWatchdogWindow : Window
         for (StyledElement? e = src; e is not null; e = e.Parent)
             if (e.DataContext is BuffSlotRowViewModel row) return row;
         return null;
-    }
-
-    // The OUTERMOST element still carrying a row's DataContext (the row container),
-    // so its Bounds give the full row height for the top/bottom-half hit test.
-    private static Visual? RowContainerOf(StyledElement? src)
-    {
-        Visual? container = null;
-        for (StyledElement? e = src; e is not null; e = e.Parent)
-        {
-            if (e.DataContext is BuffSlotRowViewModel) container = e as Visual;
-            else if (container is not null) break;   // DataContext changed past the row
-        }
-        return container;
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
