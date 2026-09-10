@@ -612,6 +612,12 @@ public sealed class CastingDirectorTests
         public Dictionary<string, (string Caster, long Duration)> BuffInfo { get; } =
             new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Buff short → the shorts its spell REMOVES (RemovesSpell). Lets a
+        /// test model a clobber (chan removes gbls) so the landing-clears-victim path
+        /// runs.</summary>
+        public Dictionary<string, string[]> Removes { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
         public CureHarness()
         {
             DefaultPatterns.Seed(Router);
@@ -641,7 +647,9 @@ public sealed class CastingDirectorTests
                 code => BuffInfo.TryGetValue(code, out (string Caster, long Duration) info)
                     ? (info.Caster, info.Duration)
                     : null,
-                record => record.Name);
+                record => record.Name,
+                removesShortsFor: code =>
+                    Removes.TryGetValue(code, out string[]? v) ? v : System.Array.Empty<string>());
             // Capture the reroll sink so a test can assert a self-buff CAST is
             // reported to the mana-regen reroll engine (fired from the send path).
             Director.SetSelfBuffCastSink(SelfBuffCast.Add);
@@ -1253,6 +1261,47 @@ public sealed class CastingDirectorTests
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
         Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void Buff_ClobberingCast_ClearsRemovedBuffTimer()
+    {
+        // A cast that REMOVES another buff (chan removes gbls) clears the removed
+        // buff's timer the moment it lands, so a stripped buff doesn't keep reading
+        // as up (report paradigm-20260910-001023). Deterministic off RemovesSpell,
+        // not the ambiguous shared wear-off line.
+        using CureHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+
+        h.Spells.BlessSlots[1] = "gbls";
+        h.Spells.BlessSlots[2] = "chan";
+        h.BuffInfo["gbls"] = (string.Empty, 300);
+        h.BuffInfo["chan"] = (string.Empty, 500);
+        h.Removes["chan"] = new[] { "gbls" };   // chan strips gbls
+        h.RecordCondition("gbls", MessageFlags.None, applied: "You feel greatly blessed!");
+        h.RecordCondition("chan", MessageFlags.None, applied: "You hear a chant!");
+
+        // Cast + confirm gbls → its timer is up.
+        h.Director.Evaluate();
+        h.FeedLine("You feel greatly blessed!");
+        Assert.Contains(h.Director.SnapshotActiveBuffs(), b => b.Short == "gbls");
+
+        // Past the 400ms applied-burst window so chan's confirm isn't treated as a
+        // sibling of gbls's just-landed burst (still well inside gbls's 300s timer).
+        h.Now = h.Now.AddSeconds(10);
+
+        // Cast + confirm chan → it strips gbls, so gbls's timer must clear.
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        h.FeedLine("You hear a chant!");
+
+        var active = h.Director.SnapshotActiveBuffs();
+        Assert.Contains(active, b => b.Short == "chan");
+        Assert.DoesNotContain(active, b => b.Short == "gbls");
     }
 
     [Fact]

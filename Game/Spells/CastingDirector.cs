@@ -1082,6 +1082,34 @@ public sealed class CastingDirector : IDisposable
         if (string.IsNullOrEmpty(shortCode)) return;
         _lastCastShort = shortCode;
         _lastCastAt = _now();
+
+        // A landed buff clobbers the buffs its spell removes (RemovesSpell) — the game
+        // strips them, so drop any active timer we still hold for one. A stripped buff
+        // must not keep reading as if it's up (report paradigm-20260910-001023: chan
+        // removes gbls, yet gbls's timer kept ticking). Keyed off the deterministic
+        // removes relationship, NOT the ambiguous shared wear-off line, so it clears
+        // the RIGHT buff; the clobber conflict is still surfaced by the config-side ⚠.
+        if (_removesShortsFor?.Invoke(shortCode) is { Count: > 0 } victims)
+            foreach (string victim in victims)
+                ClearTimersForShort(victim, clobberedBy: shortCode);
+    }
+
+    // Remove every active timer (self + any member) whose cast code matches — used when
+    // a landing buff strips it everywhere it was up. Skips the caster itself so a spell
+    // that lists its own family can never wipe the timer it just armed.
+    private void ClearTimersForShort(string shortCode, string clobberedBy)
+    {
+        if (string.IsNullOrWhiteSpace(shortCode)
+            || string.Equals(shortCode, clobberedBy, StringComparison.OrdinalIgnoreCase))
+            return;
+        List<(string Target, string Short)>? doomed = null;
+        foreach ((string Target, string Short) key in _activeUntil.Keys)
+            if (string.Equals(key.Short, shortCode, StringComparison.OrdinalIgnoreCase))
+                (doomed ??= new()).Add(key);
+        if (doomed is null) return;
+        foreach ((string, string) key in doomed) _activeUntil.Remove(key);
+        _log?.Combat(LogCategory,
+            $"buff {shortCode} clobbered by {clobberedBy} (removes) — {doomed.Count} timer(s) cleared");
     }
 
     private void OnConditionEnded(MessageRecord r)
@@ -1090,12 +1118,12 @@ public sealed class CastingDirector : IDisposable
 
         // A wear-off that lands right after a SUCCESSFUL clobbering cast is the shared,
         // ambiguous side of that clobber: bless & chant share the wear-off message, so
-        // "the effects of bless wear off" here is really the buff bless REMOVED being
-        // stripped. Don't clear anyone off it — the just-cast survivor keeps its fresh
-        // timer, AND the clobbered victim keeps its timer so the watchdog can render it
-        // as "conflict" (it infers the clobber from RemovesSpell + cast order, and a
-        // cleared timer would just read "not up" instead). A genuine later wear-off
-        // falls outside the window and clears normally below.
+        // "the effects of bless wear off" here could resolve to the just-cast SURVIVOR
+        // and wrongly clear its fresh timer. Ignore it — the clobbered victim's own
+        // timer was already dropped deterministically at the clobbering cast's landing
+        // (NoteSuccessfulCast → ClearTimersForShort), so this guard's only remaining job
+        // is protecting the survivor. A genuine later wear-off falls outside the window
+        // and clears normally below.
         if (resolved is not null
             && _lastCastShort is { } caster
             && _now() - _lastCastAt <= ClobberWindow

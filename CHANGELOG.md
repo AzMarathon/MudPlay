@@ -9,7 +9,8 @@
 - Buff Watchdog: unchecking a whole-party buff's **Party** master now clears Solo and stops every future cast, including while alone
 - **Add all blesses** now adds whole-party rows fully off (both Party and Solo), matching the UI promise that bulk-added party buffs never start casting until you opt in
 - Buff Watchdog: the inline checkboxes and buttons (Self, members, All/None, ▲▼, ✎) are clickable again — the row drag-reorder handler was swallowing every click in the panel
-- bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119, paradigm-20260909-220212, paradigm-20260910-000144
+- Buff Watchdog: a buff that gets stripped by a newly-cast buff that removes it (chant removes bless) now has its timer cleared when the clobbering buff lands, instead of lingering as though it's still up
+- bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119, paradigm-20260909-220212, paradigm-20260910-000144, paradigm-20260910-001023
 
 ## 3.61.1
 

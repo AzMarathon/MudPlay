@@ -8,6 +8,7 @@
 > - Buff Watchdog: unchecking a whole-party buff's **Party** master now clears Solo and stops every future cast, including while alone
 > - **Add all blesses** leaves whole-party buffs fully off until you explicitly enable them
 > - Buff Watchdog: the inline checkboxes and buttons are clickable again — the row drag-reorder handler was swallowing every click in the panel
+> - Buff Watchdog: a buff stripped by a newly-cast buff that removes it (chant removes bless) has its timer cleared when the clobbering buff lands, instead of lingering as if it's still up
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
