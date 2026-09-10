@@ -276,6 +276,10 @@ public sealed class CastingDirector : IDisposable
     // removal, one-directional): loser cast code → winning buff name. Never maintained (the
     // winner keeps stripping them), for ANY target; the watchdog labels them "covered by".
     private Func<IReadOnlyDictionary<string, string>>? _suppressedBuffs;
+    // STOCK one-directional conflicts: loser cast code → remover cast code. Both are
+    // maintained (not suppressed); PickUnifiedBuff orders each remover before the losers it
+    // removes so the at-cast strip doesn't knock them off. Empty off stock.
+    private Func<IReadOnlyDictionary<string, string>>? _collisionOrder;
     private Action<string>? _selfBuffCastSink;
     private Func<DateTime> _now = () => DateTime.UtcNow;
     private LineExtractor? _lines;
@@ -655,6 +659,24 @@ public sealed class CastingDirector : IDisposable
     // or unwired.
     public IReadOnlyDictionary<string, string> CurrentSuppressedBuffs()
         => _suppressedBuffs?.Invoke() ?? _emptyCoverage;
+
+    // Wire the STOCK collision-free ordering source: loser cast code → remover cast code for
+    // one-directional conflicts, where (unlike Paradigm) removes fire only at cast so both
+    // can coexist if the remover is cast first. PickUnifiedBuff re-sorts the priority list so
+    // each remover precedes the losers it removes; the loser is still maintained (not
+    // suppressed), and the clobber-clear re-applies it after each remover recast. Empty off
+    // stock (the Paradigm branch suppresses instead — SetSuppressedBuffs).
+    public void SetCollisionOrder(Func<IReadOnlyDictionary<string, string>> collisionOrder)
+    {
+        ArgumentNullException.ThrowIfNull(collisionOrder);
+        _collisionOrder = collisionOrder;
+    }
+
+    // The current stock collision-order map (loser code → remover code) — the Buff Watchdog
+    // reads this to annotate a one-way loser "both kept" instead of flagging a conflict.
+    // Empty off stock or unwired.
+    public IReadOnlyDictionary<string, string> CurrentCollisionOrder()
+        => _collisionOrder?.Invoke() ?? _emptyCoverage;
 
     private static readonly IReadOnlyDictionary<string, string> _emptyCoverage =
         new Dictionary<string, string>();
@@ -2045,6 +2067,12 @@ public sealed class CastingDirector : IDisposable
         // rounds. Empty off Paradigm and for mutual pairs (those are last-cast-wins).
         IReadOnlyDictionary<string, string>? suppressed = _suppressedBuffs?.Invoke();
 
+        // STOCK collision-free ordering: loser cast code → remover cast code. Empty off
+        // stock (Paradigm suppresses instead). Applied as a stable reorder below so each
+        // remover is cast before the losers it removes — the at-cast strip then fires with
+        // the loser not yet up, and the loser (still maintained) is cast right after.
+        IReadOnlyDictionary<string, string>? collisionOrder = _collisionOrder?.Invoke();
+
         // Cast-priority order. Default (PriorityTopDown off) walks the list grouped
         // by type (self → whole-party → item) regardless of how the config rows are
         // arranged; top-to-bottom priority (and only once the user hand-arranged the
@@ -2055,6 +2083,12 @@ public sealed class CastingDirector : IDisposable
             s => BuffPriorityOrder.Category(
                 ItemCastToken.IsToken(s.Spell),
                 s.Spell is { } sp && _isPartyWideBuff?.Invoke(sp) == true));
+
+        // Layer the stock remover-before-removed constraint on top of the chosen priority
+        // order (no-op off stock / with no one-way pairs). Stable: it only lifts a remover
+        // ahead of a loser it would otherwise strip, leaving everything else in place.
+        if (collisionOrder is { Count: > 0 })
+            ordered = BuffPriorityOrder.OrderRemoversFirst(ordered, collisionOrder);
 
         foreach (Models.Profile.BuffSlot slot in ordered)
         {

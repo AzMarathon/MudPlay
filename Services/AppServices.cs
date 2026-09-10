@@ -3685,6 +3685,9 @@ public sealed class AppServices
         // continuous removal — e.g. greater bless keeps stripping chant) is never
         // maintained on any target; the Buff Watchdog shows it "covered by" the winner.
         CastDirector.SetSuppressedBuffs(SuppressedBuffCoverage);
+        // Stock counterpart: instead of dropping a one-directional loser, order its remover
+        // ahead of it so both stay up (removes fire only at cast on stock). Empty on Paradigm.
+        CastDirector.SetCollisionOrder(CollisionOrderConstraints);
         // Downed-ally rescue heal. A dropped ally leaves `par`, so PickPartyHeal's
         // roster walk can't see them — the AllyDroppedHandler feeds each aided
         // downed ally back in here as the top-priority name-targeted heal until
@@ -6784,6 +6787,19 @@ public sealed class AppServices
         if (GameData.ActiveRealm != Game.RealmType.ParaMud)
             return new Dictionary<string, string>();
         return Game.Spells.BuffConflictAnalyzer.OneDirectionalLosers(BuffSlotOverwritePairs());
+    }
+
+    // STOCK ONLY: the stock counterpart to SuppressedBuffCoverage. On stock a buff's
+    // RemovesSpell fires only at cast (not the Paradigm ~3s re-enforcement), so a one-
+    // directional loser CAN coexist with its remover if the remover is cast first — and
+    // re-applied after each remover recast. This map (loser cast-code → remover cast-code)
+    // lets CastingDirector order the remover ahead of the loser instead of dropping it.
+    // Empty on Paradigm (SuppressedBuffCoverage owns that realm) and for mutual pairs.
+    public IReadOnlyDictionary<string, string> CollisionOrderConstraints()
+    {
+        if (GameData.ActiveRealm == Game.RealmType.ParaMud)
+            return new Dictionary<string, string>();
+        return Game.Spells.BuffConflictAnalyzer.OneDirectionalRemoverCodes(BuffSlotOverwritePairs());
     }
 
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same

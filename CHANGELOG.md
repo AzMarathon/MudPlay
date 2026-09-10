@@ -1,5 +1,11 @@
 # Version history
 
+## 3.64.0
+
+- Stock: two configured buffs that conflict one-directionally (e.g. greater bless removes chant, but chant doesn't remove greater bless) are now **both kept** — the Buff Watchdog casts the remover first and re-applies the removed buff after each remover recast, instead of letting the wrong cast order silently knock one off
+- Only on stock, where a buff's removal fires just at cast; Paradigm (continuous re-strip) still suppresses the loser per #540, and mutual pairs stay last-cast-wins on either realm
+- The kept buff's row shows "both kept" instead of a stuck conflict; bug report lists the collision-ordered buffs
+
 ## 3.63.1
 
 - The pre-engage "can I kill this?" check now weighs per-monster spell overrides, so the walker no longer skips a monster its weapons can't hit but an override spell can (a mana-blocked override reads as wait-for-mana, not unkillable)
