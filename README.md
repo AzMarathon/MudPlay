@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.63.0**
-> - Per-monster **combat overrides** in Game Data now cover the whole single-target chain: **Debuff (single target)**, **Normal attack spell**, **Alternate attack spell**, and a new **Physical attack** command — pin an exact loadout against a specific monster
-> - Override spells now **substitute into their rung and run the same gates** as the configured Combat-tab slot (Max cap, Mana floor, and the immunity / level / element-resist skip) — no longer a blanket bypass, so an override the target can't be hit by falls down the cascade instead of wasting the round
-> - New **Physical attack** override replaces the weapon command only on a round the engine already chose physical — it doesn't force physical or suppress the spell rungs
-> - The old "Override Attack" raw-verb command moved to the **Physical attack** box (existing data migrates automatically); the spell boxes are now spell-only
-> - Monster editor relabelled to mirror the Settings → Combat grid
+> **Version 3.63.1**
+> - The pre-engage "can I kill this?" check now weighs per-monster spell overrides, so the walker no longer skips a monster its weapons can't hit but an override spell can (a mana-blocked override reads as wait-for-mana, not unkillable)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
