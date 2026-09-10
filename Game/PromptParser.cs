@@ -80,6 +80,28 @@ public sealed class PromptParser : IDisposable
         if (maxMa > 0 && !knownNoMana) State.MaxMa = maxMa;
     }
 
+    // Wipe live status state to "no data" when the character changes out from
+    // under us (a profile swap). The HP / MA / position fields describe the
+    // OUTGOING character's last observed prompt; carrying them into the new
+    // character leaves HasPromptData reading true against a mismatched body —
+    // the incoming character's MaxHp gets re-seeded from its profile
+    // (ApplyStatScreenMax) while the previous character's current HP lingers,
+    // which fired a spurious low-HP emergency hangup the instant a swap ran
+    // (paradigm-20260909-172633: Fujin's 66 HP against FujinPVP's 324 max).
+    // Reset here so nothing HP-driven acts until the new character's first real
+    // prompt re-establishes live data. Sole-writer safe — routed through the
+    // parser like every other max/HP mutation.
+    public void ResetForProfileSwap()
+    {
+        State.Hp = 0;
+        State.MaxHp = 0;
+        State.Ma = 0;
+        State.MaxMa = 0;
+        State.ManaType = ManaType.None;
+        State.Position = default;
+        State.HasPromptData = false;
+    }
+
     // Adjust MaxHp / MaxMa by a signed delta when the worn set's flat pool
     // bonus changes mid-session (see Game.Health.EquipmentMaxPoolSync) —
     // composes with whatever base the ratchet/stat-screen already

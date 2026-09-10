@@ -67,6 +67,24 @@ public sealed class HangupSignal
     // through the server-drop branch, so this leaves their suppression intact.
     public void AllowNextEntry() => _suppressNextEntry = false;
 
+    // Clear both one-shot flags outright, reporting whether either was actually
+    // set. Called on a profile swap: the hangup intent (suppress reconnect +
+    // suppress next realm-entry) belongs to the character that hung up, and must
+    // not carry into a DIFFERENT character's session. A stale suppress-entry
+    // flag left by character A's low-HP / manual hangup otherwise strands
+    // character B at the realm menu on its next connect, because
+    // MainMenuEntryAutomation.Arm consumes it and refuses to auto-enter
+    // (paradigm-20260909-172633). A same-character reconnect does NOT fire
+    // ProfileLoaded, so this leaves the intentional "read the screen, enter
+    // manually" behavior intact for the character that actually hung up.
+    public bool Reset()
+    {
+        bool wasSet = _disconnectExpected || _suppressNextEntry;
+        _disconnectExpected = false;
+        _suppressNextEntry = false;
+        return wasSet;
+    }
+
     // Test seam — non-mutating read of both flags. Lets unit tests assert "flag
     // is currently set" without consuming it. Production callers always go
     // through the Consume methods.

@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.61.0**
-> - Buff Watchdog config list: re-arrange buff rows by drag (grip handle) or ▲/▼ buttons; the order persists
-> - New **Cast priority** toggle — Default (by type) casts self→whole-party→item regardless of arrangement; Top→bottom casts in the exact order shown (identical until you re-arrange)
-> - Once re-arranged, new buffs append at the bottom instead of auto-sorting; **↺ Reset order** restores the automatic grouping
+> **Version 3.61.1**
+> - Switching profiles no longer strands the new character at the game main menu — a stale low-HP hangup from the previous character was suppressing realm auto-entry
+> - Switching profiles clears the outgoing character's live HP so it can't trip a spurious low-HP hangup on the swap
+> - Login "quest available" announcements only fire once you're actually in the realm, not while sitting at the login menu
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

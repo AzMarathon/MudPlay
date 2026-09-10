@@ -94,4 +94,39 @@ public sealed class HangupSignalTests
         s.AllowNextEntry();
         Assert.True(s.ConsumeDisconnectIntent());
     }
+
+    [Fact]
+    public void Reset_ClearsBothFlags_AndReportsTheyWereSet()
+    {
+        // A profile swap must not carry character A's hangup intent into
+        // character B: Reset clears both flags outright and reports it did work
+        // so the swap can log the clear.
+        HangupSignal s = new();
+        s.SignalHangup();
+        Assert.True(s.Reset());
+        var (disc, supp) = s.PeekForTests();
+        Assert.False(disc);
+        Assert.False(supp);
+    }
+
+    [Fact]
+    public void Reset_NoIntentPending_ReportsNothingCleared()
+    {
+        // The common case: a swap with no pending hangup. Reset is a no-op and
+        // reports false so the swap doesn't log a phantom clear.
+        HangupSignal s = new();
+        Assert.False(s.Reset());
+    }
+
+    [Fact]
+    public void Reset_ClearedSuppress_MakesNextConsumeReturnFalse()
+    {
+        // The reported bug: character A's low-HP hangup armed suppress-entry;
+        // after a swap, character B's next Arm() must NOT see it and skip realm
+        // auto-entry. Reset makes the subsequent consume read false.
+        HangupSignal s = new();
+        s.SignalHangup();
+        s.Reset();
+        Assert.False(s.ConsumeSuppressEntry());
+    }
 }
