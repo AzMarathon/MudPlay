@@ -24,6 +24,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     private readonly Func<string, Task<bool>>? _sendText;
     private bool _suppressSelectionSideEffects;
 
+    // Shared staged combat-profile list edited by BOTH the Combat and Health section
+    // VMs (a combat profile spans both tabs). Lives for this window's lifetime.
+    private CombatProfileStagingSession? _profileSession;
+
     // Raised when the shell wants the host window to close.
     public event Action? CloseRequested;
 
@@ -73,6 +77,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     {
         foreach (SettingsSectionViewModel section in Sections)
             section.Dispose();
+        _profileSession?.Dispose();
     }
 
     // True once the user has chosen a commit path (OK / Apply-and-close or
@@ -221,7 +226,16 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
             AppServices.Current.Settings);
         Sections.Add(bbsSection);
 
-        var healthSection = new HealthSectionViewModel();
+        // One shared combat-profile staging session, edited by both the Health and
+        // Combat tabs (a profile spans both). Created before either section so its
+        // ProfileLoaded handler runs first (it drives the box reload on a mid-window
+        // character swap). Constructed FIRST here so it subscribes before the VMs.
+        _profileSession = new CombatProfileStagingSession(
+            AppServices.Current.CombatProfiles,
+            _profile,
+            () => _profile.Current?.Equipment);
+
+        var healthSection = new HealthSectionViewModel(_profileSession);
         Sections.Add(healthSection);
         // The Health tab's "Sys goto wimpy" gate + picker track the BBS tab's LIVE
         // (unsaved) sysop-goto state, so ticking Sysop goto there enables the wimpy
@@ -241,7 +255,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         bbsSection.SysopGotos.CollectionChanged += (_, _) => healthSection.NotifyLiveSysGotoChanged();
 
         Sections.Add(new SpellsSectionViewModel());
-        Sections.Add(new CombatSectionViewModel());
+        Sections.Add(new CombatSectionViewModel(_profileSession));
         Sections.Add(new PartySectionViewModel());
         Sections.Add(new CashSectionViewModel());
         Sections.Add(new StatlineSectionViewModel(_profile, AppServices.Current.PlayerState, _sendText));

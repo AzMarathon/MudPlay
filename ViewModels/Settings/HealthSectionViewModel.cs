@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Models.Profile;
@@ -18,16 +17,23 @@ namespace MudPlay.ViewModels.Settings;
 // the DTO from there.
 public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
 {
-    private const string TabKey = "Health";
-
     private readonly ProfileService _profile;
+    private readonly CombatProfileStagingSession _session;
     private Control? _view;
     private bool _suppressDirty;
-    private bool _dirty;
 
     public override string Id => "health";
     public override string Title => "Health";
-    public override bool IsDirty => _dirty;
+
+    // The whole Health tab is now PER COMBAT PROFILE — its dirtiness + commit are
+    // owned by the shared staging session the Combat tab also drives, so a Health
+    // edit and a Combat edit save as one unit and a chip switch swaps both.
+    public override bool IsDirty => _session.IsDirty;
+
+    // Header shown on the amber "this whole tab is per combat profile" border —
+    // tracks the active profile so a chip switch on the Combat tab re-labels it.
+    public string ActiveProfileLabel =>
+        $"Combat profile: {(string.IsNullOrWhiteSpace(_session.Active.Name) ? $"Profile {_session.ActiveIndex + 1}" : _session.Active.Name.Trim())}";
 
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
@@ -124,16 +130,24 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
 
     public void NotifyLiveSysGotoChanged() => RefreshWimpyGoto();
 
-    public HealthSectionViewModel() : this(
+    // Convenience for SettingsWindowViewModel, which builds the shared session and
+    // passes the same instance to both the Combat and Health section VMs.
+    public HealthSectionViewModel(CombatProfileStagingSession session) : this(
+        session,
         AppServices.Current.Profile,
         TryGetPlayerState(),
         TryGetDeathFloor,
         TryGetGameData()) { }
 
-    public HealthSectionViewModel(ProfileService profile, Game.PlayerState? state = null,
-        Func<int>? readDeathFloor = null, GameDataCache? gameData = null)
+    // Standalone session for the parameterless (design-time) path.
+    public HealthSectionViewModel() : this(CreateStandaloneSession()) { }
+
+    public HealthSectionViewModel(CombatProfileStagingSession session, ProfileService profile,
+        Game.PlayerState? state = null, Func<int>? readDeathFloor = null, GameDataCache? gameData = null)
     {
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(profile);
+        _session = session;
         _profile = profile;
         _state = state;
         _readDeathFloor = readDeathFloor;
@@ -147,6 +161,15 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         _profile.ProfileMutated += OnProfileMutatedRefreshWimpy;
         if (_state is not null) _state.PropertyChanged += OnStateChanged;
         if (_gameData is not null) _gameData.ActiveSetChanged += OnActiveSetChanged;
+
+        // The Health section of the shared working profiles is folded / loaded on the
+        // same events the Combat tab drives.
+        _session.CaptureRequested += CaptureHealthBoxesToActive;
+        _session.LoadRequested += OnSessionLoad;
+        _session.ReloadAllRequested += OnSessionLoad;
+        _session.ChipsChanged += OnSessionChipsChanged;
+        _session.Committed += OnSessionCommitted;
+
         RefreshShadowRestAvailability();
         OnDispose(() =>
         {
@@ -155,11 +178,68 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
             _profile.ProfileMutated -= OnProfileMutatedRefreshWimpy;
             if (_state is not null) _state.PropertyChanged -= OnStateChanged;
             if (_gameData is not null) _gameData.ActiveSetChanged -= OnActiveSetChanged;
+            _session.CaptureRequested -= CaptureHealthBoxesToActive;
+            _session.LoadRequested -= OnSessionLoad;
+            _session.ReloadAllRequested -= OnSessionLoad;
+            _session.ChipsChanged -= OnSessionChipsChanged;
+            _session.Committed -= OnSessionCommitted;
         });
         _suppressDirty = true;
-        LoadFromProfile();
+        LoadHealthBoxesFrom(_session.Active.Health);
         _suppressDirty = false;
     }
+
+    private static CombatProfileStagingSession CreateStandaloneSession() =>
+        new(AppServices.Current.CombatProfiles, AppServices.Current.Profile,
+            () => AppServices.Current.Profile.Current?.Equipment);
+
+    // The active profile's Health folded from / loaded into the boxes — the shared
+    // session's CaptureRequested / Load handlers. Mutates in place; the Combat tab
+    // folds its own combat / weapon fields on the same profile.
+    private void CaptureHealthBoxesToActive() => _session.Active.Health = BuildHealthDto();
+
+    private void OnSessionLoad()
+    {
+        _suppressDirty = true;
+        LoadHealthBoxesFrom(_session.Active.Health);
+        _suppressDirty = false;
+    }
+
+    private void OnSessionCommitted() => OnPropertyChanged(nameof(IsDirty));
+
+    private void OnSessionChipsChanged() => OnPropertyChanged(nameof(ActiveProfileLabel));
+
+    // The Health section from the current boxes — shared by the session's Capture
+    // fold (into the working profile) and the eventual Commit.
+    private HealthSettings BuildHealthDto() => new()
+    {
+        HpThresholdMode        = HpModeAbsolute ? ThresholdMode.Absolute : ThresholdMode.Percentage,
+        RestMaxHp              = Clamp(RestMaxHp),
+        RestIfBelowHp          = Clamp(RestIfBelowHp),
+        RunIfBelowHp           = Clamp(RunIfBelowHp),
+        HangIfBelowHp          = ClampHang(HangIfBelowHp),
+        HealRestTrigger        = Clamp(HealRestTrigger),
+        MinorHealCombatTrigger = Clamp(MinorHealCombatTrigger),
+        MajorHealCombatTrigger = Clamp(MajorHealCombatTrigger),
+
+        MaThresholdMode        = MaModeAbsolute ? ThresholdMode.Absolute : ThresholdMode.Percentage,
+        RestMaxMa              = Clamp(RestMaxMa),
+        RestIfBelowMa          = Clamp(RestIfBelowMa),
+        HealIfAboveMaResting   = Clamp(HealIfAboveMaResting),
+        HealIfAboveMaCombat    = Clamp(HealIfAboveMaCombat),
+        RunIfBelowMa           = Clamp(RunIfBelowMa),
+        BlessIfAboveMa         = Clamp(BlessIfAboveMa),
+
+        UseMeditateAbility     = UseMeditateAbility,
+        MeditateBeforeResting  = MeditateBeforeResting,
+        UtilizeShadowRest      = UtilizeShadowRest,
+
+        SysGotoWimpyInsteadOfHanging = SysGotoWimpyInsteadOfHanging,
+        SysGotoWimpyLocation         = SysGotoWimpyLocation ?? string.Empty,
+
+        PreRestCommand         = PreRestCommand  ?? string.Empty,
+        PostRestCommand        = PostRestCommand ?? string.Empty,
+    };
 
     private static Game.PlayerState? TryGetPlayerState()
     {
@@ -341,54 +421,13 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     public string RunIfBelowMaConverted           => FormatConversion(RunIfBelowMa,           PreviewMaxMa, MaModePercentage);
     public string BlessIfAboveMaConverted         => FormatConversion(BlessIfAboveMa,         PreviewMaxMa, MaModePercentage);
 
-    public override void Apply()
-    {
-        if (_profile.Current is not { } profile) return;
+    // Commit through the shared session (folds both tabs + persists Settings
+    // ["Combat"] + Settings["Health"] + the profile blob + weapons as one unit).
+    // Guarded on the session's dirty flag, so whichever of the Combat / Health Apply
+    // runs first commits and the other no-ops.
+    public override void Apply() => _session.CommitIfDirty();
 
-        HealthSettings dto = new()
-        {
-            HpThresholdMode        = HpModeAbsolute ? ThresholdMode.Absolute : ThresholdMode.Percentage,
-            RestMaxHp              = Clamp(RestMaxHp),
-            RestIfBelowHp          = Clamp(RestIfBelowHp),
-            RunIfBelowHp           = Clamp(RunIfBelowHp),
-            HangIfBelowHp          = ClampHang(HangIfBelowHp),
-            HealRestTrigger        = Clamp(HealRestTrigger),
-            MinorHealCombatTrigger = Clamp(MinorHealCombatTrigger),
-            MajorHealCombatTrigger = Clamp(MajorHealCombatTrigger),
-
-            MaThresholdMode        = MaModeAbsolute ? ThresholdMode.Absolute : ThresholdMode.Percentage,
-            RestMaxMa              = Clamp(RestMaxMa),
-            RestIfBelowMa          = Clamp(RestIfBelowMa),
-            HealIfAboveMaResting   = Clamp(HealIfAboveMaResting),
-            HealIfAboveMaCombat    = Clamp(HealIfAboveMaCombat),
-            RunIfBelowMa           = Clamp(RunIfBelowMa),
-            BlessIfAboveMa         = Clamp(BlessIfAboveMa),
-
-            UseMeditateAbility     = UseMeditateAbility,
-            MeditateBeforeResting  = MeditateBeforeResting,
-            UtilizeShadowRest      = UtilizeShadowRest,
-
-            SysGotoWimpyInsteadOfHanging = SysGotoWimpyInsteadOfHanging,
-            SysGotoWimpyLocation         = SysGotoWimpyLocation ?? string.Empty,
-
-            PreRestCommand         = PreRestCommand  ?? string.Empty,
-            PostRestCommand        = PostRestCommand ?? string.Empty,
-        };
-
-        profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
-        _profile.Save();
-
-        ClearDirty();
-    }
-
-    public override void Discard()
-    {
-        _suppressDirty = true;
-        LoadFromProfile();
-        _suppressDirty = false;
-        ClearDirty();
-    }
+    public override void Discard() => _session.DiscardAndReset();
 
     // Clamp threshold inputs to the realistic range. Percentage values run 0..100;
     // absolute values run 0..100,000 (covers every realistic HP/MA pool). One floor
@@ -402,22 +441,23 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     private int ClampHang(int value) =>
         Math.Clamp(value, HangMinimum, 100_000);
 
-    private void OnProfileChanged(CharacterProfile _) => ReloadAfterProfileSwap();
-    private void OnProfileClosedExternally() => ReloadAfterProfileSwap();
-
-    private void ReloadAfterProfileSwap()
+    // The shared session subscribes to ProfileLoaded first (it is constructed before
+    // this VM) and drives the box reload via ReloadAllRequested; this handler only
+    // refreshes the non-staging HasProfile gate + the wimpy picker.
+    private void OnProfileChanged(CharacterProfile _)
     {
-        _suppressDirty = true;
-        LoadFromProfile();
-        _suppressDirty = false;
-        ClearDirty();
+        RefreshWimpyGoto();
         OnPropertyChanged(nameof(HasProfile));
+        OnPropertyChanged(nameof(IsDirty));
+    }
+    private void OnProfileClosedExternally()
+    {
+        OnPropertyChanged(nameof(HasProfile));
+        OnPropertyChanged(nameof(IsDirty));
     }
 
-    private void LoadFromProfile()
+    private void LoadHealthBoxesFrom(HealthSettings dto)
     {
-        HealthSettings dto = ReadOrDefault();
-
         HpModePercentage = dto.HpThresholdMode == ThresholdMode.Percentage;
         HpModeAbsolute   = dto.HpThresholdMode == ThresholdMode.Absolute;
         RestMaxHp              = dto.RestMaxHp;
@@ -451,36 +491,15 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         RefreshWimpyGoto();   // populate the picker + include any stored selection
     }
 
-    private HealthSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new HealthSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json))
-            return new HealthSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<HealthSettings>(json) ?? new HealthSettings();
-        }
-        catch
-        {
-            // Malformed delta — fall back to defaults rather than throwing.
-            return new HealthSettings();
-        }
-    }
-
     // ----- IsDirty plumbing -----------------------------------------
 
-    private void ClearDirty()
-    {
-        _dirty = false;
-        OnPropertyChanged(nameof(IsDirty));
-    }
-
+    // Route every box edit into the shared session's single dirty flag (a combat
+    // profile spans this tab + the Combat tab). The session clears it on Commit /
+    // Discard; this VM just re-raises IsDirty for the Save-button gate.
     private void MarkDirty()
     {
         if (_suppressDirty) return;
-        if (_dirty) return;
-        _dirty = true;
+        _session.MarkDirty();
         OnPropertyChanged(nameof(IsDirty));
     }
 

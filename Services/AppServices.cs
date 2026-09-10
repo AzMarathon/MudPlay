@@ -4472,10 +4472,13 @@ public sealed class AppServices
         Equipment.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
 
-        // Casting-spell profiles: the same read/write-Combat pair the Equipment
-        // Manager uses, so a profile swap overlays its spells onto the live Combat
-        // section the engine re-reads each round. Seeded per character (first
-        // profile captured from the current combat settings) on every ProfileLoaded.
+        // Combat profiles: a full-posture quick-swap. A switch overlays the profile's
+        // spell/verb/room fields onto the live Combat section the engine re-reads each
+        // round, writes the profile's whole Health section, and writes its weapons into
+        // the Workshop Default gear set (the surface EquipmentWeaponSync +
+        // AutoEquipCoordinator already read). Seeded per character (first profile
+        // captured from the current combat + health settings and the Default-set
+        // weapons) on every ProfileLoaded.
         CombatProfiles = new Game.Combat.CombatProfileManager(
             profile: () => Profile.Current,
             readCombat: () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat"),
@@ -4485,6 +4488,22 @@ public sealed class AppServices
                 p.Settings ??= new();
                 p.Settings["Combat"] = System.Text.Json.JsonSerializer.SerializeToElement(combat);
                 Profile.Save();
+            },
+            readHealth: () => ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health"),
+            writeHealth: health =>
+            {
+                if (Profile.Current is not { } p) return;
+                p.Settings ??= new();
+                p.Settings["Health"] = System.Text.Json.JsonSerializer.SerializeToElement(health);
+                Profile.Save();
+            },
+            // Ensure the blob exists so a profile's weapon writes land on a live
+            // reference Save persists — the Equipment Manager seeds an empty one the
+            // same way. Null only when no profile is loaded.
+            equipment: () =>
+            {
+                if (Profile.Current is not { } p) return null;
+                return p.Equipment ??= new Models.Profile.EquipmentSettings();
             },
             save: () => Profile.Save(),
             log: Log);

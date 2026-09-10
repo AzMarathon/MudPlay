@@ -19,6 +19,23 @@
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        <!-- The whole Health tab is per combat profile: a soft amber panel (the
+             active-profile accent, matching the Combat tab's chips + borders) with
+             the profile name in the header. -->
+        <Style Selector="Border.ProfileGroup">
+            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Margin" Value="0,6,0,4"/>
+        </Style>
+        <Style Selector="TextBlock.ProfileGroupHeader">
+            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
@@ -53,6 +70,13 @@
                 <TextBlock Classes="SettingsSectionSub"
                            Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
                 <Border Classes="SettingsSectionRule"/>
+
+                <!-- The entire Health tab is per combat profile — switch the active
+                     profile with the chip bar on the Combat tab and these thresholds
+                     swap with it. -->
+                <Border Classes="ProfileGroup">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"/>
 
                 <!-- ============ Health (HP) ============ -->
                 <TextBlock Classes="SectionHeader" Text="Health (HP)"/>
@@ -256,6 +280,8 @@
                              ToolTip.Tip="Sent right after standing up. Same chaining rules as the pre-rest command."/>
                 </Grid>
 
+                  </StackPanel>
+                </Border>
             </StackPanel>
         </Grid>
     </ScrollViewer>

@@ -67,7 +67,7 @@ public static class BugReportBuilder
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
             new("Spell resolution", SafeSection(() => BuildSpellResolution(svc))),
-            new("Combat spell profiles", SafeSection(() => BuildCombatProfiles(svc))),
+            new("Combat profiles", SafeSection(() => BuildCombatProfiles(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
             new("Monster observations (this character)", SafeSection(() => BuildMonsterObservations(svc))),
             new("Item overrides", SafeSection(() => BuildItemOverrides(svc))),

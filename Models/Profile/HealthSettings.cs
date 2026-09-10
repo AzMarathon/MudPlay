@@ -124,4 +124,34 @@ public sealed class HealthSettings
     // Sent right after standing up from rest / meditate. Same chaining rules as
     // PreRestCommand. Default empty.
     public string PostRestCommand { get; set; } = string.Empty;
+
+    // Deep copy — every field is a value type or immutable string, so a member-wise
+    // copy is a full clone. A combat profile snapshots the whole Health tab this way
+    // (CombatSpellProfile.Health), and the manager writes a fresh clone into the live
+    // Settings["Health"] on switch so the stored profile never shares a reference.
+    public HealthSettings Clone() => new()
+    {
+        HpThresholdMode = HpThresholdMode,
+        RestMaxHp = RestMaxHp,
+        RestIfBelowHp = RestIfBelowHp,
+        RunIfBelowHp = RunIfBelowHp,
+        HangIfBelowHp = HangIfBelowHp,
+        SysGotoWimpyInsteadOfHanging = SysGotoWimpyInsteadOfHanging,
+        SysGotoWimpyLocation = SysGotoWimpyLocation,
+        HealRestTrigger = HealRestTrigger,
+        MinorHealCombatTrigger = MinorHealCombatTrigger,
+        MajorHealCombatTrigger = MajorHealCombatTrigger,
+        MaThresholdMode = MaThresholdMode,
+        RestMaxMa = RestMaxMa,
+        RestIfBelowMa = RestIfBelowMa,
+        RunIfBelowMa = RunIfBelowMa,
+        BlessIfAboveMa = BlessIfAboveMa,
+        HealIfAboveMaResting = HealIfAboveMaResting,
+        HealIfAboveMaCombat = HealIfAboveMaCombat,
+        UseMeditateAbility = UseMeditateAbility,
+        MeditateBeforeResting = MeditateBeforeResting,
+        UtilizeShadowRest = UtilizeShadowRest,
+        PreRestCommand = PreRestCommand,
+        PostRestCommand = PostRestCommand,
+    };
 }

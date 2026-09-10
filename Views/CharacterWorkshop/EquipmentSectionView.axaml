@@ -49,6 +49,16 @@
         <Style Selector="TextBlock.blocked">
             <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
         </Style>
+        <!-- The Default set's four weapon rows are the active combat profile's
+             weapons — tint them the profile accent (amber) so it's clear they swap
+             with the combat profile chip on the Combat settings tab. -->
+        <Style Selector="Border.slotRow">
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="3,0"/>
+        </Style>
+        <Style Selector="Border.slotRow.profileSynced">
+            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid Margin="22" ColumnDefinitions="220,*">
@@ -154,38 +164,56 @@
                         Background="{StaticResource ChromeBgSunkenBrush}"
                         BorderBrush="{StaticResource ChromeBorderBrush}"
                         BorderThickness="1" CornerRadius="4">
-                    <Grid RowDefinitions="Auto,*">
-                        <Grid Grid.Row="0" ColumnDefinitions="128,*" Margin="10,8,10,4">
+                    <Grid RowDefinitions="Auto,Auto,*">
+                        <!-- Default-set marker: these weapon slots ARE the active
+                             combat profile's weapons, kept in sync with the Combat
+                             tab's profile chips. -->
+                        <Border Grid.Row="0" Margin="10,8,10,4" Padding="8,4"
+                                CornerRadius="4"
+                                Background="{StaticResource AccentAmberSoftBrush}"
+                                BorderBrush="{StaticResource AccentAmberBrush}"
+                                BorderThickness="1"
+                                IsVisible="{Binding ShowCombatProfileMarker}">
+                            <TextBlock Text="{Binding CombatProfileMarker}"
+                                       Foreground="{StaticResource AccentAmberBrush}"
+                                       FontSize="{StaticResource FontSizeSm}"
+                                       FontWeight="SemiBold"
+                                       ToolTip.Tip="The Weapon / Off-Hand / Alt-Weapon / Alt-Off-Hand rows below are this combat profile's weapons — editing them here is the same as editing the profile's weapon pickers on the Combat settings tab. Switching the profile swaps them."/>
+                        </Border>
+
+                        <Grid Grid.Row="1" ColumnDefinitions="128,*" Margin="10,8,10,4">
                             <TextBlock Grid.Column="0" Classes="ColHead" Text="Slot"/>
                             <TextBlock Grid.Column="1" Classes="ColHead" Text="Item"/>
                         </Grid>
 
-                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled">
                             <ItemsControl ItemsSource="{Binding Rows}" Margin="10,0,10,8">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="vm:EquipmentSlotRowViewModel">
-                                        <Grid ColumnDefinitions="128,*,Auto" Margin="0,1"
-                                              IsVisible="{Binding Applies}">
-                                            <TextBlock Grid.Column="0" Classes="Field"
-                                                       Classes.blocked="{Binding Blocked}"
-                                                       Text="{Binding Label}"/>
-                                            <!-- Blank = {no change}: the slot is skipped on apply. -->
-                                            <AutoCompleteBox Grid.Column="1"
-                                                             ItemsSource="{Binding AvailableItems}"
-                                                             FilterMode="ContainsOrdinal"
-                                                             MinimumPrefixLength="1"
-                                                             PlaceholderText="{}{no change}"
-                                                             SelectionChanged="OnSlotItemSelected"
-                                                             Text="{Binding ItemName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
-                                            <!-- Warning marker: the character can't wear this pick, so the
-                                                 engine skips it on apply until the item is changed. -->
-                                            <TextBlock Grid.Column="2" Text="⚠" Margin="6,0,0,0"
-                                                       VerticalAlignment="Center"
-                                                       Foreground="{StaticResource AccentRedBrush}"
-                                                       IsVisible="{Binding Blocked}"
-                                                       ToolTip.Tip="Your character can't wear this item (alignment / level / class, or the game refused it). The engine skips it on apply — change the item to clear."/>
-                                        </Grid>
+                                        <Border Classes="slotRow" Classes.profileSynced="{Binding ProfileSynced}"
+                                                Margin="0,1" IsVisible="{Binding Applies}">
+                                            <Grid ColumnDefinitions="128,*,Auto">
+                                                <TextBlock Grid.Column="0" Classes="Field"
+                                                           Classes.blocked="{Binding Blocked}"
+                                                           Text="{Binding Label}"/>
+                                                <!-- Blank = {no change}: the slot is skipped on apply. -->
+                                                <AutoCompleteBox Grid.Column="1"
+                                                                 ItemsSource="{Binding AvailableItems}"
+                                                                 FilterMode="ContainsOrdinal"
+                                                                 MinimumPrefixLength="1"
+                                                                 PlaceholderText="{}{no change}"
+                                                                 SelectionChanged="OnSlotItemSelected"
+                                                                 Text="{Binding ItemName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                                                <!-- Warning marker: the character can't wear this pick, so the
+                                                     engine skips it on apply until the item is changed. -->
+                                                <TextBlock Grid.Column="2" Text="⚠" Margin="6,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{StaticResource AccentRedBrush}"
+                                                           IsVisible="{Binding Blocked}"
+                                                           ToolTip.Tip="Your character can't wear this item (alignment / level / class, or the game refused it). The engine skips it on apply — change the item to clear."/>
+                                            </Grid>
+                                        </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

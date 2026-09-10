@@ -45,6 +45,12 @@ public sealed partial class EquipmentSlotRowViewModel : ObservableObject
     // EquipmentManager's block set; recomputed on block changes + set switch.
     [ObservableProperty] private bool _blocked;
 
+    // True for the Default set's four weapon slots (Weapon / Off-Hand / Alt Weapon /
+    // Alt Off-Hand) — the surface a combat profile's weapons live in. The grid tints
+    // these rows amber (matching the Combat tab's profile accent) so the user sees
+    // they swap with the active combat profile. Set only on the Default set.
+    [ObservableProperty] private bool _profileSynced;
+
     public EquipmentSlotRowViewModel(
         EquipmentSlot slot, string label, bool isVirtual,
         IReadOnlyList<string> availableItems, Action<EquipmentSlotRowViewModel> onEdited)

@@ -63,7 +63,30 @@ public static class CombatSpellProfileReport
                        $" · drain-HP-trigger={profile.DrainHpTrigger}" +
                        $" · drains-override-AoE={(profile.DrainsOverrideAoe ? "on" : "off")}";
 
-        return $"{label}: {slots} · {knobs}";
+        string verbs = $"atk={profile.NormalAttackCommand}/{profile.AlternateAttackCommand}";
+        string room = $"monsters={profile.MinMonstersInRoom}-{profile.MaxMonstersInRoom} · run={profile.RunDistance}";
+        string weapons = $"wpn={Weapon(profile.NormalWeapon, profile.NormalOffHand)}" +
+                         $" · alt={Weapon(profile.AlternateWeapon, profile.AlternateOffHand)}";
+
+        return $"{label}: {slots} · {knobs} · {verbs} · {room} · {weapons} · {DescribeHealth(profile.Health)}";
+    }
+
+    // "main+off" (main only when no off-hand), "—" when the slot is empty.
+    private static string Weapon(string? main, string? off)
+    {
+        string m = string.IsNullOrWhiteSpace(main) ? "—" : main.Trim();
+        return string.IsNullOrWhiteSpace(off) ? m : $"{m}+{off!.Trim()}";
+    }
+
+    // Compact Health-tab summary — the rest / run / hang / bless thresholds a
+    // profile carries, mode prefix first (P%/Value).
+    private static string DescribeHealth(HealthSettings? h)
+    {
+        if (h is null) return "health —";
+        char hp = h.HpThresholdMode == ThresholdMode.Percentage ? '%' : 'v';
+        char ma = h.MaThresholdMode == ThresholdMode.Percentage ? '%' : 'v';
+        return $"health[HP{hp} rest<{h.RestIfBelowHp}→{h.RestMaxHp} run<{h.RunIfBelowHp} hang<{h.HangIfBelowHp}" +
+               $" · MA{ma} rest<{h.RestIfBelowMa}→{h.RestMaxMa} bless>{h.BlessIfAboveMa}]";
     }
 
     private static string SlotDetail(string label, CombatSpellSlot slot, bool roomWide)

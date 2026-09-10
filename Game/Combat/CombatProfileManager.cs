@@ -1,26 +1,40 @@
 using System;
 using System.Collections.Generic;
+using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Combat;
 
-// Owns the character's casting-spell profiles (CharacterProfile.CombatProfiles):
-// the named list, which one is active, and the CRUD + quick-swap operations. A
-// switch overlays the target profile's spell fields onto the live Combat section
-// (Settings["Combat"]) and persists; the combat engine re-reads that section every
-// round, so a swap takes effect on the next round with no restart. Non-spell
-// combat settings stay shared across profiles.
+// Owns the character's combat profiles (CharacterProfile.CombatProfiles): the
+// named list, which one is active, and the CRUD + quick-swap operations. A profile
+// is a full combat posture — the Combat tab's spell slots + attack verbs + room
+// thresholds, the whole Health tab, and the primary/alternate weapons — so a
+// switch reconfigures all of it at once:
+//   - Combat section (Settings["Combat"]): overlay the profile's spell/verb/room
+//     fields, which the engine re-reads each round.
+//   - Health section (Settings["Health"]): write a clone of the profile's Health.
+//   - Weapons: write the profile's four weapon names into the Workshop Default
+//     gear set, the live surface EquipmentWeaponSync + AutoEquipCoordinator read.
+// Targeting / backstab / action-order stay shared across profiles.
 //
-// Invariant: there is always at least one profile, and the active profile's spell
-// fields mirror the live Combat section (both change only on the Combat tab's Save
-// — via CaptureActiveFrom — or a switch here). Fires Changed on any list / active
-// change so the Settings chips and toolbar buttons refresh.
+// The ACTIVE profile's weapons *are* the Default-set weapon slots, so a Workshop
+// edit made while a profile is active is snapshotted back into that profile on the
+// switch away from it (CaptureDefaultWeapons) before the incoming profile's weapons
+// overwrite the set — giving two-way sync with no separate Workshop hook.
+//
+// Invariant: there is always at least one profile, and the active profile's fields
+// mirror the live sections (both change only on the Combat tab's Save or a switch
+// here). Fires Changed on any list / active change so the Settings chips and
+// toolbar buttons refresh.
 public sealed class CombatProfileManager
 {
     private readonly Func<CharacterProfile?> _profile;
     private readonly Func<CombatSettings> _readCombat;
     private readonly Action<CombatSettings> _writeCombat;   // serialize Settings["Combat"] + Save
+    private readonly Func<HealthSettings> _readHealth;
+    private readonly Action<HealthSettings> _writeHealth;   // serialize Settings["Health"] + Save
+    private readonly Func<EquipmentSettings?> _equipment;   // the live per-char Equipment blob (mutated in place, persisted by Save)
     private readonly Action _save;                           // Save only (metadata-only changes)
     private readonly LogService? _log;
 
@@ -35,12 +49,18 @@ public sealed class CombatProfileManager
         Func<CharacterProfile?> profile,
         Func<CombatSettings> readCombat,
         Action<CombatSettings> writeCombat,
+        Func<HealthSettings> readHealth,
+        Action<HealthSettings> writeHealth,
+        Func<EquipmentSettings?> equipment,
         Action save,
         LogService? log = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _readCombat = readCombat ?? throw new ArgumentNullException(nameof(readCombat));
         _writeCombat = writeCombat ?? throw new ArgumentNullException(nameof(writeCombat));
+        _readHealth = readHealth ?? throw new ArgumentNullException(nameof(readHealth));
+        _writeHealth = writeHealth ?? throw new ArgumentNullException(nameof(writeHealth));
+        _equipment = equipment ?? throw new ArgumentNullException(nameof(equipment));
         _save = save ?? throw new ArgumentNullException(nameof(save));
         _log = log;
     }
@@ -54,10 +74,13 @@ public sealed class CombatProfileManager
         bool changed = false;
         if (store.Profiles.Count == 0)
         {
-            store.Profiles.Add(CombatSpellProfile.Capture(string.Empty, _readCombat()));
-            store.ActiveId = store.Profiles[0].Id;
+            CombatSpellProfile seed = CombatSpellProfile.Capture(string.Empty, _readCombat(), _readHealth());
+            if (_equipment() is { } eq) EquipmentWeaponSync.CaptureDefaultWeapons(eq, seed);
+            store.Profiles.Add(seed);
+            store.ActiveId = seed.Id;
             changed = true;
-            _log?.Log(LogSeverity.Info, "CombatProfiles", "Seeded first combat profile from live combat settings");
+            _log?.Log(LogSeverity.Info, "CombatProfiles",
+                "Seeded first combat profile from live combat + health settings and the Default-set weapons");
         }
         else if (IndexOfActive(store) < 0)
         {
@@ -95,18 +118,38 @@ public sealed class CombatProfileManager
         }
     }
 
-    // Switch to the profile at index — overlay its spells onto the live Combat
-    // section, mark it active, persist, and return the one-line swap report (null
-    // when the index is out of range / no profile loaded).
+    // Switch to the profile at index — reconfigure the whole combat posture to it
+    // (spells + verbs + room thresholds onto the live Combat section, the Health
+    // section, and the primary/alternate weapons into the Default gear set), mark it
+    // active, persist, and return the one-line swap report (null when the index is
+    // out of range / no profile loaded).
     public string? SwitchToIndex(int index)
     {
         CombatProfileSettings? s = Store();
         if (s is null || index < 0 || index >= s.Profiles.Count) return null;
         CombatSpellProfile target = s.Profiles[index];
+        EquipmentSettings? eq = _equipment();
+
+        // Snapshot the OUTGOING profile's live weapons out of the Default set first,
+        // so a Workshop weapon edit made while it was active is remembered before
+        // the incoming profile overwrites the set (the active profile's weapons ARE
+        // the Default-set slots).
+        if (eq is not null)
+        {
+            int prev = IndexOfActive(s);
+            if (prev >= 0 && prev != index) EquipmentWeaponSync.CaptureDefaultWeapons(eq, s.Profiles[prev]);
+        }
+
         s.ActiveId = target.Id;
         CombatSettings combat = _readCombat();
         target.ApplyTo(combat);
-        _writeCombat(combat);   // one Save persists Settings["Combat"] + the active pointer
+        _writeCombat(combat);                 // Save persists Settings["Combat"], the active pointer + the snapshot-out
+        _writeHealth(target.Health.Clone());  // Save persists Settings["Health"] (clone so the profile keeps its own copy)
+        if (eq is not null)
+        {
+            EquipmentWeaponSync.WriteProfileWeapons(eq, target);
+            _save();                          // persist the mutated Equipment blob
+        }
         string report = CombatSpellProfileReport.Describe(target, index + 1);
         _log?.Log(LogSeverity.Info, "CombatProfiles", "Switched to " + report);
         _log?.Debug("CombatProfiles", CombatSpellProfileReport.DescribeConfig(target, index + 1));

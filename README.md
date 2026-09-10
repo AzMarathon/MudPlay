@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.64.0**
-> - Stock: two configured buffs that conflict one-directionally (e.g. greater bless removes chant, but chant doesn't remove greater bless) are now **both kept** — the Buff Watchdog casts the remover first and re-applies the removed buff after each remover recast, instead of letting the wrong cast order silently knock one off
-> - Only on stock, where removal fires just at cast; Paradigm (continuous re-strip) still suppresses the loser, and mutual pairs stay last-cast-wins on either realm
-> - The kept buff's row shows "both kept" instead of a stuck conflict
-> - The "mana to maintain" readout accounts for it — a collision-ordered loser is budgeted at its remover's (shorter) duration, and a suppressed loser costs nothing
+> **Version 3.65.0**
+> - Combat profiles expanded from spell-only snapshots to full quick-swap loadouts: each now also carries the attack commands, room thresholds (min/max monsters, run distance), the primary/alternate weapons (+ off-hands), and the entire Health tab
+> - Every per-profile settings group on the Combat and Health tabs is wrapped in an amber "Combat profile: <name>" border; shared settings (targeting, backstab, action order, run-away, display) stay outside
+> - New weapon pickers on the Combat tab; a profile's weapons live in the Workshop Default gear set and switch with the profile, so the equipped weapon changes on swap
+> - The Equipment Manager marks the Default set's weapon rows with the active profile name and tints them amber to show they're synced
+> - The chip selector moved to the top of the Combat tab; @profile / the toolbar cycle / the Action menu now swap the whole loadout
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

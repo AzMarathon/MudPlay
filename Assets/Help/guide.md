@@ -388,7 +388,7 @@ Active party members get a few things for free regardless of the grid: the party
 - `@atkprio` — Target Priority: bare reports it; `1` Default, `2` follow-leader, `3 <name>` attack-what-player.
 - `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after.
 - `@divert <player>` — forwards your incoming telepaths to another player; bare `@divert` stops.
-- `@profile <n|name>` — swaps your active casting-spell profile; bare `@profile` reports the roster (see **Casting spell profiles** under Settings → Combat).
+- `@profile <n|name>` — swaps your active combat profile (spells + verbs + room thresholds + weapons + the whole Health tab); bare `@profile` reports the roster (see **Combat profiles** under Settings → Combat).
 - `@reset` — zeroes your Session Stats counters.
 
 ### Do something on my behalf
@@ -1413,18 +1413,27 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 **Default:** `Percentage`
 **What it does:** Decides how every "Min mana per cast" field on the five spell slots below is read — as a 0–100% share of your maximum mana, or as a flat number.
 
-### Casting spell profiles (quick-swap)
+### Combat profiles (quick-swap loadouts)
 
-**What it does:** Saves your spell setup under a name so you can keep **several** and switch between them in one click. This helps when different fights want different spells — for example a fire setup for most monsters and a cold setup for the fire-immune ones. Rather than re-typing your slots each time, you save each as a profile and flip between them.
+**What it does:** Saves a whole combat posture under a name so you can keep **several** and switch between them in one click. This helps when different fights want different setups — a fire loadout for most monsters, a cold one for the fire-immune, a cautious "bossing" loadout with a two-hander and a lower flee threshold. Rather than re-tuning your Combat and Health tabs each time, you save each as a profile and flip between them.
 
-**What a profile remembers:** only the spell configuration below — the six spell slots, their per-slot gates, the mana-threshold mode, and the drain-HP trigger. Everything else on the Combat tab (attack verbs, targeting, backstab, room thresholds, action order) is **shared**, so switching a profile changes *only which spells you cast*.
+**What a profile remembers (a full loadout):**
+- the **six spell slots** + their per-slot gates, the mana-threshold mode, and the drain settings;
+- the **attack commands** (normal / alternate);
+- the **room thresholds** — min / max monsters and run distance;
+- the **primary & alternate weapons** (+ their off-hands);
+- the **entire Health tab** — rest / heal / flee / hangup thresholds, meditate / shadowrest, the emergency escape, and the pre-/post-rest commands.
 
-**Setting them up (here, in Settings → Combat):** your current setup is already **Profile 1** — you always have at least one. At the top of the Spell combat section:
-- Numbered **chips** (`1 2 3 …`) are your profiles; the **active one is gold**. Click a chip to load that profile into the boxes.
+Every group that swaps with the profile is wrapped in an **amber "Combat profile: `<name>`" border** on the Combat and Health tabs, so you can see at a glance which settings are per-profile. Everything *outside* those borders (targeting, backstab, action order, run-away direction, display) is **shared** across profiles.
+
+**Weapons — how they stay in sync:** a profile's weapons *are* the Workshop → Equipment Manager **Default** gear set's weapon slots (the surface the combat engine actually reads). So editing a profile's weapon pickers here and editing the Default set's Weapon / Off-Hand / Alt rows in the Workshop are the **same loadout, kept in sync** — and the Workshop shows a matching amber "Combat profile: `<name>`" marker over those rows. Switching a profile writes its stored weapons into the Default set, so your equipped weapon changes with the profile. (Backstab gear stays global on the Backstab set.)
+
+**Setting them up (in Settings → Combat):** your current setup is already **Profile 1** — you always have at least one. The **Combat profile** selector sits near the top of the tab:
+- Numbered **chips** (`1 2 3 …`) are your profiles; the **active one is gold**. Click a chip to load that profile into every bordered group (on both the Combat and Health tabs).
 - **＋** adds a new, empty profile and switches to it, ready to fill in; **✕** removes the one you're on (the last one can't be removed).
 - The **name box** just below the chips names the profile you're viewing.
 
-This editor is **staged** — nothing is saved or used until you press **Apply** or **OK**. Switch chips, edit boxes, add and remove freely; it's all held in memory and committed together on save. **Cancel** (or the title-bar ✕) throws every change away. Once applied, the active profile's spells take effect on the next combat round.
+This editor is **staged** — nothing is saved or used until you press **Apply** or **OK**. Switch chips, edit boxes (on either tab), add and remove freely; it's all held in memory and committed together on save. **Cancel** (or the title-bar ✕) throws every change away. Once applied, the active profile's combat settings take effect on the next round, its Health thresholds on the next rest cycle, and its weapons on the next combat weapon read.
 
 **Switching during play** (these act on your *saved* profiles right away, without opening Settings):
 - **Action menu → Combat Profiles** — a fly-out listing every profile; click one to switch.
