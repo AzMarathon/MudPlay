@@ -177,6 +177,81 @@ public static class CharacterCalculator
         return regen;
     }
 
+    // ----- stat-derived secondary stats (CP-planning surface) --------------
+    // These four are the stat→derived formulas the score screen / DLL expose that
+    // don't already live as combat helpers. Ground truth is the RE'd stock DLL
+    // (dll-stats-map.md); the PNG breakpoint reference confirms Stealth is identical
+    // on Paradigm, so it takes no realm. Crit's AGI term, Encumbrance, and Magic
+    // Resistance are NOT verified for Paradigm — the stock formula is used for both
+    // and flagged in the guide / GAME_MECHANICS until a Paradigm source confirms them.
+
+    // Base critical rating from stats (0x710): Level/10 + (Int-50)/10 + (Agl-50)/20
+    // + (Chm-50)/30, clamped 1..75. Combat crit % = this + gear crit bonus, then
+    // CombatCalculator.CalcCritChance applies the realm's diminishing-returns curve.
+    public static int CalcBaseCritRating(int level, int intellect, int agility, int charm)
+    {
+        int rating = level / 10
+                   + (intellect - 50) / 10
+                   + (agility - 50) / 20
+                   + (charm - 50) / 30;
+        return Math.Clamp(rating, 1, 75);
+    }
+
+    // Base stealth skill (0x5fa) from stats + level: stat terms + stealthLvl + 20,
+    // where stealthLvl = Level*2 below 16, else Level+15. Excludes the per-race /
+    // per-class +10 / -15 flat adjusts (character-specific grants, not a stat
+    // effect), so this is the stat-and-level base a stealth-capable class starts
+    // from. Non-stealth classes have no stealth at all.
+    // REALM-SPLIT (verified in MMUD-Explorer `CalculateStealth`, modMMudFunc.bas
+    // ~4620): Stock TRUNCATES each stat term individually
+    // (Fix(Agl/4)+Fix(Int/8)+Fix(Chm/6)); Paradigm (bGreaterMUD) sums the stat
+    // contributions as a float and rounds ONCE — so the two realms can differ by a
+    // point or two. (This corrects the earlier "PNG says stealth is identical"
+    // assumption, which the PNG's granularity couldn't disprove.)
+    public static int CalcStealthBase(int level, int intellect, int agility, int charm, RealmType realm)
+    {
+        int baseVal = (level < 16 ? level * 2 : level + 15) + 20;
+        if (realm == RealmType.ParaMud)
+            return baseVal + (int)Math.Round(
+                agility / 4.0 + intellect / 8.0 + charm / 6.0, MidpointRounding.ToEven);
+        return baseVal + agility / 4 + intellect / 8 + charm / 6;
+    }
+
+    // Max encumbrance / carry weight (0xb2): Str*48, with a steeper term above 100
+    // (Str*36 - 3600 added). Stock DLL; Paradigm unverified.
+    public static int CalcMaxEncumbrance(int strength)
+    {
+        int enc = strength * 48;
+        if (strength > 100) enc += strength * 36 - 3600;
+        return enc;
+    }
+
+    // Magic resistance (0xc0) from stats: (Int + 3*Wil)/4. Stock DLL; Paradigm
+    // unverified. Excludes the +magic-resist ability (0x24), a gear/innate grant.
+    public static int CalcMagicResistance(int intellect, int willpower)
+        => (intellect + 3 * willpower) / 4;
+
+    // Spellcasting skill (spellLvl, 0x604): Level*2 + manaStat + mageryLevel*5 +
+    // the +spellcasting ability (0x46 = 70, gear/innate). manaStat blends the caster
+    // stat by class type — 1=(3*Int+Wil)/6 (Mage), 2=(3*Wil+Int)/6 (Priest),
+    // 3=(Int+Wil)/3 (Druid), 4=(3*Chm+Wil)/6 (Bard). Non-casters and Mystics (Kai)
+    // have no standard spellcasting skill. Stock DLL (verified asm 0x41aae0);
+    // Paradigm unverified.
+    public static int CalcSpellcasting(int level, int intellect, int willpower, int charm,
+                                       int mageryType, int mageryLevel, int plusSpellcasting)
+    {
+        int manaStat = mageryType switch
+        {
+            1 => (3 * intellect + willpower) / 6,
+            2 => (3 * willpower + intellect) / 6,
+            3 => (intellect + willpower) / 3,
+            4 => (3 * charm + willpower) / 6,
+            _ => -1,   // non-caster / Kai — no standard spellcasting
+        };
+        if (manaStat < 0) return 0;
+        return level * 2 + manaStat + mageryLevel * 5 + plusSpellcasting;
+    }
+
     // ----- equipment stat aggregation --------------------------------------
 
     // MajorMUD items carry up to 20 ability slots (Abil-0..Abil-19); race /

@@ -8,6 +8,9 @@ namespace MudPlay.Game.Calculators;
 // long.MaxValue rather than overflowing). The "exp remaining to reach this
 // level" the grid shows is derived per-row from TotalXp - currentExp, so it
 // isn't stored here.
+// The derived combat/utility stats (Accuracy … MagicRes) are the gear-independent,
+// stat-and-level portion, so the CP-plan's per-level stat increases show their
+// effect on the character's build the same way HP/Mana already do.
 public readonly record struct LevelProjection(
     int Level,
     long TotalXp,
@@ -15,4 +18,16 @@ public readonly record struct LevelProjection(
     int HpMax,
     int HpRegen,
     int Mana,
-    int MpRegen);
+    int MpRegen,
+    // Derived stats default to 0 so display-only test rows (HP/exp formatting)
+    // can construct without supplying them; ProjectLevel always fills them in.
+    int Accuracy = 0,
+    int Crit = 0,
+    int Dodge = 0,
+    int Stealth = 0,
+    int MinDmg = 0,
+    int MaxDmg = 0,
+    int MaxEnc = 0,
+    int MagicRes = 0,
+    // HP regen per tick while RESTING (3× idle), shown alongside idle regen.
+    int HpRegenResting = 0);

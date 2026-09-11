@@ -64,7 +64,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         // The CP Allocation tab (writer) and Level Projection tab (reader) share
         // one plan state so the projection's HP / regen reflect planned training.
         var planState = new CpPlanState();
-        Sections.Add(new LevelProjectionSectionViewModel(playerStats, gameData, planState));
+        Sections.Add(new LevelProjectionSectionViewModel(playerStats, gameData, planState, inventory, questBonuses));
 
         Sections.Add(new CpAllocationSectionViewModel(playerStats, gameData, inventory, profile, planState, trainerWalk, AppServices.Current.AutoTrain));
 

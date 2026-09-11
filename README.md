@@ -1,13 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.65.0**
-> - Combat profiles expanded from spell-only snapshots to full quick-swap loadouts: each now also carries the attack commands, room thresholds (min/max monsters, run distance), the primary/alternate weapons (+ off-hands), the entire Health tab, and the Spells tab's between-round priority order + healing/regen picks
-> - Every per-profile settings group on the Combat, Health and Spells tabs is wrapped in a "Combat profile: <name>" border; shared settings stay outside
-> - Each profile now has its own distinct colour — chip, bordered groups (all three tabs), and the Workshop's Default-set weapon rows — so profiles are visually distinct
-> - New weapon pickers on the Combat tab; a profile's weapons live in the Workshop Default gear set and switch with the profile, so the equipped weapon changes on swap
-> - The chip selector moved to the top of the Combat tab; @profile / the toolbar cycle / the Action menu now swap the whole loadout
-> - Removed stale "wires in PR 9.x" / phase-plan references from Settings tooltips
+> **Version 3.66.0**
+> - Character Workshop CP Allocation tab: each stat column header now has a mouseover listing everything that stat drives, one effect per line, with this character's next breakpoint for each — spend CP to a real stopping point instead of guessing every 5th/10th point
+> - Tooltips are complete and class-aware, showing each effect's current value + magnitude: Health shows max HP + HP regen (idle/resting); carry weight shows current capacity + rate; casters show mana regen AND spellcasting under their actual casting stat (Mage INT, Priest WIL, Druid INT+WIL, Bard CHM — max mana is level×magery, not a stat)
+> - Level Projection tab gained derived-stat columns — Accuracy, Crit, Dodge, Stealth, Melee damage, Max encumbrance, Magic resist — projected per level the way HP/Mana already are
+> - Level Projection now reflects the real character: it folds your equipment's and completed quests' direct bonuses (max HP/mana, regen %, +dodge/crit/stealth/magic-resist/damage/carry) on top of your gear-boosted stats; the HP/tick column shows idle / resting
+> - Help guide gained a "What your stats do" section explaining what each of the six base stats affects
+> - Paradigm note: accuracy/dodge/stealth/damage ratios are realm-verified; crit's AGI term, encumbrance and magic-resist use the stock formula for both realms (unverified on Paradigm) and are flagged as such
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -248,6 +248,94 @@ it isn't here and you're unsure, ask.
   the stale box every feed and holds the movement engine (the "walker stalls after training, moves one
   room per manual `rm`" bug).
 
+### Base-stat → derived-stat contributions
+
+What each of the six base stats buys, so a CP plan can target real breakpoints. These are the
+gear-free stat-and-level portion (item bonuses stack on top in-game). Integer division truncates
+toward zero, matching the engine. Surfaced in the client as the CP Allocation column tooltips and
+the Level Projection derived-stat columns; all values come from `StatEffects`, which composes the
+same `CombatCalculator` / `CharacterCalculator` the combat engine uses (no hand-copied numbers).
+
+**Normal-attack accuracy — stat contribution** *([CONFIRMED] both realms — directly verified against
+syntax53/MMUD-Explorer `modMMudFunc.bas` `CalculateAccuracy` lines 2185–2225, where `bGreaterMUD`=Paradigm;
+matches `CombatCalculator.CalcAccuracy`)*.
+Realm-split, and it further splits by ATTACK TYPE on Paradigm. The `bGreaterMUD` (Paradigm) branch even
+tags the STR/AGL contributions `*bash`/`*smash` in the tool's own breakdown:
+- **Stock (all attacks):** `(STR-50)/3 + (AGL-50)/6` — STR ~3/pt, AGL ~6/pt. INT and CHM do **not**
+  feed accuracy at all, for any attack type.
+- **Paradigm normal attack:** `(AGL-50)/3 + (INT-50)/6 + (CHM-50)/10` — AGL ~3/pt, INT ~6/pt,
+  CHM ~10/pt. STR does **not** feed a normal Paradigm attack.
+- **Paradigm bash / smash:** `(STR-50)/3 + (AGL-50)/6` — STR ~3/pt, AGL ~6/pt (INT/CHM drop out).
+  So STR reaches accuracy on Paradigm ONLY through bash/smash. `StatEffects.BashAccuracyFromStats`
+  computes this; the CP tooltip labels each accuracy line with the attacks it applies to.
+
+**Dodge (raw value, pre vs-accuracy conversion)** *([CONFIRMED] — `CombatCalculator.CalcDodge`)*:
+`level/5 + (CHM-50)/5 + (AGL-50)/3` (+ gear, + an encumbrance bonus under 33% load). So AGL ~3/pt,
+CHM ~5/pt.
+
+**Stealth base** *([CONFIRMED] both realms — MMUD-Explorer `CalculateStealth` (modMMudFunc.bas ~4620),
+stock also in `dll-stats-map.md` `0x5fa`)*: `stat terms + stealthLvl + 20`, where `stealthLvl =
+level<16 ? level*2 : level+15`. Per-point ratios are INT ~8/pt, AGL ~4/pt, CHM ~6/pt on BOTH realms,
+**but the realms round differently** — Stock TRUNCATES each stat term (`Fix(AGL/4)+Fix(INT/8)+Fix(CHM/6)`)
+while Paradigm (`bGreaterMUD`) sums the stat contributions as a float and rounds ONCE
+(`Round(AGL/4 + INT/8 + CHM/6)`), so the two can differ by a point or two. **This corrects an earlier
+note that claimed the PNG showed stealth "identical" on Paradigm** — the PNG's granularity couldn't see
+the rounding difference; MMUD-Explorer's derivation makes it explicit. `CalcStealthBase` is realm-split.
+
+**Crit rating (base)** *([CONFIRMED] stock via `dll-stats-map.md` (`0x710`); **AGL term NOT verified
+for Paradigm** — stock formula used for both, flag)*:
+`clamp(level/10 + (INT-50)/10 + (AGL-50)/20 + (CHM-50)/30, 1, 75)`. So INT ~10/pt, AGL ~20/pt,
+CHM ~30/pt.
+
+**Melee damage bonus (STR onto the weapon's own range)** *([CONFIRMED] — GreaterMUD; floored at 0)*:
+min `(STR-100)/10`, max `(STR-50)/10`, never negative. So ~+1 min per 10 STR above 100, ~+1 max
+per 10 above 50.
+
+**Max encumbrance (carry weight)** *([CONFIRMED] stock via `dll-stats-map.md` (`0xb2`); **NOT
+verified for Paradigm** — stock formula used for both, flag)*: `STR*48`, plus `STR*36 - 3600` once
+STR > 100 (steeper past 100). So +48/pt (more above 100).
+
+**Magic resistance** *([CONFIRMED] stock via `dll-stats-map.md`; **NOT verified for Paradigm** —
+stock formula used for both, flag)*: `(INT + 3*WIL)/4`. WIL is the heaviest term (~0.75/pt vs INT
+~0.25/pt).
+
+**Health (HEA)** feeds **max HP** and **HP regen**, both level-scaled (see the Vitality section).
+Max-HP marginal per HEA point is `(1/2 + level/16)` (the `HEA/2` + `(HEA-50)*level/16` terms of
+`CalcMaxHp`), so it rises nearly every point and steepens with level; HP regen idle is
+`(level+20)*HEA/divisor` (750 stock / 500 Para), tripled while resting. The CP tooltip shows the
+current-value max-HP marginal and the next HEA that ticks regen up.
+
+**Mana regen scales off ONE stat per class** *([CONFIRMED] — user + `CharacterCalculator.CalcManaRegen`,
+matches the mana-regen section below)*: magery type 1 = INT (Mage), 2 = WIL (Priest), 3 = (INT+WIL)/2
+(Druid), 4 = CHM (Bard), 5 = fixed Kai rate (Mystic). Core `((level+20)*stat*(mageryLevel+2))/1650`.
+**Maximum mana is NOT stat-driven** — it's `mageryLevel*level*2 + 6` — so a caster raises mana *regen*
+by training its casting stat, never max mana. The CP tooltip lists mana regen only under the
+character's actual casting stat(s).
+
+**Spellcasting skill (spellLvl, 0x604)** *([CONFIRMED] stock — RE'd DLL `dll-stats-map.md`, verified asm
+0x41aae0; Paradigm unverified)*: `Level*2 + manaStat + mageryLevel*5 + spellcastingAbility(70)`. The
+blended `manaStat` differs from the mana-regen stat above: type 1 = (3*Int+Wil)/6, 2 = (3*Wil+Int)/6,
+3 = (Int+Wil)/3, 4 = (3*Chm+Wil)/6. So for a Priest each WIL point is ~+0.5 spellcasting (+1 per 2);
+the CP tooltip shows it under the casting stat(s) with the exact next breakpoint. Non-casters / Mystics
+have no standard spellcasting skill. (`CharacterCalculator.CalcSpellcasting`.)
+
+**Realm-difference note** *([CONFIRMED] 2026-09-10 — inspected syntax53/MMUD-Explorer `modMMudFunc.bas`)*:
+MMUD-Explorer **reads** crit / encumbrance / magic-resist / spellcasting / mana-regen / HP straight from
+the pasted character (`tCharStats.nCrit`, `.nEncumMax`, `.nMagicRes`, `.nSpellcasting`, …) — it does NOT
+derive them from primary stats, so it provides no independent Paradigm derivation to compare against.
+The only stat→derived formulas that exist are the RE'd stock ones here. The realm differences that ARE
+known live in how these get *applied* in combat (MMUD-Explorer's `bGreaterMUD` branches: accuracy
+weighting, dodge-vs-accuracy curve, spell-damage multiplier, resist application) and in the two stat
+derivations that already realm-split in code — **normal-attack accuracy** (Stock STR+AGL vs Paradigm
+AGL+INT+CHM) and **HP-regen divisor** (750 stock / 500 Paradigm). Those two the CP tooltip already
+reflects per realm; the rest use the stock derivation for both, flagged below.
+
+**Paradigm-verification summary.** Accuracy (both realms, incl. the MMUD-Explorer Paradigm branch),
+dodge, stealth (MMUD-Explorer-verified — realms differ by a rounding step, not identical), and melee
+damage are realm-verified. **Crit's AGL term,
+encumbrance, and magic resistance use the stock formula for Paradigm as well and are unverified
+there** — treat as close-but-unconfirmed until a Paradigm source or capture pins them.
+
 ## Light sources
 
 - **[CONFIRMED]** `use <item>` readies a light (torch, lantern); `rem <item>` removes it.
