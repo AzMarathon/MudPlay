@@ -248,6 +248,55 @@ it isn't here and you're unsure, ask.
   the stale box every feed and holds the movement engine (the "walker stalls after training, moves one
   room per manual `rm`" bug).
 
+### Base-stat → derived-stat contributions
+
+What each of the six base stats buys, so a CP plan can target real breakpoints. These are the
+gear-free stat-and-level portion (item bonuses stack on top in-game). Integer division truncates
+toward zero, matching the engine. Surfaced in the client as the CP Allocation column tooltips and
+the Level Projection derived-stat columns; all values come from `StatEffects`, which composes the
+same `CombatCalculator` / `CharacterCalculator` the combat engine uses (no hand-copied numbers).
+
+**Normal-attack accuracy — stat contribution** *([CONFIRMED] — source: the RE'd stock DLL
+`dll-stats-map.md` + `CombatCalculator.CalcAccuracy`; Paradigm branch from syntax53/MMUD-Explorer)*.
+Realm-split, and this is the one place the two realms weight *different* stats:
+- **Stock:** `(STR-50)/3 + (AGL-50)/6` — STR ~3/pt, AGL ~6/pt. INT and CHM do **not** feed it.
+- **Paradigm (normal attack):** `(AGL-50)/3 + (INT-50)/6 + (CHM-50)/10` — AGL ~3/pt, INT ~6/pt,
+  CHM ~10/pt. STR does **not** feed normal-attack accuracy on Paradigm.
+
+**Dodge (raw value, pre vs-accuracy conversion)** *([CONFIRMED] — `CombatCalculator.CalcDodge`)*:
+`level/5 + (CHM-50)/5 + (AGL-50)/3` (+ gear, + an encumbrance bonus under 33% load). So AGL ~3/pt,
+CHM ~5/pt.
+
+**Stealth base** *([CONFIRMED] stock via `dll-stats-map.md` (`0x5fa`); the PNG breakpoint reference
+confirms it is IDENTICAL on Paradigm)*: `INT/8 + AGL/4 + CHM/6 + stealthLvl + 20`, where
+`stealthLvl = level<16 ? level*2 : level+15`. So INT ~8/pt, AGL ~4/pt, CHM ~6/pt.
+
+**Crit rating (base)** *([CONFIRMED] stock via `dll-stats-map.md` (`0x710`); **AGL term NOT verified
+for Paradigm** — stock formula used for both, flag)*:
+`clamp(level/10 + (INT-50)/10 + (AGL-50)/20 + (CHM-50)/30, 1, 75)`. So INT ~10/pt, AGL ~20/pt,
+CHM ~30/pt.
+
+**Melee damage bonus (STR onto the weapon's own range)** *([CONFIRMED] — GreaterMUD; floored at 0)*:
+min `(STR-100)/10`, max `(STR-50)/10`, never negative. So ~+1 min per 10 STR above 100, ~+1 max
+per 10 above 50.
+
+**Max encumbrance (carry weight)** *([CONFIRMED] stock via `dll-stats-map.md` (`0xb2`); **NOT
+verified for Paradigm** — stock formula used for both, flag)*: `STR*48`, plus `STR*36 - 3600` once
+STR > 100 (steeper past 100). So +48/pt (more above 100).
+
+**Magic resistance** *([CONFIRMED] stock via `dll-stats-map.md`; **NOT verified for Paradigm** —
+stock formula used for both, flag)*: `(INT + 3*WIL)/4`. WIL is the heaviest term (~0.75/pt vs INT
+~0.25/pt).
+
+**Health (HEA)** feeds **max HP** and **HP regen**, both level-scaled (see the Vitality section) —
+there is no clean per-point combat breakpoint, so it surfaces in the projection's HP columns rather
+than as a ratio.
+
+**Paradigm-verification summary.** Accuracy (both realms, incl. the MMUD-Explorer Paradigm branch),
+dodge, stealth (PNG-confirmed identical), and melee damage are realm-verified. **Crit's AGL term,
+encumbrance, and magic resistance use the stock formula for Paradigm as well and are unverified
+there** — treat as close-but-unconfirmed until a Paradigm source or capture pins them.
+
 ## Light sources
 
 - **[CONFIRMED]** `use <item>` readies a light (torch, lantern); `rem <item>` removes it.

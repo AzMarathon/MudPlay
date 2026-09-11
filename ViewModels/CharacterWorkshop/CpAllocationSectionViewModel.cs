@@ -54,6 +54,18 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     // The grid row the user has selected — drives RemoveRowCommand.
     [ObservableProperty] private CpPlanRowViewModel? _selectedRow;
 
+    // Per-stat column mouseover text for the grid headers: realm-aware "~N → +1 X"
+    // ratios plus the next value of that stat (from the live character's current
+    // base value) that ticks each derived stat up — so the user can spend CP to a
+    // real breakpoint instead of guessing every 5th / 10th point. Built from
+    // StatEffects (the same math the combat engine + Level Projection use).
+    [ObservableProperty] private string _strStatTip = string.Empty;
+    [ObservableProperty] private string _intStatTip = string.Empty;
+    [ObservableProperty] private string _wilStatTip = string.Empty;
+    [ObservableProperty] private string _agiStatTip = string.Empty;
+    [ObservableProperty] private string _heaStatTip = string.Empty;
+    [ObservableProperty] private string _chmStatTip = string.Empty;
+
     // ----- consolidated status line --------------------------------------------
     // One notice area (right of the action buttons) for every transient/standing
     // message this tab emits, so "can train now", "training…", apply results and
@@ -370,7 +382,24 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
         UnspentCp = _stats.Cp;
         _lastEditedStat = null;   // baseline-driven recompute, not a cell edit
+        RefreshStatTips();
         RecalcGrid();
+    }
+
+    // Rebuild the six column tooltips from the live raw-base stats + realm. Anchored
+    // on the character's current base value so the "next breakpoint" is the real
+    // next point that ticks a derived stat, gear aside.
+    private void RefreshStatTips()
+    {
+        var block = new StatBlock(
+            _stats.Level, _baseline.Strength, _baseline.Intellect, _baseline.Willpower,
+            _baseline.Agility, _baseline.Health, _baseline.Charm);
+        StrStatTip = StatEffects.Tooltip(BaseStat.Strength, _realm, block);
+        IntStatTip = StatEffects.Tooltip(BaseStat.Intellect, _realm, block);
+        WilStatTip = StatEffects.Tooltip(BaseStat.Willpower, _realm, block);
+        AgiStatTip = StatEffects.Tooltip(BaseStat.Agility, _realm, block);
+        HeaStatTip = StatEffects.Tooltip(BaseStat.Health, _realm, block);
+        ChmStatTip = StatEffects.Tooltip(BaseStat.Charm, _realm, block);
     }
 
     private void RecalcGrid()

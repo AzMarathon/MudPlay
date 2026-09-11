@@ -8,14 +8,16 @@ namespace MudPlay.Game.Calculators;
 // The projection is gear-independent (base race/class progression), so the
 // equipment +MaxHP / regen-% inputs are passed as 0 and the HP/MP regens are the
 // non-resting, non-meditating per-tick base. Each call projects a single level
-// from the stats supplied for it, so the caller varies HEA/INT/WIL/CHM per level
-// to layer in the CP Allocation plan.
+// from the stats supplied for it, so the caller varies STR/INT/WIL/AGI/HEA/CHM
+// per level to layer in the CP Allocation plan. The derived combat/utility stats
+// (Accuracy … MagicRes) are likewise the gear-free stat-and-level portion, from
+// StatEffects, so they track the plan the same way HP/Mana do.
 public static class LevelProjectionCalculator
 {
     // Project a single level's numbers.
     public static LevelProjection ProjectLevel(
         int level, int chart,
-        int health, int intellect, int willpower, int charm,
+        int strength, int intellect, int willpower, int agility, int health, int charm,
         int minHitsPerLevel, int maxHitsPerLevel, int raceHpPerLevel,
         int mageryType, int mageryLevel,
         RealmType realm)
@@ -38,6 +40,17 @@ public static class LevelProjectionCalculator
         int mpRegen = CharacterCalculator.CalcManaRegen(level, intellect, willpower, charm,
             mageryType, mageryLevel, mpRegenPercent: 0, isMeditating: false, realm);
 
-        return new LevelProjection(level, total, hpMin, hpMax, hpRegen, mana, mpRegen);
+        var stats = new StatBlock(level, strength, intellect, willpower, agility, health, charm);
+        int accuracy = StatEffects.AccuracyFromStats(stats, realm);
+        int crit = StatEffects.CritRating(stats);
+        int dodge = StatEffects.DodgeValue(stats);
+        int stealth = StatEffects.Stealth(stats);
+        int minDmg = StatEffects.MinDamageBonus(stats);
+        int maxDmg = StatEffects.MaxDamageBonus(stats);
+        int maxEnc = StatEffects.MaxEncumbrance(stats);
+        int magicRes = StatEffects.MagicResistance(stats);
+
+        return new LevelProjection(level, total, hpMin, hpMax, hpRegen, mana, mpRegen,
+            accuracy, crit, dodge, stealth, minDmg, maxDmg, maxEnc, magicRes);
     }
 }

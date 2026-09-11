@@ -252,11 +252,15 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
             // Layer the CP-plan's planned stat increase (target minus the plan's
             // raw-base baseline) on top of the live attributes. Below the plan the
             // delta is 0, so those rows match the current character exactly; the
-            // projection only consumes HEA (HP) and INT/WIL/CHM (MP regen).
+            // projection consumes HEA (HP), INT/WIL/CHM (MP regen), and STR/INT/
+            // AGI/CHM (the derived combat/utility columns).
+            int str = _stats.Strength, agi = _stats.Agility;
             int hea = _stats.Health, intel = _stats.Intellect, wil = _stats.Willpower, chm = _stats.Charm;
             if (hasPlan)
             {
                 var s = _planState.StatsAtLevel(lvl);
+                str += s.Strength - planBase.Strength;
+                agi += s.Agility - planBase.Agility;
                 hea += s.Health - planBase.Health;
                 intel += s.Intellect - planBase.Intellect;
                 wil += s.Willpower - planBase.Willpower;
@@ -264,7 +268,7 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
             }
 
             LevelProjection p = LevelProjectionCalculator.ProjectLevel(
-                lvl, chart, hea, intel, wil, chm,
+                lvl, chart, str, intel, wil, agi, hea, chm,
                 minHits, maxHits, raceHpPerLevel, mageryType, mageryLevel, realm);
             int? markup = TrainerCatalog.CheapestMarkup(trainers, lvl, classNumber);
             long? trainCost = markup is { } m ? (long)ShopPriceCalculator.TrainCopper(lvl - 1, m) : null;

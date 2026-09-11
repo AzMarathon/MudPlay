@@ -1,5 +1,12 @@
 # Version history
 
+## 3.66.0
+
+- Character Workshop CP Allocation tab: each stat column header now has a mouseover showing what that stat drives (realm-aware "~N points → +1" ratios for accuracy, crit, dodge, stealth, melee damage, carry weight, magic resist) plus this character's next breakpoint for each — spend CP to a real stopping point instead of guessing every 5th/10th point
+- Level Projection tab gained derived-stat columns — Accuracy, Crit, Dodge, Stealth, Melee damage, Max encumbrance, Magic resist — projected per level the way HP/Mana already are, so a CP plan's stat increases surface their combat effect
+- Help guide gained a "What your stats do" section explaining what each of the six base stats affects
+- Paradigm note: accuracy/dodge/stealth/damage ratios are realm-verified; crit's AGI term, encumbrance and magic-resist use the stock formula for both realms (unverified on Paradigm) and are flagged as such
+
 ## 3.65.0
 
 - Combat profiles expanded from spell-only snapshots to full quick-swap loadouts: each profile now also carries the attack commands, room thresholds (min/max monsters, run distance), the primary/alternate weapons (+ off-hands), the entire Health tab, and the Spells tab's between-round priority order + healing/regen picks

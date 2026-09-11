@@ -525,9 +525,26 @@ The **Target weight** dropdown next to it caps what Find Best is willing to add:
 
 Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you. Two checkboxes mirror Settings → Auto-Trainer: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan).
 
+**Hover a stat's column header** to see what that stat actually drives — a short list of "**~N points → +1**" ratios (e.g. *6 AGI → +1 accy, 3 AGI → +1 dodge*), then a **Next from `<your value>`** line giving the very next value of that stat where each derived number ticks up for *your* character. That's the point of it: spend to a real breakpoint instead of guessing that every 5th or 10th point is a good stopping place. The ratios are realm-aware (they follow the Stock vs Paradigm accuracy weighting), and the "next" values are computed from your current base stats. See **What your stats do** below for the full picture; the actual projected numbers per level live in the **Level Projection** tab.
+
 ## Level Projection
 
-A read-only what-if table: pick a level **from–to** range (and optionally any **Race / Class**) to see the exp, training cost, HP, and mana at each level — reflecting your CP Allocation plan. **Reset to current** re-seeds it from your live character.
+A read-only what-if table: pick a level **from–to** range (and optionally any **Race / Class**) to see the exp, training cost, HP, and mana at each level — reflecting your CP Allocation plan. Alongside HP and mana it also projects the **derived combat/utility stats** your CP plan grows: **Accuracy** (the normal-attack stat contribution), **Crit**, **Dodge**, **Stealth**, **Melee dmg** (STR's bonus onto your weapon's own damage range, shown as `+min/+max`), **Max enc** (carry weight), and **Magic res** — so you can watch a planned stat raise turn into real combat numbers, level by level, the same way HP and mana already do. These are the gear-free stat-and-level portion (equipment bonuses sit on top in-game). **Reset to current** re-seeds it from your live character.
+
+## What your stats do
+
+Each of the six base stats feeds several derived numbers. The ratios below are the marginal rate (how many points buy one more of the derived stat); the exact breakpoints for *your* character are on the CP Allocation column tooltips.
+
+- **Strength (STR)** — melee **damage** (adds to your weapon's own range: roughly +1 min damage per 10 STR above 100, +1 max per 10 above 50) and **carry weight** (+48 per point, steeper past 100). On **Stock** realms STR also feeds normal-attack **accuracy** (~3/pt); on **Paradigm** it does not.
+- **Intellect (INT)** — **crit** rating (~10/pt), **stealth** (~8/pt), **magic resistance** (part of it), and **mage-family mana / spellcasting**. On **Paradigm**, INT also feeds normal-attack **accuracy** (~6/pt); on **Stock** it does not.
+- **Willpower (WIL)** — **magic resistance** (the heaviest term — resistance is roughly `(INT + 3×WIL) / 4`) and **priest / druid mana + spellcasting**.
+- **Agility (AGI)** — normal-attack **accuracy** (~6/pt on Stock, ~3/pt on Paradigm), **dodge** (~3/pt), **crit** (~20/pt), and **stealth** (~4/pt). Generally the most broadly useful combat stat.
+- **Health (HEA)** — **max HP** and **HP regeneration** (both scale with level; there's no flat per-point breakpoint, so it shows in the projection's HP columns rather than as a ratio).
+- **Charm (CHM)** — **dodge** (~5/pt), **crit** (~30/pt), **stealth** (~6/pt), and **bard mana**. On **Paradigm** it also feeds normal-attack **accuracy** (~10/pt).
+
+**Realm accuracy differs.** Stock normal-attack accuracy is driven by STR + AGI; Paradigm normal-attack accuracy is driven by AGI + INT + CHM. The client uses the correct set for your realm automatically.
+
+**Paradigm caveat.** The accuracy, dodge, stealth and damage ratios are verified for both realms. Crit's AGI term, carry-weight (encumbrance), and magic-resistance use the reverse-engineered **Stock** formula for both realms — they are **not independently verified for Paradigm**, so treat those three as close-but-unconfirmed there.
 
 ## Quests, Bosses, and Deaths
 
