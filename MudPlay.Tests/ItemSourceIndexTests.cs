@@ -42,7 +42,10 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 22, "Name": "Fang Blade", "ItemType": 1 },
           { "Number": 23, "Name": "Health Potion", "ItemType": 2 },
           { "Number": 24, "Name": "Dragon Hide Vest", "ItemType": 0 },
-          { "Number": 25, "Name": "Bloodstone Orb", "ItemType": 2 }
+          { "Number": 25, "Name": "Bloodstone Orb", "ItemType": 2 },
+          { "Number": 26, "Name": "Gate Key", "ItemType": 7 },
+          { "Number": 27, "Name": "Black Star Key", "ItemType": 7 },
+          { "Number": 28, "Name": "Stone Signet", "ItemType": 2 }
         ]
         """;
 
@@ -57,13 +60,22 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 300, "Name": "Martok" },
           { "Number": 301, "Name": "Gnome Merchant" },
           { "Number": 302, "Name": "Dragon Lord" },
-          { "Number": 303, "Name": "Gnome Commander", "Summoned By": "Room 5/512, Room 5/513" }
+          { "Number": 303, "Name": "Gnome Commander", "Summoned By": "Room 5/512, Room 5/513" },
+          { "Number": 347, "Name": "obsidian statue", "Summoned By": "Textblock #863",
+            "DropItem-0": 26, "DropItem%-0": 100 },
+          { "Number": 348, "Name": "sandstone sphinx", "Summoned By": "Textblock #864",
+            "DropItem-0": 28, "DropItem%-0": 50 },
+          { "Number": 29, "Name": "dark cultist",
+            "Summoned By": "Group: 1/1127,[8-2-2][2]Group(lair): 1/1128",
+            "DropItem-0": 27, "DropItem%-0": 10 }
         ]
         """;
 
     private const string RoomsJson = """
         [
-          { "Map Number": 3, "Room Number": 606, "Name": "Dragon Statue" }
+          { "Map Number": 3, "Room Number": 606, "Name": "Dragon Statue", "CMD": 0 },
+          { "Map Number": 8, "Room Number": 461, "Name": "Black Steel Gate", "CMD": 863 },
+          { "Map Number": 12, "Room Number": 2442, "Name": "Sphinx Chamber", "CMD": 864 }
         ]
         """;
 
@@ -85,7 +97,9 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 640, "LinkTo": 0, "Action": "giveitem 24\n", "Called From": "Textblock #641" },
           { "Number": 641, "LinkTo": 0, "Action": "text 640\n", "Called From": "Monster #302" },
           { "Number": 700, "LinkTo": 0, "Action": "orb:701\n", "Called From": "Monster #303" },
-          { "Number": 701, "LinkTo": 0, "Action": "giveitem 25\n", "Called From": "Textblock #700" }
+          { "Number": 701, "LinkTo": 0, "Action": "giveitem 25\n", "Called From": "Textblock #700" },
+          { "Number": 863, "LinkTo": 0, "Action": "touch statue:summon 347\nmove statue:summon 347\n", "Called From": "Room 8/461" },
+          { "Number": 864, "LinkTo": 0, "Action": "touch sphinx:summon 348\n", "Called From": "Room 12/2442" }
         ]
         """;
 
@@ -279,5 +293,54 @@ public sealed class ItemSourceIndexTests : IDisposable
         cache.SwitchSet("empty");
         Assert.Empty(index.GiversOf(22));
         Assert.Empty(index.ContainersOf(10));
+    }
+
+    // ----- Summon drops -------------------------------------------------
+
+    // The reported case: `touch statue` in 8/461 summons the obsidian statue, which
+    // drops the gate key at 100% — the whole chain is deterministic, so it's
+    // routable (report paradigm-20260911-010954).
+    [Fact]
+    public void SummonDrops_IndexesGuaranteedDropFromRoomCommand()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        SummonDropSource src = Assert.Single(index.SummonDropsOf(26));
+        Assert.Equal(347, src.MonsterId);
+        Assert.Equal("obsidian statue", src.MonsterName);
+        Assert.Equal(8, src.Map);
+        Assert.Equal(461, src.Room);
+        Assert.Equal("touch statue", src.Command);
+        Assert.Equal(100, src.DropPercent);
+    }
+
+    // The control the whole gate exists for: a low-drop lair dropper is NOT
+    // routable, so the black-star-key shape must never reach the summon index.
+    [Fact]
+    public void SummonDrops_ExcludesLowDropLairMonster()
+        => Assert.Empty(NewIndex(NewCache()).SummonDropsOf(27));
+
+    // A room command DOES summon this one, but its drop is a 50% roll — the spawn
+    // being deterministic isn't enough on its own.
+    [Fact]
+    public void SummonDrops_ExcludesNonGuaranteedDropFromRoomCommand()
+        => Assert.Empty(NewIndex(NewCache()).SummonDropsOf(28));
+
+    // Synonyms conjure the same monster in the same room; one routable source is
+    // enough, so "move statue" doesn't produce a duplicate row.
+    [Fact]
+    public void SummonDrops_CollapsesSynonymCommands()
+        => Assert.Single(NewIndex(NewCache()).SummonDropsOf(26));
+
+    [Fact]
+    public void SummonDrops_ClearedOnSetChange()
+    {
+        GameDataCache cache = NewCache();
+        ItemSourceIndex index = NewIndex(cache);
+        Assert.NotEmpty(index.SummonDropsOf(26));
+
+        Directory.CreateDirectory(Path.Combine(_root, "empty"));
+        cache.SwitchSet("empty");
+        Assert.Empty(index.SummonDropsOf(26));
     }
 }

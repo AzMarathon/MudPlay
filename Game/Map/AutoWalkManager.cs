@@ -62,6 +62,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<IReadOnlyList<int>>? _pathItemAnnouncer;
     private Action<IReadOnlyList<RoomKey>>? _routeAnnouncer;
     private Func<RoomKey, IReadOnlyList<int>>? _hazardItemResolver;
+    private Func<int, bool>? _doorKeySummonable;
     private Func<int, string?>? _itemNameResolver;
     // Boss rooms flagged "stop before" on the Bosses tab. A walk-to whose
     // destination is one of these halts one room short (loop / auto-lair engines
@@ -692,6 +693,20 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _pathItemAnnouncer = announcer;
     }
 
+    // Probe for "is this locked door's key worth fetching?". A key gate is
+    // deliberately NOT a possession gate — pick and bash are the usual openers, and
+    // a key we simply lack fails the exit in place rather than sending the walk off
+    // to find one. The one exception is a key whose whole acquisition chain is
+    // deterministic: a room command that summons a monster dropping it at 100%. The
+    // probe answers only for those, so a low-drop lair key (the black star key,
+    // 1-10% off lair cultists) stays unannounced and keeps failing in place.
+    // Bound to AppServices' summon-source lookup; unbound means no key is fetchable.
+    public void SetDoorKeySourceProbe(Func<int, bool> probe)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        _doorKeySummonable = probe;
+    }
+
     // Hazard counter-item resolver. Given a room the route enters, returns the
     // item ids that make that room safe and MUST be carried (no in-group
     // substitute) — the RoomHazardIndex mandatory set. Folded into the same
@@ -1166,37 +1181,50 @@ public sealed class AutoWalkManager : IRecoverableEngine
         return true;
     }
 
-    // Walk the graph along the planned directions, collecting the item id of
-    // every possession-gated exit (Item / Ticket) crossed AND the mandatory
-    // counter item of every hazard room entered. The result is the set of items
-    // the route requires the character to carry; the demand tracker decides
-    // which are missing. Cheap (one dictionary lookup per hop) and
-    // side-effect-free — skipped entirely when no announcer is bound.
+    // Walk the graph along the planned directions, collecting the item ids of
+    // every possession-gated exit crossed AND the mandatory counter item of every
+    // hazard room entered. The result is the set of items the route requires the
+    // character to carry; the demand tracker decides which are missing. Cheap
+    // (one dictionary lookup per hop) and side-effect-free — skipped entirely
+    // when no announcer is bound.
     private void AnnouncePlannedItemRequirements(RoomKey source, IReadOnlyList<Direction> path)
     {
         if (_pathItemAnnouncer is null) return;
 
-        List<int>? required = null;
+        var required = new List<int>();
         RoomKey cur = source;
         foreach (Direction dir in path)
         {
             Room? room = _graph.GetRoom(cur);
             if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit))
                 break;
-            if (exit.KeyItemId > 0
-                && exit.Hint is RoomExitHint.Item or RoomExitHint.Ticket)
-                (required ??= new List<int>()).Add(exit.KeyItemId);
+            ExitGateItems.Collect(in exit, required);
+            // ExitGateItems excludes key gates on purpose (a key is one of several
+            // openers). Re-admit exactly the key whose acquisition chain is
+            // deterministic end to end — see SetDoorKeySourceProbe.
+            //
+            // Unlike an Item/Ticket gate, crossing a key door does NOT imply
+            // needing the key: pick and bash open it too. So the live filter has to
+            // agree the door is actually impassable first — a thief who can pick
+            // 8/461's south gate must not be sent to fight the obsidian statue for
+            // a key they don't need. The planning pass has already released its
+            // gate suspension by this point, so the filter reads true here.
+            if (exit.Hint == RoomExitHint.KeyLocked && exit.KeyItemId > 0
+                && _doorKeySummonable is { } summonable && summonable(exit.KeyItemId)
+                && _filter?.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.LockedDoor) == true
+                && !required.Contains(exit.KeyItemId))
+                required.Add(exit.KeyItemId);
             // The hazard sits on the room being entered, so resolve the hop's
             // target — a free route never crosses hazard rooms (the filter
             // blocks them), so this only fires on a chosen gated route.
             if (_hazardItemResolver is { } hazardOf)
                 foreach (int itemId in hazardOf(exit.Target))
-                    if (itemId > 0)
-                        (required ??= new List<int>()).Add(itemId);
+                    if (itemId > 0 && !required.Contains(itemId))
+                        required.Add(itemId);
             cur = exit.Target;
         }
 
-        if (required is not null) _pathItemAnnouncer(required);
+        if (required.Count > 0) _pathItemAnnouncer(required);
     }
 
     // Announce the freshly-planned route to any bound listener (the auto-light
@@ -1330,7 +1358,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             {
                 ExitBlockReason hop = f.DescribeExitBlock(in exit);
                 reasons |= hop;
-                if (hop.HasFlag(ExitBlockReason.Item)) CollectGateItems(in exit, missingItems);
+                if (hop.HasFlag(ExitBlockReason.Item)) ExitGateItems.Collect(in exit, missingItems);
                 if (hop.HasFlag(ExitBlockReason.Level) && levelGate is null)
                     levelGate = (exit.Target, exit.MinLevel, exit.MaxLevel);
                 if ((hop.HasFlag(ExitBlockReason.LockedDoor) || hop.HasFlag(ExitBlockReason.Door))
@@ -1362,31 +1390,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         if (_tracker.State.CurrentRoom?.Key is not { } source) return null;
         return _bfs.FirstAvoidBlockingRoute(source, destination, _filter);
-    }
-
-    // Gather the item ids an Item/Ticket/multi-action exit demands, so the
-    // blocked-route message can name what the crosser lacks. Key-locked doors
-    // report as LockedDoor (a key is one of several openers), not Item, so
-    // they're handled by that branch — only pure possession gates land here.
-    private static void CollectGateItems(in RoomExit exit, List<int> into)
-    {
-        switch (exit.Hint)
-        {
-            case RoomExitHint.Item:
-            case RoomExitHint.Ticket:
-                if (exit.KeyItemId > 0 && !into.Contains(exit.KeyItemId)) into.Add(exit.KeyItemId);
-                break;
-            case RoomExitHint.MultiActionHidden when exit.MultiAction is { } ma:
-                foreach (ExitAction a in ma.Actions)
-                    if (a.RequiredItemId > 0 && !into.Contains(a.RequiredItemId)) into.Add(a.RequiredItemId);
-                break;
-            case RoomExitHint.Teleport:
-                // An item-use teleport (`use potion of levitation`) carries the item
-                // it consumes as KeyItemId — name it so a blocked route says which
-                // item to go obtain rather than a bare "no path".
-                if (exit.KeyItemId > 0 && !into.Contains(exit.KeyItemId)) into.Add(exit.KeyItemId);
-                break;
-        }
     }
 
     private string FormatBlockReasons(ExitBlockReason reasons, IReadOnlyList<int> missingItems,

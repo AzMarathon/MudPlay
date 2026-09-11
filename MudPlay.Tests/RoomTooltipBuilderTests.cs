@@ -707,6 +707,308 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
+    public void Build_SummonRoomCommand_NamesTheMonster()
+    {
+        // Live repro (report paradigm-20260911-010954): 8/461 "Black Steel Gate"
+        // has CMD 863 = "touch statue:summon 347" / "move statue:summon 347".
+        // The obsidian statue drops the gate key that opens the door south, and
+        // the tooltip showed nothing at all — `summon` was not in the recognised
+        // directive vocabulary. Both synonyms collapse onto one row.
+        const string cmdRooms = """
+            [
+              { "Map Number": 8, "Room Number": 461, "Name": "Black Steel Gate",
+                "Light": -200, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 863,
+                "N": "8/460", "S": "8/462 (Key: 806 [or 101 picklocks])", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 8, "Room Number": 460, "Name": "Large Hole",
+                "Light": -200, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 0,
+                "N": "0", "S": "8/461", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 8, "Room Number": 462, "Name": "Town Gates, Archway",
+                "Light": -200, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 0,
+                "N": "8/461", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string cmdTbinfo = """
+            [
+              { "Number": 863, "LinkTo": 0,
+                "Action": "touch statue:summon 347\nmove statue:summon 347\n",
+                "Called From": "Room 8/461" }
+            ]
+            """;
+        const string monsterRows = """
+            [ { "Number": 347, "Name": "obsidian statue" } ]
+            """;
+        const string itemRows = """
+            [ { "Number": 806, "Name": "gate key" } ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    cmdRooms);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"),   cmdTbinfo);
+        File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), monsterRows);
+        File.WriteAllText(Path.Combine(setRoot, "Items.json"),    itemRows);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged(_setName);
+
+        Room room = graph.GetRoom(new RoomKey(8, 461))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo);
+
+        Assert.Contains("Room commands:", text);
+        Assert.Contains("touch statue / move statue — summons obsidian statue", text);
+        // The door it guards still names its real key.
+        Assert.Contains("Key: gate key", text);
+    }
+
+    // The healer's command is literally `summon healer`, so a keyword sharing its
+    // first word with a directive must not be mistaken for one — what separates
+    // them is the argument (`summon 787` is a directive, `summon healer` is typed).
+    // The charge and the effect belong on ONE row; emitting both a "what it does"
+    // row and a separate "what it costs" row would list the command twice.
+    [Fact]
+    public void Build_PricedSummonCommand_MergesEffectAndCostOnOneRow()
+    {
+        const string cmdRooms = """
+            [
+              { "Map Number": 15, "Room Number": 908, "Name": "Red House Room",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 1602,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string cmdTbinfo = """
+            [
+              { "Number": 1602, "LinkTo": 0,
+                "Action": "summon healer:checkitem 1008:nomonsters:price 10000 318:summon 787\n",
+                "Called From": "Room 15/908" }
+            ]
+            """;
+        const string monsterRows = """
+            [ { "Number": 787, "Name": "mercenary healer" } ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    cmdRooms);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"),   cmdTbinfo);
+        File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), monsterRows);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged(_setName);
+
+        Room room = graph.GetRoom(new RoomKey(15, 908))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo);
+
+        Assert.Contains("summon healer — summons mercenary healer — costs 100 Gold", text);
+        // Exactly one row for the command — no bare "summon healer — costs …" twin.
+        Assert.Single(
+            text.Split('\n'),
+            line => line.TrimStart().StartsWith("summon healer", StringComparison.Ordinal));
+    }
+
+    // The MegaMUD export repeats a gated chain once per race/class under the
+    // trainer's keyword, and those continuation lines LEAD with `check class` —
+    // 157 of them in the Paradigm set. "class" is not a number, so an
+    // argument-is-numeric test alone would admit `check class` as a player command
+    // and fold it into the trainer's row. A directive's argument can also be
+    // another directive head, which is what separates it from `summon healer`.
+    [Fact]
+    public void Build_DirectiveLedContinuationLines_AreNotPlayerCommands()
+    {
+        const string cmdRooms = """
+            [
+              { "Map Number": 16, "Room Number": 2667, "Name": "Meditation Chamber",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 2903,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string cmdTbinfo = """
+            [
+              { "Number": 2903, "LinkTo": 0,
+                "Action": "give crane totem to kuel:check class:class 15:race 1:levelcheck:takeitem 1276 2552:learnspell 838:text 2904\ncheck class:class 15:race 2:levelcheck:takeitem 1276 2552:learnspell 838:text 2904\ncheck class:class 15:race 3:levelcheck:takeitem 1276 2552:learnspell 838:text 2904\n",
+                "Called From": "Room 16/2667" }
+            ]
+            """;
+        const string itemRows = """
+            [ { "Number": 1276, "Name": "crane totem" } ]
+            """;
+        const string spellRows = """
+            [ { "Number": 838, "Name": "form of the crane" } ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),  cmdRooms);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"), cmdTbinfo);
+        File.WriteAllText(Path.Combine(setRoot, "Items.json"),  itemRows);
+        File.WriteAllText(Path.Combine(setRoot, "Spells.json"), spellRows);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged(_setName);
+
+        Room room = graph.GetRoom(new RoomKey(16, 2667))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo);
+
+        Assert.Contains("give crane totem to kuel — teaches form of the crane", text);
+        Assert.DoesNotContain("check class", text);
+    }
+
+    // 14/6275's CMD 5728 writes two lines for "destroy portal": the attempt summons
+    // the guardian, and the line for after you've beaten it awards the quest
+    // ability. One command, two outcome branches — it must read as one row at the
+    // consequential effect (the summon), not as two commands.
+    [Fact]
+    public void Build_KeywordWithSeveralOutcomeLines_RendersOnceAtBestEffect()
+    {
+        const string cmdRooms = """
+            [
+              { "Map Number": 14, "Room Number": 6275, "Name": "Portal Chamber",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 5728,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string cmdTbinfo = """
+            [
+              { "Number": 5728, "LinkTo": 0,
+                "Action": "destroy portal:minlevel 60:testability 126 35:summon 2264:text 4503\ndemolish portal:minlevel 60:testability 126 35:summon 2264:text 4503\ndestroy portal:minlevel 60:checkability 126 36:giveability 126 37:text 5729\ndemolish portal:minlevel 60:checkability 126 36:giveability 126 37:text 5729\n",
+                "Called From": "Room 14/6275" }
+            ]
+            """;
+        const string monsterRows = """
+            [ { "Number": 2264, "Name": "portal guardian" } ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    cmdRooms);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"),   cmdTbinfo);
+        File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), monsterRows);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged(_setName);
+
+        Room room = graph.GetRoom(new RoomKey(14, 6275))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo);
+
+        // Both synonyms on one row, at the summon — and no second "grants an
+        // ability" row for the same pair of commands.
+        Assert.Contains("destroy portal / demolish portal — summons portal guardian", text);
+        Assert.DoesNotContain("grants an ability", text);
+    }
+
+    // 7/142's CMD 4703 teleports on the first visit and, on a repeat, only awards
+    // the ability. The teleport resolver already lists those keywords, so the
+    // effect pass must not list them again as an ability grant.
+    [Fact]
+    public void Build_KeywordAlreadyShownAsTeleport_IsNotAlsoAnEffectRow()
+    {
+        const string cmdRooms = """
+            [
+              { "Map Number": 7, "Room Number": 142, "Name": "Gem Alcove",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 4703,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 7, "Room Number": 20, "Name": "Hidden Vault",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 0, "CMD": 0,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string cmdTbinfo = """
+            [
+              { "Number": 4703, "LinkTo": 0,
+                "Action": "touch gem:message 290:teleport 20 7:minlevel 12:giveability 129 2\nmove gem:message 290:teleport 20 7:minlevel 12:giveability 129 2\ntouch gem:minlevel 12:checkability 129 1:giveability 129 2\nmove gem:minlevel 12:checkability 129 1:giveability 129 2\n",
+                "Called From": "Room 7/142" }
+            ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),  cmdRooms);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"), cmdTbinfo);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged(_setName);
+
+        Room room = graph.GetRoom(new RoomKey(7, 142))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo);
+
+        Assert.Contains("touch gem / move gem → Hidden Vault (7/20)", text);
+        Assert.DoesNotContain("grants an ability", text);
+    }
+
+    [Fact]
+    public void Build_EffectRoomCommands_NameSpellItemAndAbility()
+    {
+        // The other directive families a room CMD can end on. `learnspell` is the
+        // spell-trainer hall, `giveability` the quest-flag award (unnameable — no
+        // shipped table indexes ability ids), `roomitem` a floor drop to `get`, and
+        // a bare `takeitem` a hand-over with nothing returned. A summon outranks a
+        // room-item drop on the same line, so "touch hammer" reads as the hydra.
+        const string cmdRooms = """
+            [
+              { "Map Number": 3, "Room Number": 632, "Name": "Iceforge",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5, "CMD": 476,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string cmdTbinfo = """
+            [
+              { "Number": 476, "LinkTo": 0,
+                "Action": "touch hammer:roomitem 767 1114:clearitem 767:summon 316\ngive crane totem:checkitem 1276:takeitem 1276:learnspell 838\nbreak apparatus:failability 132:giveability 132 2\npull lever:roomitem 767 1114\nhand over totem:takeitem 1276\n",
+                "Called From": "Room 3/632" }
+            ]
+            """;
+        const string monsterRows = """
+            [ { "Number": 316, "Name": "frost hydra" } ]
+            """;
+        const string itemRows = """
+            [ { "Number": 767, "Name": "frozen hydra" }, { "Number": 1276, "Name": "crane totem" } ]
+            """;
+        const string spellRows = """
+            [ { "Number": 838, "Name": "form of the crane" } ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    cmdRooms);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"),   cmdTbinfo);
+        File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), monsterRows);
+        File.WriteAllText(Path.Combine(setRoot, "Items.json"),    itemRows);
+        File.WriteAllText(Path.Combine(setRoot, "Spells.json"),   spellRows);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged(_setName);
+
+        Room room = graph.GetRoom(new RoomKey(3, 632))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo);
+
+        Assert.Contains("touch hammer — summons frost hydra", text);
+        Assert.Contains("give crane totem — teaches form of the crane", text);
+        Assert.Contains("break apparatus — grants an ability", text);
+        Assert.Contains("pull lever — drops frozen hydra in the room", text);
+        Assert.Contains("hand over totem — takes crane totem", text);
+    }
+
+    [Fact]
     public void Build_LevelGatedExit_RendersFriendlyLabel()
     {
         // Form A — exit-direction gate "(Level: 40 to 0)" means Level 40+.
@@ -979,5 +1281,67 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     {
         Assert.True(RoomExit.TryParseWire("1/1224 (Key: 172)", out RoomExit exit));
         Assert.Equal("Key: #172", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+    }
+
+    // 8/462's north gate records "Key: 1" — a game-data typo, since item ids start
+    // at 9 — alongside the 31 picklocks/strength that actually opens it. With the
+    // Items table loaded and no such row, naming a key would send the reader after
+    // an item that doesn't exist (report paradigm-20260911-010954).
+    [Fact]
+    public void FormatExitHint_KeyLocked_UnresolvableKeyWithStatAlt_ReadsAsDoor()
+    {
+        using var set = new TempGameDataSet("""[ { "Number": 806, "Name": "gate key" } ]""");
+        Assert.True(RoomExit.TryParseWire(
+            "8/461 (Key: 1 [or 31 picklocks/strength])", out RoomExit exit));
+        Assert.Equal("Door: 31 picklocks/strength",
+            RoomTooltipBuilder.FormatExitHint(exit, set.Cache));
+    }
+
+    // The same door's southbound side names a key that DOES exist — only the
+    // unresolvable id is suppressed, never a real one.
+    [Fact]
+    public void FormatExitHint_KeyLocked_ResolvableKey_StillNamesIt()
+    {
+        using var set = new TempGameDataSet("""[ { "Number": 806, "Name": "gate key" } ]""");
+        Assert.True(RoomExit.TryParseWire(
+            "8/462 (Key: 806 [or 101 picklocks])", out RoomExit exit));
+        Assert.Equal("Key: gate key, or 101 picklocks",
+            RoomTooltipBuilder.FormatExitHint(exit, set.Cache));
+    }
+
+    // A typo'd key with NO stat alternative stays impassable, so the raw id is kept
+    // — it is the only signal that the door's data is broken.
+    [Fact]
+    public void FormatExitHint_KeyLocked_UnresolvableKeyNoStatAlt_KeepsRawId()
+    {
+        using var set = new TempGameDataSet("""[ { "Number": 806, "Name": "gate key" } ]""");
+        Assert.True(RoomExit.TryParseWire("8/461 (Key: 1)", out RoomExit exit));
+        Assert.Equal("Key: #1", RoomTooltipBuilder.FormatExitHint(exit, set.Cache));
+    }
+
+    // A throwaway single-table set, so the key-resolution tests can distinguish
+    // "the Items table says no such id" from "no data is loaded at all".
+    private sealed class TempGameDataSet : IDisposable
+    {
+        private readonly string _root =
+            Path.Combine(Path.GetTempPath(), "mudplay-hint-" + Guid.NewGuid().ToString("N"));
+
+        public GameDataCache Cache { get; }
+
+        public TempGameDataSet(string itemsJson)
+        {
+            const string setName = "alpha";
+            string setRoot = Path.Combine(_root, setName);
+            Directory.CreateDirectory(setRoot);
+            File.WriteAllText(Path.Combine(setRoot, "Items.json"), itemsJson);
+            Cache = new GameDataCache(_root);
+            Cache.SwitchSet(setName);
+        }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(_root, recursive: true); }
+            catch { /* best-effort temp cleanup */ }
+        }
     }
 }

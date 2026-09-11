@@ -1,11 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.68.1**
-> - A "your weapon has no effect" reply is now blamed on the weapon the game confirms is in your hand, not the one the engine has already asked for — a working alternate weapon was getting written off mid-swap, and the monster then read as unkillable for the rest of the room
-> - A swing that lands damage clears that monster from the weapon's no-effect list, so one stray "no effect" can no longer strand you against something you are visibly hurting
-> - Monster Intel drops its "physical attacks had no effect" note for a monster once one of your swings lands on it
-> - Bug reports now show the per-room weapon-no-effect lists behind a monster the engine has written off
+> **Version 3.69.0**
+> - Route planning now counts the item a hidden exit's opener needs, so a walk through one fetches it instead of marching to an exit it can't open
+> - Route picker names that item up front rather than offering the shortcut and going quiet about it
+> - A locked door's key is fetched when a room command can summon a guaranteed dropper for it — walk there, summon, fight, collect, carry on; a key you can pick or bash, or one that only drops on a low-percentage lair roll, is still left alone
+> - Room commands that summon, teach a spell, grant an ability, drop an item, or take one now show in the map tooltip instead of nothing at all
+> - Room info panel gained the room-commands section it was already documented as having
+> - A locked door whose key id matches no item reads as the plain door it behaves like, instead of naming a key that doesn't exist
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

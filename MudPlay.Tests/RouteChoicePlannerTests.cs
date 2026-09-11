@@ -140,6 +140,34 @@ public sealed class RouteChoicePlannerTests
         ]
         """;
 
+    // A hidden exit whose unlock action needs a held item. The action rides a
+    // SIBLING direction cell, exactly as the MegaMUD export writes it — the Lower
+    // Caverns bloodstone-orb exit puts its S-exit action in the room's unused N
+    // cell — so the requirement lives in MultiAction, not KeyItemId.
+    // Direct: 1/1 ──S (hidden, `rub orb`, Item: 5)── 1/9   (1 hop).
+    // Free:   1/1 ──E── 1/2 ──E── 1/3 ──E── 1/9            (3 hops, gate-free).
+    private const string MultiActionItemShortcutJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Underground Lake",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "Action [on the S exit of this room]: rub orb (Item: 5)",
+            "S": "1/9 (Hidden/Needs 1 Actions, any order)", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Mid1",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/3", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Mid2",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Narrow Passage",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/1", "S": "0", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     // A plain door the crosser can't open walls off the ONLY route to 1/9. Not an
     // acquirable gate (no key), so suspending acquirable gates doesn't open it —
     // Evaluate returns null, and PlanBlocked offers "run to the blocked room".
@@ -517,6 +545,45 @@ public sealed class RouteChoicePlannerTests
             RouteRequirement req = Assert.Single(choice!.Requirements);
             Assert.Equal(RouteRequirementKind.DoorKey, req.Kind);
             Assert.Equal(new[] { 7 }, req.ItemIds);
+        });
+    }
+
+    // The gate that went unreported: a hidden exit's held-item requirement used to
+    // fall through Classify to HazardRequirement, return null, and vanish — so the
+    // picker offered the shortcut without ever naming the item the walk would need
+    // (report paradigm-20260911-010954).
+    [Fact]
+    public void ClassifiesMultiActionHeldItemRequirement()
+    {
+        WithGraph(MultiActionItemShortcutJson, (bfs, graph, filter) =>
+        {
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;   // lacking the orb
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            RouteRequirement req = Assert.Single(choice!.Requirements);
+            Assert.Equal(RouteRequirementKind.CarryItem, req.Kind);
+            Assert.Equal(new[] { 5 }, req.ItemIds);
+        });
+    }
+
+    [Fact]
+    public void NoChoice_WhenMultiActionHeldItemCarried()
+    {
+        WithGraph(MultiActionItemShortcutJson, (bfs, graph, filter) =>
+        {
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = id => id == 5;   // orb in hand
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            // The hidden exit is already crossable, so the free route takes it —
+            // gated == free, nothing to offer.
+            Assert.Null(choice);
         });
     }
 

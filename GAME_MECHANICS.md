@@ -2892,6 +2892,20 @@ flag). These are hard eligibility gates, independent of resistance and level imm
   count for a stack, exactly one for the article/lone form). Count parsing mirrors
   `ItemNameStore.Normalize`, which strips the same leading count/article token when matching the
   item name.
+- **[CONFIRMED]** (2026-09-11, user, report `paradigm-20260911-010954`) **A monster summoned by a
+  room command drops its guaranteed loot on the floor like any other kill — an explicit `get` is
+  still required.** Being conjured rather than lair-spawned changes nothing about the drop: the item
+  lands loose on the ground, isn't announced on the death line, and has to be re-surveyed (`look`)
+  before anything can see it, then `get`-ed by name — exactly the ground-drop rule above. Worked
+  example (Paradigm 1.9.1): room 8/461 "Black Steel Gate" carries `CMD 863` =
+  `touch statue:summon 347` / `move statue:summon 347`; monster 347 "obsidian statue" is
+  `GameLimit 1`, `Summoned By: Textblock #863`, and carries `DropItem-0: 806` (gate key) at
+  `DropItem%-0: 100`. That key opens 8/461's south exit (`Key: 806 [or 101 picklocks]`). **This is
+  the shape that makes a key worth routing for** — the spawn is on demand and the drop is certain,
+  so the whole chain is deterministic, unlike a lair key such as the black star key (item 172,
+  dropped at 1–10% by lair-spawned cultists) which can never be relied on mid-route. Re-typing the
+  summon keyword is *not* a known way to force a second monster while one is already up.
+
 - **[CONFIRMED]** (2026-07-27, user, report `paradigm-20260727-185836`) **A room-wide `search`
   (`sea`) is blocked only while you're *actively engaged* in combat.** Sent mid-fight — right after
   the attack-announcement lines — it's lost; the game won't process a whole-room search until the

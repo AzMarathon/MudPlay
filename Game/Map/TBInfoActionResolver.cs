@@ -214,4 +214,162 @@ public static class TBInfoActionResolver
         value = 0;
         return false;
     }
+
+    // What a room command does when none of the resolvers above explains it. The
+    // four they cover (teleport, price, remoteaction, giveitem/random) are not the
+    // whole directive vocabulary, so a room whose only command was one of these
+    // rendered an empty tooltip — 8/461's "touch statue" summons the obsidian
+    // statue carrying the town gate key and nothing surfaced it (report
+    // paradigm-20260911-010954). Across the shipped sets that blind spot covers 25
+    // summoning rooms, 13 ability-granting rooms, and each realm's spell-trainer
+    // hall.
+    public enum RoomEffectKind
+    {
+        Summon,         // `summon <monster>` — spawns a monster in the room.
+        LearnSpell,     // `learnspell <spell>` — a trainer / totem turn-in teaches it.
+        GrantAbility,   // `giveability` / `addability` — an ability or quest-flag award.
+        PlaceRoomItem,  // `roomitem <item>` — drops an item on the floor to `get`.
+        TakeItem,       // `takeitem <item>` — hands an item over with nothing returned.
+    }
+
+    // One room command explained by its effect. TargetId is the monster / spell /
+    // item the directive names, or 0 for GrantAbility — an ability id has no table
+    // to resolve against (quests.json ships empty in every set), so the caller
+    // phrases that one without a name.
+    public readonly record struct RoomEffectCommand(string Keyword, RoomEffectKind Kind, int TargetId);
+
+    // Yields each keyword line whose effect only one of the directives above
+    // explains. Lines already surfaced elsewhere (teleport / cast / remoteaction /
+    // giveitem / random) are skipped so a keyword never renders twice; `price`
+    // lines are left in, and the caller drops them in favour of its own priced row
+    // exactly as it does for the room-action keywords.
+    //
+    // One effect per keyword, highest-priority first: a summon outranks the rest
+    // because a spawned monster is the consequence worth warning about before the
+    // reward it guards ("touch hammer" both drops an item and summons a frost
+    // hydra — the hydra is the part you want to read first).
+    public static IEnumerable<RoomEffectCommand> EnumerateEffectCommands(TBInfoStore store, int roomCmd)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (roomCmd <= 0) yield break;
+
+        TBInfoEntry? entry = store.GetEntry(roomCmd);
+        if (entry is null || string.IsNullOrWhiteSpace(entry.Action)) yield break;
+
+        foreach (string raw in entry.Action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string line = raw.Trim();
+            if (line.Length == 0) continue;
+
+            string[] parts = line.Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length < 2) continue;
+
+            string keyword = parts[0];
+            if (!IsPlayerKeyword(keyword)) continue;
+
+            bool routedElsewhere = false;
+            RoomEffectKind? kind = null;
+            int targetId = 0;
+
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string d = parts[i];
+                if (StartsWithWord(d, "teleport") || StartsWithWord(d, "cast")
+                    || StartsWithWord(d, "remoteaction") || StartsWithWord(d, "giveitem")
+                    || StartsWithWord(d, "random"))
+                {
+                    routedElsewhere = true;
+                    break;
+                }
+                TryTakeEffect(d, ref kind, ref targetId);
+            }
+
+            if (!routedElsewhere && kind is { } k)
+                yield return new RoomEffectCommand(keyword, k, targetId);
+        }
+    }
+
+    // Keep the highest-priority effect seen on a line. Priority is the declaration
+    // order of RoomEffectKind, so a later-but-weaker directive can't displace one
+    // already found.
+    private static void TryTakeEffect(string directive, ref RoomEffectKind? kind, ref int targetId)
+    {
+        RoomEffectKind found;
+        if (StartsWithWord(directive, "summon")) found = RoomEffectKind.Summon;
+        else if (StartsWithWord(directive, "learnspell")) found = RoomEffectKind.LearnSpell;
+        else if (StartsWithWord(directive, "giveability")
+              || StartsWithWord(directive, "addability")) found = RoomEffectKind.GrantAbility;
+        else if (StartsWithWord(directive, "roomitem")) found = RoomEffectKind.PlaceRoomItem;
+        else if (StartsWithWord(directive, "takeitem")) found = RoomEffectKind.TakeItem;
+        else return;
+
+        if (kind is { } existing && existing <= found) return;
+        kind = found;
+        // An ability id names nothing resolvable, so it stays 0 and the caller
+        // phrases the row without a subject.
+        targetId = found == RoomEffectKind.GrantAbility ? 0 : FirstArg(directive);
+    }
+
+    // True when the directive's first word is exactly `word` — `StartsWith` alone
+    // would read `addability` as `add` or `takecoins` as `takeitem`'s neighbour.
+    private static bool StartsWithWord(string directive, string word)
+        => directive.StartsWith(word, StringComparison.OrdinalIgnoreCase)
+           && (directive.Length == word.Length || directive[word.Length] == ' ');
+
+    // First integer argument of a `<verb> <id> [failTextblock]` directive.
+    private static int FirstArg(string directive)
+    {
+        string[] w = directive.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return w.Length >= 2 && int.TryParse(w[1], out int id) && id > 0 ? id : 0;
+    }
+
+    // A room CMD block is a keyword menu, but it can also carry directive-led
+    // continuation lines and numeric d100 roll bands ("90:message 4063:summon
+    // 2111"). Only a genuine player-typed keyword earns a tooltip row — without
+    // this guard a roll band would surface as a command called "90".
+    //
+    // Sharing a first word with a directive is NOT enough to reject a line: the
+    // player-house command is literally `summon healer`, and the ganghouses have
+    // `summon guard` / `summon elite guard` / `summon spellbreaker`. What separates
+    // them from a directive is the ARGUMENT — a directive's arguments are record
+    // numbers (`summon 347`, `message 3216`, `evilaligned -50`) or further directive
+    // heads (`check class`, which leads the per-race continuation lines the export
+    // repeats under a trainer's keyword), while a keyword's are ordinary words. So a
+    // directive head disqualifies the token only when it stands alone or its
+    // argument is itself directive-shaped.
+    private static bool IsPlayerKeyword(string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword)) return false;
+
+        bool allDigits = true;
+        foreach (char c in keyword)
+            if (!char.IsAsciiDigit(c)) { allDigits = false; break; }
+        if (allDigits) return false;
+
+        if (!EffectDirectiveHeads.Contains(FirstWord(keyword))) return true;
+        string[] words = keyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length < 2) return false;
+        return !int.TryParse(words[1], out _) && !EffectDirectiveHeads.Contains(words[1]);
+    }
+
+    private static string FirstWord(string s)
+    {
+        int space = s.IndexOf(' ');
+        return space < 0 ? s : s[..space];
+    }
+
+    // The directive heads that can legitimately lead a line in a room CMD block.
+    // A line starting with one of these is an engine continuation, not something
+    // the player types.
+    private static readonly HashSet<string> EffectDirectiveHeads =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "summon", "learnspell", "giveability", "addability", "roomitem", "takeitem",
+            "giveitem", "teleport", "cast", "remoteaction", "price", "message", "text",
+            "random", "checkitem", "clearitem", "checkability", "testability",
+            "failability", "failitem", "failroomitem", "nomonsters", "needmonster",
+            "minlevel", "maxlevel", "class", "race", "levelcheck", "goodaligned",
+            "evilaligned", "addevil", "addgood", "check", "testskill", "givecoins",
+            "takecoins", "adddelay", "delay", "addexp",
+        };
 }

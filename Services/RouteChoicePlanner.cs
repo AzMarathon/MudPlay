@@ -592,6 +592,15 @@ public static class RouteChoicePlanner
             new RouteRequirement(RouteRequirementKind.Ticket, new[] { exit.KeyItemId }),
         RoomExitHint.KeyLocked when exit.KeyItemId > 0 =>
             new RouteRequirement(RouteRequirementKind.DoorKey, new[] { exit.KeyItemId }),
+        // A hidden exit whose unlock action needs a held item, and an item-use
+        // teleport, are both plain possession gates — the item just isn't in
+        // KeyItemId for the multi-action case. Without these the gate fell through
+        // to HazardRequirement, returned null, and vanished from the requirement
+        // list: the picker offered a route through the Lower Caverns bloodstone-orb
+        // exit without ever mentioning the orb (report paradigm-20260911-010954).
+        RoomExitHint.MultiActionHidden or RoomExitHint.Teleport
+            when ExitGateItems.Of(in exit) is { Count: > 0 } gateItems =>
+            new RouteRequirement(RouteRequirementKind.CarryItem, gateItems),
         // A plain cardinal the filter still blocks is a hazard-room entry: resolve
         // the room's cast-on-enter spell to its any-of counter items.
         _ => HazardRequirement(filter, exit.Target),

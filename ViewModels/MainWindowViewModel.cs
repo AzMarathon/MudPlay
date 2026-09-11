@@ -1184,6 +1184,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Give-source routing — the `ask <npc> <keyword>` / room-CMD give
         // command at the detour giver rides the same gate-wrapped pipeline.
         AppServices.Current.PathItemGiveRouter.SetWireSender(engineSend);
+        // Summon-source routing — the room-CMD summon keyword and the post-kill
+        // `look` re-survey ride the same gate-wrapped pipeline.
+        AppServices.Current.PathItemSummonRouter.SetWireSender(engineSend);
         // Party-inventory deferral — the `@party give` / `@do give`
         // hand-off rides the same gate-wrapped pipeline. The @have probe
         // itself broadcasts through the already-bound PartyBroadcaster.

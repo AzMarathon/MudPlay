@@ -33,17 +33,34 @@ public readonly record struct ItemGiver(
     ItemGiverKind Kind, int Number, int Map, int Room, string Name, string Requirement,
     string Keyword, bool Deterministic);
 
-// Lazy per-set reverse index of the two item-acquisition paths the shop/drop
-// indexes don't cover: containers (an item's chest sources — the inverse of
-// ChestContentsReader) and textblock `giveitem` awards (quest turn-ins, room
-// CMD rewards, and merchant gives, attributed to their monster / room via each
-// TBInfo entry's Called-From chain). Backs the Game Data Browser's item detail
-// pane only, so unlike the eager routing indexes (ShopStockIndex /
-// MonsterDropIndex) it builds on first query and self-invalidates by comparing
-// the cache's ActiveSet to the set it last built from — no ActiveSetChanged
-// subscription, and it never evicts tables (the browser is actively reading
-// them). `roomitem` awards are deliberately excluded: that verb scatter-places
-// an item in a room rather than handing it to the player on a gated exchange.
+// One monster a room command summons on demand, which drops an item at a
+// guaranteed rate. This is the deterministic corner of monster drops, and the
+// reason it's indexed separately from MonsterDropIndex: the spawn is not lair RNG
+// (the room command conjures it whenever asked) and the drop is not a percentage
+// roll, so a walk can rely on the entire chain. That's what separates the town
+// gate key — `touch statue` in 8/461 summons the obsidian statue, which drops it
+// 100% of the time — from the black star key, whose dropper only appears on a lair
+// roll at a low rate and can never be relied on mid-route.
+//
+// Command is the room-CMD keyword to type, Map/Room the room to type it in.
+// DropPercent is always 100 by construction; it's carried so the log and the route
+// picker can state the guarantee rather than implying one.
+public readonly record struct SummonDropSource(
+    int MonsterId, string MonsterName, int Map, int Room, string Command, int DropPercent);
+
+// Lazy per-set reverse index of the item-acquisition paths the shop/drop indexes
+// don't cover: containers (an item's chest sources — the inverse of
+// ChestContentsReader), textblock `giveitem` awards (quest turn-ins, room CMD
+// rewards, and merchant gives, attributed to their monster / room via each TBInfo
+// entry's Called-From chain), and room-command summons whose monster drops an item
+// outright. Backs both the Game Data Browser's item detail pane and the
+// deterministic acquisition routers (PathItemGiveRouter / PathItemSummonRouter),
+// so unlike the eager indexes (ShopStockIndex / MonsterDropIndex) it builds on
+// first query and self-invalidates by comparing the cache's ActiveSet to the set
+// it last built from — no ActiveSetChanged subscription, and it never evicts
+// tables (the browser is actively reading them). `roomitem` awards are
+// deliberately excluded from the giver map: that verb scatter-places an item in a
+// room rather than handing it to the player on a gated exchange.
 public sealed class ItemSourceIndex
 {
     private readonly GameDataCache _cache;
@@ -53,6 +70,11 @@ public sealed class ItemSourceIndex
     private readonly Dictionary<int, List<ItemSource>> _containersByItem = new();
     private readonly Dictionary<int, List<ItemGiver>> _giversByItem = new();
     private readonly Dictionary<int, List<RoomKey>> _giverRoomsByMonster = new();
+    private readonly Dictionary<int, List<SummonDropSource>> _summonDropsByItem = new();
+
+    // A drop only counts as a guarantee at the top of the range. Anything less is
+    // a roll, which is MonsterDropRouter's prompt-first territory.
+    private const int GuaranteedDropPercent = 100;
 
     // Set the maps were last built from; compared against _cache.ActiveSet to
     // self-invalidate on a set swap. Null both means "never built".
@@ -106,6 +128,16 @@ public sealed class ItemSourceIndex
             : Array.Empty<RoomKey>();
     }
 
+    // Room commands that summon a monster which then drops itemId outright, or an
+    // empty list when no such command exists. Live view — read, don't mutate.
+    public IReadOnlyList<SummonDropSource> SummonDropsOf(int itemId)
+    {
+        EnsureBuilt();
+        return _summonDropsByItem.TryGetValue(itemId, out List<SummonDropSource>? list)
+            ? list
+            : Array.Empty<SummonDropSource>();
+    }
+
     private void EnsureBuilt()
     {
         string? active = _cache.ActiveSet;
@@ -118,6 +150,7 @@ public sealed class ItemSourceIndex
         _containersByItem.Clear();
         _giversByItem.Clear();
         _giverRoomsByMonster.Clear();
+        _summonDropsByItem.Clear();
         _loadedSet = active;
         _built = true;
 
@@ -130,10 +163,12 @@ public sealed class ItemSourceIndex
         BuildContainers();
         BuildGivers();
         BuildGiverMonsterRooms();
+        BuildSummonDrops();
 
         _log?.Info("ItemSourceIndex",
-            $"Indexed {_containersByItem.Count} container-sourced item(s) and " +
-            $"{_giversByItem.Count} textblock-given item(s) from '{active}'.");
+            $"Indexed {_containersByItem.Count} container-sourced item(s), " +
+            $"{_giversByItem.Count} textblock-given item(s) and " +
+            $"{_summonDropsByItem.Count} summon-dropped item(s) from '{active}'.");
     }
 
     // Invert ChestContentsReader.ReadAll (container → drops) into item → containers.
@@ -244,6 +279,83 @@ public sealed class ItemSourceIndex
                 }
             }
         }
+    }
+
+    // Index the room commands that summon a guaranteed dropper. Driven from the
+    // ROOM side rather than the monster side: a monster's "Summoned By" only names
+    // the textblock that conjures it ("Textblock #863"), so resolving it back to a
+    // room would mean walking the Called-From chain, while every room CMD already
+    // states its own summons directly. Walking rooms also keeps the result honest —
+    // a summon reachable only from a textblock no room invokes isn't something a
+    // walk could ever trigger.
+    private void BuildSummonDrops()
+    {
+        Dictionary<int, (string Name, List<int> Drops)> guaranteed = BuildGuaranteedDroppers();
+        if (guaranteed.Count == 0) return;
+
+        JsonDocument? rooms = _cache.GetRawTable("Rooms");
+        if (rooms is null) return;
+
+        foreach (JsonElement row in rooms.RootElement.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Object) continue;
+            if (!TryInt(row, "CMD", out int cmd) || cmd <= 0) continue;
+            if (!TryInt(row, "Map Number", out int map) || !TryInt(row, "Room Number", out int room))
+                continue;
+
+            foreach (TBInfoActionResolver.RoomEffectCommand ec
+                     in TBInfoActionResolver.EnumerateEffectCommands(_tb, cmd))
+            {
+                if (ec.Kind != TBInfoActionResolver.RoomEffectKind.Summon) continue;
+                if (!guaranteed.TryGetValue(ec.TargetId, out (string Name, List<int> Drops) m)) continue;
+
+                foreach (int itemId in m.Drops)
+                {
+                    if (!_summonDropsByItem.TryGetValue(itemId, out List<SummonDropSource>? list))
+                        _summonDropsByItem[itemId] = list = new List<SummonDropSource>();
+                    var src = new SummonDropSource(
+                        ec.TargetId, m.Name, map, room, ec.Keyword, GuaranteedDropPercent);
+                    // Synonyms ("touch statue" / "move statue") summon the same
+                    // monster in the same room; one source is enough to route on.
+                    if (!list.Any(s => s.MonsterId == src.MonsterId
+                                       && s.Map == src.Map && s.Room == src.Room))
+                        list.Add(src);
+                }
+            }
+        }
+    }
+
+    // Monsters with at least one guaranteed drop, by id → (name, dropped item ids).
+    // Only the guaranteed slots are collected; a monster's percentage drops stay
+    // MonsterDropIndex's business.
+    private Dictionary<int, (string Name, List<int> Drops)> BuildGuaranteedDroppers()
+    {
+        var byMonster = new Dictionary<int, (string, List<int>)>();
+        JsonDocument? doc = _cache.GetRawTable("Monsters");
+        if (doc is null) return byMonster;
+
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Object) continue;
+            if (!TryInt(row, "Number", out int id) || id <= 0) continue;
+
+            List<int>? drops = null;
+            for (int slot = 0; slot < 10; slot++)
+            {
+                if (!TryInt(row, $"DropItem-{slot}", out int itemId) || itemId <= 0) continue;
+                if (!TryInt(row, $"DropItem%-{slot}", out int pct) || pct < GuaranteedDropPercent)
+                    continue;
+                (drops ??= new List<int>()).Add(itemId);
+            }
+            if (drops is null) continue;
+
+            string name = row.TryGetProperty("Name", out JsonElement nm)
+                          && nm.ValueKind == JsonValueKind.String
+                ? nm.GetString() ?? string.Empty
+                : string.Empty;
+            byMonster[id] = (name, drops);
+        }
+        return byMonster;
     }
 
     // Resolve each giver monster's spawn rooms off Monsters.json "Summoned By".
