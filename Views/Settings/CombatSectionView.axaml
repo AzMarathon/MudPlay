@@ -21,15 +21,13 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <!-- Casting spell profile chips: a compact numbered button; the active
-             profile's chip fills gold (mirrors the toolbar's Active state). -->
+        <!-- Combat-profile chips: a compact numbered button tinted its own profile
+             colour (Background / Foreground / BorderBrush bound per-item), so the
+             profiles read as distinct; the active chip gets a solid-colour ring. -->
         <Style Selector="Button.ProfileChip">
             <Setter Property="Padding" Value="9,2"/>
             <Setter Property="MinWidth" Value="30"/>
-        </Style>
-        <Style Selector="Button.ProfileChip.Active">
-            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
         </Style>
 
         <!-- Unlearned dropdown row: struck through + dimmed. -->
@@ -52,6 +50,22 @@
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,16,0,6"/>
+        </Style>
+        <!-- Per-combat-profile settings group: a soft panel tinted the ACTIVE
+             profile's accent (bound per-instance to ActiveProfileAccentSoftBrush /
+             ActiveProfileAccentBrush, so it recolours on a chip switch) with the
+             profile name in the header — it reads as "this group swaps with the
+             combat profile chip above". -->
+        <Style Selector="Border.ProfileGroup">
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Margin" Value="0,6,0,4"/>
+        </Style>
+        <Style Selector="TextBlock.ProfileGroupHeader">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
         </Style>
         <Style Selector="TextBlock.FieldLabel">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
@@ -93,6 +107,45 @@
                 <TextBlock Classes="SettingsSectionSub"
                            Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
                 <Border Classes="SettingsSectionRule"/>
+
+                <!-- Combat-profile selector. A combat profile is a full quick-swap
+                     loadout: the spell setup, attack commands, room thresholds, the
+                     primary/alternate WEAPONS, and the whole Health tab. Numbered
+                     chips switch the active profile (the active one is gold); +/✕
+                     add an empty profile or remove the active one; the name box
+                     renames it. Every amber-bordered group below (here and on the
+                     Health tab) belongs to the active profile — switching a chip is
+                     a live swap; the name + edits save with the tab. -->
+                <TextBlock Classes="SectionHeader" Text="Combat profile" Margin="0,10,0,4"/>
+                <StackPanel Spacing="4" Margin="0,0,0,6">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Classes="FieldLabel" Text="Profile:" VerticalAlignment="Center"/>
+                        <ItemsControl ItemsSource="{Binding ProfileChips}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="3"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vmroot:CombatProfileMenuItem">
+                                    <Button Classes="ProfileChip" Classes.Active="{Binding IsActive}"
+                                            Background="{Binding ChipBackground}"
+                                            Foreground="{Binding ChipForeground}"
+                                            BorderBrush="{Binding ChipBorder}"
+                                            Content="{Binding Number}" Command="{Binding SwitchCommand}"
+                                            ToolTip.Tip="{Binding Display}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="+" Command="{Binding AddProfileCommand}"
+                                ToolTip.Tip="Add a new (empty) profile"/>
+                        <Button Content="✕" Command="{Binding RemoveActiveProfileCommand}"
+                                ToolTip.Tip="Remove the active profile (keeps at least one)"/>
+                    </StackPanel>
+                    <TextBox Text="{Binding ActiveProfileName, Mode=TwoWay}" Width="220"
+                             HorizontalAlignment="Left" PlaceholderText="Profile name"
+                             ToolTip.Tip="Name the active profile — used by @profile and the menus (saved with the tab)"/>
+                </StackPanel>
 
 
                 <!-- The master on/off for auto-attack lives on
@@ -147,30 +200,71 @@
                            FontStyle="Italic"
                            Margin="180,2,0,0"/>
 
-                <Grid ColumnDefinitions="240,*" Margin="0,4,0,0">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Normal weapon attack command"/>
-                    <TextBox Grid.Column="1"
-                             Text="{Binding NormalAttackCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                             Width="220" HorizontalAlignment="Left"
-                             ToolTip.Tip="Command sent each round to swing the normal weapon — default `a` (the canonical MajorMUD attack alias)."/>
-                </Grid>
+                <!-- ============ Weapons & attack commands (per profile) ============ -->
+                <Border Classes="ProfileGroup"
+                        Background="{Binding ActiveProfileAccentSoftBrush}"
+                        BorderBrush="{Binding ActiveProfileAccentBrush}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                   Foreground="{Binding ActiveProfileAccentBrush}"/>
+                        <TextBlock Text="Primary / alternate weapons and their attack commands, per profile. The active profile's weapons live in the Workshop → Equipment Manager Default gear set (the combat engine reads them there), so editing here and editing the Default set's weapon rows are the same loadout, kept in sync. Backstab gear stays global on the Backstab set."
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                   FontSize="{StaticResource FontSizeSm}"
+                                   FontStyle="Italic"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,6"/>
 
-                <Grid ColumnDefinitions="240,*" Margin="0,4,0,0">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Alternate weapon attack command"/>
-                    <TextBox Grid.Column="1"
-                             Text="{Binding AlternateAttackCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                             Width="220" HorizontalAlignment="Left"
-                             ToolTip.Tip="Command sent when swinging the alternate weapon — default `a`. Some 2H alt weapons use `swing` while a 1H normal uses `a`."/>
-                </Grid>
+                        <Grid ColumnDefinitions="150,260,150,*" RowDefinitions="Auto,Auto" Margin="0,0,0,2">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Normal weapon"/>
+                            <AutoCompleteBox Grid.Row="0" Grid.Column="1"
+                                             Text="{Binding NormalWeapon, Mode=TwoWay}"
+                                             ItemsSource="{Binding WeaponSuggestions}"
+                                             FilterMode="ContainsOrdinal"
+                                             PlaceholderText="(bare hands)"
+                                             Width="240" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Primary weapon for this profile. Suggestions are the realm's weapons. Written into the Workshop Default set on switch — kept in sync with that set's Weapon slot."/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="Attack command" Margin="12,0,0,0"/>
+                            <TextBox Grid.Row="0" Grid.Column="3"
+                                     Text="{Binding NormalAttackCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                     Width="120" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Command sent each round to swing the normal weapon — default `a` (the canonical MajorMUD attack alias)."/>
 
-                <!-- ============ Weapon Combat ============ -->
-                <TextBlock Classes="SectionHeader" Text="Weapon combat"/>
-                <TextBlock Text="Combat weapons are configured in the Character Workshop → Equipment Manager gear sets. Normal &amp; alternate weapons (and off-hands) come from the Default set; backstab gear comes from the Backstab set when it's enabled, otherwise the Default set."
-                           Foreground="{StaticResource ChromeFgMutedBrush}"
-                           FontSize="{StaticResource FontSizeSm}"
-                           FontStyle="Italic"
-                           TextWrapping="Wrap"
-                           Margin="0,0,0,4"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Off-hand" Margin="0,4,0,0"/>
+                            <AutoCompleteBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0"
+                                             Text="{Binding NormalOffHand, Mode=TwoWay}"
+                                             ItemsSource="{Binding OffHandSuggestions}"
+                                             FilterMode="ContainsOrdinal"
+                                             PlaceholderText="(none)"
+                                             Width="240" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Off-hand paired with the normal weapon (shield / second weapon). Written into the Default set's Off-Hand slot on switch."/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="150,260,150,*" RowDefinitions="Auto,Auto" Margin="0,6,0,0">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Alternate weapon"/>
+                            <AutoCompleteBox Grid.Row="0" Grid.Column="1"
+                                             Text="{Binding AlternateWeapon, Mode=TwoWay}"
+                                             ItemsSource="{Binding WeaponSuggestions}"
+                                             FilterMode="ContainsOrdinal"
+                                             PlaceholderText="(none)"
+                                             Width="240" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Swap-target weapon for this profile. Written into the Default set's Alt-Weapon slot on switch."/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="Attack command" Margin="12,0,0,0"/>
+                            <TextBox Grid.Row="0" Grid.Column="3"
+                                     Text="{Binding AlternateAttackCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                     Width="120" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Command sent when swinging the alternate weapon — default `a`. Some 2H alt weapons use `swing` while a 1H normal uses `a`."/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Alt off-hand" Margin="0,4,0,0"/>
+                            <AutoCompleteBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0"
+                                             Text="{Binding AlternateOffHand, Mode=TwoWay}"
+                                             ItemsSource="{Binding OffHandSuggestions}"
+                                             FilterMode="ContainsOrdinal"
+                                             PlaceholderText="(none)"
+                                             Width="240" HorizontalAlignment="Left"
+                                             ToolTip.Tip="Off-hand paired with the alternate weapon. Written into the Default set's Alt-Off-Hand slot on switch."/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
 
                 <!-- ============ Targeting ============ -->
                 <TextBlock Classes="SectionHeader" Text="Targeting"/>
@@ -230,7 +324,7 @@
                 <StackPanel Spacing="2">
                     <CheckBox Content="Do BS attacks"
                               IsChecked="{Binding DoBackstab, Mode=TwoWay}"
-                              ToolTip.Tip="Off by default. Stealth-window gating handled by StealthManager (PR 9.F) once it lands."/>
+                              ToolTip.Tip="Attempt a backstab when entering a room with an eligible target. Off by default — an explicit opt-in even on stealth-capable classes."/>
                     <CheckBox Content="Don't BS if multi-attack room spell is firing"
                               IsChecked="{Binding SkipBackstabIfMultiAttack, Mode=TwoWay}"
                               ToolTip.Tip="Skip the BS attempt when the multi-attack room spell is going off this round."/>
@@ -242,27 +336,35 @@
                               ToolTip.Tip="Combat-off override for stealth runners. When sprinting a walk-to route with combat OFF and auto-sneak ON, a room holding a see-hidden monster breaks sneak. With this on, the engine force-clears every hostile in that room (bypassing the Min/Max gate) so the route can resume sneaking — preventing monsters from dragging and stacking across rooms. Off by default."/>
                 </StackPanel>
 
-                <!-- ============ Room-skip ============ -->
+                <!-- ============ Room thresholds (per profile) ============ -->
                 <TextBlock Classes="SectionHeader" Text="Room thresholds"/>
-                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Min. monsters"/>
-                    <NumericUpDown Grid.Row="0" Grid.Column="1"
-                                   Value="{Binding MinMonstersInRoom, Mode=TwoWay}"
-                                   Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Skip the room if fewer than this many hostiles are present. Range 0–20."/>
+                <Border Classes="ProfileGroup"
+                        Background="{Binding ActiveProfileAccentSoftBrush}"
+                        BorderBrush="{Binding ActiveProfileAccentBrush}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                                   Foreground="{Binding ActiveProfileAccentBrush}"/>
+                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Min. monsters"/>
+                            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                           Value="{Binding MinMonstersInRoom, Mode=TwoWay}"
+                                           Minimum="0" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Skip the room if fewer than this many hostiles are present. Range 0–20."/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Max. monsters"/>
-                    <NumericUpDown Grid.Row="1" Grid.Column="1"
-                                   Value="{Binding MaxMonstersInRoom, Mode=TwoWay}"
-                                   Minimum="1" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Skip the room if more than this many hostiles are present. Range 1–20."/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Max. monsters"/>
+                            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                           Value="{Binding MaxMonstersInRoom, Mode=TwoWay}"
+                                           Minimum="1" Maximum="20" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Skip the room if more than this many hostiles are present. Range 1–20."/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Run distance"/>
-                    <NumericUpDown Grid.Row="2" Grid.Column="1"
-                                   Value="{Binding RunDistance, Mode=TwoWay}"
-                                   Minimum="1" Maximum="100" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Rooms to flee before re-evaluating. Range 1–100."/>
-                </Grid>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Run distance"/>
+                            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                           Value="{Binding RunDistance, Mode=TwoWay}"
+                                           Minimum="1" Maximum="100" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                           ToolTip.Tip="Rooms to flee before re-evaluating. Range 1–100."/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
 
                 <CheckBox Content="Kill all engaged"
                           Margin="0,6,0,0"
@@ -280,40 +382,14 @@
                           IsChecked="{Binding BreakBeforeFleeing, Mode=TwoWay}"
                           ToolTip.Tip="When checked (default): `break` is sent before the first flee move so auto-attack disengages and the move lands cleanly. When unchecked, the flee starts mid-fight and the server may reject the first move because you're still engaged — faster, but you may waste a round."/>
 
-                <!-- ============ Spell Combat ============ -->
+                <!-- ============ Spell combat (per profile) ============ -->
                 <TextBlock Classes="SectionHeader" Text="Spell combat"/>
-
-                <!-- Casting spell profiles: numbered chips switch the whole spell
-                     setup below (the active one is gold); +/✕ add an empty profile
-                     or remove the active one; the name box renames the active
-                     profile. All spell fields below belong to the active profile;
-                     switching a chip is a live swap, the name saves with the tab. -->
-                <StackPanel Spacing="4" Margin="0,0,0,6">
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <TextBlock Classes="FieldLabel" Text="Profile:" VerticalAlignment="Center"/>
-                        <ItemsControl ItemsSource="{Binding ProfileChips}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" Spacing="3"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vmroot:CombatProfileMenuItem">
-                                    <Button Classes="ProfileChip" Classes.Active="{Binding IsActive}"
-                                            Content="{Binding Number}" Command="{Binding SwitchCommand}"
-                                            ToolTip.Tip="{Binding Display}"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <Button Content="+" Command="{Binding AddProfileCommand}"
-                                ToolTip.Tip="Add a new (empty) profile"/>
-                        <Button Content="✕" Command="{Binding RemoveActiveProfileCommand}"
-                                ToolTip.Tip="Remove the active profile (keeps at least one)"/>
-                    </StackPanel>
-                    <TextBox Text="{Binding ActiveProfileName, Mode=TwoWay}" Width="220"
-                             HorizontalAlignment="Left" PlaceholderText="Profile name"
-                             ToolTip.Tip="Name the active profile — used by @profile and the menus (saved with the tab)"/>
-                </StackPanel>
+                <Border Classes="ProfileGroup"
+                        Background="{Binding ActiveProfileAccentSoftBrush}"
+                        BorderBrush="{Binding ActiveProfileAccentBrush}">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                               Foreground="{Binding ActiveProfileAccentBrush}"/>
 
                 <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,4">
                     <TextBlock Classes="FieldLabel" Text="Minimum mana per cast:"/>
@@ -525,6 +601,8 @@
                               IsChecked="{Binding DrainsOverrideAoe, Mode=TwoWay}"
                               ToolTip.Tip="When checked, the drain overrides the room AoE (multi-attack) too. Off (default): with enough enemies to trigger the AoE, the AoE keeps rooming and the drain only overrides single-target / physical actions."/>
                 </StackPanel>
+                  </StackPanel>
+                </Border>
 
                 <Separator Margin="0,6"/>
 
@@ -532,7 +610,7 @@
                 <TextBlock Classes="SectionHeader" Text="Display"/>
                 <CheckBox Content="Show combat round totals"
                           IsChecked="{Binding ShowCombatRoundTotals, Mode=TwoWay}"
-                          ToolTip.Tip="Append the per-round damage roll-up to the terminal canvas after each round. CombatManager (PR 9.A)."/>
+                          ToolTip.Tip="Append the per-round damage roll-up to the terminal after each round."/>
 
             </StackPanel>
         </Grid>

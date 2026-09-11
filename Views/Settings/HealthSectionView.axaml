@@ -19,6 +19,20 @@
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        <!-- The whole Health tab is per combat profile: a soft panel tinted the
+             active-profile accent (bound per-instance, matching the Combat tab's
+             chips + borders) with the profile name in the header. -->
+        <Style Selector="Border.ProfileGroup">
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Margin" Value="0,6,0,4"/>
+        </Style>
+        <Style Selector="TextBlock.ProfileGroupHeader">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
@@ -54,6 +68,16 @@
                            Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
                 <Border Classes="SettingsSectionRule"/>
 
+                <!-- The entire Health tab is per combat profile — switch the active
+                     profile with the chip bar on the Combat tab and these thresholds
+                     swap with it. -->
+                <Border Classes="ProfileGroup"
+                        Background="{Binding ActiveProfileAccentSoftBrush}"
+                        BorderBrush="{Binding ActiveProfileAccentBrush}">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
+                               Foreground="{Binding ActiveProfileAccentBrush}"/>
+
                 <!-- ============ Health (HP) ============ -->
                 <TextBlock Classes="SectionHeader" Text="Health (HP)"/>
 
@@ -72,7 +96,7 @@
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
                                    Value="{Binding RestMaxHp, Mode=TwoWay}"
                                    Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Stop resting once HP reaches this threshold. Used by HealthManager (PR 9.B) to clear the HealthRecovery gate."/>
+                                   ToolTip.Tip="Stop resting once HP reaches this threshold — the auto-rest ends here and you stand back up."/>
                     <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding RestMaxHpConverted}"/>
@@ -90,7 +114,7 @@
                     <NumericUpDown Grid.Row="2" Grid.Column="1"
                                    Value="{Binding HealRestTrigger, Mode=TwoWay}"
                                    Minimum="0" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Cast Spells → Minor heal during a rest cycle when HP drops below this. CastingDirector (PR 9.D)."/>
+                                   ToolTip.Tip="Cast Spells → Minor heal during a rest cycle when HP drops below this."/>
                     <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding HealRestTriggerConverted}"/>
@@ -150,7 +174,7 @@
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
                                    Value="{Binding RestMaxMa, Mode=TwoWay}"
                                    Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Stop resting (caster pool) once MA / KAI reaches this threshold. HealthManager (PR 9.B) uses it to clear the ManaRecovery gate."/>
+                                   ToolTip.Tip="Stop resting the caster pool once MA / KAI reaches this threshold."/>
                     <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding RestMaxMaConverted}"/>
@@ -168,7 +192,7 @@
                     <NumericUpDown Grid.Row="2" Grid.Column="1"
                                    Value="{Binding HealIfAboveMaResting, Mode=TwoWay}"
                                    Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Only cast heal spells while resting / idle when MA / KAI is at or above this — below it, heals are skipped so the pool regenerates. 0 = always heal. CastingDirector (PR 9.D)."/>
+                                   ToolTip.Tip="Only cast heal spells while resting / idle when MA / KAI is at or above this — below it, heals are skipped so the pool regenerates. 0 = always heal."/>
                     <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding HealIfAboveMaRestingConverted}"/>
@@ -177,7 +201,7 @@
                     <NumericUpDown Grid.Row="3" Grid.Column="1"
                                    Value="{Binding HealIfAboveMaCombat, Mode=TwoWay}"
                                    Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Same mana-floor for heal spells but applied in combat. 0 = always heal (survival over conservation). CastingDirector (PR 9.D)."/>
+                                   ToolTip.Tip="Same mana-floor for heal spells but applied in combat. 0 = always heal (survival over conservation)."/>
                     <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding HealIfAboveMaCombatConverted}"/>
@@ -195,7 +219,7 @@
                     <NumericUpDown Grid.Row="5" Grid.Column="1"
                                    Value="{Binding BlessIfAboveMa, Mode=TwoWay}"
                                    Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="Re-cast party / self buffs when MA recovers past this point. CastingDirector (PR 9.D)."/>
+                                   ToolTip.Tip="Re-cast party / self buffs when MA recovers past this point."/>
                     <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
                                VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding BlessIfAboveMaConverted}"/>
@@ -256,6 +280,8 @@
                              ToolTip.Tip="Sent right after standing up. Same chaining rules as the pre-rest command."/>
                 </Grid>
 
+                  </StackPanel>
+                </Border>
             </StackPanel>
         </Grid>
     </ScrollViewer>

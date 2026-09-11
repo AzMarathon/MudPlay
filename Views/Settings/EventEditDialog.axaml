@@ -121,8 +121,7 @@
 
             <!-- WHAT section: shared two-column layout so every action
                  input starts at the same x. WHAT-side targets are
-                 validated on Save (popup) rather than inline, per the
-                 PR 8.5 polish pass. -->
+                 validated on Save (popup) rather than inline. -->
             <Grid Grid.Row="2" Margin="0,12,0,0"
                   ColumnDefinitions="100,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto"

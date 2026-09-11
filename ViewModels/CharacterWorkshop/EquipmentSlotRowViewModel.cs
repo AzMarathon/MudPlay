@@ -45,6 +45,13 @@ public sealed partial class EquipmentSlotRowViewModel : ObservableObject
     // EquipmentManager's block set; recomputed on block changes + set switch.
     [ObservableProperty] private bool _blocked;
 
+    // Soft fill tinting the Default set's four weapon rows (Weapon / Off-Hand / Alt
+    // Weapon / Alt Off-Hand) the ACTIVE combat profile's colour — those slots are the
+    // surface a combat profile's weapons live in, so the tint (matching the Combat
+    // tab's chip / borders) shows they swap with the profile. Null on every other
+    // row / set. Set by the section.
+    [ObservableProperty] private Avalonia.Media.IBrush? _syncBrush;
+
     public EquipmentSlotRowViewModel(
         EquipmentSlot slot, string label, bool isVirtual,
         IReadOnlyList<string> availableItems, Action<EquipmentSlotRowViewModel> onEdited)

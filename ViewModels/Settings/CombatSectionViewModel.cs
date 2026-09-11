@@ -3,6 +3,7 @@ using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Views.Settings;
@@ -24,13 +25,17 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     private readonly ProfileService _profile;
     private readonly Game.Spells.SpellbookState _spellbook;
     private readonly Game.PlayerState? _state;
+    private readonly GameDataCache? _gameData;
     private Control? _view;
     private bool _suppressDirty;
-    private bool _dirty;
 
     public override string Id => "combat";
     public override string Title => "Combat";
-    public override bool IsDirty => _dirty;
+
+    // Dirtiness is owned by the shared staging session — a combat profile spans the
+    // Combat and Health tabs, and the single Commit writes both Settings sections +
+    // the profile blob + weapons as one unit, so any edit on either tab dirties it.
+    public override bool IsDirty => _session.IsDirty;
 
     public bool HasProfile => _profile.Current is not null;
 
@@ -102,12 +107,24 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // user switching away and back doesn't lose sight of a value they tuned.
     public bool CycleFieldsEnabled => ActionOrder == CombatActionOrder.CustomRoundCycle;
 
-    // ----- Weapon slots --------------------------------------------
-    // The weapon-swap matrix (normal / alternate / backstab + off-hands) is
-    // configured in the Workshop's Equipment Manager gear sets, not here:
-    // AppServices overlays those onto CombatSettings on each combat read
-    // (Game.Inventory.EquipmentWeaponSync). This tab keeps only the attack
-    // verbs + backstab flow options below.
+    // ----- Weapon slots (per-profile) -------------------------------
+    // Primary / alternate weapons + off-hands are now PER COMBAT PROFILE. The active
+    // profile's weapons live in the Workshop Default gear set — the surface the
+    // combat overlay (EquipmentWeaponSync) + the auto-equip coordinator read — so
+    // editing here and editing the Workshop's Default-set weapon rows are the same
+    // live loadout, kept in sync. Switching a profile writes its stored weapons into
+    // the Default set. Backstab gear stays global on the Workshop Backstab set.
+    [ObservableProperty] private string? _normalWeapon;
+    [ObservableProperty] private string? _normalOffHand;
+    [ObservableProperty] private string? _alternateWeapon;
+    [ObservableProperty] private string? _alternateOffHand;
+
+    // Typeahead suggestions for the weapon pickers — every weapon-slot / off-hand
+    // item the active game-data set ships (unfiltered by level/class/alignment; the
+    // Default set the pick lands in still block-flags an unwearable choice). Weapon +
+    // Alt-Weapon share WeaponSuggestions; OffHand + Alt-OffHand share OffHandSuggestions.
+    [ObservableProperty] private IReadOnlyList<string> _weaponSuggestions = Array.Empty<string>();
+    [ObservableProperty] private IReadOnlyList<string> _offHandSuggestions = Array.Empty<string>();
 
     // ----- Backstab options -----------------------------------------
 
@@ -354,145 +371,199 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     [ObservableProperty] private bool _showCombatRoundTotals;
 
-    // ----- Casting spell profiles (staged quick-swap chip bar) ------
+    // ----- Combat profiles (staged quick-swap chip bar) -------------
 
-    private Game.Combat.CombatProfileManager ProfilesMgr => AppServices.Current.CombatProfiles;
-
-    // The STAGED working copy of the profile list + which one is active. Every chip
-    // switch, add / remove, name + box edit happens here in memory — nothing is
-    // written to the character profile or used live until Apply / OK. Cancel
-    // (Discard) throws the working copy away and reloads the persisted one.
-    private List<CombatSpellProfile> _workingProfiles = new();
-    private int _workingActive;
+    // The SHARED staged working list — one per Settings window, edited by BOTH the
+    // Combat and Health tabs through it (a combat profile spans both). Every chip
+    // switch, add / remove, name + box edit happens in memory here; Apply commits,
+    // Cancel discards. This tab owns the spell / verb / room / weapon boxes + the
+    // name; the Health tab owns the Health section of the same working profiles.
+    private readonly CombatProfileStagingSession _session;
 
     // One numbered chip per working profile; the active one is highlighted gold.
-    // Clicking a chip STAGES a switch (folds the boxes into the outgoing profile,
-    // loads the selected one into the boxes) — no persistence.
+    // Clicking a chip STAGES a switch through the shared session (folds both tabs'
+    // boxes into the outgoing profile, loads the selected one) — no persistence.
     public ObservableCollection<ViewModels.CombatProfileMenuItem> ProfileChips { get; } = new();
 
     // The active profile's name — the textbox below the chips. Staged like the rest.
     [ObservableProperty] private string _activeProfileName = string.Empty;
 
-    partial void OnActiveProfileNameChanged(string value) => MarkDirty();
+    // Header shown on every "this group is per combat profile" border, on both the
+    // Combat and Health tabs. Tracks the active profile so a chip switch / rename
+    // re-labels the borders live.
+    public string ActiveProfileLabel =>
+        $"Combat profile: {(string.IsNullOrWhiteSpace(ActiveProfileName) ? $"Profile {_session.ActiveIndex + 1}" : ActiveProfileName.Trim())}";
 
-    // (Re)build the working copy from the persisted profiles — on load, on a
-    // character swap, after Apply, and on Discard. The boxes are loaded separately
-    // (LoadFromProfile) and mirror the persisted active profile's spells.
-    private void InitWorkingCopyFromPersisted()
+    // The active profile's distinct accent colour — each profile reads as its own,
+    // so the per-profile borders + header recolour on a chip switch to match the
+    // active chip. Raised alongside ActiveProfileLabel from RebuildProfileChips.
+    public Avalonia.Media.IBrush ActiveProfileAccentBrush =>
+        CombatProfilePalette.SolidBrush(_session.ActiveIndex + 1);
+    public Avalonia.Media.IBrush ActiveProfileAccentSoftBrush =>
+        CombatProfilePalette.SoftBrush(_session.ActiveIndex + 1);
+
+    partial void OnActiveProfileNameChanged(string value)
     {
-        _workingProfiles = ProfilesMgr.Profiles.Select(p => p.Clone(newIdentity: false)).ToList();
-        if (_workingProfiles.Count == 0)
-            _workingProfiles.Add(CombatSpellProfile.Capture(string.Empty, BuildDto()));
-        int active = ProfilesMgr.ActiveIndex;
-        _workingActive = Math.Clamp(active < 0 ? 0 : active, 0, _workingProfiles.Count - 1);
-        ActiveProfileName = _workingProfiles[_workingActive].Name;
-        RebuildProfileChips();
+        OnPropertyChanged(nameof(ActiveProfileLabel));
+        if (_suppressDirty) return;
+        _session.SetActiveName(value);
+        MarkDirty();
     }
 
     private void RebuildProfileChips()
     {
         ProfileChips.Clear();
-        for (int i = 0; i < _workingProfiles.Count; i++)
+        IReadOnlyList<CombatSpellProfile> profiles = _session.Profiles;
+        for (int i = 0; i < profiles.Count; i++)
         {
             int index = i;
             ProfileChips.Add(new ViewModels.CombatProfileMenuItem(
-                number: i + 1, name: _workingProfiles[i].Name, isActive: i == _workingActive,
-                switchCommand: new RelayCommand(() => SwitchChip(index))));
+                number: i + 1, name: profiles[i].Name, isActive: i == _session.ActiveIndex,
+                switchCommand: new RelayCommand(() => _session.SwitchTo(index))));
         }
+        OnPropertyChanged(nameof(ActiveProfileLabel));
+        OnPropertyChanged(nameof(ActiveProfileAccentBrush));
+        OnPropertyChanged(nameof(ActiveProfileAccentSoftBrush));
     }
 
-    // Fold the current boxes + name into the active working profile (keeping its
-    // Id) — done before switching away, adding, removing, or applying.
-    private void CaptureBoxesToWorking()
+    // Fold the Combat tab's boxes (spells + verbs + room + weapons + name) into the
+    // active working profile — the session's CaptureRequested handler. Mutates in
+    // place so the Health tab's Health fold on the same profile isn't clobbered.
+    private void CaptureCombatBoxesToActive()
     {
-        if (_workingActive < 0 || _workingActive >= _workingProfiles.Count) return;
-        string id = _workingProfiles[_workingActive].Id;
-        CombatSpellProfile snap = CombatSpellProfile.Capture(ActiveProfileName, BuildDto());
-        snap.Id = id;
-        _workingProfiles[_workingActive] = snap;
+        CombatSpellProfile p = _session.Active;
+        p.CaptureCombatFrom(BuildDto());
+        p.Name = ActiveProfileName ?? string.Empty;
+        p.NormalWeapon     = NullIfBlank(NormalWeapon);
+        p.NormalOffHand    = NullIfBlank(NormalOffHand);
+        p.AlternateWeapon  = NullIfBlank(AlternateWeapon);
+        p.AlternateOffHand = NullIfBlank(AlternateOffHand);
     }
 
-    // Load a profile's spell fields into the boxes, leaving the current non-spell
-    // fields alone (a profile only carries the spell config).
-    private void LoadSpellSlotBoxesFrom(CombatSpellProfile p)
+    // Chip switch: load the active profile's PER-PROFILE combat fields into the
+    // boxes, preserving the shared fields (targeting / backstab / action-order /
+    // display). BuildDto seeds the scratch from the current boxes; ApplyTo overwrites
+    // only the per-profile fields, so LoadBoxesFrom leaves the shared boxes as-is.
+    private void OnSessionLoadPerProfile()
     {
+        _suppressDirty = true;
+        CombatSpellProfile p = _session.Active;
         CombatSettings scratch = BuildDto();
         p.ApplyTo(scratch);
-        _suppressDirty = true;
         LoadBoxesFrom(scratch);
+        LoadWeaponBoxesFromActive();
+        ActiveProfileName = p.Name;
         _suppressDirty = false;
-    }
-
-    private void SwitchChip(int index)
-    {
-        if (index < 0 || index >= _workingProfiles.Count || index == _workingActive) return;
-        CaptureBoxesToWorking();
-        _workingActive = index;
-        LoadSpellSlotBoxesFrom(_workingProfiles[index]);
-        _suppressDirty = true;
-        ActiveProfileName = _workingProfiles[index].Name;
-        _suppressDirty = false;
-        RebuildProfileChips();
         MarkDirty();
     }
 
-    // Stage a new EMPTY profile and switch to it (its blank spells clear the boxes,
-    // ready to configure). Nothing persists until Apply.
-    [RelayCommand]
-    private void AddProfile()
+    // Profile swap / discard: reload EVERYTHING for the new active profile — the full
+    // Settings["Combat"] (shared + per-profile, kept in sync on the active profile)
+    // plus weapons + name.
+    private void OnSessionReloadAll()
     {
-        CaptureBoxesToWorking();
-        CombatSpellProfile np = new();
-        _workingProfiles.Add(np);
-        _workingActive = _workingProfiles.Count - 1;
-        LoadSpellSlotBoxesFrom(np);
         _suppressDirty = true;
-        ActiveProfileName = string.Empty;
+        LoadFromProfile();
+        LoadWeaponBoxesFromActive();
+        ActiveProfileName = _session.Active.Name;
         _suppressDirty = false;
-        RebuildProfileChips();
-        MarkDirty();
     }
 
-    // Stage removal of the active profile (kept ≥1); switch to a neighbour.
-    [RelayCommand]
-    private void RemoveActiveProfile()
+    private void LoadWeaponBoxesFromActive()
     {
-        if (_workingProfiles.Count <= 1) return;
-        _workingProfiles.RemoveAt(_workingActive);
-        if (_workingActive >= _workingProfiles.Count) _workingActive = _workingProfiles.Count - 1;
-        LoadSpellSlotBoxesFrom(_workingProfiles[_workingActive]);
-        _suppressDirty = true;
-        ActiveProfileName = _workingProfiles[_workingActive].Name;
-        _suppressDirty = false;
-        RebuildProfileChips();
-        MarkDirty();
+        CombatSpellProfile p = _session.Active;
+        NormalWeapon     = p.NormalWeapon;
+        NormalOffHand    = p.NormalOffHand;
+        AlternateWeapon  = p.AlternateWeapon;
+        AlternateOffHand = p.AlternateOffHand;
     }
+
+    private void OnSessionCommitted() => OnPropertyChanged(nameof(IsDirty));
+
+    [RelayCommand] private void AddProfile() => _session.AddNew();
+
+    [RelayCommand] private void RemoveActiveProfile() => _session.RemoveActive();
 
     public CombatSectionViewModel()
-        : this(AppServices.Current.Profile) { }
+        : this(AppServices.Current.Profile, CreateStandaloneSession()) { }
 
-    public CombatSectionViewModel(ProfileService profile)
+    // Convenience for SettingsWindowViewModel, which builds the shared session and
+    // passes the same instance to both the Combat and Health section VMs.
+    public CombatSectionViewModel(CombatProfileStagingSession session)
+        : this(AppServices.Current.Profile, session) { }
+
+    public CombatSectionViewModel(ProfileService profile, CombatProfileStagingSession session)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(session);
         _profile = profile;
+        _session = session;
         _spellbook = AppServices.Current.Spellbook;
         _state = TryGetPlayerState();
+        _gameData = TryGetGameData();
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
         _spellbook.Changed += OnSpellbookChanged;
         if (_state is not null) _state.PropertyChanged += OnPlayerStateChanged;
+        if (_gameData is not null) _gameData.ActiveSetChanged += OnActiveSetChangedRefreshWeapons;
+
+        // This tab drives the shared session; the Health tab folds its own section in
+        // on the same events.
+        _session.BuildFullCombat = BuildDto;
+        _session.CaptureRequested += CaptureCombatBoxesToActive;
+        _session.LoadRequested += OnSessionLoadPerProfile;
+        _session.ReloadAllRequested += OnSessionReloadAll;
+        _session.ChipsChanged += RebuildProfileChips;
+        _session.Committed += OnSessionCommitted;
+
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= OnProfileChanged;
             _profile.ProfileClosed -= OnProfileClosedExternally;
             _spellbook.Changed -= OnSpellbookChanged;
             if (_state is not null) _state.PropertyChanged -= OnPlayerStateChanged;
+            if (_gameData is not null) _gameData.ActiveSetChanged -= OnActiveSetChangedRefreshWeapons;
+            _session.BuildFullCombat = null;
+            _session.CaptureRequested -= CaptureCombatBoxesToActive;
+            _session.LoadRequested -= OnSessionLoadPerProfile;
+            _session.ReloadAllRequested -= OnSessionReloadAll;
+            _session.ChipsChanged -= RebuildProfileChips;
+            _session.Committed -= OnSessionCommitted;
         });
+
+        RefreshWeaponSuggestions();
         _suppressDirty = true;
-        LoadFromProfile();
-        InitWorkingCopyFromPersisted();
+        LoadFromProfile();                // shared + active per-profile from Settings["Combat"]
+        LoadWeaponBoxesFromActive();      // weapons from the session's active profile
+        ActiveProfileName = _session.Active.Name;
+        RebuildProfileChips();
         _suppressDirty = false;
     }
+
+    // Standalone session for the parameterless (design-time / non-Settings-window)
+    // path; the Settings window builds its own shared instance and injects it.
+    private static CombatProfileStagingSession CreateStandaloneSession() =>
+        new(AppServices.Current.CombatProfiles, AppServices.Current.Profile,
+            () => AppServices.Current.Profile.Current?.Equipment);
+
+    private static GameDataCache? TryGetGameData()
+    {
+        try { return AppServices.Current.GameData; }
+        catch { return null; }   // design-time
+    }
+
+    // Re-derive the weapon-picker suggestion lists from the active game-data set's
+    // Items table. Unfiltered by the live character (the Default set the pick lands
+    // in still flags an unwearable choice); a null / empty table yields empty lists.
+    private void RefreshWeaponSuggestions()
+    {
+        if (_gameData is null) return;
+        ClassEquipProfile anyClass = ItemEquipFilter.ResolveClassProfile(_gameData, null);
+        WeaponSuggestions  = EquipmentSlotMap.GetItemsForSlot(_gameData, EquipmentSlot.Weapon, 0, anyClass, null);
+        OffHandSuggestions = EquipmentSlotMap.GetItemsForSlot(_gameData, EquipmentSlot.OffHand, 0, anyClass, null);
+    }
+
+    private void OnActiveSetChangedRefreshWeapons(string? _) => RefreshWeaponSuggestions();
 
     // Build the full CombatSettings DTO from the current boxes (spell + non-spell).
     // Shared by Apply and the staged profile-switch capture.
@@ -585,38 +656,15 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             ShowCombatRoundTotals = ShowCombatRoundTotals,
     };
 
-    // Commit the staged edits. Fold the current boxes + name into the active
-    // WORKING profile, then persist the whole staged profile list + the active
-    // profile's spells to the character profile. Until this runs, every chip
+    // Commit the staged edits through the shared session, which folds BOTH tabs'
+    // boxes into the working profiles and persists Settings["Combat"] +
+    // Settings["Health"] + the CombatProfiles blob + the Default-set weapons in one
+    // Save. Guarded on the session's dirty flag, so whichever of the Combat / Health
+    // Apply runs first commits and the other no-ops. Until this runs, every chip
     // switch / add / remove / box edit was in-memory only; Cancel throws them away.
-    public override void Apply()
-    {
-        if (_profile.Current is not { } profile) return;
-        CaptureBoxesToWorking();
-        CombatSettings dto = BuildDto();
+    public override void Apply() => _session.CommitIfDirty();
 
-        profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
-        profile.CombatProfiles = new CombatProfileSettings
-        {
-            Profiles = _workingProfiles.Select(p => p.Clone(newIdentity: false)).ToList(),
-            ActiveId = _workingProfiles[_workingActive].Id,
-        };
-        _profile.Save();
-
-        ClearDirty();
-        ProfilesMgr.RaiseChanged();       // refresh Action-menu / toolbar from the committed state
-        InitWorkingCopyFromPersisted();   // re-baseline the working copy to what we just saved
-    }
-
-    public override void Discard()
-    {
-        _suppressDirty = true;
-        LoadFromProfile();
-        InitWorkingCopyFromPersisted();
-        _suppressDirty = false;
-        ClearDirty();
-    }
+    public override void Discard() => _session.DiscardAndReset();
 
     private static string? NullIfBlank(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -633,8 +681,21 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // past any fight that hasn't already ended some other way.
     private static int ClampRounds(int value) => Math.Clamp(value, 0, 999);
 
-    private void OnProfileChanged(CharacterProfile _) => ReloadAfterProfileSwap();
-    private void OnProfileClosedExternally() => ReloadAfterProfileSwap();
+    // The shared session subscribes to ProfileLoaded first (it is constructed before
+    // this VM) and drives the box reload via ReloadAllRequested + ChipsChanged; this
+    // handler only refreshes the non-staging HasProfile gate + the weapon suggestions
+    // for the new character's data.
+    private void OnProfileChanged(CharacterProfile _)
+    {
+        RefreshWeaponSuggestions();
+        OnPropertyChanged(nameof(HasProfile));
+        OnPropertyChanged(nameof(IsDirty));
+    }
+    private void OnProfileClosedExternally()
+    {
+        OnPropertyChanged(nameof(HasProfile));
+        OnPropertyChanged(nameof(IsDirty));
+    }
 
     private void OnSpellbookChanged()
     {
@@ -649,16 +710,6 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         // The resolved energy/targeting behind each debuff slot may have changed too.
         OnPropertyChanged(nameof(AreaDebuffSpellMisSlotWarning));
         OnPropertyChanged(nameof(SingleTargetDebuffSpellMisSlotWarning));
-    }
-
-    private void ReloadAfterProfileSwap()
-    {
-        _suppressDirty = true;
-        LoadFromProfile();
-        InitWorkingCopyFromPersisted();
-        _suppressDirty = false;
-        ClearDirty();
-        OnPropertyChanged(nameof(HasProfile));
     }
 
     private void LoadFromProfile() => LoadBoxesFrom(ReadOrDefault());
@@ -750,23 +801,25 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     // ----- IsDirty plumbing -----------------------------------------
 
-    private void ClearDirty()
-    {
-        _dirty = false;
-        OnPropertyChanged(nameof(IsDirty));
-    }
-
+    // Route every box edit into the shared session's single dirty flag (a combat
+    // profile spans this tab + the Health tab). The session clears it on Commit /
+    // Discard; this VM just re-raises IsDirty for its own Save-button gate.
     private void MarkDirty()
     {
         if (_suppressDirty) return;
-        if (_dirty) return;
-        _dirty = true;
+        _session.MarkDirty();
         OnPropertyChanged(nameof(IsDirty));
     }
 
-    // Master + attack command
+    // Attack commands
     partial void OnNormalAttackCommandChanged(string value)      => MarkDirty();
     partial void OnAlternateAttackCommandChanged(string value)   => MarkDirty();
+
+    // Weapon pickers (per-profile)
+    partial void OnNormalWeaponChanged(string? value)            => MarkDirty();
+    partial void OnNormalOffHandChanged(string? value)           => MarkDirty();
+    partial void OnAlternateWeaponChanged(string? value)         => MarkDirty();
+    partial void OnAlternateOffHandChanged(string? value)        => MarkDirty();
 
     // Combat action order
     partial void OnActionOrderChanged(CombatActionOrder value)

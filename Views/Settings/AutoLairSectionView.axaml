@@ -78,7 +78,7 @@
                                FormatString="0"
                                Width="120"
                                ShowButtonSpinner="True"
-                               ToolTip.Tip="How long the scheduler stays in Engaging after entering a lair before re-evaluating. Default 30 s. Phase 13's CombatManager will eventually expose a combat-ended signal that replaces this timer."/>
+                               ToolTip.Tip="How long the scheduler stays in Engaging after entering a lair before re-evaluating. Default 30 s."/>
                 <TextBlock Grid.Column="2" Classes="FieldSuffix" Text="seconds"/>
             </Grid>
 

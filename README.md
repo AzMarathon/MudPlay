@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.64.1**
+> **Version 3.65.1**
 > - An interrupted sweep no longer dumps its load on you: what Roomba was carrying and what it still had to do are remembered per character, verified against a real inventory read, and picked up next time
 > - New **Resume** button on the Roomba tab — carries on from a stopped sweep without re-walking the whole circuit, and survives closing the client
 > - The Roomba Log gains an **Out of space** section naming the categories that need another room, and the map rings a Roomba room that ran out of space

@@ -1,6 +1,6 @@
 # Version history
 
-## 3.64.1
+## 3.65.1
 
 - An interrupted sweep no longer dumps its load on you: what Roomba was carrying and what it still had to do are remembered per character, verified against a real inventory read, and picked up next time
 - New **Resume** button on the Roomba tab — carries on from a stopped sweep without re-walking the whole circuit, and survives closing the client
@@ -9,6 +9,16 @@
 - Recovery attempts are spaced out, so a reroute that instantly re-blocks can't spend the whole retry budget in one second
 - Fixed a crash when fleeing a fight from a room whose way back is a teleport (e.g. the Negative Power Plane) — the retreat now stops at the teleport instead of taking the client down
 - bug reports addressed: stock-20260904-135419, stock-20260904-143436, Crash-20260908-181131
+
+## 3.65.0
+
+- Combat profiles expanded from spell-only snapshots to full quick-swap loadouts: each profile now also carries the attack commands, room thresholds (min/max monsters, run distance), the primary/alternate weapons (+ off-hands), the entire Health tab, and the Spells tab's between-round priority order + healing/regen picks
+- Every per-profile settings group on the Combat, Health and Spells tabs is wrapped in a "Combat profile: <name>" border; shared settings stay outside (Spells cures / bless timing / ailment gates + the Buff Watchdog self-bless slots stay per-character)
+- Each profile now has its own distinct colour — its chip, its bordered groups (all three tabs), and the Workshop's Default-set weapon rows all take that colour, so profiles are visually distinct
+- New weapon pickers on the Combat tab; a profile's weapons live in the Workshop Default gear set and switch with the profile, so the equipped weapon changes on swap
+- Player Workshop Equipment Manager marks the Default set's weapon rows with the active profile name + colour to show they're synced
+- The combat-profile chip selector moved to the top of the Combat tab; @profile / the toolbar cycle / the Action menu now swap the whole loadout
+- Removed stale "wires in PR 9.x" / phase-plan references from Settings tooltips (General, Health, Combat, Auto-Lair, Other)
 
 ## 3.64.0
 
