@@ -6080,9 +6080,7 @@ public sealed class AppServices
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
-            // Silent supersede: the detour redirect is our own, not an external
-            // abort, so it must not fire a Stopped back into this router's OnWalkEvent.
-            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
+            walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += PathItemGiveRouter.OnNeedPosted;
@@ -6104,11 +6102,10 @@ public sealed class AppServices
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
-            // Silent supersede: the shop / bank redirect is our own, not an external
-            // abort, so it must not fire a Stopped back into this router's OnWalkEvent
-            // (which would abandon the detour on arrival — the "sat idle at the shop,
-            // never bought" bug).
-            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
+            // The shared detour walk supersedes silently — without that, arriving at
+            // the shop fired a Stopped into this router and abandoned the detour on
+            // arrival (the "sat idle at the shop, never bought" bug).
+            walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += PathItemShopRouter.OnNeedPosted;
@@ -6140,8 +6137,7 @@ public sealed class AppServices
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
-            // Silent supersede: the summon detour is our own, not an external abort.
-            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
+            walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += PathItemSummonRouter.OnNeedPosted;
@@ -6177,8 +6173,7 @@ public sealed class AppServices
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
             confirm: (title, body) => Confirm.ConfirmAsync(title, body, "Reroute"),
-            // Silent supersede: the hunt reroute is our own, not an external abort.
-            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
+            walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += MonsterDropRouter.OnNeedPosted;
@@ -8500,6 +8495,30 @@ public sealed class AppServices
         }
         return true;
     }
+
+    // The walk every path-item router drives, for both legs of a detour: out to the
+    // source and back to the original destination.
+    //
+    // Acquirable gates stay SUSPENDED while any path item is still owed. The whole
+    // premise of a gated route is "plan as if we'll be carrying it" — that's what
+    // the user consented to in the picker — but the resume re-planned with gates
+    // live, so a route with TWO gates died the moment the first item landed: the
+    // orb was collected, the walk re-planned, and BFS refused the still-locked gate
+    // door outright. Worse, failing at plan time happens BEFORE the walk-start
+    // announce, so the remaining need was never re-offered and the fulfiller that
+    // would have fetched the key was never asked (report paradigm-20260911-110624).
+    //
+    // Crossing is still guarded: the walker holds any step whose gate item is
+    // missing while a fulfiller is fetching it, so suspending gates here plans the
+    // route without ever walking into one unprepared.
+    //
+    // Silent supersede: the redirect is our own, not an external abort, so it must
+    // not fire a Stopped back into the routers' own OnWalkEvent.
+    private void WalkToForPathItemDetour(Game.Map.RoomKey key)
+        => Walker.WalkTo(
+            key,
+            planThroughAcquirableGates: Needs.Outstanding(NeedKind.PathItem).Count > 0,
+            supersedeSilently: true);
 
     // True when a PathItem need for itemId is still outstanding. Scanned rather
     // than indexed: the list holds one entry per gate item on the current route, so

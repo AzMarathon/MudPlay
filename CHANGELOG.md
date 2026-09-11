@@ -15,7 +15,8 @@
 - After asking an NPC for a path item the pack is re-read with `i` instead of trusting the hand-over line — that wording is per-giver flavour text and some givers never name the item at all, so the walk was failing for want of an item it had already been handed
 - A gate item a fulfiller had to defer on is offered again on the next walk, so a two-gate route no longer fetches the first item and then dies at the second
 - A locked door whose key is being fetched waits for it, instead of the door engine burning its one use-key attempt before the key arrives
-- bug reports addressed: paradigm-20260911-010954, paradigm-20260911-095404, paradigm-20260911-100708, paradigm-20260911-103025, paradigm-20260911-103315
+- Resuming after fetching one gate item no longer refuses the rest of the route — a two-gate trip used to collect the first item and then declare the second gate impassable
+- bug reports addressed: paradigm-20260911-010954, paradigm-20260911-095404, paradigm-20260911-100708, paradigm-20260911-103025, paradigm-20260911-103315, paradigm-20260911-110624
 
 ## 3.68.1
 
