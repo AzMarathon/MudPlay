@@ -173,24 +173,34 @@ public sealed class ItemCastSequencer
         // re-wear the off-hand. Keyed on the CAST item being two-handed.
         if (item.IsTwoHanded)
         {
-            string? restoreWeapon = SlotItem(inv, WeaponHandSlot);
-            // The blocker is whatever's literally in "Off-Hand", or — failing that —
-            // a Worn-bucketed item whose game data says it occupies the off-hand
-            // anyway (see class remarks: a worn charm/skull can block a 2H wield
-            // without the snapshot ever labeling it "Off-Hand").
-            string? restoreOffHand = SlotItem(inv, OffHandSlot) ?? OffHandBlockingWornItem(inv);
+            // What to put BACK after the cast — mirror the 1H branch's RestoreTarget
+            // fallback: prefer the live worn item, but when the snapshot has nothing
+            // there (or shows the cast 2H ITSELF — a strand left by a prior recast),
+            // fall back to the Default set's weapon + off-hand. Without this fallback a
+            // stranded greatsword restores nothing and stays two-handed over the
+            // intended 1H+shield forever, and every later recast sees it in-hand and
+            // restores nothing again — self-perpetuating. The 1H branch already
+            // recovers this way; the 2H branch didn't (the reported clobber).
+            string? restoreWeapon = RestoreTarget(inv, WeaponHandSlot, name);
+            string? restoreOffHand = OffHandRestoreTarget(inv, name);
+            // The blocker to REMOVE before the wield is whatever's LIVE in "Off-Hand"
+            // (or a Worn-bucketed off-hand occupant — a charm/skull the snapshot never
+            // labels "Off-Hand"); never the Default-set fallback, which isn't worn yet
+            // and so can't be removed.
+            string? blockerToFree = SlotItem(inv, OffHandSlot) ?? OffHandBlockingWornItem(inv);
+            bool freeOffHand = Differs(blockerToFree, name);
             bool restoreWeaponDiffers = Differs(restoreWeapon, name);
-            bool juggleOffHand = Differs(restoreOffHand, name);
+            bool restoreOffHandDiffers = Differs(restoreOffHand, name);
 
-            if (juggleOffHand) _wire.Send($"remove {restoreOffHand}");
+            if (freeOffHand) _wire.Send($"remove {blockerToFree}");
             _wire.Send($"eq {name}");
             _wire.Send($"use {name}");
             if (restoreWeaponDiffers) _wire.Send($"eq {restoreWeapon}");
-            if (juggleOffHand) _wire.Send($"eq {restoreOffHand}");
+            if (restoreOffHandDiffers) _wire.Send($"eq {restoreOffHand}");
 
             _log?.Info(LogCategory,
                 $"item-cast item=\"{name}\" 2h=True casts={item.SpellName} " +
-                $"restore-weapon={restoreWeapon ?? "<none>"} restore-offhand={(juggleOffHand ? restoreOffHand : "<none>")}");
+                $"restore-weapon={restoreWeapon ?? "<none>"} restore-offhand={(restoreOffHandDiffers ? restoreOffHand : "<none>")}");
             return true;
         }
 
@@ -253,6 +263,18 @@ public sealed class ItemCastSequencer
         string? live = SlotItem(inv, slot);
         if (Differs(live, castName)) return live;
         string? desired = _desiredSlotItem?.Invoke(slot);
+        return Differs(desired, castName) ? desired : null;
+    }
+
+    // The off-hand equivalent of RestoreTarget for the two-handed dance: the live
+    // Off-Hand slot or a Worn-bucketed off-hand occupant (a charm/skull), else — same
+    // Default-set fallback RestoreTarget uses — the set's off-hand, so a stranded 2H
+    // recovers its shield instead of staying two-handed. Null when nothing to restore.
+    private string? OffHandRestoreTarget(InventorySnapshot inv, string castName)
+    {
+        string? live = SlotItem(inv, OffHandSlot) ?? OffHandBlockingWornItem(inv);
+        if (Differs(live, castName)) return live;
+        string? desired = _desiredSlotItem?.Invoke(OffHandSlot);
         return Differs(desired, castName) ? desired : null;
     }
 

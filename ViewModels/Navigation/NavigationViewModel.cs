@@ -2607,7 +2607,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             }
 
             var session = new ExpEstimatorSessionViewModel(
-                _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.Movement);
+                _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement);
             session.PropertyChanged += OnExpEstimatorPropertyChanged;
             ExpEstimator = session;
             CurrentMode = NavigationMode.ExpEstimator;
@@ -2625,7 +2625,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         TearDownExpEstimator();
         TearDownLoopBuilder();
         var session = new ExpEstimatorSessionViewModel(
-            _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.Movement)
+            _services.ExpResolver, _services.Loops, _services.RoomGraph, _services.GameData, _services.Movement)
         { ProposedName = loop.Name };
         session.PropertyChanged += OnExpEstimatorPropertyChanged;
         foreach (LoopWaypoint w in loop.Waypoints) session.AddClick(w.Key);
@@ -3507,7 +3507,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.Walker.RemainingRoomKeys,
             _services.AutoLair.TravelCostModel,
             _services.RoomGraph.GetRoom,
-            includeLairDwell: _services.IsAutoCombatEnabled);
+            includeLairDwell: _services.IsAutoCombatEnabled,
+            lairWillBeFought: _services.LairWillBeFought);
     }
 
     private static string FormatEta(TimeSpan eta) => RouteEtaEstimator.FormatCompact(eta);
@@ -4167,6 +4168,26 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // lairs when auto-lairing.
     public ObservableCollection<CurrentNavRowViewModel> CurrentNavRows { get; } = new();
 
+    // Backs the "Entire Loop Settings" rail flyout's "Only attack in lair
+    // rooms" toggle. Hydrated from the running loop in RebuildCurrentNavRows
+    // (guarded by _suppressLoopSettingWrite so the hydrate write doesn't loop
+    // back into a persist). A user toggle writes through to the live loop +
+    // the .loop file (see OnLoopOnlyAttackInLairRoomsChanged).
+    [ObservableProperty] private bool _loopOnlyAttackInLairRooms;
+    private bool _suppressLoopSettingWrite;
+
+    partial void OnLoopOnlyAttackInLairRoomsChanged(bool value)
+    {
+        if (_suppressLoopSettingWrite) return;
+        if (_services.LoopRunner.CurrentLoop is not { } loop) return;
+        loop.OnlyAttackInLairRooms = value;             // live effect this observation
+        // Persist only when the loop is catalogued — a transient "Run this
+        // loop" instance isn't on disk, and Save would silently create a file
+        // (breaking the Run-never-writes rule). The flag still applies in-memory.
+        if (_services.Loops.Get(loop.Name) is not null)
+            _services.Loops.Save(loop);
+    }
+
     // The CURRENT NAV header's "Details…" button opens the route the engine is
     // executing in a browsable window — the route picker's full "N> map/room <
     // command" step plan, with each lair room's monsters as clickable record links.
@@ -4311,6 +4332,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 Game.Map.LoopRunner runner = _services.LoopRunner;
                 if (runner.CurrentLoop is not { } loop) break;
 
+                // Synthetic first entry — the loop-wide settings home. Present
+                // only while a loop is running; its flyout hosts "Only attack in
+                // lair rooms" (and future loop-wide toggles). Hydrate the bound
+                // toggle from the loop without triggering a write-back.
+                _suppressLoopSettingWrite = true;
+                LoopOnlyAttackInLairRooms = loop.OnlyAttackInLairRooms;
+                _suppressLoopSettingWrite = false;
+                CurrentNavRows.Add(new CurrentNavRowViewModel(
+                    index: 0, label: "Entire Loop Settings",
+                    status: CurrentNavRowStatus.Upcoming, isLoopSettingsEntry: true));
+
                 // Approach phase: show the walker's approach steps FIRST,
                 // then the loop's own circle steps appended below (all
                 // Upcoming — the loop hasn't begun). The runner expands its
@@ -4388,11 +4420,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             waypointLabel: $"{row.Index}. {row.Name}",
             command: row.Command,
             delayMs: row.DelayMs,
-            doNotRest: row.DoNotRest);
+            doNotRest: row.DoNotRest,
+            doNotAttack: row.DoNotAttack);
         WaypointActionEditResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
         if (result is null) return;
-        LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs, result.DoNotRest);
+        LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs, result.DoNotRest, result.DoNotAttack);
     }
 
     // Building Loop drag-reorder — move the row at fromOneBased to

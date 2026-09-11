@@ -439,12 +439,14 @@ public static class BugReportBuilder
             if (!string.IsNullOrWhiteSpace(o.Name)) parts.Add($"name \"{o.Name}\"");
             if (o.Relationship is { } rel) parts.Add($"relationship {rel}");
             if (o.Priority is { } prio) parts.Add($"priority {prio}");
-            if (!string.IsNullOrWhiteSpace(o.OverrideAttackCommand))
-                parts.Add($"attack-cmd \"{o.OverrideAttackCommand}\"");
-            if (o.OverrideAttackSpellId is { } atk and > 0)
-                parts.Add($"attack-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}{ManaSuffix(o.OverrideAttackMinMana)}");
             if (o.OverridePreAttackSpellId is { } pre and > 0)
-                parts.Add($"pre-attack {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}{ManaSuffix(o.OverridePreAttackMinMana)}");
+                parts.Add($"debuff {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}{ManaSuffix(o.OverridePreAttackMinMana)}");
+            if (o.OverrideAttackSpellId is { } atk and > 0)
+                parts.Add($"normal-spell {SpellLabel(svc, atk)}{CountSuffix(o.OverrideAttackCount)}{ManaSuffix(o.OverrideAttackMinMana)}");
+            if (o.OverrideAltAttackSpellId is { } alt and > 0)
+                parts.Add($"alt-spell {SpellLabel(svc, alt)}{CountSuffix(o.OverrideAltAttackCount)}{ManaSuffix(o.OverrideAltAttackMinMana)}");
+            if (!string.IsNullOrWhiteSpace(o.OverridePhysicalCommand))
+                parts.Add($"physical-cmd \"{o.OverridePhysicalCommand}\"");
             if (o.DontBackstab == true) parts.Add("dontBackstab");
             if (o.KillOnSight == true) parts.Add("killOnSight");
             if (parts.Count == 0) parts.Add("(no live fields)");
@@ -574,6 +576,38 @@ public static class BugReportBuilder
         }
         sb.Append('\n');
 
+        // Buffs a configured winner PERMANENTLY removes one-directionally (Paradigm continuous
+        // removal) — never maintained, shown "covered by" in the Watchdog. Surfaced so a
+        // "why isn't <buff> casting / holding a timer" report shows it's a deliberate skip.
+        IReadOnlyDictionary<string, string> suppressed = svc.CastDirector.CurrentSuppressedBuffs();
+        sb.Append("**Suppressed buffs (permanently removed by a configured buff)**\n\n");
+        if (suppressed.Count == 0)
+        {
+            sb.Append("(none)\n");
+        }
+        else
+        {
+            foreach (KeyValuePair<string, string> kv in suppressed)
+                sb.Append($"- {kv.Key}: not maintained — covered by {kv.Value}\n");
+        }
+        sb.Append('\n');
+
+        // Stock counterpart: one-directional losers KEPT by casting the remover first
+        // (loser cast-code → remover cast-code). Surfaced so a "both won't hold on stock"
+        // report shows the ordering the director is applying. Empty off stock.
+        IReadOnlyDictionary<string, string> collisionKept = svc.CastDirector.CurrentCollisionOrder();
+        sb.Append("**Collision-ordered buffs (stock — kept by casting the remover first)**\n\n");
+        if (collisionKept.Count == 0)
+        {
+            sb.Append("(none)\n");
+        }
+        else
+        {
+            foreach (KeyValuePair<string, string> kv in collisionKept)
+                sb.Append($"- {kv.Key}: kept — cast after its remover {kv.Value}\n");
+        }
+        sb.Append('\n');
+
         // Mana-regen reroll engine state — so a "flux stuck at a bad value" report
         // (paradigm-20260830-110918) shows the roll quality it judges from and its
         // cycle, not just the configured threshold in the buff plan above.
@@ -639,7 +673,15 @@ public static class BugReportBuilder
         // report shows exactly what was configured.
         int buffNo = 0;
         if (svc.Profile.Current?.PartyBuffs is { } unifiedBuffs)
-            Group("Buffs", unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(s)}]", s.Spell)));
+        {
+            // Note the layout + cast-priority mode: the list is shown in display order,
+            // but the engine casts by category unless priority is top→bottom AND the
+            // rows were hand-arranged — so a "wrong buff fired first" report needs both.
+            string heading = unifiedBuffs.ManualOrder || unifiedBuffs.PriorityTopDown
+                ? $"Buffs (layout: {(unifiedBuffs.ManualOrder ? "manual" : "auto")}; priority: {(unifiedBuffs.PriorityTopDown ? "top→bottom" : "default")})"
+                : "Buffs";
+            Group(heading, unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(svc, s)}]", s.Spell)));
+        }
 
         if (shown == 0) sb.Append("_(no spells configured)_\n");
         return sb.ToString();
@@ -667,22 +709,42 @@ public static class BugReportBuilder
     }
 
     // A unified buff slot's targeting + condition summary for the report label —
-    // e.g. "self", "all", "Bob,Sue", "party-wide", with "+hp-full" / "+ma-full" when
-    // a downtime condition is set. Derived from the slot's flags (whole-party is left
-    // to WholePartyOn since the classifier isn't reachable here).
-    private static string BuffScope(Models.Profile.BuffSlot s)
+    // e.g. "self", "all", "Bob,Sue", "party-wide+solo", with "+hp-full" /
+    // "+ma-full" when a downtime condition is set. Whole-party scope is resolved from
+    // the same live spellbook data as the UI so the report exposes both master + option.
+    private static string BuffScope(AppServices svc, Models.Profile.BuffSlot s)
     {
         List<string> who = new();
-        if (s.CastOnSelf) who.Add("self");
-        if (s.AllMembers) who.Add("all");
-        else if (s.Targets.Count > 0) who.Add(string.Join(",", s.Targets));
-        else if (s.WholePartyOn) who.Add("party-wide?");
+        string code = s.Spell?.Trim() ?? string.Empty;
+        bool wholeParty = Game.Spells.ItemCastToken.IsToken(code)
+            ? svc.Spellbook.IsTokenWholeParty(code)
+            : svc.Spellbook.FindByCastCode(code) is { } spell
+              && Game.Spells.BuffClassifier.IsWholeParty(spell.Targets);
+        if (wholeParty)
+        {
+            if (s.WholePartyOn)
+            {
+                who.Add("party-wide");
+                who.Add(s.CastSolo ? "solo" : "party-only");
+            }
+            else
+            {
+                who.Add("off");
+            }
+        }
+        else
+        {
+            if (s.CastOnSelf) who.Add("self");
+            if (s.AllMembers) who.Add("all");
+            else if (s.Targets.Count > 0) who.Add(string.Join(",", s.Targets));
+        }
         string scope = who.Count > 0 ? string.Join("+", who) : "unset";
         if (s.OnlyWhenHpFull) scope += " +hp-full";
         if (s.OnlyWhenMaFull) scope += " +ma-full";
         if (s.OnlyWhenDark) scope += " +only-dark";
         if (s.CastBeforeRestingForMana) scope += " +pre-rest";
-        if (s.RerollCount > 0) scope += $" +reroll<{s.RerollThreshold?.ToString() ?? "-"}x{s.RerollCount}";
+        if (s.RerollInfinite || s.RerollCount > 0)
+            scope += $" +reroll<{s.RerollThreshold?.ToString() ?? "-"}x{(s.RerollInfinite ? "∞" : s.RerollCount.ToString())}";
         return scope;
     }
 
@@ -835,12 +897,21 @@ public static class BugReportBuilder
             loop.CurrentLoop is { } running
                 ? $"{running.Name} — step {loop.CurrentIndex + 1}/{loop.StepCount}"
                 : "(none)");
-        if (loop.CurrentLoop is not null)
+        if (loop.CurrentLoop is { } curLoop)
         {
             Kv(sb, "Loop approach target",
                 loop.ApproachTarget is { } appr ? $"{appr.Map}/{appr.Room}" : "(none)");
             Kv(sb, "Loop circle start",
                 loop.CircleStartRoom is { } start ? $"{start.Map}/{start.Room}" : "(none)");
+            // Loop combat-suppression state — answers "why didn't it fight
+            // here?" for a do-not-attack / only-attack-in-lair report.
+            Kv(sb, "Loop only-attack-in-lair", curLoop.OnlyAttackInLairRooms.ToString());
+            Kv(sb, "Loop do-not-attack waypoints",
+                curLoop.Waypoints.Count(w => w.DoNotAttack).ToString());
+            Kv(sb, "Combat suppressed in current room",
+                svc.RoomTracker.State.CurrentRoom is { } cur
+                    ? Game.Map.LoopCombatSuppression.IsSuppressed(curLoop, cur.Key, cur.HasLair).ToString()
+                    : "(unknown room)");
         }
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
         // Last loop / auto-lair run this session, retained past a stop/death —
@@ -1149,6 +1220,7 @@ public static class BugReportBuilder
         Kv(sb, "Laps", $"{snap.LapsPerHour} laps/hr · {snap.AvgLapSeconds:N1}s/lap");
         Kv(sb, "Summary", snap.Summary);
         Kv(sb, "Combat mode", snap.AreaCombat ? "area (rooming)" : "single-target");
+        if (!string.IsNullOrEmpty(snap.RealmName)) Kv(sb, "Realm", snap.RealmName);
         Kv(sb, "Seconds per step", $"{snap.SecondsPerStep:0.0}");
         Kv(sb, "Rounds to kill a mob", $"{snap.RoundsPerMob:0.0}");
         Kv(sb, "Real-world multiplier", $"{snap.RealConditionsMultiplier:0.00}");

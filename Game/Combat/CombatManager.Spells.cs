@@ -47,10 +47,6 @@ public sealed partial class CombatManager
     // slots store a Number, but casts go out as the Short). Optional: until wired
     // no per-monster spell override is ever substituted.
     private Func<int, string?>? _spellShortByNumber;
-    // Reverse of the above: a cast-code → its Spells.Number, or null when the text
-    // isn't a known spell. Lets the forced-command path tell a mana-costing spell
-    // cast-code (a legacy override saved as a command) from a free verb ("bash").
-    private Func<string, int?>? _spellNumberByShort;
 
     // ----- In-between debuff bridge (CastingDirector-driven) -----------
     // A debuff is an in-between action, not a combat action, so it casts
@@ -247,13 +243,10 @@ public sealed partial class CombatManager
     // per-monster spell override (Monster overlay stores the override as a
     // Number; the chooser needs the Short to cast it). Until called, no override
     // is ever substituted and the global Combat-tab spell slots are used as-is.
-    // The optional reverse (cast-code → Number) lets the forced-command path
-    // recognise a mana-costing spell code so it can stand down at 0 mana.
-    public void SetSpellShortResolver(Func<int, string?> resolver, Func<string, int?>? reverse = null)
+    public void SetSpellShortResolver(Func<int, string?> resolver)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         _spellShortByNumber = resolver;
-        _spellNumberByShort = reverse;
     }
 
     // Wire the in-between evaluator (CastingDirector.Evaluate) that
@@ -340,55 +333,23 @@ public sealed partial class CombatManager
             _lastTalliedRound = ReadRoundCount?.Invoke() ?? -1;
         }
 
-        // A per-monster forced attack COMMAND wins over the entire normal flow
-        // (spell chooser + weapon pick): send it verbatim and let the server
-        // auto-repeat it like any attack command. Announced once per target so a
-        // log read shows why this species diverges from the Combat-tab commands.
-        // It's trusted — no effectiveness-gate fallback second-guesses it (the
-        // user hand-picked it), mirroring the spell-id override's bypass contract.
-        if (AttackCommandOverrideFor(picked.MonsterNumber) is { } forcedCommand)
-        {
-            // A forced command that is actually a spell cast-code (a legacy override
-            // saved as a raw command before cast-codes auto-routed to the spell
-            // rung — see MonsterEditDialogViewModel.ParseAttackOverride) costs mana.
-            // At 0 mana the server silently no-ops it with no error line, so re-
-            // sending it every round just leaves the player standing there getting
-            // hit until a regen tick (report paradigm-20260813-064159). Fall back to
-            // the physical weapon; the next round re-evaluates so it resumes when
-            // mana ticks back. A free verb ("bash", "kick") isn't a spell code, so it
-            // still fires at 0 mana — it costs no MA.
-            if (_readMana is not null && _readMana().Ma <= 0
-                && _spellNumberByShort?.Invoke(forcedCommand) is not null)
-            {
-                bool useAlt = ShouldUseAlternateWeapon(settings, picked.ResolvedName, picked.MonsterNumber);
-                SendWeaponAttack(settings, picked.RawName, useAlt, picked.Priority);
-                _currentTarget = picked.RawName;
-                _backstabOpenerConsumed = true;
-                return;
-            }
-            bool newTarget = !string.Equals(_currentTarget, picked.RawName, StringComparison.OrdinalIgnoreCase);
-            if (newTarget)
-                _log?.Combat(LogCategory,
-                    $"per-monster attack-command override '{forcedCommand}' (#{picked.MonsterNumber}) — forcing over normal flow");
-            SendAttack(forcedCommand, picked.RawName, picked.Priority);
-            _currentTarget = picked.RawName;
-            _backstabOpenerConsumed = true;
-            return;
-        }
-
         CombatSpellContext ctx = CombatSpellsWired
             ? BuildContext(settings, obs, picked.RawName, enemyCount, picked.MonsterNumber)
             : BuildWeaponContext(settings, obs, picked.RawName, enemyCount, picked.MonsterNumber);
 
         // Announce an active per-monster spell override once at target-pick time
         // (not on the per-round heartbeat) so a log read shows why the cast-code
-        // differs from the Combat-tab slot for this species.
+        // differs from the Combat-tab slot for this species. Each override
+        // substitutes into its rung and runs the same gates — no bypass.
         if (ctx.OverrideAttackSpell is { } atkOverride)
             _log?.Combat(LogCategory,
-                $"per-monster attack override {atkOverride} (#{picked.MonsterNumber}) — bypassing effectiveness gates");
+                $"per-monster attack override {atkOverride} (#{picked.MonsterNumber}) — substituting into the normal-attack rung");
+        if (ctx.OverrideAltAttackSpell is { } altOverride)
+            _log?.Combat(LogCategory,
+                $"per-monster alt-attack override {altOverride} (#{picked.MonsterNumber})");
         if (ctx.OverridePreAttackSpell is { } preOverride)
             _log?.Combat(LogCategory,
-                $"per-monster pre-attack override {preOverride} (#{picked.MonsterNumber})");
+                $"per-monster debuff override {preOverride} (#{picked.MonsterNumber})");
 
         CombatSpellDecision decision = _spellChooser.Choose(settings, ctx);
 
@@ -413,6 +374,20 @@ public sealed partial class CombatManager
         switch (decision.Action)
         {
             case CombatSpellAction.WeaponAttack:
+                // A per-monster Physical override replaces the weapon command on the
+                // rounds the decision engine already landed on physical — it does NOT
+                // force physical (a spell-phase round cast a spell above) and carries
+                // no gating; the server auto-repeats it like any attack command.
+                // Announced once per target so a log read shows the divergence.
+                if (PhysicalCommandOverrideFor(picked.MonsterNumber) is { } physCmd)
+                {
+                    if (!string.Equals(_currentTarget, picked.RawName, StringComparison.OrdinalIgnoreCase))
+                        _log?.Combat(LogCategory,
+                            $"per-monster physical override '{physCmd}' (#{picked.MonsterNumber}) — replacing the weapon command");
+                    SendAttack(physCmd, picked.RawName, picked.Priority);
+                    _currentTarget = picked.RawName;
+                    break;
+                }
                 // Pick the weapon that can actually hit: alternate when this
                 // species already failed vs normal this room, OR when game
                 // data says the normal weapon's HitMagic is below the
@@ -1312,8 +1287,19 @@ public sealed partial class CombatManager
     {
         (int ma, int maxMa) = _readMana!();
         (string? attackOverride, int? attackCap) = AttackOverrideFor(monsterNumber, ma, maxMa, settings.SpellManaThresholdMode);
+        (string? altAttackOverride, int? altAttackCap) = AltAttackOverrideFor(monsterNumber, ma, maxMa, settings.SpellManaThresholdMode);
         (string? preAttackOverride, int? preAttackCap) = PreAttackOverrideFor(monsterNumber, ma, maxMa, settings.SpellManaThresholdMode);
         (bool hpBelowDrain, bool drainEligible) = DrainGates(settings, monsterNumber);
+
+        // Level / element-resist blocks are computed against the EFFECTIVE spell in
+        // each single-target rung — the per-monster override when it's active this
+        // round (its own mana floor was already applied above), else the configured
+        // slot — so an override spell is gated on ITS OWN ReqLevel / element, not the
+        // global slot's.
+        string? singleEff = preAttackOverride ?? NullIfBlank(settings.SingleTargetDebuffSpell.SpellName);
+        string? normalEff = attackOverride    ?? NullIfBlank(settings.NormalAttackSpell.SpellName);
+        string? altEff    = altAttackOverride ?? NullIfBlank(settings.AlternateAttackSpell.SpellName);
+
         return new CombatSpellContext(
             EnemyCount:          enemyCount,
             TargetRawName:       target,
@@ -1327,14 +1313,16 @@ public sealed partial class CombatManager
             // Physical, so combat keeps swinging (and can still backstab) instead of
             // re-casting a spell the server no-ops (report paradigm-20260813-064159).
             SpellsAvailable:     ma > 0,
-            LevelBlockedActions: LevelBlockedFor(settings, monsterNumber),
+            LevelBlockedActions: LevelBlockedFor(monsterNumber, singleEff, normalEff, altEff),
             AllowNukes:          _autoNukeGate?.Invoke() ?? true,
-            ResistBlockedActions: ResistBlockedFor(settings, monsterNumber),
+            ResistBlockedActions: ResistBlockedFor(monsterNumber, normalEff, altEff),
             TargetDontBackstab:  IsDontBackstab(monsterNumber),
             OverrideAttackSpell:       attackOverride,
             OverrideAttackMaxCasts:    attackCap,
             OverridePreAttackSpell:    preAttackOverride,
             OverridePreAttackMaxCasts: preAttackCap,
+            OverrideAltAttackSpell:    altAttackOverride,
+            OverrideAltAttackMaxCasts: altAttackCap,
             WeaponIneffective:   WeaponPathExhausted(
                 settings, ResolveSpeciesByName(target), monsterNumber),
             AlternationPreferSpell: AlternationPreferSpell(settings),
@@ -1427,17 +1415,32 @@ public sealed partial class CombatManager
         return ResolveSpellOverride(overlay.OverrideAttackSpellId, overlay.OverrideAttackCount);
     }
 
-    // The per-monster forced attack COMMAND for this species, or null when none
-    // is set. A raw verb sent verbatim (bypassing the spell/weapon flow and the
-    // "no effect" fallback); trimmed to null when blank. Distinct from the
-    // spell-id override — no cast-rung, no mana gate; the server repeats it like
-    // any attack command.
-    private string? AttackCommandOverrideFor(int monsterNumber)
+    // Resolve this monster's override ALTERNATE-attack spell to a (cast-code, cap)
+    // pair, or (null, null) when there's no active override — mirrors
+    // AttackOverrideFor for the alternate rung.
+    private (string? Spell, int? Cap) AltAttackOverrideFor(int monsterNumber, int mana, int maxMana, ThresholdMode manaMode)
+    {
+        if (monsterNumber < 0) return (null, null);
+        MonsterOverlay overlay = ResolveOverlay(monsterNumber);
+        int floor = overlay.OverrideAltAttackMinMana ?? 0;
+        if (floor > 0 && !CombatSpellChooser.ManaMeetsReserve(floor, mana, maxMana, manaMode))
+            return (null, null);
+        return ResolveSpellOverride(overlay.OverrideAltAttackSpellId, overlay.OverrideAltAttackCount);
+    }
+
+    // The per-monster PHYSICAL override command for this species, or null when none
+    // is set. A raw verb ("attack", "bash") that replaces the weapon command on a
+    // round the decision engine already chose physical (it does NOT force physical
+    // or suppress the spell rungs); no cast-rung, no mana gate; trimmed to null when
+    // blank. The server repeats it like any attack command.
+    private string? PhysicalCommandOverrideFor(int monsterNumber)
     {
         if (monsterNumber < 0) return null;
-        string? cmd = ResolveOverlay(monsterNumber).OverrideAttackCommand;
+        string? cmd = ResolveOverlay(monsterNumber).OverridePhysicalCommand;
         return string.IsNullOrWhiteSpace(cmd) ? null : cmd.Trim();
     }
+
+    private static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
 
     // Resolve this monster's override pre-attack spell to a (cast-code, cap) pair,
     // or (null, null) when there's no active override.
@@ -1558,24 +1561,27 @@ public sealed partial class CombatManager
     // observed-immunity carve-out for multi-attack). Returns null (nothing
     // blocked) when the indexes aren't wired or the monster has no immunity.
     private IReadOnlySet<CombatSpellAction>? LevelBlockedFor(
-        CombatSettings settings, int monsterNumber)
+        int monsterNumber, string? singleCode, string? normalCode, string? altCode)
     {
         if (_monsterMagic is null || _spellReqLevel is null) return null;
         int immu = _monsterMagic.SpellImmunity(monsterNumber);
         if (immu <= 0) return null;                     // any spell allowed
 
         HashSet<CombatSpellAction>? blocked = null;
-        void Check(CombatSpellSlot slot, CombatSpellAction action)
+        void Check(string? code, CombatSpellAction action)
         {
-            if (string.IsNullOrWhiteSpace(slot.SpellName)) return;
-            int req = _spellReqLevel.ReqLevel(slot.SpellName);
+            if (string.IsNullOrWhiteSpace(code)) return;
+            int req = _spellReqLevel.ReqLevel(code);
             if (req < 0) return;                        // unknown spell → fail open
             if (req >= immu) return;                    // eligible
             (blocked ??= new HashSet<CombatSpellAction>()).Add(action);
         }
-        Check(settings.SingleTargetDebuffSpell, CombatSpellAction.SingleDebuff);
-        Check(settings.NormalAttackSpell, CombatSpellAction.NormalAttackSpell);
-        Check(settings.AlternateAttackSpell, CombatSpellAction.AlternateAttackSpell);
+        // The caller passes the EFFECTIVE cast-code per rung — the per-monster
+        // override when active, else the configured slot — so an override spell is
+        // level-gated on its own ReqLevel, not the global slot's.
+        Check(singleCode, CombatSpellAction.SingleDebuff);
+        Check(normalCode, CombatSpellAction.NormalAttackSpell);
+        Check(altCode, CombatSpellAction.AlternateAttackSpell);
         return blocked;
     }
 
@@ -1590,23 +1596,25 @@ public sealed partial class CombatManager
     // reduced) damage. Returns null (nothing blocked) when the indexes aren't wired
     // or no configured attack spell hits a ≥ 100% wall.
     private IReadOnlySet<CombatSpellAction>? ResistBlockedFor(
-        CombatSettings settings, int monsterNumber)
+        int monsterNumber, string? normalCode, string? altCode)
     {
         if (_monsterResist is null || _spellAttackType is null) return null;
 
         HashSet<CombatSpellAction>? blocked = null;
-        void Check(CombatSpellSlot slot, CombatSpellAction action)
+        void Check(string? spellCode, CombatSpellAction action)
         {
-            if (string.IsNullOrWhiteSpace(slot.SpellName)) return;
-            int attType = _spellAttackType.AttackType(slot.SpellName);
+            if (string.IsNullOrWhiteSpace(spellCode)) return;
+            int attType = _spellAttackType.AttackType(spellCode);
             if (attType < 0) return;                                       // unknown spell → fail open
-            int code = MonsterResistIndex.ElementalResistCode(attType);
-            if (code < 0) return;                                          // non-elemental (M.R./poison)
-            if (_monsterResist.ResistPercent(monsterNumber, code) < 100) return;  // still takes damage
+            int elemCode = MonsterResistIndex.ElementalResistCode(attType);
+            if (elemCode < 0) return;                                      // non-elemental (M.R./poison)
+            if (_monsterResist.ResistPercent(monsterNumber, elemCode) < 100) return;  // still takes damage
             (blocked ??= new HashSet<CombatSpellAction>()).Add(action);
         }
-        Check(settings.NormalAttackSpell, CombatSpellAction.NormalAttackSpell);
-        Check(settings.AlternateAttackSpell, CombatSpellAction.AlternateAttackSpell);
+        // Effective cast-code per rung (override when active, else the configured
+        // slot) — so an override attack spell is resist-gated on its own element.
+        Check(normalCode, CombatSpellAction.NormalAttackSpell);
+        Check(altCode, CombatSpellAction.AlternateAttackSpell);
         return blocked;
     }
 
@@ -1706,54 +1714,74 @@ public sealed partial class CombatManager
 
         (int ma, int maxMa) = _readMana!();
         IReadOnlySet<CombatSpellAction>? immune = _attackSpellImmuneSpecies.GetValueOrDefault(species);
-        IReadOnlySet<CombatSpellAction>? levelBlocked = LevelBlockedFor(settings, monsterNumber);
-        IReadOnlySet<CombatSpellAction>? resistBlocked = ResistBlockedFor(settings, monsterNumber);
+
+        // Effective single-target kill spell per rung: the per-monster override when
+        // set, else the configured slot — so a monster only an override could kill is
+        // still assessed as actionable, not skipped by the walker. The override code
+        // is resolved mana-INDEPENDENTLY; its own floor feeds the reserve check below,
+        // so a mana-blocked override reads StuckOnMana (transient), never Unkillable.
+        // (When both an override and a lower-floor configured slot are set for one
+        // rung, engageability follows the override — the user's authoritative pick.)
+        MonsterOverlay overlay = ResolveOverlay(monsterNumber);
+        (string? normalCode, int normalFloor) = EffectiveKillSpell(
+            overlay.OverrideAttackSpellId, overlay.OverrideAttackMinMana, settings.NormalAttackSpell);
+        (string? altCode, int altFloor) = EffectiveKillSpell(
+            overlay.OverrideAltAttackSpellId, overlay.OverrideAltAttackMinMana, settings.AlternateAttackSpell);
+
+        // Level / element-resist blocks weigh the EFFECTIVE spell too — an override is
+        // gated on its own ReqLevel / element. The single-debuff code is not a kill
+        // means, so it never decides this verdict.
+        IReadOnlySet<CombatSpellAction>? levelBlocked = LevelBlockedFor(monsterNumber,
+            NullIfBlank(settings.SingleTargetDebuffSpell.SpellName), normalCode, altCode);
+        IReadOnlySet<CombatSpellAction>? resistBlocked = ResistBlockedFor(monsterNumber, normalCode, altCode);
 
         bool anyUnaffordable = false;
-        foreach ((CombatSpellSlot slot, CombatSpellAction action) in AttackSpellSlots(settings))
+        ThresholdMode manaMode = settings.SpellManaThresholdMode;
+
+        // A rung is castable this round unless its spell is unconfigured, observed-
+        // immune, level- or resist-blocked, or unaffordable (which marks the transient
+        // mana stall rather than a permanent block). Shared by the normal + alternate
+        // rungs so the effective-spell gating stays in one place.
+        EngageAssessment? RungVerdict(string? code, int floor, CombatSpellAction action)
         {
-            if (string.IsNullOrWhiteSpace(slot.SpellName)) continue;          // unconfigured
-            if (immune?.Contains(action) == true) continue;                  // observed immune
-            if (levelBlocked?.Contains(action) == true) continue;            // level-blocked
-            if (resistBlocked?.Contains(action) == true) continue;           // element-resisted
-            if (!ManaMeets(slot, ma, maxMa, settings.SpellManaThresholdMode))
+            if (string.IsNullOrWhiteSpace(code)) return null;
+            if (immune?.Contains(action) == true) return null;
+            if (levelBlocked?.Contains(action) == true) return null;
+            if (resistBlocked?.Contains(action) == true) return null;
+            if (!CombatSpellChooser.ManaMeetsReserve(floor, ma, maxMa, manaMode))
             {
-                anyUnaffordable = true;                                        // would work with more MA
-                continue;
+                anyUnaffordable = true;
+                return null;
             }
-            return EngageAssessment.CanAct;                                   // castable this round
+            return EngageAssessment.CanAct;
         }
+
+        if (RungVerdict(normalCode, normalFloor, CombatSpellAction.NormalAttackSpell) is { } nv) return nv;
+        if (RungVerdict(altCode, altFloor, CombatSpellAction.AlternateAttackSpell) is { } av) return av;
 
         // Nothing castable now: unaffordable-only means a mana tick fixes it
         // (transient); otherwise every spell is permanently blocked / unconfigured.
         return anyUnaffordable ? EngageAssessment.StuckOnMana : EngageAssessment.Unkillable;
     }
 
-    // The single-target attack-spell slots, in cascade order — the kill means the
-    // affordability check weighs. Multi-attack (a room nuke gated on enemy count)
-    // isn't a reliable single-target kill means, so it's excluded here, matching
-    // the observed-immunity map which only records the single-target slots.
-    private static IEnumerable<(CombatSpellSlot Slot, CombatSpellAction Action)> AttackSpellSlots(
-        CombatSettings settings)
+    // The effective single-target kill spell for a rung — the per-monster override
+    // (resolved mana-independently) when set, else the configured slot — paired with
+    // the mana floor that applies (the override's own, or the slot's).
+    private (string? Code, int Floor) EffectiveKillSpell(
+        int? overrideSpellId, int? overrideMinMana, CombatSpellSlot configured)
     {
-        yield return (settings.NormalAttackSpell, CombatSpellAction.NormalAttackSpell);
-        yield return (settings.AlternateAttackSpell, CombatSpellAction.AlternateAttackSpell);
+        if (ResolveSpellOverride(overrideSpellId, null).Spell is { } code)
+            return (code, overrideMinMana ?? 0);
+        return (NullIfBlank(configured.SpellName), configured.MinManaPerCast);
     }
-
-    // Whether the live MA meets a slot's per-cast mana floor — the SAME gate the
-    // chooser applies (shared CombatSpellChooser.ManaMeetsReserve, which compares
-    // the percentage reserve against its rounded absolute equivalent so it matches
-    // the Settings conversion label), lifted here so the actionability assessment
-    // can tell a transient mana stall from a permanent block.
-    private static bool ManaMeets(CombatSpellSlot slot, int ma, int maxMa, ThresholdMode mode) =>
-        CombatSpellChooser.ManaMeetsReserve(slot.MinManaPerCast, ma, maxMa, mode);
 
     // The reason we can't kill monsterNumber, or null when it's actionable.
     // Physical eligibility is checked first (deterministic, fails open); only when
-    // both weapons are proven unable to hit do we consult the attack-spell slots.
-    // An attack spell counts as a kill means when it's configured and either the
-    // monster has no spell immunity or the spell's ReqLevel clears it. Area /
-    // single-target debuffs are NOT kill means and never count here.
+    // both weapons are proven unable to hit do we consult the attack-spell rungs.
+    // An attack spell counts as a kill means when it's present (a per-monster
+    // override, else the configured slot) and either the monster has no spell
+    // immunity or the spell's ReqLevel clears it. Area / single-target debuffs are
+    // NOT kill means and never count here.
     private string? UnengageableReason(CombatSettings settings, int monsterNumber)
     {
         if (_monsterMagic is null || _itemMagic is null) return null;   // unwired → fail open
@@ -1770,27 +1798,33 @@ public sealed partial class CombatManager
         if (altHit < 0) return null;                                    // unknown alt weapon → fail open
         if (altHit >= magical) return null;                             // alt hits
 
-        // Neither weapon can hit. The monster is actionable only if some
-        // configured attack spell can still land on it.
+        // Neither weapon can hit. The monster is actionable only if some attack
+        // spell can still land on it — weighing the per-monster override (resolved
+        // mana-independently) ahead of the configured slot for the normal/alternate
+        // rungs, so an override that clears the immunity keeps the monster killable.
         if (_spellReqLevel is null) return null;                        // can't prove spell-blocked → fail open
         int immu = _monsterMagic.SpellImmunity(monsterNumber);
-        if (AttackSpellCanLand(settings.NormalAttackSpell, immu)) return null;
-        if (AttackSpellCanLand(settings.AlternateAttackSpell, immu)) return null;
-        if (AttackSpellCanLand(settings.MultiAttackSpell, immu)) return null;
+        MonsterOverlay overlay = ResolveOverlay(monsterNumber);
+        string? normalEff = ResolveSpellOverride(overlay.OverrideAttackSpellId, null).Spell
+                            ?? NullIfBlank(settings.NormalAttackSpell.SpellName);
+        string? altEff = ResolveSpellOverride(overlay.OverrideAltAttackSpellId, null).Spell
+                         ?? NullIfBlank(settings.AlternateAttackSpell.SpellName);
+        if (AttackSpellCanLand(normalEff, immu)) return null;
+        if (AttackSpellCanLand(altEff, immu)) return null;
+        if (AttackSpellCanLand(NullIfBlank(settings.MultiAttackSpell.SpellName), immu)) return null;
 
         return $"weapons HitMagic<{magical} (normal={normalHit} alt={altHit}) " +
                $"and no eligible attack spell (SpellImmu={immu})";
     }
 
-    // True when slot holds a configured attack spell that can land on a monster
-    // with spell-immunity immu: unconfigured slots are not a kill means; an
-    // unknown spell fails open (assume it works); otherwise the spell lands iff
-    // its ReqLevel is ≥ the immunity. Assumes _spellReqLevel is wired (the only
-    // caller checks first).
-    private bool AttackSpellCanLand(CombatSpellSlot slot, int immu)
+    // True when code is an attack spell that can land on a monster with spell-
+    // immunity immu: a null/blank code is not a kill means; an unknown spell fails
+    // open (assume it works); otherwise the spell lands iff its ReqLevel is ≥ the
+    // immunity. Assumes _spellReqLevel is wired (the only caller checks first).
+    private bool AttackSpellCanLand(string? code, int immu)
     {
-        if (string.IsNullOrWhiteSpace(slot.SpellName)) return false;    // unconfigured → not a kill means
-        int req = _spellReqLevel!.ReqLevel(slot.SpellName);
+        if (string.IsNullOrWhiteSpace(code)) return false;              // no spell → not a kill means
+        int req = _spellReqLevel!.ReqLevel(code);
         if (req < 0) return true;                                       // unknown spell → fail open
         if (immu <= 0) return true;                                     // no immunity → any spell lands
         return req >= immu;                                             // eligible iff ReqLevel ≥ SpellImmu
@@ -1936,9 +1970,10 @@ public sealed partial class CombatManager
         string species = ResolveSpeciesByName(target);
         if (string.IsNullOrEmpty(species)) return;
 
-        // A forced per-monster command owns this species — don't second-guess it.
+        // A per-monster physical override owns this species' physical rounds — don't
+        // second-guess it with a normal→alternate command fallback.
         int monsterNumber = _classifier.Current is { } obs ? ResolveMonsterNumber(obs, target) : -1;
-        if (AttackCommandOverrideFor(monsterNumber) is not null) return;
+        if (PhysicalCommandOverrideFor(monsterNumber) is not null) return;
 
         CombatSettings settings = _readSettings();
         string normal    = settings.NormalAttackCommand?.Trim()    ?? string.Empty;

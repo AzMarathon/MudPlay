@@ -55,6 +55,11 @@
              WindowBehaviors.RaiseToFrontOnClick. -->
         <Style Selector="Window">
             <Setter Property="controls:WindowBehaviors.RaiseToFrontOnClick" Value="True"/>
+            <!-- Icon here rather than per-window: the tool windows are spawned
+                 from a couple of dozen scattered call sites, and an untitled
+                 style-less Window only inherits the exe's icon on Windows —
+                 on Linux it would fall back to the toolkit default. -->
+            <Setter Property="Icon" Value="/Assets/AppIcon/mudplay.ico"/>
         </Style>
     </Application.Styles>
 </Application>

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MudPlay.Models.GameData;
 
 // Per-character / per-BBS / global override layered on top of an MDB
@@ -17,14 +19,25 @@ namespace MudPlay.Models.GameData;
 // stored.
 //
 // What IS overridable — per-monster automation behaviour: display name,
-// relationship, target priority, per-monster attack preferences (the
-// override-pre-attack and override-attack slots take priority over the
-// global Combat-tab choices for this specific monster — the attack slot
-// takes either a Spell.Number or a raw command verb), plus the
-// DontBackstab flag. All fields nullable so a partial-tier
-// override only carries the keys the user actually set — the resolver
-// overlays them onto the next-lower tier's values, preserving lower-tier
-// values for fields the user didn't touch.
+// relationship, target priority, the DontBackstab flag, and the whole
+// SINGLE-TARGET combat chain for this specific monster, mirroring the
+// Settings → Combat spell grid rung-for-rung. Four override slots take
+// priority over the global Combat-tab choices for this species:
+//   • Debuff (single target)  — OverridePreAttack* (Spell.Number)
+//   • Normal attack spell      — OverrideAttack*    (Spell.Number)
+//   • Alternate attack spell   — OverrideAltAttack* (Spell.Number)
+//   • Physical attack          — OverridePhysicalCommand (raw verb)
+// The three spell slots substitute into their matching rung and run the
+// EXACT same gated cascade the configured slots do — observed "no effect"
+// immunity plus the predictive level / element-resist blocks, each computed
+// against the OVERRIDE spell, not the global slot. The physical slot swaps
+// the weapon command the engine would send ONLY on a round the decision
+// engine already chose physical; it does not force physical or suppress
+// spells. Multi-attack (AoE) and AoE-debuff rungs are deliberately NOT
+// overridable — they're room-scoped, not per-species. All fields nullable so
+// a partial-tier override only carries the keys the user actually set — the
+// resolver overlays them onto the next-lower tier's values, preserving
+// lower-tier values for fields the user didn't touch.
 //
 // Uses init-only properties (rather than the positional-record syntax) so
 // the resolver's new T() requirement is satisfied.
@@ -53,32 +66,44 @@ public sealed record MonsterOverlay
     // holds and the normal combat flow takes the round.
     public int? OverridePreAttackMinMana { get; init; }
 
-    // Override attack spell — Spell.Number to cast as the primary attack on
-    // this monster, regardless of the global Combat-tab attack-spell
-    // choice, routed through the mana-gated attack-spell rung. null = no
-    // per-monster override (use the global setting).
+    // Override NORMAL attack spell — Spell.Number that substitutes for the
+    // global Combat-tab Normal-attack spell on this monster, occupying the
+    // normal-attack rung and running the same gated cascade. null = no
+    // per-monster override (use the global setting). Spell-only: a raw attack
+    // verb goes in OverridePhysicalCommand, not here.
     public int? OverrideAttackSpellId { get; init; }
 
     // Per-room cast cap for OverrideAttackSpellId; null/0 = unlimited.
     public int? OverrideAttackCount { get; init; }
 
-    // Minimum mana before the override attack spell fires, same interpretation as
-    // OverridePreAttackMinMana. null/0 = no floor. Ignored for a raw-command override
-    // (OverrideAttackCommand), which never mana-gates.
+    // Minimum mana before the override normal-attack spell fires, same
+    // interpretation as OverridePreAttackMinMana. null/0 = no floor.
     public int? OverrideAttackMinMana { get; init; }
 
-    // Override attack COMMAND — a raw verb ("attack", "bash") sent verbatim as
-    // this monster's attack, forced over the whole normal spell/weapon flow.
-    // Unlike OverrideAttackSpellId it carries no cast-rung gating (no mana
-    // floor, no per-room cap): it goes out like a weapon command and the
-    // server auto-repeats it each round. The user hand-picked it, so it also
-    // bypasses the "no effect" fallback — it's never second-guessed. null/blank
-    // = no command override. The editor keeps these two mutually exclusive: a
-    // numeric entry, or text that resolves to a known spell's cast-code, sets
-    // OverrideAttackSpellId instead (so a spell typed by its code still gets
-    // mana/cap gating); only text matching no spell sets this. See
-    // MonsterEditDialogViewModel.ParseAttackOverride.
-    public string? OverrideAttackCommand { get; init; }
+    // Override ALTERNATE attack spell — Spell.Number that substitutes for the
+    // global Combat-tab Alternate-attack spell on this monster, occupying the
+    // alternate rung of the same gated cascade (fired when the normal rung
+    // can't). null = no override. Spell-only.
+    public int? OverrideAltAttackSpellId { get; init; }
+
+    // Per-room cast cap for OverrideAltAttackSpellId; null/0 = unlimited.
+    public int? OverrideAltAttackCount { get; init; }
+
+    // Minimum mana before the override alternate-attack spell fires, same
+    // interpretation as OverridePreAttackMinMana. null/0 = no floor.
+    public int? OverrideAltAttackMinMana { get; init; }
+
+    // Override PHYSICAL attack command — a raw verb ("attack", "bash") that
+    // replaces the weapon command the engine would otherwise send, but ONLY on
+    // a round the decision engine already chose physical (ActionOrder/
+    // alternation). It does NOT force physical or suppress the spell rungs, and
+    // it carries no cast-rung gating (no mana floor, no per-room cap). null/blank
+    // = no override. Legacy data written under the old "Override Attack" command
+    // slot round-trips into this field unchanged: the JSON key is pinned to the
+    // historical "OverrideAttackCommand" so no migration is needed. See
+    // MonsterEditDialogViewModel.ResolveSpellOverride.
+    [JsonPropertyName("OverrideAttackCommand")]
+    public string? OverridePhysicalCommand { get; init; }
 
     // Suppress auto-BS attempts on this target.
     public bool? DontBackstab { get; init; }

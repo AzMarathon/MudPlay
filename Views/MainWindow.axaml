@@ -85,18 +85,16 @@
                           Command="{Binding ToggleConnectionCommand}"
                           InputGesture="{Binding ToggleConnectionGesture}"/>
                 <MenuItem Header="_Quick Connect…" Command="{Binding OpenQuickConnectCommand}"/>
-                <MenuItem Header="BBS list"      Command="{Binding OpenBbsSettingsCommand}"/>
                 <MenuItem Header="Disable hangups"
                           ToggleType="CheckBox"
                           IsChecked="{Binding IsDisableHangupsActive, Mode=TwoWay}"
                           ToolTip.Tip="Block every automatic disconnect — only you can hang up (hotkey / toolbar / menu)"/>
                 <Separator/>
-                <MenuItem Header="_New profile…"  InputGesture="{Binding NewProfileGesture}"       Command="{Binding NewProfileCommand}"/>
-                <MenuItem Header="_Open profile…" InputGesture="{Binding OpenProfileGesture}"       Command="{Binding OpenProfileCommand}"/>
-                <MenuItem Header="{Binding SaveProfileLabel}"  InputGesture="{Binding SaveProfileGesture}"
-                          Command="{Binding SaveProfileCommand}"/>
-                <MenuItem Header="Save profile as…" InputGesture="{Binding SaveProfileAsGesture}"
-                          Command="{Binding SaveProfileAsCommand}"/>
+                <MenuItem Header="_Save profile" InputGesture="{Binding SaveProfileGesture}"
+                          Command="{Binding SaveProfileCommand}"
+                          ToolTip.Tip="Write the current profile and its settings to disk"/>
+                <MenuItem Header="_Profile Management…" InputGesture="{Binding ProfileManagerGesture}"
+                          Command="{Binding OpenProfileManagerCommand}"/>
                 <Separator/>
                 <MenuItem Header="Auto-load last profile on startup"
                           ToggleType="CheckBox"
@@ -129,6 +127,26 @@
                           IsVisible="{Binding Recent4, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
                           Command="{Binding OpenRecentProfileCommand}"
                           CommandParameter="{Binding ProfileName4}"/>
+                <MenuItem Header="{Binding Recent5, StringFormat='_6)  {0}'}"
+                          IsVisible="{Binding Recent5, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName5}"/>
+                <MenuItem Header="{Binding Recent6, StringFormat='_7)  {0}'}"
+                          IsVisible="{Binding Recent6, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName6}"/>
+                <MenuItem Header="{Binding Recent7, StringFormat='_8)  {0}'}"
+                          IsVisible="{Binding Recent7, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName7}"/>
+                <MenuItem Header="{Binding Recent8, StringFormat='_9)  {0}'}"
+                          IsVisible="{Binding Recent8, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName8}"/>
+                <MenuItem Header="{Binding Recent9, StringFormat='1_0)  {0}'}"
+                          IsVisible="{Binding Recent9, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                          Command="{Binding OpenRecentProfileCommand}"
+                          CommandParameter="{Binding ProfileName9}"/>
                 <Separator/>
                 <MenuItem Header="_Quit" Command="{Binding QuitCommand}" InputGesture="{Binding QuitGesture}"/>
             </MenuItem>
@@ -140,6 +158,7 @@
                 <MenuItem Header="Conversation"  InputGesture="{Binding ConversationGesture}"  Command="{Binding OpenConversationCommand}"/>
                 <MenuItem Header="Party"         InputGesture="{Binding PartyGesture}"  Command="{Binding OpenPartyCommand}"/>
                 <MenuItem Header="Buff Watchdog" InputGesture="{Binding BuffWatchdogGesture}" Command="{Binding OpenBuffWatchdogCommand}"/>
+                <MenuItem Header="Profile Management" InputGesture="{Binding ProfileManagerGesture}" Command="{Binding OpenProfileManagerCommand}"/>
                 <MenuItem Header="Player Workshop" InputGesture="{Binding WorkshopGesture}" Command="{Binding OpenWorkshopCommand}"/>
                 <MenuItem Header="Navigation"      InputGesture="{Binding NavigationGesture}" Command="{Binding OpenNavigationCommand}"/>
                 <MenuItem Header="Spell Book"    InputGesture="{Binding SpellBookGesture}"  Command="{Binding OpenSpellBookCommand}"/>

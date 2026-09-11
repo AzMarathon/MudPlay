@@ -84,4 +84,80 @@ public sealed class EngineSendGateTests
         wrapped(Encoding.Latin1.GetBytes("par\r"));
         Assert.Equal(2, sent.Count);
     }
+
+    // ----- confusion-fumble replay of the last CLIENT command ----------
+
+    private static string Last(List<byte[]> sent) => Encoding.Latin1.GetString(sent[^1]);
+
+    [Fact]
+    public void Replay_ResendsLastClientCommand()
+    {
+        // A fumble ate the last client command; re-sending it performs the action.
+        EngineSendGate gate = new();
+        List<byte[]> sent = new();
+        Action<byte[]> wrapped = gate.WrapEngineSender(sent.Add);
+
+        wrapped(Encoding.Latin1.GetBytes("cast mist dragon\r"));
+        Assert.Single(sent);
+
+        gate.ReplayLastClientCommand();
+        Assert.Equal(2, sent.Count);
+        Assert.Equal("cast mist dragon\r", Last(sent));
+    }
+
+    [Fact]
+    public void Replay_ResendsItemUse()
+    {
+        // Item-use is a multi-token command, so it re-fires (unlike a bare move).
+        EngineSendGate gate = new();
+        List<byte[]> sent = new();
+        Action<byte[]> wrapped = gate.WrapEngineSender(sent.Add);
+
+        wrapped(Encoding.Latin1.GetBytes("use waterskin\r"));
+        gate.ReplayLastClientCommand();
+
+        Assert.Equal(2, sent.Count);
+        Assert.Equal("use waterskin\r", Last(sent));
+    }
+
+    [Theory]
+    [InlineData("n\r")]
+    [InlineData("ne\r")]
+    [InlineData("up\r")]
+    [InlineData("South\r")]
+    public void Replay_SkipsBareMovement(string move)
+    {
+        // A fumbled move is recovered by the move-revert + walker re-send, so the
+        // gate must NOT also re-fire it — a second step would desync position.
+        EngineSendGate gate = new();
+        List<byte[]> sent = new();
+        Action<byte[]> wrapped = gate.WrapEngineSender(sent.Add);
+
+        wrapped(Encoding.Latin1.GetBytes(move));
+        gate.ReplayLastClientCommand();
+
+        Assert.Single(sent);   // not re-fired
+    }
+
+    [Fact]
+    public void Replay_NoOpWhileHeld()
+    {
+        EngineSendGate gate = new();
+        List<byte[]> sent = new();
+        Action<byte[]> wrapped = gate.WrapEngineSender(sent.Add);
+        wrapped(Encoding.Latin1.GetBytes("a orc\r"));
+
+        gate.Hold("MortallyWounded");
+        gate.ReplayLastClientCommand();
+        Assert.Single(sent);   // held → no replay
+    }
+
+    [Fact]
+    public void Replay_NoOpBeforeAnyClientSend()
+    {
+        // Nothing sent yet (e.g. the only traffic was user-typed, which bypasses the
+        // gate) → nothing to replay.
+        EngineSendGate gate = new();
+        gate.ReplayLastClientCommand();   // must not throw
+    }
 }

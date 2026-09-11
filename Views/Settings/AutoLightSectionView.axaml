@@ -49,6 +49,11 @@
                         Margin="22" Spacing="4"
                         MaxWidth="640" HorizontalAlignment="Left">
 
+                <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+                <TextBlock Classes="SettingsSectionSub"
+                           Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
+                <Border Classes="SettingsSectionRule"/>
+
                 <TextBlock Classes="SectionHeader" Text="Provisioning"/>
                 <TextBlock Classes="Readout"
                            Text="Enable Auto-Light on the General tab (or the toolbar toggle) to arm these. When a route runs dark, the engine readies a light — and, if provisioning is on, buys enough to cover the trip."/>

@@ -708,6 +708,48 @@ public sealed class CombatStateTrackerTests
     }
 
     [Fact]
+    public void CombatOffClear_AfterEngaging_FiresCombatSpentStealth()
+    {
+        // A combat-OFF force-clear (see-hidden / rest engage-to-clear) SPENDS sneak
+        // during the fight, but the auto-attack-OFF clear branch used to flip
+        // InCombat without firing CombatSpentStealth — leaving the FSM stale-Sneaking
+        // so the pre-move / post-cast re-sneak no-op'd (a cleared see-hidden room was
+        // left unsneaked). The clear must fire the reset.
+        using Harness h = new() { AutoAttackEnabled = false };
+        h.WireSeeHiddenGate();
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "crystal golem", killable: true);
+
+        int stealthSpent = 0;
+        h.Tracker.CombatSpentStealth += () => stealthSpent++;
+
+        h.Feed("Also here: crystal golem.");   // force-clear engages, gate held
+        h.Feed("*Combat Engaged*");             // InCombat true (we engaged)
+        h.Feed("Also here: Bob.");              // room cleared of hostiles
+
+        Assert.Equal(1, stealthSpent);
+        Assert.False(h.State.InCombat);
+    }
+
+    [Fact]
+    public void CombatOffClear_WithoutEngaging_DoesNotFireCombatSpentStealth()
+    {
+        // Guard: a walk-past of a hostile-free room with auto-attack off never
+        // engaged, so InCombat is false and the stealth reset must NOT fire — it
+        // would wrongly drop a sneak we still hold.
+        using Harness h = new() { AutoAttackEnabled = false };
+
+        int stealthSpent = 0;
+        h.Tracker.CombatSpentStealth += () => stealthSpent++;
+
+        h.Feed("Also here: Bob.");   // hostile-free, never engaged
+
+        Assert.Equal(0, stealthSpent);
+    }
+
+    [Fact]
     public void SeeHiddenOverride_Dormant_WhenToggleOff()
     {
         using Harness h = new() { AutoAttackEnabled = false };

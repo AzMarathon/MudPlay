@@ -209,6 +209,44 @@ public sealed class PromptParserTests
     }
 
     [Fact]
+    public void ResetForProfileSwap_WipesLiveStateToNoData()
+    {
+        // A profile swap must not carry the outgoing character's live HP/MA into
+        // the new character. The reported bug: Fujin's current HP (66) survived
+        // into FujinPVP while its max was re-seeded, tripping the low-HP hangup.
+        var (scanner, state, parser) = Setup();
+        Feed(scanner, "[HP=66/MA=40]: (Resting)");
+        Assert.True(state.HasPromptData);
+
+        parser.ResetForProfileSwap();
+
+        Assert.Equal(0, state.Hp);
+        Assert.Equal(0, state.MaxHp);
+        Assert.Equal(0, state.Ma);
+        Assert.Equal(0, state.MaxMa);
+        Assert.Equal(ManaType.None, state.ManaType);
+        Assert.Equal(PlayerPosition.Standing, state.Position);
+        Assert.False(state.HasPromptData);
+    }
+
+    [Fact]
+    public void ResetForProfileSwap_ThenStatScreenMax_LeavesHasPromptDataFalse()
+    {
+        // Mirrors the real ProfileLoaded order: reset, then seed the incoming
+        // character's max ceiling. HasPromptData must stay false so nothing
+        // HP-driven acts until the new character's first live prompt.
+        var (scanner, state, parser) = Setup();
+        Feed(scanner, "[HP=66/MA=40]:");
+
+        parser.ResetForProfileSwap();
+        parser.ApplyStatScreenMax(324, 0);           // FujinPVP's max seeded from profile.
+
+        Assert.Equal(324, state.MaxHp);
+        Assert.Equal(0, state.Hp);
+        Assert.False(state.HasPromptData);
+    }
+
+    [Fact]
     public void Dispose_UnsubscribesAndStopsUpdates()
     {
         var (scanner, state, parser) = Setup();

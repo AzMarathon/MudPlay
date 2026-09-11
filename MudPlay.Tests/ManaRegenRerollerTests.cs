@@ -358,4 +358,106 @@ public sealed class ManaRegenRerollerTests
         Assert.Empty(h.Recasts);
         Assert.False(h.Reroller.CycleActive);
     }
+
+    // ----- Unlimited ("reroll infinite") --------------------------------
+
+    [Fact]
+    public void UnlimitedKeepsRerollingPastAFiniteCap()
+    {
+        // Same always-bad-roll setup as RerollsUpToCapThenAcceptsWhateverLanded, but
+        // Unlimited ignores the cap — it never accepts a below-threshold roll, so the
+        // only thing that stops it here is our loop guard.
+        Harness h = new() { Config = new ManaRegenRerollConfig(Threshold: 5, Cap: 3, Unlimited: true) };
+
+        h.Reroller.OnRollSpellLanded("flux");
+        int guard = 0;
+        while (h.Reroller.CycleActive && guard++ < 10)
+        {
+            h.FeedRoll(1);
+            if (h.Reroller.CycleActive) h.Reroller.OnRollSpellLanded("flux");
+        }
+
+        Assert.Equal(10, h.Recasts.Count);          // blew past cap 3 — still rerolling
+        Assert.True(h.Reroller.CycleActive);
+    }
+
+    // ----- ReconsiderActiveRoll (reroll the buff that's already up) ------
+
+    // Drive a cap-0 cycle so a bad roll is remembered in LastObservedValue with the
+    // cycle closed — the state a config bump acts on.
+    private static Harness WithAcceptedBadRoll(int roll)
+    {
+        Harness h = new() { Config = new ManaRegenRerollConfig(Threshold: 0, Cap: 0) };
+        h.Reroller.OnRollSpellLanded("flux");
+        h.FeedRoll(roll);                            // cap 0 → accepted immediately
+        Assert.False(h.Reroller.CycleActive);
+        Assert.Empty(h.Recasts);
+        return h;
+    }
+
+    [Fact]
+    public void ReconsiderActiveRoll_StagesRerollAfterCapRaised()
+    {
+        Harness h = WithAcceptedBadRoll(-2);         // -2 < threshold 0, remembered
+        Assert.Equal(-2, h.Reroller.LastObservedValue);
+
+        h.Config = h.Config with { Cap = 20 };       // user bumps 0 → 20
+        h.Reroller.ReconsiderActiveRoll("flux");
+
+        Assert.Equal(new[] { "flux" }, h.Recasts);   // rerolled the live -2
+        Assert.True(h.Reroller.CycleActive);
+        Assert.Equal(1, h.Reroller.RerollsUsed);
+    }
+
+    [Fact]
+    public void ReconsiderActiveRoll_InfiniteRerollsEvenWithCapZero()
+    {
+        Harness h = WithAcceptedBadRoll(-2);
+        h.Config = h.Config with { Unlimited = true };   // infinite on, cap still 0
+        h.Reroller.ReconsiderActiveRoll("flux");
+        Assert.Equal(new[] { "flux" }, h.Recasts);
+    }
+
+    [Fact]
+    public void ReconsiderActiveRoll_NoOpWhenActiveRollAlreadyClearsThreshold()
+    {
+        Harness h = WithAcceptedBadRoll(5);          // 5 >= threshold 0 — a good roll
+        h.Config = h.Config with { Cap = 20 };
+        h.Reroller.ReconsiderActiveRoll("flux");
+        Assert.Empty(h.Recasts);                     // nothing to improve
+    }
+
+    [Fact]
+    public void ReconsiderActiveRoll_NoOpWhenNoRollObservedYet()
+    {
+        Harness h = new() { Config = new ManaRegenRerollConfig(Threshold: 0, Cap: 20) };
+        h.Reroller.ReconsiderActiveRoll("flux");     // never saw a roll
+        Assert.Empty(h.Recasts);
+        Assert.Null(h.Reroller.LastObservedValue);
+    }
+
+    [Fact]
+    public void ReconsiderActiveRoll_NoOpWhileACycleIsAlreadyInFlight()
+    {
+        Harness h = new() { Config = new ManaRegenRerollConfig(Threshold: 5, Cap: 3) };
+        h.Reroller.OnRollSpellLanded("flux");        // cycle open, awaiting the abil read
+        h.Reroller.ReconsiderActiveRoll("flux");
+        Assert.Empty(h.Recasts);                     // don't double-drive an in-flight cycle
+    }
+
+    [Fact]
+    public void ReconsiderActiveRoll_SuspendsAtManaFloorThenResumes()
+    {
+        Harness h = WithAcceptedBadRoll(-2);
+        h.Config = h.Config with { Cap = 20 };
+        h.CanAfford = false;
+
+        h.Reroller.ReconsiderActiveRoll("flux");
+        Assert.Empty(h.Recasts);                     // can't pay yet
+        Assert.True(h.Reroller.WaitingForMana);
+
+        h.CanAfford = true;
+        h.Reroller.OnRecoveryTick();
+        Assert.Equal(new[] { "flux" }, h.Recasts);   // fired once mana recovered
+    }
 }

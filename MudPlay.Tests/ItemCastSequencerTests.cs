@@ -168,6 +168,61 @@ public sealed class ItemCastSequencerTests
     }
 
     [Fact]
+    public void Execute_TwoHanded_StrandedCastItemInHand_RestoresFromDefaultSet()
+    {
+        // The reported 2H clobber: a prior recast left the greatsword wielded — the
+        // snapshot shows it in-hand, off-hand empty. The old 2H branch read restore
+        // targets only from that snapshot, so it restored nothing and the greatsword
+        // stayed two-handed forever (every later recast saw it in-hand and skipped
+        // restore again). With the Default-set fallback it re-equips the 1H + shield.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeqWithDesired(
+            InvWith(new EquippedItem("Shimmering Greatsword", "Weapon Hand")),
+            slot => slot switch
+            {
+                "Weapon Hand" => "long sword",
+                "Off-Hand"    => "medium shield",
+                _             => null,
+            });
+
+        Assert.True(seq.Execute("#shimmering greatsword"));
+        Assert.Equal(new[]
+        {
+            "eq Shimmering Greatsword",   // no-op while still worn; harmless
+            "use Shimmering Greatsword",
+            "eq long sword",
+            "eq medium shield",
+        }, Decode(sent));
+    }
+
+    [Fact]
+    public void Execute_TwoHanded_LiveGearPresent_RestoresLiveNotDefault()
+    {
+        // The Default-set fallback only fills in when the snapshot is empty/stranded —
+        // when the live loadout is real, restore THAT (battle axe / tower shield), not
+        // the Default items.
+        (ItemCastSequencer seq, List<byte[]> sent) = NewSeqWithDesired(
+            InvWith(
+                new EquippedItem("battle axe", "Weapon Hand"),
+                new EquippedItem("tower shield", "Off-Hand")),
+            slot => slot switch
+            {
+                "Weapon Hand" => "long sword",
+                "Off-Hand"    => "medium shield",
+                _             => null,
+            });
+
+        Assert.True(seq.Execute("#shimmering greatsword"));
+        Assert.Equal(new[]
+        {
+            "remove tower shield",
+            "eq Shimmering Greatsword",
+            "use Shimmering Greatsword",
+            "eq battle axe",
+            "eq tower shield",
+        }, Decode(sent));
+    }
+
+    [Fact]
     public void Execute_TwoHandedItem_WornSlotBlocksIt_RemovesAndRestoresWornItem()
     {
         // Report paradigm-20260819-234712: a red skull sits in "Worn" (not

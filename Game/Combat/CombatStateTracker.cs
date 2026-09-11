@@ -118,6 +118,12 @@ public sealed class CombatStateTracker : IDisposable
     // this gate existed.
     private Func<bool>? _isMovementActive;
 
+    // Reports whether we've committed to fighting the current room (its count met
+    // the engage window) — CombatManager.HasCommittedToCurrentRoom. Drives the
+    // "Kill all engaged" below-floor override in IsWithinMonsterCountWindow. Null
+    // (unwired) → false (no override; the Min floor behaves exactly as before).
+    private Func<bool>? _roomCommitted;
+
     // Reports whether we're standing in a too-dark room (RoomTracker.IsInDarkRoom).
     // Gates the idle-stall watchdog's resync CR: a CR in the dark re-emits no
     // "Also here:" line (nothing to re-observe) AND its "you can't see anything"
@@ -319,6 +325,15 @@ public sealed class CombatStateTracker : IDisposable
         _isMovementActive = isMovementActive;
     }
 
+    // Wire the "we've committed to this room" probe (CombatManager
+    // .HasCommittedToCurrentRoom) so the "Kill all engaged" override can hold the
+    // walker below the Min floor to finish an engaged room's survivors.
+    public void SetRoomCommittedGate(Func<bool> roomCommitted)
+    {
+        ArgumentNullException.ThrowIfNull(roomCommitted);
+        _roomCommitted = roomCommitted;
+    }
+
     // Wire path for the break-before-run disengage. Bound at connect time (the
     // same gate-wrapped engineSend every other engine receives). Until set, the
     // break-before-run step no-ops.
@@ -516,7 +531,18 @@ public sealed class CombatStateTracker : IDisposable
             // InCombat stays stuck true and HealthManager never rests
             // (CombatStatus=Off is unreliable, see OnCombatStatus). A hostile
             // still here keeps InCombat true so we don't rest next to a mob.
-            if (targetable == 0 && _state.InCombat) _state.InCombat = false;
+            if (targetable == 0 && _state.InCombat)
+            {
+                _state.InCombat = false;
+                // A combat-OFF force-clear (a see-hidden / rest engage-to-clear) still
+                // SPENT sneak during the fight, but with no line to latch the FSM reads
+                // stale-Sneaking. Fire the same stealth reset the auto-attack-ON clear
+                // path uses so the pre-move / post-cast re-sneak isn't no-op'd on stale
+                // state — otherwise a stealth runner leaves a cleared see-hidden room
+                // unsneaked. Guarded on InCombat (true only after we engaged), so a pure
+                // walk-past of an un-actionable room never resets a sneak we still hold.
+                CombatSpentStealth?.Invoke();
+            }
             return;
         }
 
@@ -617,8 +643,11 @@ public sealed class CombatStateTracker : IDisposable
         CombatSettings settings = _readSettings();
         int min = Math.Max(0, settings.MinMonstersInRoom);
         int max = settings.MaxMonstersInRoom > 0 ? settings.MaxMonstersInRoom : int.MaxValue;
-        if (min > max) return true;                       // misconfig — no gate
-        return targetable >= min && targetable <= max;
+        // Shared with CombatManager's own gate (MonsterCountGate) so the two can't
+        // diverge. "Kill all engaged" holds the walker below the floor only while
+        // we've committed to this room — finish the survivors instead of moving on.
+        return MonsterCountGate.WithinWindow(
+            targetable, min, max, settings.KillAllEngaged, _roomCommitted?.Invoke() ?? false);
     }
 
     // Engageable = Enemy (the default for a resolved-but-untagged monster) OR a Neutral

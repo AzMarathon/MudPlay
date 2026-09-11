@@ -120,6 +120,11 @@
                   HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="22" Spacing="10">
 
+        <TextBlock Classes="SettingsSectionBanner first" Text="Global client settings"/>
+        <TextBlock Classes="SettingsSectionSub"
+                   Text="Shared across every character and BBS on this install."/>
+        <Border Classes="SettingsSectionRule"/>
+
         <!-- Help-menu websites (Global tier) — always editable. -->
         <TextBlock Classes="SectionHeader"
                    Text="Help menu websites — shown under Help ↗ (shared across all characters)"/>
@@ -146,6 +151,11 @@
                      BorderThickness="0"/>
         </Border>
 
+        <TextBlock Classes="SettingsSectionBanner" Text="BBS settings"/>
+        <TextBlock Classes="SettingsSectionSub"
+                   Text="Stored with the active BBS, shared by every character on it."/>
+        <Border Classes="SettingsSectionRule"/>
+
         <!-- Active BBS's own site — a per-BBS value edited here as a special
              row tied to whichever BBS is active. -->
         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8"
@@ -170,7 +180,10 @@
                    TextWrapping="Wrap"
                    Text="Configure a BBS (Settings → BBS + Display) to attach its website to the Help menu."/>
 
-        <Separator Margin="0,4"/>
+        <TextBlock Classes="SettingsSectionBanner" Text="Character profile settings"/>
+        <TextBlock Classes="SettingsSectionSub"
+                   Text="The toolbar layout, shortcuts, and terminal right-click menu live on the loaded character."/>
+        <Border Classes="SettingsSectionRule"/>
 
         <!-- "No profile loaded" banner — shown when HasProfile is false.
              Only the toolbar/shortcuts editor below needs a character; the

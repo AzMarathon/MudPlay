@@ -10,6 +10,7 @@ public enum BuiltInAction
     OpenConversation,
     OpenParty,
     OpenBuffWatchdog,
+    OpenProfileManager,
     OpenWorkshop,
     OpenNavigation,
     OpenSpellBook,
@@ -27,10 +28,9 @@ public enum BuiltInAction
     ToggleDisableHangups,
 
     // ---- File menu ----
-    NewProfile,
-    OpenProfile,
+    // New / Open / Save-as profile were retired in favour of the Profile
+    // Management window; Save profile (quick one-click save) + Quit remain.
     SaveProfile,
-    SaveProfileAs,
     Quit,
 
     // ---- Movement engine (toolbar) ----

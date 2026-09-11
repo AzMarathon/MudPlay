@@ -1,6 +1,6 @@
 # Version history
 
-## 3.58.11
+## 3.64.1
 
 - An interrupted sweep no longer dumps its load on you: what Roomba was carrying and what it still had to do are remembered per character, verified against a real inventory read, and picked up next time
 - New **Resume** button on the Roomba tab — carries on from a stopped sweep without re-walking the whole circuit, and survives closing the client
@@ -8,8 +8,142 @@
 - A loop blocked because it lost track of where it is asks the game for its position without waiting out the repeat-ask delay, so the retry isn't denied every time
 - Recovery attempts are spaced out, so a reroute that instantly re-blocks can't spend the whole retry budget in one second
 - Fixed a crash when fleeing a fight from a room whose way back is a teleport (e.g. the Negative Power Plane) — the retreat now stops at the teleport instead of taking the client down
-- Restores the Auto-Lair engage fix that this branch had reverted (it landed separately in main)
 - bug reports addressed: stock-20260904-135419, stock-20260904-143436, Crash-20260908-181131
+
+## 3.64.0
+
+- Stock: two configured buffs that conflict one-directionally (e.g. greater bless removes chant, but chant doesn't remove greater bless) are now **both kept** — the Buff Watchdog casts the remover first and re-applies the removed buff after each remover recast, instead of letting the wrong cast order silently knock one off
+- Only on stock, where a buff's removal fires just at cast; Paradigm (continuous re-strip) still suppresses the loser per #540, and mutual pairs stay last-cast-wins on either realm
+- The kept buff's row shows "both kept" instead of a stuck conflict; bug report lists the collision-ordered buffs
+- The "mana to maintain" readout now accounts for it — a collision-ordered loser is budgeted at its remover's (shorter) duration since each remover recast re-casts it, and a suppressed loser costs nothing
+
+## 3.63.1
+
+- The pre-engage "can I kill this?" check now weighs per-monster spell overrides, so the walker no longer skips a monster its weapons can't hit but an override spell can (a mana-blocked override reads as wait-for-mana, not unkillable)
+
+## 3.63.0
+
+- Per-monster **combat overrides** in Game Data now cover the whole single-target chain, not just two slots: **Debuff (single target)**, **Normal attack spell**, **Alternate attack spell**, and a new **Physical attack** command — each pinnable against an exact monster
+- Override spells now **substitute into their rung and run the same gates** as the configured Combat-tab slot (Max cap, Mana floor, and the immunity / level / element-resist skip) — they are no longer a blanket bypass, so an override the target can't be hit by falls down the cascade instead of wasting the round
+- New **Physical attack** override replaces the weapon command only on a round the engine already chose physical — it doesn't force physical or suppress the spell rungs
+- The old "Override Attack" raw-verb command moved to the **Physical attack** box (existing data migrates automatically); the spell boxes are now spell-only
+- Monster editor relabelled to mirror the Settings → Combat grid; bug report lists all four override rungs per monster
+
+## 3.62.0
+
+- Buff/heal/cure maintenance no longer sits idle forever while Sneaking or Hidden — casting breaks stealth, but that's handled now instead of silently blocking the cast
+- New **sneak-aware casting** (whenever Auto-Sneak is on): after any auto-cast the client re-sneaks in place, and while sneaking with Auto-Combat off a due buff/cure/heal waits for the next empty room (then casts + re-sneaks) rather than stripping sneak in a room you're passing through
+- A see-hidden room cleared by *Clear hostiles when sneak broken by see-hidden monster* now catches up the held casts there, then re-sneaks and continues
+- Emergency survival (life-threatening heal, flee, emergency hangup) always fires immediately; Auto-Sneak off reverts to casting on schedule wherever you are
+- Buff Watchdog: unchecking a whole-party buff's **Party** master now clears Solo and stops every future cast, including while alone
+- **Add all blesses** now adds whole-party rows fully off (both Party and Solo), matching the UI promise that bulk-added party buffs never start casting until you opt in
+- Buff Watchdog: the inline checkboxes and buttons (Self, members, All/None, ▲▼, ✎) are clickable again — the row drag-reorder handler was swallowing every click in the panel
+- Buff Watchdog: a buff stripped by a newly-cast buff that removes it now has its timer cleared when the clobbering buff lands, instead of lingering as though it's still up — each spell respects its literal Removes list (e.g. casting greater bless clears an active chant; casting chant leaves greater bless alone)
+- Buff Watchdog: re-casting a buff that had earlier been stripped now correctly drops whatever replaced it (e.g. re-casting greater bless while a chant is up now clears the chant instead of leaving it stuck on "conflict") — the stripped buff's applied-latch is released on clobber so its re-cast re-confirms
+- Buff Watchdog: when you've configured both a buff and one it permanently removes one-directionally (e.g. greater bless removes chant, but chant doesn't remove greater bless), the loser is no longer cast or timed on anyone — it reads "covered by" the winner instead of a stuck "conflict" (Paradigm only, where an active buff re-strips its removes continuously; mutual pairs like bless ↔ greater bless stay last-cast-wins)
+- **Save profile** put back on the File menu with a floppy-disk toolbar icon (quick one-click write of the current profile + settings); New / Open / Save-as profile retired from the menus and shortcut list (Profile Management covers them), and Profile Management gained a **Ctrl+P** shortcut
+- bug reports addressed: paradigm-20260909-134825, paradigm-20260909-142359, paradigm-20260909-144119, paradigm-20260909-220212, paradigm-20260910-000144, paradigm-20260910-001023, paradigm-20260910-012303
+
+## 3.61.1
+
+- Switching profiles no longer strands the new character at the game main menu — a stale low-HP hangup from the previous character was suppressing realm auto-entry
+- Switching profiles clears the outgoing character's live HP so it can't trip a spurious low-HP hangup on the swap
+- Login "quest available" announcements only fire once you're actually in the realm, not while sitting at the login menu
+- bug reports addressed: paradigm-20260909-172633
+
+## 3.61.0
+
+- Buff Watchdog config list: re-arrange buff rows by drag (grip handle) or ▲/▼ buttons; the order persists
+- New **Cast priority** toggle — Default (by type) casts self→whole-party→item regardless of arrangement; Top→bottom casts in the exact order shown (identical until you re-arrange)
+- Once re-arranged, new buffs append at the bottom instead of auto-sorting; **↺ Reset order** restores the automatic grouping
+
+## 3.60.0
+
+- Loops: per-room **"Do not attack here"** flag — the loop skips combat in that room as if auto-combat were off, but a triggered rest still clears it
+- Loops: loop-wide **"Only attack in lair rooms"** — only engage in game-data lair rooms; walk through the rest (do-not-attack still overrides on a lair room)
+- New **Entire Loop Settings** entry at the top of the CURRENT NAV area — while building a loop, while one is running, and mirrored in the Edit Loop window — home for whole-loop toggles
+- Edit Loop table now edits each waypoint's command / delay / no-rest / no-attack **inline as columns** (the ✎ per-row dialog is gone; the build-time strip keeps it)
+
+## 3.59.3
+
+- MudPlay now has its own icon — an amber **M** in a CP437 double-line box — replacing the default Avalonia logo on the window, the taskbar and the Windows .exe
+
+## 3.59.1
+
+- Combat → Room thresholds: new "Kill all engaged" checkbox — once a room is engaged because its count met Min. monsters, keep fighting it per your combat settings until cleared, instead of moving on when kills drop the count below Min. monsters (for areas where mixed HP pools leave the tanky ones alive); off (default) = current behavior, move on from the leftovers
+
+## 3.59.0
+
+- New **Profile Management** window (View menu + toolbar) — one place to add / rename / delete / load characters, move a character to another BBS, and add / remove / rename BBSes
+- **Load** is multi-select: tick several characters and the first loads into this client (when idle) while the rest each open in their own new client — bring a whole stable online in one click. If this client is actively connected it's left alone; every selected character opens in a new client instead of a disconnect→swap→reconnect
+- File menu's New / Open / Save / Save As collapsed into a single **Profile Management** entry (the Ctrl+N/O/S/Shift+S shortcuts still work); the redundant "BBS list" entry removed
+- Characters can now be **renamed and deleted** (neither was possible before), and moved between BBSes via an explicit **Assign to BBS**
+- BBS add / remove moved out of Settings → BBS + Display into the new window; that tab keeps the BBS list for selecting and editing a board's connection/display fields
+- Selecting a BBS in Settings no longer silently re-homes your loaded character — moving a character is now an explicit action
+- Mutating the loaded character (load-swap / rename / delete / reassign) asks you to disconnect first; other characters are freely managed while connected
+- New **Settings → General** picker for how many recent profiles the File menu lists (0–10, default 5); the client now remembers up to ten
+
+## 3.58.30
+
+- Fixed a crash: renaming a BBS to a name whose folder already exists no longer takes the app down — it refuses with a "name already in use" notice and leaves the rename undone
+- A deleted (or renamed-away) character profile no longer keeps reappearing in File → Recent — stale entries are pruned from the menu and the saved list
+- Buff Watchdog: a buff that isn't set to recast now drops its bar the moment its timer runs out, instead of sitting full at 0s until cleared by hand — only a buff set to recast persists as an expired bar
+- bug reports addressed: Crash-20260909-133612, Crash-20260909-133613, Crash-20260909-133636, paradigm-20260909-125700, paradigm-20260909-134710
+
+## 3.58.25
+
+- Every Settings tab now shows which persistence tier each setting saves to, via banner-headed sections — Global (app-wide) / BBS (shared by all characters on the board) / Character profile (only the loaded character) — so it's clear where a setting lands instead of the tiers being interleaved. BBS + Display, General, Toolbar + Shortcuts, and Other split into multiple tier sections; the per-character-only tabs (Health, Spells, Combat, Party, Cash, Statline, Talk, Auto-Light, Auto-Lair, Auto-Trainer, Events) carry a single header naming their tier
+
+## 3.58.24
+
+- Mana-flux reroll: bumping the reroll cap / lowering the threshold now re-rolls the flux that's already up (if its last roll falls short) instead of waiting for the next cast — so changing the setting acts on the active buff
+- Mana-flux reroll: new "Reroll infinite" checkbox below Max rerolls — keep re-rolling until the roll clears the threshold, no cap (pauses and resumes across meditation if mana runs dry)
+- Mana-regen roll spells now reroll regardless of a slot's target flags: flux is a self-only cast (can't be aimed at others), so a slot left on whole-party no longer silently disables its rerolling
+- bug reports addressed: paradigm-20260909-113655
+
+## 3.58.22
+
+- Auto-Lair now walks to the closest lair that's up by the time you arrive (a closer lair still on cooldown that pops during the walk counts, and beats a farther already-ready one) and no longer parks in a wait-room idling for a nearer lair unless it'd actually be ready when you get there — maximizing hits per run instead of waiting out long idle timers
+- Gear-set swaps no longer send a redundant "rem" before re-equipping a paired ring/bracelet: the worn-slot snapshot now tracks the game's real finger/wrist order, so wearing the ring auto-evicts cleanly
+- Mana rest no longer thrashes meditate↔move↔gear-swap every room: a Pre-rest Mana set (which raises max mana) was dragging the rest target below the rest trigger and flapping the mana-rest gate on and off — rest thresholds now stay anchored to your normal loadout's max regardless of which set is worn, so the character sits and meditates once to top off (like an HP rest) instead of stepping between ticks
+- Fixed a two-handed item-use buff (a 2H weapon cast) sometimes leaving the 2H equipped over your normal 1H+shield: the restore now falls back to your Default set's weapon and off-hand instead of only the live snapshot, so a stranded 2H recovers instead of persisting across recasts
+- bug reports addressed: paradigm-20260909-074126, paradigm-20260909-090029, paradigm-20260909-095419
+
+## 3.58.18
+
+- Auto-Lair routing-heuristic option now spells "minimize" (was the British "minimise")
+- Map legend rewritten to match what the map actually draws: current room now shows its bright ring + centre dot (not a flat swatch), and the walk-to destination, up+down exit rooms, deathpile skull, boss crown (plus stop-before-boss halt ring), trainer chevrons, gang-house robot, avoid/stash X-marks, and the @where result flash are all keyed now (route-line colours stay in Settings → General since they're recolourable)
+- Custom monster spawn lines with no "into the room"/"from <dir>" wording (e.g. "A muckworm darts out of the mud!") are now recognized: the client spots the yellow-tagged monster name and engages the room a round before the spawn's first swing, instead of only reacting once it hits you
+
+## 3.58.15
+
+- Equipment Manager's gear-set list is taller so all sets (Default, Backstab, Pre-rest HP/Mana, While Moving, Bossing) show at once without a scrollbar
+- Auto-search no longer stalls travel: it releases the walker the moment a room's search comes back empty ("Your search revealed nothing.") instead of always waiting out the full settle window, and its per-room pre-search grace was trimmed to just what's needed to catch a hostile walking in — cutting seconds of latency on long search-along-route runs
+- Auto-search now also searches the room a walk/loop/auto-lair starts from — previously the very first room (entered before you set off, or at login) was skipped
+- Route ETA no longer counts combat dwell for lairs the party won't actually fight (friendly/fled/neutral-not-KOS occupants) — now applied consistently to the walk-status line, the route-picker cards, and the Details window, so a hostile-free path reads close to real walk time everywhere
+- bug reports addressed: paradigm-20260909-004947, paradigm-20260909-055045
+
+## 3.58.12
+
+- Confusion/convulsion fumbles no longer leave you stuck: a fumble eats the command the client just sent, so the client now re-sends it — weapon swings, attack spells (immediately, not on the next round), item uses, and other client-sent commands alike — instead of sitting there (e.g. getting beat on while convulsing)
+- Commands you typed yourself are never auto-repeated (that stays your call), and a fumbled movement step self-recovers as before
+- bug reports addressed: paradigm-20260908-211659
+
+## 3.58.11
+
+- Auto-Lair moves on within seconds when it walks into a lair that hasn't respawned, instead of standing in the empty room for the full engage timeout
+- bug reports addressed: stock-20260908-192900
+
+## 3.58.10
+
+- Exp/Hr estimator now counts a room's summon-spell yield by realm: Paradigm re-rolls every combat round plus on entry, Stock on the slower 6-second medium tick plus on room change (replaces the old quick-kill bonus guess)
+- Summon spells with a `nomonsters:` gate are credited only on clear pass-throughs (empty on entry), not when arriving to a full lair
+- Estimator panel shows the active realm driving the summon cadence; the bug report captures it
+
+## 3.58.9
+
+- Asylum (teleport-maze) solver no longer fails out when a relocalization peek points at a closed door/gate — it bashes the barrier open first, then looks through it
+- bug reports addressed: stock-20260908-205441
 
 ## 3.58.8
 

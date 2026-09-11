@@ -5,7 +5,6 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
-using MudPlay.ViewModels.Profile;
 using MudPlay.Views.Settings;
 
 namespace MudPlay.ViewModels.Settings;
@@ -355,100 +354,16 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         _globalSettings.Save();
     }
 
-    // Push the BBS section's character-side decisions onto the loaded profile. The
-    // BBS link is now the folder the profile lives under (there's no BbsName field
-    // on the DTO), so "pinning a BBS" means one of three things depending on
-    // profile state:
-    //   • Blank draft → ProfileService.PinDraftBbs records the home BBS so the
-    //     draft's first Save lands under it.
-    //   • Named profile, same BBS → nothing to move; just re-commit credentials.
-    //   • Named profile, different BBS → re-home the on-disk folder. No name clash
-    //     in the destination → silent move now. Clash → prompt for a new name
-    //     asynchronously and finish the move in the continuation (Apply itself
-    //     stays synchronous; the Settings window may close while the prompt is up).
-    // Every path ends in CommitCredentials, which writes the per-BBS credential
-    // slice and fires the mutate / pin notifications.
+    // Commit the selected BBS's per-character credentials onto the loaded
+    // profile. Selecting a BBS here is now editing-only — it NEVER re-homes /
+    // pins the loaded character (that moved to the Profile Management window's
+    // explicit "Assign to BBS"). So this just writes the credential slice for
+    // whichever BBS the user is editing; the profile stays where it lives.
     private void ApplyToCurrentProfile()
     {
         if (SelectedBbsName is not { } bbs) return;
-        CharacterProfile? character = _profile.Current;
-        if (character is null) return;
-
-        // Blank draft: just record the home BBS; there's no folder to move.
-        if (_profile.CurrentProfileName is null)
-        {
-            _profile.PinDraftBbs(bbs);
-            CommitCredentials(bbs, character);
-            return;
-        }
-
-        // Named profile staying on its current BBS: no move needed.
-        if (string.Equals(bbs, _profile.CurrentBbsName, StringComparison.OrdinalIgnoreCase))
-        {
-            CommitCredentials(bbs, character);
-            return;
-        }
-
-        // Named profile changing BBS → re-home. A same-named profile already
-        // under the destination BBS forces a rename (async-after-Apply);
-        // otherwise the move is silent and immediate.
-        if (_profile.Exists(bbs, _profile.CurrentProfileName))
-        {
-            _ = ReHomeWithRenameAsync(bbs, character);
-        }
-        else
-        {
-            _profile.ReHome(bbs);
-            CommitCredentials(bbs, character);
-        }
-    }
-
-    // Re-home flow for the name-clash case: prompt the user for a fresh profile
-    // name in the destination BBS, then move + commit. Fire-and-forget from
-    // ApplyToCurrentProfile so Apply stays synchronous; cancelling the prompt
-    // leaves the profile where it is.
-    private async Task ReHomeWithRenameAsync(string bbs, CharacterProfile character)
-    {
-        string? currentName = _profile.CurrentProfileName;
-        if (currentName is null) return; // named-profile path only.
-
-        ProfileNameInputDialogViewModel vm = new(
-            suggestedName: DeriveUniqueName(bbs, currentName),
-            exists:        name => _profile.Exists(bbs, name));
-
-        string? newName = await AppServices.Current.Dialogs.OpenWindowAsync<
-            ProfileNameInputDialogViewModel, string>(vm);
-        if (string.IsNullOrWhiteSpace(newName))
-        {
-            AppServices.Current.Log.Info("Profile",
-                $"Re-home of '{currentName}' to BBS '{bbs}' cancelled — left in place.");
-            return;
-        }
-
-        try
-        {
-            _profile.ReHome(bbs, newName);
-        }
-        catch (Exception ex)
-        {
-            AppServices.Current.Log.Error("Profile",
-                $"Re-home of '{currentName}' to BBS '{bbs}' failed: {ex.Message}");
-            return;
-        }
+        if (_profile.Current is not { } character) return;
         CommitCredentials(bbs, character);
-    }
-
-    // Suggest a destination profile name that doesn't already exist under the
-    // given BBS, so the rename prompt's default is valid. Tries the original name
-    // first, then appends " 2", " 3", …
-    private string DeriveUniqueName(string bbs, string baseName)
-    {
-        if (!_profile.Exists(bbs, baseName)) return baseName;
-        for (int n = 2; ; n++)
-        {
-            string candidate = $"{baseName} {n}";
-            if (!_profile.Exists(bbs, candidate)) return candidate;
-        }
     }
 
     // Write the per-BBS credential slice (username, password, menu-nav, sysop
@@ -484,11 +399,14 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             _pendingPassword = null;
         }
 
-        // Save() no-ops on drafts (no name to write to). NotifyMutated
-        // always fires so observers refresh either way.
+        // Save() no-ops on drafts (no name to write to). NotifyMutated always
+        // fires so observers refresh either way. NotifyBbsPinApplied is NOT
+        // fired here anymore: editing a BBS's credentials no longer changes the
+        // active-BBS identity (re-home moved to Profile Management), so a
+        // credential edit warrants only a mutation signal — BbsPinApplied now
+        // fires solely on a real active-BBS change.
         _profile.Save();
         _profile.NotifyMutated();
-        _profile.NotifyBbsPinApplied();
     }
 
     private void RenameSelected(string oldName, string newName)
@@ -499,8 +417,21 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             if (profile is null) return;
         }
 
-        // Don't trample an existing BBS with the new name.
-        if (_loaded.ContainsKey(newName) || _bbsStore.Get(newName) is not null) return;
+        // Don't trample an existing BBS with the new name. Test the folder, not
+        // just a loadable bbs.json: BbsProfileStore.Rename moves the whole folder
+        // and Directory.Move throws if the destination folder exists at all —
+        // even a stray one with no bbs.json (half-deleted BBS, or one holding
+        // only nested profiles). Guarding on Get(newName) alone let those slip
+        // through and crashed the app with an unhandled IOException on Apply.
+        if (_loaded.ContainsKey(newName) || _bbsStore.Exists(newName))
+        {
+            AppServices.Current.Log.Info("BBS",
+                $"Rename '{oldName}' → '{newName}' refused: a folder for that name already exists.");
+            AppServices.Current.Dialogs.ShowInfo(
+                "BBS not renamed",
+                $"A BBS named “{newName}” already exists. Pick a name that isn't in use.");
+            return;
+        }
 
         // Move the whole Data/BBS/{old}/ subtree — bbs.json, side-files, and
         // every nested character profile — to the new name. The old
@@ -515,43 +446,12 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // refs — cascade the rename so logon-nav / passwords, the File → Recent
         // menu, and the "import logon steps" picker follow the new name.
         _profile.RenameBbs(oldName, newName);
-        CascadeRecentProfiles(oldName, newName);
+        RecentProfileList.RekeyBbs(_globalSettings, oldName, newName);
 
         _suppressDirty = true;
         ReloadBbsList();
         SelectedBbsName = newName;
         _suppressDirty = false;
-    }
-
-    // Rewrite the Global-tier recent-profiles + last-used pointers that named
-    // the old BBS. They're (bbs, char) refs; without the rewrite the File →
-    // Recent menu and startup auto-load point at a BBS folder that no longer
-    // exists. Saving fires GlobalSettingsChanged so the live menu rebuilds.
-    private void CascadeRecentProfiles(string oldName, string newName)
-    {
-        GlobalSettings settings = _globalSettings.Current;
-        bool changed = false;
-
-        if (settings.RecentProfiles is { } recents)
-        {
-            for (int i = 0; i < recents.Count; i++)
-            {
-                if (string.Equals(recents[i].Bbs, oldName, StringComparison.OrdinalIgnoreCase))
-                {
-                    recents[i] = recents[i] with { Bbs = newName };
-                    changed = true;
-                }
-            }
-        }
-
-        if (settings.LastUsedProfile is { } last
-            && string.Equals(last.Bbs, oldName, StringComparison.OrdinalIgnoreCase))
-        {
-            settings.LastUsedProfile = last with { Bbs = newName };
-            changed = true;
-        }
-
-        if (changed) _globalSettings.Save();
     }
 
     public override void Discard()
@@ -589,33 +489,13 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         _display.TerminalRows = values.TerminalRows;
     }
 
+    // Adding / removing BBSes moved to the Profile Management window (View →
+    // Profile Management); this tab now only selects a saved BBS to edit its
+    // fields. Renaming still happens here via the Name field on Apply. The
+    // "Open Profile Management" button routes through the AppServices bridge
+    // (the window is owned by the main VM).
     [RelayCommand]
-    private void AddBbs()
-    {
-        string baseName = "New BBS";
-        string name = baseName;
-        int n = 2;
-        while (_bbsStore.Get(name) is not null || _loaded.ContainsKey(name))
-        {
-            name = $"{baseName} {n++}";
-        }
-        BbsProfile fresh = new() { Name = name, Host = string.Empty, Port = 23 };
-        _bbsStore.Save(fresh);
-        _loaded[name] = fresh;
-        ReloadBbsList();
-        SelectedBbsName = name;
-    }
-
-    [RelayCommand]
-    private async Task DeleteBbsAsync()
-    {
-        if (SelectedBbsName is not { } name) return;
-        if (!await AppServices.Current.Confirm.ConfirmDeleteAsync($"the BBS '{name}'")) return;
-        _bbsStore.Delete(name);
-        _loaded.Remove(name);
-        ReloadBbsList();
-        SelectedBbsName = AvailableBbsNames.FirstOrDefault();
-    }
+    private void OpenProfileManager() => AppServices.Current.OpenProfileManager();
 
     partial void OnSelectedBbsNameChanged(string? value)
     {

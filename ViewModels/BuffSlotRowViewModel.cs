@@ -37,11 +37,26 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     private readonly Func<string?, bool>? _resolveLearned;
     private bool _suppress;
 
+    // Manual-reorder ▲/▼ button enable flags — set by BuffPanelViewModel.Renumber
+    // to the row's position (top row can't move up, bottom can't move down).
+    [ObservableProperty] private bool _canMoveUp;
+    [ObservableProperty] private bool _canMoveDown;
+
+    // Live drag-reorder feedback (driven by the window's pointer handlers):
+    // IsDragging dims the row being moved; DropAbove / DropBelow draw the
+    // insertion line showing where it will land.
+    [ObservableProperty] private bool _isDragging;
+    [ObservableProperty] private bool _dropAbove;
+    [ObservableProperty] private bool _dropBelow;
+
     // Editable targeting only — spell + recast are fixed at add time.
     [ObservableProperty] private bool _castOnSelf;
-    [ObservableProperty] private bool _wholePartyOn;
-    // Whole-party slots only: also cast it while solo (a lone character is a party
-    // of one, so the whole-party cast still lands on us). Surfaced as the "Solo" box.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCastSolo))]
+    private bool _wholePartyOn;
+    // Whole-party slots only: while the Party master is on, also cast it while solo
+    // (a lone character is a party of one, so the whole-party cast still lands on us).
+    // Surfaced as the subordinate "Solo" box.
     [ObservableProperty] private bool _castSolo;
 
     // True once the party has at least one non-self member, so the per-member and
@@ -126,6 +141,10 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // via CastOnSelf, so they don't need it.
     public bool ShowSolo => IsWholeParty;
 
+    // Solo is an option on an enabled whole-party slot, not an independent way to
+    // re-enable one whose Party master was unchecked.
+    public bool CanCastSolo => WholePartyOn;
+
     // Non-null when another configured slot's spell removes this one's (or this
     // one's removes another's) via RemovesSpell — see AppServices.BuffSlotOverwritePairs.
     // Combines both directions into one tooltip; the icon shows whenever either is set.
@@ -208,6 +227,16 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     {
         if (_suppress) return;
         _dto.WholePartyOn = value;
+        // Party is the master switch. Clear its subordinate option too so the row
+        // becomes visibly and persistently off instead of leaving a checked-but-
+        // disabled Solo box that looks impossible to turn off.
+        if (!value && CastSolo)
+        {
+            _suppress = true;
+            CastSolo = false;
+            _suppress = false;
+            _dto.CastSolo = false;
+        }
         _persist();
     }
 

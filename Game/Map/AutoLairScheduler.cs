@@ -62,7 +62,15 @@ public static class AutoLairScheduler
 
         DateTimeOffset evalAt = now ?? DateTimeOffset.UtcNow;
         double penalty = Math.Max(0, idlePenalty);
-        LairDecision? best = null;
+        // Default two-tier: prefer a lair that's up by the time we ARRIVE — among
+        // those the CLOSEST (soonest we start fighting = most hits per run) — and only
+        // if none is ready by arrival, fall back to whichever we could start fighting
+        // soonest (the least-bad wait). Never idle for a nearer lair unless it'd
+        // actually be up when we get there.
+        LairDecision? bestReady = null;     // ready by arrival — ranked by arrival time
+        TimeSpan bestReadySlack = TimeSpan.MaxValue;   // tie-break: freshest among equidistant
+        LairDecision? bestSoonest = null;   // fallback: soonest fight-start over all
+        LairDecision? bestThroughput = null; // Throughput heuristic: min wasted-respawn
 
         foreach (LairCandidate c in candidates)
         {
@@ -75,36 +83,64 @@ public static class AutoLairScheduler
             DateTimeOffset readyAt = c.ReadyAt ?? evalAt; // null = ready now
             TimeSpan slack = entryArrival - readyAt;
             double wastedSeconds = Math.Max(0, slack.TotalSeconds);
-            double idleSeconds   = Math.Max(0, -slack.TotalSeconds);
 
-            double score = heuristic switch
-            {
-                AutoLairHeuristic.Throughput => wastedSeconds,
-                _                            => wastedSeconds + idleSeconds * penalty,
-            };
+            // When we could actually start fighting this lair: on arrival if it's
+            // already up (slack ≥ 0), else when it respawns (we'd idle until then).
+            DateTimeOffset fightStart = entryArrival > readyAt ? entryArrival : readyAt;
+            double soonestScore = (fightStart - evalAt).TotalSeconds;
 
-            if (best is null || score < best.Score)
+            LairDecision Decision(double score) => new(
+                Lair: c.Lair, WaitRoom: c.WaitRoom.Value, ApproachDuration: approach,
+                EntryArrival: entryArrival, SlackAtEntry: slack, Score: score);
+
+            // Ready by the time we arrive → rank by arrival time so the CLOSEST wins
+            // (a closer on-cooldown lair that pops during the walk lands here too, and
+            // beats a farther already-up one).
+            if (slack >= TimeSpan.Zero)
             {
-                best = new LairDecision(
-                    Lair: c.Lair,
-                    WaitRoom: c.WaitRoom.Value,
-                    ApproachDuration: approach,
-                    EntryArrival: entryArrival,
-                    SlackAtEntry: slack,
-                    Score: score);
+                double arrivalScore = (entryArrival - evalAt).TotalSeconds;
+                // Closest first; among equidistant ready lairs prefer the freshest
+                // (smallest slack — least respawn already wasted) so the pick is
+                // deterministic and independent of candidate order.
+                if (bestReady is null
+                    || arrivalScore < bestReady.Score
+                    || (arrivalScore == bestReady.Score && slack < bestReadySlack))
+                {
+                    bestReady = Decision(arrivalScore);
+                    bestReadySlack = slack;
+                }
             }
+
+            if (bestSoonest is null || soonestScore < bestSoonest.Score) bestSoonest = Decision(soonestScore);
+
+            if (heuristic == AutoLairHeuristic.Throughput
+                && (bestThroughput is null || wastedSeconds < bestThroughput.Score))
+                bestThroughput = Decision(wastedSeconds);
         }
 
-        return best;
+        _ = penalty; // idlePenalty no longer weights Default (superseded by the two-tier rule); kept for API/settings compat.
+
+        return heuristic switch
+        {
+            // Throughput keeps its own semantics: minimise wasted respawn, idle is free.
+            AutoLairHeuristic.Throughput => bestThroughput,
+            // Default: closest ready-by-arrival lair, else the soonest we can fight.
+            _                            => bestReady ?? bestSoonest,
+        };
     }
 }
 
 // Scoring heuristic for AutoLairScheduler.PickNext.
 public enum AutoLairHeuristic
 {
-    // Penalise both wasted-respawn AND idle wait, weighted by idlePenalty.
+    // Maximise hits per run: go to the CLOSEST lair that's up by the time you arrive
+    // (a closer on-cooldown lair that pops during the walk counts, and beats a farther
+    // already-up one). Never idle for a nearer lair unless it'd actually be ready when
+    // you get there. Only when NO lair is up by arrival does it fall back to whichever
+    // you could start fighting soonest.
     Default,
-    // Penalise only wasted-respawn — idle wait is free.
+    // Penalise only wasted-respawn — idle wait is free (chases the soonest respawn
+    // even if that means idling past an already-ready lair).
     Throughput,
 }
 

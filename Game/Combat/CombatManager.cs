@@ -184,6 +184,14 @@ public sealed partial class CombatManager : IDisposable
 
     private string? _currentTarget;
 
+    // True once this room's hostile count met the [min..max] engage window, i.e.
+    // we committed to fighting here. Drives the "Kill all engaged" override: once
+    // committed, we finish the room to empty even after kills drop the count below
+    // the Min floor (see MonsterCountGate). Reset on a physical room change
+    // (NotePreMove); exposed for CombatStateTracker's mirror of the same gate.
+    private bool _committedToRoom;
+    public bool HasCommittedToCurrentRoom => _committedToRoom;
+
     // Guard-redirect memory. MajorMUD "guarded" monsters (a brigand chief guarded
     // by brigands) can't be hit directly while a guard is in the room — each swing
     // we aim at the chief is redirected to a guard, announced by "<guard> moves to
@@ -1331,14 +1339,36 @@ public sealed partial class CombatManager : IDisposable
                 _log?.Warn(LogCategory,
                     $"MinMonsters={min} > MaxMonsters={max} — gate disabled for this observation");
             }
-            else if (engageable.Count < min || engageable.Count > max)
+            else
             {
-                _log?.Combat(LogCategory,
-                    $"min/max gate skip — count={engageable.Count} window=[{min}..{max}]");
-                // Clear target so we don't keep swinging at an old pick
-                // that's now out-of-window after a kill.
-                _currentTarget = null;
-                return;
+                // We engaged this room because its count met the [min..max] window —
+                // remember that so "Kill all engaged" can hold us here to finish the
+                // survivors even after kills drop the count below the Min floor.
+                if (engageable.Count >= min && engageable.Count <= max)
+                    _committedToRoom = true;
+
+                if (!MonsterCountGate.WithinWindow(
+                        engageable.Count, min, max,
+                        settings.KillAllEngaged, _committedToRoom))
+                {
+                    _log?.Combat(LogCategory,
+                        $"min/max gate skip — count={engageable.Count} window=[{min}..{max}]");
+                    // Clear target so we don't keep swinging at an old pick
+                    // that's now out-of-window after a kill.
+                    _currentTarget = null;
+                    return;
+                }
+
+                if (settings.KillAllEngaged && _committedToRoom
+                    && engageable.Count < min && engageable.Count > 0)
+                {
+                    // "Kill all engaged" is holding us here: we committed to this room
+                    // above the Min floor and it's now below it, but we finish the
+                    // survivors per normal combat settings instead of moving on
+                    // (mixed HP pools left the tanky ones alive after the engage).
+                    _log?.Combat(LogCategory,
+                        $"kill-all-engaged: finishing {engageable.Count} leftover(s) below min {min} (engaged this room)");
+                }
             }
         }
 
@@ -1746,6 +1776,9 @@ public sealed partial class CombatManager : IDisposable
     public void NotePreMove()
     {
         _spellChooser.ResetForNewRoom();
+        // Leaving the room ends our commitment to it — the next room re-earns
+        // the "Kill all engaged" hold by meeting the engage window again.
+        _committedToRoom = false;
         // Leaving the room drops any debuff still awaiting a rejection — its mark is
         // gone with the room reset, so there's nothing left to roll back.
         _debuffAwaitingConfirm = null;
@@ -3472,19 +3505,26 @@ public sealed partial class CombatManager : IDisposable
     // auto-repeats and the failures stop. Weapon mode only — spell mode re-issues
     // its cast on the per-round tick (OnCombatTick), and _lastAttackCommand holds a
     // weapon verb we must not fire into a spell fight.
-    public void OnActionFailed()
+    // Returns true when it re-sent the weapon swing (so the caller knows combat
+    // handled the fumble and need not fall back to a generic re-fire). False when this
+    // isn't a weapon fight it can act on — spell mode, no target, attacks blocked, or
+    // no prior swing — in which case the caller re-fires the last client command
+    // generically (EngineSendGate.ReplayLastClientCommand), which covers the fumbled
+    // attack SPELL / item-use / other client commands.
+    public bool OnActionFailed()
     {
-        if (_disposed || !_isEnabled()) return;
-        if (_castingSpellTarget is not null) return;
-        if (_currentTarget is null) return;
-        if (_lastAttackCommand is not { Length: > 0 } line) return;
-        if (_wireSender is null) return;
-        if (AttacksBlocked()) return;   // can't re-send a swing while attacks are blocked
+        if (_disposed || !_isEnabled()) return false;
+        if (_castingSpellTarget is not null) return false;
+        if (_currentTarget is null) return false;
+        if (_lastAttackCommand is not { Length: > 0 } line) return false;
+        if (_wireSender is null) return false;
+        if (AttacksBlocked()) return false;   // can't re-send a swing while attacks are blocked
 
         _combatOff = false;
         _log?.Combat(LogCategory, $"action failed — re-sending last attack '{line}'");
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         NoteAttackSent();
+        return true;
     }
 
     // Arm the engage-verification timer after a fresh attack goes out. No-op once

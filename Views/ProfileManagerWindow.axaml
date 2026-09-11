@@ -1,0 +1,133 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:vmp="using:MudPlay.ViewModels.Profile"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="460"
+        x:Class="MudPlay.Views.ProfileManagerWindow"
+        x:DataType="vm:ProfileManagerViewModel"
+        Title="Profile Management"
+        Width="640" Height="460"
+        MinWidth="520" MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.PaneHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <!-- Bold the currently-loaded character's row. -->
+        <Style Selector="TextBlock.current">
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+    </Window.Styles>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- ===== Current profile strip ===== -->
+        <Border DockPanel.Dock="Top"
+                Background="{StaticResource ChromeBgSunkenBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="10,8">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                <TextBlock Grid.Column="0" Text="Loaded:" VerticalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgSecBrush}" Margin="0,0,6,0"/>
+                <TextBlock Grid.Column="1" Text="{Binding CurrentProfileLabel}" VerticalAlignment="Center"
+                           FontFamily="{StaticResource FontMono}"
+                           Foreground="{StaticResource ChromeFgBrush}" TextTrimming="CharacterEllipsis"/>
+                <Button Grid.Column="2" Content="New…" Command="{Binding NewCurrentCommand}" Margin="6,0,0,0"/>
+                <Button Grid.Column="3" Content="Save" Command="{Binding SaveCurrentCommand}" Margin="6,0,0,0"/>
+                <Button Grid.Column="4" Content="Save As…" Command="{Binding SaveCurrentAsCommand}" Margin="6,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <Grid ColumnDefinitions="240,1,*" Margin="10">
+
+            <!-- ===== BBS rail ===== -->
+            <DockPanel Grid.Column="0" Margin="0,0,10,0">
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Classes="PaneHeader" Text="BBSes"/>
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="4" Margin="0,0,0,6">
+                        <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
+                                Command="{Binding AddBbsCommand}"/>
+                        <Button Grid.Column="1" Content="Rename" HorizontalAlignment="Stretch"
+                                Command="{Binding RenameBbsCommand}" IsEnabled="{Binding HasBbsSelection}"/>
+                        <Button Grid.Column="2" Content="Remove" HorizontalAlignment="Stretch"
+                                Command="{Binding RemoveBbsCommand}" IsEnabled="{Binding HasBbsSelection}"/>
+                    </Grid>
+                </StackPanel>
+                <ListBox ItemsSource="{Binding Bbses}"
+                         SelectedItem="{Binding SelectedBbs, Mode=TwoWay}"
+                         Background="{StaticResource ChromeBgSunkenBrush}"
+                         BorderBrush="{StaticResource ChromeBorderBrush}"
+                         BorderThickness="1"/>
+            </DockPanel>
+
+            <Border Grid.Column="1" Background="{StaticResource ChromeBorderBrush}"/>
+
+            <!-- ===== Characters pane ===== -->
+            <DockPanel Grid.Column="2" Margin="10,0,0,0">
+                <TextBlock DockPanel.Dock="Top" Classes="PaneHeader"
+                           Text="{Binding SelectedBbs, StringFormat='Characters on {0}'}"/>
+
+                <!-- Character actions -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0" Spacing="6">
+                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="4">
+                        <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
+                                Command="{Binding AddProfileCommand}" IsEnabled="{Binding HasBbsSelection}"/>
+                        <Button Grid.Column="1" Content="Rename" HorizontalAlignment="Stretch"
+                                Command="{Binding RenameProfileCommand}" IsEnabled="{Binding HasProfileSelection}"/>
+                        <Button Grid.Column="2" Content="Delete" HorizontalAlignment="Stretch"
+                                Command="{Binding DeleteProfileCommand}" IsEnabled="{Binding HasProfileSelection}"/>
+                        <Button Grid.Column="3" Content="Load" HorizontalAlignment="Stretch"
+                                Command="{Binding LoadCommand}" IsEnabled="{Binding HasProfileSelection}"
+                                ToolTip.Tip="Load the selected character(s): the first fills this client (when it's idle), the rest each open in a new client."/>
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <TextBlock Grid.Column="0" Text="Move to:" VerticalAlignment="Center"
+                                   Foreground="{StaticResource ChromeFgSecBrush}" Margin="0,0,6,0"/>
+                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding AssignableBbses}"
+                                  SelectedItem="{Binding AssignTargetBbs, Mode=TwoWay}"
+                                  PlaceholderText="another BBS"/>
+                        <Button Grid.Column="2" Content="Assign to BBS" Margin="6,0,0,0"
+                                Command="{Binding AssignToBbsCommand}" IsEnabled="{Binding HasProfileSelection}"/>
+                    </Grid>
+                </StackPanel>
+
+                <Grid>
+                    <ListBox ItemsSource="{Binding Profiles}"
+                             SelectedItem="{Binding SelectedProfile, Mode=TwoWay}"
+                             SelectedItems="{Binding SelectedProfiles}"
+                             SelectionMode="Multiple"
+                             Background="{StaticResource ChromeBgSunkenBrush}"
+                             BorderBrush="{StaticResource ChromeBorderBrush}"
+                             BorderThickness="1">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vmp:ProfileManagerRow">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding Name}" Classes.current="{Binding IsCurrent}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="loaded" IsVisible="{Binding IsCurrent}"
+                                               Foreground="{StaticResource AccentGreenBrush}"
+                                               FontSize="10" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <!-- Empty-state so a BBS with no characters still shows the Add affordance. -->
+                    <TextBlock IsVisible="{Binding IsProfilesEmpty}"
+                               Text="No characters on this BBS yet — click Add to create one."
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Margin="16" MaxWidth="240"/>
+                </Grid>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</Window>

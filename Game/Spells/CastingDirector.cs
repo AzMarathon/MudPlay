@@ -94,9 +94,16 @@ public sealed class CastingDirector : IDisposable
     // Null until wired → the heal falls back to the live _state.MaxHp.
     private Func<int>? _restDefaultMaxHp;
     private Func<int>? _restRealMaxHp;
-    private Func<bool>? _isStealthedFunc;
     private Func<bool>? _inputCaptured;
     private Func<bool>? _buffStripRoom;
+    // True when sneak-maintenance casts (buffs + cures) should be HELD for the
+    // next empty room: auto-sneak is on, auto-combat won't clear the current room,
+    // and an NPC is present. Casting breaks sneak (GAME_MECHANICS) and you can't
+    // re-sneak with an NPC in the room, so a stealth runner defers the cast until
+    // a room it can cast in and re-sneak. Null / unwired → never defer (tests +
+    // non-stealth play behave exactly as before). Emergency survival casts are
+    // never in this set.
+    private Func<bool>? _deferMaintenanceWhileStealthed;
     private Func<(string Spell, string? Target)?>? _combatDebuffSource;
     private Action? _combatDebuffCommit;
     private Func<string, int?>? _manaCostLookup;
@@ -265,6 +272,14 @@ public sealed class CastingDirector : IDisposable
     // Self-buff cast code → the party-wide party buff that removes (supersedes) it while
     // in a party. PickSelfBuff skips a covered slot; the Buff Watchdog labels it.
     private Func<IReadOnlyDictionary<string, string>>? _selfBuffCoverage;
+    // Configured buffs another configured buff PERMANENTLY removes (Paradigm continuous
+    // removal, one-directional): loser cast code → winning buff name. Never maintained (the
+    // winner keeps stripping them), for ANY target; the watchdog labels them "covered by".
+    private Func<IReadOnlyDictionary<string, string>>? _suppressedBuffs;
+    // STOCK one-directional conflicts: loser cast code → remover cast code. Both are
+    // maintained (not suppressed); PickUnifiedBuff orders each remover before the losers it
+    // removes so the at-cast strip doesn't knock them off. Empty off stock.
+    private Func<IReadOnlyDictionary<string, string>>? _collisionOrder;
     private Action<string>? _selfBuffCastSink;
     private Func<DateTime> _now = () => DateTime.UtcNow;
     private LineExtractor? _lines;
@@ -392,12 +407,6 @@ public sealed class CastingDirector : IDisposable
     // alone.
     public event Action? CastFired;
 
-    // Wire a stealth-state predicate so the Buff slot can skip candidate casts that
-    // would break stealth. Typically pointed at StealthManager.IsStealthed. Optional
-    // — when unset the buff slot fires regardless of stealth.
-    public void SetStealthGate(Func<bool> isStealthed) =>
-        _isStealthedFunc = isStealthed;
-
     // Wire the self-heal rest-target ceilings (DEFAULT-set max HP + current gear's
     // real max) so heal triggers anchor to the Default set like the rest gates.
     public void SetRestPoolMaxHp(Func<int>? defaultMaxHp, Func<int>? realMaxHp)
@@ -520,6 +529,20 @@ public sealed class CastingDirector : IDisposable
         _buffStripRoom = isBuffStripRoom;
     }
 
+    // Wire the sneak-maintenance defer gate. When the predicate returns true
+    // (auto-sneak on + auto-combat not clearing this room + an NPC present), the
+    // Buffing and Curing categories are HELD rather than cast — a stealth runner
+    // walking combat-off waits for an empty room so the cast (which breaks sneak)
+    // can be followed by a re-sneak, instead of stripping sneak in a room it's only
+    // passing through. Optional — until wired, maintenance never defers. The hold
+    // is additionally skipped while resting / meditating (a stationary recovery
+    // should cast normally) — that guard lives at the decision pass.
+    public void SetStealthMaintenanceDeferGate(Func<bool> shouldDefer)
+    {
+        ArgumentNullException.ThrowIfNull(shouldDefer);
+        _deferMaintenanceWhileStealthed = shouldDefer;
+    }
+
     // Wire the item-cast buff bridge. A Bless slot may hold an ItemCastToken
     // (#<item name>) instead of a cast-code; when picked, the buff is produced by
     // equipping + using an item rather than a direct cast. durationOf resolves a
@@ -620,6 +643,40 @@ public sealed class CastingDirector : IDisposable
     // solo or unwired.
     public IReadOnlyDictionary<string, string> CurrentSelfBuffCoverage()
         => _selfBuffCoverage?.Invoke() ?? _emptyCoverage;
+
+    // Wire the permanently-suppressed-buff source: loser cast code → winning buff name for
+    // one-directional conflicts (Paradigm continuous removal). PickUnifiedBuff skips a
+    // suppressed slot for any target so we never waste rounds casting a buff the winner
+    // re-strips; the Buff Watchdog labels it "covered by".
+    public void SetSuppressedBuffs(Func<IReadOnlyDictionary<string, string>> suppressed)
+    {
+        ArgumentNullException.ThrowIfNull(suppressed);
+        _suppressedBuffs = suppressed;
+    }
+
+    // The current permanently-suppressed-buff map (loser code → winning buff name) — the
+    // Buff Watchdog reads this to label a suppressed buff "covered by". Empty off Paradigm
+    // or unwired.
+    public IReadOnlyDictionary<string, string> CurrentSuppressedBuffs()
+        => _suppressedBuffs?.Invoke() ?? _emptyCoverage;
+
+    // Wire the STOCK collision-free ordering source: loser cast code → remover cast code for
+    // one-directional conflicts, where (unlike Paradigm) removes fire only at cast so both
+    // can coexist if the remover is cast first. PickUnifiedBuff re-sorts the priority list so
+    // each remover precedes the losers it removes; the loser is still maintained (not
+    // suppressed), and the clobber-clear re-applies it after each remover recast. Empty off
+    // stock (the Paradigm branch suppresses instead — SetSuppressedBuffs).
+    public void SetCollisionOrder(Func<IReadOnlyDictionary<string, string>> collisionOrder)
+    {
+        ArgumentNullException.ThrowIfNull(collisionOrder);
+        _collisionOrder = collisionOrder;
+    }
+
+    // The current stock collision-order map (loser code → remover code) — the Buff Watchdog
+    // reads this to annotate a one-way loser "both kept" instead of flagging a conflict.
+    // Empty off stock or unwired.
+    public IReadOnlyDictionary<string, string> CurrentCollisionOrder()
+        => _collisionOrder?.Invoke() ?? _emptyCoverage;
 
     private static readonly IReadOnlyDictionary<string, string> _emptyCoverage =
         new Dictionary<string, string>();
@@ -1067,6 +1124,45 @@ public sealed class CastingDirector : IDisposable
         if (string.IsNullOrEmpty(shortCode)) return;
         _lastCastShort = shortCode;
         _lastCastAt = _now();
+
+        // A landed buff clobbers the buffs its spell removes (RemovesSpell) — the game
+        // strips them, so drop any active timer we still hold for one. A stripped buff
+        // must not keep reading as if it's up (report paradigm-20260910-001023: chan
+        // removes gbls, yet gbls's timer kept ticking). Keyed off the deterministic
+        // removes relationship, NOT the ambiguous shared wear-off line, so it clears
+        // the RIGHT buff; the clobber conflict is still surfaced by the config-side ⚠.
+        if (_removesShortsFor?.Invoke(shortCode) is { Count: > 0 } victims)
+            foreach (string victim in victims)
+                ClearTimersForShort(victim, clobberedBy: shortCode);
+    }
+
+    // Remove every active timer (self + any member) whose cast code matches — used when
+    // a landing buff strips it everywhere it was up. Skips the caster itself so a spell
+    // that lists its own family can never wipe the timer it just armed.
+    private void ClearTimersForShort(string shortCode, string clobberedBy)
+    {
+        if (string.IsNullOrWhiteSpace(shortCode)
+            || string.Equals(shortCode, clobberedBy, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        // The clobbering buff strips this one in-game, so release its applied-latch in
+        // the ConditionTracker too — not just the timer below. A latched applied line
+        // is deduped, so if the clobbered buff is later RE-CAST its confirm would never
+        // re-fire, and that re-cast could then never drive its own clobber-clear
+        // (report paradigm-20260910-012303: a re-cast greater bless never dropped an
+        // active chant because gbls stayed latched from before chant clobbered it).
+        if (_conditions is not null && _shortFromAppliedRecord is { } resolve)
+            _conditions.ReleaseApplied(rec =>
+                string.Equals(resolve(rec), shortCode, StringComparison.OrdinalIgnoreCase));
+
+        List<(string Target, string Short)>? doomed = null;
+        foreach ((string Target, string Short) key in _activeUntil.Keys)
+            if (string.Equals(key.Short, shortCode, StringComparison.OrdinalIgnoreCase))
+                (doomed ??= new()).Add(key);
+        if (doomed is null) return;
+        foreach ((string, string) key in doomed) _activeUntil.Remove(key);
+        _log?.Combat(LogCategory,
+            $"buff {shortCode} clobbered by {clobberedBy} (removes) — {doomed.Count} timer(s) cleared");
     }
 
     private void OnConditionEnded(MessageRecord r)
@@ -1075,12 +1171,12 @@ public sealed class CastingDirector : IDisposable
 
         // A wear-off that lands right after a SUCCESSFUL clobbering cast is the shared,
         // ambiguous side of that clobber: bless & chant share the wear-off message, so
-        // "the effects of bless wear off" here is really the buff bless REMOVED being
-        // stripped. Don't clear anyone off it — the just-cast survivor keeps its fresh
-        // timer, AND the clobbered victim keeps its timer so the watchdog can render it
-        // as "conflict" (it infers the clobber from RemovesSpell + cast order, and a
-        // cleared timer would just read "not up" instead). A genuine later wear-off
-        // falls outside the window and clears normally below.
+        // "the effects of bless wear off" here could resolve to the just-cast SURVIVOR
+        // and wrongly clear its fresh timer. Ignore it — the clobbered victim's own
+        // timer was already dropped deterministically at the clobbering cast's landing
+        // (NoteSuccessfulCast → ClearTimersForShort), so this guard's only remaining job
+        // is protecting the survivor. A genuine later wear-off falls outside the window
+        // and clears normally below.
         if (resolved is not null
             && _lastCastShort is { } caster
             && _now() - _lastCastAt <= ClobberWindow
@@ -1307,6 +1403,20 @@ public sealed class CastingDirector : IDisposable
             _log?.Combat(LogCategory,
                 "between-round non-heal categories held — HP unconfirmed on a damage-driven tick (prompt pending).");
 
+        // Sneak-maintenance defer: hold buffs + cures for the next empty room when
+        // a stealth runner is walking combat-off through an occupied room (the
+        // gate predicate folds auto-sneak + auto-combat-off + NPC-present). Casting
+        // breaks sneak and you can't re-sneak with an NPC here, so we wait for a
+        // room we can cast in and re-sneak — the re-sneak itself happens on CastFired
+        // (StealthManager.ReSneakAfterCast). Skipped while resting / meditating: a
+        // stationary recovery has already stopped, so a due cure/buff there should
+        // fire (not wait) — and it's the only place a maintenance heal casts anyway.
+        // Emergency survival (major heal / flee / hangup) and combat debuffs are
+        // never in the deferred set, so a low-HP character still heals/flees here.
+        bool deferSneakMaintenance =
+            _deferMaintenanceWhileStealthed?.Invoke() == true
+            && _state.Position is not (PlayerPosition.Resting or PlayerPosition.Meditating);
+
         foreach (SpellCategory category in PrioritisedCategories(spells))
         {
             if (holdNonHeal
@@ -1331,6 +1441,17 @@ public sealed class CastingDirector : IDisposable
 
             if (pick is not { } cand) continue;
             if (string.IsNullOrWhiteSpace(cand.Spell)) continue;
+
+            // Sneak-maintenance defer: a buff/cure came due, but we're sneak-walking
+            // combat-off through an occupied room — hold it for the next empty room
+            // so the cast can be followed by a re-sneak. Logged only here (where a
+            // candidate was actually produced) so the hold isn't spammed every poll.
+            if (deferSneakMaintenance && category is SpellCategory.Buffing or SpellCategory.Curing)
+            {
+                _log?.Combat(LogCategory,
+                    $"sneak-maintenance held: {cand.Spell} ({category}) — room occupied, waiting for a clear room to cast + re-sneak.");
+                continue;
+            }
 
             // Item-cast buff (#-token in a Bless slot): bypass the raw cast path
             // entirely — run the equip → use → re-equip sequence and key the
@@ -1830,11 +1951,6 @@ public sealed class CastingDirector : IDisposable
     // behaviour.
     private CastCandidate? PickBuff(SpellsSettings spells, HealthSettings health, PartySettings? party)
     {
-        // Stealth gate: any cast — or an item-cast's equip/use/re-equip — breaks
-        // sneak / hide; suppress buffs entirely while stealthed so a backstab
-        // window stays open.
-        if (_isStealthedFunc?.Invoke() == true) return null;
-
         // Buff-strip-room gate: the room casts a buff-removal spell on entry, so
         // any buff we put up is torn straight back off. Skip the whole category
         // here — heals / cures still run their own paths.
@@ -1945,9 +2061,42 @@ public sealed class CastingDirector : IDisposable
         // bless) is left to that party buff — skip self-casting the superseded spell.
         IReadOnlyDictionary<string, string>? covered = _selfBuffCoverage?.Invoke();
 
-        foreach (Models.Profile.BuffSlot slot in buffs.Slots)
+        // A buff another configured buff PERMANENTLY removes (one-directional, Paradigm
+        // continuous removal — e.g. greater bless keeps stripping chant) is never
+        // maintained on ANY target: the winner re-strips it, so casting it just burns
+        // rounds. Empty off Paradigm and for mutual pairs (those are last-cast-wins).
+        IReadOnlyDictionary<string, string>? suppressed = _suppressedBuffs?.Invoke();
+
+        // STOCK collision-free ordering: loser cast code → remover cast code. Empty off
+        // stock (Paradigm suppresses instead). Applied as a stable reorder below so each
+        // remover is cast before the losers it removes — the at-cast strip then fires with
+        // the loser not yet up, and the loser (still maintained) is cast right after.
+        IReadOnlyDictionary<string, string>? collisionOrder = _collisionOrder?.Invoke();
+
+        // Cast-priority order. Default (PriorityTopDown off) walks the list grouped
+        // by type (self → whole-party → item) regardless of how the config rows are
+        // arranged; top-to-bottom priority (and only once the user hand-arranged the
+        // rows) walks the stored list as-is. Same category definition the config
+        // panel groups by — see BuffPriorityOrder.
+        IReadOnlyList<Models.Profile.BuffSlot> ordered = BuffPriorityOrder.InPriorityOrder(
+            buffs.Slots, buffs.PriorityTopDown, buffs.ManualOrder,
+            s => BuffPriorityOrder.Category(
+                ItemCastToken.IsToken(s.Spell),
+                s.Spell is { } sp && _isPartyWideBuff?.Invoke(sp) == true));
+
+        // Layer the stock remover-before-removed constraint on top of the chosen priority
+        // order (no-op off stock / with no one-way pairs). Stable: it only lifts a remover
+        // ahead of a loser it would otherwise strip, leaving everything else in place.
+        if (collisionOrder is { Count: > 0 })
+            ordered = BuffPriorityOrder.OrderRemoversFirst(ordered, collisionOrder);
+
+        foreach (Models.Profile.BuffSlot slot in ordered)
         {
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
+
+            // Permanently removed by another configured buff — never maintain it (the
+            // winner keeps stripping it). Skips self, member, and whole-party casts alike.
+            if (suppressed is not null && suppressed.ContainsKey(slot.Spell)) continue;
 
             // Only-when-dark light spells are cast reactively by the auto-light system
             // on entering a dark room, not maintained here — skip them entirely.
@@ -1977,14 +2126,16 @@ public sealed class CastingDirector : IDisposable
             // One untargeted, self-landing cast covers a whole-party buff AND a plain
             // self-cast — they're the same command (no target, keyed "" since it confirms
             // under its own cast code), so a single path decides both. A whole-party spell
-            // fires party-wide while in a party (WholePartyOn) and, solo, as a self-cast
-            // when CastSolo is set — a lone character is a party of one, so a whole-party
-            // cast still lands on us alone (GAME_MECHANICS.md). A self / single-target
-            // spell fires on CastOnSelf. The `covered` supersession skip applies only to a
-            // self-cast (a whole-party cast IS the covering buff, never superseded). Self is
-            // resolved BEFORE the per-member loop below, so we always bless ourselves first.
+            // fires only while its master Party toggle (WholePartyOn) is enabled. CastSolo
+            // then decides whether that enabled buff also fires while alone — it must never
+            // bypass an unchecked master toggle (report paradigm-20260909-220212). A lone
+            // character is a party of one, so an enabled whole-party cast still lands on us.
+            // A self / single-target spell fires on CastOnSelf. The `covered` supersession
+            // skip applies only to a self-cast (a whole-party cast IS the covering buff,
+            // never superseded). Self is resolved BEFORE the per-member loop below, so we
+            // always bless ourselves first.
             bool wantSelfCast = partyWide
-                ? (inParty ? slot.WholePartyOn && partyAllowed : slot.CastSolo && selfEligible)
+                ? slot.WholePartyOn && (inParty ? partyAllowed : slot.CastSolo && selfEligible)
                 : slot.CastOnSelf && selfEligible && (covered is null || !covered.ContainsKey(slot.Spell));
             if (wantSelfCast && IsRecastDue("", slot.Spell))
                 return new CastCandidate(slot.Spell, Target: null, slot.RecastMarginSec);

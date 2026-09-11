@@ -27,6 +27,7 @@ public static class ToolbarDefaults
         "ToggleSprintMode",
         null,
         "OpenParty",
+        "OpenProfileManager",
         "OpenBackscroll",
         null,
         "ToggleAllAutoOff",

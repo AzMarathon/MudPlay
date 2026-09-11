@@ -5,90 +5,74 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// The "Override Attack" box disambiguation (<see cref="MonsterEditDialogViewModel.ParseAttackOverride"/>):
-/// a positive integer is a Spell.Number (routed through the mana-gated attack-spell
-/// rung). Text that resolves to a known spell's cast-code (via the injected
-/// resolver) ALSO lands on that rung, via its resolved Number — someone typing
-/// the code they'd actually cast in-game (report paradigm-20260813-070249)
-/// shouldn't silently lose mana/cap gating for it. Only text matching no known
-/// spell (or no resolver supplied) is a raw command sent as-is; blank is no
-/// override. This is also what lets "attack" persist (report
-/// paradigm-20260809-131642 — it used to be silently dropped by an int-only parse).
-/// </summary>
+// The three spell-override boxes (Debuff / Normal / Alternate) are SPELL-ONLY
+// (MonsterEditDialogViewModel.ResolveSpellOverride): a positive integer is a
+// Spell.Number; other text resolves via the injected cast-code resolver (someone
+// typing the code they'd actually cast in-game, e.g. "turn", report
+// paradigm-20260813-070249); text that matches no known spell yields null — raw
+// attack verbs belong in the separate Physical attack box, not a spell rung.
+// Blank is no override.
 public sealed class MonsterEditDialogViewModelTests
 {
     [Theory]
     [InlineData("42")]
     [InlineData("  42  ")]   // trimmed
-    public void ParseAttackOverride_PositiveInteger_IsSpellId(string text)
+    public void ResolveSpellOverride_PositiveInteger_IsSpellId(string text)
     {
-        (int? spellId, string? command) = MonsterEditDialogViewModel.ParseAttackOverride(text);
-        Assert.Equal(42, spellId);
-        Assert.Null(command);
+        Assert.Equal(42, MonsterEditDialogViewModel.ResolveSpellOverride(text));
     }
 
     [Theory]
-    [InlineData("attack", "attack")]
-    [InlineData("  harm  ", "harm")]   // trimmed, kept as a command — no resolver supplied
-    [InlineData("bash", "bash")]
-    [InlineData("0", "0")]             // non-positive int is not a spell id → command
-    [InlineData("-3", "-3")]
-    public void ParseAttackOverride_NonNumericText_NoResolver_IsCommand(string text, string expected)
+    [InlineData("0")]
+    [InlineData("-3")]
+    public void ResolveSpellOverride_NonPositiveInteger_IsNull(string text)
     {
-        (int? spellId, string? command) = MonsterEditDialogViewModel.ParseAttackOverride(text);
-        Assert.Null(spellId);
-        Assert.Equal(expected, command);
+        Assert.Null(MonsterEditDialogViewModel.ResolveSpellOverride(text));
+    }
+
+    [Theory]
+    [InlineData("attack")]
+    [InlineData("  bash  ")]
+    public void ResolveSpellOverride_NonSpellText_NoResolver_IsNull(string text)
+    {
+        // Spell-only: a raw verb with no resolver is NOT a spell → null (it belongs
+        // in the Physical attack box).
+        Assert.Null(MonsterEditDialogViewModel.ResolveSpellOverride(text));
     }
 
     [Fact]
-    public void ParseAttackOverride_CastCodeMatchesKnownSpell_ResolvesToSpellId()
+    public void ResolveSpellOverride_CastCodeMatchesKnownSpell_ResolvesToSpellId()
     {
-        // Report paradigm-20260813-070249: typing "turn" (the cast-code you'd
-        // actually type in-game) must land on the mana-gated spell rung, same
-        // as typing its Spell.Number directly — not silently become an
-        // ungated raw command just because it's text, not digits.
-        (int? spellId, string? command) = MonsterEditDialogViewModel.ParseAttackOverride(
-            "turn", code => code == "turn" ? 18 : null);
-
-        Assert.Equal(18, spellId);
-        Assert.Null(command);
+        // Typing "turn" (the cast-code you'd type in-game) resolves to its
+        // Spell.Number, same as typing the number directly.
+        Assert.Equal(18, MonsterEditDialogViewModel.ResolveSpellOverride(
+            "turn", code => code == "turn" ? 18 : null));
     }
 
     [Fact]
-    public void ParseAttackOverride_CastCodeMatch_IsCaseAndWhitespaceInsensitive()
+    public void ResolveSpellOverride_CastCodeMatch_IsCaseAndWhitespaceInsensitive()
     {
-        (int? spellId, string? command) = MonsterEditDialogViewModel.ParseAttackOverride(
-            "  TuRn  ", code => string.Equals(code, "turn", StringComparison.OrdinalIgnoreCase) ? 18 : null);
-
-        Assert.Equal(18, spellId);
-        Assert.Null(command);
+        Assert.Equal(18, MonsterEditDialogViewModel.ResolveSpellOverride(
+            "  TuRn  ", code => string.Equals(code, "turn", StringComparison.OrdinalIgnoreCase) ? 18 : null));
     }
 
     [Fact]
-    public void ParseAttackOverride_ResolverSupplied_NoMatch_FallsBackToCommand()
+    public void ResolveSpellOverride_ResolverSupplied_NoMatch_IsNull()
     {
-        // A resolver is wired, but this text isn't a spell anyone knows —
-        // still a legitimate raw command (e.g. "bash").
-        (int? spellId, string? command) = MonsterEditDialogViewModel.ParseAttackOverride(
-            "bash", _ => null);
-
-        Assert.Null(spellId);
-        Assert.Equal("bash", command);
+        // A resolver is wired, but this text isn't a spell anyone knows — spell-only
+        // means it drops to null (not a command).
+        Assert.Null(MonsterEditDialogViewModel.ResolveSpellOverride("bash", _ => null));
     }
 
     [Fact]
-    public void ParseAttackOverride_NumericText_ResolverNeverConsulted()
+    public void ResolveSpellOverride_NumericText_ResolverNeverConsulted()
     {
-        // A positive integer is always read as a literal Spell.Number —
-        // the resolver (cast-code → number) isn't relevant here and must not
-        // be invoked.
+        // A positive integer is always a literal Spell.Number — the cast-code
+        // resolver isn't relevant and must not be invoked.
         bool resolverCalled = false;
-        (int? spellId, string? command) = MonsterEditDialogViewModel.ParseAttackOverride(
+        int? id = MonsterEditDialogViewModel.ResolveSpellOverride(
             "18", _ => { resolverCalled = true; return 999; });
-
-        Assert.Equal(18, spellId);
-        Assert.Null(command);
+        Assert.Equal(18, id);
         Assert.False(resolverCalled);
     }
 
@@ -96,60 +80,62 @@ public sealed class MonsterEditDialogViewModelTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public void ParseAttackOverride_Blank_IsNoOverride(string? text)
+    public void ResolveSpellOverride_Blank_IsNull(string? text)
     {
-        (int? spellId, string? command) = MonsterEditDialogViewModel.ParseAttackOverride(text);
-        Assert.Null(spellId);
-        Assert.Null(command);
-    }
-
-    [Fact]
-    public void ParseAttackOverride_SetsExactlyOneOfThePair()
-    {
-        // The two backing fields are mutually exclusive — a species never carries
-        // both a spell id and a command.
-        (int? spellId, string? command) = MonsterEditDialogViewModel.ParseAttackOverride("attack");
-        Assert.True(spellId is null ^ command is null || (spellId is null && command is null));
-        Assert.Null(spellId);
-        Assert.NotNull(command);
+        Assert.Null(MonsterEditDialogViewModel.ResolveSpellOverride(text));
     }
 
     // ----- Display round-trip (Spell.Number → cast-code on reopen) -----------
 
-    // report paradigm-20260813-131658: setting the Override Attack spell by typing
-    // its cast-code ("agon") resolved and saved correctly, but reopening the dialog
-    // showed the internal Spells.Number ("22") instead of the code the user typed.
+    // report paradigm-20260813-131658: setting a spell override by typing its
+    // cast-code ("agon") saved correctly, but reopening showed the internal
+    // Spells.Number ("22") instead of the code — all three spell boxes round-trip
+    // the number back to a code via the resolver.
     [Fact]
-    public void AttackOverride_ShowsCastCode_WhenResolverMapsSpellNumberBack()
+    public void NormalSpell_ShowsCastCode_WhenResolverMapsSpellNumberBack()
     {
         MonsterOverlay existing = new() { OverrideAttackSpellId = 22 };
-
         MonsterEditDialogViewModel vm = new(
-            wccNoStr: "100",
-            mdbName: "test monster",
-            existing: existing,
-            currentTier: SettingsTier.Character,
-            mdbInfo: Array.Empty<MdbInfoRow>(),
+            wccNoStr: "100", mdbName: "test monster", existing: existing,
+            currentTier: SettingsTier.Character, mdbInfo: Array.Empty<MdbInfoRow>(),
             writableTiers: [SettingsTier.Character],
             resolveSpellNumber: n => n == 22 ? "agon" : null);
 
-        Assert.Equal("agon", vm.AttackOverride);
+        Assert.Equal("agon", vm.NormalSpellId);
     }
 
     [Fact]
-    public void AttackOverride_FallsBackToNumber_WhenNoResolverProvided()
+    public void NormalSpell_FallsBackToNumber_WhenNoResolverProvided()
     {
         MonsterOverlay existing = new() { OverrideAttackSpellId = 22 };
-
         MonsterEditDialogViewModel vm = new(
-            wccNoStr: "100",
-            mdbName: "test monster",
-            existing: existing,
-            currentTier: SettingsTier.Character,
-            mdbInfo: Array.Empty<MdbInfoRow>(),
+            wccNoStr: "100", mdbName: "test monster", existing: existing,
+            currentTier: SettingsTier.Character, mdbInfo: Array.Empty<MdbInfoRow>(),
             writableTiers: [SettingsTier.Character]);
 
-        Assert.Equal("22", vm.AttackOverride);
+        Assert.Equal("22", vm.NormalSpellId);
+    }
+
+    [Fact]
+    public void AllSpellRungs_ShowCastCodes_OnReopen()
+    {
+        MonsterOverlay existing = new()
+        {
+            OverridePreAttackSpellId = 7,
+            OverrideAttackSpellId = 22,
+            OverrideAltAttackSpellId = 30,
+            OverridePhysicalCommand = "bash",
+        };
+        MonsterEditDialogViewModel vm = new(
+            wccNoStr: "1", mdbName: "rat", existing: existing,
+            currentTier: SettingsTier.Character, mdbInfo: Array.Empty<MdbInfoRow>(),
+            writableTiers: [SettingsTier.Character],
+            resolveSpellNumber: n => n switch { 7 => "curse", 22 => "agon", 30 => "flame", _ => null });
+
+        Assert.Equal("curse", vm.PreAttackSpellId);
+        Assert.Equal("agon",  vm.NormalSpellId);
+        Assert.Equal("flame", vm.AltSpellId);
+        Assert.Equal("bash",  vm.PhysicalCommand);   // legacy OverrideAttackCommand key round-trips here
     }
 
     // ----- Installed-defaults tier + equality (the reset / auto-cleanup wiring) ----
@@ -219,45 +205,80 @@ public sealed class MonsterEditDialogViewModelTests
         Assert.True(Save(vm).EqualsInstalledDefaults);
     }
 
-    // ----- Per-monster override mana floors (the Settings → Combat spell-slot parity) ----
+    // ----- Per-monster override save round-trip (the four single-target rungs) ----
+
+    [Fact]
+    public void AllFourRungs_SaveIntoOverlay()
+    {
+        MonsterEditDialogViewModel vm = new(
+            wccNoStr: "1", mdbName: "rat", existing: null,
+            currentTier: SettingsTier.Character, mdbInfo: Array.Empty<MdbInfoRow>(),
+            writableTiers: [SettingsTier.Character],
+            resolveSpellShort: code => code switch { "curse" => 7, "agon" => 22, "flame" => 30, _ => (int?)null });
+
+        vm.PreAttackSpellId = "curse"; vm.PreAttackCount = 2; vm.PreAttackMinMana = 30;
+        vm.NormalSpellId    = "agon";  vm.NormalCount    = 3; vm.NormalMinMana    = 40;
+        vm.AltSpellId       = "flame"; vm.AltCount       = 1; vm.AltMinMana       = 25;
+        vm.PhysicalCommand  = "bash";
+
+        MonsterOverlay o = Save(vm).Overlay;
+        Assert.Equal(7,  o.OverridePreAttackSpellId);
+        Assert.Equal(2,  o.OverridePreAttackCount);
+        Assert.Equal(30, o.OverridePreAttackMinMana);
+        Assert.Equal(22, o.OverrideAttackSpellId);
+        Assert.Equal(3,  o.OverrideAttackCount);
+        Assert.Equal(40, o.OverrideAttackMinMana);
+        Assert.Equal(30, o.OverrideAltAttackSpellId);
+        Assert.Equal(1,  o.OverrideAltAttackCount);
+        Assert.Equal(25, o.OverrideAltAttackMinMana);
+        Assert.Equal("bash", o.OverridePhysicalCommand);
+    }
+
+    [Fact]
+    public void SpellBox_RawVerb_IsNotSavedAsSpellOrCommand()
+    {
+        // A verb that resolves to no spell drops out of a spell box (spell-only);
+        // it does NOT silently migrate into the physical command.
+        MonsterEditDialogViewModel vm = new(
+            wccNoStr: "1", mdbName: "rat", existing: null,
+            currentTier: SettingsTier.Character, mdbInfo: Array.Empty<MdbInfoRow>(),
+            writableTiers: [SettingsTier.Character],
+            resolveSpellShort: _ => null);
+        vm.NormalSpellId = "attack";
+
+        MonsterOverlay o = Save(vm).Overlay;
+        Assert.Null(o.OverrideAttackSpellId);
+        Assert.Null(o.OverridePhysicalCommand);
+    }
 
     [Fact]
     public void ManaFloors_LoadFromOverlay()
     {
-        MonsterOverlay existing = new() { OverridePreAttackMinMana = 30, OverrideAttackMinMana = 40 };
+        MonsterOverlay existing = new()
+        {
+            OverridePreAttackMinMana = 30,
+            OverrideAttackMinMana = 40,
+            OverrideAltAttackMinMana = 25,
+        };
         MonsterEditDialogViewModel vm = new(
             wccNoStr: "1", mdbName: "rat", existing: existing,
             currentTier: SettingsTier.Character, mdbInfo: Array.Empty<MdbInfoRow>(),
             writableTiers: [SettingsTier.Character]);
 
         Assert.Equal(30, vm.PreAttackMinMana);
-        Assert.Equal(40, vm.AttackMinMana);
-    }
-
-    [Fact]
-    public void ManaFloors_SaveIntoOverlay()
-    {
-        MonsterEditDialogViewModel vm = MakeVm(existing: null, installedDefaults: null);
-        vm.PreAttackSpellId = "22";
-        vm.PreAttackCount   = 3;
-        vm.PreAttackMinMana = 30;
-        vm.AttackOverride   = "18";
-        vm.AttackMinMana    = 40;
-
-        MonsterOverlay o = Save(vm).Overlay;
-        Assert.Equal(3,  o.OverridePreAttackCount);
-        Assert.Equal(30, o.OverridePreAttackMinMana);
-        Assert.Equal(40, o.OverrideAttackMinMana);
+        Assert.Equal(40, vm.NormalMinMana);
+        Assert.Equal(25, vm.AltMinMana);
     }
 
     [Fact]
     public void ManaFloors_BlankStaysNull()
     {
         MonsterEditDialogViewModel vm = MakeVm(existing: null, installedDefaults: null);
-        vm.PreAttackSpellId = "22";   // spell set, but no mana floor typed
+        vm.NormalSpellId = "22";   // spell set, but no mana floor typed
 
         MonsterOverlay o = Save(vm).Overlay;
         Assert.Null(o.OverridePreAttackMinMana);
         Assert.Null(o.OverrideAttackMinMana);
+        Assert.Null(o.OverrideAltAttackMinMana);
     }
 }

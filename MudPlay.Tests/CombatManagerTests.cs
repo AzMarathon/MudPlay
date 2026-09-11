@@ -1980,14 +1980,14 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
-    public void AttackCommandOverride_ForcesConfiguredCommand_OverGlobal()
+    public void PhysicalOverride_ReplacesConfiguredCommand_OnPhysicalRound()
     {
-        // A per-monster "Override Attack" command forces that verb for the species,
-        // ignoring the global NormalAttackCommand.
+        // A per-monster Physical override replaces the global NormalAttackCommand on a
+        // round the engine chose physical (here: no attack spell configured → physical).
         using Harness h = new();
         h.Settings.NormalAttackCommand = "harm";
         h.AddMonster(1, "acid slime", killable: true);
-        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "attack" };
+        h.Overlays[1] = new MonsterOverlay { OverridePhysicalCommand = "attack" };
 
         h.Feed("Also here: acid slime.");
 
@@ -1996,15 +1996,15 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
-    public void AttackCommandOverride_IsTrusted_NoFallbackOnNoEffect()
+    public void PhysicalOverride_IsTrusted_NoFallbackOnNoEffect()
     {
-        // The forced command is trusted — a "no effect" line must NOT flip it to the
-        // alternate (mirrors the spell-id override's bypass-gates contract).
+        // The physical override is trusted — a "no effect" line must NOT flip it to the
+        // alternate command (it owns this species' physical rounds).
         using Harness h = new();
         h.Settings.NormalAttackCommand = "harm";
         h.Settings.AlternateAttackCommand = "attack";
         h.AddMonster(1, "acid slime", killable: true);
-        h.Overlays[1] = new MonsterOverlay { OverrideAttackCommand = "smite" };
+        h.Overlays[1] = new MonsterOverlay { OverridePhysicalCommand = "smite" };
 
         h.Feed("Also here: acid slime.");
         Assert.Equal("smite acid slime", h.LastSent);

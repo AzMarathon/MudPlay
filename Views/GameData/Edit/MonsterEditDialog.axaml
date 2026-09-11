@@ -124,14 +124,17 @@
                                  cast-codes are all short, so the old 280 was
                                  wasted width. -->
                             <TextBlock Classes="SectionHeader" Text="Details"/>
-                            <!-- Override spell rows mirror the Settings → Combat spell
-                                 slots: a spell picker (code/name typeahead) on its own
-                                 row, with a per-room "Max casts" cap + a "Min mana to
-                                 cast" floor stacked beneath it (same NumericUpDown + %↔
-                                 value label as the Combat tab). Narrow two-column layout;
+                            <!-- Per-monster single-target combat overrides mirror the
+                                 Settings → Combat spell grid rung-for-rung: three spell
+                                 pickers (Debuff / Normal / Alternate) each with a per-room
+                                 "Max casts" cap + a "Min mana to cast" floor stacked beneath
+                                 it (same NumericUpDown + %↔value label as the Combat tab),
+                                 plus a Physical-attack command box. A configured slot
+                                 substitutes its spell into the matching rung of the same
+                                 gated cascade for this species. Narrow two-column layout;
                                  the sub-rows span both columns, indented under the picker. -->
                             <Grid ColumnDefinitions="130,210"
-                                  RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                                   ColumnSpacing="6" RowSpacing="4"
                                   HorizontalAlignment="Left">
 
@@ -141,8 +144,8 @@
                                            SelectedItem="{Binding Relationship, Mode=TwoWay}"
                                            HorizontalAlignment="Stretch"/>
 
-                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Override Pre-attack"
-                                           ToolTip.Tip="Spell to cast on this monster before melee — takes priority over the global Combat-tab pre-attack. Pick from the list (or type a cast-code / Spell.Number). Max casts caps casts per room (blank = unlimited); Min mana to cast is read as % or absolute per the Combat tab's mana mode."/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Debuff (single target)"
+                                           ToolTip.Tip="Single-target debuff to cast on this monster, over the global Combat-tab debuff. Pick from the list (or type a cast-code / Spell.Number). Max casts caps casts per room (blank = unlimited); Min mana to cast is read as % or absolute per the Combat tab's mana mode. Runs the same gates as the Combat-tab slot — a debuff the target's level blocks is skipped."/>
                                 <AutoCompleteBox Grid.Row="1" Grid.Column="1"
                                                  Text="{Binding PreAttackSpellId, Mode=TwoWay}"
                                                  ItemsSource="{Binding SpellSuggestions}"
@@ -163,27 +166,55 @@
                                     <TextBlock Classes="FieldLabel" Text="{Binding PreAttackMinManaConverted}"/>
                                 </StackPanel>
 
-                                <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Override Attack"
-                                           ToolTip.Tip="Force a specific attack on this monster, over the global Combat-tab flow. Pick a spell (or type its cast-code / Spell.Number) to cast through the mana-gated attack-spell rung — Max casts caps casts per room (blank = unlimited), Min mana to cast is the floor (% or absolute per the Combat tab's mana mode). Anything that isn't a spell (e.g. &quot;attack&quot;, &quot;bash&quot;) is sent verbatim as a raw command every round, with no mana/cap gating."/>
+                                <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Normal attack spell"
+                                           ToolTip.Tip="Spell that replaces the global Combat-tab Normal-attack spell on this monster, occupying the normal rung of the same gated cascade. Pick from the list (or type a cast-code / Spell.Number). Max casts caps casts per room (blank = unlimited); Min mana to cast is the floor (% or absolute). Spell-only — a raw attack verb goes in the Physical attack box below. Runs all the same gates: a spell the target is immune / level / element-resist blocked from is skipped down the cascade."/>
                                 <AutoCompleteBox Grid.Row="3" Grid.Column="1"
-                                                 Text="{Binding AttackOverride, Mode=TwoWay}"
+                                                 Text="{Binding NormalSpellId, Mode=TwoWay}"
                                                  ItemsSource="{Binding SpellSuggestions}"
                                                  ValueMemberBinding="{ReflectionBinding Short}"
                                                  ItemFilter="{Binding SpellSuggestionFilter}"
                                                  ItemTemplate="{StaticResource SpellPickItem}"
-                                                 PlaceholderText="spell, or a raw verb…"/>
+                                                 PlaceholderText="code or name…"/>
                                 <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
                                             Orientation="Horizontal" Spacing="6" Margin="16,0,0,0">
                                     <TextBlock Classes="FieldLabel" Text="Max casts"/>
-                                    <NumericUpDown Value="{Binding AttackCount, Mode=TwoWay}"
+                                    <NumericUpDown Value="{Binding NormalCount, Mode=TwoWay}"
                                                    Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100"
                                                    ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
                                     <TextBlock Classes="FieldLabel" Text="Min mana to cast" Margin="8,0,0,0"/>
-                                    <NumericUpDown Value="{Binding AttackMinMana, Mode=TwoWay}"
+                                    <NumericUpDown Value="{Binding NormalMinMana, Mode=TwoWay}"
                                                    Minimum="0" Maximum="{Binding SpellManaMax}"
                                                    FormatString="0" Increment="1" Width="108"/>
-                                    <TextBlock Classes="FieldLabel" Text="{Binding AttackMinManaConverted}"/>
+                                    <TextBlock Classes="FieldLabel" Text="{Binding NormalMinManaConverted}"/>
                                 </StackPanel>
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Alternate attack spell"
+                                           ToolTip.Tip="Spell that replaces the global Combat-tab Alternate-attack spell on this monster, the alternate rung of the same cascade (fired when the normal rung can't). Pick from the list (or type a cast-code / Spell.Number). Max casts / Min mana to cast as above. Spell-only."/>
+                                <AutoCompleteBox Grid.Row="5" Grid.Column="1"
+                                                 Text="{Binding AltSpellId, Mode=TwoWay}"
+                                                 ItemsSource="{Binding SpellSuggestions}"
+                                                 ValueMemberBinding="{ReflectionBinding Short}"
+                                                 ItemFilter="{Binding SpellSuggestionFilter}"
+                                                 ItemTemplate="{StaticResource SpellPickItem}"
+                                                 PlaceholderText="code or name…"/>
+                                <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                                            Orientation="Horizontal" Spacing="6" Margin="16,0,0,0">
+                                    <TextBlock Classes="FieldLabel" Text="Max casts"/>
+                                    <NumericUpDown Value="{Binding AltCount, Mode=TwoWay}"
+                                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100"
+                                                   ToolTip.Tip="Casts per room — blank = no limit, 0 = never, N = at most N."/>
+                                    <TextBlock Classes="FieldLabel" Text="Min mana to cast" Margin="8,0,0,0"/>
+                                    <NumericUpDown Value="{Binding AltMinMana, Mode=TwoWay}"
+                                                   Minimum="0" Maximum="{Binding SpellManaMax}"
+                                                   FormatString="0" Increment="1" Width="108"/>
+                                    <TextBlock Classes="FieldLabel" Text="{Binding AltMinManaConverted}"/>
+                                </StackPanel>
+
+                                <TextBlock Grid.Row="7" Grid.Column="0" Classes="FieldLabel" Text="Physical attack"
+                                           ToolTip.Tip="Raw attack verb (attack, bash, kick…) that replaces the weapon command on this monster — but only on a round the engine already chose physical. It does NOT force physical or suppress the spell rungs, and carries no mana / cap gating. Blank = use the Combat-tab attack command."/>
+                                <TextBox Grid.Row="7" Grid.Column="1"
+                                         Text="{Binding PhysicalCommand, Mode=TwoWay}"
+                                         PlaceholderText="verb (attack, bash…)"/>
                             </Grid>
 
                             <!-- Attack Priority + Options border boxes —

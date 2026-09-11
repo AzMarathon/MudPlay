@@ -29,6 +29,18 @@ public sealed class BuffSlotRowViewModelTests
     }
 
     [Fact]
+    public void MoveFlags_DefaultFalse_AndSettable()
+    {
+        var row = Row(new BuffSlot { Spell = "bless" });
+        Assert.False(row.CanMoveUp);
+        Assert.False(row.CanMoveDown);
+        row.CanMoveUp = true;
+        row.CanMoveDown = true;
+        Assert.True(row.CanMoveUp);
+        Assert.True(row.CanMoveDown);
+    }
+
+    [Fact]
     public void UncheckingAll_LeavesSelfChecked()
     {
         var dto = new BuffSlot { Spell = "bless", CastOnSelf = true, AllMembers = true };
@@ -94,6 +106,25 @@ public sealed class BuffSlotRowViewModelTests
         row.RebuildMemberTargets(Party("aragorn"));
         Assert.False(row.ShowMemberTargets);
         Assert.True(row.ShowSelf);
+    }
+
+    [Fact]
+    public void UncheckingWholePartyMaster_ClearsSoloOptionAndPersistsOnce()
+    {
+        int persists = 0;
+        var dto = new BuffSlot { Spell = "chan", WholePartyOn = true, CastSolo = true };
+        var row = new BuffSlotRowViewModel(
+            dto, _ => BuffSlotScope.WholeParty, s => s ?? string.Empty,
+            _ => (null, null), () => persists++);
+
+        Assert.True(row.CanCastSolo);
+        row.WholePartyOn = false;
+
+        Assert.False(row.CanCastSolo);
+        Assert.False(row.CastSolo);
+        Assert.False(dto.WholePartyOn);
+        Assert.False(dto.CastSolo);
+        Assert.Equal(1, persists);
     }
 
     [Fact]

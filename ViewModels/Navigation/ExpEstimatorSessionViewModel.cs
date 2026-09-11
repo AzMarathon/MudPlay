@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 
@@ -19,21 +20,32 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
     private readonly RouteExpResolver _resolver;
     private readonly LoopManager _loops;
     private readonly RoomGraphManager _graph;
+    private readonly GameDataCache _gameData;
     private readonly IRoomFilter? _filter;
     private readonly List<RoomKey> _clicks = new();
 
     public ExpEstimatorSessionViewModel(
-        RouteExpResolver resolver, LoopManager loops, RoomGraphManager graph, IRoomFilter? filter = null)
+        RouteExpResolver resolver, LoopManager loops, RoomGraphManager graph,
+        GameDataCache gameData, IRoomFilter? filter = null)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(loops);
         ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(gameData);
         _resolver = resolver;
         _loops = loops;
         _graph = graph;
+        _gameData = gameData;
         _filter = filter;
         ProposedName = $"Loop {DateTime.Now:HH-mm}";
     }
+
+    // Active realm drives only how often a room's summon spell re-rolls (Paradigm on
+    // the combat round, Stock on the medium tick); the estimate otherwise uses the
+    // user's own kill-rate knobs. Shown read-only so the user knows which cadence the
+    // summon figures assume.
+    public RealmType Realm => _gameData.ActiveRealm;
+    public string RealmLabel => Realm == RealmType.ParaMud ? "Paradigm" : "Stock";
 
     // Ordered clicked rooms (reuses the loop-builder row shape).
     public ObservableCollection<LoopBuilderRow> Clicks { get; } = new();
@@ -164,7 +176,7 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
 
         return new ExpEstimatorSnapshot(
             ProposedName, rooms, SecondsPerStep, AreaCombat, RoundsPerMob, RealConditionsMultiplier,
-            ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses, summonLines);
+            ExpPerHour, AvgLapSeconds, LapsPerHour, Summary, lairs, bosses, summonLines, RealmLabel);
     }
 
     private void Recompute()
@@ -200,7 +212,8 @@ public sealed partial class ExpEstimatorSessionViewModel : ObservableObject
             Math.Max(0, SecondsPerStep),
             AreaCombat ? ExpCombatMode.AreaAllTargets : ExpCombatMode.SingleTarget,
             Math.Max(0.1, RoundsPerMob),
-            Math.Clamp(RealConditionsMultiplier, 0.1, 1.0));
+            Math.Clamp(RealConditionsMultiplier, 0.1, 1.0),
+            Realm: Realm);
         ExpSimResult r = LoopExpSimulator.Simulate(route, settings);
 
         ExpPerHour = r.ExpPerHour;

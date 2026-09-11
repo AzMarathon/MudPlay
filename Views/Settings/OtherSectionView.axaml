@@ -45,6 +45,11 @@
         <StackPanel Margin="22" Spacing="4"
                     MaxWidth="780" HorizontalAlignment="Left">
 
+            <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+            <TextBlock Classes="SettingsSectionSub"
+                       Text="Saved to the loaded character — each character on a BBS keeps its own."/>
+            <Border Classes="SettingsSectionRule"/>
+
             <!-- Title / phase tag / description deliberately omitted per
                  user direction — section headers throughout this tab
                  are removed too. The bound Title is still surfaced via
@@ -192,6 +197,11 @@
                  next to the Hits-You-% checkboxes) — editing it doesn't mean
                  leaving Monster Intel to come back. Still backed by
                  OtherSettings.RoundsToKillCap at the Character tier. -->
+
+            <TextBlock Classes="SettingsSectionBanner" Text="Global client settings"/>
+            <TextBlock Classes="SettingsSectionSub"
+                       Text="Apply to the whole install, regardless of BBS or character."/>
+            <Border Classes="SettingsSectionRule"/>
 
             <!-- Navigation puzzle-solver master toggles (Global tier — one switch
                  per install). Off → a walk-to that would hand off to the solver

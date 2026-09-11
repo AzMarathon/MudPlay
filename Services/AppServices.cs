@@ -126,6 +126,15 @@ public sealed class AppServices
         if (!string.IsNullOrWhiteSpace(text)) _terminalNotice?.Invoke(text);
     }
 
+    // Toggle the Profile Management window. The window is owned by the main VM
+    // (it borrows that VM's connection gate + profile-swap path), so non-main
+    // surfaces — the Settings → BBS tab's "Open Profile Management" button —
+    // route through this bridge rather than reaching MainWindowViewModel. No-op
+    // until the main VM binds it.
+    private Action? _openProfileManager;
+    public void SetOpenProfileManager(Action open) => _openProfileManager = open;
+    public void OpenProfileManager() => _openProfileManager?.Invoke();
+
     // Opens (or re-focuses) the single Navigation Management dialog. Both the map
     // window's "Navigation Management" button and the toolbar Start button route
     // here so there's only ever one instance — no two identical windows. The bool
@@ -2325,6 +2334,20 @@ public sealed class AppServices
         // the first live `stat` reconfirms.
         Profile.ProfileLoaded += p =>
         {
+            // Wipe the OUTGOING character's live status state before hydrating
+            // the incoming one. Otherwise the previous character's current HP
+            // lingers in PlayerState while the new character's MaxHp is
+            // re-seeded below (ApplyStatScreenMax), and any HP-driven engine —
+            // notably the low-HP emergency hangup — acts on that mismatched body
+            // the instant the swap runs (paradigm-20260909-172633: Fujin's 66 HP
+            // measured against FujinPVP's 324 max fired a hangup while already
+            // disconnected). Also drop any pending hangup intent: it belonged to
+            // the character that hung up, and a stale suppress-entry flag would
+            // otherwise make the next connect skip realm auto-entry for THIS,
+            // different, character.
+            Player.ResetForProfileSwap();
+            if (HangupSignal.Reset())
+                Log.Info("HangupSignal", "Cleared stale hangup intent on profile swap.");
             // Capture the persisted learned set before seeding fires Changed —
             // the restore below re-applies it once the class list exists.
             List<string>? learned = p.LearnedSpells is { Count: > 0 } ls
@@ -3064,14 +3087,11 @@ public sealed class AppServices
         CombatTracker = new Game.Combat.CombatStateTracker(
             Router, MovementCoordinator, RoomClassifier, MonsterMessages,
             PlayerState,
-            isAutoAttackEnabled: () => ReadAutoModeFlag(d => d.AutoCombat),
-            // Same overlay-resolve closure CombatManager uses — keeps
-            // the engageable predicate consistent so the gate and the
-            // swing decision can't diverge on the same room state.
-            resolveOverlay: n => Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
-                "Monsters",
-                n.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                MonsterOverlaySeed.GetOverlay(n)),
+            isAutoAttackEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
+            // Same overlay-resolve helper CombatManager uses — keeps the
+            // engageable predicate consistent so the gate and the swing
+            // decision can't diverge on the same room state.
+            resolveOverlay: ResolveMonsterOverlay,
             log: Log);
 
         // Generic color+wording combat-line recognizer — subscribes to the router's
@@ -3247,13 +3267,9 @@ public sealed class AppServices
 
         Combat = new Game.Combat.CombatManager(
             Router, RoomClassifier, MonsterMessages,
-            // Resolve per-monster overlay: seed-store value forms the
-            // Defaults tier, SettingsResolver overlays Global / BBS /
-            // Char-tier user overrides on top.
-            resolveOverlay: n => Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
-                "Monsters",
-                n.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                MonsterOverlaySeed.GetOverlay(n)),
+            // Resolve per-monster overlay through the shared tier-merge helper
+            // (seed Defaults + Global / BBS / Char overrides).
+            resolveOverlay: ResolveMonsterOverlay,
             party: PartyState,
             // The six weapon fields are derived from the Equipment Manager's gear
             // sets (the Combat tab no longer edits weapons): normal + alternate
@@ -3268,7 +3284,7 @@ public sealed class AppServices
                     combat, Profile.Current?.Equipment ?? new Models.Profile.EquipmentSettings());
                 return combat;
             },
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoCombat),
+            isEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
             readOwnGivenName: () => Profile.CurrentProfileName,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log,
@@ -3603,9 +3619,6 @@ public sealed class AppServices
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             isEnabled: () => ReadAutoModeFlag(d => d.AutoHealRest),
             log: Log);
-        // Stealth gate — buff casts suppressed while
-        // sneaking or hidden so we don't break the backstab window.
-        CastDirector.SetStealthGate(() => Stealth.IsStealthed);
         // Survival casts (heal / cure / buff / party heal) skip any spell the
         // player can't afford — the cost comes from the game-data Spells table
         // via the live spellbook. Combat-tab spells keep their own
@@ -3628,6 +3641,19 @@ public sealed class AppServices
         // burn mana on a buff the room tears straight back off.
         CastDirector.SetBuffStripRoomGate(
             () => RoomBuffStrip.StripsBuffs(RoomTracker.State.CurrentRoom?.Spell ?? 0));
+        // Sneak-maintenance defer — hold buffs / cures for the next empty room when
+        // a stealth runner is walking combat-off through an occupied room, so the
+        // cast (which breaks sneak) can be followed by a re-sneak instead of
+        // stripping sneak in a room it's only passing through. Conditioned entirely
+        // on auto-sneak: off ⇒ this never fires and casts go out immediately. The
+        // auto-combat term matches the Combat gate's "effectively engaging here"
+        // (global AutoCombat AND not per-room-suppressed) — if combat WILL clear the
+        // room there's no sneak to preserve. NPC presence is the hard blocker: you
+        // can't re-sneak with a monster in the room.
+        CastDirector.SetStealthMaintenanceDeferGate(
+            () => ReadAutoModeFlag(d => d.AutoSneak)
+               && !(ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom())
+               && CombatTracker.HasRoomNpc);
         // Suppress ALL auto-casts while the `train stats` full-screen menu has
         // character-mode input armed — otherwise a cast's letters get typed raw
         // into the character-creation form (the "bles" family-name corruption).
@@ -3661,6 +3687,13 @@ public sealed class AppServices
         // self-buff (RemovesSpell) covers us, so the director stops self-casting the
         // removed one — the Buff Watchdog shows that slot "covered by" the party buff.
         CastDirector.SetSelfBuffCoverage(SelfBuffCoverage);
+        // A buff a configured winner PERMANENTLY removes one-directionally (Paradigm
+        // continuous removal — e.g. greater bless keeps stripping chant) is never
+        // maintained on any target; the Buff Watchdog shows it "covered by" the winner.
+        CastDirector.SetSuppressedBuffs(SuppressedBuffCoverage);
+        // Stock counterpart: instead of dropping a one-directional loser, order its remover
+        // ahead of it so both stay up (removes fire only at cast on stock). Empty on Paradigm.
+        CastDirector.SetCollisionOrder(CollisionOrderConstraints);
         // Downed-ally rescue heal. A dropped ally leaves `par`, so PickPartyHeal's
         // roster walk can't see them — the AllyDroppedHandler feeds each aided
         // downed ally back in here as the top-priority name-targeted heal until
@@ -3776,7 +3809,8 @@ public sealed class AppServices
             readConfig: () =>
             {
                 Models.Profile.BuffSlot? slot = ManaRegenRerollSlot();
-                return new Game.Spells.ManaRegenRerollConfig(slot?.RerollThreshold, slot?.RerollCount ?? 0);
+                return new Game.Spells.ManaRegenRerollConfig(
+                    slot?.RerollThreshold, slot?.RerollCount ?? 0, slot?.RerollInfinite ?? false);
             },
             sendAbilQuery: () =>
                 _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("abil 145\r")),
@@ -3832,6 +3866,11 @@ public sealed class AppServices
         // engine resume the weapon attack on the resulting *Combat Off*
         // instead of idling until the next round.
         CastDirector.CastFired += Combat.NoteBetweenRoundCast;
+        // A cast breaks sneak / hide (GAME_MECHANICS) with no line to latch, so after
+        // an out-of-combat auto-cast re-establish sneak in place — StealthManager
+        // self-gates on auto-sneak being on, being out of combat, and no NPC present,
+        // so this no-ops for a non-stealth character or an in-combat cast.
+        CastDirector.CastFired += () => Stealth.ReSneakAfterCast();
         // The round after a survival cast belongs to the attack spell it
         // interrupted — CastDirector must sit out until that resume lands, or it
         // just re-claims the round the instant HP dips again and the attack never
@@ -3974,7 +4013,7 @@ public sealed class AppServices
         // Short. Wire the resolver so the chooser can substitute a numbered
         // override in place of the global Combat-tab cast-code slot.
         SpellShort = new Game.Combat.SpellShortIndex(GameData);
-        Combat.SetSpellShortResolver(SpellShort.ShortByNumber, SpellShort.NumberByShort);
+        Combat.SetSpellShortResolver(SpellShort.ShortByNumber);
 
         // Shared monster-record opener — opens the monster edit dialog by Number from any
         // surface (the Navigation Room Info panel), reusing the browser's read-only "Other
@@ -4026,6 +4065,12 @@ public sealed class AppServices
         CombatTracker.SetMonsterCountWindow(
             () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat"));
 
+        // "Kill all engaged" needs the tracker to know when we've committed to the
+        // current room (its count met the engage window), so it can hold the walker
+        // below the Min floor to finish the survivors — read straight off
+        // CombatManager's own room-commitment state.
+        CombatTracker.SetRoomCommittedGate(() => Combat.HasCommittedToCurrentRoom);
+
         // Combat-off "clear hostiles when seen Hidden" override —
         // a stealth runner (AutoSneak on) sprinting a route with combat
         // OFF that hits a SeeHidden room must stop and clear it rather than
@@ -4046,7 +4091,11 @@ public sealed class AppServices
         // combat's off so we won't fight, and HP's above the flee trigger so we won't
         // run. HealthManager pokes RequestRestClearEngage to fire the first attack.
         Health.SetRestClearEngage(
-            isAutoCombatEnabled: () => ReadAutoModeFlag(d => d.AutoCombat),
+            // Effective auto-combat: a loop room the user marked "do not attack"
+            // (or a non-lair room under "only attack in lair rooms") reads as OFF
+            // here, so a rest triggered in a suppressed room arms the rest-clear
+            // and fights to clear it — the do-not-attack rest exception.
+            isAutoCombatEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
             requestEngage: Combat.RequestRestClearEngage);
         Combat.SetRestClearGate(() => Health.ForceClearForRest);
 
@@ -4498,8 +4547,8 @@ public sealed class AppServices
         // stat-screen max (so a rest set that LOWERS the pool can never strand the rest
         // out of reach — report paradigm-20260902-052036).
         Health.SetRestPoolMaxProviders(
-            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerStats.MaxHits),
-            () => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerStats.MaxMana),
+            () => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp),
+            () => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa),
             () => PlayerStats.MaxHits,
             () => PlayerStats.MaxMana);
         // Self-heal HP triggers anchor to the Default set too (same basis as rest).
@@ -4560,10 +4609,18 @@ public sealed class AppServices
         // combat-entry trigger can't clobber the swap (the weapon-flap report).
         Equipment.SetCombatWeaponOwnershipProbe(() => Combat.IsWeaponOverrideActive);
 
-        // Confusion-fumble retry: a fumbled attack is consumed without engaging,
-        // so re-send the last swing on every fumble line (ConditionTracker gates
-        // the raw signal to the confusion record; Combat gates on an active fight).
-        Conditions.ActionFailed += _ => Combat.OnActionFailed();
+        // Confusion-fumble retry: a fumble consumes the just-sent command without it
+        // executing, so the client re-sends it. Combat re-sends a weapon swing first
+        // (it owns the engage-verification bookkeeping); if this isn't a weapon fight it
+        // can act on — a fumbled attack SPELL, an item-use, or any other client command —
+        // fall through to re-firing the last client command generically. Movement is NOT
+        // re-fired here (ReplayLastClientCommand skips bare moves): a fumbled step already
+        // reverts + re-sends via the walker, so a second send would desync position. A
+        // command the USER typed is never re-fired — it never flowed through the gate.
+        Conditions.ActionFailed += _ =>
+        {
+            if (!Combat.OnActionFailed()) EngineGate.ReplayLastClientCommand();
+        };
 
         // CashManager. Subscribes to cash-on-ground
         // / cash-picked-up / cash-dropped patterns and dispatches
@@ -4980,6 +5037,12 @@ public sealed class AppServices
         // handler ran first, so the hostile flag is current.
         RoomClassifier.EntitiesObserved += _ => AutoSearch.OnRoomObserved();
 
+        // Empty-search seam: an empty room's `sea` prints "Your search revealed
+        // nothing." — release the walker hold at once rather than idling the settle,
+        // so auto-search doesn't tax every empty transit room (a fruitful search
+        // surfaces the "You notice … here." survey the get engines handle instead).
+        Router.Subscribe(Services.Patterns.KnownPatterns.SearchRevealedNothing, _ => AutoSearch.NotifySearchRevealedNothing());
+
         // Drop the stale queue / ground snapshot when we actually change rooms.
         //
         // Registered here — before LoopRunner exists (constructed further below) —
@@ -5030,7 +5093,14 @@ public sealed class AppServices
             MazeIndex, RoomGraph, RoomTracker, Bfs, Walker, Log,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             paradigmResolver: ParadigmResync,
-            enabled: () => Settings.Current.AsylumSolverEnabled);
+            enabled: () => Settings.Current.AsylumSolverEnabled,
+            // Open a closed door/gate blocking a relocalization peek before looking
+            // through it, via the shared door FSM. Asylum barriers are plain-bashable
+            // (no key, no strength gate the resolver can read while Lost), so request
+            // a bashable no-key open and report back whether it opened.
+            openDoor: (dir, done) => Door.Enqueue(
+                dir, statRequirement: 0, canBash: true, keyItemId: 0, sender: "maze",
+                reply: r => done(r is Game.Map.DoorOpenResult.Opened)));
         Walker.SetMazeSolver(MazeSolver);
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
@@ -5224,6 +5294,23 @@ public sealed class AppServices
         {
             if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed)
                 _forcedPathObtain.Clear();
+        };
+
+        // Search the room a walk / loop / auto-lair STARTS from. Auto-search fires on
+        // room entry, but the room the walker steps out of at the start of a run was
+        // entered earlier (before auto-search was armed, or at login) and so never got
+        // its entry search (report paradigm-20260909-055045). On the Started event —
+        // which fires before the walker's first SendNextStep, so asserting the Search
+        // gate here holds that step — search the current room, but only when it's
+        // Confirmed (the deferred/Pending Started is skipped; the walk re-raises Started
+        // once it settles). Loops route each leg through the walker too, so this also
+        // covers a loop's first room; the manager dedupes so later legs (starting from a
+        // room already searched on arrival) are no-ops.
+        Walker.Event += e =>
+        {
+            if (e.Kind != Game.Map.WalkEventKind.Started) return;
+            if (RoomTracker.State.Confidence != Game.Map.RoomConfidence.Confirmed) return;
+            AutoSearch.OnMovementStarting(RoomTracker.State.CurrentRoom?.Key);
         };
 
         // Boss "stop before" rooms — the walker halts one room short of any boss
@@ -5845,6 +5932,9 @@ public sealed class AppServices
                     ? ViewModels.CharacterWorkshop.QuestTextFormatter.FallbackTitle(q)
                     : def.Name,
                 level),
+            // In the realm only once a status line has been observed — keeps the
+            // login dump off the character-select / main menu.
+            isInRealm: () => PlayerState.HasPromptData,
             log: Log);
 
         AutoDeposit = new Game.Cash.AutoDepositManager(
@@ -6355,6 +6445,69 @@ public sealed class AppServices
     // route is pure travel time).
     public bool IsAutoCombatEnabled => ReadAutoModeFlag(d => d.AutoCombat);
 
+    // True when the running loop suppresses combat in the room we're standing
+    // in — a per-waypoint "do not attack here" or the loop-wide "only attack in
+    // lair rooms" (non-lair room). The three engage-gate delegates AND it into
+    // their effective auto-combat read so combat treats the room as if the
+    // master toggle were off (skip + walk on). Because HealthManager's rest-clear
+    // arms exactly when it sees auto-combat off, a triggered rest in a suppressed
+    // room automatically fires ForceClearForRest → CombatManager's rest-clear
+    // override fights to clear it (the rest exception, reused from #450). Loops
+    // only; the raw toggle (IsAutoCombatEnabled, toolbar/Settings display) is
+    // left untouched so it still shows the user's real ON/OFF.
+    private bool CombatSuppressedInCurrentRoom()
+    {
+        bool suppressed =
+            LoopRunner.State != Game.Map.LoopState.Idle
+            && LoopRunner.CurrentLoop is { } loop
+            && RoomTracker.State.CurrentRoom is { } here
+            && Game.Map.LoopCombatSuppression.IsSuppressed(loop, here.Key, here.HasLair);
+
+        // Edge-trigger a Combat-log line on transition — the three gate Funcs
+        // each call this per observation, so log only when (room, suppressed)
+        // actually changes to avoid per-line spam. Explains a "loop walked past
+        // hostiles" in the program log.
+        Game.Map.RoomKey? room = RoomTracker.State.CurrentRoom?.Key;
+        if (suppressed != _lastCombatSuppressed || !Equals(room, _lastCombatSuppressedRoom))
+        {
+            _lastCombatSuppressed = suppressed;
+            _lastCombatSuppressedRoom = room;
+            if (suppressed && room is { } rk)
+                Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
+        }
+        return suppressed;
+    }
+    private bool _lastCombatSuppressed;
+    private Game.Map.RoomKey? _lastCombatSuppressedRoom;
+
+    // Per-monster overlay resolve: seed-store value forms the Defaults tier,
+    // SettingsResolver overlays Global / BBS / Char-tier user overrides on top.
+    // The single copy every consumer shares — the two CombatManager /
+    // MonsterEngagementGate closures and the lair-fight ETA predicate — so the
+    // engageable decision can't diverge on the same room state.
+    private Models.GameData.MonsterOverlay ResolveMonsterOverlay(int number) =>
+        Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
+            "Monsters",
+            number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            MonsterOverlaySeed.GetOverlay(number));
+
+    // Whether the walker would actually FIGHT a lair room's occupants — the gate
+    // RouteEtaEstimator uses so an ETA only charges combat dwell for lairs it'll
+    // stop and clear. Resolves each lair monster through the same tier merge combat
+    // uses and asks MonsterEngagement, so a friendly-guardsman / passive-neutral
+    // "lair" (common on town routes) is a free walk-through. An unparseable tag falls
+    // back to "will fight" so a real lair is never under-counted. Shared by every ETA
+    // surface (walk-status line, route-picker cards, Details title) so they agree.
+    public bool LairWillBeFought(Game.Map.Room room)
+    {
+        if (string.IsNullOrEmpty(room.RawLairTag)) return false;
+        Game.Map.RoomTooltipBuilder.ParseLairTag(room.RawLairTag, out _, out IReadOnlyList<int> monsterIds);
+        if (monsterIds.Count == 0) return true;
+        foreach (int id in monsterIds)
+            if (Game.Combat.MonsterEngagement.IsEngageable(ResolveMonsterOverlay(id))) return true;
+        return false;
+    }
+
     // Live read of the master "Disable hangups" kill-switch from the
     // char-tier General section — the same store the toolbar toggle
     // writes. Wired into every automatic-hangup site (HangupHandler,
@@ -6436,27 +6589,34 @@ public sealed class AppServices
     // stay put while a Pre-rest set that alters the pool is worn. Falls back to the
     // live pool max before a stat screen / when no Default set is configured.
     public int RestPreviewMaxHp()
-        => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerStats.MaxHits) is int v and > 0 ? v : PlayerState.MaxHp;
+        => DefaultSetMaxPool(static t => t.PlusMaxHp, PlayerState.MaxHp) is int v and > 0 ? v : PlayerState.MaxHp;
     public int RestPreviewMaxMa()
-        => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerStats.MaxMana) is int v and > 0 ? v : PlayerState.MaxMa;
+        => DefaultSetMaxPool(static t => t.PlusMaxMana, PlayerState.MaxMa) is int v and > 0 ? v : PlayerState.MaxMa;
 
     // The max HP or mana the DEFAULT gear set would give (selector picks the pool
-    // from an equipment-stat summary). Re-bases the authoritative current-gear max
-    // (stat screen) from the CURRENTLY-worn flat pool bonus to the DEFAULT set's, so
-    // the rest engine anchors to the loadout the user's rest %s are tuned for
-    // regardless of any Pre-rest set swapped in. Returns 0 (→ HealthManager falls back
-    // to its own real / live max) before a stat screen has landed or when no Default
-    // set is configured.
-    private int DefaultSetMaxPool(Func<Game.Calculators.EquipmentStatSummary, int> pool, int realMax)
+    // from an equipment-stat summary). Re-bases the LIVE gear-aware pool max off the
+    // CURRENTLY-worn flat pool bonus onto the DEFAULT set's, so the rest engine anchors
+    // to the loadout the user's rest %s are tuned for regardless of any Pre-rest set
+    // swapped in. It MUST use the live max (PlayerState.MaxHp/MaxMa, kept in step with
+    // worn gear by EquipmentMaxPoolSync), NOT the stat-screen max: the live max minus
+    // the currently-worn bonus is the gear-independent bare base, so `live - worn + def`
+    // stays fixed across a swap. The stat screen stays frozen at whatever gear was worn
+    // when the last stat check landed, so subtracting the LIVE worn bonus from it
+    // double-counts a swap — a Pre-rest MANA set (which ADDS mana) then drove the basis
+    // DOWN, dragging the rest target below the rest trigger and flapping the mana gate
+    // every room, thrashing meditate↔move↔gear-swap (report paradigm-20260909-095419).
+    // Returns 0 (→ HealthManager falls back to its own real / live max) before a pool
+    // max is known or when no Default set is configured.
+    private int DefaultSetMaxPool(Func<Game.Calculators.EquipmentStatSummary, int> pool, int liveMax)
     {
-        if (realMax <= 0) return 0;
+        if (liveMax <= 0) return 0;
         IReadOnlyList<Game.Inventory.EquippedItem> defaultItems = DefaultSetEquippedItems();
         if (defaultItems.Count == 0) return 0;
         int worn = pool(Game.Calculators.CharacterCalculator
             .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals);
         int def = pool(Game.Calculators.CharacterCalculator
             .AggregateEquipmentStats(defaultItems, GameData).Totals);
-        return Math.Max(1, realMax - worn + def);
+        return Math.Max(1, liveMax - worn + def);
     }
 
     // Whether the gear set the engine last equipped is a pre-rest swap set (HP / Mana)
@@ -6632,12 +6792,57 @@ public sealed class AppServices
         return map;
     }
 
+    // Configured buffs that can never stay up because another configured buff PERMANENTLY
+    // removes them: loser cast code → the winning buff's name (for a "covered by" label).
+    // A one-directional conflict only (Y removes X, X does NOT remove Y back) — Y is up, so
+    // X is stripped and re-stripped forever; the client shouldn't waste casts maintaining it
+    // or show a live timer for it. Mutual pairs (each removes the other, e.g. bless ↔ greater
+    // bless) are NOT suppressed — those are last-cast-wins, left to the normal clobber-clear.
+    //
+    // PARADIGM ONLY: Paradigm re-enforces a buff's RemovesSpell continuously (~3s), so the
+    // loser truly can't coexist. Stock is unverified (it may pace removes on cast, letting
+    // both stay), so this returns empty off Paradigm — don't suppress there.
+    //
+    // Distinct from SelfBuffCoverage (which is the in-party, whole-party-covers-self case,
+    // including mutual pairs): this is the general one-directional winner, self-cast winners
+    // and solo included. The picker skips a suppressed slot for ANY target; the Buff Watchdog
+    // shows the loser as "covered by" instead of a stuck "conflict".
+    public IReadOnlyDictionary<string, string> SuppressedBuffCoverage()
+    {
+        // PARADIGM ONLY: only there is a buff's RemovesSpell re-enforced continuously (~3s),
+        // so the one-directional loser truly can't coexist. Stock is unverified (may pace on
+        // cast, letting both stay), so suppress nothing there.
+        if (GameData.ActiveRealm != Game.RealmType.ParaMud)
+            return new Dictionary<string, string>();
+        return Game.Spells.BuffConflictAnalyzer.OneDirectionalLosers(BuffSlotOverwritePairs());
+    }
+
+    // STOCK ONLY: the stock counterpart to SuppressedBuffCoverage. On stock a buff's
+    // RemovesSpell fires only at cast (not the Paradigm ~3s re-enforcement), so a one-
+    // directional loser CAN coexist with its remover if the remover is cast first — and
+    // re-applied after each remover recast. This map (loser cast-code → remover cast-code)
+    // lets CastingDirector order the remover ahead of the loser instead of dropping it.
+    // Empty on Paradigm (SuppressedBuffCoverage owns that realm) and for mutual pairs.
+    public IReadOnlyDictionary<string, string> CollisionOrderConstraints()
+    {
+        if (GameData.ActiveRealm == Game.RealmType.ParaMud)
+            return new Dictionary<string, string>();
+        return Game.Spells.BuffConflictAnalyzer.OneDirectionalRemoverCodes(BuffSlotOverwritePairs());
+    }
+
     // The spell numbers a cast code's spell removes (RemovesSpell, Abil 122 — the same
-    // effect the Spell Book renders as "Removes <spell>").
-    private HashSet<int> RemovedSpellNumbers(string castCode) =>
-        Spellbook.FindByCastCode(castCode.Trim()) is { } s
-            ? Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula)
-            : new HashSet<int>();
+    // effect the Spell Book renders as "Removes <spell>"). LITERAL: a spell strips exactly
+    // the spells its own list names, with no transitive/family inference. The game data is
+    // authoritative here — chant removes bless/curse/blight but NOT greater bless, even
+    // though bless and greater bless remove each other (so casting chant leaves an active
+    // greater bless alone; greater bless removes chant directly). An earlier "bless-family
+    // exclusivity slot" expansion inferred chant→greater-bless transitively and was wrong
+    // (user-confirmed in-game, Paradigm — report paradigm-20260910-012303 follow-up).
+    private HashSet<int> RemovedSpellNumbers(string castCode)
+    {
+        if (Spellbook.FindByCastCode(castCode.Trim()) is not { } s) return new HashSet<int>();
+        return Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(s.Formula);
+    }
 
     // Every pair of configured, resolvable buff slots where one's spell removes the
     // other's via RemovesSpell (Abil 122) and their targeting can land on the same
@@ -6792,9 +6997,12 @@ public sealed class AppServices
     // share the wear-off message, so the shared line can't disambiguate on its own).
     private IReadOnlyCollection<string> RemovesShortsFor(string castShort)
     {
-        if (string.IsNullOrWhiteSpace(castShort)
-            || Spellbook.FindByCastCode(castShort.Trim()) is not { } spell) return System.Array.Empty<string>();
-        HashSet<int> removed = Game.Spells.BuffConflictAnalyzer.RemovedSpellNumbers(spell.Formula);
+        if (string.IsNullOrWhiteSpace(castShort)) return System.Array.Empty<string>();
+        // LITERAL removes (RemovedSpellNumbers) — a spell strips exactly the spells its
+        // own RemovesSpell list names, no family inference. Realm-agnostic: it's what lets
+        // a landed remover clear its victim's timer on ANY realm (so on stock a collision-
+        // order loser is re-cast after the remover, even if the loser wasn't otherwise due).
+        HashSet<int> removed = RemovedSpellNumbers(castShort);
         if (removed.Count == 0) return System.Array.Empty<string>();
         List<string> shorts = new();
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
@@ -6959,17 +7167,33 @@ public sealed class AppServices
         ManaRegen.OnRollSpellLanded(maRegen);
     }
 
-    // The unified-list slot that drives mana-regen rerolling: a CastOnSelf slot whose
-    // spell is a code-145 rolled regen-rate spell (nature tap / mana flux / prfl). One
-    // per character; null when none is configured. (The reroll config — threshold /
-    // count — rides on this slot.)
+    // The unified-list slot that drives mana-regen rerolling: a slot whose spell is a
+    // code-145 rolled regen-rate spell (nature tap / mana flux / prfl). One per
+    // character; null when none is configured. (The reroll config — threshold / count /
+    // infinite — rides on this slot.) NOT gated on CastOnSelf: these roll spells are
+    // self-only casts (they can't target others), so the CASTER always receives the
+    // roll whenever the slot fires — rerolling must not hinge on a target flag the user
+    // may have left on whole-party (report paradigm-20260909-113655).
     private Models.Profile.BuffSlot? ManaRegenRerollSlot()
     {
         if (Profile.Current?.PartyBuffs is not { } buffs) return null;
         foreach (Models.Profile.BuffSlot s in buffs.Slots)
-            if (s.CastOnSelf && !string.IsNullOrWhiteSpace(s.Spell) && IsManaRegenRollSpell(s.Spell.Trim()))
+            if (!string.IsNullOrWhiteSpace(s.Spell) && IsManaRegenRollSpell(s.Spell.Trim()))
                 return s;
         return null;
+    }
+
+    // A reroll-config edit may now warrant rerolling the roll spell that's already up
+    // (report paradigm-20260909-113655: user bumped flux 0→20 expecting the active -2 to
+    // reroll). Only re-roll a spell that is CURRENTLY active — we're improving a live
+    // roll, not spawning a fresh cast. Self-buff timers key on "" (self target).
+    public void ReconsiderManaRegenRerollAfterConfigChange()
+    {
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } shortCode) return;
+        bool active = CastDirector.SnapshotActiveBuffs()
+            .Any(t => string.Equals(t.Short, shortCode, System.StringComparison.OrdinalIgnoreCase));
+        if (!active) return;
+        ManaRegen.ReconsiderActiveRoll(shortCode);
     }
 
     // Live worst/best passive mana-regen TICK for a mana-regen roll spell at the
@@ -7052,8 +7276,17 @@ public sealed class AppServices
             if (string.IsNullOrWhiteSpace(s.Spell)) { Log.Info("Buffs", $"  {n}. (empty)"); continue; }
 
             System.Collections.Generic.List<string> who = new();
+            bool wholeParty = IsPartyWideBuff(s.Spell);
             if (s.CastOnSelf) who.Add("self");
-            if (s.WholePartyOn && IsPartyWideBuff(s.Spell)) who.Add("party-wide");
+            if (s.WholePartyOn && wholeParty)
+            {
+                who.Add("party-wide");
+                who.Add(s.CastSolo ? "solo" : "party-only");
+            }
+            else if (wholeParty)
+            {
+                who.Add("off");
+            }
             if (s.AllMembers) who.Add("all-members");
             else if (s.Targets.Count > 0) who.Add(string.Join("+", s.Targets));
 

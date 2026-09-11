@@ -50,10 +50,17 @@
 
         <!-- Main content. -->
         <Grid IsVisible="{Binding HasProfile}"
-              RowDefinitions="Auto,*,Auto">
+              RowDefinitions="Auto,Auto,*,Auto">
+
+            <StackPanel Grid.Row="0">
+                <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+                <TextBlock Classes="SettingsSectionSub"
+                           Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
+                <Border Classes="SettingsSectionRule" Margin="0,6,0,8"/>
+            </StackPanel>
 
             <!-- Toolbar: New / Modify / Remove above the table. -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6"
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6"
                         Margin="0,0,0,8">
                 <Button Content="New…" Command="{Binding NewCommand}" Width="92"/>
                 <Button Content="Modify…" Command="{Binding ModifyCommand}" Width="92"/>
@@ -61,7 +68,7 @@
             </StackPanel>
 
             <!-- Table: full-width, NAME / WHEN / WHAT columns. -->
-            <Border Grid.Row="1"
+            <Border Grid.Row="2"
                     BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource CornerSm}"
@@ -109,7 +116,7 @@
             </Border>
 
             <!-- Master switch below the table. -->
-            <CheckBox Grid.Row="2"
+            <CheckBox Grid.Row="3"
                       Content="Disable all events"
                       IsChecked="{Binding IsGloballyDisabled, Mode=TwoWay}"
                       ToolTip.Tip="Master switch — pauses every event regardless of per-row state. Persists immediately."

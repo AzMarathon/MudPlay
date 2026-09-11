@@ -340,6 +340,25 @@ it isn't here and you're unsure, ask.
   `(?!You notice )` guard so it doesn't also grab `"You notice <name>"` as a null-numbered
   Monster — which previously held the combat gate open and froze the loop.
 
+**Monster arrival lines carry a yellow-indexed name** *([CONFIRMED] 2026-09-09, user)*
+- A monster entering the room prints an arrival line; the wording is **per-monster and NOT
+  exported** — it can be the structured `"<name> <verb> into the room from <dir>."` form OR an
+  arbitrary custom line with no such marker (e.g. `"A muckworm darts out of the mud!"`). What is
+  **constant across every monster** is that the **monster's NAME is tagged the yellow ANSI colour
+  index** (standard 3 / bright 11) — sometimes just the name, sometimes the whole line.
+- **This is an index, not a rendered colour.** The user confirmed the arrival name's yellow index
+  is **not remapped or stripped by the client palette** — a custom palette only changes how index 3
+  *looks*, not that the cell carries index 3. So the index is the one palette-stable signal.
+- **Do NOT record a colour→line-type table as game truth.** Other lines' rendered colours (the
+  `You notice` floor line, the `Also here:` roster, prompts, room descriptions) **vary by the
+  user's palette** and are not reliable identifiers. Only the yellow *index* on an arrival name is
+  dependable; a plain room description that happens to name a monster is default-colour (no yellow
+  index), so it isn't an arrival.
+- **Client note:** `RoomEntryWatcher.OnLineScan` recognizes the unstructured custom spawns the two
+  regex patterns miss — on a line no structured pattern claims, a run of fully-yellow-indexed words
+  that resolves to a known monster (not already in the room) is appended as an arrival, tripping the
+  combat gate a round before the spawn's first swing. Keys on the palette index (3/11), never the RGB.
+
 **Sneak vs hide — both enable backstab** *([CONFIRMED])*
 - **Sneaking** and **hidden** are distinct stealth states and **either one enables a backstab**:
   - *Sneaking* lets you **move** silently and open on a target you approach, but does **not** remove
@@ -400,6 +419,13 @@ it isn't here and you're unsure, ask.
   from the stream; it gates on the **class ability (code 1103) + the user setting** instead.
 - **Ideally used solo.** Resting while hidden un-targets you from party single-target heals/buffs
   (same reason auto-hide is party-suppressed above), so ShadowRest resting is a solo behavior.
+
+**Casting breaks both Sneak and Hide** *([CONFIRMED] 2026-09-09, user)*
+- Casting a spell — self buff/heal/cure, party buff, anything — breaks Sneak **and** Hide alike.
+  This is an accepted cost, not a reason to withhold the cast: the buff-maintenance automation casts
+  a due buff/heal/cure regardless of stealth state rather than silently sitting on it to preserve
+  Sneak or Hide (`CastingDirector` does not gate casts on `StealthManager.IsStealthed`). Only the
+  backstab opener still reads combined stealth state, since either Sneaking or Hidden opens it.
 
 ## Combat & backstab
 
@@ -1057,10 +1083,15 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
 ### Room-spell monster summons *([CONFIRMED] 2026-08-06, user + game-data trace, Paradigm 1.9.1)*
 
 Distinct from a monster's death-summon: a **room itself** can summon monsters via its entry spell.
-`Rooms.Spell` names a `Spells` row cast **on room entry and re-cast every combat tick (~5s)** while
-you're in the room (the user times it at **~5.3s** — the tick, firing just after entry). These are the
-monster-spawning rooms that made the Exp/Hr estimator under-report: the exp comes from summons the
-route resolver never counted.
+`Rooms.Spell` names a `Spells` row cast **on room entry and re-cast on a recurring tick** while
+you're in the room. These are the monster-spawning rooms that made the Exp/Hr estimator under-report:
+the exp comes from summons the route resolver never counted.
+
+- **Re-roll cadence differs by realm** *([CONFIRMED] 2026-09-08, user)*. **Paradigm** re-casts the room
+  spell **every combat tick (~5s)** while you're present (the user timed it at **~5.3s**, firing just after
+  entry) plus the entry cast. **Stock** re-rolls on a slower **"medium tick" of 6 seconds** (per the
+  `wccmmud.dll` disassembly) plus on room change — so a Stock summoning room yields fewer rolls over the
+  same fight than a Paradigm one. The estimator encodes the 6s value as `StockMediumTickSeconds`.
 
 - **The summon lives in a TextBlock, not an `Abil 12` slot.** The room spell carries a **`TextBlock`
   ability (`Abil == 148`)** whose `AbilVal` is a **TBInfo `Number`**. The TBInfo `Action` string is the
@@ -1078,10 +1109,18 @@ route resolver never counted.
     `90:…:summon 2111` (86–90, **cairn wraith** 13000) · `95:…:summon 2119` (91–95, **ogre skeleton**
     12000) · `100:…:summon 2122` (96–100, **zombie warrior** 12000).
   - → **15% summon chance**, **1,850 expected exp per roll** (`0.05 × (13000+12000+12000)`).
-- **Estimator model** *(user design)*: credit each summoning room **one averaged roll per visit**
-  (`Σ band% × monster exp`), plus a **second roll's worth when a quick kill (rounds ≤ 2)** lets another
-  spawn before you leave (`× (1 + summonChance)`), scaled by laps/hr. A simplification of the true
-  per-tick loop, but it lands close and stops the under-report.
+- **Estimator model** *(user design, revised 2026-09-08)*: credit each summoning room `ExpPerRoll ×
+  fires` per visit, where `ExpPerRoll = Σ band% × monster exp` and `fires` follows the cadence + gate:
+  - **Ungated spell** — rolls regardless of occupancy: `fires = 1 (entry/room-change) + roundsInRoom`,
+    where `roundsInRoom` = combat rounds spent fighting base mobs here ÷ the realm's room-spell tick
+    (Paradigm = combat round, Stock = medium tick).
+  - **Gated spell (`nomonsters:`)** — only summons while the room is empty, so a pass-through visit
+    credits **1** fire when the room was empty on arrival and **0** when you arrive to a full lair;
+    combat length adds no fires.
+
+  Summon mobs are never *killed* by the estimator (a room-attached spell never kills NPCs, and no
+  feedback is modeled) — `RoundsPerMob` (the clear-rate knob) stays realm-agnostic and the user sets it
+  directly. Lives in `LoopExpSimulator.SummonFires`.
 
 ### What makes a room-entry spell a movement HAZARD *([CONFIRMED] 2026-08-25, user)*
 
@@ -1134,6 +1173,8 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 ### Rerolling a mana-regen roll spell *([CONFIRMED] 2026-08-28, user + screenshot)*
 
 Only **roll spells** (nature tap / mana flux / `prfl`, and kin — code-145 with stored value 0) are candidates for rerolling: a bad roll drags `ManaRgn%` down, so re-cast to chase a better one. **`CHSU` (chaos surge) is NEVER rerolled** — it's a *constant* mana heal-over-time (the mana analogue of HP regen), not a rolled `ManaRgn%` modifier; maintain it like a normal buff. A fixed (non-zero) code-145 spell isn't rerolled either. (`RegenSpellClassifier` already splits roll / fixed / HoT.)
+
+**Mana-regen roll spells are self-only casts** *([CONFIRMED] 2026-09-09, user)* — mana flux and its kin **cannot be cast on others**; the caster always receives the roll whenever the slot fires. So the reroll engine must NOT gate on a "cast on self" flag (a user can leave a slot's default whole-party flag on; the spell still only lands on the caster). `ManaRegenRerollSlot` therefore matches any configured roll-spell slot regardless of its target flags.
 
 Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. Cast → read the roll → if below the gate, re-queue and repeat until at/above the gate or max attempts hit; then stop and wait for the spell's normal recast-within window before trying the cycle again. **Running out of mana mid-cycle PAUSES, it does not surrender** *(2026-09-01, report `paradigm-20260901-114223`: the reroller quit at 3/20 when a recast would breach the mana floor, stranding the spell at a bad roll)*: each recast costs mana, so if the next one would drop under the buff mana floor the cycle SUSPENDS with its reroll counter intact and resumes the next attempt once meditation lifts mana back over the floor — so it spends its full reroll budget across rest instead of abandoning a bad roll at the floor.
 
@@ -1291,6 +1332,46 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
   10 / 1 copper-farthing ratio ladder. The deathpile display lists each denomination the character
   held by its own count (e.g. `100 gold crowns` + `1 platinum piece`), **not** re-bucketed into a
   consolidated wealth total.
+
+**RemovesSpell is LITERAL — no family/transitive inference** *([CONFIRMED] 2026-09-10, user, Paradigm)*
+- A buff strips **exactly** the spells its own `RemovesSpell` (Abil-122) list names — nothing more. There
+  is NO "family exclusivity slot": the fact that bless removes both chant and greater bless, and that bless
+  ↔ greater bless remove each other, does NOT make chant remove greater bless. Concretely, the bless family:
+  - **greater bless #146** removes: greater curse #61, bless #14, curse #15, **chant #23**, divine favour
+    #62, ashwood wand #668.
+  - **chant #23** removes: blight #75, curse #15, bless #14 — **NOT greater bless.**
+  - So it's **asymmetric**: casting **greater bless strips an active chant** (gbls lists chant directly),
+    but casting **chant leaves an active greater bless alone** (chant's list omits it).
+  - (An earlier build inferred chant→greater-bless transitively via a "family slot" — that was WRONG and
+    was reverted; the user verified in-game that chant does not strip greater bless.)
+- **Two `chant` records share cast code `chan`**: **#23** is the learnable one (`Learnable`, all classes,
+  the one a player casts and the one gbls/curse/blight reference); **#825** is a non-learnable room-cast
+  duplicate (`Casted By = Room …`). The clobber math keys off #23.
+- **Removal TIMING differs by realm — this is why #540's suppression is Paradigm-only** *([CONFIRMED]
+  2026-09-10, user)*:
+  - **Stock** — a buff's RemovesSpell fires ONLY when that spell is cast (one-time; no ongoing re-check). So a
+    ONE-WAY pair cast in non-colliding order holds **both, durably**: cast **greater bless first, then chant**
+    and both stay (gbls's strip already fired with no chant present; chant doesn't list gbls). Reverse order
+    (chant then gbls) leaves only gbls. (Also subject to the 10-affect cap below.)
+  - **Paradigm** — an ACTIVE remover keeps stripping its removes on an ongoing **~3-second tick**, not just at
+    its own cast, so a one-way-removed buff CANNOT coexist with an active remover regardless of cast order: an
+    active greater bless re-strips chant every few seconds. This is exactly why **#540's "suppress the loser" is correct on Paradigm**
+    (don't waste rounds maintaining chant under a maintained gbls) and **correctly does nothing on stock**
+    (where cast-order lets you hold both). The stock counterpart — **cast the remover before the loser so both
+    stay up** — is now BUILT: the Buff Watchdog re-orders its maintenance casts (remover before removed) on
+    stock only, keeping the loser maintained instead of dropping it (`BuffPriorityOrder.OrderRemoversFirst` +
+    `AppServices.CollisionOrderConstraints`, the stock branch of the same one-way removes graph #540 suppresses
+    on Paradigm). The clobber-clear re-applies the loser after each remover recast.
+  - Mutual pairs (bless ↔ greater bless — each lists the other) are last-cast-wins in both realms.
+- **Stock: "10 spelling" affect cap** *([CONFIRMED] 2026-09-10, user, Stock)*: Paradigm has unlimited
+  buff/affect slots; **stock caps active affects at 10** (buffs + debuffs combined). Casting/receiving an 11th
+  pushes an existing affect off — the exact eviction rule is not yet known. Not modelled in the client yet.
+- **Applied-latch gotcha** *(report paradigm-20260910-012303)*: `ConditionTracker` dedups a repeated applied
+  line (each spell's "You feel …" latches once until its wear-off). A clobber clears the victim's *timer* but
+  the game sends no distinct wear-off for it (the shared family wear-off is ignored), so the victim's
+  applied-latch survived — and a later **re-cast** of that victim was deduped, never re-confirmed, and so
+  never drove its own clobber-clear (a re-cast greater bless never dropped an active chant). Fixed by
+  `ConditionTracker.ReleaseApplied`, called from the clobber-clear so the victim's latch is dropped too.
 
 **On-death effect wipe** *([CONFIRMED])*
 - Death removes **all active effects — buffs and debuffs alike**. A poison ticking at the moment of
@@ -1753,6 +1834,12 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
   the peeked room, and the window is consumed when `NoteRoomObserved` fires on the exits line. The
   player's *own* room is unaffected: walking in for real re-renders the room outside the window and the
   automation runs normally.
+  - **A closed door/gate blocks the peek** *([CONFIRMED] 2026-09-08, user + report `stock-20260908-205441`)*.
+    `look <dir>` at an exit whose barrier is **shut** renders no room — the server answers *"The door is
+    closed in that direction!"* instead. The obvious-exits line flags it ahead of time (`closed door
+    north` / `closed gate north`), so a peek that must read the neighbour has to **open the barrier
+    first, then look**. The Warped Asylum look-sweep does exactly this (its rooms gate siblings behind
+    bashable doors); before #346 a shut door on a peek direction failed the whole maze solve out.
 - **[CONFIRMED]** **Some rooms harm you on entry unless you carry (or wear, or drink) a protective
   item — either exit-gated or room-spell-gated.** Encoding fully decoded off the 1.11p data set below.
   There are TWO gate locations (exit vs room-spell) and, within room-spells, THREE distinct
@@ -2726,7 +2813,17 @@ flag). These are hard eligibility gates, independent of resistance and level imm
   then keeps the walker held briefly so the revealed `You notice … here.` survey lands and the get
   engines collect it **before** the loop sets up sneaking and steps on. One search per room; empty
   rooms (no fight) search on entry as before. (Targeted `sea <dir>` hidden-exit reveals are a
-  separate path, above.)
+  separate path, above.) **The post-search hold is released *reactively*:** because an empty search
+  answers with `Your search revealed nothing.`, the walker is let go the instant that line arrives
+  rather than sitting out the whole settle window — so a room with nothing hidden costs only the
+  command→reply round-trip, not a fixed per-room wait. The settle window survives only as a short
+  fallback for the case where the reveal *does* surface loot (the `You notice …` survey), which the
+  get engines then need a beat to collect. **The room a walk / loop / auto-lair STARTS from is
+  searched too** (report paradigm-20260909-055045): auto-search normally arms on room *entry*, but
+  the room you're standing in when movement begins was entered earlier — before auto-search was
+  armed, or at login — so it never got that entry search. Movement start arms + searches it before
+  the walker steps out, deduped against the last room actually searched so a loop's later legs
+  (each starting from a room already searched on arrival) don't re-search.
 
 ### Item-cast triggers — how a `CastsSp` fires *([CONFIRMED] 2026-07-18, user)*
 
@@ -3353,13 +3450,25 @@ glass jug               5               2 gold crowns
   action, not just combat — and the fumble line can be customized per confuse source.** Most confusion
   sources surface the generic `You fumble in confusion!`; `convulsions` customizes it to `You convulse
   violently!` (with its own onset `You are in convulsions!`). Either way the just-sent command is consumed
-  and never executes. The client already re-sends a fumbled combat swing (ConditionTracker's
-  `LastActionFailed` → `CombatManager.OnActionFailed`), but a fumbled **move** has to REVERT its pending
+  and never executes, so the client re-sends it — but a fumbled **move** has to REVERT its pending
   step or the tracker strands — the unreverted move got wrongly matched against later unrelated text and
   stranded a tier-3 recovery backtrack indefinitely (no timeout watched its landing). The fumble line
   always appears as the direct reply to the command it swallowed, never as unprompted ambient text.
   **Client encoding:** `MovementRefusalDetector` recognizes BOTH `You fumble in confusion!` and `You
   convulse violently!` as movement refusals, reverting the pending move immediately.
+- **[CONFIRMED] 2026-09-09, user + report `paradigm-20260908-211659`: the re-send covers EVERY client-sent
+  command, not just a weapon swing — but only the CLIENT's own commands, never what the user typed.** A
+  fumble eats whatever command was just sent; to perform it you re-send the same command. The client now
+  does this generically for anything IT sent — weapon swing, attack spell (immediately, not deferred to
+  the next round tick), item use, door bash, and so on — because a user fighting confused shouldn't have
+  to hand-repeat each eaten action. A command the **user typed** is never auto-repeated (re-sending a
+  manual command is the user's call). **Client encoding:** every fumble fires `ConditionTracker.ActionFailed`
+  (on a `LastActionFailed` record OR a `ConfuseFumbleLine` match); the handler calls
+  `CombatManager.OnActionFailed` first (re-sends a weapon swing WITH its engage-verification bookkeeping,
+  returns whether it did), and on false falls through to `EngineSendGate.ReplayLastClientCommand`, which
+  re-sends the last command that passed through the engine send gate. User-typed input bypasses that gate
+  (it flows straight to `SendUserInput`), so it's never in the replay buffer; a bare **movement** step is
+  skipped by the replay (the move-revert above already recovers it, and a second send would double-step).
 - **[CONFIRMED] 2026-09-02, report `paradigm-20260902-113201`: convulsions can fumble several consecutive
   moves in a row, well inside a handful of seconds.** The revert above is correct per-move, but
   `LoopRunner`'s bounded recovery budget (3 attempts) was shared between genuine desyncs and these
@@ -3487,7 +3596,10 @@ glass jug               5               2 gold crowns
   gates for a `WholePartyOn` slot when `!PartyState.IsInParty`, instead of holding it forever behind
   "must be in a party" (report `paradigm-20260906-150624`: a whole-party item-cast buff, `platinum
   sceptre`, never fired outside a party). A **single-target** slot genuinely still needs an actual party
-  member to aim at, so that branch is unaffected.)
+  member to aim at, so that branch is unaffected.) **`WholePartyOn` remains the master enable**: the
+  per-slot `CastSolo` option only extends an enabled slot to solo play and must not bypass an unchecked
+  Party box. (2026-09-09, report `paradigm-20260909-220212`: unchecked whole-party rows kept casting
+  solo through their default `CastSolo=true`, draining mana while the rest of the UI reported them off.)
   **Scope classification** (confirmed against stock + Paradigm data), gated first on **`EnergyCost == 0`**
   (a buff, not an attack):
   - **`Spells.Targets` = 2** (Self or User) → a **single-target** beneficial buff cast on ONE other member

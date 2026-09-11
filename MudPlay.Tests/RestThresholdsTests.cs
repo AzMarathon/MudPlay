@@ -81,4 +81,32 @@ public sealed class RestThresholdsTests
         Assert.Equal(100, trigger);   // absolute, under the cap
         Assert.Equal(205, max);       // absolute 250 capped at the 205 real max
     }
+
+    [Fact]
+    public void StableDefaultBasis_LiveMaxSwingAcrossPreRestSwap_KeepsThresholdsIdentical()
+    {
+        // report paradigm-20260909-095419: the mana rest gate flapped every room,
+        // thrashing meditate↔move↔gear-swap. The inputs here are what AppServices now
+        // feeds after re-basing DefaultSetMaxPool off the LIVE gear max: the default-set
+        // basis stays fixed (212) no matter which set is worn, while only liveMax swings
+        // as a Pre-rest Mana set (which ADDS mana) comes on (212 → 222). Both resolves
+        // must yield the SAME (trigger, max) — the trigger can never end up above the
+        // target, which is the inverted band that made the gate assert-and-clear at the
+        // same pool value. (The old bug re-based off the STATIC stat screen while
+        // subtracting the LIVE worn bonus, so the basis dropped to ~202 with the Pre-rest
+        // set on, giving trigger=189 > target=182.)
+        (int triggerDefaultSet, int maxDefaultSet) = RestThresholds.Resolve(
+            ThresholdMode.Percentage, 89, 90,
+            defaultMax: 212, realMax: 212, liveMax: 212);   // normal loadout worn
+        (int triggerPreRest, int maxPreRest) = RestThresholds.Resolve(
+            ThresholdMode.Percentage, 89, 90,
+            defaultMax: 212, realMax: 212, liveMax: 222);   // Pre-rest Mana set worn (raises live max)
+
+        Assert.Equal(189, triggerDefaultSet);   // 89% of 212 = 188.68 → 189
+        Assert.Equal(191, maxDefaultSet);        // 90% of 212 = 190.8 → 191
+        Assert.Equal(triggerDefaultSet, triggerPreRest);
+        Assert.Equal(maxDefaultSet, maxPreRest);
+        Assert.True(maxPreRest >= triggerPreRest,
+            "rest target must never fall below the rest trigger — that inverted band is the flap");
+    }
 }

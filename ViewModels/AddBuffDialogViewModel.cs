@@ -20,7 +20,8 @@ public sealed record AddBuffResult(
     bool OnlyWhenDark,
     bool CastBeforeRestingForMana,
     int RerollCount,
-    int? RerollThreshold);
+    int? RerollThreshold,
+    bool RerollInfinite = false);
 
 // One entry in the Add-buff dropdown: the cast Code the game accepts, a Display
 // showing the buff's name + the level it's learned at ("bless (Lvl 2)"), and
@@ -84,6 +85,15 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     [ObservableProperty] private bool _castBeforeRestingForMana;
     [ObservableProperty] private int _rerollCount;
     [ObservableProperty] private int? _rerollThreshold;
+
+    // "Reroll infinite" — keep re-casting until the roll clears the threshold, so the
+    // user needn't set an obscene Max-rerolls. When on, the Max-rerolls picker is inert.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RerollCountEnabled))]
+    private bool _rerollInfinite;
+
+    // The Max-rerolls picker is live only when rerolling is capped (infinite off).
+    public bool RerollCountEnabled => !RerollInfinite;
 
     // Whether the picked spell is a light spell (offers "only when dark") or a
     // mana-regen roll spell (offers the reroll config + "cast before resting").
@@ -154,6 +164,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             _castBeforeRestingForMana = i.CastBeforeRestingForMana;
             _rerollCount = i.RerollCount;
             _rerollThreshold = i.RerollThreshold;
+            _rerollInfinite = i.RerollInfinite;
             _range = _isStockRealm ? _tickRange?.Invoke(_spell) : null;
         }
     }
@@ -170,7 +181,8 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             IsLightSpell && OnlyWhenDark,
             IsRollSpell && CastBeforeRestingForMana,
             IsRollSpell ? Math.Clamp(RerollCount, 0, 20) : 0,
-            IsRollSpell ? RerollThreshold : null));
+            IsRollSpell ? RerollThreshold : null,
+            IsRollSpell && RerollInfinite));
     }
 
     [RelayCommand]

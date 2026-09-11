@@ -206,6 +206,31 @@ public sealed class ConditionTrackerTests
     }
 
     [Fact]
+    public void ConfuseFumbleLine_FiresActionFailed_EvenWithoutADedicatedLastActionFailedRecord()
+    {
+        // The shipped "convulsions" record carries Confused + ConfuseFumbleLine but
+        // no separate LastActionFailed-flagged record for its fumble wordings (no
+        // shipped record ever has). A fumble line must still re-send the swing:
+        // report paradigm-20260908-211659, "sit here and get beat on".
+        using Harness h = new();
+        h.Messages.Messages.Add(new MessageRecord(
+            Id: "conv", Name: "convulsions",
+            Flags: MessageFlags.Confused, RawFlagsHex: 2,
+            CasterMessage: "", TargetMessage: "", WitnessMessage: "",
+            AppliedMessage: "You are in convulsions!", AppliedEndsWith: "Your body returns to normal.",
+            Links: null,
+            ConfuseFumbleLine: "You fumble in confusion!\nYou convulse violently"));
+
+        h.Feed("You are in convulsions!");
+        h.Feed("You convulse violently!");
+        h.Feed("You convulse violently!");
+
+        Assert.True(h.Tracker.IsConfused);
+        Assert.Equal(2, h.ActionFailed.Count);        // every fumble line, not deduped
+        Assert.All(h.ActionFailed, r => Assert.Equal("convulsions", r.Name));
+    }
+
+    [Fact]
     public void Fumble_FiresEveryLine_NotJustFirst()
     {
         // Confusion fumbles command after command while it lasts; the condition
@@ -473,5 +498,50 @@ public sealed class ConditionTrackerTests
         h.Tracker.ClearAll();
         Assert.False(h.Tracker.IsPoisoned);
         Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
+    }
+
+    // ----- clobber-clear latch release -------------------------------
+
+    [Fact]
+    public void ReleaseApplied_LetsAReCastReConfirm()
+    {
+        // A fresh-cast applied line latches once; an identical repeat is deduped (fires
+        // nothing) while the record stays active. But when a landing buff clobbers this
+        // one (RemovesSpell), the CastingDirector releases its latch — and the buff's
+        // RE-CAST must then re-confirm, so it can drive its own clobber-clear against
+        // whatever replaced it. Report paradigm-20260910-012303: a re-cast greater bless
+        // never dropped an active chant because gbls stayed latched from before chant
+        // clobbered it, so its "You feel VERY lucky!" re-cast was deduped forever.
+        using Harness h = new();
+        MessageRecord gbls = MakeRecord("greater bless", MessageFlags.None,
+            applied: "You feel VERY lucky!", endsWith: "");
+        h.Messages.Messages.Add(gbls);
+
+        h.Feed("You feel VERY lucky!");                    // first cast — latches, fires
+        Assert.Single(h.Applied);
+
+        h.Feed("You feel VERY lucky!");                    // re-cast while latched — deduped
+        Assert.Single(h.Applied);
+
+        h.Tracker.ReleaseApplied(r => r.Id == gbls.Id);    // a clobber released the latch
+
+        h.Feed("You feel VERY lucky!");                    // re-cast now re-confirms
+        Assert.Equal(2, h.Applied.Count);
+    }
+
+    [Fact]
+    public void ReleaseApplied_NonMatch_LeavesLatchIntact()
+    {
+        using Harness h = new();
+        MessageRecord gbls = MakeRecord("greater bless", MessageFlags.None,
+            applied: "You feel VERY lucky!", endsWith: "");
+        h.Messages.Messages.Add(gbls);
+
+        h.Feed("You feel VERY lucky!");
+        Assert.Single(h.Applied);
+
+        h.Tracker.ReleaseApplied(_ => false);              // nothing matches
+        h.Feed("You feel VERY lucky!");                    // still latched → still deduped
+        Assert.Single(h.Applied);
     }
 }

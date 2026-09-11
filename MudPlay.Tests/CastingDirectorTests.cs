@@ -593,6 +593,12 @@ public sealed class CastingDirectorTests
         /// removes buffs on entry, so the Buffing category is suppressed.</summary>
         public bool BuffStripRoom { get; set; }
 
+        /// <summary>When true the sneak-maintenance defer gate reports we're a
+        /// stealth runner walking combat-off through an occupied room, so the
+        /// Buffing / Curing categories are held for the next empty room (unless
+        /// resting / meditating).</summary>
+        public bool DeferMaintenanceForStealth { get; set; }
+
         /// <summary>Test clock — buff-expiry math reads this so tests can
         /// advance time deterministically.</summary>
         public DateTime Now { get; set; } =
@@ -604,6 +610,12 @@ public sealed class CastingDirectorTests
         /// In this harness the confirmed condition's Name doubles as the
         /// buff short, so this keys on the condition Name.</summary>
         public Dictionary<string, (string Caster, long Duration)> BuffInfo { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Buff short → the shorts its spell REMOVES (RemovesSpell). Lets a
+        /// test model a clobber (chan removes gbls) so the landing-clears-victim path
+        /// runs.</summary>
+        public Dictionary<string, string[]> Removes { get; } =
             new(StringComparer.OrdinalIgnoreCase);
 
         public CureHarness()
@@ -621,6 +633,7 @@ public sealed class CastingDirectorTests
             Director.SetAutoBlessGate(() => AutoBlessEnabled);
             Director.SetTriggeredRestGate(() => TriggeredRest);
             Director.SetBuffStripRoomGate(() => BuffStripRoom);
+            Director.SetStealthMaintenanceDeferGate(() => DeferMaintenanceForStealth);
             Director.SetCombatTickSource(() => CombatTickDamageDriven);
             Director.SetClock(() => Now);
             // Self buffs now live in the unified list. Fold the tests' self-bless
@@ -634,7 +647,9 @@ public sealed class CastingDirectorTests
                 code => BuffInfo.TryGetValue(code, out (string Caster, long Duration) info)
                     ? (info.Caster, info.Duration)
                     : null,
-                record => record.Name);
+                record => record.Name,
+                removesShortsFor: code =>
+                    Removes.TryGetValue(code, out string[]? v) ? v : System.Array.Empty<string>());
             // Capture the reroll sink so a test can assert a self-buff CAST is
             // reported to the mana-regen reroll engine (fired from the send path).
             Director.SetSelfBuffCastSink(SelfBuffCast.Add);
@@ -1246,6 +1261,47 @@ public sealed class CastingDirectorTests
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
         Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void Buff_ClobberingCast_ClearsRemovedBuffTimer()
+    {
+        // A cast that REMOVES another buff (chan removes gbls) clears the removed
+        // buff's timer the moment it lands, so a stripped buff doesn't keep reading
+        // as up (report paradigm-20260910-001023). Deterministic off RemovesSpell,
+        // not the ambiguous shared wear-off line.
+        using CureHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+
+        h.Spells.BlessSlots[1] = "gbls";
+        h.Spells.BlessSlots[2] = "chan";
+        h.BuffInfo["gbls"] = (string.Empty, 300);
+        h.BuffInfo["chan"] = (string.Empty, 500);
+        h.Removes["chan"] = new[] { "gbls" };   // chan strips gbls
+        h.RecordCondition("gbls", MessageFlags.None, applied: "You feel greatly blessed!");
+        h.RecordCondition("chan", MessageFlags.None, applied: "You hear a chant!");
+
+        // Cast + confirm gbls → its timer is up.
+        h.Director.Evaluate();
+        h.FeedLine("You feel greatly blessed!");
+        Assert.Contains(h.Director.SnapshotActiveBuffs(), b => b.Short == "gbls");
+
+        // Past the 400ms applied-burst window so chan's confirm isn't treated as a
+        // sibling of gbls's just-landed burst (still well inside gbls's 300s timer).
+        h.Now = h.Now.AddSeconds(10);
+
+        // Cast + confirm chan → it strips gbls, so gbls's timer must clear.
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        h.FeedLine("You hear a chant!");
+
+        var active = h.Director.SnapshotActiveBuffs();
+        Assert.Contains(active, b => b.Short == "chan");
+        Assert.DoesNotContain(active, b => b.Short == "gbls");
     }
 
     [Fact]
@@ -1893,24 +1949,6 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void Buff_StealthGate_Suppressed()
-    {
-        // Stealth gate (wired by AppServices to StealthManager.IsStealthed)
-        // suppresses buff casts to keep the backstab window open.
-        using CureHarness h = new();
-        h.Director.SetStealthGate(() => true);
-        h.Spells.BlessSlots[1] ="bless";
-        h.Health.BlessIfAboveMa = 50;
-        h.State.MaxMa = 100;
-        h.State.Ma = 80;
-        h.State.InCombat = false;
-
-        h.Director.Evaluate();
-
-        Assert.Empty(h.CastsSent);
-    }
-
-    [Fact]
     public void Buff_InCombat_Suppressed()
     {
         // v1 hard-gates buffs out of combat — never burn a round
@@ -1925,6 +1963,85 @@ public sealed class CastingDirectorTests
         h.State.Ma = 80;
 
         h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    // ----- Sneak-maintenance defer (hold buffs/cures for an empty room) -------
+
+    [Fact]
+    public void Buff_SneakMaintenanceDefer_Held()
+    {
+        // A stealth runner walking combat-off through an occupied room: a due buff
+        // is HELD (not cast) so the cast doesn't strip sneak in a room we can't
+        // re-sneak in. It fires once the room clears (gate goes false).
+        using CureHarness h = new();
+        h.DeferMaintenanceForStealth = true;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_SneakMaintenanceDefer_Off_Casts()
+    {
+        // Control: with the defer gate off (not a stealth runner / empty room) the
+        // same due buff casts normally.
+        using CureHarness h = new();
+        h.DeferMaintenanceForStealth = false;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bless" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_SneakMaintenanceDefer_WhileResting_StillCasts()
+    {
+        // The defer is skipped while resting: a stationary recovery has already
+        // stopped, so a due buff/cure there should fire rather than wait for a
+        // room that never comes (you're not walking).
+        using CureHarness h = new();
+        h.DeferMaintenanceForStealth = true;
+        h.Spells.BlessSlots[1] = "bless";
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Resting;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bless" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Cure_SneakMaintenanceDefer_Held()
+    {
+        // Cures defer too (user chose max sneak preservation): a poison cure is
+        // held while sneak-walking an occupied room. The emergency survival tier
+        // (major heal / flee / hangup) is never in the deferred set, so a low-HP
+        // character still heals.
+        using CureHarness h = new();
+        h.DeferMaintenanceForStealth = true;
+        h.State.Position = PlayerPosition.Standing;
+        h.Spells.CurePoisonSpell = "neutralize";
+        h.RecordCondition("Poison", MessageFlags.Poisoned, "poisoned!");
+
+        h.FeedLine("You have been poisoned!");
 
         Assert.Empty(h.CastsSent);
     }
@@ -2969,6 +3086,22 @@ public sealed class CastingDirectorTests
         h.Health.BlessIfAboveMa = 0;
         h.AddWholePartySlot("chan", on: false);   // all-off
         h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_WholePartyOff_SoloOptionOn_NoCast()
+    {
+        // Regression: the Solo option used to bypass the unchecked Party master and
+        // cast every bulk-added whole-party buff while alone, draining the mana pool.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddWholePartySlot("chan", on: false);
+        slot.CastSolo = true;
+        h.Party.IsInParty = false;
 
         h.Director.Evaluate();
 

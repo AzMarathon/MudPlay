@@ -874,9 +874,27 @@
                 <StackPanel Spacing="4" MinWidth="180">
                     <TextBlock Text="MAP LEGEND" FontSize="10"
                                FontWeight="SemiBold" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    <!-- Current room = amber fill + bright ring + a yellow centre dot
+                         (CurrentFill / CurrentPen / PlayerDotFill), the exact "you are
+                         here" shape the map draws. -->
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Border Width="14" Height="14" Background="#F8B500"/>
+                        <Grid Width="14" Height="14">
+                            <Border Background="#F8B500" BorderBrush="#FFD24D" BorderThickness="2"/>
+                            <Ellipse Width="6" Height="6" Fill="#FFE03A" Stroke="#3A1F00" StrokeThickness="1"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
                         <TextBlock Text="Current room" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <!-- Walk-to destination = the same ring + dot shape in blue
+                         (DestinationFill / DestinationRing / DestinationDotFill), so it
+                         reads as the other end of the pair. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Grid Width="14" Height="14">
+                            <Border Background="#1A4FB0" BorderBrush="#3D6FCA" BorderThickness="2"/>
+                            <Ellipse Width="6" Height="6" Fill="#9FC4FF" Stroke="#0A1E40" StrokeThickness="1"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock Text="Walk-to destination" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Border Width="14" Height="14" Background="#8E4F7B"/>
@@ -923,6 +941,12 @@
                         </Grid>
                         <TextBlock Text="(corner mark) Down exit" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
+                    <!-- A room whose only vertical exits are BOTH up and down fills
+                         orange (UpDownFill), distinct from the green up / yellow down. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border Width="14" Height="14" Background="#FFB432" BorderBrush="#FFD250" BorderThickness="1"/>
+                        <TextBlock Text="(full block) Up + Down exits" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Grid Width="14" Height="14">
                             <Border Background="#3A3A3A"/>
@@ -930,6 +954,74 @@
                             <Path Stroke="#FF50E6FF" StrokeThickness="1.5" Data="M 0,0 L 14,14 M 0,7 L 7,14 M 7,0 L 14,7"/>
                         </Grid>
                         <TextBlock Text="Teleport (CMD)" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <!-- Per-cell room markers — glyphs the map overlays on a room
+                         node. Colours + shapes mirror MapControl's Draw* primitives. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Canvas Width="14" Height="14">
+                            <Border Canvas.Left="0" Canvas.Top="0" Width="14" Height="14" Background="#3A3A3A"/>
+                            <Ellipse Canvas.Left="3" Canvas.Top="2" Width="8" Height="7" Fill="#ECE7DA"/>
+                            <Border Canvas.Left="5" Canvas.Top="7" Width="4" Height="3" Background="#ECE7DA" CornerRadius="1"/>
+                            <Ellipse Canvas.Left="4.5" Canvas.Top="4" Width="2" Height="2" Fill="#141414"/>
+                            <Ellipse Canvas.Left="7.5" Canvas.Top="4" Width="2" Height="2" Fill="#141414"/>
+                        </Canvas>
+                        <TextBlock Text="Deathpile (skull)" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Canvas Width="14" Height="14">
+                            <Border Canvas.Left="0" Canvas.Top="0" Width="14" Height="14" Background="#3A3A3A"/>
+                            <Polygon Points="2,11 2,5 5,7.5 7,3 9,7.5 12,5 12,11" Fill="#F1C34A" Stroke="#7C5C14" StrokeThickness="0.8"/>
+                        </Canvas>
+                        <TextBlock Text="Boss room (crown)" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Canvas Width="14" Height="14">
+                            <Border Canvas.Left="0" Canvas.Top="0" Width="14" Height="14" Background="#3A3A3A"/>
+                            <Ellipse Canvas.Left="1" Canvas.Top="1" Width="12" Height="12" Stroke="#E64545" StrokeThickness="1.5"/>
+                            <Polygon Points="4,10 4,6 6,7.5 7,4.5 8,7.5 10,6 10,10" Fill="#F1C34A" Stroke="#7C5C14" StrokeThickness="0.6"/>
+                        </Canvas>
+                        <TextBlock Text="Boss — stop before entering" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Canvas Width="14" Height="14">
+                            <Border Canvas.Left="0" Canvas.Top="0" Width="14" Height="14" Background="#3A3A3A"/>
+                            <Path Stroke="#3FD07A" StrokeThickness="1.6" Data="M 4,6 L 7,3.5 L 10,6"/>
+                            <Path Stroke="#3FD07A" StrokeThickness="1.6" Data="M 4,8.5 L 7,6 L 10,8.5"/>
+                            <Path Stroke="#3FD07A" StrokeThickness="1.6" Data="M 4,11 L 7,8.5 L 10,11"/>
+                        </Canvas>
+                        <TextBlock Text="Trainer (level-up chevrons)" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Canvas Width="14" Height="14">
+                            <Border Canvas.Left="0" Canvas.Top="0" Width="14" Height="14" Background="#3A3A3A"/>
+                            <Line StartPoint="7,1" EndPoint="7,3" Stroke="#10384A" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="5.5" Canvas.Top="0" Width="3" Height="3" Fill="#7FE0FF" Stroke="#10384A" StrokeThickness="0.8"/>
+                            <Border Canvas.Left="2.5" Canvas.Top="3" Width="9" Height="8" Background="#7FE0FF" BorderBrush="#10384A" BorderThickness="1" CornerRadius="2"/>
+                            <Ellipse Canvas.Left="4.5" Canvas.Top="5.5" Width="2.6" Height="2.6" Fill="#10384A"/>
+                            <Ellipse Canvas.Left="7.4" Canvas.Top="5.5" Width="2.6" Height="2.6" Fill="#10384A"/>
+                        </Canvas>
+                        <TextBlock Text="Gang-house room (Roomba)" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Grid Width="14" Height="14">
+                            <Border Background="#3A3A3A"/>
+                            <Path Stroke="#FF2020" StrokeThickness="2" Data="M 3.5,3.5 L 10.5,10.5 M 10.5,3.5 L 3.5,10.5"/>
+                        </Grid>
+                        <TextBlock Text="Avoid room" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Grid Width="14" Height="14">
+                            <Border Background="#3A3A3A"/>
+                            <Path Stroke="#FFD24E" StrokeThickness="2" Data="M 3.5,3.5 L 10.5,10.5 M 10.5,3.5 L 3.5,10.5"/>
+                        </Grid>
+                        <TextBlock Text="Stash room" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Grid Width="14" Height="14">
+                            <Border Background="#3A3A3A"/>
+                            <Border Background="#8833DD66" BorderBrush="#33DD66" BorderThickness="2" CornerRadius="2" Margin="1"/>
+                        </Grid>
+                        <TextBlock Text="@where result (fades)" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                     <!-- Edge colours. Trap-red and action-magenta both
                          tint the corridor line between rooms (not the
@@ -1170,6 +1262,34 @@
                             <!-- The section's description line lives up in the
                                  top-bar action label (TopBarStatusText) now, so
                                  CURRENT NAV holds only its step rows. -->
+                            <!-- Build-time Entire Loop Settings — the loop-wide toggles for the
+                                 loop being built (mirrors the running loop's rail entry + the
+                                 Edit Loop window). First thing in the current-nav area while
+                                 building, above the per-room click list. -->
+                            <Button IsVisible="{Binding IsLoopBuilding}"
+                                    HorizontalAlignment="Center"
+                                    HorizontalContentAlignment="Center"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="2,0"
+                                    FontSize="13"
+                                    Content="⚙  Entire Loop Settings  ⚙"
+                                    ToolTip.Tip="Settings that apply to the whole loop you're building, not any one room.">
+                                <Button.Flyout>
+                                    <Flyout Placement="Bottom">
+                                        <StackPanel Spacing="6" MaxWidth="280">
+                                            <TextBlock Text="Entire Loop Settings"
+                                                       FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource ChromeFgBrush}"/>
+                                            <CheckBox Content="Only attack in lair rooms"
+                                                      FontSize="11"
+                                                      IsChecked="{Binding LoopBuilder.OnlyAttackInLairRooms, Mode=TwoWay}"
+                                                      ToolTip.Tip="Only engage hostiles in game-data lair rooms; walk through the rest as if auto-combat were off. A per-room 'do not attack' still skips even a lair room, and a triggered rest still clears any room."/>
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+
                             <!-- Building-loop click list — visible only while in LoopBuild mode.
                                  Click a row to attach a command to that waypoint (opens the
                                  same Waypoint action editor the loop editor uses); ✕ removes,
@@ -1220,7 +1340,7 @@
                                                            Foreground="{StaticResource ChromeFgBrush}"
                                                            TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Center"/>
-                                                <!-- Gear marks a command; ⛔ marks a "do not rest" waypoint. -->
+                                                <!-- Gear marks a command; ⛔ marks "do not rest"; ⚔ marks "do not attack". -->
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal"
                                                             Spacing="2" Margin="2,0" VerticalAlignment="Center">
                                                     <TextBlock Text="⚙" FontSize="11"
@@ -1231,6 +1351,10 @@
                                                                IsVisible="{Binding HasDoNotRest}"
                                                                Foreground="{StaticResource AccentRedBrush}"
                                                                ToolTip.Tip="Do not rest in this room"/>
+                                                    <TextBlock Text="⚔" FontSize="11"
+                                                               IsVisible="{Binding HasDoNotAttack}"
+                                                               Foreground="{StaticResource AccentRedBrush}"
+                                                               ToolTip.Tip="Do not attack in this room"/>
                                                 </StackPanel>
                                                 <Button Grid.Column="3"
                                                         Content="↑" FontSize="13" Padding="7,3" MinWidth="26"
@@ -1291,7 +1415,10 @@
                                                 Classes.Current="{Binding IsCurrent}"
                                                 Classes.Upcoming="{Binding IsUpcoming}"
                                                 Classes.Ready="{Binding IsReady}">
-                                            <Grid ColumnDefinitions="24,*,Auto,Auto,Auto">
+                                            <Panel>
+                                              <!-- Normal navigation step row. -->
+                                              <Grid ColumnDefinitions="24,*,Auto,Auto,Auto"
+                                                    IsVisible="{Binding !IsLoopSettingsEntry}">
                                                 <TextBlock Grid.Column="0"
                                                            Text="{Binding Index}"
                                                            FontSize="11"
@@ -1327,7 +1454,34 @@
                                                         IsVisible="{Binding HasRemove}"
                                                         Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).UnmarkAutoLairRoomCommand}"
                                                         CommandParameter="{Binding RemoveKey}"/>
-                                            </Grid>
+                                              </Grid>
+
+                                              <!-- Synthetic first entry: opens a flyout of loop-wide
+                                                   settings (the extensible home for whole-loop toggles). -->
+                                              <Button IsVisible="{Binding IsLoopSettingsEntry}"
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Center"
+                                                      Background="Transparent"
+                                                      BorderThickness="0"
+                                                      Padding="2,0"
+                                                      FontSize="13"
+                                                      Content="⚙  Entire Loop Settings  ⚙"
+                                                      ToolTip.Tip="Settings that apply to the whole loop, not any one room.">
+                                                  <Button.Flyout>
+                                                      <Flyout Placement="Bottom">
+                                                          <StackPanel Spacing="6" MaxWidth="280">
+                                                              <TextBlock Text="Entire Loop Settings"
+                                                                         FontSize="11" FontWeight="SemiBold"
+                                                                         Foreground="{StaticResource ChromeFgBrush}"/>
+                                                              <CheckBox Content="Only attack in lair rooms"
+                                                                        FontSize="11"
+                                                                        IsChecked="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).LoopOnlyAttackInLairRooms, Mode=TwoWay}"
+                                                                        ToolTip.Tip="Only engage hostiles in game-data lair rooms; walk through the rest as if auto-combat were off. A per-room 'do not attack' still skips even a lair room, and a triggered rest still clears any room."/>
+                                                          </StackPanel>
+                                                      </Flyout>
+                                                  </Button.Flyout>
+                                              </Button>
+                                            </Panel>
                                         </Border>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -1857,6 +2011,15 @@
                                                            Text="{Binding ExpEstimator.Summary}"/>
                                             </StackPanel>
                                         </Border>
+
+                                        <!-- Active realm (read-only — follows the active game-data set).
+                                             Only affects how often a room's summon spell re-rolls:
+                                             Paradigm on the combat round, Stock on the medium tick. Your
+                                             kill-rate knobs below are realm-agnostic. -->
+                                        <TextBlock FontSize="10"
+                                                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                   ToolTip.Tip="A room's summon spell re-rolls on the combat round in Paradigm and on the (slower) medium tick in Stock. This only changes summoning-room yield, not your kill rate."
+                                                   Text="{Binding ExpEstimator.RealmLabel, StringFormat='Realm: {0} — sets room-summon cadence'}"/>
 
                                         <!-- Per-lair breakdown: fires vs misses per hour, amber
                                              when a miss was close (nudge the loop to catch it). -->
