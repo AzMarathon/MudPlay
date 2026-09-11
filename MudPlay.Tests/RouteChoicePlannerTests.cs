@@ -1276,4 +1276,80 @@ public sealed class RouteChoicePlannerTests
             Assert.Null(RouteChoicePlanner.AvoidAlternative(
                 bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9))));
     }
+    // ----- Sourceable gate items (what an "obtain then cross" pick arms) -------
+    //
+    // Report paradigm-20260911-095404: the pick force-obtained only hazard
+    // counters, so an item-gated route armed nothing whenever Settings → Other →
+    // "search rooms if item needed" was off — the walk then crossed the Lower
+    // Caverns gate having made no arrangements, rubbed an orb it did not carry,
+    // and bonked.
+
+    private static readonly Func<int, bool> NoSummons = _ => false;
+    private static readonly Func<int, bool> AllSummonable = _ => true;
+
+    [Fact]
+    public void SourceableGateItems_IncludesCarryItemsAndTickets()
+    {
+        var reqs = new[]
+        {
+            new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 807 }),
+            new RouteRequirement(RouteRequirementKind.Ticket, new[] { 9 }),
+        };
+        Assert.Equal(new[] { 807, 9 }, RouteChoicePlanner.SourceableGateItems(reqs, NoSummons));
+    }
+
+    // The picker resolves hazard counters itself (it may grab one off the current
+    // floor instead of detouring) and forces them on its own path.
+    [Fact]
+    public void SourceableGateItems_ExcludesHazardCounters()
+    {
+        var reqs = new[]
+        {
+            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 42, 43 }),
+            new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 807 }),
+        };
+        Assert.Equal(new[] { 807 }, RouteChoicePlanner.SourceableGateItems(reqs, NoSummons));
+    }
+
+    // A door key is only worth arming for when a room command can summon a
+    // guaranteed dropper; any other key has no source, so forcing it would switch
+    // on a per-room search that can never succeed.
+    [Fact]
+    public void SourceableGateItems_AdmitsDoorKeyOnlyWhenSummonable()
+    {
+        var reqs = new[] { new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 806 }) };
+        Assert.Empty(RouteChoicePlanner.SourceableGateItems(reqs, NoSummons));
+        Assert.Equal(new[] { 806 }, RouteChoicePlanner.SourceableGateItems(reqs, AllSummonable));
+    }
+
+    // The reported route: the orb gate AND the gate key on one sole route.
+    [Fact]
+    public void SourceableGateItems_MixedRoute_KeepsOrbAndSummonableKey()
+    {
+        var reqs = new[]
+        {
+            new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 807 }),
+            new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 806 }),
+        };
+        Assert.Equal(
+            new[] { 807, 806 },
+            RouteChoicePlanner.SourceableGateItems(reqs, id => id == 806));
+    }
+
+    [Fact]
+    public void SourceableGateItems_DedupesAndDropsNonPositiveIds()
+    {
+        var reqs = new[]
+        {
+            new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 807, 0, 807 }),
+            new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 807 }),
+        };
+        Assert.Equal(new[] { 807 }, RouteChoicePlanner.SourceableGateItems(reqs, NoSummons));
+    }
+
+    [Fact]
+    public void SourceableGateItems_NoRequirements_IsEmpty()
+        => Assert.Empty(RouteChoicePlanner.SourceableGateItems(
+            Array.Empty<RouteRequirement>(), NoSummons));
+
 }

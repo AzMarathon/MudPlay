@@ -584,6 +584,39 @@ public static class RouteChoicePlanner
         return gates;
     }
 
+    // The gate items on a chosen route the acquisition pipeline can actually source,
+    // deduped in requirement order. Hazard counters are excluded: the picker
+    // resolves those itself (it may grab one off the current floor rather than
+    // detour) and forces them on its own path.
+    //
+    // Flag-independent by design — an explicit "obtain then cross" pick IS the
+    // consent, the same rule the hazard counters already follow. hasSummonSource
+    // gates door keys: a key is worth arming for only when a room command can summon
+    // a guaranteed dropper, since any other key has no source and forcing it would
+    // just switch on a per-room search that can never succeed.
+    //
+    // Static so the rule can be pinned without standing up AppServices, which owns
+    // the summon-source lookup this defers to.
+    public static IReadOnlyList<int> SourceableGateItems(
+        IReadOnlyList<RouteRequirement> requirements, Func<int, bool> hasSummonSource)
+    {
+        ArgumentNullException.ThrowIfNull(requirements);
+        ArgumentNullException.ThrowIfNull(hasSummonSource);
+
+        var ids = new List<int>();
+        foreach (RouteRequirement req in requirements)
+        {
+            if (req.Kind is RouteRequirementKind.HazardProtection) continue;
+            foreach (int id in req.ItemIds)
+            {
+                if (id <= 0 || ids.Contains(id)) continue;
+                if (req.Kind == RouteRequirementKind.DoorKey && !hasSummonSource(id)) continue;
+                ids.Add(id);
+            }
+        }
+        return ids;
+    }
+
     private static RouteRequirement? Classify(MovementFilter filter, in RoomExit exit) => exit.Hint switch
     {
         RoomExitHint.Item when exit.KeyItemId > 0 =>

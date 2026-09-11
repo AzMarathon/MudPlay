@@ -8483,6 +8483,25 @@ public sealed class AppServices
         return true;
     }
 
+    // The gate items on a chosen route that the acquisition pipeline can actually
+    // source, for the picker to force-obtain when the user commits to crossing.
+    // Hazard counters are excluded — the picker resolves those itself (it may grab
+    // one off the current floor instead) and forces them on its own path.
+    //
+    // This is the item-gate twin of the hazard-counter force: an explicit "obtain
+    // then cross" pick IS the consent, so the ids come back whether or not they
+    // carry the per-item AutoObtainForPath flag. Without it the pick armed nothing
+    // whenever Settings → Other → "search rooms if item needed" was off, and the
+    // walk crossed unprovisioned — it would `rub bloodstone orb` while carrying no
+    // orb and bonk on the hidden exit (report paradigm-20260911-095404).
+    //
+    // A door key is admitted only when a room command can summon a guaranteed
+    // dropper for it; any other key has no source to arm, so forcing it would only
+    // switch on a per-room `sea` that can never succeed.
+    public IReadOnlyList<int> SourceableGateItems(IReadOnlyList<RouteRequirement> requirements)
+        => RouteChoicePlanner.SourceableGateItems(
+            requirements, id => SummonSourcesForItem(id).Count > 0);
+
     // Per-person copies to provision when auto-obtaining an item for a path. Aims
     // for MaxToGet (the carry target: rope=1, a waterskin its 2–3), never below
     // the MinToKeep floor, and never below 1 — so an item with no carry policy set

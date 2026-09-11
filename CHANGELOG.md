@@ -8,7 +8,8 @@
 - Room commands that summon, teach a spell, grant an ability, drop an item, or take one now show in the map tooltip instead of nothing at all
 - Room info panel gained the room-commands section it was already documented as having
 - A locked door whose key id matches no item reads as the plain door it behaves like, instead of naming a key that doesn't exist
-- bug reports addressed: paradigm-20260911-010954
+- Choosing "obtain then cross" in the route picker now actually fetches the route's gate items — it only ever armed hazard counters, so an item-gated pick crossed the gate having arranged nothing unless "search rooms if item needed" happened to be on
+- bug reports addressed: paradigm-20260911-010954, paradigm-20260911-095404
 
 ## 3.68.1
 
