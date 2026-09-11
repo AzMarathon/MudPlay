@@ -375,25 +375,28 @@ public sealed class RoomTrackerTests : IDisposable
     {
         // The double-move bug: in an identically-named corridor the source
         // room and the predicted move target share name AND exits, so a
-        // passive re-look redisplay of the source (a post-combat CR echo that
+        // passive re-look redisplay of the source (a post-combat redraw that
         // landed while the move was still in flight) satisfies the predicted-
-        // target match too. Timing is the only tell — the echo lands far
-        // faster than a real move round-trip. A fast redisplay must stay
-        // Pending (not phantom-confirm and fire the next loop step from the
-        // source); the move's real outcome a round-trip later still confirms.
+        // target match too. The tell is the server's command ECHO: a stray
+        // re-look carries none, so the tracker stays Pending (not phantom-confirm
+        // and fire the next loop step from the source); the move's real, echoed
+        // outcome still confirms.
         RoomTracker tracker = NewTracker();
         DateTimeOffset t0 = DateTimeOffset.UtcNow;
         tracker.SetLocated(new RoomKey(4, 1), t0);          // Cleared Fields, {N, S}
         tracker.NoteMoveSent(Direction.N, t0);               // predicted target 4/2 (same name + exits)
 
-        // Source re-look echoes back 100ms later — under the plausible-hop floor.
+        // Source re-look 100ms later — no echo of our "n" yet, so it is not the
+        // landing and the tracker stays put.
         tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S),
             t0.AddMilliseconds(100));
 
         Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
         Assert.Equal(new RoomKey(4, 1), tracker.State.CurrentRoom!.Key);
 
-        // The real arrival a full round-trip later confirms the move to 4/2.
+        // The server echoes "n"; the next matching display is the real arrival and
+        // confirms the move to 4/2.
+        tracker.NoteInboundMoveEcho("n", t0.AddMilliseconds(1400));
         tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S),
             t0.AddMilliseconds(1500));
 
@@ -419,10 +422,31 @@ public sealed class RoomTrackerTests : IDisposable
         tracker.SetLocated(new RoomKey(4, 1), t0);          // Cleared Fields, {N, S}
         tracker.NoteFollowMove(Direction.N, t0);            // dragged N → predicted 4/2
 
-        // Same-named neighbour redisplays 100ms later — under the floor, a re-look for
-        // a self-typed move but a real arrival for a follow-drag.
+        // Same-named neighbour redisplays 100ms later — for a self-typed move this
+        // would be held pending an echo, but a follow-drag is exempt (no typed
+        // command to echo) and its redisplay is always the real arrival.
         tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S),
             t0.AddMilliseconds(100));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(4, 2), tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void Pending_EchoedMove_SameNameCorridor_ConfirmsEvenWhenFast()
+    {
+        // The echo short-circuits the old timing hold: once the server has echoed
+        // the move, a same-named-neighbour redisplay IS the landing and confirms
+        // immediately, no matter how fast it arrives. (Without an echo this same
+        // fast redisplay is held — see Pending_AmbiguousCorridor_FastSourceRedisplay.)
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.SetLocated(new RoomKey(4, 1), t0);          // Cleared Fields, {N, S}
+        tracker.NoteMoveSent(Direction.N, t0);               // predicted target 4/2 (same name + exits)
+
+        tracker.NoteInboundMoveEcho("n", t0.AddMilliseconds(30));
+        tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S),
+            t0.AddMilliseconds(50));
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(4, 2), tracker.State.CurrentRoom!.Key);
@@ -473,9 +497,11 @@ public sealed class RoomTrackerTests : IDisposable
         tracker.Hydrate(profile);                             // Confirmed at 4/1, anchor 4/1
         Assert.Equal(new RoomKey(4, 1), tracker.State.CurrentRoom!.Key);
 
-        // Move N into the identically-named 4/2 — a predicted-neighbour confirm.
+        // Move N into the identically-named 4/2 — a predicted-neighbour confirm,
+        // gated on the server echoing our "n".
         DateTimeOffset t0 = DateTimeOffset.UtcNow;
         tracker.NoteMoveSent(Direction.N, t0);
+        tracker.NoteInboundMoveEcho("n", t0.AddMilliseconds(1400));
         tracker.NoteRoomObserved(Obs("Cleared Fields", Direction.N, Direction.S),
             t0.AddMilliseconds(1500));
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);

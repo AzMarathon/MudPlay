@@ -1029,6 +1029,13 @@ public static class BugReportBuilder
         // instant so all the tracker's comparisons work either way, but printing
         // the raw value would show the UTC hour next to local ones — normalize.
         Kv(sb, "Last move sent", svc.RoomTracker.LastMoveSentAt?.ToLocalTime().ToString("HH:mm:ss") ?? "(never)");
+        // The echo gate confirms a move's landing only once the server has echoed
+        // its command; if the tracker is stuck Pending in a same-named room, this
+        // tells missed-echo (no echo recorded) apart from some other hang.
+        Kv(sb, "Last move-echo",
+            svc.RoomTracker.LastInboundMoveEcho is { } echo
+                ? $"'{echo.Command}' @ {echo.At.ToLocalTime():HH:mm:ss}"
+                : "(none)");
         // Sysop room-status capability. A "recovery didn't work" report needs to
         // distinguish never-enabled from enabled-but-the-BBS-refused: the probe
         // turns itself off after one unanswered attempt, and that leaves no other

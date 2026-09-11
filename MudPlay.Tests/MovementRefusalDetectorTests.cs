@@ -121,6 +121,72 @@ public sealed class MovementRefusalDetectorTests : IDisposable
         Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
     }
 
+    // The typing-rate limiter dropped the move we just sent ("You are typing too
+    // quickly - command ignored") — it never executed, so un-count the pending
+    // move and stay put. This is the net-miscount that strands a homogeneous grid
+    // in Lost (issue #478). A move sent moments before the drop is plausibly the
+    // contended command, so the revert fires.
+    [Theory]
+    [InlineData("You are typing too quickly - command ignored.")]
+    [InlineData("You are typing too quickly - command ignored!")]
+    [InlineData("You are typing too quickly - command ignored")]
+    public void TypingTooQuickly_WithinWindow_RevertsPendingMove(string line)
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        var sent = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        tracker.SetLocated(new RoomKey(1, 1), sent);
+        tracker.NoteMoveSent(Direction.N, sent);
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+
+        detector.FeedTestLine(line, sent.AddMilliseconds(300));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    // A pending move outstanding longer than the attribution window is more likely
+    // a slow landing than the command the limiter just dropped — leave it pending
+    // so a genuinely-in-flight move still confirms when its room arrives.
+    [Fact]
+    public void TypingTooQuickly_OutsideWindow_LeavesPendingMove()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        var sent = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        tracker.SetLocated(new RoomKey(1, 1), sent);
+        tracker.NoteMoveSent(Direction.N, sent);
+
+        detector.FeedTestLine("You are typing too quickly - command ignored.", sent.AddSeconds(5));
+
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+    }
+
+    // No move in flight → the dropped command wasn't a move of ours; no-op.
+    [Fact]
+    public void TypingTooQuickly_NotPending_NoOp()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        tracker.SetLocated(new RoomKey(1, 1));
+
+        detector.FeedTestLine("You are typing too quickly - command ignored.");
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    // The limiter's preceding warning ("Why don't you slow down...") carries no
+    // drop — only the "command ignored" line un-counts anything. The warning must
+    // leave a pending move untouched.
+    [Fact]
+    public void SlowDownWarning_DoesNotRevert()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        SetupPending(tracker);
+
+        detector.FeedTestLine("Why don't you slow down for a few seconds?");
+
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+    }
+
     // Confusion fumbles the just-sent move — it never executes, so the pending step
     // must revert or the tracker strands (report -080223). The wordings are no longer
     // hardcoded: they come from Confused records' ConfuseFumbleLine via the injected

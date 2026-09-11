@@ -152,7 +152,11 @@ public enum MessageFlags : ushort
     Blinded             = 0x0001,
     Confused            = 0x0002,
     Poisoned            = 0x0004,
-    // 0x0008 LosingHp removed per user direction — no engine consumed it
+    // A monster-cast fear effect (e.g. a terror beast's shriek, spell 430): the
+    // game forcibly moves you between connected rooms until it wears off. Tracked
+    // so the nav engine can halt rather than walk while being shoved around.
+    // Reuses the bit freed when LosingHp was removed.
+    Fear                = 0x0008,
     MovementPrevented   = 0x0010,
     AttackPrevented     = 0x0020,
     Diseased            = 0x0040,

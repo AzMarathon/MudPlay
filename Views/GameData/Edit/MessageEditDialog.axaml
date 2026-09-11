@@ -263,6 +263,7 @@
                             <StackPanel Grid.Column="0">
                                 <CheckBox Content="Blinded"             IsChecked="{Binding FlagBlinded, Mode=TwoWay}"/>
                                 <CheckBox Content="Confused"            IsChecked="{Binding FlagConfused, Mode=TwoWay}"/>
+                                <CheckBox Content="Fear"                IsChecked="{Binding FlagFear, Mode=TwoWay}"/>
                                 <CheckBox Content="Poisoned"            IsChecked="{Binding FlagPoisoned, Mode=TwoWay}"/>
                                 <CheckBox Content="Diseased"            IsChecked="{Binding FlagDiseased, Mode=TwoWay}"/>
                             </StackPanel>

@@ -953,4 +953,81 @@ public sealed class EngineRecoveryGateTests : IDisposable
         Assert.False(gate.AwaitingAuthoritativeResync);
         Assert.Equal(1, engine.AbortCount);
     }
+
+    // All six rooms share the name "Maze", and every exit-signature is shared by a
+    // twin (so no room is graph-unique — the tracker can never strict-anchor). The
+    // two {E} rooms 1/1 and 1/2 are the ambiguous start; their east neighbours
+    // DIFFER — 1/1→1/4 {W,N}, 1/2→1/3 {W} — so a single eastward step observing
+    // {W,N} prunes 1/2 (its east neighbour lacks N) and pins us at 1/4.
+    private const string ForwardGridJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Maze",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Maze",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Maze",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Maze",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Maze",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/6",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "Maze",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/5", "S": "0", "E": "0", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private (RoomGraphManager Graph, RoomTracker Tracker) NewForwardGridGraphAndTracker()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "fwd"));
+        File.WriteAllText(Path.Combine(_root, "fwd", "Rooms.json"), ForwardGridJson);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("fwd");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("fwd");
+        return (graph, new RoomTracker(graph));
+    }
+
+    [Fact]
+    public void Tier2ForwardFootprint_ConvergesAndReanchors_WithoutBacktrack()
+    {
+        // Tier 2 keeps the engine walking its planned path through an ambiguous,
+        // identically-named area; the forward footprint narrows "where are we?" as
+        // it goes and re-anchors on convergence WITHOUT ever backtracking.
+        (RoomGraphManager graph, RoomTracker tracker) = NewForwardGridGraphAndTracker();
+        var gate = new EngineRecoveryGate(graph, tracker);
+        var engine = new RecordingEngine();
+        gate.Attach(engine);
+
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        tracker.SetLocated(new RoomKey(1, 1), t0);                 // really at 1/1 ({E}, ambiguous with 1/2)
+        tracker.NoteRoomObserved(Obs("Maze", Direction.E), t0);
+
+        gate.NoteSuspectedMismatch("ambiguous start");             // → tier 2, seeds forward {1/1,1/2}
+        Assert.Equal(TierLevel.Tier2, gate.CurrentTier);
+
+        // Walk east: the engine reports the step, the character lands in 1/4 {W,N}.
+        gate.NoteEngineStepSent(Direction.E);
+        tracker.NoteMoveSent(Direction.E, t0.AddSeconds(1));
+        tracker.NoteInboundMoveEcho("e", t0.AddSeconds(1).AddMilliseconds(400));
+        tracker.NoteRoomObserved(Obs("Maze", Direction.W, Direction.N), t0.AddSeconds(1).AddMilliseconds(500));
+
+        // The forward footprint pruned 1/2 (its east neighbour has no N) and pinned
+        // 1/4 — gate is back at tier 1, anchored there, with no backtrack sent.
+        Assert.Equal(TierLevel.Tier1, gate.CurrentTier);
+        Assert.Equal(new RoomKey(1, 4), gate.Anchor);
+        Assert.Empty(engine.Backtracks);
+        Assert.Equal(new RoomKey(1, 4), tracker.State.CurrentRoom!.Key);
+    }
 }

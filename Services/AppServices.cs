@@ -647,6 +647,15 @@ public sealed class AppServices
     // the way they would going through Terminal.LineExtractor.
     public WirePromptScanner PromptScanner { get; }
 
+    // The exact prompt matcher built from the active profile's statline (the same
+    // one installed on PromptScanner). The StatlineReconciler forces the live
+    // statline to this setting, so this pattern is what actually prints on the
+    // wire — InboundMoveEchoScanner reads it to spot the echoed command after ANY
+    // configured prompt, not just the default "[HP=..]:". Resets to the class
+    // default on profile close.
+    public System.Text.RegularExpressions.Regex CurrentStatlinePromptRegex { get; private set; }
+        = Game.StatlinePromptRegexBuilder.Default;
+
     // Reasserts the editor's statline on every connect. Verifies the live
     // prompt against the editor-built pattern and resends set statline
     // when the game has drifted (e.g. a fresh character on the class default).
@@ -2605,7 +2614,11 @@ public sealed class AppServices
         // tick (the Statline section's Apply path fires one after a save);
         // profile close drops back to the permissive class-default pattern.
         Profile.ProfileLoaded += _ => ApplyStatlineRegex();
-        Profile.ProfileClosed += PromptScanner.ResetRegexToDefault;
+        Profile.ProfileClosed += () =>
+        {
+            PromptScanner.ResetRegexToDefault();
+            CurrentStatlinePromptRegex = Game.StatlinePromptRegexBuilder.Default;
+        };
         Profile.ProfileMutated += _ => ApplyStatlineRegex();
 
         // Bridge: keep the live ToolbarConfig in sync with the loaded
@@ -9039,7 +9052,9 @@ public sealed class AppServices
     {
         Models.Profile.StatlineSettings statline =
             ReadSection<Models.Profile.StatlineSettings>(Profile.Current, "Statline");
-        PromptScanner.InstallRegex(Game.StatlinePromptRegexBuilder.Build(statline.Command));
+        System.Text.RegularExpressions.Regex rx = Game.StatlinePromptRegexBuilder.Build(statline.Command);
+        PromptScanner.InstallRegex(rx);
+        CurrentStatlinePromptRegex = rx;
     }
 
     private void OnProfileLoaded(Models.Profile.CharacterProfile profile)

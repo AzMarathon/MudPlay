@@ -1561,6 +1561,29 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
 
 ## Movement & navigation
 
+### Movement on the wire — command echo, failure lines, and what actually moves you *([CONFIRMED] 2026-09-10, user wire captures `stock-20260910-21{1620,1747,1931,2008}` + `paradigm-20260910-21{2717,2938}`, stock + Paradigm)*
+
+In character mode the server **echoes the typed command** on the prompt line before its result, e.g. `[HP=91/KAI=5]:e` then the new room display. This holds on stock and Paradigm (`[HP=../MA=..]`/`[HP=../KAI=..]`). The echo may be inline (`]:w`), on its own line (`w`), or doubled; combat / spell / event lines and even other commands' echoes can **interleave between a move's echo and its landing room display**, so a display can arrive well after the move that caused it.
+
+**The prompt/statline is user-defined.** MajorMUD's `set statline` lets a player format the prompt however they like — the default is bracketed HP/mana (`[HP=%h/MA=%m]: %r`, or `KAI`, or HP-only), which is what the vast majority run, but a custom statline can be any shape (`set statline full custom <template>`). Static text in the template is exact; the dynamic parts are `%`-wildcards (`%h`, `%m`, `%r`, …). MudPlay is the source of truth for the live statline: it sends `set statline` on logon and re-sends on any parser mismatch (StatlineReconciler), so **the configured statline is what actually prints on the wire**, and the same template compiles (StatlinePromptRegexBuilder) into the exact matcher used to read HP/mana AND to find the echoed command after the prompt. The echo detection therefore keys off the player's configured prompt, not a hardcoded `[HP=..]:` — so the move-echo gate works whatever statline they set. (If an echo ever can't be read, the tracker falls back to timing rather than freezing.)
+
+So every room display has an identifiable cause on the wire:
+
+- **Move succeeded** — the move's echo, then a NEW room display. (This is the only case that should advance position.)
+- **Move failed, stayed put** — the move's echo, then a failure line, no new room: `There is no exit in that direction!` (wall), `The gate is closed!`, `The door is Closed!`, or `You are typing too quickly - command ignored` (rate-limiter drop — common in fast command bursts; the command did NOT execute). These mean the move never happened.
+- **`look` / `look <dir>`** — a `look` echo, then a room display that is the *same* room, an *adjacent* room (peek), or an *unreachable* room beyond a shut door. Never a move. (Directional peeks are already suppressed via the outbound `NoteLookSent` path.)
+- **Spontaneous re-display** — NO command echo. An NPC self-moving (`X moves into the room from the <dir>` / `just left to the <dir>`), a regen/KAI tick, or a post-bonk redraw re-renders the CURRENT room. This is what fools a naive tracker into a phantom move.
+
+**Moves with NO command echo (forced moves) — the complete set:**
+- **Party follow / drag** — a follower moves because the leader did; the follower sends no bytes. Announced by `-- Following your Party leader <dir> --` (handled via `FollowMoveObserver` → `NoteFollowMove`).
+- **Fear** *([CONFIRMED] 2026-09-10, user — MegaMUD backscroll capture, terror beast in the Black Wasteland, spell ID 430)* — a monster-cast debuff, not a room property. It **is** announced and **is** a trackable timed condition, contrary to an earlier (wrong) note that it was messageless:
+  - **Onset:** the attack line `…'s unearthly shriek strikes terror into your heart!` then **`You are afraid!`**.
+  - **Active:** shows in the `stat` effect list as a timed buff/debuff line, **`You are afraid!`**. The trailing **`(27s)` remaining-time suffix is Paradigm-only** (seconds left as of when `stat` fired) — stock prints the effect line with no countdown. This realm split applies to the *whole* stat effect list, not just fear (the same capture shows `safe from evil! (75s)`, `halo … (156s)`, etc.).
+  - **End:** **`The effects of fear wear off!`**.
+  - **While feared**, the game shoves you between cardinal-CONNECTED adjacent rooms (never across a `go`/text-exit) and re-renders each new room — but those forced moves carry **no command echo and no per-move line** (bare `[HP=..]:` prompts, just changing exits). So the *direction* of each fear-move is unknown from the wire, but the *feared state itself is known* (onset → wear-off window). A nav client can therefore recognise it's being fear-moved and stop treating the echo-less redisplays as re-looks — dropping to localisation instead of holding/guessing — rather than being "wire-indistinguishable." Fear is still rare, so this is an edge case, not the common path.
+
+**`go`/teleport** (`go vortex`, `go man`, `go path`) is a *commanded, echoed* text-exit move; it can land you in a distant unrelated room (`You step into the swirling vortex, and find yourself... elsewhere.`). **There is no random "flee"** — "flee" is a user-sent directional run-away (commanded + echoed). **No engine recall**: sys-goto resolves to a known destination room (goto table), and Paradigm teleport tokens are player-only (not engine-consumed; `rm` fixes position on Paradigm).
+
 ### Winch gates *([CONFIRMED] 2026-08-27, user — report `paradigm-20260827-113513` + wire capture)*
 
 Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit whose prerequisite is `pull winch`), e.g. the Entrance Hall fortress gate west (`iron gates … a heavy wooden winch`).

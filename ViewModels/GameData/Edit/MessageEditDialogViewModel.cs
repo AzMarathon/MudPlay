@@ -73,6 +73,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     // are NOT exposed in the UI.
     [ObservableProperty] private bool _flagBlinded;
     [ObservableProperty] private bool _flagConfused;
+    [ObservableProperty] private bool _flagFear;
     [ObservableProperty] private bool _flagPoisoned;
     [ObservableProperty] private bool _flagMovementPrevented;
     [ObservableProperty] private bool _flagAttackPrevented;
@@ -278,6 +279,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
     {
         FlagBlinded           = flags.HasFlag(MessageFlags.Blinded);
         FlagConfused          = flags.HasFlag(MessageFlags.Confused);
+        FlagFear              = flags.HasFlag(MessageFlags.Fear);
         FlagPoisoned          = flags.HasFlag(MessageFlags.Poisoned);
         FlagMovementPrevented = flags.HasFlag(MessageFlags.MovementPrevented);
         FlagAttackPrevented   = flags.HasFlag(MessageFlags.AttackPrevented);
@@ -396,6 +398,7 @@ public sealed partial class MessageEditDialogViewModel : ObservableObject, IDial
         MessageFlags f = MessageFlags.None;
         if (FlagBlinded)           f |= MessageFlags.Blinded;
         if (FlagConfused)          f |= MessageFlags.Confused;
+        if (FlagFear)              f |= MessageFlags.Fear;
         if (FlagPoisoned)          f |= MessageFlags.Poisoned;
         if (FlagMovementPrevented) f |= MessageFlags.MovementPrevented;
         if (FlagAttackPrevented)   f |= MessageFlags.AttackPrevented;
