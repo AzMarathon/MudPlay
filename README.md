@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.68.1**
-> - A "your weapon has no effect" reply is now blamed on the weapon the game confirms is in your hand, not the one the engine has already asked for — a working alternate weapon was getting written off mid-swap, and the monster then read as unkillable for the rest of the room
-> - A swing that lands damage clears that monster from the weapon's no-effect list, so one stray "no effect" can no longer strand you against something you are visibly hurting
-> - Monster Intel drops its "physical attacks had no effect" note for a monster once one of your swings lands on it
-> - Bug reports now show the per-room weapon-no-effect lists behind a monster the engine has written off
+> **Version 3.68.2**
+> - The navigation engine no longer loses track of itself when looping a block of identically-named rooms (e.g. the Soldier's Quarters grid): a movement command the game silently drops to its typing-rate limiter ("You are typing too quickly - command ignored") is now un-counted, so the tracker can't run a room ahead of you and spiral into a Lost state
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

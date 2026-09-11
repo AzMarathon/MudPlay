@@ -818,6 +818,37 @@ public sealed class RoomTracker
         }
     }
 
+    // How recently the most-recent move must have been sent for a "command
+    // ignored" drop to be attributed to it. A fast loop or Roomba sweep floods
+    // commands far tighter than this; a move still Pending from longer ago is
+    // more likely a slow landing than the command the limiter just dropped.
+    private static readonly TimeSpan DroppedCommandWindow = TimeSpan.FromSeconds(3);
+
+    // The game dropped the command we just sent to its typing-rate limiter
+    // ("You are typing too quickly - command ignored") — the move never
+    // executed, yet NoteMoveSent already counted it. Un-count the most-recent
+    // pending move so the tracker doesn't run one room ahead of the character.
+    // This is the net-miscount that turns a homogeneous grid into a Lost state
+    // (issue #478): a single counted-but-never-made move is invisible among
+    // identically-named rooms and compounds every lap. Unlike a plain refusal
+    // ("no exit"), "command ignored" doesn't name WHAT it dropped — it could be
+    // a non-move command — so this only reverts when a move is actually in
+    // flight AND was sent inside DroppedCommandWindow (i.e. plausibly the
+    // contended command). A long-outstanding pending move is left alone.
+    public void NoteCommandDropped(DateTimeOffset? whenUtc = null)
+    {
+        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        if (State.Confidence != RoomConfidence.Pending || _pending.IsEmpty) return;
+        if (LastMoveSentAt is not { } sent || when - sent > DroppedCommandWindow) return;
+
+        DropMostRecentPending();
+        RoomConfidence target = _pending.IsEmpty ? RoomConfidence.Confirmed : RoomConfidence.Pending;
+        SetConfidence(target, when, "command dropped (typing too quickly)");
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            "Command dropped by the game's typing-rate limiter while a move was in flight; " +
+            "un-counting it so the tracker doesn't run a room ahead.");
+    }
+
     // A "The door is closed!" refusal was seen. Beyond the generic move-blocked
     // revert, this tells us the cached "door open" reading for the just-attempted
     // direction is stale — the door shut (typically mid-combat) since we last saw

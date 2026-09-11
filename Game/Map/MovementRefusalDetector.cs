@@ -69,6 +69,19 @@ public sealed partial class MovementRefusalDetector : IDisposable
             return;
         }
 
+        // The typing-rate limiter silently dropped the command we just sent
+        // ("You are typing too quickly - command ignored"). If that command was
+        // the move in flight, it never executed — un-count it so the tracker
+        // doesn't run a room ahead through a same-named grid (issue #478).
+        // NoteCommandDropped self-guards: it reverts only a recently-sent,
+        // still-Pending move, since this line doesn't name what it dropped.
+        if (TypingTooQuickly().IsMatch(text))
+        {
+            _tracker.NoteCommandDropped(when);
+            _log?.Info("MoveRefusal", $"command dropped (typing too quickly): {text.Trim()}");
+            return;
+        }
+
         // A confusion fumble consumes the just-sent command — for a MOVE the step never
         // lands, so revert like any other refusal. The wordings come from game data
         // (Confused records' ConfuseFumbleLine) via the injected predicate, not a
@@ -167,6 +180,17 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*Your current alignment prevents you from entering this exit[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AlignmentBlocksExit();
+
+    // Typing-rate limiter dropped the just-sent command. Unlike the refusals
+    // above this is NOT necessarily a move (it drops whatever was typed), so it
+    // routes to NoteCommandDropped — which self-guards on a recently-sent,
+    // still-Pending move — rather than the unconditional NoteMoveBlocked. The
+    // preceding "Why don't you slow down for a few seconds?" warning carries no
+    // drop, so only the "command ignored" line reverts anything.
+    [GeneratedRegex(
+        @"^\s*You are typing too quickly - command ignored[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex TypingTooQuickly();
 
     // Confusion-fumble wordings ("You fumble in confusion!", convulsions' "You convulse
     // violently" / "You look around stupidly and do nothing") are no longer hardcoded

@@ -171,21 +171,20 @@ public sealed class SoldiersQuartersGridLostRepro : IDisposable
     }
 
     // ---------------------------------------------------------------------
-    // Test B — the full failure. A lone stray re-display self-heals (commands
-    // still equal real moves), so permanent drift needs a NET miscount: a move
-    // the client counts but the character never makes. Roomba's fast command
-    // bursts routinely trip the game's typing-rate limiter ("You are typing too
-    // quickly - command ignored"), which drops the command silently — the client
-    // counted it, the character didn't move. Combined with a stray re-display to
-    // phantom-confirm the dropped move, the tracker is permanently one room ahead,
-    // and in a homogeneous grid it stays invisibly wrong until a turn in the path
-    // contradicts its prediction and it bails to Lost.
+    // Test B — the permanent-drift fix. A lone stray re-display self-heals
+    // (commands still equal real moves), so permanent drift needs a NET miscount:
+    // a move the client counts but the character never makes. Roomba's fast
+    // command bursts routinely trip the game's typing-rate limiter ("You are
+    // typing too quickly - command ignored"), which drops the command silently —
+    // the client counted it, the character didn't move. In a homogeneous grid
+    // that one-room lie is invisible and compounds into Lost.
     //
-    // The snake: ssssennnnessssennnnwww (boustrophedon over all 20 rooms). The
-    // client SENDS every move; the character only MAKES the ones the game didn't
-    // drop.
+    // The fix (RoomTracker.NoteCommandDropped, driven by MovementRefusalDetector's
+    // rate-limiter pattern) un-counts the dropped move so the count never runs
+    // past reality. This walks a deterministic grid leg with a dropped move
+    // mid-way and asserts the tracker ends exactly where the character is.
     [Fact]
-    public void SnakeLoop_DroppedMovePlusStrayRedisplay_GoesLost()
+    public void SnakeLoop_DroppedMove_UnCounted_StaysInSync()
     {
         RoomTracker tracker = NewTracker();
         var clock = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -194,46 +193,41 @@ public sealed class SoldiersQuartersGridLostRepro : IDisposable
         tracker.SetLocated(new RoomKey(8, realPos), clock);
         tracker.NoteRoomObserved(Obs(realPos), clock);
 
-        Direction[] moves = ParseMoves("ssssennnnessssennnnwww");
-        const int dropStep = 6;   // the game drops this command (rate limiter)
-
-        for (int i = 0; i < moves.Length; i++)
+        // Each (direction, dropped) is a VALID exit from the real position at that
+        // step. The dropped E at 1707 is the rate-limiter drop; the real E right
+        // after makes the actual 1707->1711 move. Path: down col0, E to col1, up
+        // col1, E to col2, down col2 — a realistic loop leg through the 4-way core.
+        (Direction dir, bool dropped)[] steps =
         {
-            Direction d = moves[i];
-            clock = clock.AddSeconds(2);
-            tracker.NoteMoveSent(d, clock);   // client always counts the send
+            (Direction.S, false), (Direction.S, false), (Direction.S, false), (Direction.S, false), // 1703->1707
+            (Direction.E, true),                                                                     // DROPPED at 1707
+            (Direction.E, false),                                                                    // 1707->1711
+            (Direction.N, false), (Direction.N, false), (Direction.N, false), (Direction.N, false),  // 1711->1702
+            (Direction.E, false),                                                                    // 1702->1701
+            (Direction.S, false), (Direction.S, false), (Direction.S, false), (Direction.S, false),  // 1701->1715
+        };
 
-            if (i == dropStep)
+        foreach ((Direction dir, bool dropped) in steps)
+        {
+            clock = clock.AddSeconds(2);
+            tracker.NoteMoveSent(dir, clock);   // client counts the send either way
+
+            if (dropped)
             {
-                // Command dropped by the typing-rate limiter: no real move, no
-                // arrival display. A passing mob then re-renders the room we're
-                // STILL in, 600ms later (> the 400ms floor) — phantom-confirming
-                // the move that never happened.
-                tracker.NoteRoomObserved(Obs(realPos), clock.AddMilliseconds(600));
+                // Typing-rate limiter drops it 200ms later: no real move, no arrival.
+                tracker.NoteCommandDropped(clock.AddMilliseconds(200));
                 continue;
             }
 
-            // Ordinary move: the character actually moves (if the exit exists) and
-            // the landing room renders a round-trip later.
-            if (Adj[realPos].TryGetValue(d, out int next))
-            {
-                realPos = next;
-                tracker.NoteRoomObserved(Obs(realPos), clock.AddMilliseconds(1500));
-            }
-
-            if (tracker.State.Confidence == RoomConfidence.Lost) break;
+            realPos = Adj[realPos][dir];   // valid exit by construction
+            tracker.NoteRoomObserved(Obs(realPos), clock.AddMilliseconds(1500));
         }
 
         RoomKey? believed = tracker.State.CurrentRoom?.Key;
         _out.WriteLine($"real position 8/{realPos}, tracker believes {believed}, confidence {tracker.State.Confidence}");
 
-        // One dropped command + one stray re-display is enough to strand the loop:
-        // the tracker ends either Lost or confidently wrong about where it is.
-        bool desynced = tracker.State.Confidence != RoomConfidence.Confirmed
-                        || believed != new RoomKey(8, realPos);
-        Assert.True(desynced,
-            $"expected the dropped-move + stray re-display to desync the tracker; " +
-            $"instead it stayed in sync at 8/{realPos}");
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(8, realPos), believed);
     }
 
     private static Direction[] ParseMoves(string s) =>
