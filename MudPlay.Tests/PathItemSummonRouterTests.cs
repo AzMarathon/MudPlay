@@ -135,7 +135,7 @@ public sealed class PathItemSummonRouterTests
 
         r.OnMonsterDied(Died());
 
-        // summon, post-summon redisplay, then the post-kill floor survey.
+        // summon, bare-CR roster redisplay, then the bare-CR floor survey.
         Assert.Equal(new[] { "touch statue", "", "" }, h.Sent.Select(Decode).ToArray());
     }
 

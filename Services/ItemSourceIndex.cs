@@ -67,19 +67,26 @@ public sealed class ItemSourceIndex
     private readonly TBInfoStore _tb;
     private readonly LogService? _log;
 
-    private readonly Dictionary<int, List<ItemSource>> _containersByItem = new();
-    private readonly Dictionary<int, List<ItemGiver>> _giversByItem = new();
-    private readonly Dictionary<int, List<RoomKey>> _giverRoomsByMonster = new();
-    private readonly Dictionary<int, List<SummonDropSource>> _summonDropsByItem = new();
+    // One immutable build, published by a single reference assignment. Readers take
+    // the current snapshot and work from it, so a rebuild can run on a background
+    // thread without ever handing a caller a half-cleared dictionary — which is what
+    // lets the warm-up below happen off the UI thread.
+    private sealed class Snapshot
+    {
+        public required string? Set { get; init; }
+        public required Dictionary<int, List<ItemSource>> Containers { get; init; }
+        public required Dictionary<int, List<ItemGiver>> Givers { get; init; }
+        public required Dictionary<int, List<RoomKey>> GiverRooms { get; init; }
+        public required Dictionary<int, List<SummonDropSource>> SummonDrops { get; init; }
+    }
+
+    // Serialises builders so two threads racing the same set build once, not twice.
+    private readonly object _buildGate = new();
+    private volatile Snapshot? _snapshot;
 
     // A drop only counts as a guarantee at the top of the range. Anything less is
     // a roll, which is MonsterDropRouter's prompt-first territory.
     private const int GuaranteedDropPercent = 100;
-
-    // Set the maps were last built from; compared against _cache.ActiveSet to
-    // self-invalidate on a set swap. Null both means "never built".
-    private string? _loadedSet;
-    private bool _built;
 
     // Provenance-walk safety caps: a Called-From chain is a small acyclic tree in
     // practice, but the visited-set plus these bounds keep a malformed cycle or a
@@ -99,8 +106,7 @@ public sealed class ItemSourceIndex
     // list when nothing in the active set drops it. Live view — read, don't mutate.
     public IReadOnlyList<ItemSource> ContainersOf(int itemId)
     {
-        EnsureBuilt();
-        return _containersByItem.TryGetValue(itemId, out List<ItemSource>? list)
+        return EnsureBuilt().Containers.TryGetValue(itemId, out List<ItemSource>? list)
             ? list
             : Array.Empty<ItemSource>();
     }
@@ -109,8 +115,7 @@ public sealed class ItemSourceIndex
     // empty list when nothing gives it. Live view — read, don't mutate.
     public IReadOnlyList<ItemGiver> GiversOf(int itemId)
     {
-        EnsureBuilt();
-        return _giversByItem.TryGetValue(itemId, out List<ItemGiver>? list)
+        return EnsureBuilt().Givers.TryGetValue(itemId, out List<ItemGiver>? list)
             ? list
             : Array.Empty<ItemGiver>();
     }
@@ -122,8 +127,7 @@ public sealed class ItemSourceIndex
     // placement. Live view — read, don't mutate.
     public IReadOnlyList<RoomKey> GiverMonsterRoomsOf(int monsterId)
     {
-        EnsureBuilt();
-        return _giverRoomsByMonster.TryGetValue(monsterId, out List<RoomKey>? rooms)
+        return EnsureBuilt().GiverRooms.TryGetValue(monsterId, out List<RoomKey>? rooms)
             ? rooms
             : Array.Empty<RoomKey>();
     }
@@ -132,47 +136,82 @@ public sealed class ItemSourceIndex
     // empty list when no such command exists. Live view — read, don't mutate.
     public IReadOnlyList<SummonDropSource> SummonDropsOf(int itemId)
     {
-        EnsureBuilt();
-        return _summonDropsByItem.TryGetValue(itemId, out List<SummonDropSource>? list)
+        return EnsureBuilt().SummonDrops.TryGetValue(itemId, out List<SummonDropSource>? list)
             ? list
             : Array.Empty<SummonDropSource>();
     }
 
-    private void EnsureBuilt()
+    // Build the index for the active set ahead of anyone asking for it. Safe to
+    // call from a worker thread — the build touches only locals until it publishes,
+    // and GameDataCache guards its own tables — so the ~600 ms first build lands
+    // while the set loads instead of inside the first walk that crosses a gate.
+    // A query racing the warm just builds it itself; the gate makes one of them wait
+    // rather than doing the work twice.
+    public void Warm()
     {
-        string? active = _cache.ActiveSet;
-        if (_built && _loadedSet == active) return;
-        Rebuild(active);
+        try
+        {
+            EnsureBuilt();
+        }
+        catch (Exception ex)
+        {
+            // A warm-up is an optimisation; a failure here must not take down the
+            // thread it runs on. The next query rebuilds and surfaces the fault.
+            _log?.Warn("ItemSourceIndex", $"Warm-up failed ({ex.GetType().Name}: {ex.Message}).");
+        }
     }
 
-    private void Rebuild(string? active)
+    private Snapshot EnsureBuilt()
     {
-        _containersByItem.Clear();
-        _giversByItem.Clear();
-        _giverRoomsByMonster.Clear();
-        _summonDropsByItem.Clear();
-        _loadedSet = active;
-        _built = true;
+        string? active = _cache.ActiveSet;
+        if (_snapshot is { } current && current.Set == active) return current;
+
+        lock (_buildGate)
+        {
+            // Another thread may have published while we waited for the gate.
+            if (_snapshot is { } published && published.Set == active) return published;
+            Snapshot built = Build(active);
+            _snapshot = built;
+            return built;
+        }
+    }
+
+    private Snapshot Build(string? active)
+    {
+        var containers = new Dictionary<int, List<ItemSource>>();
+        var givers = new Dictionary<int, List<ItemGiver>>();
+        var giverRooms = new Dictionary<int, List<RoomKey>>();
+        var summonDrops = new Dictionary<int, List<SummonDropSource>>();
 
         if (string.IsNullOrWhiteSpace(active))
         {
             _log?.Info("ItemSourceIndex", "No active set; cleared.");
-            return;
+        }
+        else
+        {
+            BuildContainers(containers);
+            BuildGivers(givers);
+            BuildGiverMonsterRooms(givers, giverRooms);
+            BuildSummonDrops(summonDrops);
+
+            _log?.Info("ItemSourceIndex",
+                $"Indexed {containers.Count} container-sourced item(s), " +
+                $"{givers.Count} textblock-given item(s) and " +
+                $"{summonDrops.Count} summon-dropped item(s) from '{active}'.");
         }
 
-        BuildContainers();
-        BuildGivers();
-        BuildGiverMonsterRooms();
-        BuildSummonDrops();
-
-        _log?.Info("ItemSourceIndex",
-            $"Indexed {_containersByItem.Count} container-sourced item(s), " +
-            $"{_giversByItem.Count} textblock-given item(s) and " +
-            $"{_summonDropsByItem.Count} summon-dropped item(s) from '{active}'.");
+        return new Snapshot
+        {
+            Set = active,
+            Containers = containers,
+            Givers = givers,
+            GiverRooms = giverRooms,
+            SummonDrops = summonDrops,
+        };
     }
 
     // Invert ChestContentsReader.ReadAll (container → drops) into item → containers.
-    private void BuildContainers()
+    private void BuildContainers(Dictionary<int, List<ItemSource>> containersByItem)
     {
         IReadOnlyDictionary<int, ChestContents> chests = ChestContentsReader.ReadAll(_cache);
         foreach ((int containerId, ChestContents contents) in chests)
@@ -182,20 +221,20 @@ public sealed class ItemSourceIndex
                 : $"#{containerId.ToString(CultureInfo.InvariantCulture)}";
             foreach (ChestDrop drop in contents.Drops)
             {
-                if (!_containersByItem.TryGetValue(drop.ItemId, out List<ItemSource>? list))
-                    _containersByItem[drop.ItemId] = list = new List<ItemSource>();
+                if (!containersByItem.TryGetValue(drop.ItemId, out List<ItemSource>? list))
+                    containersByItem[drop.ItemId] = list = new List<ItemSource>();
                 list.Add(new ItemSource(containerId, containerName, drop.Probability));
             }
         }
         // Highest-chance source first so the detail pane leads with the most
         // likely chest to open.
-        foreach (List<ItemSource> list in _containersByItem.Values)
+        foreach (List<ItemSource> list in containersByItem.Values)
             list.Sort(static (a, b) => b.Probability.CompareTo(a.Probability));
     }
 
     // Walk every TBInfo entry that hands out an item, attribute each award to its
     // monster / room root, and record the per-award requirement gate.
-    private void BuildGivers()
+    private void BuildGivers(Dictionary<int, List<ItemGiver>> giversByItem)
     {
         Dictionary<int, string> itemNames = BuildNameMap("Items");
         Dictionary<int, string> monsterNames = BuildNameMap("Monsters");
@@ -272,7 +311,7 @@ public sealed class ItemSourceIndex
                         // line; only fall back to the parent-menu keyword when this
                         // line leads with a directive.
                         string keyword = lineKeyword.Length > 0 ? lineKeyword : root.Keyword;
-                        AddGiver(itemId,
+                        AddGiver(giversByItem, itemId,
                             new ItemGiver(root.Kind, root.Number, root.Map, root.Room, name, requirement,
                                 keyword, deterministic));
                     }
@@ -288,7 +327,7 @@ public sealed class ItemSourceIndex
     // states its own summons directly. Walking rooms also keeps the result honest —
     // a summon reachable only from a textblock no room invokes isn't something a
     // walk could ever trigger.
-    private void BuildSummonDrops()
+    private void BuildSummonDrops(Dictionary<int, List<SummonDropSource>> summonDropsByItem)
     {
         Dictionary<int, (string Name, List<int> Drops)> guaranteed = BuildGuaranteedDroppers();
         if (guaranteed.Count == 0) return;
@@ -311,8 +350,8 @@ public sealed class ItemSourceIndex
 
                 foreach (int itemId in m.Drops)
                 {
-                    if (!_summonDropsByItem.TryGetValue(itemId, out List<SummonDropSource>? list))
-                        _summonDropsByItem[itemId] = list = new List<SummonDropSource>();
+                    if (!summonDropsByItem.TryGetValue(itemId, out List<SummonDropSource>? list))
+                        summonDropsByItem[itemId] = list = new List<SummonDropSource>();
                     var src = new SummonDropSource(
                         ec.TargetId, m.Name, map, room, ec.Keyword, GuaranteedDropPercent);
                     // Synonyms ("touch statue" / "move statue") summon the same
@@ -362,10 +401,12 @@ public sealed class ItemSourceIndex
     // Only the monsters that actually give an item are looked up — parsing every
     // monster's (often hundreds-long) Summoned By would be wasted work, and the
     // router only ever asks where a known giver lives.
-    private void BuildGiverMonsterRooms()
+    private void BuildGiverMonsterRooms(
+        Dictionary<int, List<ItemGiver>> giversByItem,
+        Dictionary<int, List<RoomKey>> giverRoomsByMonster)
     {
         var giverMonsters = new HashSet<int>();
-        foreach (List<ItemGiver> givers in _giversByItem.Values)
+        foreach (List<ItemGiver> givers in giversByItem.Values)
             foreach (ItemGiver g in givers)
                 if (g.Kind == ItemGiverKind.Monster && g.Number > 0)
                     giverMonsters.Add(g.Number);
@@ -381,7 +422,7 @@ public sealed class ItemSourceIndex
                 || s.ValueKind != JsonValueKind.String)
                 continue;
             if (MonsterDropIndex.ParseSummonedByRooms(s.GetString()) is { } rooms)
-                _giverRoomsByMonster[num] = rooms;
+                giverRoomsByMonster[num] = rooms;
         }
     }
 
@@ -454,10 +495,10 @@ public sealed class ItemSourceIndex
         return string.Empty;
     }
 
-    private void AddGiver(int itemId, ItemGiver giver)
+    private static void AddGiver(Dictionary<int, List<ItemGiver>> giversByItem, int itemId, ItemGiver giver)
     {
-        if (!_giversByItem.TryGetValue(itemId, out List<ItemGiver>? list))
-            _giversByItem[itemId] = list = new List<ItemGiver>();
+        if (!giversByItem.TryGetValue(itemId, out List<ItemGiver>? list))
+            giversByItem[itemId] = list = new List<ItemGiver>();
 
         // Dedup by source identity — the same monster / room reached through
         // several award lines is one row. Keep the first requirement / keyword

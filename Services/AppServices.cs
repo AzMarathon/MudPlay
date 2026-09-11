@@ -2735,11 +2735,22 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             TBInfo.OnActiveSetChanged(GameData.ActiveSet);
 
-        // ItemSourceIndex — reverse item-acquisition (containers + textblock
-        // giveitem awards) for the Game Data browser. Reads TBInfo's typed
-        // entries, so it's constructed after the store above. Lazy and
-        // self-invalidating, so there's no ActiveSetChanged subscription to wire.
+        // ItemSourceIndex — reverse item-acquisition (containers, textblock
+        // giveitem awards, guaranteed summon drops), read by the Game Data browser
+        // and by the path-item acquisition routers. Reads TBInfo's typed entries, so
+        // it's constructed after the store above.
+        //
+        // Still lazy and self-invalidating, but warmed in the background on a set
+        // change: the first build is ~600 ms (it walks every Rooms and Monsters row),
+        // and left purely lazy that lands on whichever walk first crosses a gate —
+        // a stall exactly when the user is watching the character move. The warm
+        // builds into locals and publishes by reference, and GameDataCache guards its
+        // own tables, so it's safe off-thread. Subscribed AFTER TBInfo above so the
+        // store has reloaded by the time the build reads it; a query that beats the
+        // warm simply builds it itself.
         ItemSources = new ItemSourceIndex(GameData, TBInfo, Log);
+        GameData.ActiveSetChanged += _ => Task.Run(ItemSources.Warm);
+        if (GameData.ActiveSet is not null) Task.Run(ItemSources.Warm);
 
         // RoomFloorItemIndex — the room→floor-item (`roomitem`) mapping for the
         // Navigation Room Info panel. Reads TBInfo's typed entries like ItemSources;

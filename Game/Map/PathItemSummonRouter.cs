@@ -278,8 +278,10 @@ public sealed class PathItemSummonRouter : IDisposable
         _log?.Info(LogCategory,
             $"a kill landed while waiting on '{_source.MonsterName}' — re-surveying " +
             $"{_source.Room} for path item {_itemId} ({_reSurveys}/{MaxReSurveys})");
-        // Bare CR, same as the post-summon redisplay: the room render carries the
-        // floor listing PathItemFloorCollector reads.
+        // Bare CR, same as the post-summon redisplay. Enter and `look` both carry
+        // the "You notice … here." floor listing this survey needs, but `look` also
+        // prints the room description, which can fill the whole terminal — so the
+        // quiet one wins for something fired once per kill.
         _wire.Send("");
     }
 

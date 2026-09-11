@@ -343,4 +343,63 @@ public sealed class ItemSourceIndexTests : IDisposable
         cache.SwitchSet("empty");
         Assert.Empty(index.SummonDropsOf(26));
     }
+    // ----- concurrent warm-up ----------------------------------------
+    //
+    // The index is warmed on a worker thread so its ~600 ms first build lands while
+    // the set loads rather than inside the first walk that crosses a gate. That is
+    // only safe because a build touches nothing shared until it publishes a finished
+    // snapshot by one reference assignment.
+
+    [Fact]
+    public void Warm_ThenQuery_ReturnsTheSameBuild()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+        index.Warm();
+
+        Assert.NotEmpty(index.GiversOf(22));
+        Assert.NotEmpty(index.SummonDropsOf(26));
+    }
+
+    [Fact]
+    public void ConcurrentReadersAndWarms_NeverSeeAPartialBuild()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+        var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
+
+        System.Threading.Tasks.Parallel.For(0, 64, i =>
+        {
+            try
+            {
+                if (i % 4 == 0) index.Warm();
+                // Every reader must see a COMPLETE build — a half-filled map would
+                // show up as a giver or summon source going missing.
+                if (index.GiversOf(22).Count == 0) failures.Add("givers empty");
+                if (index.SummonDropsOf(26).Count == 0) failures.Add("summon drops empty");
+                if (index.ContainersOf(10).Count == 0) failures.Add("containers empty");
+            }
+            catch (Exception ex)
+            {
+                failures.Add(ex.GetType().Name);
+            }
+        });
+
+        Assert.Empty(failures);
+    }
+
+    // A warm-up is an optimisation, never a crash vector: with no readable set it
+    // publishes an empty build instead of throwing on the worker thread.
+    [Fact]
+    public void Warm_WithNoActiveSet_IsHarmless()
+    {
+        GameDataCache cache = NewCache();
+        ItemSourceIndex index = NewIndex(cache);
+        Directory.CreateDirectory(Path.Combine(_root, "empty"));
+        cache.SwitchSet("empty");
+
+        index.Warm();
+
+        Assert.Empty(index.GiversOf(22));
+        Assert.Empty(index.SummonDropsOf(26));
+    }
+
 }
