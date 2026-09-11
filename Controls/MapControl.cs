@@ -501,7 +501,10 @@ public sealed class MapControl : Control
     private static readonly IBrush Bg            = new SolidColorBrush(Color.Parse("#0E0E0E"));
     private static readonly IBrush TileBg        = new SolidColorBrush(Color.Parse("#1E1E1E"));
     private static readonly IBrush RoomFill      = new SolidColorBrush(Color.Parse("#9B9B9B"));
-    private static readonly IBrush CurrentFill   = new SolidColorBrush(Color.Parse("#F8B500"));
+    // Darkened + shifted off pure yellow (lower green channel) so the current-room
+    // fill doesn't blend into a down-exit room's #DCDC00 yellow where the two abut at
+    // a shared corner; red kept high so "you are here" still reads as a punchy gold.
+    private static readonly IBrush CurrentFill   = new SolidColorBrush(Color.Parse("#E0A000"));
     private static readonly IBrush LairFill      = new SolidColorBrush(Color.Parse("#8E4F7B"));
     private static readonly IBrush ShopFill      = new SolidColorBrush(Color.Parse("#4A7791"));
     private static readonly IBrush SpellFill     = new SolidColorBrush(Color.Parse("#6428A0"));
@@ -512,6 +515,14 @@ public sealed class MapControl : Control
     private static readonly IBrush UpFill        = new SolidColorBrush(Color.Parse("#00C800"));
     private static readonly IBrush DownFill      = new SolidColorBrush(Color.Parse("#DCDC00"));
     private static readonly IBrush UpDownFill    = new SolidColorBrush(Color.Parse("#FFB432"));
+    // Dark rim for the U/D corner-badge triangles so the yellow down-badge (and green
+    // up-badge) read against ANY cell fill — in particular the gold current-room fill,
+    // where a rimless yellow triangle blends into the highlight. Same trick the skull /
+    // trainer chevron use to stay legible over the current-room marker.
+    private static readonly IPen   VerticalBadgeEdgePen = new Pen(new SolidColorBrush(Color.Parse("#141414")), 1.0)
+    {
+        LineJoin = PenLineJoin.Round,
+    };
 
     private static readonly IPen   TileBorderPen = new Pen(new SolidColorBrush(Color.Parse("#2A2A2A")), 1.0);
     private static readonly IPen   ExitPen       = new Pen(new SolidColorBrush(Color.Parse("#C0C0C0")), 2.0);
@@ -2107,6 +2118,9 @@ public sealed class MapControl : Control
 
         IBrush fill;
         IPen pen;
+        // True once the up/down hint has coloured the WHOLE node (no higher-priority
+        // class claimed it) — the corner badge is then redundant and skipped.
+        bool verticalFillIsPrimary = false;
         if (isCurrent)
         {
             fill = CurrentFill;
@@ -2160,6 +2174,9 @@ public sealed class MapControl : Control
                 VerticalHint.Down => (DownFill,           DownBorderPen),
                 _                 => ((IBrush)RoomFill,   (IPen)RoomBorderPen),
             };
+            // The whole node now carries the up/down colour, so the corner badge
+            // would just be the same hue drawn on itself — suppress it below.
+            verticalFillIsPrimary = hint != VerticalHint.None;
         }
         else
         {
@@ -2180,11 +2197,13 @@ public sealed class MapControl : Control
             DrawTeleportHash(ctx, node);
         }
 
-        // Vertical-exit corner badges — always drawn when the room has
-        // a U/D hint, regardless of the cell's primary fill class. Lets
-        // the user see "this room goes up/down" even when the fill is
-        // claimed by Lair / Shop / Spell / Auto-Lair.
-        if (Layout?.VerticalHints is { } vh
+        // Vertical-exit corner badges — drawn only when a higher-priority class
+        // (current / destination / Auto-Lair / Lair / Shop / Spell) claimed the
+        // cell fill, so "this room goes up/down" still shows. When the up/down hint
+        // IS the whole-node fill, the badge is redundant (same hue on itself) and
+        // skipped — otherwise a rimmed triangle sits on a matching square.
+        if (!verticalFillIsPrimary
+            && Layout?.VerticalHints is { } vh
             && vh.TryGetValue(key, out VerticalHint vhint)
             && vhint != VerticalHint.None)
         {
@@ -2233,7 +2252,7 @@ public sealed class MapControl : Control
                 g.LineTo(new Point(node.Right, node.Top + size));
                 g.EndFigure(true);
             }
-            ctx.DrawGeometry(UpFill, null, geo);
+            ctx.DrawGeometry(UpFill, VerticalBadgeEdgePen, geo);
         }
 
         if (hint is VerticalHint.Down or VerticalHint.Both)
@@ -2246,7 +2265,7 @@ public sealed class MapControl : Control
                 g.LineTo(new Point(node.Right, node.Bottom - size));
                 g.EndFigure(true);
             }
-            ctx.DrawGeometry(DownFill, null, geo);
+            ctx.DrawGeometry(DownFill, VerticalBadgeEdgePen, geo);
         }
     }
 

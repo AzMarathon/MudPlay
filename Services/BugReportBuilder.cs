@@ -1036,6 +1036,10 @@ public static class BugReportBuilder
             svc.RoomTracker.LastInboundMoveEcho is { } echo
                 ? $"'{echo.Command}' @ {echo.At.ToLocalTime():HH:mm:ss}"
                 : "(none)");
+        // Passive grid re-localiser: whether the engine-independent same-name-grid
+        // recovery is mid-narrow and how ambiguous it still is. A "stuck Lost with
+        // automation off" report shows here whether that path was even running.
+        Kv(sb, "Passive grid locate", svc.RoomTracker.PassiveGridStatus);
         // Sysop room-status capability. A "recovery didn't work" report needs to
         // distinguish never-enabled from enabled-but-the-BBS-refused: the probe
         // turns itself off after one unanswered attempt, and that leaves no other
