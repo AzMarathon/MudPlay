@@ -54,6 +54,18 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     // The grid row the user has selected — drives RemoveRowCommand.
     [ObservableProperty] private CpPlanRowViewModel? _selectedRow;
 
+    // Per-stat column mouseover text for the grid headers: realm-aware "~N → +1 X"
+    // ratios plus the next value of that stat (from the live character's current
+    // base value) that ticks each derived stat up — so the user can spend CP to a
+    // real breakpoint instead of guessing every 5th / 10th point. Built from
+    // StatEffects (the same math the combat engine + Level Projection use).
+    [ObservableProperty] private string _strStatTip = string.Empty;
+    [ObservableProperty] private string _intStatTip = string.Empty;
+    [ObservableProperty] private string _wilStatTip = string.Empty;
+    [ObservableProperty] private string _agiStatTip = string.Empty;
+    [ObservableProperty] private string _heaStatTip = string.Empty;
+    [ObservableProperty] private string _chmStatTip = string.Empty;
+
     // ----- consolidated status line --------------------------------------------
     // One notice area (right of the action buttons) for every transient/standing
     // message this tab emits, so "can train now", "training…", apply results and
@@ -120,7 +132,12 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         _trainerWalk.PlanApplied += OnPlanApplied;
         _autoTrain.StateChanged += OnAutoTrainStateChanged;
         _autoTrain.ApplyTargetsCompleted += OnApplyLevelCompleted;
+        // A game-data set swap flips the realm (Stock ↔ Paradigm) and race bounds,
+        // so re-resolve the baseline + realm-aware column tooltips + CP cost curve.
+        _gameData.ActiveSetChanged += OnActiveSetChanged;
     }
+
+    private void OnActiveSetChanged(string? _) => RefreshBaseline();
 
     // Auto-train applied (and removed) a level's CP row — reload the grid so the
     // consumed row disappears from the displayed plan.
@@ -370,8 +387,50 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
         UnspentCp = _stats.Cp;
         _lastEditedStat = null;   // baseline-driven recompute, not a cell edit
+        RefreshStatTips();
         RecalcGrid();
     }
+
+    // Rebuild the six column tooltips from the live raw-base stats + realm. Anchored
+    // on the character's current base value so the "next breakpoint" is the real
+    // next point that ticks a derived stat, gear aside. The class/race context feeds
+    // the HP and (class-specific) mana-regen effects.
+    private void RefreshStatTips()
+    {
+        var block = new StatBlock(
+            _stats.Level, _baseline.Strength, _baseline.Intellect, _baseline.Willpower,
+            _baseline.Agility, _baseline.Health, _baseline.Charm);
+        StatContext ctx = ResolveStatContext();
+        StrStatTip = StatEffects.Tooltip(BaseStat.Strength, block, ctx);
+        IntStatTip = StatEffects.Tooltip(BaseStat.Intellect, block, ctx);
+        WilStatTip = StatEffects.Tooltip(BaseStat.Willpower, block, ctx);
+        AgiStatTip = StatEffects.Tooltip(BaseStat.Agility, block, ctx);
+        HeaStatTip = StatEffects.Tooltip(BaseStat.Health, block, ctx);
+        ChmStatTip = StatEffects.Tooltip(BaseStat.Charm, block, ctx);
+    }
+
+    // Resolve the class hit-dice + magery and race per-level HP the HP / mana-regen
+    // tooltip effects need, from the live character's class/race game-data rows.
+    private StatContext ResolveStatContext()
+    {
+        int minHits = 0, maxHits = 0, mageryType = 0, mageryLevel = 0, raceHp = 0;
+        if (_gameData.FindRowByName("Classes", _stats.Class) is System.Text.Json.JsonElement cls
+            && cls.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            minHits = TipInt(cls, "MinHits");
+            maxHits = TipInt(cls, "MaxHits");
+            mageryType = TipInt(cls, "MageryType");
+            mageryLevel = TipInt(cls, "MageryLVL");
+        }
+        if (_gameData.FindRowByName("Races", _stats.Race) is System.Text.Json.JsonElement race
+            && race.ValueKind == System.Text.Json.JsonValueKind.Object)
+            raceHp = TipInt(race, "HPPerLVL");
+        return new StatContext(_realm, minHits, maxHits, raceHp, mageryType, mageryLevel);
+    }
+
+    private static int TipInt(System.Text.Json.JsonElement row, string property) =>
+        row.TryGetProperty(property, out System.Text.Json.JsonElement v)
+        && v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
 
     private void RecalcGrid()
     {
@@ -469,5 +528,6 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         _trainerWalk.PlanApplied -= OnPlanApplied;
         _autoTrain.StateChanged -= OnAutoTrainStateChanged;
         _autoTrain.ApplyTargetsCompleted -= OnApplyLevelCompleted;
+        _gameData.ActiveSetChanged -= OnActiveSetChanged;
     }
 }

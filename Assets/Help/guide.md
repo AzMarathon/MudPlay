@@ -351,7 +351,7 @@ Active party members get a few things for free regardless of the grid: the party
 | Command | Args | Replies with |
 |---|---|---|
 | `@version` | — | the app name + version |
-| `@help` | — | the commands *that sender* is allowed to use |
+| `@help` | — or `<command>` | bare, the commands *that sender* is allowed to use; with a command name (`@help goto` — the name is accepted with or without the `@`) it replies with that command's syntax + a one-line description. Requires the `@` like every remote command — a plain `help` in chat won't trigger it. |
 | `@health` | — | HP / MA / Kai and resting-or-meditating state |
 | `@status` | — | what you're doing (walking / looping / fighting / resting), your room, and any ailments |
 | `@lives` | — | lives remaining |
@@ -525,9 +525,63 @@ The **Target weight** dropdown next to it caps what Find Best is willing to add:
 
 Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you. Two checkboxes mirror Settings → Auto-Trainer: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan).
 
+**Hover a stat's column header** to see everything that stat drives, one effect per line: the derived stat's **current value for your character**, its marginal rate (e.g. *~6 AGL → +1*, *+3 per 4*), and — where it's a discrete breakpoint — **the very next value of that stat where it ticks up** (`next at N`). That's the point of it: spend to a real breakpoint instead of guessing that every 5th or 10th point is a good stopping place. The lists are complete and class-aware: **Health** shows max HP (with the gain per point at your level) and HP regen (idle / resting); **carry weight** shows your current capacity and the per-point rate (steeper past 100 STR); **casters** show **mana regen** and **spellcasting** under their actual casting stat (INT for Mages, WIL for Priests, both for Druids, CHM for Bards — max mana itself is level × magery, not a stat, so it isn't listed); accuracy follows the Stock vs Paradigm weighting. Values are the stat-and-level portion — your gear and quest bonuses stack on top in-game. See **What your stats do** below for the full picture; the projected numbers per level live in the **Level Projection** tab.
+
 ## Level Projection
 
-A read-only what-if table: pick a level **from–to** range (and optionally any **Race / Class**) to see the exp, training cost, HP, and mana at each level — reflecting your CP Allocation plan. **Reset to current** re-seeds it from your live character.
+A read-only what-if table: pick a level **from–to** range (and optionally any **Race / Class**) to see the exp, training cost, HP, and mana at each level — reflecting your CP Allocation plan. Alongside HP and mana it also projects the **derived combat/utility stats** your CP plan grows: **Accuracy** (the normal-attack stat contribution), **Crit**, **Dodge**, **Stealth**, **Melee dmg** (STR's bonus onto your weapon's own damage range, shown as `+min/+max`), **Max enc** (carry weight), and **Magic res** — so you can watch a planned stat raise turn into real combat numbers, level by level, the same way HP and mana already do. The **HP/tick** column shows both rates as `idle / resting` (resting regen is 3× idle).
+
+These figures reflect **your current character**: the base attributes carry your equipment's and completed quests' stat bonuses (the `stat` screen is already gear-inclusive), and the table folds your gear's and completed quests' **direct** bonuses on top too — extra max HP / max mana, HP- and MP-regen %, and flat +dodge / +crit / +stealth / +magic-resist / +damage / +carry from items. (Accuracy stays the stat-and-level contribution — a weapon's own accuracy is situational and can't be projected to future levels.) Mark a quest **Complete** on the Quest Status tab and its bonuses flow in here automatically. **Reset to current** re-seeds it from your live character.
+
+## What your stats do
+
+Each of the six base stats feeds several derived numbers. The ratios below are the marginal rate (how many points buy one more of the derived stat); the exact breakpoints for *your* character are on the CP Allocation column tooltips.
+
+- **Strength (STR)** — melee **damage** (adds to your weapon's own range: roughly +1 min damage per 10 STR above 100, +1 max per 10 above 50) and **carry weight** (+48 per point, steeper past 100). STR also feeds **accuracy** (~3/pt): on **Stock** for **all** attacks, on **Paradigm** for **bash / smash only** (normal Paradigm attacks get no STR accuracy).
+- **Intellect (INT)** — **crit** rating (~10/pt), **stealth** (~8/pt), **magic resistance** (+1 per 4 INT), and, for **Mages and Druids**, **mana regen + spellcasting**. On **Paradigm**, INT also feeds normal-attack **accuracy** (~6/pt); on **Stock** it does not.
+- **Willpower (WIL)** — **magic resistance** (the heaviest term — resistance is `(INT + 3×WIL) / 4`, so +3 per 4 WIL) and, for **Priests and Druids**, **mana regen + spellcasting**. WIL does **not** raise your *maximum* mana (that's level × magery level); it scales how fast mana comes back.
+- **Agility (AGI)** — normal-attack **accuracy** (~6/pt on Stock, ~3/pt on Paradigm), **dodge** (~3/pt), **crit** (~20/pt), and **stealth** (~4/pt). Generally the most broadly useful combat stat.
+- **Health (HEA)** — **max HP** (rises nearly every point, more per point the higher your level) and **HP regeneration** (idle, tripled while resting). Both scale with level.
+- **Charm (CHM)** — **dodge** (~5/pt), **crit** (~30/pt), **stealth** (~6/pt), and, for **Bards**, **mana regen**. On **Paradigm** it also feeds normal-attack **accuracy** (~10/pt).
+
+**Mana regen scales off one stat per class.** Mage = INT, Priest = WIL, Druid = the average of INT and WIL, Bard = CHM (Mystics use a fixed Kai rate). Maximum mana is level × magery level regardless of stats.
+
+**Realm accuracy differs, and by attack type.** On **Stock**, accuracy is driven by **STR + AGI** for every attack (INT and CHM don't affect accuracy at all). On **Paradigm** it splits by attack: a **normal** attack uses **AGI + INT + CHM**, while a **bash / smash** uses **STR + AGI** (INT and CHM don't help bash/smash). The tooltips label each accuracy line with the attacks it applies to, and the client uses the correct set for your realm automatically.
+
+**Paradigm caveat.** The accuracy, dodge, stealth and damage ratios are verified for both realms. Crit's AGI term, carry-weight (encumbrance), and magic-resistance use the reverse-engineered **Stock** formula for both realms — they are **not independently verified for Paradigm**, so treat those three as close-but-unconfirmed there.
+
+### The exact formulas
+
+For the curious, here are the actual equations behind the numbers above, with everything that feeds them. These are the *base* (stat-and-level) values; your gear and completed-quest bonuses add on top in-game. Division drops the fraction (truncates) unless a formula says "round". `MinHits` is your class's per-level hit dice; `MageryLevel` is your class's magery level; `Level` is character level.
+
+**Max HP** = `HEA/2 + Level×MinHits + (HEA−50)×Level/16 + per-level rolls + RaceHPPerLevel×Level` (+ gear `+MaxHP`). The per-level rolls are random, which is why the projection shows HP as a range.
+
+**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100**. `divisor` = **750 on Stock, 500 on Paradigm**.
+
+**Max mana** = `MageryLevel×Level×2 + 6` (+ gear `+MaxMana`); 0 for non-casters. Mystics instead use **Kai = Level − 1**. Note this has *no stat term* — no attribute raises max mana.
+
+**Mana regen** (per tick) = `(Level+20) × CastingStat × (MageryLevel+2) / 1650`, then the realm's regen-% step. `CastingStat` = **INT** (Mage), **WIL** (Priest), **(INT+WIL)/2** (Druid), **CHM** (Bard).
+
+**Spellcasting** = `Level×2 + StatBlend + MageryLevel×5` (+ gear `+Spellcasting`). `StatBlend` = **(3×INT+WIL)/6** (Mage), **(3×WIL+INT)/6** (Priest), **(INT+WIL)/3** (Druid), **(3×CHM+WIL)/6** (Bard).
+
+**Accuracy** (the stat contribution — a level/combat base, worn-weapon accuracy and encumbrance also apply but aren't stat-driven):
+- **Stock**, every attack: `(STR−50)/3 + (AGI−50)/6`
+- **Paradigm**, normal attack: `(AGI−50)/3 + (INT−50)/6 + (CHM−50)/10`
+- **Paradigm**, bash / smash: `(STR−50)/3 + (AGI−50)/6`
+
+**Crit rating** = `clamp( Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30, 1, 75 )`. *(AGI term unverified on Paradigm.)*
+
+**Dodge** (raw value, before the vs-accuracy % conversion) = `Level/5 + (CHM−50)/5 + (AGI−50)/3` (+ gear `+Dodge`, + a bonus while under 33% encumbrance).
+
+**Stealth** = `StealthLevel + 20 + stat terms`, where `StealthLevel = Level×2` at level ≤ 15, else `Level+15`. The stat terms differ by realm:
+- **Stock**: `trunc(AGI/4) + trunc(INT/8) + trunc(CHM/6)` (each term truncated)
+- **Paradigm**: `round(AGI/4 + INT/8 + CHM/6)` (summed, then rounded once)
+
+**Max encumbrance** (carry weight) = `STR×48`, plus `STR×36 − 3600` once STR is above 100. *(Unverified on Paradigm.)*
+
+**Magic resistance** = `(INT + 3×WIL) / 4`. *(Unverified on Paradigm.)*
+
+**Melee damage bonus** (STR added onto the weapon's own min/max) = min `(STR−100)/10`, max `(STR−50)/10`, neither below 0.
 
 ## Quests, Bosses, and Deaths
 

@@ -69,13 +69,38 @@
                 <DataGridTextColumn Header="HP" Binding="{ReflectionBinding HpRange}"
                                     Width="120" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="HP / tick" Binding="{ReflectionBinding HpRegen}"
-                                    Width="90" FontFamily="{StaticResource FontMono}"
+                <DataGridTextColumn Header="HP/tick (idle/rest)" Binding="{ReflectionBinding HpRegen}"
+                                    Width="130" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
                 <DataGridTextColumn Header="Mana / Kai" Binding="{ReflectionBinding Mana}"
                                     Width="100" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgBrush}"/>
                 <DataGridTextColumn Header="MP / tick" Binding="{ReflectionBinding MpRegen}"
+                                    Width="90" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <!-- Derived combat / utility stats — the gear-free stat-and-level
+                     portion, so a CP plan's stat increases surface here the way
+                     HP/Mana already do. Accuracy is the normal-attack stat part;
+                     Melee dmg is STR's bonus onto the weapon's own range. -->
+                <DataGridTextColumn Header="Accy" Binding="{ReflectionBinding Accuracy}"
+                                    Width="70" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgBrush}"/>
+                <DataGridTextColumn Header="Crit" Binding="{ReflectionBinding Crit}"
+                                    Width="70" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="Dodge" Binding="{ReflectionBinding Dodge}"
+                                    Width="70" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="Stealth" Binding="{ReflectionBinding Stealth}"
+                                    Width="80" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="Melee dmg" Binding="{ReflectionBinding MeleeDmg}"
+                                    Width="100" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgBrush}"/>
+                <DataGridTextColumn Header="Max enc" Binding="{ReflectionBinding MaxEnc}"
+                                    Width="90" FontFamily="{StaticResource FontMono}"
+                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="Magic res" Binding="{ReflectionBinding MagicRes}"
                                     Width="90" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
             </DataGrid.Columns>

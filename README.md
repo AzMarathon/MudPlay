@@ -1,13 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.65.1**
-> - An interrupted sweep no longer dumps its load on you: what Roomba was carrying and what it still had to do are remembered per character, verified against a real inventory read, and picked up next time
-> - New **Resume** button on the Roomba tab — carries on from a stopped sweep without re-walking the whole circuit, and survives closing the client
-> - The Roomba Log gains an **Out of space** section naming the categories that need another room, and the map rings a Roomba room that ran out of space
-> - A loop blocked because it lost track of where it is asks the game for its position without waiting out the repeat-ask delay, so the retry isn't denied every time
-> - Recovery attempts are spaced out, so a reroute that instantly re-blocks can't spend the whole retry budget in one second
-> - Fixed a crash when fleeing a fight from a room whose way back is a teleport (e.g. the Negative Power Plane) — the retreat now stops at the teleport instead of taking the client down
+> **Version 3.67.0**
+> - `@help <command>` now replies with that remote command's syntax + a one-line description (the command name is accepted with or without the leading `@`, so `@help suicide` and `@help @suicide` both work)
+> - Bare `@help` still lists the commands you're permitted to use, now with a "type @help <command>" hint
+> - `@help` still requires the `@` like every remote command — a plain `help` typed between players in chat won't trigger it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

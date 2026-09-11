@@ -16,6 +16,8 @@ public sealed class LevelProjectionRow
     // Cumulative exp threshold to reach this level (absolute).
     public string TotalXp { get; }
     public string HpRange { get; }
+    // HP regen per tick as "idle / resting" (resting is 3× idle) — so the column
+    // shows both the passive and the sit-and-rest rate.
     public string HpRegen { get; }
     // Max mana (or Kai for Mystics); "—" for non-casters.
     public string Mana { get; }
@@ -24,6 +26,19 @@ public sealed class LevelProjectionRow
     // Cheapest trainer's copper fee to reach this level; "—" when no trainer
     // serves it for this class (quest-gated level or beyond the top trainer).
     public string Cost { get; }
+
+    // Derived combat/utility stats — the gear-free stat-and-level portion, shown
+    // so the CP plan's per-level stat increases surface their effect the same way
+    // HP/Mana already do. Accuracy is the normal-attack stat contribution.
+    public string Accuracy { get; }
+    public string Crit { get; }
+    public string Dodge { get; }
+    public string Stealth { get; }
+    // STR's bonus onto the weapon's own min/max damage range.
+    public string MeleeDmg { get; }
+    public string MaxEnc { get; }
+    public string MagicRes { get; }
+
     // True when this row is the live character's current level.
     public bool IsCurrentLevel { get; }
 
@@ -38,12 +53,21 @@ public sealed class LevelProjectionRow
         HpRange = p.HpMin == p.HpMax
             ? p.HpMin.ToString("N0", CultureInfo.InvariantCulture)
             : string.Create(CultureInfo.InvariantCulture, $"{p.HpMin:N0}–{p.HpMax:N0}");
-        HpRegen = p.HpRegen.ToString(CultureInfo.InvariantCulture);
+        HpRegen = string.Create(CultureInfo.InvariantCulture, $"{p.HpRegen} / {p.HpRegenResting}");
         Mana = isCaster ? p.Mana.ToString("N0", CultureInfo.InvariantCulture) : "—";
         MpRegen = isCaster ? p.MpRegen.ToString(CultureInfo.InvariantCulture) : "—";
         // Raw copper, ungrouped (no thousands separators) — the train cost pastes
         // straight into the game, unlike the other columns' human-readable figures.
         Cost = trainCost is { } c ? c.ToString("0", CultureInfo.InvariantCulture) : "—";
+
+        Accuracy = p.Accuracy.ToString(CultureInfo.InvariantCulture);
+        Crit = string.Create(CultureInfo.InvariantCulture, $"{p.Crit}%");
+        Dodge = p.Dodge.ToString(CultureInfo.InvariantCulture);
+        Stealth = p.Stealth.ToString(CultureInfo.InvariantCulture);
+        MeleeDmg = string.Create(CultureInfo.InvariantCulture, $"+{p.MinDmg}/+{p.MaxDmg}");
+        MaxEnc = p.MaxEnc.ToString("N0", CultureInfo.InvariantCulture);
+        MagicRes = p.MagicRes.ToString(CultureInfo.InvariantCulture);
+
         IsCurrentLevel = isCurrentLevel;
     }
 
