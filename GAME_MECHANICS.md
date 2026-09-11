@@ -1561,6 +1561,23 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
 
 ## Movement & navigation
 
+### Movement on the wire — command echo, failure lines, and what actually moves you *([CONFIRMED] 2026-09-10, user wire captures `stock-20260910-21{1620,1747,1931,2008}` + `paradigm-20260910-21{2717,2938}`, stock + Paradigm)*
+
+In character mode the server **echoes the typed command** on the prompt line before its result, e.g. `[HP=91/KAI=5]:e` then the new room display. This holds on stock and Paradigm (`[HP=../MA=..]`/`[HP=../KAI=..]`). The echo may be inline (`]:w`), on its own line (`w`), or doubled; combat / spell / event lines and even other commands' echoes can **interleave between a move's echo and its landing room display**, so a display can arrive well after the move that caused it.
+
+So every room display has an identifiable cause on the wire:
+
+- **Move succeeded** — the move's echo, then a NEW room display. (This is the only case that should advance position.)
+- **Move failed, stayed put** — the move's echo, then a failure line, no new room: `There is no exit in that direction!` (wall), `The gate is closed!`, `The door is Closed!`, or `You are typing too quickly - command ignored` (rate-limiter drop — common in fast command bursts; the command did NOT execute). These mean the move never happened.
+- **`look` / `look <dir>`** — a `look` echo, then a room display that is the *same* room, an *adjacent* room (peek), or an *unreachable* room beyond a shut door. Never a move. (Directional peeks are already suppressed via the outbound `NoteLookSent` path.)
+- **Spontaneous re-display** — NO command echo. An NPC self-moving (`X moves into the room from the <dir>` / `just left to the <dir>`), a regen/KAI tick, or a post-bonk redraw re-renders the CURRENT room. This is what fools a naive tracker into a phantom move.
+
+**Moves with NO command echo (forced moves) — the complete set:**
+- **Party follow / drag** — a follower moves because the leader did; the follower sends no bytes. Announced by `-- Following your Party leader <dir> --` (handled via `FollowMoveObserver` → `NoteFollowMove`).
+- **Fear** — a rare mechanic (few rooms). Emits **NO message at all**; silently moves you to any cardinal-CONNECTED adjacent room (never across a `go`/text-exit), then re-displays the new room. A fear move into an identically-named adjacent room is therefore **wire-indistinguishable** from a spontaneous re-look — no algorithm can tell them apart from the stream.
+
+**`go`/teleport** (`go vortex`, `go man`, `go path`) is a *commanded, echoed* text-exit move; it can land you in a distant unrelated room (`You step into the swirling vortex, and find yourself... elsewhere.`). **There is no random "flee"** — "flee" is a user-sent directional run-away (commanded + echoed). **No engine recall**: sys-goto resolves to a known destination room (goto table), and Paradigm teleport tokens are player-only (not engine-consumed; `rm` fixes position on Paradigm).
+
 ### Winch gates *([CONFIRMED] 2026-08-27, user — report `paradigm-20260827-113513` + wire capture)*
 
 Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit whose prerequisite is `pull winch`), e.g. the Entrance Hall fortress gate west (`iron gates … a heavy wooden winch`).
