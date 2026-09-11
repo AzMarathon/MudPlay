@@ -351,7 +351,7 @@ Active party members get a few things for free regardless of the grid: the party
 | Command | Args | Replies with |
 |---|---|---|
 | `@version` | — | the app name + version |
-| `@help` | — | the commands *that sender* is allowed to use |
+| `@help` | — or `<command>` | bare, the commands *that sender* is allowed to use; with a command name (`@help goto` — the name is accepted with or without the `@`) it replies with that command's syntax + a one-line description. Requires the `@` like every remote command — a plain `help` in chat won't trigger it. |
 | `@health` | — | HP / MA / Kai and resting-or-meditating state |
 | `@status` | — | what you're doing (walking / looping / fighting / resting), your room, and any ailments |
 | `@lives` | — | lives remaining |

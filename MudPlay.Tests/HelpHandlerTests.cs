@@ -154,6 +154,72 @@ public sealed class HelpHandlerTests
     }
 
     [Fact]
+    public void Help_WithCommandArg_RepliesWithThatCommandsSyntax()
+    {
+        // @help only needs QueryVersion; the ARG command is merely described, so a
+        // sender can look up a command they can't themselves use.
+        var (router, _, players, engine) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryVersion);
+
+        Telepath(router, "Bob", "@help suicide");
+
+        string joined = string.Join(" ", Replies(engine));
+        Assert.Contains("@suicide", joined);
+        Assert.Contains("Elevated", joined);   // from the description
+    }
+
+    [Fact]
+    public void Help_CommandArg_AcceptsWithOrWithoutAtSign()
+    {
+        var (router, _, players, engine) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryVersion);
+
+        Telepath(router, "Bob", "@help @goto");
+        Telepath(router, "Bob", "@help goto");
+
+        List<string> replies = Replies(engine);
+        Assert.Equal(2, replies.Count);
+        Assert.Equal(replies[0], replies[1]);          // same answer either way
+        Assert.Contains("@goto <destination>", replies[0]);
+    }
+
+    [Fact]
+    public void Help_UnknownCommandArg_RepliesNoSuchCommand()
+    {
+        var (router, _, players, engine) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryVersion);
+
+        Telepath(router, "Bob", "@help notacommand");
+
+        Assert.Contains("no such command", string.Join(" ", Replies(engine)));
+    }
+
+    [Fact]
+    public void Help_NoArg_IncludesUsageHint()
+    {
+        var (router, _, players, engine) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryVersion);
+
+        Telepath(router, "Bob", "@help");
+
+        Assert.Contains(Replies(engine), r => r.Contains("@help <command>"));
+    }
+
+    [Fact]
+    public void BareHelp_WithoutAtSign_DoesNotFire()
+    {
+        // A plain `help` typed between players in chat must NOT trigger the command
+        // — only the @-prefixed @help does. (No reply, permitted or not.)
+        var (router, _, players, engine) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.QueryVersion);
+
+        Telepath(router, "Bob", "help");
+        Telepath(router, "Bob", "help me carry this");
+
+        Assert.Empty(Replies(engine));
+    }
+
+    [Fact]
     public void Dispose_UnregistersHandler()
     {
         var (_, handler, _, engine) = Setup();

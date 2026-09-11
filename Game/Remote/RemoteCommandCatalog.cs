@@ -204,6 +204,79 @@ public static class RemoteCommandCatalog
             ["@share"]        = PlayerRemoteControls.None,
         };
 
+    // Per-command help — argument syntax + a one-line description, surfaced by
+    // `@help <command>`. Every command in Map has an entry here (enforced by a
+    // catalog-completeness test), including the party-whitelist ones, since @help
+    // describes commands regardless of how they're gated. Keyed case-insensitively
+    // by the same @-prefixed name as Map. Descriptions are drawn from the Help
+    // guide's remote-@-command section and kept terse enough that
+    // "Syntax — Description" fits one telepath line.
+    public static readonly IReadOnlyDictionary<string, RemoteCommandHelp> Help =
+        new Dictionary<string, RemoteCommandHelp>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["@version"]      = new("@version", "the app name + version"),
+            ["@health"]       = new("@health", "HP / MA / Kai and resting-or-meditating state"),
+            ["@exp"]          = new("@exp", "exp remaining to level, exp/hour rate, and time-to-level"),
+            ["@level"]        = new("@level", "level, current exp, and exp to next"),
+            ["@status"]       = new("@status", "what you're doing (walking/looping/fighting/resting), your room, and any ailments"),
+            ["@lives"]        = new("@lives", "lives remaining"),
+            ["@where"]        = new("@where", "room name, map/room, and exits"),
+            ["@path"]         = new("@path", "movement engine activity + step progress; when idle, the last loop/auto-lair run"),
+            ["@who"]          = new("@who", "other players / monsters in your room"),
+            ["@timer"]        = new("@timer [name]", "boss respawn timers (all, or matching a name); @timer sync shares them client-to-client"),
+            ["@death"]        = new("@death [all]", "unrecovered deaths from the recovery log — the latest, or all of them"),
+            ["@roomba"]       = new("@roomba <item>", "where an item was last seen across gang-house rooms; @roomba sync shares the log"),
+            ["@help"]         = new("@help [command]", "the commands you're allowed to use, or one command's syntax"),
+            ["@what"]         = new("@what", "items on the room floor"),
+            ["@wealth"]       = new("@wealth", "your coins and total value"),
+            ["@enc"]          = new("@enc", "encumbrance"),
+            ["@have"]         = new("@have <item>", "whether you carry, wear, or hold a matching item / key"),
+            ["@inv"]          = new("@inv", "your carried pack and keys"),
+            ["@suicide"]      = new("@suicide", "forces your character's death (Elevated; uses your stored suicide password; blocked at/below your lives threshold)"),
+            ["@invite"]       = new("@invite", "asks you to invite the sender into your party"),
+            ["@join"]         = new("@join", "asks you to join the sender's party"),
+            ["@get-all"]      = new("@get-all", "pick up everything on the ground you can"),
+            ["@drop-all"]     = new("@drop-all", "drop everything unworn in your pack"),
+            ["@deposit-all"]  = new("@deposit-all", "bank all excess coin"),
+            ["@do"]           = new("@do <command>", "sends the command verbatim to the game (highest-trust)"),
+            ["@kill"]         = new("@kill <target>", "retargets your combat onto the named monster this round"),
+            ["@trap"]         = new("@trap <dir>", "search and disarm a trap in that direction; @trap stop aborts"),
+            ["@train"]        = new("@train", "trains (and applies your CP plan if Auto-train-stats is on); assumes you're at a trainer"),
+            ["@equip"]        = new("@equip-<set>", "wears a saved gear set by keyword (e.g. @equip-backstab; @equip-all = Default set)"),
+            ["@goto"]         = new("@goto <destination>", "walks you to a GOTO favorite, a searched room (coords/name/acronym), or a boss"),
+            ["@loop"]         = new("@loop <name|coords>", "starts a saved loop, or an ad-hoc coordinate loop (≥2 coords)"),
+            ["@lair"]         = new("@lair <name|coords>", "starts an Auto-Lair setup"),
+            ["@stop"]         = new("@stop", "pauses your movement"),
+            ["@rego"]         = new("@rego", "resumes your movement"),
+            ["@atkprio"]      = new("@atkprio [1|2|3 <name>]", "Target Priority: bare reports it; 1 Default, 2 follow-leader, 3 <name> attack-what-player"),
+            ["@atkorder"]     = new("@atkorder [1-4 <name>]", "Attack Order: bare reports it; 1 Default, 2 last-party, 3 last-room, 4 <name> attack-after"),
+            ["@auto-all"]     = new("@auto-all [on|off]", "kill switch: off stops every engine, on restores what was running"),
+            ["@auto-combat"]  = new("@auto-combat [on|off]", "toggle the auto-combat engine"),
+            ["@auto-nuke"]    = new("@auto-nuke [on|off]", "toggle the auto-nuke (offensive spell) engine"),
+            ["@auto-heal"]    = new("@auto-heal [on|off]", "toggle auto-heal (same flag as @auto-rest)"),
+            ["@auto-rest"]    = new("@auto-rest [on|off]", "toggle auto-rest / heal"),
+            ["@auto-bless"]   = new("@auto-bless [on|off]", "toggle the auto-bless engine"),
+            ["@auto-light"]   = new("@auto-light [on|off]", "toggle the auto-light engine"),
+            ["@auto-cash"]    = new("@auto-cash [on|off]", "toggle the auto-cash engine"),
+            ["@auto-get"]     = new("@auto-get [on|off]", "toggle the auto-get (loot) engine"),
+            ["@auto-sneak"]   = new("@auto-sneak [on|off]", "toggle the auto-sneak engine"),
+            ["@auto-hide"]    = new("@auto-hide [on|off]", "toggle the auto-hide engine"),
+            ["@auto-search"]  = new("@auto-search [on|off]", "toggle the auto-search engine"),
+            ["@settings"]     = new("@settings", "reports every engine's on/off state"),
+            ["@reset"]        = new("@reset", "zeroes your Session Stats counters"),
+            ["@profile"]      = new("@profile [n|name]", "swaps your active combat profile; bare reports the roster"),
+            ["@divert"]       = new("@divert [player]", "forwards your incoming telepaths to another player; bare stops"),
+            ["@hangup"]       = new("@hangup", "drops your connection and stays down (no auto-reconnect)"),
+            ["@relog"]        = new("@relog", "cleanly exits, then reconnects and auto-logs back in"),
+            ["@wait"]         = new("@wait", "hold: automation pauses until @ok releases it"),
+            ["@ok"]           = new("@ok", "releases a @wait hold"),
+            ["@comeback"]     = new("@comeback [map/room]", "stranded member asks the party to come recover them"),
+            ["@forget"]       = new("@forget", "calls off a @comeback recovery"),
+            ["@heal"]         = new("@heal", "asks a configured party healer to heal whoever's low"),
+            ["@party"]        = new("@party [directive]", "bare reports solo/following/leading; with args on say, relays the directive to your character"),
+            ["@share"]        = new("@share", "splits your held coin evenly across the party"),
+        };
+
     // Look up the required category for a command. Returns false for unknown
     // commands so the caller can decide whether to register the handler anyway
     // (user-defined triggers, future extension points). Lookup is
@@ -217,6 +290,20 @@ public static class RemoteCommandCatalog
         // command name in the catalog.
         if (key[^1] == '!') key = key[..^1];
         return Map.TryGetValue(key, out category);
+    }
+
+    // Look up a command's help. Accepts the name with or without the leading `@`
+    // (so `@help suicide` and `@help @suicide` both resolve) and strips a trailing
+    // `!`. Case-insensitive. Returns false for unknown commands.
+    public static bool TryGetHelp(string command, out RemoteCommandHelp help)
+    {
+        help = default;
+        if (string.IsNullOrWhiteSpace(command)) return false;
+        string key = command.Trim();
+        if (key[^1] == '!') key = key[..^1];
+        if (key.Length == 0) return false;
+        if (key[0] != '@') key = "@" + key;
+        return Help.TryGetValue(key, out help);
     }
 
     // Total number of documented commands in the catalog. Useful for tests that

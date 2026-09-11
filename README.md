@@ -1,13 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.66.0**
-> - Character Workshop CP Allocation tab: each stat column header now has a mouseover listing everything that stat drives, one effect per line, with this character's next breakpoint for each — spend CP to a real stopping point instead of guessing every 5th/10th point
-> - Tooltips are complete and class-aware, showing each effect's current value + magnitude: Health shows max HP + HP regen (idle/resting); carry weight shows current capacity + rate; casters show mana regen AND spellcasting under their actual casting stat (Mage INT, Priest WIL, Druid INT+WIL, Bard CHM — max mana is level×magery, not a stat)
-> - Level Projection tab gained derived-stat columns — Accuracy, Crit, Dodge, Stealth, Melee damage, Max encumbrance, Magic resist — projected per level the way HP/Mana already are
-> - Level Projection now reflects the real character: it folds your equipment's and completed quests' direct bonuses (max HP/mana, regen %, +dodge/crit/stealth/magic-resist/damage/carry) on top of your gear-boosted stats; the HP/tick column shows idle / resting
-> - Help guide gained a "What your stats do" section explaining what each of the six base stats affects
-> - Paradigm note: accuracy/dodge/stealth/damage ratios are realm-verified; crit's AGI term, encumbrance and magic-resist use the stock formula for both realms (unverified on Paradigm) and are flagged as such
+> **Version 3.67.0**
+> - `@help <command>` now replies with that remote command's syntax + a one-line description (the command name is accepted with or without the leading `@`, so `@help suicide` and `@help @suicide` both work)
+> - Bare `@help` still lists the commands you're permitted to use, now with a "type @help <command>" hint
+> - `@help` still requires the `@` like every remote command — a plain `help` typed between players in chat won't trigger it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

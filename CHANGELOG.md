@@ -1,5 +1,11 @@
 # Version history
 
+## 3.67.0
+
+- `@help <command>` now replies with that remote command's syntax + a one-line description (the command name is accepted with or without the leading `@`, so `@help suicide` and `@help @suicide` both work)
+- Bare `@help` still lists the commands you're permitted to use, now with a "type @help <command>" hint
+- `@help` still requires the `@` like every remote command — a plain `help` typed between players in chat won't trigger it
+
 ## 3.66.0
 
 - Character Workshop CP Allocation tab: each stat column header now has a mouseover listing everything that stat drives, one effect per line, with this character's next breakpoint for each — spend CP to a real stopping point instead of guessing every 5th/10th point

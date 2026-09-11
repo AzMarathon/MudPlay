@@ -203,6 +203,41 @@ public sealed class RemoteCommandCatalogTests
             $"Catalog should hold at least 56 entries; has {RemoteCommandCatalog.Count}.");
     }
 
+    // ===== Per-command help (surfaced by @help <command>) =====
+
+    [Fact]
+    public void EveryCommand_HasHelp_AndViceVersa()
+    {
+        // @help <command> must be able to describe every catalogued command, and
+        // no help entry should reference a command that isn't in the map.
+        foreach (string cmd in RemoteCommandCatalog.Map.Keys)
+            Assert.True(RemoteCommandCatalog.Help.ContainsKey(cmd), $"'{cmd}' has no help entry.");
+        foreach (string cmd in RemoteCommandCatalog.Help.Keys)
+            Assert.True(RemoteCommandCatalog.Map.ContainsKey(cmd), $"help '{cmd}' isn't a catalog command.");
+    }
+
+    [Fact]
+    public void EveryHelpEntry_HasSyntaxAndDescription()
+    {
+        foreach ((string cmd, RemoteCommandHelp h) in RemoteCommandCatalog.Help)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(h.Syntax), $"'{cmd}' has empty syntax.");
+            Assert.False(string.IsNullOrWhiteSpace(h.Description), $"'{cmd}' has empty description.");
+        }
+    }
+
+    [Fact]
+    public void TryGetHelp_AcceptsWithOrWithoutAtAndTrailingBang()
+    {
+        Assert.True(RemoteCommandCatalog.TryGetHelp("@suicide", out RemoteCommandHelp a));
+        Assert.True(RemoteCommandCatalog.TryGetHelp("suicide", out RemoteCommandHelp b));
+        Assert.True(RemoteCommandCatalog.TryGetHelp("@STOP!", out RemoteCommandHelp c));
+        Assert.Equal(a, b);
+        Assert.Equal(RemoteCommandCatalog.Help["@stop"], c);
+        Assert.False(RemoteCommandCatalog.TryGetHelp("nonsense", out _));
+        Assert.False(RemoteCommandCatalog.TryGetHelp("", out _));
+    }
+
     private static PlayerRemoteControls Lookup(string cmd)
     {
         Assert.True(RemoteCommandCatalog.TryGetCategory(cmd, out PlayerRemoteControls c),
