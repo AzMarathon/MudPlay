@@ -48,6 +48,10 @@ public sealed class CombatManagerTests
         // pin the decision — which loadout combat requested and when.
         public List<(string? Weapon, string? OffHand)> Swaps { get; } = new();
         public List<bool> SwapForced { get; } = new();   // parallel to Swaps: the force flag per swap
+        // Server-confirmed worn weapon, as EquipmentManager would report it. Null
+        // (the default) stands for "live gear can't say yet", which is what every
+        // pre-existing test assumes — the engine then falls back to its own belief.
+        public string? WornWeapon { get; set; }
 
         // When true, UI posts queue instead of running inline so a test can feed
         // a whole announce burst, then PumpUi() to flush the single coalesced
@@ -74,7 +78,8 @@ public sealed class CombatManagerTests
                 post: a => { if (DeferUi) _uiJobs.Enqueue(a); else a(); },
                 log: Log);
             Combat.SetWireSender(b => Sent.Add(b));
-            Combat.SetWeaponActuator((w, oh, force) => { Swaps.Add((w, oh)); SwapForced.Add(force); });
+            Combat.SetWeaponActuator((w, oh, force) => { Swaps.Add((w, oh)); SwapForced.Add(force); },
+                readWornWeapon: () => WornWeapon);
             Combat.SetDarkRoomProbe(() => Dark);
             Combat.SetAttackPreventedGate(() => AttackPrevented);
         }
@@ -1938,6 +1943,84 @@ public sealed class CombatManagerTests
         Assert.False(h.Combat.CanEngageMonster(1));      // whole chain exhausted this room
         Assert.Null(h.Combat.CurrentTarget);             // target dropped so we re-pick
         Assert.True(h.CrRefreshSends >= 1);              // CR fired to force a re-observe
+    }
+
+    [Fact]
+    public void WeaponNoEffect_WhileAltSwapStillInFlight_BlamesTheWeaponActuallyWorn()
+    {
+        // Report paradigm-20260910-214553. The engine swapped to the alternate and
+        // attacked in one batch; the server's answer to the PREVIOUS swing (made with
+        // the normal weapon) then came back as "no effect". Believing the alternate was
+        // already on the hand, it wrote the species into the ALTERNATE fail-set —
+        // exhausting the weapon path against a mob the alternate was impaling for 24 a
+        // hit, which left it permanently Unkillable for the room. Live gear still says
+        // the normal weapon is worn, and that is what the line is about.
+        using Harness h = new();
+        h.Settings.NormalWeapon = "throwing hammers";
+        h.Settings.AlternateWeapon = "golden broadsword";
+        h.Settings.AlternateAttackCommand = "a";
+        h.AddMonster(1, "nexus hunter", killable: true);
+        h.Feed("Also here: big nexus hunter.");
+
+        // First no-effect: the engine requests the alternate, so its belief flag now
+        // says "alternate". The server hasn't applied the swap yet, though.
+        h.Feed("Your weapon has no effect against this monster!");
+        h.WornWeapon = "throwing hammers";
+        h.Sent.Clear();
+
+        // The next no-effect is the answer to a swing still made with the hammers.
+        h.Feed("Your weapon has no effect against this monster!");
+
+        // Booked against the normal weapon: the alternate is still a live option, so
+        // the engine re-requests it and re-swings instead of conceding the monster.
+        Assert.True(h.Combat.CanEngageMonster(1));
+        Assert.Equal("a big nexus hunter", h.LastSent);
+    }
+
+    [Fact]
+    public void LandedSwing_ClearsTheSpeciesFromTheWornWeaponsFailSet()
+    {
+        // The fail-sets were one-way for the whole room: one no-effect exhausted the
+        // weapon and no amount of subsequent damage took it back. A landed swing is
+        // direct proof the weapon on the hand hurts this species.
+        using Harness h = new();
+        h.Settings.NormalWeapon = "throwing hammers";
+        h.Settings.AlternateWeapon = "golden broadsword";
+        h.Settings.AlternateAttackCommand = "a";
+        h.AddMonster(1, "nexus hunter", killable: true);
+        h.Feed("Also here: big nexus hunter.");
+
+        h.Feed("Your weapon has no effect against this monster!");   // normal → swap to alt
+        h.WornWeapon = "golden broadsword";
+        h.Feed("Your weapon has no effect against this monster!");   // alt 1st → force-retry
+        h.Feed("Your weapon has no effect against this monster!");   // alt 2nd → concede
+        Assert.False(h.Combat.CanEngageMonster(1));
+
+        h.Feed("You impale big nexus hunter for 24 damage!");
+
+        Assert.True(h.Combat.CanEngageMonster(1));   // the alternate demonstrably works
+    }
+
+    [Fact]
+    public void LandedSwing_ByAPartyMember_DoesNotClearOurFailSet()
+    {
+        // UserHits fires for other people's swings and for reactive gear too; neither
+        // says anything about the weapon in OUR hand.
+        using Harness h = new();
+        h.Settings.NormalWeapon = "throwing hammers";
+        h.Settings.AlternateWeapon = "golden broadsword";
+        h.AddMonster(1, "nexus hunter", killable: true);
+        h.Feed("Also here: big nexus hunter.");
+
+        h.Feed("Your weapon has no effect against this monster!");
+        h.WornWeapon = "golden broadsword";
+        h.Feed("Your weapon has no effect against this monster!");
+        h.Feed("Your weapon has no effect against this monster!");
+        Assert.False(h.Combat.CanEngageMonster(1));
+
+        h.Feed("Borland hacks big nexus hunter for 24 damage!");
+
+        Assert.False(h.Combat.CanEngageMonster(1));
     }
 
     [Fact]

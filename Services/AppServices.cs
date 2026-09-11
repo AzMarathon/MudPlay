@@ -4629,7 +4629,8 @@ public sealed class AppServices
         // which weapon it wants and hands the act off here. The backstab-set
         // armor (deltas only, synchronous) and the weapon swap both fire from the
         // pre-move sequence, before the sn — equipping breaks sneak.
-        Combat.SetWeaponActuator(Equipment.SwapWeapon, () => Equipment.ApplyBackstabArmor());
+        Combat.SetWeaponActuator(Equipment.SwapWeapon, () => Equipment.ApplyBackstabArmor(),
+            () => Equipment.WornWeapon);
 
         // Let an auto-fire gear-set apply defer the weapon slot to combat while it
         // holds a per-monster alternate-weapon override, so the Default set's

@@ -102,6 +102,7 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _mobMissesSub;
     private readonly IDisposable _targetGoneSub;
     private readonly IDisposable _weaponNoEffectSub;
+    private readonly IDisposable _weaponLandedSub;
     private readonly IDisposable _fistsNoEffectSub;
     private readonly IDisposable _spellNoEffectSub;
     private readonly IDisposable _commandNoEffectSub;
@@ -136,6 +137,10 @@ public sealed partial class CombatManager : IDisposable
     // not the actuation).
     private Action<string?, string?, bool>? _swapWeapon;
     private Action? _prepBackstabArmor;
+    // Live worn-weapon reader (EquipmentManager.WornWeapon). Server-confirmed, so
+    // it lags _usingAlternateWeapon by exactly the round-trip the belief flag skips
+    // — which is what makes it the right witness for a no-effect line.
+    private Func<string?>? _readWornWeapon;
     private Func<bool>? _isStealthed;
     private Func<int, bool>? _hasSeeHidden;
     private Func<bool>? _seeHiddenClearActive;
@@ -699,6 +704,7 @@ public sealed partial class CombatManager : IDisposable
         _mobMissesSub = router.Subscribe(KnownPatterns.MobMisses, OnCombatLine);
         _targetGoneSub = router.Subscribe(KnownPatterns.TargetNotHere, OnTargetNotHere);
         _weaponNoEffectSub = router.Subscribe(KnownPatterns.WeaponNoEffect, OnWeaponNoEffect);
+        _weaponLandedSub   = router.Subscribe(KnownPatterns.UserHits,       OnUserWeaponLanded);
         _fistsNoEffectSub  = router.Subscribe(KnownPatterns.FistsNoEffect,  OnFistsNoEffect);
         _spellNoEffectSub  = router.Subscribe(KnownPatterns.SpellNoEffect,  OnSpellNoEffect);
         _commandNoEffectSub = router.Subscribe(KnownPatterns.CommandNoEffect, OnCommandNoEffect);
@@ -802,13 +808,17 @@ public sealed partial class CombatManager : IDisposable
     // land before the next swing; prepBackstabArmor applies the Backstab set's
     // armor synchronously in the pre-move sequence, before the sn (null when no
     // backstab-armor automation is wired — the weapon still gets swapped either
-    // way).
+    // way). readWornWeapon reads back what the server has confirmed is on the hand,
+    // so weapon-effectiveness evidence can be booked against the weapon that
+    // actually swung rather than the one combat has already asked for.
     public void SetWeaponActuator(
-        Action<string?, string?, bool> swapWeapon, Action? prepBackstabArmor = null)
+        Action<string?, string?, bool> swapWeapon, Action? prepBackstabArmor = null,
+        Func<string?>? readWornWeapon = null)
     {
         ArgumentNullException.ThrowIfNull(swapWeapon);
         _swapWeapon = swapWeapon;
         _prepBackstabArmor = prepBackstabArmor;
+        _readWornWeapon = readWornWeapon;
     }
 
     // The monster name we last sent `attack` against, or null when no fight is in
@@ -1855,7 +1865,21 @@ public sealed partial class CombatManager : IDisposable
         string species = ResolveSpeciesFromCurrentTarget();
         CombatSettings settings = _readSettings();
 
-        if (_usingAlternateWeapon)
+        // Book the failure against the weapon that actually swung. _usingAlternateWeapon
+        // flips the moment an `eq` is SENT, so when combat swaps and attacks in one
+        // batch, a no-effect that is really the server answering the PREVIOUS weapon's
+        // swing lands on the new weapon's ledger — and an alternate that hits perfectly
+        // well gets written into the fail-set, exhausting the weapon path and making the
+        // monster read Unkillable for the rest of the room (report paradigm-20260910-214553:
+        // throwing hammers drew the no-effect, the golden broadsword was blamed, and the
+        // engine then refused to swing at a mob it was impaling for 24 a hit).
+        bool onAlternate = AlternateConfirmedOnHand(settings) ?? _usingAlternateWeapon;
+        if (onAlternate != _usingAlternateWeapon)
+            _log?.Combat(LogCategory,
+                $"weapon-no-effect attributed to the {(onAlternate ? "ALTERNATE" : "normal")} weapon " +
+                $"from live gear (engine believed {(_usingAlternateWeapon ? "alternate" : "normal")} — swap still in flight)");
+
+        if (onAlternate)
         {
             // SpellsFirst, the two Alternate* orders, AND CustomRoundCycle all take
             // the "try the spell cascade immediately" branch below — this is a
@@ -1882,7 +1906,7 @@ public sealed partial class CombatManager : IDisposable
                 _log?.Combat(LogCategory, $"adding {species} to alternate-weapon fail-set");
                 if (!physicalFirst && TryFallBackToSpellAfterWeaponFail(settings)) return;
                 _log?.Combat(LogCategory,
-                    $"weapon-no-effect on ALT against {species} — forcing physical swap + retry");
+                    $"weapon-no-effect on ALT against {species} — forcing a real re-equip of the alternate + retry");
                 EquipForAttack(settings, wantAlternate: true, force: true);
                 if (_currentTarget is { } retryTgt)
                 {
@@ -1946,6 +1970,52 @@ public sealed partial class CombatManager : IDisposable
         // observation. (The classifier re-fires on every full room
         // display + arrival.)
         _currentTarget = null;
+    }
+
+    // Whether live gear confirms the configured ALTERNATE weapon is on the hand:
+    // true when the worn weapon is it, false when it's demonstrably something else,
+    // null when gear can't answer (reader unwired, no inventory dump yet, empty
+    // hand, or no alternate configured) and the caller must fall back to the belief
+    // flag. Deliberately keyed on the alternate alone rather than comparing both
+    // slots — NormalWeapon is legitimately blank when the normal loadout comes from
+    // the Workshop Default set, and "worn isn't the alternate" is the whole answer.
+    private bool? AlternateConfirmedOnHand(CombatSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.AlternateWeapon)) return null;
+        string? worn = _readWornWeapon?.Invoke();
+        if (string.IsNullOrWhiteSpace(worn)) return null;
+        return string.Equals(worn.Trim(), settings.AlternateWeapon.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Our own swing landed damage — direct proof the weapon on the hand hurts this
+    // species, so drop it from that weapon's fail-set. Without this the fail-sets
+    // are one-way for the whole room: a single mis-attributed or one-off no-effect
+    // permanently exhausts the weapon path and the retarget loop skips the monster
+    // as Unkillable, no matter how much damage the very next round deals.
+    private void OnUserWeaponLanded(MatchResult match)
+    {
+        if (!_isEnabled()) return;
+        if (match.Groups.Count < 3) return;
+        // Only our OWN swing counts. UserHits also fires for party members ("Bob
+        // hacks ...") and for reactive gear ("The armour spikes stab ..."), neither
+        // of which says anything about what's in our hand.
+        if (!string.Equals(match.Groups[0], "You", StringComparison.OrdinalIgnoreCase)) return;
+
+        string species = ResolveSpeciesByName(match.Groups[1]);
+        if (string.IsNullOrEmpty(species)) return;
+
+        CombatSettings settings = _readSettings();
+        bool onAlternate = AlternateConfirmedOnHand(settings) ?? _usingAlternateWeapon;
+        HashSet<string> failSet = onAlternate
+            ? _alternateWeaponFailedMonsters
+            : _normalWeaponFailedMonsters;
+        if (!failSet.Remove(species)) return;
+
+        _cannotAttackAnnounced.Remove(species);
+        _log?.Combat(LogCategory,
+            $"{species} dropped from the {(onAlternate ? "alternate" : "normal")}-weapon fail-set — " +
+            "a swing just landed with it");
     }
 
     // Map current target's RawName back to its base species via the live
@@ -3589,6 +3659,7 @@ public sealed partial class CombatManager : IDisposable
         _mobMissesSub.Dispose();
         _targetGoneSub.Dispose();
         _weaponNoEffectSub.Dispose();
+        _weaponLandedSub.Dispose();
         _fistsNoEffectSub.Dispose();
         _spellNoEffectSub.Dispose();
         _commandNoEffectSub.Dispose();
