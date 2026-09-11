@@ -50,9 +50,21 @@ public sealed class StatEffectsTests
         var b = Block(str: 130, intel: 88, wil: 66, agi: 77, chm: 55, level: 30);
         Assert.Equal(CharacterCalculator.CalcBaseCritRating(30, 88, 77, 55), StatEffects.CritRating(b));
         Assert.Equal(CombatCalculator.CalcDodge(30, 77, 55, 0), StatEffects.DodgeValue(b));
-        Assert.Equal(CharacterCalculator.CalcStealthBase(30, 88, 77, 55), StatEffects.Stealth(b));
+        Assert.Equal(CharacterCalculator.CalcStealthBase(30, 88, 77, 55, RealmType.Stock), StatEffects.Stealth(b, RealmType.Stock));
         Assert.Equal(CharacterCalculator.CalcMaxEncumbrance(130), StatEffects.MaxEncumbrance(b));
         Assert.Equal(CharacterCalculator.CalcMagicResistance(88, 66), StatEffects.MagicResistance(b));
+    }
+
+    // Stealth is NOT identical across realms (correcting the old PNG-based assumption):
+    // Stock truncates each stat term, Paradigm rounds the summed float. AGI/INT/CHM=50
+    // → stock 12+6+8=26 vs Paradigm round(27.08)=27, a 1-point gap. (MMUD-Explorer
+    // CalculateStealth bGreaterMUD branch.)
+    [Fact]
+    public void Stealth_RealmDiffers_ParadigmRoundsStockTruncates()
+    {
+        int stock = CharacterCalculator.CalcStealthBase(20, 50, 50, 50, RealmType.Stock);
+        int para = CharacterCalculator.CalcStealthBase(20, 50, 50, 50, RealmType.ParaMud);
+        Assert.Equal(stock + 1, para);
     }
 
     [Fact]

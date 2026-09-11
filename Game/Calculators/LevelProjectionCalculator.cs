@@ -61,7 +61,7 @@ public static class LevelProjectionCalculator
         int accuracy = StatEffects.AccuracyFromStats(stats, realm);
         int crit = StatEffects.CritRating(stats) + (gear?.PlusCrits ?? 0);
         int dodge = StatEffects.DodgeValue(stats) + (gear?.PlusDodge ?? 0);
-        int stealth = StatEffects.Stealth(stats) + (gear?.PlusStealth ?? 0);
+        int stealth = StatEffects.Stealth(stats, realm) + (gear?.PlusStealth ?? 0);
         int minDmg = StatEffects.MinDamageBonus(stats) + (gear?.PlusMinDamage ?? 0);
         int maxDmg = StatEffects.MaxDamageBonus(stats) + (gear?.PlusMaxDamage ?? 0);
         int maxEnc = StatEffects.MaxEncumbrance(stats) + (gear?.PlusEncumbrance ?? 0);

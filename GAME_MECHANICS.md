@@ -273,9 +273,14 @@ tags the STR/AGL contributions `*bash`/`*smash` in the tool's own breakdown:
 `level/5 + (CHM-50)/5 + (AGL-50)/3` (+ gear, + an encumbrance bonus under 33% load). So AGL ~3/pt,
 CHM ~5/pt.
 
-**Stealth base** *([CONFIRMED] stock via `dll-stats-map.md` (`0x5fa`); the PNG breakpoint reference
-confirms it is IDENTICAL on Paradigm)*: `INT/8 + AGL/4 + CHM/6 + stealthLvl + 20`, where
-`stealthLvl = level<16 ? level*2 : level+15`. So INT ~8/pt, AGL ~4/pt, CHM ~6/pt.
+**Stealth base** *([CONFIRMED] both realms — MMUD-Explorer `CalculateStealth` (modMMudFunc.bas ~4620),
+stock also in `dll-stats-map.md` `0x5fa`)*: `stat terms + stealthLvl + 20`, where `stealthLvl =
+level<16 ? level*2 : level+15`. Per-point ratios are INT ~8/pt, AGL ~4/pt, CHM ~6/pt on BOTH realms,
+**but the realms round differently** — Stock TRUNCATES each stat term (`Fix(AGL/4)+Fix(INT/8)+Fix(CHM/6)`)
+while Paradigm (`bGreaterMUD`) sums the stat contributions as a float and rounds ONCE
+(`Round(AGL/4 + INT/8 + CHM/6)`), so the two can differ by a point or two. **This corrects an earlier
+note that claimed the PNG showed stealth "identical" on Paradigm** — the PNG's granularity couldn't see
+the rounding difference; MMUD-Explorer's derivation makes it explicit. `CalcStealthBase` is realm-split.
 
 **Crit rating (base)** *([CONFIRMED] stock via `dll-stats-map.md` (`0x710`); **AGL term NOT verified
 for Paradigm** — stock formula used for both, flag)*:
@@ -326,7 +331,8 @@ AGL+INT+CHM) and **HP-regen divisor** (750 stock / 500 Paradigm). Those two the 
 reflects per realm; the rest use the stock derivation for both, flagged below.
 
 **Paradigm-verification summary.** Accuracy (both realms, incl. the MMUD-Explorer Paradigm branch),
-dodge, stealth (PNG-confirmed identical), and melee damage are realm-verified. **Crit's AGL term,
+dodge, stealth (MMUD-Explorer-verified — realms differ by a rounding step, not identical), and melee
+damage are realm-verified. **Crit's AGL term,
 encumbrance, and magic resistance use the stock formula for Paradigm as well and are unverified
 there** — treat as close-but-unconfirmed until a Paradigm source or capture pins them.
 

@@ -197,15 +197,24 @@ public static class CharacterCalculator
         return Math.Clamp(rating, 1, 75);
     }
 
-    // Base stealth skill (0x5fa) from stats + level: Int/8 + Agl/4 + Chm/6 +
-    // stealthLvl + 20, where stealthLvl = Level*2 below 16, else Level+15. Excludes
-    // the per-race / per-class +10 / -15 flat adjusts (they're character-specific
-    // grants, not a stat effect), so this is the stat-and-level base a stealth-
-    // capable class starts from. Non-stealth classes have no stealth at all.
-    public static int CalcStealthBase(int level, int intellect, int agility, int charm)
+    // Base stealth skill (0x5fa) from stats + level: stat terms + stealthLvl + 20,
+    // where stealthLvl = Level*2 below 16, else Level+15. Excludes the per-race /
+    // per-class +10 / -15 flat adjusts (character-specific grants, not a stat
+    // effect), so this is the stat-and-level base a stealth-capable class starts
+    // from. Non-stealth classes have no stealth at all.
+    // REALM-SPLIT (verified in MMUD-Explorer `CalculateStealth`, modMMudFunc.bas
+    // ~4620): Stock TRUNCATES each stat term individually
+    // (Fix(Agl/4)+Fix(Int/8)+Fix(Chm/6)); Paradigm (bGreaterMUD) sums the stat
+    // contributions as a float and rounds ONCE — so the two realms can differ by a
+    // point or two. (This corrects the earlier "PNG says stealth is identical"
+    // assumption, which the PNG's granularity couldn't disprove.)
+    public static int CalcStealthBase(int level, int intellect, int agility, int charm, RealmType realm)
     {
-        int stealthLvl = level < 16 ? level * 2 : level + 15;
-        return intellect / 8 + agility / 4 + charm / 6 + stealthLvl + 20;
+        int baseVal = (level < 16 ? level * 2 : level + 15) + 20;
+        if (realm == RealmType.ParaMud)
+            return baseVal + (int)Math.Round(
+                agility / 4.0 + intellect / 8.0 + charm / 6.0, MidpointRounding.ToEven);
+        return baseVal + agility / 4 + intellect / 8 + charm / 6;
     }
 
     // Max encumbrance / carry weight (0xb2): Str*48, with a steeper term above 100

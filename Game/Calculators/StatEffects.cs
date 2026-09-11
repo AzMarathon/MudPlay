@@ -79,8 +79,8 @@ public static class StatEffects
     public static int DodgeValue(StatBlock s)
         => CombatCalculator.CalcDodge(s.Level, s.Agility, s.Charm, plusDodge: 0);
 
-    public static int Stealth(StatBlock s)
-        => CharacterCalculator.CalcStealthBase(s.Level, s.Intellect, s.Agility, s.Charm);
+    public static int Stealth(StatBlock s, RealmType realm)
+        => CharacterCalculator.CalcStealthBase(s.Level, s.Intellect, s.Agility, s.Charm, realm);
 
     // STR's fold into weapon min / max damage (the bonus added to the weapon's own
     // range): min (STR-100)/10, max (STR-50)/10, never negative (GreaterMUD floor).
@@ -120,6 +120,7 @@ public static class StatEffects
 
         // Derived-value functions (stat-and-level portion; gear excluded).
         Func<StatBlock, int> accy = s => AccuracyFromStats(s, realm);
+        Func<StatBlock, int> stealth = s => Stealth(s, realm);   // realm-split rounding
         Func<StatBlock, int> maxHp = s => CharacterCalculator.CalcMaxHp(
             s.Health, s.Level, ctx.MinHits, ctx.MaxHits, ctx.RaceHpPerLevel, 0, HpRollMode.Average);
         Func<StatBlock, int> hpIdle = s => CharacterCalculator.CalcHpRegen(s.Level, s.Health, 0, false, realm);
@@ -170,7 +171,7 @@ public static class StatEffects
                     para ? $"~3 {ab} → +1 (normal; ~6 bash/smash)" : $"~6 {ab} → +1 (all attacks)", accy);
                 Line("Dodge", $"{DodgeValue(current)}", $"~3 {ab} → +1", DodgeValue);
                 Line("Crit", $"{CritRating(current)}%", $"~20 {ab} → +1", CritRating);
-                Line("Stealth", $"{Stealth(current)}", $"~4 {ab} → +1", Stealth);
+                Line("Stealth", $"{stealth(current)}", $"~4 {ab} → +1", stealth);
                 break;
 
             case BaseStat.Intellect:
@@ -178,7 +179,7 @@ public static class StatEffects
                 // never bash/smash.
                 if (para) Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~6 {ab} → +1 (normal attacks)", accy);
                 Line("Crit", $"{CritRating(current)}%", $"~10 {ab} → +1", CritRating);
-                Line("Stealth", $"{Stealth(current)}", $"~8 {ab} → +1", Stealth);
+                Line("Stealth", $"{stealth(current)}", $"~8 {ab} → +1", stealth);
                 Line("Magic resist", $"{MagicResistance(current)}", $"+1 per 4 {ab}", MagicResistance);
                 if (manaFromInt) Line("Mana regen", $"{manaRegen(current)}/tick", "", manaRegen);
                 if (manaFromInt) Line("Spellcasting", $"{spellcast(current)}", "", spellcast);
@@ -197,7 +198,7 @@ public static class StatEffects
                 if (para) Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~10 {ab} → +1 (normal attacks)", accy);
                 Line("Dodge", $"{DodgeValue(current)}", $"~5 {ab} → +1", DodgeValue);
                 Line("Crit", $"{CritRating(current)}%", $"~30 {ab} → +1", CritRating);
-                Line("Stealth", $"{Stealth(current)}", $"~6 {ab} → +1", Stealth);
+                Line("Stealth", $"{stealth(current)}", $"~6 {ab} → +1", stealth);
                 if (manaFromChm) Line("Mana regen", $"{manaRegen(current)}/tick", "", manaRegen);
                 if (manaFromChm) Line("Spellcasting", $"{spellcast(current)}", "", spellcast);
                 break;
