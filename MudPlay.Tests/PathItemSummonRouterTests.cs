@@ -118,9 +118,9 @@ public sealed class PathItemSummonRouterTests
 
         r.OnWalkEvent(Finished(GateRoom));
 
-        // The summon, then a room re-read so the roster sees what arrived and
-        // auto-combat can engage it.
-        Assert.Equal(new[] { "touch statue", "look" }, h.Sent.Select(Decode).ToArray());
+        // The summon, then a bare CR (Enter) to redisplay the room, so the roster
+        // sees what arrived and auto-combat can engage it.
+        Assert.Equal(new[] { "touch statue", "" }, h.Sent.Select(Decode).ToArray());
     }
 
     // The drop is not announced on the death line, so the floor has to be
@@ -135,8 +135,8 @@ public sealed class PathItemSummonRouterTests
 
         r.OnMonsterDied(Died());
 
-        // summon, post-summon re-read, then the post-kill floor survey.
-        Assert.Equal(new[] { "touch statue", "look", "look" }, h.Sent.Select(Decode).ToArray());
+        // summon, post-summon redisplay, then the post-kill floor survey.
+        Assert.Equal(new[] { "touch statue", "", "" }, h.Sent.Select(Decode).ToArray());
     }
 
     // Deaths carry no identity, so a death must never be taken as OUR kill and end
@@ -175,7 +175,7 @@ public sealed class PathItemSummonRouterTests
 
         for (int i = 0; i < 50; i++) r.OnMonsterDied(Died());
 
-        int looks = h.Sent.Count(b => Decode(b) == "look");
+        int looks = h.Sent.Count(b => Decode(b).Length == 0);
         Assert.InRange(looks, 1, 10);
         Assert.True(r.DetourActive);   // capping the surveys must not end the detour
     }
@@ -280,7 +280,7 @@ public sealed class PathItemSummonRouterTests
         r.OnWalkEvent(Started());
 
         Assert.False(r.DetourActive);
-        Assert.Equal(new[] { "touch statue", "look" }, h.Sent.Select(Decode).ToArray());
+        Assert.Equal(new[] { "touch statue", "" }, h.Sent.Select(Decode).ToArray());
     }
 
     // Every router redirects with supersedeSilently, so a sibling detour stealing
@@ -432,8 +432,8 @@ public sealed class PathItemSummonRouterTests
     }
     // Report paradigm-20260911-112005: the summon directive carries no message of
     // its own, so whether the room re-renders after it is up to the engine — and in
-    // the observed run the statue swung BEFORE any redisplay named it. Asking
-    // outright is what makes the roster reliable rather than incidental.
+    // the observed run the statue swung BEFORE any redisplay named it. A bare CR
+    // (Enter) is what makes the roster reliable rather than incidental.
     [Fact]
     public void SummonIsFollowedByARoomReRead()
     {
@@ -444,7 +444,7 @@ public sealed class PathItemSummonRouterTests
         r.OnWalkEvent(Finished(GateRoom));
 
         Assert.Equal(2, h.Sent.Count);
-        Assert.Equal("look", Decode(h.Sent[1]));   // after the summon, never before
+        Assert.Equal(string.Empty, Decode(h.Sent[1]));   // bare CR, after the summon
     }
 
 }

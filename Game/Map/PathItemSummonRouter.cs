@@ -278,7 +278,9 @@ public sealed class PathItemSummonRouter : IDisposable
         _log?.Info(LogCategory,
             $"a kill landed while waiting on '{_source.MonsterName}' — re-surveying " +
             $"{_source.Room} for path item {_itemId} ({_reSurveys}/{MaxReSurveys})");
-        _wire.Send("look");
+        // Bare CR, same as the post-summon redisplay: the room render carries the
+        // floor listing PathItemFloorCollector reads.
+        _wire.Send("");
     }
 
     // Inventory-change callback (wired to InventoryManager.Changed). When the item
@@ -319,15 +321,18 @@ public sealed class PathItemSummonRouter : IDisposable
             $"at {_source.Room} — '{_source.Command}' to summon '{_source.MonsterName}' " +
             $"for path item {_itemId}");
         _wire.Send(_source.Command);
-        // Re-read the room straight after the summon so the roster learns what just
-        // arrived, and auto-combat can engage it. Nothing else tells us: the summon
-        // directive carries no message of its own, so whether the room re-renders at
-        // all is up to the engine — and in the observed run the statue got its swing
-        // in BEFORE any redisplay named it, leaving the client fighting a monster it
-        // hadn't noticed (report paradigm-20260911-112005). Asking removes the
-        // dependency on a redisplay we aren't promised; it can't outrun a summon that
-        // attacks in the same server tick.
-        _wire.Send("look");
+        // Bare CR = Enter = redisplay the current room, surfacing the "Also here:"
+        // line that now names what we just conjured. The summon directive carries no
+        // message of its own, so whether the engine re-renders on its own is not
+        // something we're promised — in the observed run it did, but only after the
+        // statue had already swung, leaving the client fighting a monster it hadn't
+        // noticed (report paradigm-20260911-112005).
+        //
+        // This can't outrun a summon that attacks in the same server tick, as that
+        // one did. It buys the round back when the monster doesn't act immediately,
+        // and more importantly it stops the roster depending on an engine redisplay
+        // that may never come.
+        _wire.Send("");
     }
 
     private void ResumeToPath()
