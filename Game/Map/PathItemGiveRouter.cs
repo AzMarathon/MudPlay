@@ -237,6 +237,18 @@ public sealed class PathItemGiveRouter : IDisposable
         _phase = Phase.Acquiring;
         _log?.Info(LogCategory, $"at giver {_giver.Room} — '{_giver.Command}' for path item {_itemId}");
         _wire.Send(_giver.Command);
+        // Re-read the pack immediately after the ask. The hand-over line is
+        // per-give flavor text ("The gnome commander gives you the heavy bloodstone
+        // orb.") — wording we can't recognise and mustn't try to, since every giver
+        // words it differently. Without a re-read the item sat in the pack unnoticed,
+        // the need never resolved, the give window expired, and the walk resumed and
+        // failed for want of an item it was already carrying (report
+        // paradigm-20260911-103025). The `i` reply is a plain "You are carrying …"
+        // line the inventory parse already owns, so asking is the reliable test of
+        // whether the give landed. Two commands is far inside the realms' burst
+        // allowance, and the game processes them in order, so the listing reflects
+        // the give.
+        _wire.Send("i");
         ArmGiveTimer();
     }
 

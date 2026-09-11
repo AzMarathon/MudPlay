@@ -13,12 +13,17 @@ public sealed class PathItemDemandTrackerTests
         public readonly Dictionary<int, int> Carried = new();
         public bool InventoryLoaded = true;
         public bool Enabled = true;
+        // Item ids whose source is deterministic (a keyword give / guaranteed
+        // summon) and therefore NOT worth searching for. Empty = search everything,
+        // which is the historical behaviour.
+        public readonly HashSet<int> DeterministicallySourced = new();
 
         public PathItemDemandTracker Build() => new(
             Needs,
             carriedCount: id => Carried.TryGetValue(id, out int n) ? n : 0,
             inventoryLoaded: () => InventoryLoaded,
-            isEnabled: () => Enabled);
+            isEnabled: () => Enabled,
+            isSearchWorthy: id => !DeterministicallySourced.Contains(id));
 
         public void Carry(int id, int n = 1) => Carried[id] = n;
 
@@ -233,4 +238,113 @@ public sealed class PathItemDemandTrackerTests
         Assert.Equal(0, h.OutstandingCount);
         Assert.False(t.SearchDemandActive);
     }
+    // ----- search worthiness -----------------------------------------
+    //
+    // Report paradigm-20260911-100708: the run detoured to the gnome commander for
+    // a bloodstone orb and searched every room on the way. An NPC who hands the
+    // item over on a keyword is already being walked to, so a `sea` per room buys
+    // nothing. A shop item or a percentage drop stays search-worthy.
+
+    [Fact]
+    public void DeterministicallySourcedItem_PostsNeedButDoesNotArmSearch()
+    {
+        var h = new Harness();
+        h.DeterministicallySourced.Add(807);
+        PathItemDemandTracker t = h.Build();
+
+        t.OnPathItemsRequired(new[] { 807 });
+
+        // The need still posts — the acquisition routers run off it.
+        Assert.Equal(1, h.OutstandingCount);
+        Assert.False(t.SearchDemandActive);
+    }
+
+    [Fact]
+    public void ShopOrDropSourcedItem_StillArmsSearch()
+    {
+        var h = new Harness();
+        PathItemDemandTracker t = h.Build();
+
+        t.OnPathItemsRequired(new[] { 42 });
+
+        Assert.True(t.SearchDemandActive);
+    }
+
+    // A route needing both kinds still searches: the searchable one justifies it.
+    [Fact]
+    public void MixedRoute_ArmsSearchForTheSearchableItem()
+    {
+        var h = new Harness();
+        h.DeterministicallySourced.Add(807);
+        PathItemDemandTracker t = h.Build();
+
+        t.OnPathItemsRequired(new[] { 807, 42 });
+
+        Assert.Equal(2, h.OutstandingCount);
+        Assert.True(t.SearchDemandActive);
+    }
+
+    // Once the searchable item is in hand its need resolves, and the remaining
+    // deterministic one must not keep the search armed for the rest of the trip.
+    [Fact]
+    public void SearchDisarmsWhenOnlyDeterministicNeedsRemain()
+    {
+        var h = new Harness();
+        h.DeterministicallySourced.Add(807);
+        PathItemDemandTracker t = h.Build();
+        t.OnPathItemsRequired(new[] { 807, 42 });
+        Assert.True(t.SearchDemandActive);
+
+        h.Carry(42);
+        t.OnInventoryChanged();
+
+        Assert.Equal(1, h.OutstandingCount);
+        Assert.False(t.SearchDemandActive);
+    }
+
+    // ----- re-offering a deferred need -------------------------------
+    //
+    // Report paradigm-20260911-103025: a two-gate route posts both needs
+    // back-to-back; the first router takes item one and the rest defer so two
+    // detours can't fight over the walk. Post only announces NEW needs, so when
+    // that detour finished nothing re-offered item two and the route failed at the
+    // gate nobody had been sent after.
+
+    [Fact]
+    public void AlreadyOutstandingNeed_IsReOfferedOnTheNextAnnounce()
+    {
+        var h = new Harness();
+        PathItemDemandTracker t = h.Build();
+        var offered = new List<string>();
+        h.Needs.NeedPosted += n => offered.Add(n.Descriptor);
+
+        t.OnPathItemsRequired(new[] { 807, 806 });
+        Assert.Equal(new[] { "807", "806", "807", "806" }, offered);   // posts, then the re-offer
+
+        // The detour for 807 completes and its resume re-announces the route. 806 is
+        // still outstanding and MUST be offered again.
+        offered.Clear();
+        h.Carry(807);
+        t.OnInventoryChanged();
+        t.OnPathItemsRequired(new[] { 807, 806 });
+
+        Assert.Contains("806", offered);
+    }
+
+    // Nothing left to fetch → nothing announced, so a plain walk stays quiet.
+    [Fact]
+    public void EverythingCarried_AnnouncesNothing()
+    {
+        var h = new Harness();
+        PathItemDemandTracker t = h.Build();
+        var offered = new List<string>();
+        h.Needs.NeedPosted += n => offered.Add(n.Descriptor);
+        h.Carry(807);
+
+        t.OnPathItemsRequired(new[] { 807 });
+
+        Assert.Empty(offered);
+        Assert.Equal(0, h.OutstandingCount);
+    }
+
 }

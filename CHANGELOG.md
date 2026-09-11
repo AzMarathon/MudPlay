@@ -1,13 +1,32 @@
 # Version history
 
-## 3.69.0
+## 3.70.0
 
 - Navigation no longer loses track of itself looping a block of identically-named rooms (e.g. the Soldier's Quarters grid), reworked across three layers:
   - A movement command the game silently drops to its typing-rate limiter ("You are typing too quickly - command ignored") is un-counted, so the tracker can't run a room ahead of you
-  - Position now advances on the server's **command echo** ("[HP=..]:e") — the causal proof your move executed — instead of a timing guess, so a stray room redisplay (a passing mob, a regen tick, a combat redraw) can no longer be mistaken for your move's landing, no matter when it arrives
+  - Position now advances on the server's **command echo** ("[HP=..]:e") — the causal proof your move executed — instead of a timing guess, so a stray room redisplay (a passing mob, a regen tick, a combat redraw) can no longer be mistaken for your move's landing, no matter when it arrives; the echo is read after whatever prompt/statline you've configured, not just the default shape
   - While walking an ambiguous area, the path itself now narrows down where you are and re-anchors you without the slower reverse-walk recovery
 - **Fear** is now a tracked condition in its own right (the "You are afraid!" debuff, e.g. a terror beast's shriek): it shows as **Fear** in the Messages game-data editor and the condition log, distinct from a plain movement-held, while still halting navigation so the client doesn't walk while being shoved around
 - bug reports addressed: issue #478
+
+## 3.69.0
+
+- Route planning now counts the item a hidden exit's opener needs, so a walk through one fetches it instead of marching to an exit it can't open
+- Route picker names that item up front rather than offering the shortcut and going quiet about it
+- A locked door's key is fetched when a room command can summon a guaranteed dropper for it — walk there, summon, fight, collect, carry on; a key you can pick or bash, or one that only drops on a low-percentage lair roll, is still left alone
+- Room commands that summon, teach a spell, grant an ability, drop an item, or take one now show in the map tooltip instead of nothing at all
+- Room info panel gained the room-commands section it was already documented as having
+- A locked door whose key id matches no item reads as the plain door it behaves like, instead of naming a key that doesn't exist
+- Choosing "obtain then cross" in the route picker now actually fetches the route's gate items — it only ever armed hazard counters, so an item-gated pick crossed the gate having arranged nothing unless "search rooms if item needed" happened to be on
+- Auto-search no longer fires a `sea` in every room while detouring for an item an NPC hands over on a keyword — searching stays on for shop items and percentage drops, where finding one loose actually helps
+- The walker no longer reads its own multi-action command (`step tile`, `climb rope`) as a hand-typed move and pauses itself mid-detour
+- A crossing whose item is already being fetched waits for it instead of being attempted and failed first — no more rubbing an orb you aren't carrying and bonking on the exit
+- After asking an NPC for a path item the pack is re-read with `i` instead of trusting the hand-over line — that wording is per-giver flavour text and some givers never name the item at all, so the walk was failing for want of an item it had already been handed
+- A gate item a fulfiller had to defer on is offered again on the next walk, so a two-gate route no longer fetches the first item and then dies at the second
+- A locked door whose key is being fetched waits for it, instead of the door engine burning its one use-key attempt before the key arrives
+- Resuming after fetching one gate item no longer refuses the rest of the route — a two-gate trip used to collect the first item and then declare the second gate impassable
+- The room is re-read straight after a summon so the roster sees what arrived, instead of waiting on a redisplay the engine never promised
+- bug reports addressed: paradigm-20260911-010954, paradigm-20260911-095404, paradigm-20260911-100708, paradigm-20260911-103025, paradigm-20260911-103315, paradigm-20260911-110624, paradigm-20260911-112005
 
 ## 3.68.1
 

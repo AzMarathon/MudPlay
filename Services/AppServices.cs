@@ -1394,6 +1394,15 @@ public sealed class AppServices
     // record's AutoObtainForPath flag.
     public Game.Map.PathItemGiveRouter PathItemGiveRouter { get; private set; } = null!;
 
+    // Guaranteed-summon acquisition. When a walk needs a gate item no give or shop
+    // supplies but a room command summons a monster that drops it outright, detours
+    // there, types the command, waits out the fight, re-surveys the floor, and
+    // resumes. The only router that can source a LOCKED DOOR's key — everything
+    // else leaves a key gate to fail in place, because only a deterministic spawn +
+    // guaranteed drop makes a key worth routing for. Gated per item by the same
+    // AutoObtainForPath flag.
+    public Game.Map.PathItemSummonRouter PathItemSummonRouter { get; private set; } = null!;
+
     // Index of the active set's room-entry hazards — a room's cast-on-enter
     // Spell mapped to the item(s) that make the room safe (fish-helm negator,
     // failitem rafts, checkspell buff sources). Feeds the navigation
@@ -2739,11 +2748,22 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             TBInfo.OnActiveSetChanged(GameData.ActiveSet);
 
-        // ItemSourceIndex — reverse item-acquisition (containers + textblock
-        // giveitem awards) for the Game Data browser. Reads TBInfo's typed
-        // entries, so it's constructed after the store above. Lazy and
-        // self-invalidating, so there's no ActiveSetChanged subscription to wire.
+        // ItemSourceIndex — reverse item-acquisition (containers, textblock
+        // giveitem awards, guaranteed summon drops), read by the Game Data browser
+        // and by the path-item acquisition routers. Reads TBInfo's typed entries, so
+        // it's constructed after the store above.
+        //
+        // Still lazy and self-invalidating, but warmed in the background on a set
+        // change: the first build is ~600 ms (it walks every Rooms and Monsters row),
+        // and left purely lazy that lands on whichever walk first crosses a gate —
+        // a stall exactly when the user is watching the character move. The warm
+        // builds into locals and publishes by reference, and GameDataCache guards its
+        // own tables, so it's safe off-thread. Subscribed AFTER TBInfo above so the
+        // store has reloaded by the time the build reads it; a query that beats the
+        // warm simply builds it itself.
         ItemSources = new ItemSourceIndex(GameData, TBInfo, Log);
+        GameData.ActiveSetChanged += _ => Task.Run(ItemSources.Warm);
+        if (GameData.ActiveSet is not null) Task.Run(ItemSources.Warm);
 
         // RoomFloorItemIndex — the room→floor-item (`roomitem`) mapping for the
         // Navigation Room Info panel. Reads TBInfo's typed entries like ItemSources;
@@ -4920,6 +4940,13 @@ public sealed class AppServices
             isEnabled: () =>
                 Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded
                 || _forcedPathObtain.Count > 0,
+            // Searching is only a plausible way to get an item nobody hands over on
+            // demand. An NPC keyword give or a guaranteed room-command summon is
+            // already being walked to, so a `sea` in every room en route is pure
+            // noise. A shop item or a percentage drop stays search-worthy — finding
+            // one loose beats paying or grinding for it.
+            isSearchWorthy: id =>
+                !DeterministicGiveExists(id) && SummonSourcesForItem(id).Count == 0,
             log: Log);
         Inventory.Changed += PathItemDemand.OnInventoryChanged;
 
@@ -5327,6 +5354,24 @@ public sealed class AppServices
         // announces only when the user forced one via the route picker's "obtain
         // then cross" choice (otherwise the group stays a manual counter choice).
         Walker.SetHazardItemResolver(HazardAnnounceItems);
+
+        // Admit a locked door's key into that same announce, but ONLY when a room
+        // command can summon a guaranteed dropper for it — the one key-acquisition
+        // chain with no RNG in it. Every other key gate stays unannounced and fails
+        // in place, which is what keeps a low-drop lair key (the black star key)
+        // from sending a walk on an open-ended hunt.
+        Walker.SetDoorKeySourceProbe(id => SummonSourcesForItem(id).Count > 0);
+
+        // Hold a crossing whose gate item is missing but already being fetched,
+        // rather than sending an opener and a move that can only fail. Requires a
+        // detour to actually be in flight, so a gate nothing can source still fails
+        // the normal way instead of parking the walk.
+        Walker.SetGateItemHoldProbe(id =>
+            id > 0
+            && !IsItemCarried(id)
+            && (PathItemGiveRouter.DetourActive || PathItemShopRouter.DetourActive
+                || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive)
+            && HasOutstandingPathItemNeed(id));
 
         // Clear the per-walk forced-obtain override when a walk is abandoned, so a
         // forced flag never leaks into a later unrelated walk. (The per-item drop
@@ -6059,9 +6104,7 @@ public sealed class AppServices
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
-            // Silent supersede: the detour redirect is our own, not an external
-            // abort, so it must not fire a Stopped back into this router's OnWalkEvent.
-            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
+            walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += PathItemGiveRouter.OnNeedPosted;
@@ -6083,16 +6126,48 @@ public sealed class AppServices
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
-            // Silent supersede: the shop / bank redirect is our own, not an external
-            // abort, so it must not fire a Stopped back into this router's OnWalkEvent
-            // (which would abandon the detour on arrival — the "sat idle at the shop,
-            // never bought" bug).
-            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
+            // The shared detour walk supersedes silently — without that, arriving at
+            // the shop fired a Stopped into this router and abandoned the detour on
+            // arrival (the "sat idle at the shop, never bought" bug).
+            walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += PathItemShopRouter.OnNeedPosted;
         Walker.Event += PathItemShopRouter.OnWalkEvent;
         Inventory.Changed += PathItemShopRouter.OnInventoryChanged;
+
+        // Guaranteed-summon routing. Between the free routers and the gamble: when
+        // a walk-to needs an uncarried gate item that no give or shop supplies but
+        // a ROOM COMMAND summons a monster which drops it outright, detour there,
+        // type the command, let the fight resolve, re-survey the floor, and resume.
+        // Unlike the drop hunt below this needs no prompt — both the spawn and the
+        // drop are deterministic — and unlike the give/shop routers it is the only
+        // one that can source a locked door's key (see AnnounceDoorKeyIfSummonable).
+        // Wire-sender bound by MainWindowViewModel.
+        PathItemSummonRouter = new Game.Map.PathItemSummonRouter(
+            summonSourcesForItem: SummonSourcesForItem,
+            cheaperSourceExists: id => DeterministicGiveExists(id) || ShopStock.AnyShopSells(id),
+            // A multi-item route posts one need per item back-to-back, so a sibling
+            // may already own the walk by the time ours fires.
+            siblingDetourActive: () =>
+                PathItemGiveRouter.DetourActive || PathItemShopRouter.DetourActive
+                || MonsterDropRouter.DetourActive,
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
+            walkDestination: () => Walker.Destination,
+            distanceBetween: PathItemDetourDistance,
+            carriedCount: CountItemCarried,
+            itemName: ItemNames.GetName,
+            isEnabled: IsAutoObtainForPath,
+            engineWalkActive: () =>
+                AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
+                || AutoDeposit.IsRerouting,
+            walkTo: WalkToForPathItemDetour,
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+            log: Log);
+        Needs.NeedPosted += PathItemSummonRouter.OnNeedPosted;
+        Walker.Event += PathItemSummonRouter.OnWalkEvent;
+        Inventory.Changed += PathItemSummonRouter.OnInventoryChanged;
+        MonsterDeath.MonsterDied += PathItemSummonRouter.OnMonsterDied;
 
         // Monster-drop reroute (PR D). The no-shop counterpart to the shop
         // router: when a walk-to needs an uncarried Item/Ticket-gate item no
@@ -6108,7 +6183,10 @@ public sealed class AppServices
         MonsterDropRouter = new Game.Map.MonsterDropRouter(
             dropSpawnsForItem: DropSpawnsForItem,
             anyShopSells: ShopStock.AnyShopSells,
-            deterministicGiveExists: DeterministicGiveExists,
+            // A guaranteed summon counts as a deterministic source here too: a
+            // certain kill beats asking the user to gamble on a lair roll.
+            deterministicGiveExists: id =>
+                DeterministicGiveExists(id) || SummonSourcesForItem(id).Count > 0,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
             distancesFrom: src => Bfs.ComputeDistancesFrom(src, Movement),
@@ -6119,8 +6197,7 @@ public sealed class AppServices
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting,
             confirm: (title, body) => Confirm.ConfirmAsync(title, body, "Reroute"),
-            // Silent supersede: the hunt reroute is our own, not an external abort.
-            walkTo: key => Walker.WalkTo(key, supersedeSilently: true),
+            walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         Needs.NeedPosted += MonsterDropRouter.OnNeedPosted;
@@ -7764,6 +7841,9 @@ public sealed class AppServices
         if (!IsAutoObtainForPath(itemId)) return null;
         if (DeterministicGiveExists(itemId)) return null;   // give preempts the hunt
         if (ShopStock.AnyShopSells(itemId)) return null;
+        // A guaranteed summon preempts it too — same stand-down MonsterDropRouter
+        // enforces, so the tail can't promise a lair the run won't visit.
+        if (SummonSourcesForItem(itemId).Count > 0) return null;
         System.Collections.Generic.IReadOnlyList<Game.Map.MonsterDropSpawn> spawns = DropSpawnsForItem(itemId);
         if (spawns.Count == 0) return null;
         return Game.Map.MonsterDropRouter.SelectNearestSpawn(
@@ -8081,6 +8161,29 @@ public sealed class AppServices
     // never both claim the item.
     private bool DeterministicGiveExists(int itemId) => GiveSourcesForItem(itemId).Count > 0;
 
+    // Every room command that can conjure itemId's dropper on demand, backing
+    // PathItemSummonRouter's detour-target search. ItemSourceIndex has already done
+    // the filtering that matters — only a monster a room CMD summons, and only its
+    // 100% drop slots — so this is a straight projection onto the router's record.
+    // Computed lazily, like the give sources, so the fan-out never materialises at
+    // load time. Also decides the drop router's stand-down and whether a locked
+    // door's key is worth announcing at all (AnnounceDoorKeyIfSummonable).
+    internal System.Collections.Generic.IReadOnlyList<Game.Map.SummonSource> SummonSourcesForItem(int itemId)
+    {
+        System.Collections.Generic.IReadOnlyList<SummonDropSource> sources =
+            ItemSources.SummonDropsOf(itemId);
+        if (sources.Count == 0)
+            return System.Array.Empty<Game.Map.SummonSource>();
+        var result = new System.Collections.Generic.List<Game.Map.SummonSource>(sources.Count);
+        foreach (SummonDropSource s in sources)
+        {
+            if (s.Command.Length == 0) continue;   // nothing to type — not routable
+            result.Add(new Game.Map.SummonSource(
+                new Game.Map.RoomKey(s.Map, s.Room), s.Command, s.MonsterName));
+        }
+        return result;
+    }
+
     // True when a room "You notice ..." entry resolves to a real item in the
     // active set. The cash filters (GroundItemTracker.IsCashEntry /
     // CashManager.TryParseCashEntry) use this as an authoritative tiebreaker so a
@@ -8391,9 +8494,10 @@ public sealed class AppServices
 
     // Sole-route auto-obtain decision. Given the requirements of a route that has
     // NO gate-free alternative, returns true when every gate is a single
-    // carry-item or ticket the user flagged AutoObtainForPath — the walk should
-    // arm the acquisition pipeline and cross the gate rather than fail. A key gate
-    // (never auto-sourced), a hazard, or any unflagged item makes it false, so the
+    // carry-item / ticket the user flagged AutoObtainForPath, or a door key a room
+    // command can summon a guaranteed dropper for — the walk should arm the
+    // acquisition pipeline and cross the gate rather than fail. A hazard, an
+    // unflagged item, or a key with no deterministic source makes it false, so the
     // walk stays a plain route whose BFS fails in place naming what's missing.
     // Hazard-only sole routes never reach here — the picker offers those.
     public bool ShouldAutoObtainSoleRoute(IReadOnlyList<RouteRequirement> requirements)
@@ -8402,13 +8506,74 @@ public sealed class AppServices
         if (requirements.Count == 0) return false;
         foreach (RouteRequirement req in requirements)
         {
-            if (req.Kind is not (RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket))
+            if (req.Kind is not (RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket
+                or RouteRequirementKind.DoorKey))
                 return false;
             if (req.ItemIds.Count != 1 || !IsAutoObtainForPath(req.ItemIds[0]))
+                return false;
+            // A key is only ever auto-sourced off a guaranteed summon; a flagged
+            // key with no such source would otherwise send the walk hunting.
+            if (req.Kind == RouteRequirementKind.DoorKey
+                && SummonSourcesForItem(req.ItemIds[0]).Count == 0)
                 return false;
         }
         return true;
     }
+
+    // The walk every path-item router drives, for both legs of a detour: out to the
+    // source and back to the original destination.
+    //
+    // Acquirable gates stay SUSPENDED while any path item is still owed. The whole
+    // premise of a gated route is "plan as if we'll be carrying it" — that's what
+    // the user consented to in the picker — but the resume re-planned with gates
+    // live, so a route with TWO gates died the moment the first item landed: the
+    // orb was collected, the walk re-planned, and BFS refused the still-locked gate
+    // door outright. Worse, failing at plan time happens BEFORE the walk-start
+    // announce, so the remaining need was never re-offered and the fulfiller that
+    // would have fetched the key was never asked (report paradigm-20260911-110624).
+    //
+    // Crossing is still guarded: the walker holds any step whose gate item is
+    // missing while a fulfiller is fetching it, so suspending gates here plans the
+    // route without ever walking into one unprepared.
+    //
+    // Silent supersede: the redirect is our own, not an external abort, so it must
+    // not fire a Stopped back into the routers' own OnWalkEvent.
+    private void WalkToForPathItemDetour(Game.Map.RoomKey key)
+        => Walker.WalkTo(
+            key,
+            planThroughAcquirableGates: Needs.Outstanding(NeedKind.PathItem).Count > 0,
+            supersedeSilently: true);
+
+    // True when a PathItem need for itemId is still outstanding. Scanned rather
+    // than indexed: the list holds one entry per gate item on the current route, so
+    // it's a handful at most even on a long gated walk.
+    private bool HasOutstandingPathItemNeed(int itemId)
+    {
+        string descriptor = itemId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        foreach (Need n in Needs.Outstanding(NeedKind.PathItem))
+            if (string.Equals(n.Descriptor, descriptor, StringComparison.Ordinal))
+                return true;
+        return false;
+    }
+
+    // The gate items on a chosen route that the acquisition pipeline can actually
+    // source, for the picker to force-obtain when the user commits to crossing.
+    // Hazard counters are excluded — the picker resolves those itself (it may grab
+    // one off the current floor instead) and forces them on its own path.
+    //
+    // This is the item-gate twin of the hazard-counter force: an explicit "obtain
+    // then cross" pick IS the consent, so the ids come back whether or not they
+    // carry the per-item AutoObtainForPath flag. Without it the pick armed nothing
+    // whenever Settings → Other → "search rooms if item needed" was off, and the
+    // walk crossed unprovisioned — it would `rub bloodstone orb` while carrying no
+    // orb and bonk on the hidden exit (report paradigm-20260911-095404).
+    //
+    // A door key is admitted only when a room command can summon a guaranteed
+    // dropper for it; any other key has no source to arm, so forcing it would only
+    // switch on a per-room `sea` that can never succeed.
+    public IReadOnlyList<int> SourceableGateItems(IReadOnlyList<RouteRequirement> requirements)
+        => RouteChoicePlanner.SourceableGateItems(
+            requirements, id => SummonSourcesForItem(id).Count > 0);
 
     // Per-person copies to provision when auto-obtaining an item for a path. Aims
     // for MaxToGet (the carry target: rope=1, a waterskin its 2–3), never below

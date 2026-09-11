@@ -1143,6 +1143,10 @@ public static class BugReportBuilder
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Shop-buy detour active", svc.PathItemShopRouter.DetourActive.ToString());
         Kv(sb, "Monster-drop hunt detour active", svc.MonsterDropRouter.DetourActive.ToString());
+        Kv(sb, "Summon detour active", svc.PathItemSummonRouter.DetourActive.ToString()
+            + (svc.PathItemSummonRouter.PendingMonsterName is { Length: > 0 } sm
+                ? $" — waiting on {sm}"
+                : string.Empty));
 
         IReadOnlyList<Need> needs = svc.Needs.Outstanding(NeedKind.PathItem);
         sb.Append("\nOutstanding path-item needs (").Append(needs.Count).Append(")\n\n");

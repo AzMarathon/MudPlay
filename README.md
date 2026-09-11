@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.69.0**
+> **Version 3.70.0**
 > - Navigation no longer loses track of itself looping a block of identically-named rooms (the Soldier's Quarters grid), reworked across three layers: a move the game silently drops to its typing-rate limiter is un-counted; position advances on the server's command echo instead of a timing guess, so a stray room redisplay can't be mistaken for your move's landing; and the walk itself narrows down where you are without the slower reverse-walk recovery
 > - **Fear** ("You are afraid!") is now a tracked condition in its own right — shown in the Messages game-data editor and condition log, distinct from a plain movement-held — and still halts navigation so the client doesn't walk while being shoved around
 >

@@ -1199,6 +1199,19 @@
                                             </ItemsControl>
                                         </StackPanel>
 
+                                        <!-- Room commands -->
+                                        <StackPanel IsVisible="{Binding RoomInfo.HasRoomCommands}" Spacing="1">
+                                            <TextBlock Classes="RoomInfoGroup" Text="Room commands"/>
+                                            <ItemsControl ItemsSource="{Binding RoomInfo.RoomCommands}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="gd:RoomDetailLink">
+                                                        <Button Classes="RecordLink"
+                                                                Content="{Binding Text}" Command="{Binding Open}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
                                         <!-- Shop -->
                                         <StackPanel IsVisible="{Binding RoomInfo.HasShop}" Spacing="1">
                                             <TextBlock Classes="RoomInfoGroup" Text="Shop"/>

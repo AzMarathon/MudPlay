@@ -348,4 +348,67 @@ public sealed class OutboundMovementObserverTests : IDisposable
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
     }
+    // ----- engine aux commands (multi-action prerequisites) ----------
+    //
+    // Report paradigm-20260911-100708: several multi-action prerequisites begin
+    // with a text-exit verb ("step tile", "climb rope", "cross plank"). The walker
+    // sends them before the cardinal that actually crosses, and its own echo came
+    // back through here unclaimed — so it was read as a HAND-TYPED move, which both
+    // enqueued a phantom pending move and (via ManualMoveObserved) made navigation
+    // pause itself as a user override, parking the walk mid-detour.
+
+    [Theory]
+    [InlineData("step tile")]
+    [InlineData("climb rope")]
+    [InlineData("cross plank")]
+    [InlineData("go lever")]
+    public void ClaimedAuxCommand_IsNotAManualMove(string command)
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+        bool manual = false;
+        tracker.ManualMoveObserved += () => manual = true;
+
+        tracker.NoteAuxCommandSent(command);     // what SpecialExitDispatch now does
+        observer.ObserveOutbound(Cmd(command));  // our own bytes echoing back
+
+        Assert.False(manual);
+        // And no phantom pending move: the action doesn't relocate us, so the
+        // tracker must stay Confirmed at the source room until the cardinal moves.
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    // The same wording typed by hand still has to register as a manual move —
+    // the claim is what distinguishes ours from theirs, not the wording.
+    [Fact]
+    public void UnclaimedTextMove_StillCountsAsManual()
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+        bool manual = false;
+        tracker.ManualMoveObserved += () => manual = true;
+
+        observer.ObserveOutbound(Cmd("step tile"));
+
+        Assert.True(manual);
+    }
+
+    // One claim is consumed by one echo, so a second identical command typed later
+    // is not silently swallowed as ours.
+    [Fact]
+    public void AuxClaim_IsConsumedByASingleEcho()
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+        int manualCount = 0;
+        tracker.ManualMoveObserved += () => manualCount++;
+
+        tracker.NoteAuxCommandSent("step tile");
+        observer.ObserveOutbound(Cmd("step tile"));   // ours — claimed
+        observer.ObserveOutbound(Cmd("step tile"));   // theirs — must register
+
+        Assert.Equal(1, manualCount);
+    }
+
 }

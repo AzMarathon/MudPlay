@@ -407,6 +407,22 @@ public sealed class RoomTracker
         NoteMoveSentCore(command, cardinal, isEngineAnnouncement: true, whenUtc ?? DateTimeOffset.UtcNow);
     }
 
+    // An engine command that is NOT a move but whose wording collides with the
+    // text-exit verbs — a multi-action prerequisite like `step tile`, `rub
+    // bloodstone orb` or `pull lever`, sent before the cardinal that actually
+    // crosses. Claims the echo so OutboundMovementObserver drops it, WITHOUT
+    // enqueuing a pending move: the action doesn't relocate the player, the
+    // following cardinal does, and a phantom pending move here both stalls the
+    // tracker and (via ManualMoveObserved) makes navigation pause itself as though
+    // the user had taken over — the walk sent `step tile`, read its own echo as a
+    // hand-typed move, and parked mid-detour (report paradigm-20260911-100708).
+    public void NoteAuxCommandSent(string command, DateTimeOffset? whenUtc = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(command);
+        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        _textEchoClaim = (command, when + EchoClaimExpiry);
+    }
+
     private void NoteMoveSentCore(string command, Direction? cardinal, bool isEngineAnnouncement, DateTimeOffset when)
     {
         if (isEngineAnnouncement)

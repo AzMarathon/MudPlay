@@ -115,6 +115,14 @@ public static class RouteChoicePrompt
                 return;
             case RoutePlanKind.AutoObtainSole:
                 calcVm?.Close();
+                // Every gate here is already flagged AutoObtainForPath, but the
+                // DEMAND gate is a separate switch: with Settings → Other → "search
+                // rooms if item needed" off it stays shut, so this path's own
+                // "arming acquisition" promise armed nothing. Forcing the ids opens
+                // it for this walk, which is what the flags asked for.
+                if (plan.Choice is { } sole
+                    && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems)
+                    services.ForcePathObtain(soleItems);
                 CommitWalk(services, destination, gated: true);
                 return;
             default:
@@ -557,6 +565,13 @@ public static class RouteChoicePrompt
                         services.SendGameCommand($"get {n}");
                 if (detourCounters.Count > 0)
                     services.ForcePathObtain(detourCounters);
+                // The route's ITEM gates need the same force, for the same reason:
+                // the pick is the consent. Only the hazard counters were being
+                // forced, so an item-gated pick armed nothing unless the global
+                // search-if-needed preference happened to be on — and the walk then
+                // crossed a gate it had made no arrangements for.
+                if (services.SourceableGateItems(choice.Requirements) is { Count: > 0 } gateItems)
+                    services.ForcePathObtain(gateItems);
                 CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
                 break;
             case RouteChoiceResult.GatedNoAcquire:
