@@ -112,28 +112,39 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
             // parked deliberately, so it's neither a worklist item nor an orphan to chase.
             if (m.Flags.HasFlag(MessageFlags.Disabled)) continue;
 
+            // Slots holding real text too short to safely Contains-match (a corrupt "n"/"E"
+            // from an old import) read as "filled", so MissingSlots ignores them — but they
+            // spam the condition tracker, so surface them here (flagged distinctly) for repair.
+            IReadOnlyList<string> malformed = MalformedSlots(m);
+
             string missing;
             if (IsClaimedByExistingSpell(m, spellNumbers))
             {
                 // A spell's message is edited from the Spells section, so a COMPLETE one is
                 // hidden here (listing the same record under both tabs is confusing). An
                 // INCOMPLETE one — a required perspective/applied slot still blank — surfaces
-                // as a worklist item: the "fill these in from in-game" list.
-                IReadOnlyList<string> gaps = MissingSlots(m);
+                // as a worklist item: the "fill these in from in-game" list. A malformed
+                // (too-short) pattern surfaces the same way even when nothing is blank.
+                List<string> gaps = new(MissingSlots(m));
+                gaps.AddRange(malformed);
                 if (gaps.Count == 0) continue;
                 missing = string.Join(", ", gaps);
             }
             else if (IsClaimedByExistingItem(m, itemNumbers))
             {
                 // An item-claimed message (its "use <item>" buff line or weapon-proc line) is
-                // edited from the item dialog's Message section, so it never surfaces here.
-                continue;
+                // edited from the item dialog's Message section, so a healthy one never surfaces
+                // here — but a malformed pattern still does, so a corrupt record is findable.
+                if (malformed.Count == 0) continue;
+                missing = string.Join(", ", malformed);
             }
             else
             {
                 // Tied to no spell/item in this set — an orphan awaiting a link (renamed-away
                 // spells, standalone detectors, records whose only link is orphaned).
-                missing = "not linked to a spell/item";
+                missing = malformed.Count == 0
+                    ? "not linked to a spell/item"
+                    : "not linked to a spell/item, " + string.Join(", ", malformed);
             }
 
             // Lines column = compact tag string showing which perspective slots ARE populated,
@@ -189,6 +200,18 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
         if (m.Flags.HasFlag(MessageFlags.Confused) && string.IsNullOrWhiteSpace(m.ConfuseFumbleLine))
             gaps.Add("Fumble");
         return gaps;
+    }
+
+    // Recognition slots (Applied / Wears-off) that hold real text too short to be a safe
+    // Contains-pattern — a corrupt "n"/"E" from an older import. They read as "filled" so
+    // MissingSlots skips them, but the condition tracker refuses to index them (they'd match
+    // almost every line), so they surface on this worklist, labelled distinctly, for repair.
+    internal static IReadOnlyList<string> MalformedSlots(MessageRecord m)
+    {
+        List<string> bad = new(2);
+        if (MessageRecord.IsTooShortToMatch(m.AppliedMessage))  bad.Add("Applied (too short)");
+        if (MessageRecord.IsTooShortToMatch(m.AppliedEndsWith)) bad.Add("Wears-off (too short)");
+        return bad;
     }
 
     // True when the record is claimed by a spell present in the active set — a Links

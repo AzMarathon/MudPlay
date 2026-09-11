@@ -88,6 +88,33 @@ public sealed class ConditionTrackerTests
         Assert.Single(h.Applied);
     }
 
+    // A corrupt 1-char applied/ends pair ("n"/"E", seen in some older MDB imports) would
+    // Contains-match almost every line — a room display like "Stone Chamber, Entrance" holds
+    // both an 'n' and an 'E', so it would apply AND end the effect every line. The tracker must
+    // refuse to index such a too-short pattern, so it never latches. (report paradigm-20260911-004201)
+    [Fact]
+    public void TooShortPattern_NeverIndexed_NoSpuriousToggle()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("amethyst pendant (corrupt)",
+            MessageFlags.None, applied: "n", endsWith: "E"));
+        // A healthy record alongside it must still work.
+        h.Messages.Messages.Add(MakeRecord("Poison", MessageFlags.Poisoned,
+            applied: "You have been poisoned!", endsWith: "The poison wears off."));
+
+        h.Feed("Stone Chamber, Entrance");        // has both 'n' and 'E'
+        h.Feed("Also here: angry kobold slave.");
+        h.Feed("[HP=324/MA=48]:e");
+
+        Assert.Empty(h.Applied);   // the 1-char pattern never latched anything
+        Assert.Empty(h.Ended);
+
+        // The healthy record is unaffected by the guard.
+        h.Feed("You have been poisoned!");
+        Assert.Single(h.Applied);
+        Assert.True(h.Tracker.IsPoisoned);
+    }
+
     // Fear is its own tracked condition (spell 430, terror beast): "You are
     // afraid!" latches it, "The effects of fear wear off!" clears it. The seeded
     // records also carry MovementPrevented (preserving the held-style halt), so a

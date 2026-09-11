@@ -214,6 +214,16 @@ public sealed class LoopRunner : IRecoverableEngine
 
     public LoopState State { get; private set; } = LoopState.Idle;
 
+    // True while the runner is still getting TO the loop's start waypoint and hasn't yet
+    // entered the circle — the live Approaching walk, OR a pause that fired DURING that
+    // approach (a combat pause, a coordinator hold). Distinct from a pause mid-circuit,
+    // which leaves _pausedFromApproach false. The map keys the red approach-preview line off
+    // this (rather than State==Approaching alone) so a combat pause during the walk-to
+    // doesn't briefly expose the green running-loop line underneath.
+    public bool IsApproachInFlight =>
+        State == LoopState.Approaching
+        || (State == LoopState.Paused && _pausedFromApproach);
+
     public Loop? CurrentLoop => _loop;
     public int CurrentIndex => _index;
 

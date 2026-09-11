@@ -635,11 +635,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RoomKey? source = runner.CircleStartRoom
                            ?? _services.RoomTracker.State.CurrentRoom?.Key;
 
-        if (runner.State == Game.Map.LoopState.Approaching)
+        if (runner.IsApproachInFlight)
         {
             // Approach phase — show the red loop preview alongside the
             // blue walker overlay. The walker owns WalkPath; we own
-            // the preview ring drawn under it.
+            // the preview ring drawn under it. IsApproachInFlight (not
+            // State==Approaching) so a combat pause mid-walk-to keeps the
+            // preview red instead of flipping to the green running-loop line.
             if (source is { } entry)
             {
                 IReadOnlyList<RoomKey> previewKeys = runner.ResolveLoopRoomKeys(entry);

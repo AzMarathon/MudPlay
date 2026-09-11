@@ -215,15 +215,29 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             // A slot holding a {null}/{void}/{empty} sentinel means "this spell has no such
             // line" — treat it as absent so it never compiles into a matcher (IsBlankOrAbsent),
             // exactly as an empty slot would. Only real wording indexes.
+            // A present-but-tiny pattern ("n"/"E" from a corrupt import) would Contains-match
+            // almost every line — never index it, and warn so the bad record is findable.
             if (!MessageRecord.IsBlankOrAbsent(r.AppliedMessage))
             {
-                applied.Add((r.AppliedMessage, r));
-                if (!aliases.TryGetValue(r.AppliedMessage, out List<MessageRecord>? group))
-                    aliases[r.AppliedMessage] = group = new List<MessageRecord>();
-                group.Add(r);
+                if (MessageRecord.IsTooShortToMatch(r.AppliedMessage))
+                    _log?.Warn(LogCategory,
+                        $"record '{r.Name}' (id {r.Id}) has a too-short applied pattern '{r.AppliedMessage.Trim()}' — not indexing it; a Contains-match on so few characters fires on unrelated lines (corrupt import data). Fix or clear this record's Applied slot.");
+                else
+                {
+                    applied.Add((r.AppliedMessage, r));
+                    if (!aliases.TryGetValue(r.AppliedMessage, out List<MessageRecord>? group))
+                        aliases[r.AppliedMessage] = group = new List<MessageRecord>();
+                    group.Add(r);
+                }
             }
             if (!MessageRecord.IsBlankOrAbsent(r.AppliedEndsWith))
-                ends.Add((r.AppliedEndsWith, r));
+            {
+                if (MessageRecord.IsTooShortToMatch(r.AppliedEndsWith))
+                    _log?.Warn(LogCategory,
+                        $"record '{r.Name}' (id {r.Id}) has a too-short wear-off pattern '{r.AppliedEndsWith.Trim()}' — not indexing it (corrupt import data). Fix or clear this record's Wears-off slot.");
+                else
+                    ends.Add((r.AppliedEndsWith, r));
+            }
             if (r.Flags.HasFlag(MessageFlags.Confused) && !MessageRecord.IsBlankOrAbsent(r.ConfuseFumbleLine))
                 foreach (string wording in r.ConfuseFumbleLine.Split('\n'))
                 {
