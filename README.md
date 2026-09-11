@@ -5,6 +5,7 @@
 > - Navigation can now re-locate itself in a block of identically-named rooms **even with automation stopped** — walking a same-name grid by hand, or being dragged by a party leader: it narrows down which look-alike room you're in from the sequence of moves you make and the rooms they reveal, and silently re-anchors the instant that sequence fits exactly one room
 > - Sends nothing to the game to do this (pure inference from moves you're already making); if the walk stays genuinely ambiguous it stays Lost rather than guess
 > - Stands down while an automation engine is driving, so the walker's own recovery still owns that case
+> - Map: the current-room gold marker is a touch darker so it no longer blends into a down-exit room's yellow where the two meet at a corner
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

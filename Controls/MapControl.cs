@@ -501,7 +501,10 @@ public sealed class MapControl : Control
     private static readonly IBrush Bg            = new SolidColorBrush(Color.Parse("#0E0E0E"));
     private static readonly IBrush TileBg        = new SolidColorBrush(Color.Parse("#1E1E1E"));
     private static readonly IBrush RoomFill      = new SolidColorBrush(Color.Parse("#9B9B9B"));
-    private static readonly IBrush CurrentFill   = new SolidColorBrush(Color.Parse("#F8B500"));
+    // Darkened + shifted off pure yellow (lower green channel) so the current-room
+    // fill doesn't blend into a down-exit room's #DCDC00 yellow where the two abut at
+    // a shared corner; red kept high so "you are here" still reads as a punchy gold.
+    private static readonly IBrush CurrentFill   = new SolidColorBrush(Color.Parse("#E0A000"));
     private static readonly IBrush LairFill      = new SolidColorBrush(Color.Parse("#8E4F7B"));
     private static readonly IBrush ShopFill      = new SolidColorBrush(Color.Parse("#4A7791"));
     private static readonly IBrush SpellFill     = new SolidColorBrush(Color.Parse("#6428A0"));
