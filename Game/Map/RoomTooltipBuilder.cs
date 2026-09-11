@@ -95,7 +95,7 @@ public static class RoomTooltipBuilder
         // synonyms collapse to one line. Includes cast-delivered
         // teleports ("jump west" → bridge-jump spell) whose random range
         // surfaces every landing room.
-        string commandsBlock = BuildRoomCommandsBlock(room, graph, tbinfo, spellCatalog);
+        string commandsBlock = BuildRoomCommandsBlock(room, graph, data, tbinfo, spellCatalog);
         if (commandsBlock.Length > 0)
         {
             sb.Append('\n').Append('\n').Append(commandsBlock);
@@ -362,7 +362,7 @@ public static class RoomTooltipBuilder
         string leversBlock = BuildLeversHereBlock(room, graph);
         if (leversBlock.Length > 0) parts.Add(leversBlock);
 
-        string commandsBlock = BuildRoomCommandsBlock(room, graph, tbinfo, spellCatalog);
+        string commandsBlock = BuildRoomCommandsBlock(room, graph, data, tbinfo, spellCatalog);
         if (commandsBlock.Length > 0) parts.Add(commandsBlock);
 
         if (room.Light != 0)
@@ -542,6 +542,26 @@ public static class RoomTooltipBuilder
                     _                   => "Key",
                 };
                 string? itemName = LookupName(data, "Items", exit.KeyItemId);
+
+                // A key id that names no item in a READABLE Items table is a
+                // game-data typo, not a key to go find: 8/462's north gate records
+                // "Key: 1" where item ids start at 9, and its real openers are the
+                // 31 picklocks/strength it also carries. Naming a key there sends
+                // the reader hunting an item that doesn't exist, so the clause is
+                // dropped and the door reads as what it is.
+                //
+                // The table itself has to be readable before a missing row can be
+                // called a typo — LookupName returns null just as readily for an
+                // absent or malformed Items.json, and silently restyling every keyed
+                // door in the set as a plain door would be a much worse lie. Also
+                // kept when the door has no stat alternative: that one really is
+                // impassable, and the raw id is the only clue why.
+                if (exit.Hint == RoomExitHint.KeyLocked
+                    && itemName is not { Length: > 0 }
+                    && exit.StatRequirement > 0
+                    && data?.GetRawTable("Items") is not null)
+                    return $"Door: {FormatDoorSkill(exit)}";
+
                 string baseText = itemName is { Length: > 0 }
                     ? $"{label}: {itemName}"
                     : $"{label}: #{exit.KeyItemId}";
@@ -688,7 +708,7 @@ public static class RoomTooltipBuilder
     // ----- Room commands (TBInfo CMD chains) ------------------------
 
     private static string BuildRoomCommandsBlock(Room room, RoomGraphManager graph,
-        TBInfoStore? tbinfo, Game.Spells.KnownSpellCatalog? spellCatalog)
+        GameDataCache? data, TBInfoStore? tbinfo, Game.Spells.KnownSpellCatalog? spellCatalog)
     {
         if (tbinfo is null || room.Cmd <= 0) return string.Empty;
 
@@ -758,8 +778,21 @@ public static class RoomTooltipBuilder
                 && !actionKeywords.Contains(kw, StringComparer.OrdinalIgnoreCase))
                 actionKeywords.Add(kw);
 
-        if (byDest.Count == 0 && castGroups.Count == 0
-            && actionKeywords.Count == 0 && priced.Count == 0)
+        // Effect commands — the directives none of the resolvers above explain
+        // (summon / learnspell / ability grant / room-item drop / plain turn-in).
+        // Anything already rendered above is excluded: a command whose FIRST-time
+        // line teleports and whose REPEAT line only awards an ability (7/142's
+        // "touch gem") would otherwise appear both as a teleport and as an ability
+        // grant, reading as two separate commands.
+        var renderedKeywords = new List<string>();
+        foreach (List<string> words in byDest.Values) renderedKeywords.AddRange(words);
+        foreach (CastTeleportGroup g in castGroups) renderedKeywords.AddRange(g.Keywords);
+        renderedKeywords.AddRange(actionKeywords);
+        IReadOnlyList<RoomEffectRow> effectRows =
+            ResolveRoomEffectRows(room, data, tbinfo, renderedKeywords);
+
+        if (byDest.Count == 0 && castGroups.Count == 0 && actionKeywords.Count == 0
+            && priced.Count == 0 && effectRows.Count == 0)
             return string.Empty;
 
         // Append the cost of any priced keyword in a rendered group (marking it
@@ -820,6 +853,17 @@ public static class RoomTooltipBuilder
             sb.Append('\n').Append("  ").Append(string.Join(" / ", actionKeywords))
               .Append(" (room action)");
 
+        // An effect row that also charges (the healer's "summon healer" for gold)
+        // carries its own cost, so mark those keywords shown — otherwise the same
+        // command would render twice, once for what it does and once for the price.
+        foreach (RoomEffectRow row in effectRows)
+        {
+            foreach (string kw in row.Keywords) pricedShown.Add(kw);
+            sb.Append('\n').Append("  ").Append(string.Join(" / ", row.Keywords))
+              .Append(" — ").Append(row.EffectText);
+            if (row.CostText.Length > 0) sb.Append(" — ").Append(row.CostText);
+        }
+
         // Paid commands not already surfaced above (a healer's buy list, a
         // summoner's services, the jail bribe) get one line each with the cost.
         foreach (TBInfoActionResolver.PricedCommand pc in priced)
@@ -830,6 +874,120 @@ public static class RoomTooltipBuilder
               .Append(" — ").Append(FormatPricedCost(pc));
         }
         return sb.ToString();
+    }
+
+    // One room command described by what it does: its synonyms grouped, the effect
+    // phrased, and the charge folded in when the line carries a `price`. Shared by
+    // the hover tooltip and the Navigation Room Info panel so both describe a
+    // command identically. TargetId is the monster / spell / item the effect names
+    // (0 for GrantAbility), kept alongside the text so a consumer can link the row
+    // to that game-data record.
+    public sealed record RoomEffectRow(
+        IReadOnlyList<string> Keywords,
+        TBInfoActionResolver.RoomEffectKind Kind,
+        int TargetId,
+        string EffectText,
+        string CostText);
+
+    // Every effect-explained command in a room's CMD chain, one row per command.
+    // Synonyms producing the same effect collapse onto one row the way teleport
+    // destinations do, so 8/461's "touch statue" and "move statue" read as a single
+    // line. Pass alreadyShown to suppress commands the caller renders by another
+    // means (the hover tooltip passes its teleport / cast / room-action keywords, so
+    // 7/142's "touch gem" reads once as the teleport it is rather than twice).
+    // Empty when the room has no CMD, no TBInfo store, or nothing but flavour text.
+    public static IReadOnlyList<RoomEffectRow> ResolveRoomEffectRows(
+        Room room, GameDataCache? data, TBInfoStore? tbinfo,
+        IEnumerable<string>? alreadyShown = null)
+    {
+        ArgumentNullException.ThrowIfNull(room);
+        if (tbinfo is null || room.Cmd <= 0) return Array.Empty<RoomEffectRow>();
+
+        var shown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (alreadyShown is not null) shown.UnionWith(alreadyShown);
+
+        Dictionary<string, TBInfoActionResolver.PricedCommand> pricedByKeyword =
+            new(StringComparer.OrdinalIgnoreCase);
+        foreach (TBInfoActionResolver.PricedCommand pc
+                 in TBInfoActionResolver.EnumeratePricedCommands(tbinfo, room.Cmd))
+            pricedByKeyword[pc.Keyword] = pc;
+
+        // One effect per KEYWORD, at its highest priority. The export writes a
+        // separate line per outcome branch of the same command — 14/6275's "destroy
+        // portal" summons the guardian on the attempt line and awards the quest
+        // ability on the line for after you've beaten it — so one keyword can carry
+        // several effects across lines. Collapsing to the best of them (the
+        // declaration order of RoomEffectKind) is the same rule that picks between
+        // two effects on a single line, and it stops a command being listed twice.
+        Dictionary<string, (TBInfoActionResolver.RoomEffectKind Kind, int TargetId, string Cost)>
+            bestByKeyword = new(StringComparer.OrdinalIgnoreCase);
+        var keywordOrder = new List<string>();
+
+        foreach (TBInfoActionResolver.RoomEffectCommand ec
+                 in TBInfoActionResolver.EnumerateEffectCommands(tbinfo, room.Cmd))
+        {
+            if (shown.Contains(ec.Keyword)) continue;
+            string cost = pricedByKeyword.TryGetValue(ec.Keyword, out TBInfoActionResolver.PricedCommand pc)
+                ? FormatPricedCost(pc)
+                : string.Empty;
+            if (bestByKeyword.TryGetValue(ec.Keyword, out var existing))
+            {
+                if (existing.Kind <= ec.Kind) continue;
+                bestByKeyword[ec.Keyword] = (ec.Kind, ec.TargetId, cost);
+            }
+            else
+            {
+                bestByKeyword[ec.Keyword] = (ec.Kind, ec.TargetId, cost);
+                keywordOrder.Add(ec.Keyword);
+            }
+        }
+
+        // Then fold synonyms together: same effect AND same cost is one offer (two
+        // keywords that summon the same monster for different prices are not).
+        var keys = new List<(TBInfoActionResolver.RoomEffectKind Kind, int TargetId, string Cost)>();
+        var keywordsPerRow = new List<List<string>>();
+        Dictionary<(TBInfoActionResolver.RoomEffectKind, int, string), int> rowIndex = new();
+
+        foreach (string keyword in keywordOrder)
+        {
+            var key = bestByKeyword[keyword];
+            if (!rowIndex.TryGetValue(key, out int i))
+            {
+                rowIndex[key] = i = keys.Count;
+                keys.Add(key);
+                keywordsPerRow.Add(new List<string>());
+            }
+            keywordsPerRow[i].Add(keyword);
+        }
+
+        var rows = new List<RoomEffectRow>(keys.Count);
+        for (int i = 0; i < keys.Count; i++)
+            rows.Add(new RoomEffectRow(
+                keywordsPerRow[i], keys[i].Kind, keys[i].TargetId,
+                FormatRoomEffect(data, keys[i].Kind, keys[i].TargetId), keys[i].Cost));
+        return rows;
+    }
+
+    // Plain-language effect for a room command the directive resolvers explain by
+    // outcome rather than destination ("summons obsidian statue", "teaches form of
+    // the crane"). An unresolvable id degrades to "#N" rather than dropping the row
+    // — knowing a command summons *something* still matters.
+    private static string FormatRoomEffect(GameDataCache? data,
+        TBInfoActionResolver.RoomEffectKind kind, int targetId)
+    {
+        string Named(string table) =>
+            LookupName(data, table, targetId) is { Length: > 0 } n ? n : $"#{targetId}";
+
+        return kind switch
+        {
+            TBInfoActionResolver.RoomEffectKind.Summon => $"summons {Named("Monsters")}",
+            TBInfoActionResolver.RoomEffectKind.LearnSpell => $"teaches {Named("Spells")}",
+            TBInfoActionResolver.RoomEffectKind.PlaceRoomItem => $"drops {Named("Items")} in the room",
+            TBInfoActionResolver.RoomEffectKind.TakeItem => $"takes {Named("Items")}",
+            // Ability ids resolve against no shipped table, so this one is unnamed
+            // by construction (see RoomEffectCommand).
+            _ => "grants an ability",
+        };
     }
 
     // "costs 100 Gold", or for a tiered charge (the jail bribe-guard's escalating

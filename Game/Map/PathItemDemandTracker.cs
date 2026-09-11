@@ -40,6 +40,11 @@ public sealed class PathItemDemandTracker
     private readonly Func<int, int> _carriedCount;
     private readonly Func<bool> _inventoryLoaded;
     private readonly Func<bool> _isEnabled;
+    // "Is a room search a plausible way to get this item?" — false for an item with
+    // a deterministic source (a keyword give, a guaranteed summon), which the run
+    // is already detouring to collect. Null means every need is search-worthy,
+    // preserving the original behaviour for callers that don't supply it.
+    private readonly Func<int, bool>? _isSearchWorthy;
     private readonly LogService? _log;
 
     public PathItemDemandTracker(
@@ -47,6 +52,7 @@ public sealed class PathItemDemandTracker
         Func<int, int> carriedCount,
         Func<bool> inventoryLoaded,
         Func<bool> isEnabled,
+        Func<int, bool>? isSearchWorthy = null,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(needs);
@@ -57,14 +63,39 @@ public sealed class PathItemDemandTracker
         _carriedCount = carriedCount;
         _inventoryLoaded = inventoryLoaded;
         _isEnabled = isEnabled;
+        _isSearchWorthy = isSearchWorthy;
         _log = log;
     }
 
-    // True when the "search rooms if item needed" feature is on AND at least
-    // one PathItem need is outstanding — i.e. auto-search should arm to hunt the
-    // missing route item. Read live by AutoSearchManager's demand gate.
+    // True when the "search rooms if item needed" feature is on AND at least one
+    // outstanding PathItem need is actually worth searching for — i.e. auto-search
+    // should arm to hunt the missing route item. Read live by AutoSearchManager's
+    // demand gate.
+    //
+    // A need whose item has a DETERMINISTIC source is not worth searching for: the
+    // run is already walking to an NPC who hands it over on a keyword, or to a room
+    // command that summons a guaranteed dropper. Searching every room on the way
+    // there buys nothing and costs a `sea` per room — the whole trip to the gnome
+    // commander for a bloodstone orb searched every room it crossed (report
+    // paradigm-20260911-100708). A shop item or a percentage drop DOES stay
+    // search-worthy: finding one loose is strictly better than paying or grinding
+    // for it.
     public bool SearchDemandActive
-        => _isEnabled() && _needs.Outstanding(NeedKind.PathItem).Count > 0;
+    {
+        get
+        {
+            if (!_isEnabled()) return false;
+            IReadOnlyList<Need> outstanding = _needs.Outstanding(NeedKind.PathItem);
+            if (outstanding.Count == 0) return false;
+            if (_isSearchWorthy is null) return true;
+            foreach (Need n in outstanding)
+                if (!int.TryParse(n.Descriptor, NumberStyles.Integer,
+                        CultureInfo.InvariantCulture, out int id)
+                    || _isSearchWorthy(id))
+                    return true;
+            return false;
+        }
+    }
 
     // Walk-start callback (reached via PartyPathItemGate's forward): every item
     // id gating an Item/Ticket exit along the planned route the party can't
@@ -82,12 +113,22 @@ public sealed class PathItemDemandTracker
 
         int want = Math.Max(1, quantity);
         var considered = new HashSet<int>();
+        bool postedAny = false;
         foreach (int id in itemIds)
         {
             if (id <= 0 || !considered.Add(id)) continue;
             if (_carriedCount(id) >= want) continue;
             _needs.Post(NeedKind.PathItem, id.ToString(CultureInfo.InvariantCulture), Requester, want);
+            postedAny = true;
         }
+
+        // Re-offer whatever is still outstanding. Post announces only NEW needs, so
+        // a fulfiller that had to stand down when the need was first posted — the
+        // second item on a two-gate route, deferred so two routers couldn't fight
+        // over the walk — would never be asked again, and the route would fail at a
+        // gate nobody was sent after. This walk is the previous detour's own resume,
+        // so the deferring router is free again by now.
+        if (postedAny) _needs.Reoffer(NeedKind.PathItem);
     }
 
     // Inventory-change callback (wired to InventoryManager.Changed): resolves

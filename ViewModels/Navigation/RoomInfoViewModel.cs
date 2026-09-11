@@ -100,6 +100,14 @@ public sealed partial class RoomInfoViewModel : ObservableObject
     public ObservableCollection<RoomDetailLink> FloorItems { get; } = new();
     public bool HasFloorItems => FloorItems.Count > 0;
 
+    // Room commands the map tooltip surfaces — teleports and priced services
+    // already read off the tooltip, and these are the effect commands that used to
+    // appear nowhere in this panel at all (report paradigm-20260911-010954:
+    // 8/461's "touch statue" summons the monster carrying the gate key). Each row
+    // links to the record its effect names where there is one.
+    public ObservableCollection<RoomDetailLink> RoomCommands { get; } = new();
+    public bool HasRoomCommands => RoomCommands.Count > 0;
+
     // Populate every section for the clicked room. Called from
     // NavigationViewModel.OnRoomLeftClicked on any left-click.
     public void Show(RoomKey key)
@@ -113,6 +121,7 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         PlayerLight = string.Empty;
         Exits.Clear();
         FloorItems.Clear();
+        RoomCommands.Clear();
         ShopLink = null;
         RoomSpellLink = null;
         HasRoom = true;
@@ -180,6 +189,18 @@ public sealed partial class RoomInfoViewModel : ObservableObject
                 $"{name}(#{id})", null, new RelayCommand(() => _services.OpenItemGameData(id))));
         }
 
+        // Room commands — the CMD-chain effects (summon / learnspell / ability
+        // grant / room-item drop / turn-in), with any charge folded in. Clicking a
+        // row opens the record the effect names, so "touch statue — summons
+        // obsidian statue" jumps straight to the statue's monster record.
+        foreach (RoomTooltipBuilder.RoomEffectRow row in
+                 RoomTooltipBuilder.ResolveRoomEffectRows(room, _services.GameData, _services.TBInfo))
+        {
+            string label = $"{string.Join(" / ", row.Keywords)} — {row.EffectText}";
+            if (row.CostText.Length > 0) label += $" — {row.CostText}";
+            RoomCommands.Add(new RoomDetailLink(label, null, EffectRowCommand(row)));
+        }
+
         // Shop — one link that opens the interactive room-detail popup for this room (the
         // stock menu with buy/sell prices + charm picker), the same popup the Shops browser
         // tab double-click opens — not a Game Data Browser jump.
@@ -219,6 +240,29 @@ public sealed partial class RoomInfoViewModel : ObservableObject
             _services.OpenRoomGameData(_key.Map, _key.Room);
     }
 
+    // The record a room-command row opens: the monster it summons, the spell it
+    // teaches, the item it drops or takes. An ability grant names no record — no
+    // shipped table indexes ability ids — so it falls back to the ROOM's record,
+    // where the CMD chain that awards it is actually defined. That keeps every row
+    // clickable (RoomDetailLink requires a command, and a null one would grey the
+    // row out as if it were disabled).
+    private System.Windows.Input.ICommand EffectRowCommand(RoomTooltipBuilder.RoomEffectRow row)
+    {
+        int id = row.TargetId;
+        RoomKey key = _key;
+        return row.Kind switch
+        {
+            TBInfoActionResolver.RoomEffectKind.Summon =>
+                new AsyncRelayCommand(() => _services.OpenMonsterRecordAsync(id)),
+            TBInfoActionResolver.RoomEffectKind.LearnSpell =>
+                new AsyncRelayCommand(() => _services.OpenSpellRecordAsync(id)),
+            TBInfoActionResolver.RoomEffectKind.PlaceRoomItem or
+            TBInfoActionResolver.RoomEffectKind.TakeItem =>
+                new RelayCommand(() => _services.OpenItemGameData(id)),
+            _ => new RelayCommand(() => _services.OpenRoomGameData(key.Map, key.Room)),
+        };
+    }
+
     // The label carries the monster's record number — "chest(#69)" — mirroring the
     // room-detail popup so the panel doubles as a quick lookup key. Clicking opens the
     // monster record DIALOG (like the item record), not a Game Data Browser jump.
@@ -235,5 +279,6 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         OnPropertyChanged(nameof(HasLair));
         OnPropertyChanged(nameof(HasExits));
         OnPropertyChanged(nameof(HasFloorItems));
+        OnPropertyChanged(nameof(HasRoomCommands));
     }
 }
