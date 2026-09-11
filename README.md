@@ -11,6 +11,7 @@
 > - Choosing "obtain then cross" in the route picker now actually fetches the route's gate items — it only ever armed hazard counters, so an item-gated pick crossed the gate having arranged nothing unless "search rooms if item needed" happened to be on
 > - Auto-search no longer fires a `sea` in every room while detouring for an item an NPC hands over on a keyword — searching stays on for shop items and percentage drops, where finding one loose actually helps
 > - The walker no longer reads its own multi-action command (`step tile`, `climb rope`) as a hand-typed move and pauses itself mid-detour
+> - A crossing whose item is already being fetched waits for it instead of being attempted and failed first — no more rubbing an orb you aren't carrying and bonking on the exit
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

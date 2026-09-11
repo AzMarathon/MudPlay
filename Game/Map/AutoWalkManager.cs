@@ -63,6 +63,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<IReadOnlyList<RoomKey>>? _routeAnnouncer;
     private Func<RoomKey, IReadOnlyList<int>>? _hazardItemResolver;
     private Func<int, bool>? _doorKeySummonable;
+    private Func<int, bool>? _gateItemHoldProbe;
     private Func<int, string?>? _itemNameResolver;
     // Boss rooms flagged "stop before" on the Bosses tab. A walk-to whose
     // destination is one of these halts one room short (loop / auto-lair engines
@@ -705,6 +706,18 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(probe);
         _doorKeySummonable = probe;
+    }
+
+    // Probe for "wait for this gate item rather than attempt the crossing" —
+    // true when the item isn't carried AND a fulfiller is actively acquiring it.
+    // Both halves matter: without the first we'd hold on a gate we can already
+    // cross, and without the second we'd park a walk forever on a gate nothing can
+    // source instead of failing it the normal way. Bound to AppServices; unbound
+    // means never hold, which is the pre-existing attempt-and-fail behaviour.
+    public void SetGateItemHoldProbe(Func<int, bool> probe)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        _gateItemHoldProbe = probe;
     }
 
     // Hazard counter-item resolver. Given a room the route enters, returns the
@@ -1574,6 +1587,20 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // Tier-3 gate may have escalated; if so don't queue a new step.
         if (_recovery is not null && !_recovery.MayProceedWithPlannedStep()) return;
 
+        // Don't attempt a crossing we already know we can't make. A gated route is
+        // planned as if every gate item were in hand (that's the point — the
+        // acquisition runs first), but the first step goes out synchronously here
+        // while a fulfiller's detour redirect is still queued on the dispatcher. So
+        // the walk would send the opener and the move, watch both fail, and only
+        // then be superseded: `rub bloodstone orb` while carrying no orb, then a
+        // bonk on the hidden exit (report paradigm-20260911-100708). We know the
+        // inventory, so hold the step instead and let the detour take the wheel.
+        //
+        // Held only while someone is actually fetching the item — the probe requires
+        // an in-flight acquisition, so a gate nothing can source still goes out and
+        // fails the normal way rather than parking the walk forever.
+        if (HeldForGateItem(_path[_index])) return;
+
         WalkStep step = _path[_index];
         switch (step)
         {
@@ -1590,6 +1617,31 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 SendSysGotoStep(sysGoto);
                 break;
         }
+    }
+
+    // True when the step's exit demands an item we lack AND an acquisition for it
+    // is already under way, so the crossing should wait rather than be attempted
+    // and fail. Only a MoveStep can carry a gate (a CommandStep is the opener
+    // itself, already past this decision); an unresolvable exit or an unbound probe
+    // never holds.
+    private bool HeldForGateItem(WalkStep step)
+    {
+        if (_gateItemHoldProbe is not { } held) return false;
+        if (step is not MoveStep move) return false;
+        if (_tracker.State.CurrentRoom is not { } room) return false;
+        if (!room.Exits.TryGetValue(move.Direction, out RoomExit exit)) return false;
+
+        foreach (int itemId in ExitGateItems.Of(in exit))
+        {
+            if (!held(itemId)) continue;
+            // Debug, not Info: a held step re-evaluates on every dispatch attempt,
+            // so this can repeat while the detour settles.
+            _log?.Log(LogSeverity.Debug, "Walker",
+                $"step {_index + 1}/{_path!.Count}: holding {move.Direction} — "
+                + $"gate item {itemId} is being acquired");
+            return true;
+        }
+        return false;
     }
 
     // Re-drive the current step after the engine send-gate that swallowed it

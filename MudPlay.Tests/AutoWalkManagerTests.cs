@@ -50,6 +50,22 @@ public sealed class AutoWalkManagerTests : IDisposable
         ]
         """;
 
+
+    // 1/1 ──N (Item: 807)── 1/2: the only route, gated on carrying item 807.
+    // Mirrors the Lower Caverns orb gate at the shape the walker sees.
+    private const string ItemGatedLineJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Item: 807)", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     // A route with a cross-room lever detour: reaching 1/3 from 1/2 crosses
     // 1/2's N exit, gated by a lever in 1/4 (one E hop off 1/2). So the planned
     // path is the go-act-return round-trip E→1/4, pull, W→1/2, then N→1/3 — the
@@ -2005,4 +2021,71 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Idle, h.Walker.State);
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
     }
+    // ----- gate-item hold --------------------------------------------
+    //
+    // Report paradigm-20260911-100708: a gated route is planned as if the gate item
+    // were in hand, but the first step goes out synchronously while the acquisition
+    // detour's redirect is still queued — so the walk sent the opener and the move,
+    // watched both fail, and only then got superseded. We know the inventory, so
+    // hold instead. Held ONLY while something is actually fetching the item, so a
+    // gate nothing can source still fails the normal way.
+
+    [Fact]
+    public void GatedStep_ItemBeingAcquired_HoldsInsteadOfSending()
+    {
+        Harness h = NewHarness(ItemGatedLineJson);
+        h.Walker.SetGateItemHoldProbe(id => id == 807);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        bool started = h.Walker.WalkTo(new RoomKey(1, 2));
+
+        Assert.True(started);                       // the walk is armed...
+        Assert.Empty(h.Sent);                       // ...but nothing went on the wire
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    [Fact]
+    public void GatedStep_NothingAcquiringIt_StillSends()
+    {
+        Harness h = NewHarness(ItemGatedLineJson);
+        h.Walker.SetGateItemHoldProbe(_ => false);   // no acquisition in flight
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        // Attempt-and-fail is the correct fallback: holding here would park the
+        // walk forever on a gate nobody is working on.
+        Assert.NotEmpty(h.Sent);
+    }
+
+    [Fact]
+    public void UngatedStep_IsNeverHeld()
+    {
+        Harness h = NewHarness();                    // plain 1/1 ─N─ 1/2 ─N─ 1/3
+        h.Walker.SetGateItemHoldProbe(_ => true);    // would hold anything gated
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Walker.WalkTo(new RoomKey(1, 3));
+
+        Assert.NotEmpty(h.Sent);
+    }
+
+    // Once the item lands the probe stops holding, and the next dispatch crosses.
+    [Fact]
+    public void HeldStep_ResumesOnceTheItemIsAcquired()
+    {
+        Harness h = NewHarness(ItemGatedLineJson);
+        bool acquiring = true;
+        h.Walker.SetGateItemHoldProbe(id => acquiring && id == 807);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+        Assert.Empty(h.Sent);
+
+        acquiring = false;                           // orb in hand, need resolved
+        h.Walker.NudgeStalledStep();                 // any re-drive re-evaluates
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        Assert.NotEmpty(h.Sent);
+    }
+
 }

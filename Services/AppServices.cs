@@ -5338,6 +5338,17 @@ public sealed class AppServices
         // from sending a walk on an open-ended hunt.
         Walker.SetDoorKeySourceProbe(id => SummonSourcesForItem(id).Count > 0);
 
+        // Hold a crossing whose gate item is missing but already being fetched,
+        // rather than sending an opener and a move that can only fail. Requires a
+        // detour to actually be in flight, so a gate nothing can source still fails
+        // the normal way instead of parking the walk.
+        Walker.SetGateItemHoldProbe(id =>
+            id > 0
+            && !IsItemCarried(id)
+            && (PathItemGiveRouter.DetourActive || PathItemShopRouter.DetourActive
+                || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive)
+            && HasOutstandingPathItemNeed(id));
+
         // Clear the per-walk forced-obtain override when a walk is abandoned, so a
         // forced flag never leaks into a later unrelated walk. (The per-item drop
         // on acquisition is wired to Inventory.Changed above.)
@@ -8488,6 +8499,18 @@ public sealed class AppServices
                 return false;
         }
         return true;
+    }
+
+    // True when a PathItem need for itemId is still outstanding. Scanned rather
+    // than indexed: the list holds one entry per gate item on the current route, so
+    // it's a handful at most even on a long gated walk.
+    private bool HasOutstandingPathItemNeed(int itemId)
+    {
+        string descriptor = itemId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        foreach (Need n in Needs.Outstanding(NeedKind.PathItem))
+            if (string.Equals(n.Descriptor, descriptor, StringComparison.Ordinal))
+                return true;
+        return false;
     }
 
     // The gate items on a chosen route that the acquisition pipeline can actually
