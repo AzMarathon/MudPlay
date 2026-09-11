@@ -550,6 +550,39 @@ Each of the six base stats feeds several derived numbers. The ratios below are t
 
 **Paradigm caveat.** The accuracy, dodge, stealth and damage ratios are verified for both realms. Crit's AGI term, carry-weight (encumbrance), and magic-resistance use the reverse-engineered **Stock** formula for both realms — they are **not independently verified for Paradigm**, so treat those three as close-but-unconfirmed there.
 
+### The exact formulas
+
+For the curious, here are the actual equations behind the numbers above, with everything that feeds them. These are the *base* (stat-and-level) values; your gear and completed-quest bonuses add on top in-game. Division drops the fraction (truncates) unless a formula says "round". `MinHits` is your class's per-level hit dice; `MageryLevel` is your class's magery level; `Level` is character level.
+
+**Max HP** = `HEA/2 + Level×MinHits + (HEA−50)×Level/16 + per-level rolls + RaceHPPerLevel×Level` (+ gear `+MaxHP`). The per-level rolls are random, which is why the projection shows HP as a range.
+
+**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100**. `divisor` = **750 on Stock, 500 on Paradigm**.
+
+**Max mana** = `MageryLevel×Level×2 + 6` (+ gear `+MaxMana`); 0 for non-casters. Mystics instead use **Kai = Level − 1**. Note this has *no stat term* — no attribute raises max mana.
+
+**Mana regen** (per tick) = `(Level+20) × CastingStat × (MageryLevel+2) / 1650`, then the realm's regen-% step. `CastingStat` = **INT** (Mage), **WIL** (Priest), **(INT+WIL)/2** (Druid), **CHM** (Bard).
+
+**Spellcasting** = `Level×2 + StatBlend + MageryLevel×5` (+ gear `+Spellcasting`). `StatBlend` = **(3×INT+WIL)/6** (Mage), **(3×WIL+INT)/6** (Priest), **(INT+WIL)/3** (Druid), **(3×CHM+WIL)/6** (Bard).
+
+**Accuracy** (the stat contribution — a level/combat base, worn-weapon accuracy and encumbrance also apply but aren't stat-driven):
+- **Stock**, every attack: `(STR−50)/3 + (AGI−50)/6`
+- **Paradigm**, normal attack: `(AGI−50)/3 + (INT−50)/6 + (CHM−50)/10`
+- **Paradigm**, bash / smash: `(STR−50)/3 + (AGI−50)/6`
+
+**Crit rating** = `clamp( Level/10 + (INT−50)/10 + (AGI−50)/20 + (CHM−50)/30, 1, 75 )`. *(AGI term unverified on Paradigm.)*
+
+**Dodge** (raw value, before the vs-accuracy % conversion) = `Level/5 + (CHM−50)/5 + (AGI−50)/3` (+ gear `+Dodge`, + a bonus while under 33% encumbrance).
+
+**Stealth** = `StealthLevel + 20 + stat terms`, where `StealthLevel = Level×2` at level ≤ 15, else `Level+15`. The stat terms differ by realm:
+- **Stock**: `trunc(AGI/4) + trunc(INT/8) + trunc(CHM/6)` (each term truncated)
+- **Paradigm**: `round(AGI/4 + INT/8 + CHM/6)` (summed, then rounded once)
+
+**Max encumbrance** (carry weight) = `STR×48`, plus `STR×36 − 3600` once STR is above 100. *(Unverified on Paradigm.)*
+
+**Magic resistance** = `(INT + 3×WIL) / 4`. *(Unverified on Paradigm.)*
+
+**Melee damage bonus** (STR added onto the weapon's own min/max) = min `(STR−100)/10`, max `(STR−50)/10`, neither below 0.
+
 ## Quests, Bosses, and Deaths
 
 - **Quest Status** — a journal of the realm's quests. Expand a card for its requirements, reward, and step checklist; tick every step (or the **Complete** box) to fold its permanent bonus into your character. Inside a step, two kinds of token are **clickable**: a `(map/room)` coordinate (cyan) walks you there, and a single-quoted `'command'` (green) is typed at the game for you, exactly as if you'd entered it in the terminal — so annotate a step with `'ask jorah transport'` and clicking it sends that line. **Edit Quests…** lets you name, hide, or annotate them — and for the handful of quests that are class-locked in a way the crawler can't see (Magebane, Tarl), its **Restrict to classes** dropdown (a checklist of every class) pins the quest to the ticked class(es), so any other class is marked *Cannot complete*. **Quests you can't complete — wrong class, race, or alignment, or a class restriction — are hidden from the journal by default;** tick **Show in quest journal** for one in the editor to keep it visible anyway (that choice is saved per character, since eligibility is per character). The **Announce available quests** checkbox at the top (on by default, saved per character) prints `[<quest> Quest is Now Available]` to the terminal the moment you train past a quest's minimum level — including a several-level jump, which announces every quest whose gate you crossed — and dumps the full list of quests you can now start once you've entered the realm (after the stat/inventory/who sequence — never while you're still sitting at the login menu). That dump only lists quests your class/race can do and that you haven't already completed, and never includes a cannot-complete quest even if you've chosen to show it in the journal. Alignment quests are gated separately: the three **Evil / Neutral / Good** checkboxes on the second header row (off by default, saved per character) declare which alignment chain(s) you're committed to — an alignment-gated quest only counts as available when its matching box is ticked, since in-game you're locked to one alignment chain once you start it regardless of your live alignment.
