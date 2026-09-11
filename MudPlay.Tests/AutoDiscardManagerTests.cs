@@ -73,6 +73,22 @@ public sealed class AutoDiscardManagerTests
     }
 
     [Fact]
+    public void DuringRoombaSweep_NoDrop_EvenWhenFlagged()
+    {
+        // A Roomba sweep is sorting the house: auto-discard is held off so it can't
+        // bin an item Roomba is relocating. Roomba sorts flagged items itself;
+        // normal discard resumes when the sweep ends.
+        using Harness h = new();
+        h.Map("dagger", 1, discard: true);
+        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Discard.SuppressDuringSweep = () => true;
+
+        h.Discard.OnInventoryChanged();
+
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
     public void Paradigm_BatchesDropIntoOneCountedCommand()
     {
         using Harness h = new() { Paradigm = true };

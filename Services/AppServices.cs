@@ -5765,12 +5765,6 @@ public sealed class AppServices
             // items can't outrun the game's command-rate limit and have the whole
             // batch — plus the loop's next move — silently dropped.
             promptScanner: PromptScanner,
-            // Don't sort what auto-discard is going to bin. Reads the same
-            // resolver auto-discard itself uses, and the same enable flag, so the
-            // two engines can't disagree about which items are junk.
-            wouldAutoDiscard: entry =>
-                ReadAutoModeFlag(d => d.AutoGetItems)
-                && ResolveAutoDiscardItem(entry) is { Discard: true, KeepCount: 0 },
             // Carries an interrupted sweep forward: the items it was holding are
             // still in the pack with only its queue knowing where each belonged,
             // and its remaining plan is a full lap of the circuit to rebuild.
@@ -6006,6 +6000,14 @@ public sealed class AppServices
             () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
         AutoGetItems.SuppressCollectInStashRoom =
             () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
+        // Hold auto-collect and auto-discard off while a Roomba sweep is sorting the
+        // house: an auto-collect would eat the carry headroom Roomba budgets for its
+        // moves (shrinking it until pre-planned sorts no longer fit, so the sweep
+        // can never finish), and an auto-discard would bin an item Roomba is
+        // relocating. Roomba sorts flagged items itself; both engines resume the
+        // moment the sweep ends.
+        AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
+        AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
         // Bank deposits (already a copper value) join stash hides in the Session
         // Stats stashed/deposited figure. The transaction-history ledger is fed
         // separately from the `You deposit …` echo (InventoryManager.BankDeposited,

@@ -67,6 +67,14 @@ public sealed class AutoDiscardManager : IDisposable
     // drop <item>. Live-mirrored from OtherSettings via AppServices ApplyToServices.
     public bool HideMode { get; set; }
 
+    // True while a Roomba sweep is underway. Auto-discard is held off for the whole
+    // sweep so it can't bin an item Roomba is in the middle of relocating — Roomba
+    // sorts auto-discard-flagged items into their labeled rooms instead. Normal
+    // auto-discard resumes the moment the sweep ends, clearing anything that
+    // accumulated. Wired by AppServices to GhSweepManager.IsActive; defaults to
+    // never-suppress.
+    public Func<bool> SuppressDuringSweep { get; set; } = static () => false;
+
     private Action<byte[]>? _wireSender;
     private bool _disposed;
 
@@ -106,6 +114,9 @@ public sealed class AutoDiscardManager : IDisposable
     public void OnInventoryChanged()
     {
         if (!_isEnabled() || _wireSender is null) return;
+        // A Roomba sweep is sorting the house — don't bin an item it may be
+        // relocating; Roomba sorts auto-discard-flagged items itself.
+        if (SuppressDuringSweep()) return;
 
         // Group carried copies by resolved item Number so duplicate name strings
         // ("a torch", "a torch") count as two of one item.

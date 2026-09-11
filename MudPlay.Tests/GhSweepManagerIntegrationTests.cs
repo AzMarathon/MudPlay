@@ -1181,6 +1181,43 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void StalledSort_FinishesAfterAVerificationLap_InsteadOfLoopingForever()
+    {
+        // The 70-lap bug: a queued move that can't complete (here it's never
+        // confirmed) kept the sweep circling the house indefinitely. Now the first
+        // fruitless lap is only a warning — a verification pass — and a second
+        // fruitless lap finishes: the move is surfaced as CouldNotComplete and the
+        // sweep leaves Sorting rather than retrying forever.
+        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Sweep.Start());
+
+        h.Feed("You notice a war hammer here.");
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("B", Direction.S);
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("A", Direction.N);
+        Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
+        Assert.Equal(1, h.Sweep.PendingMoveCount);
+
+        // First fruitless lap is a grace pass: still sorting, move still queued.
+        FireSortingLapCompleted(h.Sweep);
+        Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
+        Assert.Equal(1, h.Sweep.PendingMoveCount);
+
+        // Second fruitless lap confirms nothing more can move: the move is stranded
+        // and the sweep leaves Sorting (onto its final verification lap) — it does
+        // not keep circling.
+        FireSortingLapCompleted(h.Sweep);
+        Assert.NotEqual(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
+        Assert.Equal(0, h.Sweep.PendingMoveCount);
+        Assert.Contains(h.Sweep.LeftInPlace, l => l.Reason == GhLeftReason.CouldNotComplete);
+
+        h.Dispose();
+    }
+
+    [Fact]
     public void GetRefusedWithTheCurrencySyntax_IsStrandedNotRetriedForever()
     {
         // The live realm emits BRACES — "Syntax: GET {Amount} {Currency}" — while

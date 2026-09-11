@@ -191,7 +191,6 @@ public sealed class GhSweepManager : IDisposable
     private readonly IDisposable _commandIgnoredSub;
     private readonly IDisposable _slowDownSub;
     private readonly WirePromptScanner? _promptScanner;
-    private readonly Func<string, bool>? _wouldAutoDiscard;
     private readonly GhSuspendedSweepStore? _suspendedStore;
 
     // The unfinished sort queue from a sweep that stopped early, kept in memory so
@@ -309,8 +308,23 @@ public sealed class GhSweepManager : IDisposable
     private int _sortLapCount;
     private int _progressSnapshotMoved;
     private int _progressSnapshotCarried;
+    // Consecutive Sorting laps that moved/carried nothing. One stall is the
+    // "everything we had headroom for is done" signal; a second confirms no
+    // queued move can currently complete, so we stop instead of walking the
+    // circuit forever (see OnSortingLapCompleted).
+    private int _noProgressSortLaps;
+    // Stall this many fruitless Sorting laps in a row and the sweep finishes: the
+    // first lap says "nothing left I can move", the verification lap confirms it.
+    private const int StalledSortLapLimit = 2;
 
     public SweepPhase Phase { get; private set; } = SweepPhase.Idle;
+
+    // A sweep is underway in any non-idle phase (recon, sorting, or the final
+    // verification lap). The auto-get and auto-discard engines read this to hold
+    // off while Roomba is sorting — an auto-get would eat the headroom Roomba
+    // needs to carry moves, and an auto-discard would bin an item Roomba is in
+    // the middle of relocating.
+    public bool IsActive => Phase != SweepPhase.Idle;
     public int CompletedReconLaps { get; private set; }
 
     // Which mode the current (or most recently finished) run is/was — set
@@ -397,7 +411,6 @@ public sealed class GhSweepManager : IDisposable
         GhItemLocationStore? itemLocations = null,
         Func<RoomKey, bool>? isRoomActivelyManaged = null,
         WirePromptScanner? promptScanner = null,
-        Func<string, bool>? wouldAutoDiscard = null,
         GhSuspendedSweepStore? suspendedStore = null)
     {
         ArgumentNullException.ThrowIfNull(labels);
@@ -426,7 +439,6 @@ public sealed class GhSweepManager : IDisposable
         // rooms sweep them exactly as before.
         _isRoomActivelyManaged = isRoomActivelyManaged ?? (static _ => true);
         _promptScanner = promptScanner;
-        _wouldAutoDiscard = wouldAutoDiscard;
         _suspendedStore = suspendedStore;
         _log = log;
 
@@ -538,6 +550,7 @@ public sealed class GhSweepManager : IDisposable
         _sortLapCount = 0;
         _progressSnapshotMoved = 0;
         _progressSnapshotCarried = 0;
+        _noProgressSortLaps = 0;
         _reconSearchSettle.Stop();
         _reconSearchRoom = null;
         _reconSearchesSent = 0;
@@ -768,10 +781,14 @@ public sealed class GhSweepManager : IDisposable
         }
     }
 
-    // A lap of the Sorting circuit completed. This records progress for
-    // diagnostics but never treats a quiet lap as completion: hidden items,
-    // transient pickup failures, and temporary full-pack failures must remain
-    // queued and be retried until their drops are actually verified.
+    // A lap of the Sorting circuit completed. Tracks progress and decides when the
+    // sort is exhausted: a lap that moved and carried nothing means every queued
+    // move we had headroom (and a free destination) for is done. One such lap isn't
+    // proof — a transient miss, a briefly-full room, or a re-survey catching up can
+    // clear on the next pass — so we take one more verification lap; a SECOND
+    // fruitless lap confirms nothing queued can complete this sweep and we finish
+    // (rather than circling the house forever, which once stranded a sweep across
+    // 70 laps). A lap that DID progress resets the stall counter.
     private void OnSortingLapCompleted()
     {
         _sortLapCount++;
@@ -797,20 +814,54 @@ public sealed class GhSweepManager : IDisposable
         int carriedNow = _pending.Count(p => p.IsCarried && !p.Delivered);
         bool progressed = movedNow != _progressSnapshotMoved || carriedNow != _progressSnapshotCarried;
         int remaining = _pending.Count(p => !p.Delivered);
+        _progressSnapshotMoved = movedNow;
+        _progressSnapshotCarried = carriedNow;
 
-        if (!progressed)
+        if (progressed)
+        {
+            _noProgressSortLaps = 0;
+            _log?.Info(LogCategory,
+                $"sort lap {_sortLapCount} complete: moved={movedNow} carrying={carriedNow} remaining={remaining}");
+            return;
+        }
+
+        _noProgressSortLaps++;
+        // remaining == 0 is handled by the normal all-delivered completion path
+        // (MaybeFinish → BeginFinalRecon); only a stall with work still queued
+        // needs the stop-instead-of-loop decision.
+        if (remaining == 0 || _noProgressSortLaps < StalledSortLapLimit)
         {
             _log?.Warn(LogCategory,
                 $"sort lap {_sortLapCount}: no progress (moved={movedNow} carrying={carriedNow}); "
-                + $"{remaining} queued move(s) remain and will be retried");
+                + $"{remaining} queued move(s) remain — one verification lap to confirm nothing else can move");
+            return;
         }
-        else
+
+        _log?.Warn(LogCategory,
+            $"sort lap {_sortLapCount}: still no progress after a verification lap; "
+            + $"{remaining} queued move(s) can't be completed this sweep — finishing");
+        StrandStalledAndFinish();
+    }
+
+    // Two Sorting laps running moved nothing: every remaining queued move is blocked
+    // (its destination stayed full, a hidden item never surfaced, or what's left is
+    // too heavy for the budget the player's own load leaves). Surface each still-
+    // undelivered, not-carried move as left-in-place so the Roomba Log names exactly
+    // what couldn't be sorted, then finish through the normal final-recon pass.
+    // Carried-but-undelivered moves become Stranded on the finish path
+    // (BuildFinalReport).
+    private void StrandStalledAndFinish()
+    {
+        List<PendingSortMove> stalled = _pending.Where(p => !p.Delivered && !p.IsCarried).ToList();
+        foreach (PendingSortMove move in stalled)
         {
-            _log?.Info(LogCategory,
-                $"sort lap {_sortLapCount} complete: moved={movedNow} carrying={carriedNow} remaining={remaining}");
+            _pending.Remove(move);
+            _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.CouldNotComplete));
         }
-        _progressSnapshotMoved = movedNow;
-        _progressSnapshotCarried = carriedNow;
+        if (stalled.Count > 0)
+            _log?.Info(LogCategory,
+                $"left {stalled.Count} move(s) unsorted — no reachable destination or headroom this sweep");
+        BeginFinalRecon();
     }
 
     // LoopRunner ended outside our own Stop()/FinishSweep() call (toolbar
@@ -1058,7 +1109,7 @@ public sealed class GhSweepManager : IDisposable
         foreach ((RoomKey room, List<string> items) in _observedByRoom) observed[room] = items;
 
         (IReadOnlyList<GhPendingMove> moves, IReadOnlyList<GhSweepItemFound> leftInPlace) =
-            GhSortQueueBuilder.Build(observed, _labels.Labels, _itemNames, _wouldAutoDiscard);
+            GhSortQueueBuilder.Build(observed, _labels.Labels, _itemNames);
 
         foreach (GhPendingMove move in moves)
         {

@@ -121,7 +121,7 @@ public sealed partial class RoombaLogViewModel : ObservableObject, IDisposable
         GhLeftReason.GoneBySortTime => "gone by sort time",
         GhLeftReason.AllDestinationsFull => "every room that takes it is full",
         GhLeftReason.NotActuallyCarried => "not in inventory — the pickup never landed",
-        GhLeftReason.AutoDiscarded => "auto-discard would bin it anyway",
+        GhLeftReason.CouldNotComplete => "couldn't be sorted this sweep — no room or headroom",
         _ => "no matching room",
     };
 
