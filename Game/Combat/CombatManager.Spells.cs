@@ -1671,6 +1671,14 @@ public sealed partial class CombatManager
         return list;
     }
 
+    // The runtime weapon fail-sets standing behind an Unkillable verdict. These
+    // hold observed "no effect" evidence, which UnengageableReason (pure game data)
+    // can't show — so a report where the engine walks past a monster game data says
+    // it should be able to hit has nothing to explain the decision without them.
+    // Room-scoped, cleared with the rest of the per-room state.
+    internal (IReadOnlyList<string> Normal, IReadOnlyList<string> Alternate) SnapshotWeaponFailSets()
+        => (_normalWeaponFailedMonsters.ToArray(), _alternateWeaponFailedMonsters.ToArray());
+
     // How the engine can act against a monster THIS round.
     internal enum EngageAssessment
     {

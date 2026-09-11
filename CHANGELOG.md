@@ -1,5 +1,13 @@
 # Version history
 
+## 3.68.1
+
+- A "your weapon has no effect" reply is now blamed on the weapon the game confirms is in your hand, not the one the engine has already asked for — a working alternate weapon was getting written off mid-swap, and the monster then read as unkillable for the rest of the room
+- A swing that lands damage clears that monster from the weapon's no-effect list, so one stray "no effect" can no longer strand you against something you are visibly hurting
+- Monster Intel drops its "physical attacks had no effect" note for a monster once one of your swings lands on it
+- Bug reports now show the per-room weapon-no-effect lists behind a monster the engine has written off
+- bug reports addressed: paradigm-20260910-214553
+
 ## 3.68.0
 
 - An interrupted Roomba sweep no longer dumps its load on you: what it was carrying and where each piece was headed are remembered per character, verified against a real inventory read, and delivered next time

@@ -310,6 +310,14 @@ public sealed class EquipmentManager
     private static bool IsHeld(ISet<string>? held, string name) =>
         held is null || held.Contains(name);
 
+    // The weapon the SERVER has confirmed is on the hand, or null while that's
+    // unknown (no 'i' dump parsed yet, or the hand is empty). Distinct from the
+    // combat engine's own belief, which flips the instant an `eq` is sent — this
+    // only moves when the game answers ("You are now holding X."), so a handler
+    // reading it mid-round sees the weapon the swing it's reacting to was made
+    // with, not the one already queued behind it.
+    public string? WornWeapon => SlotItem(_getSnapshot(), "Weapon Hand");
+
     private static string? SlotItem(InventorySnapshot snap, string slot)
     {
         foreach (EquippedItem e in snap.EquippedItems)
