@@ -92,6 +92,13 @@ public sealed class RoomTracker
     // line arrives before the exits line that confirms the move).
     public DateTimeOffset? LastMoveSentAt { get; private set; }
 
+    // Diagnostics: the most recent server move-echo the tracker recorded (the
+    // command + when), or null if none this session. The echo gate confirms a
+    // move's landing only once its command has been echoed, so a bug report of a
+    // "walker stuck Pending in a same-named room" shows here whether that gating
+    // echo actually arrived — the tell for a missed-echo stall.
+    public (string Command, DateTimeOffset At)? LastInboundMoveEcho => _lastInboundEcho;
+
     // True while we're standing in a room too dark to display its name or exits
     // ("The room is very dark..." / "The room is pitch black..."). Set by
     // NoteDarkRoomEntered on the dark line, cleared the moment a normal room
@@ -859,6 +866,8 @@ public sealed class RoomTracker
         // real landing looking un-echoed — which would hold the move as a re-look.
         if (!_pending.TryPeek(out PendingMove head) || !EchoMatchesHead(command, head)) return;
         _lastInboundEcho = (command, whenUtc ?? DateTimeOffset.UtcNow);
+        _log?.Log(LogSeverity.Debug, "RoomTracker",
+            $"Server echoed head move '{command}'; its next matching room display will confirm the landing.");
     }
 
     // A "The door is closed!" refusal was seen. Beyond the generic move-blocked
