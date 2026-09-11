@@ -319,10 +319,16 @@ public sealed class RemoteCommandManager : IDisposable
         // unknown-command denial path and bounce a reply at the sender.
         if (_ignored.Contains(command)) return;
 
+        // @help is a pure query — describing a command isn't executing it — so it's
+        // exempt from the suicide / reroll content guards below, which scan the args
+        // for dangerous tokens meant for action commands (@do suicide, @party reroll).
+        // Without this, `@help suicide` would be swallowed by the suicide policy block.
+        bool isHelp = string.Equals(command, "@help", StringComparison.OrdinalIgnoreCase);
+
         // Hard-blocks first — bypass everything else. Always silent (no
         // reply) even when WarnOnDenial is on: never advertise the block
         // to a malicious caller.
-        if (IsHardBlocked(command, args, out string? reason))
+        if (!isHelp && IsHardBlocked(command, args, out string? reason))
         {
             _log?.Log(LogSeverity.Info, "RemoteCmd",
                 $"Blocked {command} from {entry.Speaker}: {reason}");
@@ -337,7 +343,7 @@ public sealed class RemoteCommandManager : IDisposable
         // block below because that one's permissive when lives >
         // threshold; we don't want @do suicide to slip through
         // just because we happen to have enough lives.
-        string? forcedSuicideRedirect = GetForcedSuicideRedirectReply(command, args);
+        string? forcedSuicideRedirect = isHelp ? null : GetForcedSuicideRedirectReply(command, args);
         if (forcedSuicideRedirect is not null)
         {
             _log?.Log(LogSeverity.Info, "RemoteCmd",
@@ -353,7 +359,7 @@ public sealed class RemoteCommandManager : IDisposable
         // SendDenialReply so the WarnOnDenial master gate applies
         // (specific reason wins over the generic FailureMessage
         // when WarnOnDenial is on; nothing sent when it's off).
-        string? suicideReply = GetSuicidePolicyBlockReply(command, args);
+        string? suicideReply = isHelp ? null : GetSuicidePolicyBlockReply(command, args);
         if (suicideReply is not null)
         {
             _log?.Log(LogSeverity.Info, "RemoteCmd",
