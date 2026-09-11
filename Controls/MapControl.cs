@@ -2118,6 +2118,9 @@ public sealed class MapControl : Control
 
         IBrush fill;
         IPen pen;
+        // True once the up/down hint has coloured the WHOLE node (no higher-priority
+        // class claimed it) — the corner badge is then redundant and skipped.
+        bool verticalFillIsPrimary = false;
         if (isCurrent)
         {
             fill = CurrentFill;
@@ -2171,6 +2174,9 @@ public sealed class MapControl : Control
                 VerticalHint.Down => (DownFill,           DownBorderPen),
                 _                 => ((IBrush)RoomFill,   (IPen)RoomBorderPen),
             };
+            // The whole node now carries the up/down colour, so the corner badge
+            // would just be the same hue drawn on itself — suppress it below.
+            verticalFillIsPrimary = hint != VerticalHint.None;
         }
         else
         {
@@ -2191,11 +2197,13 @@ public sealed class MapControl : Control
             DrawTeleportHash(ctx, node);
         }
 
-        // Vertical-exit corner badges — always drawn when the room has
-        // a U/D hint, regardless of the cell's primary fill class. Lets
-        // the user see "this room goes up/down" even when the fill is
-        // claimed by Lair / Shop / Spell / Auto-Lair.
-        if (Layout?.VerticalHints is { } vh
+        // Vertical-exit corner badges — drawn only when a higher-priority class
+        // (current / destination / Auto-Lair / Lair / Shop / Spell) claimed the
+        // cell fill, so "this room goes up/down" still shows. When the up/down hint
+        // IS the whole-node fill, the badge is redundant (same hue on itself) and
+        // skipped — otherwise a rimmed triangle sits on a matching square.
+        if (!verticalFillIsPrimary
+            && Layout?.VerticalHints is { } vh
             && vh.TryGetValue(key, out VerticalHint vhint)
             && vhint != VerticalHint.None)
         {

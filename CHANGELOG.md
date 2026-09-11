@@ -5,7 +5,7 @@
 - Navigation can now re-locate itself in a block of identically-named rooms **even with automation stopped** — walking a same-name grid by hand, or being dragged by a party leader: it narrows down which look-alike room you're in from the sequence of moves you make and the rooms they reveal, and silently re-anchors the instant that sequence fits exactly one room
 - Sends nothing to the game to do this (pure inference from moves you're already making); if the walk stays genuinely ambiguous it stays Lost rather than guess
 - Stands down while an automation engine is driving, so the walker's own recovery still owns that case
-- Map: the up/down corner badges now have a dark rim so the yellow down-badge reads against the current-room gold fill instead of blending into it; the current-room fill is also a touch darker
+- Map: up/down corner badges get a dark rim so they read over a claimed fill (current room, lair, shop, spell) instead of blending in, and are suppressed on rooms where the up/down colour is already the whole-node fill (no redundant triangle-on-itself); the current-room fill is also a touch darker
 
 ## 3.70.0
 
