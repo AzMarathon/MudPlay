@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using MudPlay.Terminal;
 
 namespace MudPlay.Game.Map;
@@ -11,14 +12,21 @@ namespace MudPlay.Game.Map;
 // landing from a stray re-look in an identically-named grid (issue #478) without
 // relying on the fragile round-trip timing heuristic.
 //
-// LineExtractor splits a prompt row that carries trailing text ("[HP=..]:e") into
-// two back-to-back EmittedLines — the prompt half (IsPromptLine, "[HP=..]:") then
-// the trailing content ("e") — BOTH stamped with the same row timestamp. A bare
-// prompt ("[HP=..]:" with nothing typed) emits only the prompt line; the room
-// display that follows is a separate row with a later timestamp. So the echoed
-// command is exactly "a non-prompt line immediately following a prompt line and
-// sharing its timestamp"; the same-timestamp test is what rejects the room-name
-// line that follows a bare prompt (which would otherwise clobber the real echo).
+// Two ways the echoed command reaches us, because the prompt is user-configurable:
+//
+//  A) DEFAULT-shaped statline ("[HP=..]:"). LineExtractor recognises this shape
+//     and splits a prompt row carrying trailing text ("[HP=..]:e") into two
+//     back-to-back EmittedLines — the prompt half (IsPromptLine, "[HP=..]:") then
+//     the trailing content ("e") — BOTH stamped with the same row timestamp. The
+//     echoed command is the same-timestamp content line after a prompt line.
+//
+//  B) CUSTOM statline LineExtractor's built-in "[HP=..]:" split doesn't recognise.
+//     The whole prompt row (prompt + typed command) arrives as ONE line. We match
+//     the user's own configured statline pattern (StatlinePromptRegexBuilder, via
+//     the injected provider — the exact matcher the reconciler forces onto the
+//     wire) at the row start and take the trailing text as the echoed command. So
+//     the gate works for whatever prompt the player set, not just the default.
+//
 // RoomTracker.NoteInboundMoveEcho is the final authority — it keeps only an echo
 // that names the move in flight — so forwarding a non-move echo here is harmless.
 public sealed class InboundMoveEchoScanner : IDisposable
@@ -26,15 +34,20 @@ public sealed class InboundMoveEchoScanner : IDisposable
     private readonly LineExtractor _lines;
     private readonly RoomTracker _tracker;
 
+    // Supplies the active statline prompt matcher (path B). Null in headless tests
+    // that only exercise the default-split path.
+    private readonly Func<Regex>? _promptPattern;
+
     private bool _prevWasPrompt;
     private DateTimeOffset _prevPromptAt;
 
-    public InboundMoveEchoScanner(LineExtractor lines, RoomTracker tracker)
+    public InboundMoveEchoScanner(LineExtractor lines, RoomTracker tracker, Func<Regex>? promptPattern = null)
     {
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(tracker);
         _lines = lines;
         _tracker = tracker;
+        _promptPattern = promptPattern;
         _lines.LineEmitted += OnLineEmitted;
     }
 
@@ -51,12 +64,32 @@ public sealed class InboundMoveEchoScanner : IDisposable
             return;
         }
 
-        bool isPromptEcho = _prevWasPrompt && line.Timestamp == _prevPromptAt;
+        bool wasPrompt = _prevWasPrompt;
         _prevWasPrompt = false;
-        if (!isPromptEcho) return;
 
-        string command = line.Text.Trim();
+        // Path A — the split-off trailing content of a default prompt row: it
+        // arrives right after the prompt line and carries that row's timestamp.
+        if (wasPrompt && line.Timestamp == _prevPromptAt)
+        {
+            Forward(line.Text, line.Timestamp);
+            return;
+        }
+
+        // Path B — a custom prompt LineExtractor didn't split: the prompt + command
+        // are one line. Match the configured statline at the start and take what
+        // follows as the echoed command.
+        if (_promptPattern?.Invoke() is { } rx)
+        {
+            Match m = rx.Match(line.Text);
+            if (m.Success && m.Index == 0 && m.Length < line.Text.Length)
+                Forward(line.Text[m.Length..], line.Timestamp);
+        }
+    }
+
+    private void Forward(string commandText, DateTimeOffset at)
+    {
+        string command = commandText.Trim();
         if (command.Length == 0) return;
-        _tracker.NoteInboundMoveEcho(command, line.Timestamp);
+        _tracker.NoteInboundMoveEcho(command, at);
     }
 }

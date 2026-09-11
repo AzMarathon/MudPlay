@@ -1565,6 +1565,8 @@ Config per roll-spell slot: a **max rerolls per cycle** and a **minimum gate**. 
 
 In character mode the server **echoes the typed command** on the prompt line before its result, e.g. `[HP=91/KAI=5]:e` then the new room display. This holds on stock and Paradigm (`[HP=../MA=..]`/`[HP=../KAI=..]`). The echo may be inline (`]:w`), on its own line (`w`), or doubled; combat / spell / event lines and even other commands' echoes can **interleave between a move's echo and its landing room display**, so a display can arrive well after the move that caused it.
 
+**The prompt/statline is user-defined.** MajorMUD's `set statline` lets a player format the prompt however they like — the default is bracketed HP/mana (`[HP=%h/MA=%m]: %r`, or `KAI`, or HP-only), which is what the vast majority run, but a custom statline can be any shape (`set statline full custom <template>`). Static text in the template is exact; the dynamic parts are `%`-wildcards (`%h`, `%m`, `%r`, …). MudPlay is the source of truth for the live statline: it sends `set statline` on logon and re-sends on any parser mismatch (StatlineReconciler), so **the configured statline is what actually prints on the wire**, and the same template compiles (StatlinePromptRegexBuilder) into the exact matcher used to read HP/mana AND to find the echoed command after the prompt. The echo detection therefore keys off the player's configured prompt, not a hardcoded `[HP=..]:` — so the move-echo gate works whatever statline they set. (If an echo ever can't be read, the tracker falls back to timing rather than freezing.)
+
 So every room display has an identifiable cause on the wire:
 
 - **Move succeeded** — the move's echo, then a NEW room display. (This is the only case that should advance position.)

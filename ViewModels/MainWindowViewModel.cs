@@ -894,8 +894,11 @@ public partial class MainWindowViewModel : ObservableObject
         // Feeds the server's move-command echo ("[HP=..]:e") to the tracker so it
         // confirms a move's landing on that causal signal rather than guessing by
         // timing — the fix for phantom-advancing through identically-named grids.
+        // Passes the active statline matcher so the echo is read after whatever
+        // prompt the player configured, not just the default shape.
         _inboundMoveEchoScanner = new Game.Map.InboundMoveEchoScanner(Lines,
-            AppServices.Current.RoomTracker);
+            AppServices.Current.RoomTracker,
+            () => AppServices.Current.CurrentStatlinePromptRegex);
         // Combat-gated-entry refusal: `break` → 3s → revert move so the driving
         // engine retries. Gated on a movement engine actually driving.
         _combatEntryRefusalHandler = new Game.Map.CombatEntryRefusalHandler(Lines,

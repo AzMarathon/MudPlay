@@ -855,11 +855,20 @@ public sealed class RoomTracker
     // move's landing only once the move has been echoed, regardless of how fast or
     // slow it arrived. A single slot is enough — moves and their echoes are FIFO,
     // and a stale echo can't apply to a later move because its timestamp predates
-    // that move's SentAt (see HeadMoveEchoed).
+    // that move's SentAt (see HeadMoveEchoed). Only works when the user's statline
+    // is one the scanner can split; the re-look guard falls back to timing when no
+    // echo is ever seen (see _everReceivedEcho and the guard in ReconcileFromPending).
     public void NoteInboundMoveEcho(string echoedCommand, DateTimeOffset? whenUtc = null)
     {
         if (string.IsNullOrWhiteSpace(echoedCommand)) return;
         string command = echoedCommand.Trim();
+        // Any prompt-echo the scanner produces proves this user's statline is one the
+        // echo path can read — latch it so the arrival gate trusts the echo instead of
+        // the timing fallback. A custom statline the scanner can't split never reaches
+        // here, so the latch stays false and the timing fallback keeps the walker from
+        // freezing. Set before the head-match gate: even a non-move command echo (stat,
+        // inventory) is proof the scanner is working.
+        _everReceivedEcho = true;
         // Record only an echo that names the move currently in flight. A non-move
         // command echoed mid-move (stat, inventory), or the echo of an already-
         // confirmed move, must not overwrite the head move's echo and leave its
@@ -1048,15 +1057,31 @@ public sealed class RoomTracker
                 // drag-arrival stranded the anchor a room back and desynced). NoteFollowMove
                 // flags the pending move exempt so it confirms immediately; self-typed
                 // moves keep the echo gate.
+                //
+                // STATLINE DEPENDENCY + FALLBACK: the echo signal only works when the
+                // user's statline is one InboundMoveEchoScanner can read (LineExtractor
+                // splits the "[HP=..]:" prompt from its trailing command). A player can
+                // set an arbitrary statline; if theirs isn't split, NO echo ever arrives,
+                // and gating purely on !HeadMoveEchoed would hold every same-named-grid
+                // move forever (a frozen walker). So we only trust the echo once we've
+                // actually SEEN one this session (_everReceivedEcho); until then — i.e.
+                // for a statline the scanner can't parse — fall back to the old 400ms
+                // timing floor, which is no worse than the pre-echo behaviour. The common
+                // default "[HP=..]:" prompts flip the latch on the first move.
+                bool notEchoedOrTimingHold = _everReceivedEcho
+                    ? !HeadMoveEchoed(head)                             // echo-capable statline: causal, timing-independent
+                    : (when - head.SentAt < AmbiguousRedisplayFloor);  // never echoed (custom statline): timing fallback
                 if (!head.IsFollowDrag
                     && MatchesPredicted(source, observation)
-                    && !HeadMoveEchoed(head)
+                    && notEchoedOrTimingHold
                     && RedisplayExitsUnchanged(observation))
                 {
                     _log?.Log(LogSeverity.Debug, "RoomTracker",
-                        $"Redisplay matches source '{source.Name}' AND predicted {moveLabel} target, " +
-                        $"but the move has not been echoed by the server yet; treating as a passive " +
-                        $"re-look and staying Pending until the move's echoed landing arrives.");
+                        $"Redisplay matches source '{source.Name}' AND predicted {moveLabel} target; " +
+                        (_everReceivedEcho
+                            ? "the move has not been echoed by the server yet"
+                            : "no move-echo has been seen this session (statline not echo-readable), holding by timing") +
+                        "; treating as a passive re-look and staying Pending.");
                     State.LastUpdatedAt = when;
                     return;
                 }
@@ -1466,6 +1491,20 @@ public sealed class RoomTracker
     // NoteInboundMoveEcho; read by HeadMoveEchoed. Single slot — see
     // NoteInboundMoveEcho for why that's sufficient.
     private (string Command, DateTimeOffset At)? _lastInboundEcho;
+
+    // Latches true the first time NoteInboundMoveEcho fires this session — proof
+    // the user's statline is one the echo scanner can read. Until then the re-look
+    // guard can't trust the ABSENCE of an echo (a custom statline the scanner
+    // can't split never produces one), so it falls back to AmbiguousRedisplayFloor.
+    private bool _everReceivedEcho;
+
+    // Timing fallback for the re-look guard when no move-echo is available (a
+    // statline the scanner can't parse). A real move's confirming display takes a
+    // full server round-trip; a stray same-room re-look landing faster than this is
+    // treated as noise. This is the pre-echo heuristic, kept only as the fallback —
+    // echo-readable statlines use the causal echo signal instead, which is why the
+    // reported "double move" through identically-named grids needed the echo gate.
+    private static readonly TimeSpan AmbiguousRedisplayFloor = TimeSpan.FromMilliseconds(400);
 
     // Has the server echoed the head pending move since it was sent? True only
     // when the most recent inbound echo BOTH matches the head move's command AND

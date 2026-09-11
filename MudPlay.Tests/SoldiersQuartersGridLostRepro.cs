@@ -131,18 +131,23 @@ public sealed class SoldiersQuartersGridLostRepro : IDisposable
     private static RoomObservation Obs(int room) => new(Name, ExitsOf(room));
 
     // ---------------------------------------------------------------------
-    // Test A — the phantom-advance fix via the echo gate. A stray re-display of
-    // the room the player is STILL in matches the predicted target in this grid,
-    // but without the server having echoed the move it is NOT the landing — so the
-    // tracker stays put regardless of how late the re-display arrives (the old
-    // 400ms floor let a late one phantom-advance). Once the move's echo arrives,
-    // the next matching display IS the landing and confirms.
+    // Test A — the phantom-advance fix via the echo gate (echo-readable statline).
+    // A stray re-display of the room the player is STILL in matches the predicted
+    // target in this grid, but without the server having echoed the move it is NOT
+    // the landing — so the tracker stays put regardless of how late the re-display
+    // arrives (the old 400ms floor let a late one phantom-advance). Once the move's
+    // echo arrives, the next matching display IS the landing and confirms.
     // ---------------------------------------------------------------------
     [Fact]
-    public void SlowSourceRedisplay_NoEcho_DoesNotPhantomAdvance()
+    public void SlowSourceRedisplay_Echoed_DoesNotPhantomAdvance()
     {
         RoomTracker tracker = NewTracker();
         var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        // Echo-capable session (a default "[HP=..]:"-style statline the scanner
+        // reads): a move-echo has already flowed, so the tracker trusts the echo
+        // signal and drops the timing fallback.
+        tracker.NoteInboundMoveEcho("n", t0);
 
         // Standing, Confirmed, in interior room 1708 (4-way N/S/E/W).
         tracker.SetLocated(new RoomKey(8, 1708), t0);
@@ -168,10 +173,12 @@ public sealed class SoldiersQuartersGridLostRepro : IDisposable
         Assert.Equal(new RoomKey(8, 1709), tracker.State.CurrentRoom?.Key);
     }
 
-    // The same stray re-display arriving FAST (100ms) is also held — proving the
-    // gate is timing-independent: with no echo it never advances, fast or slow.
+    // A statline the scanner can't read (a custom prompt) never produces an echo,
+    // so the guard falls back to the old timing floor rather than freezing: a FAST
+    // stray re-display is still held. (This session feeds no echo, so the latch
+    // stays off and the fallback is in force.)
     [Fact]
-    public void FastSourceRedisplay_NoEcho_StaysPut()
+    public void FastSourceRedisplay_NoEchoStatline_HeldByTimingFallback()
     {
         RoomTracker tracker = NewTracker();
         var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);

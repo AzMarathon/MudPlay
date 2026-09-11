@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 using MudPlay.Game.Map;
 using MudPlay.Services;
 using MudPlay.Terminal;
@@ -49,7 +50,7 @@ public sealed class InboundMoveEchoScannerTests : IDisposable
         ]
         """;
 
-    private (RoomTracker Tracker, InboundMoveEchoScanner Scanner) NewScanner()
+    private (RoomTracker Tracker, InboundMoveEchoScanner Scanner) NewScanner(Regex? promptPattern = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
@@ -59,7 +60,9 @@ public sealed class InboundMoveEchoScannerTests : IDisposable
         graph.OnActiveSetChanged("alpha");
         RoomTracker tracker = new(graph);
         LineExtractor lines = new(new TerminalEmulator(80, 25));
-        InboundMoveEchoScanner scanner = new(lines, tracker);
+        InboundMoveEchoScanner scanner = promptPattern is null
+            ? new(lines, tracker)
+            : new(lines, tracker, () => promptPattern);
         return (tracker, scanner);
     }
 
@@ -92,8 +95,8 @@ public sealed class InboundMoveEchoScannerTests : IDisposable
     }
 
     // A room display following a BARE prompt carries a later timestamp (a separate
-    // row), so it is not mistaken for an echo — without a real echo, the matching
-    // redisplay stays Pending rather than phantom-advancing.
+    // row), so the scanner does NOT forward it as an echo — the tracker records no
+    // move-echo from it.
     [Fact]
     public void BarePromptThenRoomLine_NotTreatedAsEcho()
     {
@@ -107,10 +110,32 @@ public sealed class InboundMoveEchoScannerTests : IDisposable
         scanner.FeedTestLine(Line("[HP=100/MA=50]:", t0.AddSeconds(2), prompt: true));
         scanner.FeedTestLine(Line("Hall", t0.AddSeconds(2).AddMilliseconds(40), prompt: false));
 
-        // A matching redisplay now arrives — with no echo forwarded, it is held.
-        tracker.NoteRoomObserved(Hall(), t0.AddSeconds(2).AddMilliseconds(700));
+        // Nothing was forwarded as an echo — the room line is not a command echo.
+        Assert.Null(tracker.LastInboundMoveEcho);
+    }
 
-        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
-        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    // A CUSTOM statline LineExtractor's built-in "[HP=..]:" split doesn't recognise:
+    // the whole prompt + typed command arrive as ONE non-prompt line. Given the
+    // user's configured statline matcher, the scanner still lifts the trailing
+    // command (path B) — so the move's same-named-neighbour landing confirms.
+    [Fact]
+    public void CustomStatlinePrompt_UnsplitLine_ConfirmsMove()
+    {
+        // A user-authored prompt shape "<hp/mana>:" the default [HP=..]: split misses.
+        Regex custom = new(@"<\d+/\d+>:", RegexOptions.CultureInvariant);
+        (RoomTracker tracker, InboundMoveEchoScanner scanner) = NewScanner(custom);
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        tracker.SetLocated(new RoomKey(1, 1), t0);
+        tracker.NoteRoomObserved(Hall(), t0);
+        tracker.NoteMoveSent(Direction.N, t0.AddSeconds(1));  // predicted 1/2 (identical {N,S})
+
+        // The whole row as one non-prompt line: prompt + the echoed "n".
+        DateTimeOffset echoAt = t0.AddSeconds(2);
+        scanner.FeedTestLine(Line("<100/50>:n", echoAt, prompt: false));
+
+        tracker.NoteRoomObserved(Hall(), echoAt.AddMilliseconds(100));
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
     }
 }
