@@ -121,6 +121,22 @@ public sealed record MessageRecord(
     // Recognition consumers skip these: an absent line compiles no pattern.
     public static bool IsBlankOrAbsent(string? line)
         => string.IsNullOrWhiteSpace(line) || IsAbsentSentinel(line);
+
+    // AppliedMessage / AppliedEndsWith are Contains-matched against every server line, so a
+    // pattern of only a few characters — a stray "n" / "E" seen in some older MDB imports —
+    // matches almost every line and spams the condition tracker (a room display like "Stone
+    // Chamber, Entrance" holds both an 'n' and an 'E', so it both applies AND ends the effect
+    // every line). A real effect line is always a full phrase — the shortest one shipped is 12
+    // characters — so a present-but-tiny pattern can only be corrupt data. The floor sits at 8:
+    // comfortably below the 12-char shortest real line, well above the 1-char "n"/"E" garbage,
+    // so anything shorter is almost certainly malformed. Recognition consumers skip it like a
+    // blank slot; the Game Data Browser flags it so the record can be found and repaired.
+    public const int MinRecognitionPatternLength = 8;
+
+    // True when line holds real text (not blank / sentinel) that is nonetheless too short to
+    // be a safe Contains-pattern — see MinRecognitionPatternLength.
+    public static bool IsTooShortToMatch(string? line)
+        => !IsBlankOrAbsent(line) && line!.Trim().Length < MinRecognitionPatternLength;
 }
 
 // One back-reference from a MessageRecord to a record inside the active

@@ -90,6 +90,21 @@ public sealed class MessagesSectionFilterTests
         Assert.Empty(MessagesSectionViewModel.MissingSlots(m));
     }
 
+    // A corrupt 1-char applied/ends pair ("n"/"E") reads as "filled" so MissingSlots sees no
+    // gap, but it can't be safely Contains-matched — it surfaces on the worklist for repair.
+    [Fact]
+    public void MalformedSlots_FlagsTooShortPatterns()
+    {
+        MessageRecord corrupt = WithLines(MessageFlags.None, "c", "t", "w", applied: "n", wearsOff: "E");
+        Assert.Empty(MessagesSectionViewModel.MissingSlots(corrupt));
+        Assert.Equal(new[] { "Applied (too short)", "Wears-off (too short)" },
+            MessagesSectionViewModel.MalformedSlots(corrupt));
+
+        MessageRecord healthy = WithLines(MessageFlags.None, "c", "t", "w",
+            applied: "You are blurred", wearsOff: "The effects of blur wear off");
+        Assert.Empty(MessagesSectionViewModel.MalformedSlots(healthy));
+    }
+
     [Fact]
     public void ClaimedByExistingSpell_IsHidden()
     {

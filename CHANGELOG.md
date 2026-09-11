@@ -1,5 +1,12 @@
 # Version history
 
+## 3.73.0
+
+- Loop nav-line keeps its approach colour the whole way to the loop; a combat pause mid-walk-to no longer flips it to the running-loop colour — it changes only once you're actually looping
+- Condition tracker ignores a corrupt too-short message pattern (a stray 1-character "applied"/"wear-off" left by some older MDB imports) instead of matching it against nearly every line and spamming "condition applied/ended" in the program log
+- Such a malformed record now surfaces on the Game Data → Incomplete Messages worklist (flagged "too short") so it can be found and repaired
+- bug reports addressed: paradigm-20260911-003738, paradigm-20260911-004201
+
 ## 3.71.0
 
 - Navigation can now re-locate itself in a block of identically-named rooms **even with automation stopped** — walking a same-name grid by hand, or being dragged by a party leader: it narrows down which look-alike room you're in from the sequence of moves you make and the rooms they reveal, and silently re-anchors the instant that sequence fits exactly one room
