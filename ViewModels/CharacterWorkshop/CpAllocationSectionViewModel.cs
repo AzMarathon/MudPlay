@@ -132,7 +132,12 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         _trainerWalk.PlanApplied += OnPlanApplied;
         _autoTrain.StateChanged += OnAutoTrainStateChanged;
         _autoTrain.ApplyTargetsCompleted += OnApplyLevelCompleted;
+        // A game-data set swap flips the realm (Stock ↔ Paradigm) and race bounds,
+        // so re-resolve the baseline + realm-aware column tooltips + CP cost curve.
+        _gameData.ActiveSetChanged += OnActiveSetChanged;
     }
+
+    private void OnActiveSetChanged(string? _) => RefreshBaseline();
 
     // Auto-train applied (and removed) a level's CP row — reload the grid so the
     // consumed row disappears from the displayed plan.
@@ -523,5 +528,6 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         _trainerWalk.PlanApplied -= OnPlanApplied;
         _autoTrain.StateChanged -= OnAutoTrainStateChanged;
         _autoTrain.ApplyTargetsCompleted -= OnApplyLevelCompleted;
+        _gameData.ActiveSetChanged -= OnActiveSetChanged;
     }
 }
