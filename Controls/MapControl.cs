@@ -515,6 +515,14 @@ public sealed class MapControl : Control
     private static readonly IBrush UpFill        = new SolidColorBrush(Color.Parse("#00C800"));
     private static readonly IBrush DownFill      = new SolidColorBrush(Color.Parse("#DCDC00"));
     private static readonly IBrush UpDownFill    = new SolidColorBrush(Color.Parse("#FFB432"));
+    // Dark rim for the U/D corner-badge triangles so the yellow down-badge (and green
+    // up-badge) read against ANY cell fill — in particular the gold current-room fill,
+    // where a rimless yellow triangle blends into the highlight. Same trick the skull /
+    // trainer chevron use to stay legible over the current-room marker.
+    private static readonly IPen   VerticalBadgeEdgePen = new Pen(new SolidColorBrush(Color.Parse("#141414")), 1.0)
+    {
+        LineJoin = PenLineJoin.Round,
+    };
 
     private static readonly IPen   TileBorderPen = new Pen(new SolidColorBrush(Color.Parse("#2A2A2A")), 1.0);
     private static readonly IPen   ExitPen       = new Pen(new SolidColorBrush(Color.Parse("#C0C0C0")), 2.0);
@@ -2236,7 +2244,7 @@ public sealed class MapControl : Control
                 g.LineTo(new Point(node.Right, node.Top + size));
                 g.EndFigure(true);
             }
-            ctx.DrawGeometry(UpFill, null, geo);
+            ctx.DrawGeometry(UpFill, VerticalBadgeEdgePen, geo);
         }
 
         if (hint is VerticalHint.Down or VerticalHint.Both)
@@ -2249,7 +2257,7 @@ public sealed class MapControl : Control
                 g.LineTo(new Point(node.Right, node.Bottom - size));
                 g.EndFigure(true);
             }
-            ctx.DrawGeometry(DownFill, null, geo);
+            ctx.DrawGeometry(DownFill, VerticalBadgeEdgePen, geo);
         }
     }
 
