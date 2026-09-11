@@ -302,4 +302,49 @@ public sealed class PathItemDemandTrackerTests
         Assert.False(t.SearchDemandActive);
     }
 
+    // ----- re-offering a deferred need -------------------------------
+    //
+    // Report paradigm-20260911-103025: a two-gate route posts both needs
+    // back-to-back; the first router takes item one and the rest defer so two
+    // detours can't fight over the walk. Post only announces NEW needs, so when
+    // that detour finished nothing re-offered item two and the route failed at the
+    // gate nobody had been sent after.
+
+    [Fact]
+    public void AlreadyOutstandingNeed_IsReOfferedOnTheNextAnnounce()
+    {
+        var h = new Harness();
+        PathItemDemandTracker t = h.Build();
+        var offered = new List<string>();
+        h.Needs.NeedPosted += n => offered.Add(n.Descriptor);
+
+        t.OnPathItemsRequired(new[] { 807, 806 });
+        Assert.Equal(new[] { "807", "806", "807", "806" }, offered);   // posts, then the re-offer
+
+        // The detour for 807 completes and its resume re-announces the route. 806 is
+        // still outstanding and MUST be offered again.
+        offered.Clear();
+        h.Carry(807);
+        t.OnInventoryChanged();
+        t.OnPathItemsRequired(new[] { 807, 806 });
+
+        Assert.Contains("806", offered);
+    }
+
+    // Nothing left to fetch → nothing announced, so a plain walk stays quiet.
+    [Fact]
+    public void EverythingCarried_AnnouncesNothing()
+    {
+        var h = new Harness();
+        PathItemDemandTracker t = h.Build();
+        var offered = new List<string>();
+        h.Needs.NeedPosted += n => offered.Add(n.Descriptor);
+        h.Carry(807);
+
+        t.OnPathItemsRequired(new[] { 807 });
+
+        Assert.Empty(offered);
+        Assert.Equal(0, h.OutstandingCount);
+    }
+
 }

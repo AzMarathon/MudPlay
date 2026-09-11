@@ -2892,9 +2892,16 @@ flag). These are hard eligibility gates, independent of resistance and level imm
   count for a stack, exactly one for the article/lone form). Count parsing mirrors
   `ItemNameStore.Normalize`, which strips the same leading count/article token when matching the
   item name.
-- **[CONFIRMED]** (2026-09-11, user, report `paradigm-20260911-010954`) **A monster summoned by a
-  room command drops its guaranteed loot on the floor like any other kill — an explicit `get` is
-  still required.** Being conjured rather than lair-spawned changes nothing about the drop: the item
+- **[CONFIRMED]** (2026-09-11, user, reports `paradigm-20260911-103025`, `-103315`) **An NPC
+  keyword hand-over cannot be detected from its message — re-read the pack instead.** The line a
+  giver prints is flavor text living in a TextBlock that is **not shipped with the MDB**, so it
+  can't be matched against game data: asking the gnome commander for the orb prints *"The gnome
+  commander gives you the heavy bloodstone orb."* while the item's record name is plainly
+  `bloodstone orb`. Worse, **other keyword-gives may print no line containing any part of the
+  item's name at all**, so there is no wording to latch onto even in principle. The reliable test
+  is to send the ask and then immediately `i`: the inventory listing names the item **by its
+  item-record name**, which game-data lookups match exactly. Treat a hand-over message as
+  unparseable decoration — never as the signal that a give succeeded. Being conjured rather than lair-spawned changes nothing about the drop: the item
   lands loose on the ground, isn't announced on the death line, and has to be re-surveyed (`look`)
   before anything can see it, then `get`-ed by name — exactly the ground-drop rule above. Worked
   example (Paradigm 1.9.1): room 8/461 "Black Steel Gate" carries `CMD 863` =

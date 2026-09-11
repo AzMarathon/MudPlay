@@ -113,12 +113,22 @@ public sealed class PathItemDemandTracker
 
         int want = Math.Max(1, quantity);
         var considered = new HashSet<int>();
+        bool postedAny = false;
         foreach (int id in itemIds)
         {
             if (id <= 0 || !considered.Add(id)) continue;
             if (_carriedCount(id) >= want) continue;
             _needs.Post(NeedKind.PathItem, id.ToString(CultureInfo.InvariantCulture), Requester, want);
+            postedAny = true;
         }
+
+        // Re-offer whatever is still outstanding. Post announces only NEW needs, so
+        // a fulfiller that had to stand down when the need was first posted — the
+        // second item on a two-gate route, deferred so two routers couldn't fight
+        // over the walk — would never be asked again, and the route would fail at a
+        // gate nobody was sent after. This walk is the previous detour's own resume,
+        // so the deferring router is free again by now.
+        if (postedAny) _needs.Reoffer(NeedKind.PathItem);
     }
 
     // Inventory-change callback (wired to InventoryManager.Changed): resolves

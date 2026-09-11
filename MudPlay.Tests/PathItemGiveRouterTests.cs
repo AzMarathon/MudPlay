@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using MudPlay.Game.Map;
 using MudPlay.Services;
@@ -97,7 +98,9 @@ public sealed class PathItemGiveRouterTests
 
         r.OnWalkEvent(Finished(GiverA));
 
-        Assert.Equal("ask commander orb", Decode(Assert.Single(h.Sent)));
+        // The ask, then an inventory re-read — the hand-over line is per-giver
+        // flavor text, so `i` is the reliable test of whether the give landed.
+        Assert.Equal(new[] { "ask commander orb", "i" }, h.Sent.Select(Decode).ToArray());
     }
 
     [Fact]
@@ -112,7 +115,7 @@ public sealed class PathItemGiveRouterTests
         r.OnNeedPosted(PathNeed(42));
         r.OnWalkEvent(Finished(GiverA));
 
-        Assert.Equal("insert fang", Decode(Assert.Single(h.Sent)));
+        Assert.Equal(new[] { "insert fang", "i" }, h.Sent.Select(Decode).ToArray());
     }
 
     [Fact]
@@ -199,7 +202,7 @@ public sealed class PathItemGiveRouterTests
         r.OnWalkEvent(Finished(GiverB));
 
         Assert.Equal(GiverB, h.Walks[0]);
-        Assert.Equal("ask b orb", Decode(Assert.Single(h.Sent)));
+        Assert.Equal(new[] { "ask b orb", "i" }, h.Sent.Select(Decode).ToArray());
     }
 
     [Fact]
@@ -257,4 +260,61 @@ public sealed class PathItemGiveRouterTests
         Assert.False(r.DetourActive);
         Assert.Single(h.Walks);          // only the original detour walk; no resume
     }
+    // ----- inventory re-read after the ask ---------------------------
+    //
+    // Report paradigm-20260911-103025: the commander DID hand the orb over, but the
+    // only evidence was per-give flavor text ("The gnome commander gives you the
+    // heavy bloodstone orb.") — wording no parser owns and none should try to. With
+    // nothing re-reading the pack, the need never resolved, the give window expired,
+    // and the walk resumed and failed for want of an item already in inventory.
+
+    [Fact]
+    public void GiveCommand_IsFollowedByAnInventoryReRead()
+    {
+        var h = new Harness().WithNpcGiver();
+        PathItemGiveRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(42));
+
+        r.OnWalkEvent(Finished(GiverA));
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("i", Decode(h.Sent[1]));   // after the ask, never before it
+    }
+
+    // The re-read's whole purpose: the reply lands, the item is seen, the walk
+    // resumes — without anyone having parsed the hand-over sentence.
+    [Fact]
+    public void ItemSeenByTheReRead_ResumesWithoutParsingTheGiveLine()
+    {
+        var h = new Harness().WithNpcGiver();
+        PathItemGiveRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(42));
+        r.OnWalkEvent(Finished(GiverA));
+
+        // What the `i` reply does: the inventory parse lands and fires Changed.
+        h.Carry(42);
+        r.OnInventoryChanged();
+
+        Assert.False(r.DetourActive);
+        Assert.Equal(Dest, h.Walks[^1]);
+    }
+
+    // A give that genuinely didn't land still falls through to the other
+    // fulfillers — the re-read must not make a failure look like a success.
+    [Fact]
+    public void ReReadShowingNothing_StillTimesOutAndResumes()
+    {
+        var h = new Harness().WithNpcGiver();
+        PathItemGiveRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(42));
+        r.OnWalkEvent(Finished(GiverA));
+
+        r.OnInventoryChanged();   // reply parsed, item absent
+        Assert.True(r.DetourActive);
+
+        r.OnGiveTimeout();
+        Assert.False(r.DetourActive);
+        Assert.Equal(Dest, h.Walks[^1]);
+    }
+
 }

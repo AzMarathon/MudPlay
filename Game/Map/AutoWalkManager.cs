@@ -1632,16 +1632,29 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (!room.Exits.TryGetValue(move.Direction, out RoomExit exit)) return false;
 
         foreach (int itemId in ExitGateItems.Of(in exit))
-        {
-            if (!held(itemId)) continue;
-            // Debug, not Info: a held step re-evaluates on every dispatch attempt,
-            // so this can repeat while the detour settles.
-            _log?.Log(LogSeverity.Debug, "Walker",
-                $"step {_index + 1}/{_path!.Count}: holding {move.Direction} — "
-                + $"gate item {itemId} is being acquired");
-            return true;
-        }
+            if (held(itemId)) return HoldStep(move.Direction, itemId);
+
+        // ExitGateItems omits key gates by design (pick and bash open them too), but
+        // a key that IS being fetched has to hold as well — otherwise the door FSM
+        // arrives first and burns its one use-key attempt on a key we don't have
+        // yet, failing the whole walk while the summon that produces it is still on
+        // its way. Only a key with an acquisition behind it reaches here; every
+        // other key door still opens, picks, bashes or fails exactly as before
+        // (report paradigm-20260911-103315: `get key` / `use gate key s` sent at the
+        // Black Steel Gate instead of waiting for the statue's key).
+        if (exit.Hint == RoomExitHint.KeyLocked && exit.KeyItemId > 0 && held(exit.KeyItemId))
+            return HoldStep(move.Direction, exit.KeyItemId);
+
         return false;
+    }
+
+    // Debug, not Info: a held step re-evaluates on every dispatch attempt, so this
+    // can repeat a few times while the detour settles.
+    private bool HoldStep(Direction dir, int itemId)
+    {
+        _log?.Log(LogSeverity.Debug, "Walker",
+            $"step {_index + 1}/{_path!.Count}: holding {dir} — gate item {itemId} is being acquired");
+        return true;
     }
 
     // Re-drive the current step after the engine send-gate that swallowed it

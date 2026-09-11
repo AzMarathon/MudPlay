@@ -66,6 +66,22 @@ public sealed class AutoWalkManagerTests : IDisposable
         ]
         """;
 
+
+    // 1/1 ──N (Key: 806 [or 101 picklocks])── 1/2: a locked door whose key is being
+    // fetched by a summon detour. The Black Steel Gate shape.
+    private const string KeyGatedLineJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Key: 806 [or 101 picklocks])", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
     // A route with a cross-room lever detour: reaching 1/3 from 1/2 crosses
     // 1/2's N exit, gated by a lever in 1/4 (one E hop off 1/2). So the planned
     // path is the go-act-return round-trip E→1/4, pull, W→1/2, then N→1/3 — the
@@ -2083,6 +2099,38 @@ public sealed class AutoWalkManagerTests : IDisposable
 
         acquiring = false;                           // orb in hand, need resolved
         h.Walker.NudgeStalledStep();                 // any re-drive re-evaluates
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        Assert.NotEmpty(h.Sent);
+    }
+
+    // A key gate is NOT a carry gate — pick and bash open it — so ExitGateItems
+    // omits it. But a key with an acquisition behind it still has to hold, or the
+    // door FSM arrives first and burns its one use-key attempt on a key that hasn't
+    // been fetched yet, failing the walk while the summon is still en route
+    // (report paradigm-20260911-103315).
+    [Fact]
+    public void KeyGatedStep_KeyBeingAcquired_Holds()
+    {
+        Harness h = NewHarness(KeyGatedLineJson);
+        h.Walker.SetGateItemHoldProbe(id => id == 806);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        Assert.Empty(h.Sent);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    // Every other key door is untouched: with nothing fetching the key the step
+    // goes out and the door FSM picks, bashes or fails exactly as before.
+    [Fact]
+    public void KeyGatedStep_NothingAcquiringTheKey_StillSends()
+    {
+        Harness h = NewHarness(KeyGatedLineJson);
+        h.Walker.SetGateItemHoldProbe(_ => false);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
         h.Walker.WalkTo(new RoomKey(1, 2));
 
         Assert.NotEmpty(h.Sent);

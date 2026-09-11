@@ -120,6 +120,34 @@ public sealed class NeedsRegistry
         return need;
     }
 
+    // Re-announce the still-outstanding needs of kind to the subscribers, as if
+    // they had just been posted.
+    //
+    // Post fires NeedPosted only for a NEW need, which makes a fulfiller's single
+    // chance to claim its one and only chance. That loses a need whenever a
+    // fulfiller had to stand down the first time it was offered: a route needing
+    // two items posts both back-to-back, the first router takes item one and every
+    // other router defers so they don't fight over the walk — and when that detour
+    // finishes, nothing ever re-offers item two. The route then fails at the gate
+    // it never fetched for (report paradigm-20260911-103025: the orb was collected,
+    // then the walk died on the gate-key door nobody had been sent after).
+    //
+    // Called at walk-start, once the previous detour has necessarily finished (its
+    // resume is what started this walk), so the deferring router is now free.
+    // Re-offering an already-claimed need is harmless: every fulfiller no-ops when
+    // its own detour is already running.
+    public void Reoffer(NeedKind kind)
+    {
+        Need[] outstanding;
+        lock (_gate)
+            outstanding = _slots.Where(s => s.Need.Kind == kind).Select(s => s.Need).ToArray();
+        if (outstanding.Length == 0) return;
+
+        _log?.Info("Needs", $"re-offering {outstanding.Length} outstanding {kind} need(s)");
+        foreach (Need n in outstanding)
+            NeedPosted?.Invoke(n);
+    }
+
     // Try to claim the oldest unclaimed need of kind for claimant. A claimed
     // need stays in the registry (still outstanding) but won't be handed to a
     // second claimant — only Resolve or Release changes that. Returns false

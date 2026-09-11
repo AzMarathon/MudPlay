@@ -12,6 +12,9 @@
 > - Auto-search no longer fires a `sea` in every room while detouring for an item an NPC hands over on a keyword — searching stays on for shop items and percentage drops, where finding one loose actually helps
 > - The walker no longer reads its own multi-action command (`step tile`, `climb rope`) as a hand-typed move and pauses itself mid-detour
 > - A crossing whose item is already being fetched waits for it instead of being attempted and failed first — no more rubbing an orb you aren't carrying and bonking on the exit
+> - After asking an NPC for a path item the pack is re-read with `i` instead of trusting the hand-over line — that wording is per-giver flavour text and some givers never name the item at all, so the walk was failing for want of an item it had already been handed
+> - A gate item a fulfiller had to defer on is offered again on the next walk, so a two-gate route no longer fetches the first item and then dies at the second
+> - A locked door whose key is being fetched waits for it, instead of the door engine burning its one use-key attempt before the key arrives
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
