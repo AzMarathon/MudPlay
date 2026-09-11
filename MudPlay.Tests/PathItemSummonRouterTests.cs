@@ -118,7 +118,9 @@ public sealed class PathItemSummonRouterTests
 
         r.OnWalkEvent(Finished(GateRoom));
 
-        Assert.Equal("touch statue", Decode(Assert.Single(h.Sent)));
+        // The summon, then a room re-read so the roster sees what arrived and
+        // auto-combat can engage it.
+        Assert.Equal(new[] { "touch statue", "look" }, h.Sent.Select(Decode).ToArray());
     }
 
     // The drop is not announced on the death line, so the floor has to be
@@ -133,7 +135,8 @@ public sealed class PathItemSummonRouterTests
 
         r.OnMonsterDied(Died());
 
-        Assert.Equal(new[] { "touch statue", "look" }, h.Sent.Select(Decode).ToArray());
+        // summon, post-summon re-read, then the post-kill floor survey.
+        Assert.Equal(new[] { "touch statue", "look", "look" }, h.Sent.Select(Decode).ToArray());
     }
 
     // Deaths carry no identity, so a death must never be taken as OUR kill and end
@@ -277,7 +280,7 @@ public sealed class PathItemSummonRouterTests
         r.OnWalkEvent(Started());
 
         Assert.False(r.DetourActive);
-        Assert.Equal(new[] { "touch statue" }, h.Sent.Select(Decode).ToArray());
+        Assert.Equal(new[] { "touch statue", "look" }, h.Sent.Select(Decode).ToArray());
     }
 
     // Every router redirects with supersedeSilently, so a sibling detour stealing
@@ -427,4 +430,21 @@ public sealed class PathItemSummonRouterTests
 
         Assert.Equal(GateRoom, Assert.Single(h.Walks));
     }
+    // Report paradigm-20260911-112005: the summon directive carries no message of
+    // its own, so whether the room re-renders after it is up to the engine — and in
+    // the observed run the statue swung BEFORE any redisplay named it. Asking
+    // outright is what makes the roster reliable rather than incidental.
+    [Fact]
+    public void SummonIsFollowedByARoomReRead()
+    {
+        var h = new Harness().WithGateStatue();
+        PathItemSummonRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(GateKey));
+
+        r.OnWalkEvent(Finished(GateRoom));
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("look", Decode(h.Sent[1]));   // after the summon, never before
+    }
+
 }

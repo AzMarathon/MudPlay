@@ -319,6 +319,15 @@ public sealed class PathItemSummonRouter : IDisposable
             $"at {_source.Room} — '{_source.Command}' to summon '{_source.MonsterName}' " +
             $"for path item {_itemId}");
         _wire.Send(_source.Command);
+        // Re-read the room straight after the summon so the roster learns what just
+        // arrived, and auto-combat can engage it. Nothing else tells us: the summon
+        // directive carries no message of its own, so whether the room re-renders at
+        // all is up to the engine — and in the observed run the statue got its swing
+        // in BEFORE any redisplay named it, leaving the client fighting a monster it
+        // hadn't noticed (report paradigm-20260911-112005). Asking removes the
+        // dependency on a redisplay we aren't promised; it can't outrun a summon that
+        // attacks in the same server tick.
+        _wire.Send("look");
     }
 
     private void ResumeToPath()
