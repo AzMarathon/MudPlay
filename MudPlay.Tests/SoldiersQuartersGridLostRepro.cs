@@ -254,6 +254,90 @@ public sealed class SoldiersQuartersGridLostRepro : IDisposable
         Assert.Equal(new RoomKey(8, realPos), believed);
     }
 
+    // ---------------------------------------------------------------------
+    // Test C — the passive grid re-localiser. When we're Lost / ambiguous-Suspect
+    // in this grid with NO engine driving, EngineRecoveryGate's tier-2 forward
+    // localiser never runs (it early-returns with no engine). The tracker instead
+    // narrows the same FootprintMatcher passively off the moves the player makes by
+    // hand: each (move, observation) pair drops candidates until one remains, then it
+    // re-anchors — with no command sent. These walk the REAL grid to prove it.
+    //
+    // The right-hand column 1716/1717/1718 all display {N,S,W} — never a 1-of-1
+    // exact match, so ONLY the passive footprint can resolve it (the tracker's own
+    // 1-of-1 / name-covering deductions can't). Walking N then S,S narrows
+    // {1716,1717,1718} → {1718} the instant a hop would fall off the bottom corner
+    // (1719 is {N,W}), and we re-anchor at 1718 while the display is still ambiguous.
+    // ---------------------------------------------------------------------
+    [Fact]
+    public void PassiveGrid_NoEngine_ConvergesAndReanchors()
+    {
+        RoomTracker tracker = NewTracker();
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        // No engine-attached probe set → treated as "no engine attached", so the
+        // passive path runs.
+
+        // From Unknown, the first ambiguous display seeds the footprint (three exact
+        // candidates 1716/1717/1718) and drops us to Suspect with no anchor.
+        tracker.NoteRoomObserved(Obs(1717), t0);
+        Assert.NotEqual(RoomConfidence.Confirmed, tracker.State.Confidence);
+
+        // Real path 1717 →N→ 1716 →S→ 1717 →S→ 1718, every display {N,S,W}.
+        PassiveStep(tracker, Direction.N, 1716, t0.AddSeconds(1));
+        PassiveStep(tracker, Direction.S, 1717, t0.AddSeconds(2));
+        PassiveStep(tracker, Direction.S, 1718, t0.AddSeconds(3));
+
+        _out.WriteLine($"passive result: {tracker.State.Confidence} at {tracker.State.CurrentRoom?.Key}");
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(8, 1718), tracker.State.CurrentRoom?.Key);
+    }
+
+    // Same walk, but an engine IS attached: the passive path must stand fully down
+    // (the gate's own forward localiser owns recovery then), so the tracker never
+    // re-anchors on its own and stays unresolved.
+    [Fact]
+    public void PassiveGrid_EngineAttached_StandsDown()
+    {
+        RoomTracker tracker = NewTracker();
+        tracker.SetEngineAttachedProbe(() => true);
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        tracker.NoteRoomObserved(Obs(1717), t0);
+        PassiveStep(tracker, Direction.N, 1716, t0.AddSeconds(1));
+        PassiveStep(tracker, Direction.S, 1717, t0.AddSeconds(2));
+        PassiveStep(tracker, Direction.S, 1718, t0.AddSeconds(3));
+
+        _out.WriteLine($"engine-attached result: {tracker.State.Confidence} at {tracker.State.CurrentRoom?.Key}");
+        Assert.NotEqual(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Null(tracker.State.CurrentRoom);
+    }
+
+    // Refuses to guess: an oscillating walk that stays genuinely ambiguous (the
+    // footprint never narrows below two of 1716/1717/1718) must NOT re-anchor.
+    [Fact]
+    public void PassiveGrid_NeverUnique_StaysUnresolved()
+    {
+        RoomTracker tracker = NewTracker();
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        tracker.NoteRoomObserved(Obs(1717), t0);
+        PassiveStep(tracker, Direction.S, 1718, t0.AddSeconds(1));
+        PassiveStep(tracker, Direction.N, 1717, t0.AddSeconds(2));
+        PassiveStep(tracker, Direction.S, 1718, t0.AddSeconds(3));
+        PassiveStep(tracker, Direction.N, 1717, t0.AddSeconds(4));
+
+        _out.WriteLine($"ambiguous result: {tracker.State.Confidence} at {tracker.State.CurrentRoom?.Key}");
+        Assert.NotEqual(RoomConfidence.Confirmed, tracker.State.Confidence);
+    }
+
+    // One manual move plus its landing display — no engine echo, because we're
+    // recovering (Suspect/Lost), not tracking a Pending move: the passive footprint
+    // reads the move + observation directly.
+    private static void PassiveStep(RoomTracker tracker, Direction dir, int landedRoom, DateTimeOffset when)
+    {
+        tracker.NoteMoveSent(dir, when);
+        tracker.NoteRoomObserved(Obs(landedRoom), when.AddMilliseconds(100));
+    }
+
     private static Direction[] ParseMoves(string s) =>
         s.Select(c => c switch
         {

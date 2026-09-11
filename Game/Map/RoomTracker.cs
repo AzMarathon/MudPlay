@@ -48,6 +48,11 @@ public sealed class RoomTracker
     // of incrementing further.
     private const int SuspectStrikeLimit = 3;
 
+    // Depth ceiling for the passive grid footprint. Generous — the passive
+    // re-localiser keeps narrowing as long as the player keeps moving; a unique
+    // convergence, not the ceiling, is what ends it.
+    private const int PassiveGridDepthCeiling = 128;
+
     private readonly RoomGraphManager _graph;
     private readonly LogService? _log;
     private readonly ConcurrentQueue<PendingMove> _pending = new();
@@ -64,6 +69,29 @@ public sealed class RoomTracker
     // from _history.First (the newest CONFIRMED room), which drifts several rooms ahead of
     // the trail during a run of ambiguous non-strict confirms and makes replay abort.
     private RoomKey? _stepsAnchor;
+
+    // Passive, engine-independent grid re-localiser. When we're stuck Lost /
+    // ambiguous-Suspect in a block of identically-named rooms (the Soldiers'
+    // Quarters grid) and NO navigation engine is attached, EngineRecoveryGate's
+    // tier-2 forward localiser — which would normally narrow "which identical room
+    // am I in?" — never runs (it early-returns with no engine). This is the same
+    // FootprintMatcher SLAM accumulator, driven passively off the moves the player
+    // is already making by hand (or being dragged through): each (move, observation)
+    // pair drops candidates until one remains, then we re-anchor there WITHOUT
+    // sending a single command. Gated OFF while an engine drives (_isEngineAttached)
+    // so only one localiser re-anchors; it refuses to guess — an ambiguous set that
+    // never narrows to one just stays Lost.
+    private readonly FootprintMatcher _passiveGrid;
+    private bool _passiveGridActive;
+    // The last cardinal move not yet folded into _passiveGrid — set on every cardinal
+    // step, consumed once when the next observation lands. Cleared on seed (the seed
+    // already reflects where we stand). Text-exit (cardinal-less) moves don't advance
+    // the passive footprint.
+    private Direction? _passivePendingMove;
+    // Reports whether a navigation engine is currently attached to the recovery gate.
+    // Null in tests / before wiring → treated as "not attached", so the passive path
+    // runs. Wired by AppServices to EngineRecoveryGate.HasAttachedEngine.
+    private Func<bool>? _isEngineAttached;
 
     // Profile the tracker is currently writing into. Set by Hydrate; cleared by
     // OnProfileClosed. When null, persistence operations are no-ops — the
@@ -166,7 +194,21 @@ public sealed class RoomTracker
         ArgumentNullException.ThrowIfNull(graph);
         _graph = graph;
         _log = log;
+        _passiveGrid = new FootprintMatcher(
+            probeHop: (from, dir) => GraphFootprintProbes.Hop(_graph, from, dir),
+            matchesObservation: (key, obs) => GraphFootprintProbes.Matches(_graph, key, obs),
+            log: log,
+            depthCeiling: PassiveGridDepthCeiling);
         State.LastUpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    // Wired by AppServices so the passive grid re-localiser stands down while an
+    // engine drives (EngineRecoveryGate.HasAttachedEngine). Left unset in tests /
+    // headless → the passive path is treated as un-gated (no engine present).
+    public void SetEngineAttachedProbe(Func<bool> probe)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        _isEngineAttached = probe;
     }
 
     // Snapshot of the rolling confirmed-position history, newest-first. [0] is
@@ -278,6 +320,7 @@ public sealed class RoomTracker
     public void OnProfileClosed()
     {
         _profile = null;
+        ClearPassiveGrid();
     }
 
     // Bind the live inventory snapshot provider so NoteDeath can capture the
@@ -325,6 +368,7 @@ public sealed class RoomTracker
             ? PendingMove.FromFollowDrag(direction, when)
             : PendingMove.FromDirection(direction, when));
         AppendStep(new DirectionDto(direction));
+        _passivePendingMove = direction;
 
         if (State.Confidence is RoomConfidence.Confirmed or RoomConfidence.Pending)
         {
@@ -431,6 +475,11 @@ public sealed class RoomTracker
         }
         EnqueuePending(new PendingMove(cardinal, command, when));
         AppendStep(new DirectionDto(cardinal, command));
+        // Only a cardinal advances the passive footprint. A text-exit ("go path")
+        // carries no direction to hop the candidate set through, so clear the pending
+        // move (null) — the next observation then skips a passive step rather than
+        // folding it under a stale, wrong direction.
+        _passivePendingMove = cardinal;
 
         if (State.Confidence is RoomConfidence.Confirmed or RoomConfidence.Pending)
         {
@@ -797,6 +846,7 @@ public sealed class RoomTracker
         while (_pending.TryDequeue(out _)) { /* drain */ }
         _recentSteps.Clear();
         _stepsAnchor = null;
+        ClearPassiveGrid();
         PersistSteps();
         IsInDarkRoom = false;
         SetRoom(room: null, RoomConfidence.PendingRespawn, when, "death recorded");
@@ -1239,6 +1289,12 @@ public sealed class RoomTracker
             return;
         }
 
+        // Still ambiguous. With no engine driving, narrow across the moves we're
+        // making by hand before escalating; a convergence re-anchors us here. Runs
+        // on every ambiguous Suspect observation so the footprint keeps closing in
+        // during the wander, not only once the strike limit trips.
+        if (TryPassiveGridLocate(observation, when)) return;
+
         // Still mismatched. Either escalate or replay.
         if (State.SuspectStrikes + 1 >= SuspectStrikeLimit)
         {
@@ -1293,10 +1349,13 @@ public sealed class RoomTracker
                 break;
 
             default:
-                // Ambiguous from Unknown / Lost — drop into Suspect with
-                // no anchor room (we never had one). Counter stays
-                // distinct so the next observation can either resolve
-                // or trip Lost on its own merits.
+                // Ambiguous from Unknown / Lost — no single graph room fits this
+                // display. With no engine driving, narrow across the moves we're
+                // making by hand before giving up; a convergence re-anchors us.
+                if (TryPassiveGridLocate(observation, when)) return;
+                // Still ambiguous — drop into Suspect with no anchor room (we never
+                // had one). Counter stays distinct so the next observation can
+                // either resolve or trip Lost on its own merits.
                 SetRoom(room: null, RoomConfidence.Suspect, when,
                     $"{candidates.Count} candidates (ambiguous)");
                 break;
@@ -1402,6 +1461,82 @@ public sealed class RoomTracker
             $"name-unique re-anchor ({context}); observed exits subset of graph exits");
         return true;
     }
+
+    // Engine-independent recovery for a same-name grid with nobody driving. Called
+    // from the ambiguous (>1 candidate) Suspect / Lost paths, where the single-endpoint
+    // replay + 1-of-1 + name-covering deductions have all missed. Seeds the SLAM
+    // footprint from the current ambiguous observation's candidate set, then folds one
+    // (move, observation) pair per subsequent call; a convergence to a single room
+    // re-anchors us with NO command sent. Returns true only when it re-anchored — the
+    // caller then returns; otherwise it falls through to its normal Suspect / Lost path
+    // while the footprint keeps narrowing across the wander.
+    //
+    // Stands fully down whenever an engine is attached: the gate's own tier-2 forward
+    // localiser owns recovery then, and two localisers must never both re-anchor.
+    private bool TryPassiveGridLocate(RoomObservation observation, DateTimeOffset when)
+    {
+        if (_isEngineAttached?.Invoke() == true)
+        {
+            ClearPassiveGrid();
+            return false;
+        }
+
+        if (!_passiveGridActive)
+        {
+            // Seed from the ambiguous observation. A unique (or empty) candidate set
+            // isn't ours — the caller's 1-of-1 / name-covering paths handle those.
+            IReadOnlyList<RoomKey> seeds = _graph.FindCandidates(observation.Name, observation.Exits);
+            if (seeds.Count <= 1) return false;
+            _passiveGrid.Reset(seeds);
+            _passiveGridActive = true;
+            _passivePendingMove = null;   // the seed already reflects where we stand now
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                $"Passive grid locate seeded: {seeds.Count} candidates from '{observation.Name}' (no engine attached — narrowing by hand-walked moves, no commands sent).");
+            return false;
+        }
+
+        // Fold the move that carried us to THIS observation. A redisplay with no move
+        // since the last fold carries no new spatial constraint, so skip it.
+        if (_passivePendingMove is not { } move) return false;
+        _passivePendingMove = null;
+        _passiveGrid.Step(move, observation);
+
+        if (_passiveGrid.IsConverged && _graph.GetRoom(_passiveGrid.Candidates.Single()) is { } room)
+        {
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                $"Passive grid locate converged → {room.Name} {room.Key} after {_passiveGrid.Depth} moves; re-anchoring (no command sent).");
+            ClearPendingAndSteps();   // also retires the passive footprint
+            // A deduction, like replay-recovery — non-strict so it updates in-memory
+            // position without overwriting the stronger on-disk LastKnownRoom anchor.
+            SetRoom(room, RoomConfidence.Confirmed, when, "passive grid re-localise converged", isStrictAnchor: false);
+            return true;
+        }
+
+        if (_passiveGrid.IsExhausted)
+        {
+            // The walked footprint fits no graph path (a stale map, or an unobserved
+            // forced move such as fear). Drop it and re-seed from the next observation.
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                "Passive grid locate exhausted: walked footprint fits no graph path; re-seeding on the next observation.");
+            ClearPassiveGrid();
+        }
+        return false;
+    }
+
+    private void ClearPassiveGrid()
+    {
+        _passivePendingMove = null;
+        if (!_passiveGridActive) return;
+        _passiveGrid.Clear();
+        _passiveGridActive = false;
+    }
+
+    // Diagnostics for the bug report: whether the passive grid re-localiser is mid-narrow
+    // and how far it has closed in, or idle. A "stuck Lost with automation off" report
+    // shows here whether the passive path was even running and how ambiguous it still is.
+    public string PassiveGridStatus => _passiveGridActive
+        ? $"active — {_passiveGrid.Candidates.Count} candidates, depth {_passiveGrid.Depth}"
+        : "idle";
 
     private void EnterSuspect(DateTimeOffset when, string reason)
     {
@@ -1722,6 +1857,10 @@ public sealed class RoomTracker
 
     private void ClearPendingAndSteps()
     {
+        // Position resolved by any means — retire any in-flight passive grid
+        // narrowing so a fresh episode starts clean rather than folding stale
+        // candidates. Cheap no-op when it wasn't running.
+        ClearPassiveGrid();
         while (_pending.TryDequeue(out _)) { /* drain */ }
         _stepsAnchor = null;
         if (_recentSteps.Count == 0) return;

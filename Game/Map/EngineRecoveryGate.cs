@@ -298,6 +298,12 @@ public sealed class EngineRecoveryGate
             $"Tier1.attach engine={engine.Name} anchor={(_anchor?.ToString() ?? "(none)")} confidence={_tracker.State.Confidence}");
     }
 
+    // True while an engine is driving. RoomTracker reads this to gate its passive
+    // grid re-localiser OFF — the tier-2 forward localiser owns recovery whenever an
+    // engine is attached, so the two can't both re-anchor; the passive path only runs
+    // when nobody is driving (automation stopped, manual walking, dragged follower).
+    public bool HasAttachedEngine => _engine is not null;
+
     // Detach the current engine; clears all gate state.
     public void Detach()
     {
@@ -1114,24 +1120,11 @@ public sealed class EngineRecoveryGate
 
     // ----- matcher delegates -----------------------------------------
 
-    private HopOutcome ProbeHop(RoomKey from, Direction dir)
-    {
-        Room? source = _graph.GetRoom(from);
-        if (source is null) return HopOutcome.NoExit();
-        if (!source.Exits.TryGetValue(dir, out RoomExit exit)) return HopOutcome.NoExit();
-        if (exit.Hint == RoomExitHint.Trap) return HopOutcome.TrappedExit();
-        return HopOutcome.Reached(exit.Target);
-    }
+    // Both matcher probes live in the shared GraphFootprintProbes so the passive
+    // re-localiser in RoomTracker narrows candidates identically — see that class.
+    private HopOutcome ProbeHop(RoomKey from, Direction dir) => GraphFootprintProbes.Hop(_graph, from, dir);
 
-    private bool KeyMatchesObservation(RoomKey key, RoomObservation obs)
-    {
-        Room? r = _graph.GetRoom(key);
-        if (r is null) return false;
-        if (!string.Equals(r.Name, obs.Name, StringComparison.OrdinalIgnoreCase)) return false;
-        uint observedMask = 0;
-        foreach (Direction d in obs.Exits) observedMask |= 1u << (int)d;
-        return (observedMask & r.ExitMask) == observedMask;
-    }
+    private bool KeyMatchesObservation(RoomKey key, RoomObservation obs) => GraphFootprintProbes.Matches(_graph, key, obs);
 
     // ----- helpers ---------------------------------------------------
 

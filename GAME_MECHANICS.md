@@ -4136,6 +4136,16 @@ Hidden items: 1845(0) 14(0) 894(0) 223(0) 879(0) 870(0) 897(1) 876(1) 402(0) 430
   the gate's `NoteAuthoritativePosition` / `OnAuthoritativeResyncFailed` consumers. On Paradigm `rm`
   wins each site (realm-gated); on a stock realm with the power `sys st` fills in. (Maze-solve stays
   `rm`-only — the solver drives its own relocalization.)
+- **Passive grid re-localiser (command-free):** the authoritative locate above and the gate's
+  tier-2 forward localiser both require something to send / an engine to drive. When neither is
+  available — no `rm`/`sys st` power, no engine attached (automation stopped, walking a same-name
+  grid by hand, or a party drag) — `RoomTracker` runs the same `FootprintMatcher` SLAM narrowing
+  passively off the moves it already sees (`NoteMoveSent` / `NoteFollowMove`) and the room displays,
+  re-anchoring (`SetRoom`) the instant the walked sequence fits exactly one graph room. It sends
+  **nothing** to the wire (pure client-side inference), stands down whenever an engine is attached
+  (gated on `EngineRecoveryGate.HasAttachedEngine`), and refuses to guess — an ambiguous set that
+  never narrows to one stays Lost. Fills the same-name-grid + no-engine gap the two command-driven
+  paths can't reach.
 
 ### `sys goto <location>` — teleport to a named location *([CONFIRMED] 2026-09-08, user)*
 A separately-gated sysop power (distinct from `sys status` / `sys map` / `sys god`). The
