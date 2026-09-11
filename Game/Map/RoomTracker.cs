@@ -84,18 +84,6 @@ public sealed class RoomTracker
     private DateTimeOffset? _suppressObservationUntil;
     private const int LookSuppressWindowMs = 3000;
 
-    // Floor on a plausible move round-trip. In a corridor of identically-named
-    // rooms ("Cleared Fields"), a passive re-look redisplay of the SOURCE room also
-    // satisfies the predicted-TARGET match (same name + compatible exits), so it can
-    // be mistaken for arrival. The tell is timing: a real move's confirming display
-    // takes a full server round-trip (observed 1.3-2.7s on the reference BBS), while
-    // a re-look redisplay — the echo of a post-combat CR sent while the move was
-    // still in flight — lands in tens of milliseconds. A predicted-target match that
-    // ALSO matches the source and arrives faster than this floor is that stale
-    // re-look, not the arrival; confirming it phantom-advanced the loop and fired the
-    // next move while still at the source (the reported "double move" while looping).
-    private static readonly TimeSpan AmbiguousRedisplayFloor = TimeSpan.FromMilliseconds(400);
-
     // Wall-clock time the most recent move command was enqueued, or null before
     // the first move this session. Lets observers tell a post-move room display
     // ("the room we just walked into") apart from a pre-move stale observation —
@@ -849,6 +837,30 @@ public sealed class RoomTracker
             "un-counting it so the tracker doesn't run a room ahead.");
     }
 
+    // The server echoes the command you typed back on the prompt line
+    // ("[HP=..]:e") as it processes it, immediately before rendering the move's
+    // result room — whereas a spontaneous redisplay (an NPC walking through, a
+    // regen-tick refresh, a post-combat redraw) carries NO echo because you typed
+    // nothing to cause it. InboundMoveEchoScanner feeds the echoed command here;
+    // ReconcileFromPending reads it (via HeadMoveEchoed) as the causal "this move
+    // actually executed" signal that replaces the old 400ms timing heuristic: in
+    // an identically-named grid a redisplay matching the predicted target is the
+    // move's landing only once the move has been echoed, regardless of how fast or
+    // slow it arrived. A single slot is enough — moves and their echoes are FIFO,
+    // and a stale echo can't apply to a later move because its timestamp predates
+    // that move's SentAt (see HeadMoveEchoed).
+    public void NoteInboundMoveEcho(string echoedCommand, DateTimeOffset? whenUtc = null)
+    {
+        if (string.IsNullOrWhiteSpace(echoedCommand)) return;
+        string command = echoedCommand.Trim();
+        // Record only an echo that names the move currently in flight. A non-move
+        // command echoed mid-move (stat, inventory), or the echo of an already-
+        // confirmed move, must not overwrite the head move's echo and leave its
+        // real landing looking un-echoed — which would hold the move as a re-look.
+        if (!_pending.TryPeek(out PendingMove head) || !EchoMatchesHead(command, head)) return;
+        _lastInboundEcho = (command, whenUtc ?? DateTimeOffset.UtcNow);
+    }
+
     // A "The door is closed!" refusal was seen. Beyond the generic move-blocked
     // revert, this tells us the cached "door open" reading for the just-attempted
     // direction is stale — the door shut (typically mid-combat) since we last saw
@@ -994,15 +1006,20 @@ public sealed class RoomTracker
             {
                 // Ambiguity guard: in an identically-named corridor the predicted
                 // target and the source room match the SAME observation, so a passive
-                // re-look redisplay of the source (a post-combat CR echo that landed
-                // while this move was still in flight) satisfies this match too. It's
-                // distinguishable only by timing — it arrives far faster than a real
-                // move round-trip. When the observation matches the source AND lands
-                // under the plausible-hop floor, it's that stale re-look, not the
-                // arrival: fall through to the Strategy-1b passive-redisplay path
-                // (stay Pending) so the move's real outcome a round-trip later still
-                // confirms here. Confirming it instead phantom-advanced the loop and
-                // fired the next step from the source room (the "double move").
+                // re-look redisplay of the source (an NPC walking through, a regen-tick
+                // refresh, a post-combat redraw that landed while this move was still in
+                // flight) satisfies this predicted-target match too. The causal tell is
+                // the server's command ECHO: the game echoes the move you typed on the
+                // prompt line ("[HP=..]:e") as it processes it, immediately before
+                // rendering the destination room, whereas a spontaneous re-look carries
+                // NO echo (you typed nothing to cause it). So when the observation also
+                // matches the source AND the head move has NOT been echoed yet, it's that
+                // stale re-look, not the arrival: fall through to the Strategy-1b passive-
+                // redisplay path (stay Pending) so the move's real, echoed landing still
+                // confirms here. This is timing-independent — the earlier heuristic
+                // confirmed any matching redisplay that arrived after a 400ms floor, which
+                // let a LATE spontaneous re-look phantom-advance the loop and fire the next
+                // step from the source room (the "double move", issue #478).
                 // Exit-set discriminator: a passive re-look shows the SAME exits the
                 // source last displayed. When a genuine move lands in a same-named
                 // neighbour whose exits DIFFER (report paradigm-20260811-104042: a
@@ -1012,28 +1029,25 @@ public sealed class RoomTracker
                 // exits won't match the last live display, so it's the move's real
                 // outcome, not a re-look. Only hold Pending when the exits are
                 // unchanged (or there's no prior display to compare — the pure
-                // identically-named-AND-exited corridor, where timing is the only
-                // tell and the double-move guard must still hold).
+                // identically-named-AND-exited corridor, where the echo is the only tell).
                 //
-                // A follow-drag is EXEMPT from this timing tell. The whole guard rests
-                // on "a real move is slower than a stray same-room redisplay," but the
-                // game drags a party follower with NO byte round-trip — its confirming
-                // room display lands almost instantly (8ms in the report), exactly what
-                // this reads as a re-look. And a follower never emits stray re-looks:
-                // the game only redisplays on a real arrival, so a fast redisplay after
-                // a drag is ALWAYS the move's outcome. Discarding it stranded the anchor
-                // one room back and desynced through an identical "Slum Street {N,S}"
-                // corridor (report paradigm-20260811-122610). Self-typed moves keep the
-                // guard — the double-move regression is theirs.
+                // A follow-drag is EXEMPT: the game drags a party follower with no typed
+                // command, so there is no echo to wait for, and a follower never emits
+                // stray re-looks — the game only redisplays a drag on a real arrival. So
+                // its confirming display IS the move (report paradigm-20260811-122610: an
+                // identical "Slum Street {N,S}" corridor where discarding the instant
+                // drag-arrival stranded the anchor a room back and desynced). NoteFollowMove
+                // flags the pending move exempt so it confirms immediately; self-typed
+                // moves keep the echo gate.
                 if (!head.IsFollowDrag
                     && MatchesPredicted(source, observation)
-                    && when - head.SentAt < AmbiguousRedisplayFloor
+                    && !HeadMoveEchoed(head)
                     && RedisplayExitsUnchanged(observation))
                 {
                     _log?.Log(LogSeverity.Debug, "RoomTracker",
-                        $"Fast redisplay ({(when - head.SentAt).TotalMilliseconds:F0}ms < " +
-                        $"{AmbiguousRedisplayFloor.TotalMilliseconds:F0}ms) matches source '{source.Name}' AND " +
-                        $"predicted {moveLabel} target; treating as passive re-look, staying Pending.");
+                        $"Redisplay matches source '{source.Name}' AND predicted {moveLabel} target, " +
+                        $"but the move has not been echoed by the server yet; treating as a passive " +
+                        $"re-look and staying Pending until the move's echoed landing arrives.");
                     State.LastUpdatedAt = when;
                     return;
                 }
@@ -1437,6 +1451,36 @@ public sealed class RoomTracker
         uint obsMask = 0;
         foreach (Direction d in observation.Exits) obsMask |= 1u << (int)d;
         return prevMask == obsMask;
+    }
+
+    // The most recent command the server echoed back, and when. Set by
+    // NoteInboundMoveEcho; read by HeadMoveEchoed. Single slot — see
+    // NoteInboundMoveEcho for why that's sufficient.
+    private (string Command, DateTimeOffset At)? _lastInboundEcho;
+
+    // Has the server echoed the head pending move since it was sent? True only
+    // when the most recent inbound echo BOTH matches the head move's command AND
+    // arrived at/after the move was sent — i.e. the server is processing THIS move,
+    // so the next matching room display is its genuine landing rather than a stray
+    // re-look. The "at/after SentAt" bound is what keeps a stale echo from an
+    // already-confirmed earlier move (same direction) from applying to a later one.
+    // Never consulted for a follow-drag: that path is exempted in the guard above
+    // (the game drags a follower with no typed command, so there is no echo).
+    private bool HeadMoveEchoed(PendingMove head) =>
+        _lastInboundEcho is { } echo
+        && echo.At >= head.SentAt
+        && EchoMatchesHead(echo.Command, head);
+
+    // Does an echoed command string name the head pending move? A cardinal move
+    // echoes its wire token ("e", "ne", "u"); a text-exit move ("go path") echoes
+    // the verbatim command. Case-insensitive.
+    private static bool EchoMatchesHead(string echoed, PendingMove head)
+    {
+        if (head.Cardinal is { } dir)
+            return DirectionExtensions.TryFromToken(echoed, out Direction d) && d == dir;
+        if (head.Command is { } cmd)
+            return string.Equals(echoed, cmd, StringComparison.OrdinalIgnoreCase);
+        return false;
     }
 
     // Subset-only match against a null-name target. Used by the null-name

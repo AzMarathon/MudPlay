@@ -73,6 +73,7 @@ public partial class MainWindowViewModel : ObservableObject
     // view-model.
     private readonly Game.Map.RoomDisplayParser _roomDisplayParser;
     private readonly Game.Map.MovementRefusalDetector _movementRefusalDetector;
+    private readonly Game.Map.InboundMoveEchoScanner _inboundMoveEchoScanner;
     private readonly Game.Map.CombatEntryRefusalHandler _combatEntryRefusalHandler;
 
     // The screen buffer the UI renders. Lifetime spans the whole window.
@@ -890,6 +891,11 @@ public partial class MainWindowViewModel : ObservableObject
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine);
+        // Feeds the server's move-command echo ("[HP=..]:e") to the tracker so it
+        // confirms a move's landing on that causal signal rather than guessing by
+        // timing — the fix for phantom-advancing through identically-named grids.
+        _inboundMoveEchoScanner = new Game.Map.InboundMoveEchoScanner(Lines,
+            AppServices.Current.RoomTracker);
         // Combat-gated-entry refusal: `break` → 3s → revert move so the driving
         // engine retries. Gated on a movement engine actually driving.
         _combatEntryRefusalHandler = new Game.Map.CombatEntryRefusalHandler(Lines,

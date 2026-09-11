@@ -28,14 +28,19 @@ namespace MudPlay.Tests;
 //
 // Root cause: a sent move only flips the tracker to Pending; position advances
 // when a room display matches the predicted target (name + subset exits). There
-// is no move<->display correlation token, so a stray re-display of the room the
+// was no move<->display correlation token, so a stray re-display of the room the
 // player is STILL in (a passing mob re-rendering the room, a look, a combat
-// redraw) also matches the predicted target in a homogeneous grid. The only
-// guard is a 400ms timing floor (RoomTracker.AmbiguousRedisplayFloor). A
-// re-display that lands at normal server latency (>400ms) slips past it and
-// phantom-advances the tracker one room ahead of reality — invisibly, because
-// every room reads the same name — until the predicted room's exits stop
-// matching and it bails to Lost.
+// redraw) also matches the predicted target in a homogeneous grid, and the only
+// guard was a 400ms timing floor that a normal-latency re-display slipped past —
+// phantom-advancing the tracker one room ahead, invisibly (every room reads the
+// same name) until the predicted exits stopped matching and it bailed to Lost.
+//
+// Fixed in two layers: NoteCommandDropped un-counts a move the rate limiter
+// silently drops (the net miscount that made the drift permanent), and the echo
+// gate advances position only once the server has echoed the move command back
+// ("[HP=..]:s"), so a stray re-display without a preceding echo can no longer be
+// mistaken for the landing — regardless of its timing. These tests drive the REAL
+// grid through the REAL RoomTracker to prove both.
 public sealed class SoldiersQuartersGridLostRepro : IDisposable
 {
     private readonly ITestOutputHelper _out;
@@ -126,12 +131,15 @@ public sealed class SoldiersQuartersGridLostRepro : IDisposable
     private static RoomObservation Obs(int room) => new(Name, ExitsOf(room));
 
     // ---------------------------------------------------------------------
-    // Test A — the isolated root defect: a stray re-display of the room the
-    // player is STILL in, arriving after the 400ms floor, phantom-advances the
-    // tracker to the predicted target. (Under the floor it correctly stays put.)
+    // Test A — the phantom-advance fix via the echo gate. A stray re-display of
+    // the room the player is STILL in matches the predicted target in this grid,
+    // but without the server having echoed the move it is NOT the landing — so the
+    // tracker stays put regardless of how late the re-display arrives (the old
+    // 400ms floor let a late one phantom-advance). Once the move's echo arrives,
+    // the next matching display IS the landing and confirms.
     // ---------------------------------------------------------------------
     [Fact]
-    public void SlowSourceRedisplay_PhantomAdvancesTrackerWithoutMoving()
+    public void SlowSourceRedisplay_NoEcho_DoesNotPhantomAdvance()
     {
         RoomTracker tracker = NewTracker();
         var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -139,24 +147,31 @@ public sealed class SoldiersQuartersGridLostRepro : IDisposable
         // Standing, Confirmed, in interior room 1708 (4-way N/S/E/W).
         tracker.SetLocated(new RoomKey(8, 1708), t0);
         tracker.NoteRoomObserved(Obs(1708), t0);
-        Assert.Equal(new RoomKey(8, 1708), tracker.State.CurrentRoom?.Key);
 
         // Send "s" (predicted target 1709, also interior 4-way). Pending.
         tracker.NoteMoveSent(Direction.S, t0.AddSeconds(1));
 
         // A passing mob re-renders room 1708 — the room we're STILL in — 700ms
-        // later, well past the 400ms floor. Same name, same N/S/E/W exits as the
-        // predicted target 1709, so it matches the prediction.
+        // later, well past the old 400ms floor. Same name + exits as predicted
+        // target 1709, but the server has NOT echoed our "s", so it is not the
+        // landing: the tracker stays put (the old timing guard phantom-advanced here).
         tracker.NoteRoomObserved(Obs(1708), t0.AddSeconds(1).AddMilliseconds(700));
+        _out.WriteLine($"after slow un-echoed re-display: believes {tracker.State.CurrentRoom?.Key}, {tracker.State.Confidence}");
+        Assert.Equal(RoomConfidence.Pending, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(8, 1708), tracker.State.CurrentRoom?.Key);
 
-        // BUG: tracker now believes it arrived at 1709, though the character
-        // never left 1708.
-        _out.WriteLine($"after slow source re-display: tracker believes {tracker.State.CurrentRoom?.Key}, confidence {tracker.State.Confidence}");
+        // The server now echoes "s"; the next matching display is the genuine
+        // landing at 1709 and confirms.
+        tracker.NoteInboundMoveEcho("s", t0.AddSeconds(2));
+        tracker.NoteRoomObserved(Obs(1709), t0.AddSeconds(2).AddMilliseconds(100));
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(8, 1709), tracker.State.CurrentRoom?.Key);
     }
 
+    // The same stray re-display arriving FAST (100ms) is also held — proving the
+    // gate is timing-independent: with no echo it never advances, fast or slow.
     [Fact]
-    public void FastSourceRedisplay_CorrectlyStaysPut()
+    public void FastSourceRedisplay_NoEcho_StaysPut()
     {
         RoomTracker tracker = NewTracker();
         var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -164,7 +179,6 @@ public sealed class SoldiersQuartersGridLostRepro : IDisposable
         tracker.NoteRoomObserved(Obs(1708), t0);
         tracker.NoteMoveSent(Direction.S, t0.AddSeconds(1));
 
-        // Same stray re-display, but 100ms < the 400ms floor — the guard catches it.
         tracker.NoteRoomObserved(Obs(1708), t0.AddSeconds(1).AddMilliseconds(100));
 
         Assert.Equal(new RoomKey(8, 1708), tracker.State.CurrentRoom?.Key);
@@ -220,6 +234,9 @@ public sealed class SoldiersQuartersGridLostRepro : IDisposable
             }
 
             realPos = Adj[realPos][dir];   // valid exit by construction
+            // The server echoes the executed move just before rendering the
+            // landing — the causal signal the echo gate confirms on.
+            tracker.NoteInboundMoveEcho(dir.ToToken(), clock.AddMilliseconds(1400));
             tracker.NoteRoomObserved(Obs(realPos), clock.AddMilliseconds(1500));
         }
 
