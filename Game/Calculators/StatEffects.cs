@@ -65,6 +65,13 @@ public static class StatEffects
         return (s.Strength - 50) / 3 + (s.Agility - 50) / 6;
     }
 
+    // Bash / smash accuracy stat contribution — STR/3 + AGL/6, the same on both
+    // realms (CalcAccuracy's bash/smash branch weights STR + AGL and drops INT/CHM).
+    // On Stock this equals the normal-attack contribution; on Paradigm it's how STR
+    // reaches accuracy at all (normal Paradigm attacks get no STR accuracy).
+    public static int BashAccuracyFromStats(StatBlock s)
+        => (s.Strength - 50) / 3 + (s.Agility - 50) / 6;
+
     public static int CritRating(StatBlock s)
         => CharacterCalculator.CalcBaseCritRating(s.Level, s.Intellect, s.Agility, s.Charm);
 
@@ -145,21 +152,31 @@ public static class StatEffects
             case BaseStat.Strength:
                 Line("Max melee dmg", $"+{MaxDamageBonus(current)}", $"~10 {ab} → +1 above 50", MaxDamageBonus);
                 Line("Min melee dmg", $"+{MinDamageBonus(current)}", $"~10 {ab} → +1 above 100", MinDamageBonus);
-                if (!para) Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~3 {ab} → +1", accy);
+                // Stock: STR feeds accuracy on ALL attacks. Paradigm: only bash/smash.
+                if (!para)
+                    Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~3 {ab} → +1 (all attacks)", accy);
+                else
+                    Line("Bash/smash accy", BashAccuracyFromStats(current).ToString("+0;-0;0"),
+                        $"~3 {ab} → +1 (bash/smash only)", BashAccuracyFromStats);
                 int encNow = MaxEncumbrance(current);
                 int encPer = MaxEncumbrance(current.With(BaseStat.Strength, current.Strength + 1)) - encNow;
                 Line("Carry weight", $"{encNow} max", $"+{encPer}/pt here (+48 to 100 {ab}, +84 beyond)", null);
                 break;
 
             case BaseStat.Agility:
-                Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~{(para ? 3 : 6)} {ab} → +1", accy);
+                // AGL feeds accuracy on every attack in both realms (Paradigm normal
+                // weights it /3, bash/smash /6; Stock /6 throughout).
+                Line("Accuracy", accy(current).ToString("+0;-0;0"),
+                    para ? $"~3 {ab} → +1 (normal; ~6 bash/smash)" : $"~6 {ab} → +1 (all attacks)", accy);
                 Line("Dodge", $"{DodgeValue(current)}", $"~3 {ab} → +1", DodgeValue);
                 Line("Crit", $"{CritRating(current)}%", $"~20 {ab} → +1", CritRating);
                 Line("Stealth", $"{Stealth(current)}", $"~4 {ab} → +1", Stealth);
                 break;
 
             case BaseStat.Intellect:
-                if (para) Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~6 {ab} → +1", accy);
+                // INT feeds accuracy on Paradigm NORMAL attacks only — never Stock,
+                // never bash/smash.
+                if (para) Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~6 {ab} → +1 (normal attacks)", accy);
                 Line("Crit", $"{CritRating(current)}%", $"~10 {ab} → +1", CritRating);
                 Line("Stealth", $"{Stealth(current)}", $"~8 {ab} → +1", Stealth);
                 Line("Magic resist", $"{MagicResistance(current)}", $"+1 per 4 {ab}", MagicResistance);
@@ -176,7 +193,8 @@ public static class StatEffects
                 break;
 
             case BaseStat.Charm:
-                if (para) Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~10 {ab} → +1", accy);
+                // CHM feeds accuracy on Paradigm NORMAL attacks only.
+                if (para) Line("Accuracy", accy(current).ToString("+0;-0;0"), $"~10 {ab} → +1 (normal attacks)", accy);
                 Line("Dodge", $"{DodgeValue(current)}", $"~5 {ab} → +1", DodgeValue);
                 Line("Crit", $"{CritRating(current)}%", $"~30 {ab} → +1", CritRating);
                 Line("Stealth", $"{Stealth(current)}", $"~6 {ab} → +1", Stealth);

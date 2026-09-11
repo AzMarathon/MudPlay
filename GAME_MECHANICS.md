@@ -258,10 +258,15 @@ same `CombatCalculator` / `CharacterCalculator` the combat engine uses (no hand-
 
 **Normal-attack accuracy — stat contribution** *([CONFIRMED] — source: the RE'd stock DLL
 `dll-stats-map.md` + `CombatCalculator.CalcAccuracy`; Paradigm branch from syntax53/MMUD-Explorer)*.
-Realm-split, and this is the one place the two realms weight *different* stats:
-- **Stock:** `(STR-50)/3 + (AGL-50)/6` — STR ~3/pt, AGL ~6/pt. INT and CHM do **not** feed it.
-- **Paradigm (normal attack):** `(AGL-50)/3 + (INT-50)/6 + (CHM-50)/10` — AGL ~3/pt, INT ~6/pt,
-  CHM ~10/pt. STR does **not** feed normal-attack accuracy on Paradigm.
+Realm-split, and it further splits by ATTACK TYPE on Paradigm (from `CalcAccuracy`, verified against
+MMUD-Explorer's `bGreaterMUD` branch):
+- **Stock (all attacks):** `(STR-50)/3 + (AGL-50)/6` — STR ~3/pt, AGL ~6/pt. INT and CHM do **not**
+  feed accuracy at all, for any attack type.
+- **Paradigm normal attack:** `(AGL-50)/3 + (INT-50)/6 + (CHM-50)/10` — AGL ~3/pt, INT ~6/pt,
+  CHM ~10/pt. STR does **not** feed a normal Paradigm attack.
+- **Paradigm bash / smash:** `(STR-50)/3 + (AGL-50)/6` — STR ~3/pt, AGL ~6/pt (INT/CHM drop out).
+  So STR reaches accuracy on Paradigm ONLY through bash/smash. `StatEffects.BashAccuracyFromStats`
+  computes this; the CP tooltip labels each accuracy line with the attacks it applies to.
 
 **Dodge (raw value, pre vs-accuracy conversion)** *([CONFIRMED] — `CombatCalculator.CalcDodge`)*:
 `level/5 + (CHM-50)/5 + (AGL-50)/3` (+ gear, + an encumbrance bonus under 33% load). So AGL ~3/pt,

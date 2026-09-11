@@ -87,14 +87,15 @@ public sealed class StatEffectsTests
     }
 
     [Fact]
-    public void Tooltip_Strength_Paradigm_OmitsAccuracy()
+    public void Tooltip_Strength_Accuracy_QualifiesAttackTypeByRealm()
     {
-        // STR drives accuracy on Stock but not on Paradigm normal attacks; carry
-        // weight + melee damage show on both.
+        // Stock: STR feeds accuracy on ALL attacks. Paradigm: bash/smash only.
         string stock = StatEffects.Tooltip(BaseStat.Strength, Block(str: 90), Ctx(RealmType.Stock));
         string para = StatEffects.Tooltip(BaseStat.Strength, Block(str: 90), Ctx(RealmType.ParaMud));
         Assert.Contains("Accuracy", stock);
-        Assert.DoesNotContain("Accuracy", para);
+        Assert.Contains("all attacks", stock);
+        Assert.DoesNotContain("Accuracy", para);          // no unqualified normal-accuracy line
+        Assert.Contains("Bash/smash accy", para);         // STR reaches accy via bash/smash only
         Assert.Contains("Carry weight", para);
         Assert.Contains("melee dmg", para);
     }
