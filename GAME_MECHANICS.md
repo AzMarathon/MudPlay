@@ -256,10 +256,11 @@ toward zero, matching the engine. Surfaced in the client as the CP Allocation co
 the Level Projection derived-stat columns; all values come from `StatEffects`, which composes the
 same `CombatCalculator` / `CharacterCalculator` the combat engine uses (no hand-copied numbers).
 
-**Normal-attack accuracy — stat contribution** *([CONFIRMED] — source: the RE'd stock DLL
-`dll-stats-map.md` + `CombatCalculator.CalcAccuracy`; Paradigm branch from syntax53/MMUD-Explorer)*.
-Realm-split, and it further splits by ATTACK TYPE on Paradigm (from `CalcAccuracy`, verified against
-MMUD-Explorer's `bGreaterMUD` branch):
+**Normal-attack accuracy — stat contribution** *([CONFIRMED] both realms — directly verified against
+syntax53/MMUD-Explorer `modMMudFunc.bas` `CalculateAccuracy` lines 2185–2225, where `bGreaterMUD`=Paradigm;
+matches `CombatCalculator.CalcAccuracy`)*.
+Realm-split, and it further splits by ATTACK TYPE on Paradigm. The `bGreaterMUD` (Paradigm) branch even
+tags the STR/AGL contributions `*bash`/`*smash` in the tool's own breakdown:
 - **Stock (all attacks):** `(STR-50)/3 + (AGL-50)/6` — STR ~3/pt, AGL ~6/pt. INT and CHM do **not**
   feed accuracy at all, for any attack type.
 - **Paradigm normal attack:** `(AGL-50)/3 + (INT-50)/6 + (CHM-50)/10` — AGL ~3/pt, INT ~6/pt,
