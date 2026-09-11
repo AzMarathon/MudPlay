@@ -200,6 +200,29 @@ public sealed class MonsterObservationTrackerTests
     }
 
     [Fact]
+    public void LandedHit_RetiresAnEarlierPhysicalNoEffect()
+    {
+        // The count is a persisted claim Monster Intel renders as "your weapon/fists
+        // aren't magical enough for this monster". A landed swing disproves it — the
+        // record must not assert the monster is physical-proof while also holding the
+        // damage it took (report paradigm-20260910-214553: 7 landed hits alongside a
+        // standing physical-no-effect mark).
+        using Harness h = new();
+        h.AddMonster(1, "nexus hunter");
+        h.Feed("Also here: big nexus hunter.");
+        h.CurrentTarget = "big nexus hunter";
+
+        h.Feed("Your weapon has no effect against this monster!");
+        Assert.Equal(1, h.Tracker.For(1)!.PhysicalNoEffectCount);
+
+        h.Feed("You impale big nexus hunter for 24 damage!");
+
+        MonsterObservation o = h.Tracker.For(1)!;
+        Assert.Equal(0, o.PhysicalNoEffectCount);
+        Assert.Equal(1, o.HitCount);
+    }
+
+    [Fact]
     public void FistsNoEffect_FoldsIntoSamePhysicalCounterAsWeapon()
     {
         using Harness h = new();

@@ -516,6 +516,16 @@ public static class BugReportBuilder
         StringBuilder sb = new();
         var rows = svc.Combat.SnapshotRoomEngage();
 
+        // The observed-failure fail-sets first: they override game data (a species
+        // named here is skipped even when HitMagic says the weapon should land), and
+        // they survive the monster leaving the room view, so they matter even when
+        // the per-monster rows below are empty.
+        (IReadOnlyList<string> failNormal, IReadOnlyList<string> failAlt) = svc.Combat.SnapshotWeaponFailSets();
+        static string FailSet(IReadOnlyList<string> s) => s.Count == 0 ? "(none)" : string.Join(", ", s);
+        Kv(sb, "Weapon-no-effect this room — normal", FailSet(failNormal));
+        Kv(sb, "Weapon-no-effect this room — alternate", FailSet(failAlt));
+        sb.Append('\n');
+
         sb.Append("Engine engageability of monsters known in the current room (weapon/spell magic gates + verdict) (")
           .Append(rows.Count).Append(")\n\n");
         if (rows.Count == 0) { sb.Append("_(no monsters tracked in the current room)_\n"); return sb.ToString(); }

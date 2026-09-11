@@ -125,6 +125,20 @@ public sealed class MonsterObservationTracker : IDisposable
         }
         o.HitCount++;
         o.HitDamageSum += dmg;
+
+        // A landed swing disproves "physical can't touch this". The count is a
+        // persisted claim Monster Intel shows as "your weapon/fists aren't magical
+        // enough for this monster" — true of the weapon that drew the line, but not
+        // of the monster, and the two get confused the moment a second weapon (or a
+        // mis-attributed line) is involved. Contrary evidence retires the claim
+        // rather than leaving the record asserting both at once.
+        if (o.PhysicalNoEffectCount > 0)
+        {
+            o.PhysicalNoEffectCount = 0;
+            _log?.Info(LogCategory,
+                $"#{number} physical-no-effect retired — a weapon landed {dmg} damage on it");
+        }
+
         Touch(o);
     }
 
