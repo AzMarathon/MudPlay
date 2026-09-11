@@ -122,6 +122,12 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlySet<RoomKey>?> GhRoomsProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(GhRooms));
 
+    // Roomba rooms the game refused a drop in during the current/last sweep. Drawn
+    // as a ring around the robot so a glance at the map answers "which of my rooms
+    // are out of space" — otherwise that only exists in the log.
+    public static readonly StyledProperty<IReadOnlySet<RoomKey>?> GhFullRoomsProperty =
+        AvaloniaProperty.Register<MapControl, IReadOnlySet<RoomKey>?>(nameof(GhFullRooms));
+
     public static readonly StyledProperty<IReadOnlyDictionary<RoomKey, int>?> LoopSequenceNumbersProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyDictionary<RoomKey, int>?>(nameof(LoopSequenceNumbers));
 
@@ -310,6 +316,12 @@ public sealed class MapControl : Control
     {
         get => GetValue(StashRoomsProperty);
         set => SetValue(StashRoomsProperty, value);
+    }
+
+    public IReadOnlySet<RoomKey>? GhFullRooms
+    {
+        get => GetValue(GhFullRoomsProperty);
+        set => SetValue(GhFullRoomsProperty, value);
     }
 
     public IReadOnlySet<RoomKey>? GhRooms
@@ -807,7 +819,7 @@ public sealed class MapControl : Control
             HighlightShopsProperty, SpellModeProperty,
             WalkPathProperty, LoopPathProperty, LoopBuilderPathProperty, LoopBuilderWaypointsProperty,
             AutoLairWaypointsProperty, AutoLairApproachPathProperty,
-            LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, GhRoomsProperty, LoopSequenceNumbersProperty,
+            LoopApproachPreviewPathProperty, AvoidedRoomsProperty, StashRoomsProperty, GhRoomsProperty, GhFullRoomsProperty, LoopSequenceNumbersProperty,
             AutoLairRoomsProperty, WalkPathIsAutoLairProperty, SelectedRoomKeyProperty,
             PreviewPathProperty, TeleportRoomsProperty, DeathRoomsProperty,
             BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty,
@@ -1248,7 +1260,8 @@ public sealed class MapControl : Control
                 DrawStashX(context, cell);
 
             if (GhRooms is not null && GhRooms.Contains(kvp.Value))
-                DrawRobotIcon(context, cell);
+                DrawRobotIcon(context, cell,
+                    full: GhFullRooms is not null && GhFullRooms.Contains(kvp.Value));
 
             if (DeathRooms is not null && DeathRooms.Contains(kvp.Value))
                 DrawSkull(context, cell);
@@ -1711,11 +1724,22 @@ public sealed class MapControl : Control
     private static readonly IPen   RobotRimPen    = new Pen(new SolidColorBrush(Color.Parse("#FF10384A")), 1.0);
     private static readonly IBrush RobotEyeBrush  = new SolidColorBrush(Color.Parse("#FF10384A"));
 
-    private static void DrawRobotIcon(DrawingContext ctx, Rect cell)
+    // Amber, matching the nav status line's "held for a reason" colour — a full
+    // room isn't an error, it's a room needing attention.
+    private static readonly IPen GhFullRingPen =
+        new Pen(new SolidColorBrush(Color.Parse("#FFE0A030")), 1.6);
+
+    private static void DrawRobotIcon(DrawingContext ctx, Rect cell, bool full = false)
     {
         double s = Math.Max(cell.Width * 0.34, 3.5);
         double cxm = cell.X + cell.Width / 2.0;
         double cym = cell.Y + cell.Height / 2.0;
+
+        // "No space left" ring around the robot. A ring rather than a recolour so
+        // the room still reads as a Roomba room at a glance — it's the same room,
+        // just out of space.
+        if (full)
+            ctx.DrawEllipse(null, GhFullRingPen, new Point(cxm, cym), s * 0.95, s * 0.95);
 
         // Head placed so the antenna above balances the head below — the whole glyph
         // (tip to head-bottom) stays centred on the cell, ~0.4 cell tall, so it sits

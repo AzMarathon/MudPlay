@@ -13,9 +13,22 @@ namespace MudPlay.Game.Map;
 // room whose rules also admit the item. Labels are tried in order and the first
 // one not excluded wins, so labelling a second room for the same category is the
 // whole configuration. The catch-all is the last resort, and is itself skippable
-// — a full catch-all excludes itself like any other room.
+// — a full catch-all excludes itself and the next one is tried, so several
+// catch-alls act as an overflow chain.
 public static class GhDestinationResolver
 {
+    // Every room whose rules admit `item`, full or not, plus the catch-alls. What
+    // a caller needs to explain a failure: "these are the rooms this could have
+    // gone to, and they're all full" tells the user which category to label
+    // another room for, which "nowhere left for opal" on its own does not.
+    public static IReadOnlyList<RoomKey> CandidateRooms(
+        GhItemClass item, IReadOnlyCollection<GhRoomLabel> labels)
+        => labels
+            .Where(l => GhItemClassifier.MatchesAny(l, item) || l.IsCatchAll)
+            .Select(l => new RoomKey(l.Map, l.Room))
+            .Distinct()
+            .ToList();
+
     // The room to put `item` in, or null when every candidate is excluded (the
     // caller then records it as left in place rather than queueing it at a wall).
     // `excluded` is the sweep's known-full set.
@@ -32,8 +45,15 @@ public static class GhDestinationResolver
             return key;
         }
 
-        if (labels.FirstOrDefault(l => l.IsCatchAll) is not { } catchAll) return null;
-        RoomKey fallback = new(catchAll.Map, catchAll.Room);
-        return excluded.Contains(fallback) ? null : fallback;
+        // Catch-alls are an overflow CHAIN, not one room: take the first that
+        // isn't already known full, the same way the category rooms above are
+        // tried in order. A single overflow room is the bottleneck in a house
+        // where the labelled rooms are filling up.
+        foreach (GhRoomLabel catchAll in labels.Where(l => l.IsCatchAll))
+        {
+            RoomKey fallback = new(catchAll.Map, catchAll.Room);
+            if (!excluded.Contains(fallback)) return fallback;
+        }
+        return null;
     }
 }

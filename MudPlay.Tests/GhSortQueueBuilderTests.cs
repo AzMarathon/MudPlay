@@ -316,12 +316,14 @@ public sealed class GhSortQueueBuilderTests : IDisposable
     }
 
     [Fact]
-    public void Build_SkipsItemsAutoDiscardWouldBin()
+    public void Build_SortsFlaggedItemsToo_NoDiscardSkip()
     {
-        // Otherwise the two engines fight over the same item every lap: Roomba
-        // collects it, auto-discard bins it mid-sweep, and the sweep is left
-        // believing it still carries something it doesn't — whose drop the game
-        // then partial-matches onto a different held item.
+        // The builder no longer excludes auto-discard-flagged items: the discard
+        // engine is held off for the whole sweep (GhSweepManager.IsActive), so
+        // Roomba sorts a flagged item to its labeled room like anything else
+        // rather than leaving it for the engine to bin. Both the weapon and the
+        // armour, misplaced in room 1/9, are queued to their rooms; nothing is
+        // left behind.
         ItemNameStore names = NewStore();
         var observed = new Dictionary<RoomKey, IReadOnlyList<string>>
         {
@@ -329,26 +331,11 @@ public sealed class GhSortQueueBuilderTests : IDisposable
         };
 
         (IReadOnlyList<GhPendingMove> moves, IReadOnlyList<GhSweepItemFound> left) =
-            GhSortQueueBuilder.Build(observed, Labels, names,
-                wouldAutoDiscard: entry => entry == "war hammer");
-
-        Assert.Equal("chain shirt", Assert.Single(moves).ItemName);
-        Assert.Contains(left, l => l.ItemName == "war hammer"
-                                && l.Reason == GhLeftReason.AutoDiscarded);
-    }
-
-    [Fact]
-    public void Build_WithNoDiscardPredicate_QueuesEverythingAsBefore()
-    {
-        ItemNameStore names = NewStore();
-        var observed = new Dictionary<RoomKey, IReadOnlyList<string>>
-        {
-            [new RoomKey(1, 9)] = new[] { "war hammer", "chain shirt" },
-        };
-
-        (IReadOnlyList<GhPendingMove> moves, _) =
             GhSortQueueBuilder.Build(observed, Labels, names);
 
         Assert.Equal(2, moves.Count);
+        Assert.Contains(moves, m => m.ItemName == "war hammer" && m.To.Equals(WeaponsRoom));
+        Assert.Contains(moves, m => m.ItemName == "chain shirt" && m.To.Equals(ArmourRoom));
+        Assert.Empty(left);
     }
 }

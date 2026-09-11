@@ -70,17 +70,15 @@ public sealed class GhRoomLabelStore
     public bool TryGetLabel(RoomKey key, out GhRoomLabel label)
         => _labels.TryGetValue(key, out label!);
 
-    // Set (or replace) key's label. When isCatchAll is true, any other
-    // labeled room's catch-all flag is cleared first — at most one room owns
-    // the flag at a time (single-owner, radio-button semantics). Persists
-    // immediately.
+    // Set (or replace) key's label. Any number of rooms may be catch-alls: they
+    // form an overflow chain, tried in order, so a house whose first overflow room
+    // fills up has somewhere else to put things. It used to be single-owner
+    // (ticking one silently un-ticked the last), which meant a user who marked ten
+    // rooms ended up with one and no indication the other nine were discarded.
+    // Persists immediately.
     public void SetLabel(RoomKey key, IReadOnlyList<GhCategoryRule> rules, bool isCatchAll)
     {
         if (_activeBbs is null) return;
-
-        if (isCatchAll)
-            foreach (GhRoomLabel other in _labels.Values)
-                other.IsCatchAll = false;   // same instances _settings.RoomLabels holds — one mutation covers both
 
         GhRoomLabel label = new(key.Map, key.Room) { Rules = rules.ToList(), IsCatchAll = isCatchAll };
         _labels[key] = label;
@@ -116,7 +114,6 @@ public sealed class GhRoomLabelStore
         ArgumentNullException.ThrowIfNull(incoming);
         if (_activeBbs is null || incoming.Count == 0) return 0;
 
-        bool haveCatchAll = _labels.Values.Any(l => l.IsCatchAll);
         int added = 0;
         foreach (GhRoomLabel lbl in incoming)
         {
@@ -124,12 +121,10 @@ public sealed class GhRoomLabelStore
             RoomKey key = new(lbl.Map, lbl.Room);
             if (_labels.ContainsKey(key)) continue;   // don't overwrite a local label
 
-            bool catchAll = lbl.IsCatchAll && !haveCatchAll;   // at most one catch-all owner
-            if (catchAll) haveCatchAll = true;
             GhRoomLabel adopted = new(key.Map, key.Room)
             {
                 Rules = lbl.Rules ?? new List<GhCategoryRule>(),
-                IsCatchAll = catchAll,
+                IsCatchAll = lbl.IsCatchAll,
             };
             _labels[key] = adopted;
             _settings.RoomLabels ??= new List<GhRoomLabel>();

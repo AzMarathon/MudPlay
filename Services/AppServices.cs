@@ -1668,6 +1668,11 @@ public sealed class AppServices
     // labels stay per-BBS above. See GhManagedRoomStore.
     public Game.Map.GhManagedRoomStore GhManagedRooms { get; private set; } = null!;
 
+    // What the last Roomba sweep still had to do when it stopped. Persisted per
+    // character so its load is delivered by the next sweep instead of being left
+    // in the player's pack, and so Resume can skip the scan even after a restart.
+    public Game.Map.GhSuspendedSweepStore GhSuspendedSweep { get; private set; } = null!;
+
     // Per-BBS "last seen this item in this room" log, fed by GhSweep and read by
     // RoombaQuery's @roomba handler.
     public Game.Map.GhItemLocationStore GhItemLocations { get; private set; } = null!;
@@ -2972,6 +2977,7 @@ public sealed class AppServices
         // Loaded/reloaded via OnBbsPinApplied, same pattern as RoomBlacklist.
         GhRoomLabels = new Game.Map.GhRoomLabelStore(Profile, Log);
         GhManagedRooms = new Game.Map.GhManagedRoomStore(Profile, Log);
+        GhSuspendedSweep = new Game.Map.GhSuspendedSweepStore(Profile, Log);
         GhItemLocations = new Game.Map.GhItemLocationStore(ItemNames, Log);
         Profile.ProfileLoaded += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
         Profile.BbsPinApplied += _ => GhRoomLabels.OnBbsPinApplied(ResolveActiveBbs()?.Name);
@@ -5192,10 +5198,22 @@ public sealed class AppServices
         // Same maze-solver guard as TryResync above — a caller's one-shot re-fix
         // (LoopRunner / AutoWalkManager leaning on rm before trusting a possibly
         // mis-anchored belief) must not race the solver's own rm during a solve.
+        // Paradigm's `rm` first, then sysop `sys st` — the same authoritative
+        // answer by a different route. Without the second, a stock realm's
+        // "blocked at source" recovery had no locator at all: it rerouted from a
+        // room the tracker had wrong, three times in one second, and failed the
+        // loop (report stock-20260904-143436).
         Recovery.TryResyncOnce = (reason, onResolved, onFailed) =>
             !MazeSolver.Active
             && (ParadigmResync.RequestResyncOnce(reason, onResolved, onFailed)
-                || SysopLocate.RequestLocateOnce(reason, onResolved, onFailed));   // sysop mirror of the loop/replan one-shot `rm`
+                // Sysop mirror of the loop/replan one-shot `rm`. forRecovery bypasses
+                // the locate throttle: a loop blocked at source re-enters recovery on
+                // the 2s attempt spacing (stock-20260904-143436 showed three reroutes
+                // in one second before that spacing existed), so the 15s convenience
+                // throttle would deny every retry after the first and drop us to a
+                // backtrack that can't converge in a gang house of identically-named
+                // rooms.
+                || SysopLocate.RequestLocateOnce(reason, onResolved, onFailed, forRecovery: true));
         // Engine-less resync gap: the recovery gate above asks for an `rm` on a
         // mid-walk mismatch, but no-ops with no engine attached. A manual boat ride
         // (no engine) that disembarks into a duplicated-name room strands the tracker
@@ -5747,12 +5765,16 @@ public sealed class AppServices
             // items can't outrun the game's command-rate limit and have the whole
             // batch — plus the loop's next move — silently dropped.
             promptScanner: PromptScanner,
-            // Don't sort what auto-discard is going to bin. Reads the same
-            // resolver auto-discard itself uses, and the same enable flag, so the
-            // two engines can't disagree about which items are junk.
-            wouldAutoDiscard: entry =>
-                ReadAutoModeFlag(d => d.AutoGetItems)
-                && ResolveAutoDiscardItem(entry) is { Discard: true, KeepCount: 0 });
+            // Carries an interrupted sweep forward: the items it was holding are
+            // still in the pack with only its queue knowing where each belonged,
+            // and its remaining plan is a full lap of the circuit to rebuild.
+            suspendedStore: GhSuspendedSweep);
+
+        // The sweep manager is app-scoped but a resumable sweep is per-character:
+        // drop the in-memory leftover on a character switch so Resume doesn't offer
+        // one character's load to the next (the persisted manifest is already keyed
+        // per profile). Same reset intent as SysStatus.ResetAutoDisable above.
+        Profile.ProfileLoaded += _ => GhSweep.OnProfileLoaded();
 
         // A manually-typed movement step (one the walker / loop / auto-lair didn't
         // send — RoomTracker's echo-claim tells them apart) pauses the active nav
@@ -5978,6 +6000,14 @@ public sealed class AppServices
             () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
         AutoGetItems.SuppressCollectInStashRoom =
             () => (AutoDeposit?.IsPassingThroughStashRoom() ?? false) && AutoSearch.IsRevealInFlight;
+        // Hold auto-collect and auto-discard off while a Roomba sweep is sorting the
+        // house: an auto-collect would eat the carry headroom Roomba budgets for its
+        // moves (shrinking it until pre-planned sorts no longer fit, so the sweep
+        // can never finish), and an auto-discard would bin an item Roomba is
+        // relocating. Roomba sorts flagged items itself; both engines resume the
+        // moment the sweep ends.
+        AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
+        AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
         // Bank deposits (already a copper value) join stash hides in the Session
         // Stats stashed/deposited figure. The transaction-history ledger is fed
         // separately from the `You deposit …` echo (InventoryManager.BankDeposited,

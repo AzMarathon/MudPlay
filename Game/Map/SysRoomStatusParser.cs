@@ -46,7 +46,13 @@ public sealed partial class SysRoomStatusParser : IDisposable
     private bool _disposed;
 
     // Window after an outbound sysop status during which lines are scanned.
-    public TimeSpan ExpectingBlockWindow { get; set; } = TimeSpan.FromSeconds(5);
+    //
+    // MUST be at least as long as SysStatusProbe.Timeout. It was shorter (5s
+    // against the probe's 6s), which meant the parser could bin a block the probe
+    // was still waiting for: a reply arriving at 5.5s was discarded, the probe then
+    // timed out on the silence, and one slow reply switched sysop status off for the
+    // whole session. Observed live — the same command answered fine 16 minutes later.
+    public TimeSpan ExpectingBlockWindow { get; set; } = TimeSpan.FromSeconds(10);
 
     // Test seam.
     public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;

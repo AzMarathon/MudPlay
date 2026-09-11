@@ -168,6 +168,21 @@ public sealed class AutoGetItemsManagerTests
     }
 
     [Fact]
+    public void DuringRoombaSweep_NoSend_EvenWhenFlagged()
+    {
+        // A Roomba sweep is sorting the house: auto-collect is held off so it can't
+        // eat the carry headroom Roomba budgets for its moves. Resumes when the
+        // sweep ends.
+        using Harness h = new();
+        h.Flags["long sword"] = true;
+        h.Items.SuppressDuringSweep = () => true;
+
+        h.Feed("You notice a long sword here.");
+
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
     public void CannotBeTaken_NeverSends_EvenWhenAutoCollect()
     {
         using Harness h = new();

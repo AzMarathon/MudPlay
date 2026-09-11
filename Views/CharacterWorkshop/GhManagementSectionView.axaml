@@ -57,6 +57,9 @@
                     ToolTip.Tip="Scan, then move misplaced items into their labeled rooms."/>
             <Button Content="Start Inventory" Command="{Binding StartInventoryCommand}" IsEnabled="{Binding !IsRunning}" Margin="0,0,6,6"
                     ToolTip.Tip="Scan and log room contents (feeds @roomba) without moving anything — safe to run alongside your own manual organization."/>
+            <Button Content="Resume" Command="{Binding ResumeCommand}" Margin="0,0,6,6"
+                    IsEnabled="{Binding CanResume}"
+                    ToolTip.Tip="{Binding ResumeHint}"/>
             <Button Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}" Margin="0,0,6,6"/>
             <Button Content="Roomba Log" Command="{Binding OpenRoombaLogCommand}" Margin="0,0,6,6"/>
             <Button Content="Master List" Command="{Binding OpenMasterListCommand}" Margin="0,0,6,6"

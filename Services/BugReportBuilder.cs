@@ -951,6 +951,13 @@ public static class BugReportBuilder
             $"{svc.GhSweep.MovedSoFar.Count} / {svc.GhSweep.LeftInPlace.Count} / "
             + $"{svc.GhSweep.PendingMoveCount} / {svc.GhSweep.CarriedPendingCount} / "
             + $"{svc.GhSweep.HiddenPendingCount}");
+        // Resume state — the ONLY trace of an interrupted sweep after a restart, when
+        // Phase is Idle and the in-memory pending counts read 0 but a per-character
+        // manifest is still on disk. A "Resume greyed out" or "it dumped my load"
+        // report is undiagnosable without it. ResumableMoveCount falls back to the
+        // persisted store, so it's non-zero even in a fresh session.
+        Kv(sb, "Roomba resumable (can / moves)",
+            $"{svc.GhSweep.CanResume} / {svc.GhSweep.ResumableMoveCount}");
         // Full-ledger carry state — a "sweep stranded everything" or "won't pick up"
         // report needs the tracked working budget, what the ledger thinks is carried,
         // the live headroom, and how many items were left as too-heavy.
@@ -1018,7 +1025,7 @@ public static class BugReportBuilder
         // trace in the report.
         Kv(sb, "Sysop status probe",
             svc.SysStatus.Available ? "available"
-            : svc.SysStatus.AutoDisabled ? "auto-disabled (no room block came back)"
+            : svc.SysStatus.AutoDisabled ? "backed off after a timeout — retries shortly"
             : "off (no sysop powers set for this BBS)");
         // What the last ground-truth locate actually did. "Recovery walked me
         // backwards anyway" is unanswerable without it: the probe can be

@@ -19,7 +19,9 @@ public enum GhLeftReason
     // the item isn't held at all — a pickup the ledger recorded that never landed.
     // The move is a phantom, so it's removed rather than retried.
     NotActuallyCarried,
-    // Auto-discard is configured to throw this item away, so sorting it would be
-    // a tug of war: collect, get binned, find it again next lap. Left alone.
-    AutoDiscarded,
+    // Two Sorting laps in a row completed no moves: the item couldn't be sorted
+    // this sweep (its destination stayed full, a hidden item never surfaced, or
+    // what's left is too heavy for the budget the player's own load leaves). Left
+    // where it is rather than circling the circuit forever.
+    CouldNotComplete,
 }

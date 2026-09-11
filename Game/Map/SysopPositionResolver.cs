@@ -182,9 +182,13 @@ public sealed class SysopPositionResolver : IDisposable
     // caller (a loop blocked at source, an @where re-fix) gets its OWN onResolved /
     // onFailed invoked exactly once for this locate, on top of the gate's global
     // re-anchor consumers. Returns false when no locate can start (capability off /
-    // throttled / suppressed) so the caller falls back immediately. Throttled by
-    // default (forRecovery: false) — the heavier `sys st` shouldn't fire as freely
-    // as Paradigm's one-line `rm`.
+    // throttled / suppressed) so the caller falls back immediately. UI-thread
+    // confined like the rest, so subscribe-then-detach needs no locking.
+    //
+    // Throttled by default — the heavier `sys st` shouldn't fire as freely as
+    // Paradigm's one-line `rm`, and a convenience caller like `@where` can wait.
+    // A caller that is itself a recovery escalation must pass forRecovery: true;
+    // see TryRequestLocate for why the throttle is wrong for those.
     public bool RequestLocateOnce(string reason, Action<RoomKey> onResolved, Action onFailed,
         bool forRecovery = false)
     {

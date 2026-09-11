@@ -190,6 +190,16 @@ public sealed class CharacterProfile
     // GhManagedRoomStore; null or empty = this character manages nothing yet.
     public List<string>? GhManagedRooms { get; set; }
 
+    // What a Roomba sweep still had to do when it ended — items already in the
+    // pack plus moves it hadn't got to yet. Persisted because an aborted sweep
+    // otherwise leaves its load in your inventory with only the sweep (now gone)
+    // knowing where any of it belonged, and throws away a survey that costs a full
+    // lap of the circuit to rebuild. Carried entries are re-adopted (after an
+    // inventory check) by any sweep; the rest are what Resume picks up to skip the
+    // scan. Maintained by GhSuspendedSweepStore; null or empty = the last sweep
+    // finished cleanly, which is the normal case.
+    public List<GhSuspendedMove>? GhUnfinishedSweep { get; set; }
+
     // Recent walk-to destinations, newest first, capped at 10. Each entry is a
     // "map/room" coordinate string. Maintained by GotoHistoryStore; drives the
     // Navigation goto-button dropdown. null or empty = no history yet.

@@ -247,4 +247,32 @@ public sealed class GhSortPlannerTests
             unloading: false);
         Assert.Equal(R(2), next);
     }
+
+    [Fact]
+    public void NothingFitsAndNothingCarried_HasNowhereToGo()
+    {
+        // The caller ends the sweep on null. With a pack too full to collect and
+        // nothing owed, there is genuinely no next room — better than shuttling
+        // one item per round trip, which is what a barely-viable budget produces.
+        RoomKey? next = GhSortPlanner.NextTarget(
+            carried: System.Array.Empty<GhSortPlanner.CarriedLoad>(),
+            pickups: System.Array.Empty<GhSortPlanner.PickupRoom>(),
+            headroom: 5,
+            distancesFromHere: Dist((2, 1)));
+        Assert.Null(next);
+    }
+
+    [Fact]
+    public void NoPickupsButStillCarrying_DeliversBeforeGivingUp()
+    {
+        // A tight pack stops collecting but must still deliver what it holds —
+        // stranding a carried load would hand the player the exact mess the
+        // suspended-sweep record exists to avoid.
+        RoomKey? next = GhSortPlanner.NextTarget(
+            carried: new[] { Load(9, 200) },
+            pickups: System.Array.Empty<GhSortPlanner.PickupRoom>(),
+            headroom: 5,
+            distancesFromHere: Dist((9, 3)));
+        Assert.Equal(R(9), next);
+    }
 }

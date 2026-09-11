@@ -660,6 +660,7 @@
                                  AvoidedRooms="{Binding AvoidedRooms}"
                                  StashRooms="{Binding StashRooms}"
                                  GhRooms="{Binding GhRooms}"
+                                 GhFullRooms="{Binding GhFullRooms}"
                                  LoopSequenceNumbers="{Binding LoopSequenceNumbers}"
                                  AutoLairRooms="{Binding AutoLairRooms}"
                                  AutoLairWaypoints="{Binding AutoLairMarkedKeys}"

@@ -83,10 +83,10 @@ public sealed class GhRoomLabelStoreTests : IDisposable
     }
 
     [Fact]
-    public void MergeSyncLabels_AdoptsAbsent_KeepsLocal_OneCatchAll()
+    public void MergeSyncLabels_AdoptsAbsent_KeepsLocal_AndKeepsCatchAllFlags()
     {
         GhRoomLabelStore store = NewPinnedStore();
-        // A local label the sync must not clobber, and it already owns the catch-all.
+        // A local label the sync must not clobber, itself a catch-all.
         store.SetLabel(new RoomKey(1, 100),
             new List<GhCategoryRule> { GhCategoryRule.ForItemType(9) }, isCatchAll: true);
 
@@ -97,7 +97,9 @@ public sealed class GhRoomLabelStoreTests : IDisposable
         {
             // Same room as the local one — must be skipped (add-if-absent).
             new GhRoomLabel(1, 100) { Rules = new() { GhCategoryRule.ForItemType(1) } },
-            // New room, wants catch-all — adopted, but demoted since one already exists.
+            // New room, also a catch-all — adopted AS ONE. Catch-alls are an overflow
+            // chain now, so a synced one joins the chain rather than being demoted:
+            // a single overflow room is the bottleneck in a house that's filling up.
             new GhRoomLabel(1, 200) { IsCatchAll = true, Rules = new() { GhCategoryRule.ForWornSlot(2) } },
             // New room, ordinary.
             new GhRoomLabel(1, 300) { Rules = new() { GhCategoryRule.ForItemType(7) } },
@@ -108,10 +110,10 @@ public sealed class GhRoomLabelStoreTests : IDisposable
 
         Assert.True(store.TryGetLabel(new RoomKey(1, 100), out GhRoomLabel local));
         Assert.Equal(9, local.Rules[0].ItemType);   // local kept, not clobbered
-        Assert.True(local.IsCatchAll);               // local still owns the catch-all
+        Assert.True(local.IsCatchAll);               // local keeps its flag
 
         Assert.True(store.TryGetLabel(new RoomKey(1, 200), out GhRoomLabel adopted200));
-        Assert.False(adopted200.IsCatchAll);         // second catch-all demoted
+        Assert.True(adopted200.IsCatchAll);          // joins the chain, not demoted
         Assert.Equal(2, adopted200.Rules[0].Worn);
     }
 

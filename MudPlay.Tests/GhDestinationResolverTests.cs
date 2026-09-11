@@ -93,4 +93,38 @@ public sealed class GhDestinationResolverTests
 
         Assert.Null(GhDestinationResolver.Resolve(Gem, labels, full));
     }
+
+    [Fact]
+    public void CatchAllsFormAnOverflowChain()
+    {
+        // One overflow room is the bottleneck in a house whose labelled rooms are
+        // filling up: the user marked ten and the store kept one.
+        RoomKey second = new(1, 2200);
+        GhRoomLabel[] labels =
+        {
+            Label(Gems, false, GhCategoryRule.ForItemType(11)),
+            Label(CatchAll, true, GhCategoryRule.ForItemType(99)),
+            Label(second, true, GhCategoryRule.ForItemType(99)),
+        };
+        GhItemClass scroll = new(9, null, null, null);
+
+        Assert.Equal(CatchAll, GhDestinationResolver.Resolve(scroll, labels, None));
+        Assert.Equal(second, GhDestinationResolver.Resolve(scroll, labels,
+            new HashSet<RoomKey> { CatchAll }));
+        Assert.Null(GhDestinationResolver.Resolve(scroll, labels,
+            new HashSet<RoomKey> { CatchAll, second }));
+    }
+
+    [Fact]
+    public void CandidateRoomsNamesEveryRoomAnItemCouldHaveGoneTo()
+    {
+        // Drives the "which category ran out" report: "nowhere left for opal" is
+        // not actionable, "these rooms all take opals and they're all full" is.
+        IReadOnlyList<RoomKey> candidates = GhDestinationResolver.CandidateRooms(Gem, Labels);
+
+        Assert.Contains(Gems, candidates);
+        Assert.Contains(GemsBackup, candidates);
+        Assert.Contains(CatchAll, candidates);      // a legitimate destination too
+        Assert.DoesNotContain(Weapons, candidates); // wrong category
+    }
 }

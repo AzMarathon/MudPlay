@@ -96,6 +96,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Bosses.Changed += RefreshBossRooms;
         RefreshBossRooms();
         _services.GhRoomLabels.Changed += RefreshGhRooms;
+        _services.GhSweep.PhaseChanged += RefreshGhFullRooms;
         RefreshGhRooms();
         RefreshTrainerRooms();   // trainers come from game data; refreshed on set swap via OnGraphReloaded
         _services.AutoLair.MarkedChanged += OnAutoLairMarkedChanged;
@@ -183,6 +184,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Movement.StashChanged   -= OnStashChanged;
         _services.Bosses.Changed -= RefreshBossRooms;
         _services.GhRoomLabels.Changed -= RefreshGhRooms;
+        _services.GhSweep.PhaseChanged -= RefreshGhFullRooms;
         _services.AutoLair.MarkedChanged -= OnAutoLairMarkedChanged;
         _services.AutoLair.ActiveChanged -= OnAutoLairActiveChanged;
         _services.AutoLair.PhaseChanged  -= OnAutoLairPhaseChanged;
@@ -551,7 +553,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         foreach (Models.Profile.GhRoomLabel label in _services.GhRoomLabels.Labels)
             rooms.Add(new RoomKey(label.Map, label.Room));
         GhRooms = rooms;
+        RefreshGhFullRooms();
     }
+
+    private void RefreshGhFullRooms()
+        => GhFullRooms = new HashSet<RoomKey>(_services.GhSweep.FullRooms);
 
     // Death does a clean stop of every engine (same as the Stop button), which
     // clears the walker's own destination. Drop the UI's armed walk-to target too
@@ -920,6 +926,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Rooms labeled for Roomba Mode. Bound to MapControl.GhRooms — each renders a
     // robot-head marker. Refreshed by RefreshGhRooms on GhRoomLabelStore.Changed.
     [ObservableProperty] private IReadOnlySet<RoomKey>? _ghRooms;
+
+    // Roomba rooms the game refused a drop in this sweep. Bound to
+    // MapControl.GhFullRooms — an amber ring round the robot, so "which of my
+    // rooms are out of space" is answerable at a glance rather than only from the
+    // log. Refreshed off the sweep's phase changes, which is when it can change.
+    [ObservableProperty] private IReadOnlySet<RoomKey>? _ghFullRooms;
 
     [ObservableProperty] private IReadOnlyDictionary<RoomKey, int>? _loopSequenceNumbers;
     [ObservableProperty] private IReadOnlySet<RoomKey>? _autoLairRooms;

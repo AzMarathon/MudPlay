@@ -45,6 +45,14 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     // A refused Start's reason (null = none), shown as a warning line on the tab so
     // clicking Start with too few labeled rooms (etc.) isn't a silent no-op.
     [ObservableProperty] private string? _startHint;
+
+    // True when a sweep stopped with work left, so Resume can carry on from its
+    // queue instead of re-walking the whole circuit to rediscover it.
+    [ObservableProperty] private bool _canResume;
+
+    // What Resume would pick up, shown beside the button so it's clear what's
+    // being carried over rather than a bare enabled button.
+    [ObservableProperty] private string? _resumeHint;
     // One-line "sweep finished" banner set from the SweepCompleted report; cleared
     // when the next sweep starts.
     [ObservableProperty] private string? _completionSummary;
@@ -170,6 +178,12 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private void RefreshStatus()
     {
         IsRunning = _sweep.Phase != GhSweepManager.SweepPhase.Idle;
+        CanResume = _sweep.CanResume;
+        // Always says something: a disabled button with no tooltip reads as broken
+        // rather than as "nothing to resume right now".
+        ResumeHint = _sweep.CanResume
+            ? $"Carry on from the interrupted sweep — {_sweep.ResumableMoveCount} move(s) left, and the scan is skipped."
+            : "Nothing to resume — this lights up when a sweep stops with work left to do.";
         bool inventoryOnly = _sweep.Mode == GhSweepManager.SweepMode.InventoryOnly;
         PhaseText = _sweep.Phase switch
         {
@@ -196,6 +210,18 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
 
     [RelayCommand]
     private void Start() => BeginSweep(GhSweepManager.SweepMode.Sort);
+
+    // Carry on from an interrupted sweep without re-scanning the circuit. The
+    // scan is most of a sweep's cost in a large house, and an abort doesn't make
+    // what it found wrong.
+    [RelayCommand]
+    private void Resume()
+    {
+        RoomContentsTitle = null;
+        if (_sweep.Resume()) { StartHint = null; CompletionSummary = null; }
+        else StartHint = _sweep.LastStartError;
+        RefreshStatus();
+    }
 
     // Walks the same labeled circuit as Start (recon + hidden-item search per
     // the same settings) but never dispatches a get/drop — for a player who

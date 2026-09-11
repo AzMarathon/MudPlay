@@ -333,9 +333,24 @@ public sealed class AutoGetItemsManager : IDisposable
     // never-suppress.
     internal Func<bool> SuppressCollectInStashRoom { get; set; } = static () => false;
 
+    // True while a Roomba sweep is underway. Auto-collect is held off for the whole
+    // sweep: every flagged item it grabbed would eat the carry headroom Roomba
+    // budgets for its moves, shrinking it until pre-planned sorts no longer fit and
+    // the sweep can never finish. Roomba sorts flagged items itself; normal
+    // auto-collect resumes the moment the sweep ends. Wired by AppServices to
+    // GhSweepManager.IsActive; defaults to never-suppress.
+    public Func<bool> SuppressDuringSweep { get; set; } = static () => false;
+
     private void DispatchList(string list)
     {
         if (!_isEnabled()) return;
+        // A Roomba sweep is sorting the house — don't let auto-collect grab extra
+        // weight and shrink the headroom Roomba needs for its moves.
+        if (SuppressDuringSweep())
+        {
+            _log?.Debug(LogCategory, "skipped you-notice survey (Roomba sweep active)");
+            return;
+        }
         // A search in a stash room just re-exposed the pile the pass-through stash
         // hid — don't sweep our own stash back up. Only the reveal survey is gated;
         // items visible on plain entry collect normally.

@@ -68,6 +68,18 @@ public sealed class GhSweepManager : IDisposable
     // its prompts still drains — just at the safe rate instead of the live one.
     private static readonly TimeSpan PromptWaitTimeout = TimeSpan.FromMilliseconds(800);
 
+    // Hard floor between sends, prompt or no prompt. A prompt alone is NOT a safe
+    // release token: every rate-limit line the game emits carries one, so
+    // prompt-gating on its own speeds up under exactly the condition it should be
+    // slowing down for — nudge arrives with a prompt, prompt releases another
+    // command, which earns another nudge. Observed live as bursts of five nudges
+    // inside 200ms, repeating every backoff.
+    //
+    // 800ms is the one interval known to be safe on this realm (GAME_MECHANICS:
+    // the paced @roomba sync uses it), so it's the floor rather than a guess. The
+    // prompt still gates — it just can't release EARLY.
+    private static readonly TimeSpan MinCommandInterval = TimeSpan.FromMilliseconds(800);
+
     // Pause after the game complains about our command rate before resuming the
     // queue. Matches RoombaSyncSender's clobber backoff, for the same reason:
     // give the limiter time to forgive before pushing again.
@@ -85,8 +97,15 @@ public sealed class GhSweepManager : IDisposable
     private static readonly Regex GetNotHereRegex = new(
         @"^\s*You don't see (?<echo>.+?) here\.\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // Both bracket and brace forms. GAME_MECHANICS recorded this as
+    // "Syntax: GET [Amount] [Currency]" and the pattern faithfully implemented
+    // that — but the live realm emits BRACES, so it never matched a single one.
+    // The cost was invisible and large: an item the game won't take by that name
+    // failed silently, was never stranded, and got retried every lap forever
+    // (one capture shows `get piece of amber` sent 42 times), which also pinned
+    // the sweep ping-ponging between the two rooms holding them.
     private static readonly Regex GetCurrencySyntaxRegex = new(
-        @"^\s*Syntax:\s*GET\s*\[Amount\]\s*\[Currency\]",
+        @"^\s*Syntax:\s*GET\s*[\[{]Amount[\]}]\s*[\[{]Currency[\]}]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex GetCannotCarryRegex = new(
         @"^\s*You cannot carry that much!\s*$",
@@ -101,7 +120,7 @@ public sealed class GhSweepManager : IDisposable
     // the usual cause is that we aren't holding it — the ledger believes a pickup
     // landed that actually didn't. Confirmed live 2026-09-02.
     private static readonly Regex DropCurrencySyntaxRegex = new(
-        @"^\s*Syntax:\s*DROP\s*\{Amount\}\s*\{Currency\}",
+        @"^\s*Syntax:\s*DROP\s*[\[{]Amount[\]}]\s*[\[{]Currency[\]}]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     // The other face of the same problem, and the more dangerous one. The game
@@ -143,6 +162,13 @@ public sealed class GhSweepManager : IDisposable
         public required bool RequiresSearch { get; init; }
         public bool IsCarried { get; set; }
         public bool Delivered { get; set; }
+
+        // Units the game has actually confirmed for the CURRENT leg. Stock has no
+        // bulk verb, so a Count of 3 is sent as three separate commands and answers
+        // with three lines — completing the move on the first one orphans the rest,
+        // and an orphaned confirmation is then misread as somebody else's drop.
+        // Reset when the leg changes (collected -> delivering).
+        public int ConfirmedUnits { get; set; }
     }
 
     private readonly GhRoomLabelStore _labels;
@@ -165,7 +191,13 @@ public sealed class GhSweepManager : IDisposable
     private readonly IDisposable _commandIgnoredSub;
     private readonly IDisposable _slowDownSub;
     private readonly WirePromptScanner? _promptScanner;
-    private readonly Func<string, bool>? _wouldAutoDiscard;
+    private readonly GhSuspendedSweepStore? _suspendedStore;
+
+    // The unfinished sort queue from a sweep that stopped early, kept in memory so
+    // Resume can carry on from it. Survives ResetToIdle deliberately — it's the
+    // one piece of a dead sweep still worth something. Cleared by a fresh Start,
+    // since that re-scans anyway.
+    private List<PendingSortMove>? _suspended;
 
     private readonly DispatcherTimer _reconSearchSettle;
     private readonly DispatcherTimer _dispatchSettle;
@@ -188,6 +220,7 @@ public sealed class GhSweepManager : IDisposable
     // burst. See DispatchAtRoomAfterSearch for why the burst was fatal.
     private readonly Queue<(string Verb, PendingSortMove Move)> _commandQueue = new();
     private (string Verb, PendingSortMove Move)? _lastQueuedCommand;
+    private DateTimeOffset _lastCommandSentAt = DateTimeOffset.MinValue;
 
     // Rooms the game refused a drop in ("There is no room to drop X here.") this
     // sweep. Two opposite effects from the one set: excluded as a DESTINATION, so
@@ -222,11 +255,20 @@ public sealed class GhSweepManager : IDisposable
     // persists between decisions — that's what makes it a run instead of a flap.
     private bool _unloading;
 
+    // Latches the "pack too full to sort" warning so a tight pack reports once
+    // rather than on every reroute.
+    private bool _reportedTightPack;
+
     // Baseline captured at sort start (and corrected on a resync): base = the
     // player's gear+pack weight carrying zero Roomba pickups; max = MaxWeight.
     // int.MaxValue max means "no weight data" → fill everything, strand nothing.
     private int _baseCarryWeight;
     private int _maxCarryWeight = int.MaxValue;
+
+    // Lowest base seen this sweep — the pack at its emptiest, which is the only
+    // honest yardstick for a permanent "can this ever be carried" call. Tracked
+    // separately from _baseCarryWeight, which moves with the live pack.
+    private int _minBaseCarryWeight = int.MaxValue;
 
     // Recon's own direct-search dispatch (mirrors _outstandingDispatch's role
     // for Sorting's get/drop dispatch): which circuit room we're currently
@@ -266,8 +308,23 @@ public sealed class GhSweepManager : IDisposable
     private int _sortLapCount;
     private int _progressSnapshotMoved;
     private int _progressSnapshotCarried;
+    // Consecutive Sorting laps that moved/carried nothing. One stall is the
+    // "everything we had headroom for is done" signal; a second confirms no
+    // queued move can currently complete, so we stop instead of walking the
+    // circuit forever (see OnSortingLapCompleted).
+    private int _noProgressSortLaps;
+    // Stall this many fruitless Sorting laps in a row and the sweep finishes: the
+    // first lap says "nothing left I can move", the verification lap confirms it.
+    private const int StalledSortLapLimit = 2;
 
     public SweepPhase Phase { get; private set; } = SweepPhase.Idle;
+
+    // A sweep is underway in any non-idle phase (recon, sorting, or the final
+    // verification lap). The auto-get and auto-discard engines read this to hold
+    // off while Roomba is sorting — an auto-get would eat the headroom Roomba
+    // needs to carry moves, and an auto-discard would bin an item Roomba is in
+    // the middle of relocating.
+    public bool IsActive => Phase != SweepPhase.Idle;
     public int CompletedReconLaps { get; private set; }
 
     // Which mode the current (or most recently finished) run is/was — set
@@ -292,6 +349,15 @@ public sealed class GhSweepManager : IDisposable
     // "Roomba kept carrying everything" reads identically to a routing bug unless
     // you can see the destinations were simply out of space.
     public IReadOnlyCollection<RoomKey> FullRooms => _fullRooms;
+
+    // Room groups that ran out of space this sweep, worst first. Surfaced so the
+    // Roomba log can tell the user which category to label another room for
+    // instead of leaving that only in the program log.
+    public IReadOnlyList<GhSaturatedGroup> SaturatedGroups
+        => _saturated.Values
+            .OrderByDescending(e => e.Items.Count)
+            .Select(e => new GhSaturatedGroup(e.Rooms.ToList(), e.Items.ToList()))
+            .ToList();
     public IReadOnlyList<GhSweepStranded> Stranded => _stranded;
     public int CircuitRoomCount => _sweepRooms.Count;
     public int PendingMoveCount => _pending.Count(p => !p.Delivered);
@@ -345,7 +411,7 @@ public sealed class GhSweepManager : IDisposable
         GhItemLocationStore? itemLocations = null,
         Func<RoomKey, bool>? isRoomActivelyManaged = null,
         WirePromptScanner? promptScanner = null,
-        Func<string, bool>? wouldAutoDiscard = null)
+        GhSuspendedSweepStore? suspendedStore = null)
     {
         ArgumentNullException.ThrowIfNull(labels);
         ArgumentNullException.ThrowIfNull(loopRunner);
@@ -373,7 +439,7 @@ public sealed class GhSweepManager : IDisposable
         // rooms sweep them exactly as before.
         _isRoomActivelyManaged = isRoomActivelyManaged ?? (static _ => true);
         _promptScanner = promptScanner;
-        _wouldAutoDiscard = wouldAutoDiscard;
+        _suspendedStore = suspendedStore;
         _log = log;
 
         _reconSearchSettle = new DispatcherTimer { Interval = ReconSearchSettle };
@@ -431,16 +497,18 @@ public sealed class GhSweepManager : IDisposable
     // (LoopRunner's own ≥2-waypoint cycle requirement), another sweep is
     // already running, or another movement engine (walk / loop / auto-lair)
     // is active.
-    public bool Start(SweepMode mode = SweepMode.Sort)
+    // Shared Start / Resume preconditions. Both put the same engine on the wire,
+    // so both refuse for the same reasons and report them the same way.
+    private bool TryClaimSweepStart(out int manageable)
     {
-        LastStartError = null;
+        manageable = 0;
         if (Phase != SweepPhase.Idle)
         {
             LastStartError = "A sweep is already running.";
             _log?.Warn(LogCategory, "start refused: a sweep is already running");
             return false;
         }
-        int manageable = _labels.Labels.Count(l => _isRoomActivelyManaged(new RoomKey(l.Map, l.Room)));
+        manageable = _labels.Labels.Count(l => _isRoomActivelyManaged(new RoomKey(l.Map, l.Room)));
         if (manageable < 2)
         {
             LastStartError = manageable == 0
@@ -456,9 +524,13 @@ public sealed class GhSweepManager : IDisposable
             _log?.Warn(LogCategory, "start refused: another movement engine is active");
             return false;
         }
+        return true;
+    }
 
-        Mode = mode;
-        StartedAt = DateTimeOffset.Now;
+    // Everything a run owns, wiped back to its pre-sweep state. Shared by Start
+    // and Resume; Resume then re-seeds the queue it kept.
+    private void ResetSweepState()
+    {
         _observedByRoom.Clear();
         _visibleByRoom.Clear();
         _hiddenByRoom.Clear();
@@ -469,6 +541,7 @@ public sealed class GhSweepManager : IDisposable
         _leftInPlace.Clear();
         _stranded.Clear();
         _fullRooms.Clear();
+        _saturated.Clear();
         _commandQueue.Clear();
         _lastQueuedCommand = null;
         _promptWait.Stop();
@@ -477,6 +550,7 @@ public sealed class GhSweepManager : IDisposable
         _sortLapCount = 0;
         _progressSnapshotMoved = 0;
         _progressSnapshotCarried = 0;
+        _noProgressSortLaps = 0;
         _reconSearchSettle.Stop();
         _reconSearchRoom = null;
         _reconSearchesSent = 0;
@@ -490,9 +564,101 @@ public sealed class GhSweepManager : IDisposable
         _resyncPending = false;
         _verifyCarriedAfterResync = false;
         _unloading = false;
+        _reportedTightPack = false;
         _baseCarryWeight = 0;
         _maxCarryWeight = int.MaxValue;
+        _minBaseCarryWeight = int.MaxValue;
+    }
 
+    // Work left over from a sweep that stopped early — what Resume would pick up.
+    // Falls back to the persisted record when there's nothing in memory, which is
+    // the case that matters most: a client restart after a bail is exactly when
+    // re-walking a 120-room circuit hurts, and it's the one an in-memory-only
+    // queue can't survive.
+    public int ResumableMoveCount
+        => _suspended?.Count ?? _suspendedStore?.Load().Count ?? 0;
+
+    public bool CanResume => Phase == SweepPhase.Idle && ResumableMoveCount > 0;
+
+    // This manager is app-scoped, but a resumable sweep belongs to ONE character:
+    // the manifest is persisted per profile (GhSuspendedSweepStore keys on the active
+    // character), yet _suspended is a shared in-memory copy. A character switch must
+    // drop it, or Resume would offer — and deliver — the previous character's load to
+    // the new one (its own items dropped by name against a pack that doesn't hold
+    // them). Cleared here so CanResume / ResumableMoveCount fall back to the
+    // newly-loaded character's own store; the UI re-reads on the PhaseChanged.
+    public void OnProfileLoaded()
+    {
+        if (_suspended is null) return;
+        _suspended = null;
+        PhaseChanged?.Invoke();
+    }
+
+    // Carry on from where a stopped sweep left off, skipping recon entirely. The
+    // survey a sweep dies holding is still good, and re-walking a 120-room circuit
+    // to rediscover what we already knew is most of the cost of a sweep.
+    //
+    // Deliberately keeps the old queue rather than re-deriving it: items already
+    // delivered are gone from it, so a re-derived plan would send us back to
+    // collect things we'd already moved. Anything that HAS changed underneath us
+    // (someone else took an item) surfaces the same way it always does — the get
+    // fails and that move is dropped.
+    public bool Resume()
+    {
+        LastStartError = null;
+        // In-memory first (same session), else rehydrate the persisted record —
+        // that's the path a client restart takes.
+        List<PendingSortMove>? resumable = _suspended ?? RehydrateSuspended();
+        if (resumable is not { Count: > 0 })
+        {
+            LastStartError = "There's no unfinished sweep to resume.";
+            return false;
+        }
+        if (!TryClaimSweepStart(out int _)) return false;
+
+        Mode = SweepMode.Sort;
+        StartedAt = DateTimeOffset.Now;
+        List<PendingSortMove> restored = resumable;
+        _suspended = null;
+        ResetSweepState();
+        _pending.AddRange(restored);
+
+        if (!PlotAndStartCircuit())
+        {
+            // Put it back — a route we can't plot right now (mid-combat, position
+            // unknown) is worth retrying once the player sorts that out.
+            _suspended = restored;
+            _pending.Clear();
+            LastStartError = "Couldn't plot a walkable route through the labeled rooms.";
+            _log?.Warn(LogCategory, "resume refused: LoopRunner declined the sweep circuit");
+            return false;
+        }
+
+        Phase = SweepPhase.Sorting;
+        CaptureCarryBaseline();
+        SplitOversizedMoves();
+        StrandUnmovableItems();
+        // The live queue now owns this work; the persisted copy would otherwise let
+        // a later Start adopt the carried half a second time. It's rewritten at the
+        // next sweep end either way.
+        _suspendedStore?.Clear();
+
+        _log?.Info(LogCategory,
+            $"sweep resumed: {_pending.Count} move(s) carried over, recon skipped");
+        PhaseChanged?.Invoke();
+        if (_pending.Count == 0) FinishSweep();
+        return true;
+    }
+
+    public bool Start(SweepMode mode = SweepMode.Sort)
+    {
+        LastStartError = null;
+        if (!TryClaimSweepStart(out int manageable)) return false;
+
+        Mode = mode;
+        StartedAt = DateTimeOffset.Now;
+        _suspended = null;   // a fresh start re-scans, so the old queue is moot
+        ResetSweepState();
         if (!PlotAndStartCircuit())
         {
             LastStartError = "Couldn't plot a walkable route through the labeled rooms.";
@@ -615,31 +781,87 @@ public sealed class GhSweepManager : IDisposable
         }
     }
 
-    // A lap of the Sorting circuit completed. This records progress for
-    // diagnostics but never treats a quiet lap as completion: hidden items,
-    // transient pickup failures, and temporary full-pack failures must remain
-    // queued and be retried until their drops are actually verified.
+    // A lap of the Sorting circuit completed. Tracks progress and decides when the
+    // sort is exhausted: a lap that moved and carried nothing means every queued
+    // move we had headroom (and a free destination) for is done. One such lap isn't
+    // proof — a transient miss, a briefly-full room, or a re-survey catching up can
+    // clear on the next pass — so we take one more verification lap; a SECOND
+    // fruitless lap confirms nothing queued can complete this sweep and we finish
+    // (rather than circling the house forever, which once stranded a sweep across
+    // 70 laps). A lap that DID progress resets the stall counter.
     private void OnSortingLapCompleted()
     {
         _sortLapCount++;
+
+        // Forget which rooms were full. "Full" is a reading taken at one moment,
+        // and a lap later it's often stale — Roomba has been emptying rooms all
+        // lap, and the player may have cleared space themselves (one run refused
+        // the catch-all early and then treated it as full for another two hours
+        // while it visibly had room). Re-learning costs one refused drop per room
+        // that really is still full, and buys back every room that isn't.
+        if (_fullRooms.Count > 0)
+        {
+            _log?.Info(LogCategory,
+                $"lap {_sortLapCount}: forgetting {_fullRooms.Count} full room(s) so any that have "
+                + "since freed up get used again");
+            _fullRooms.Clear();
+            // The map's amber "out of space" rings read FullRooms on PhaseChanged;
+            // without this they'd linger a full lap on rooms we just forgot.
+            PhaseChanged?.Invoke();
+        }
+
         int movedNow = _movedSoFar.Count;
         int carriedNow = _pending.Count(p => p.IsCarried && !p.Delivered);
         bool progressed = movedNow != _progressSnapshotMoved || carriedNow != _progressSnapshotCarried;
         int remaining = _pending.Count(p => !p.Delivered);
+        _progressSnapshotMoved = movedNow;
+        _progressSnapshotCarried = carriedNow;
 
-        if (!progressed)
+        if (progressed)
+        {
+            _noProgressSortLaps = 0;
+            _log?.Info(LogCategory,
+                $"sort lap {_sortLapCount} complete: moved={movedNow} carrying={carriedNow} remaining={remaining}");
+            return;
+        }
+
+        _noProgressSortLaps++;
+        // remaining == 0 is handled by the normal all-delivered completion path
+        // (MaybeFinish → BeginFinalRecon); only a stall with work still queued
+        // needs the stop-instead-of-loop decision.
+        if (remaining == 0 || _noProgressSortLaps < StalledSortLapLimit)
         {
             _log?.Warn(LogCategory,
                 $"sort lap {_sortLapCount}: no progress (moved={movedNow} carrying={carriedNow}); "
-                + $"{remaining} queued move(s) remain and will be retried");
+                + $"{remaining} queued move(s) remain — one verification lap to confirm nothing else can move");
+            return;
         }
-        else
+
+        _log?.Warn(LogCategory,
+            $"sort lap {_sortLapCount}: still no progress after a verification lap; "
+            + $"{remaining} queued move(s) can't be completed this sweep — finishing");
+        StrandStalledAndFinish();
+    }
+
+    // Two Sorting laps running moved nothing: every remaining queued move is blocked
+    // (its destination stayed full, a hidden item never surfaced, or what's left is
+    // too heavy for the budget the player's own load leaves). Surface each still-
+    // undelivered, not-carried move as left-in-place so the Roomba Log names exactly
+    // what couldn't be sorted, then finish through the normal final-recon pass.
+    // Carried-but-undelivered moves become Stranded on the finish path
+    // (BuildFinalReport).
+    private void StrandStalledAndFinish()
+    {
+        List<PendingSortMove> stalled = _pending.Where(p => !p.Delivered && !p.IsCarried).ToList();
+        foreach (PendingSortMove move in stalled)
         {
-            _log?.Info(LogCategory,
-                $"sort lap {_sortLapCount} complete: moved={movedNow} carrying={carriedNow} remaining={remaining}");
+            _pending.Remove(move);
+            _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.CouldNotComplete));
         }
-        _progressSnapshotMoved = movedNow;
-        _progressSnapshotCarried = carriedNow;
+        if (stalled.Count > 0)
+            _log?.Info(LogCategory,
+                $"left {stalled.Count} move(s) unsorted — no reachable destination or headroom this sweep");
+        BeginFinalRecon();
     }
 
     // LoopRunner ended outside our own Stop()/FinishSweep() call (toolbar
@@ -661,9 +883,27 @@ public sealed class GhSweepManager : IDisposable
     // completion) so none of them can silently drop what's currently carried.
     private GhSweepReport BuildFinalReport()
     {
+        // Hold the unfinished queue so Resume can pick it up without re-walking
+        // the whole circuit. Recon is by far the most expensive part of a sweep —
+        // a 120-room house is minutes of walking — and an abort throws away a
+        // survey that is still perfectly good.
+        _suspended = _pending.Where(p => !p.Delivered).ToList();
+        if (_suspended.Count == 0) _suspended = null;
+
         List<PendingSortMove> stillCarried = _pending.Where(p => p.IsCarried && !p.Delivered).ToList();
         foreach (PendingSortMove move in stillCarried)
             _stranded.Add(new GhSweepStranded(move.From, move.To, move.ItemName));
+
+        // Hand the whole unfinished queue forward, not just the carried half.
+        // Whatever ended this sweep, the items in the pack are still there and only
+        // this queue knows where each was going; and the planned-but-uncollected
+        // moves are a full lap of the circuit to rediscover. Persisting both is
+        // what lets Resume skip the scan even after the client restarts. Always
+        // written, including empty, so a clean finish clears the last record
+        // rather than leaving it to be re-delivered forever.
+        _suspendedStore?.Save((_suspended ?? new List<PendingSortMove>()).Select(m =>
+            new GhSuspendedMove($"{m.From.Map}/{m.From.Room}", $"{m.To.Map}/{m.To.Room}",
+                m.ItemName, m.Count, m.IsCarried, m.RequiresSearch)));
 
         if (stillCarried.Count > 0)
         {
@@ -671,6 +911,8 @@ public sealed class GhSweepManager : IDisposable
                 $"sweep ending with {stillCarried.Count} item(s) still carried, undelivered: "
                 + string.Join("; ", stillCarried.Select(m => $"{m.ItemName} (from {m.From}) -> {m.To}")));
         }
+
+        ReportSaturatedCategories();
 
         // Name the rooms that hit capacity — otherwise a sweep that quietly
         // rerouted half its load reads the same as one that had nowhere to go.
@@ -713,13 +955,22 @@ public sealed class GhSweepManager : IDisposable
         if (_inventory?.Snapshot.Encumbrance is { MaxWeight: > 0 } enc)
         {
             _maxCarryWeight = enc.MaxWeight;
-            _baseCarryWeight = enc.CurrentWeight;
+            // Discount anything the sort ledger already owns. A fresh sort opens
+            // with an empty load so this changes nothing there — but Resume enters
+            // Sorting ALREADY carrying the items it re-adopted, and counting those
+            // as the player's gear inflates base by exactly their weight. That
+            // collapses the budget, trips the too-tight-to-collect guard, and the
+            // resumed sweep delivers its load and immediately stops.
+            _baseCarryWeight = Math.Max(0, enc.CurrentWeight - LedgerCarriedWeight());
         }
         else
         {
             _maxCarryWeight = int.MaxValue;
             _baseCarryWeight = 0;
         }
+        // A later resync can still beat this reading if the player sheds gear, so
+        // track the minimum rather than pinning the opening one.
+        _minBaseCarryWeight = _baseCarryWeight;
     }
 
     // Correct the baseline from a fresh `i` after a capacity refusal proved the
@@ -730,9 +981,14 @@ public sealed class GhSweepManager : IDisposable
         if (_inventory?.Snapshot.Encumbrance is not { MaxWeight: > 0 } enc) return;
         _maxCarryWeight = enc.MaxWeight;
         _baseCarryWeight = Math.Max(0, enc.CurrentWeight - LedgerCarriedWeight());
+        _minBaseCarryWeight = Math.Min(_minBaseCarryWeight, _baseCarryWeight);
         _log?.Info(LogCategory,
             $"resynced carry weight: max={_maxCarryWeight} current={enc.CurrentWeight} "
-            + $"base={_baseCarryWeight} ledgerCarried={LedgerCarriedWeight()}");
+            + $"base={_baseCarryWeight} (lowest {_minBaseCarryWeight}) ledgerCarried={LedgerCarriedWeight()}"
+            + (_baseCarryWeight > _minBaseCarryWeight
+                ? $"; pack holds {_baseCarryWeight - _minBaseCarryWeight} of weight Roomba didn't collect, "
+                  + "so live headroom is down but nothing is written off for it"
+                : string.Empty));
     }
 
     // Total weight of everything Roomba is currently carrying (picked up, not yet
@@ -740,12 +996,26 @@ public sealed class GhSweepManager : IDisposable
     private int LedgerCarriedWeight()
         => _pending.Where(m => m.IsCarried && !m.Delivered).Sum(MoveWeight);
 
-    // The most sort-item weight we could ever hold at once: MaxWeight minus the
-    // base gear/pack weight. int.MaxValue when there's no weight data to judge by.
+    // The most sort-item weight we could hold at once RIGHT NOW: MaxWeight minus
+    // whatever the pack is currently carrying that isn't ours. Live on purpose —
+    // headroom has to track reality or we over-fill and earn a capacity refusal.
+    // int.MaxValue when there's no weight data to judge by.
     private int WorkingBudget()
         => _maxCarryWeight == int.MaxValue
             ? int.MaxValue
             : Math.Max(0, _maxCarryWeight - _baseCarryWeight);
+
+    // The budget at our emptiest this sweep. "Base" is everything in the pack the
+    // sort ledger doesn't own, and it is NOT stable: auto-get loot, a quest item,
+    // anything picked up mid-sweep inflates it, and it only falls again once that
+    // weight leaves. So the live budget is the wrong yardstick for any permanent
+    // decision — measured against a dip, an item looks unmovable when it would fit
+    // fine minutes later. Use this for "could we EVER carry this", and the live
+    // budget for "does it fit at this moment".
+    private int BestCaseBudget()
+        => _maxCarryWeight == int.MaxValue
+            ? int.MaxValue
+            : Math.Max(0, _maxCarryWeight - _minBaseCarryWeight);
 
     // How much more can be carried right now, from the tracked ledger (no `i`):
     // working budget minus what's already in the pack. No cap without weight data.
@@ -801,17 +1071,24 @@ public sealed class GhSweepManager : IDisposable
     // LeftInPlace so the user sees what was skipped. No-op without weight data.
     private void StrandUnmovableItems()
     {
-        int workingBudget = WorkingBudget();
-        if (workingBudget == int.MaxValue) return;
+        // Judged against the BEST budget we've seen this sweep, not the current
+        // one. This decision is permanent — the move is removed and recorded — so
+        // "too heavy" has to mean "too heavy at our emptiest", not "too heavy
+        // right now". The live budget dips whenever the pack holds anything Roomba
+        // didn't put there (auto-get loot, a quest item), and writing items off
+        // against a dip permanently discards armour that fits perfectly well once
+        // the pack clears.
+        int bestBudget = BestCaseBudget();
+        if (bestBudget == int.MaxValue) return;
         foreach (PendingSortMove move in _pending
             .Where(m => !m.Delivered && !m.IsCarried
-                        && (_itemNames.WeightOf(m.ItemName) ?? 0) > workingBudget).ToList())
+                        && (_itemNames.WeightOf(m.ItemName) ?? 0) > bestBudget).ToList())
         {
             _pending.Remove(move);
             _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.TooHeavy));
             _log?.Info(LogCategory,
-                $"too heavy to carry (unit weight {_itemNames.WeightOf(move.ItemName)} > working budget "
-                + $"{workingBudget}): leaving {move.Count}x {move.ItemName} at {move.From}");
+                $"too heavy to carry (unit weight {_itemNames.WeightOf(move.ItemName)} > best-case budget "
+                + $"{bestBudget}): leaving {move.Count}x {move.ItemName} at {move.From}");
         }
     }
 
@@ -832,7 +1109,7 @@ public sealed class GhSweepManager : IDisposable
         foreach ((RoomKey room, List<string> items) in _observedByRoom) observed[room] = items;
 
         (IReadOnlyList<GhPendingMove> moves, IReadOnlyList<GhSweepItemFound> leftInPlace) =
-            GhSortQueueBuilder.Build(observed, _labels.Labels, _itemNames, _wouldAutoDiscard);
+            GhSortQueueBuilder.Build(observed, _labels.Labels, _itemNames);
 
         foreach (GhPendingMove move in moves)
         {
@@ -850,6 +1127,121 @@ public sealed class GhSweepManager : IDisposable
                 + (requiresSearch ? " (hidden)" : string.Empty));
         }
         _leftInPlace.AddRange(leftInPlace);
+        RestoreCarriedManifest();
+    }
+
+    // Re-adopt what a previous sweep left in the pack. These enter already
+    // IsCarried, so the planner treats them as deliveries owed — with the unload
+    // hysteresis that means a pack still full from last time is emptied before
+    // anything new is collected, which is the behaviour we want anyway.
+    //
+    // The manifest is a record, not a fact: the player may have dropped, sold or
+    // worn any of it in between. So a restored move is queued only when a fresh
+    // inventory read still shows the item. Without live inventory data we adopt
+    // nothing rather than guess — a phantom carried move sends a drop the game
+    // partial-matches onto some other item we really are holding.
+    private void RestoreCarriedManifest()
+    {
+        if (_suspendedStore is null) return;
+        IReadOnlyList<GhSuspendedMove> manifest = _suspendedStore.LoadCarried();
+        if (manifest.Count == 0) return;
+
+        if (_inventory is null || !_inventory.IsLoaded)
+        {
+            _log?.Warn(LogCategory,
+                $"{manifest.Count} item(s) remembered from the last sweep, but inventory hasn't been read "
+                + "— not adopting them rather than risk delivering something we aren't holding");
+            return;
+        }
+
+        IReadOnlyList<string> carried = _inventory.Snapshot.CarriedItems;
+        int adopted = 0, gone = 0;
+        foreach (GhSuspendedMove entry in manifest)
+        {
+            if (entry.Item is not { Length: > 0 } name
+                || ParseRoom(entry.From) is not { } from
+                || ParseRoom(entry.To) is not { } to) continue;
+
+            int held = HeldCount(name, carried);
+            if (held == 0) { gone++; continue; }
+
+            _pending.Add(new PendingSortMove
+            {
+                From = from,
+                To = to,
+                ItemName = name,
+                // Clamp to what the pack ACTUALLY holds. The manifest's count is last
+                // session's record; a stack sold or dropped down since would otherwise
+                // queue a drop for units that aren't there — and the game partial-
+                // matches that surplus drop onto a DIFFERENT item we still hold.
+                Count = Math.Min(Math.Max(1, entry.Count), held),
+                RequiresSearch = false,
+                IsCarried = true,
+            });
+            adopted++;
+        }
+
+        _log?.Info(LogCategory,
+            $"resuming {adopted} item(s) still carried from the last sweep"
+            + (gone > 0 ? $"; {gone} no longer in the pack and dropped from the manifest" : string.Empty));
+    }
+
+    // Rebuild the suspended queue from the persisted record, for a Resume in a
+    // session that never ran the sweep that made it. Carried entries honour the same
+    // invariant a fresh Start does — never queue a delivery for an item the pack no
+    // longer holds: when a live inventory read is available it's verified here (gone
+    // entries dropped, partially-sold stacks clamped) rather than issued and unwound
+    // by delivery-time refusal. Only when inventory hasn't been read do we adopt a
+    // carried entry unverified and lean on that refusal path. Uncollected entries are
+    // planned work, re-verified by their own get. Unparseable rows are skipped.
+    private List<PendingSortMove>? RehydrateSuspended()
+    {
+        if (_suspendedStore is null) return null;
+        IReadOnlyList<GhSuspendedMove> saved = _suspendedStore.Load();
+        if (saved.Count == 0) return null;
+
+        IReadOnlyList<string>? carried =
+            _inventory is { IsLoaded: true } ? _inventory.Snapshot.CarriedItems : null;
+
+        List<PendingSortMove> restored = new();
+        int droppedFromManifest = 0;
+        foreach (GhSuspendedMove entry in saved)
+        {
+            if (entry.Item is not { Length: > 0 } name
+                || ParseRoom(entry.From) is not { } from
+                || ParseRoom(entry.To) is not { } to) continue;
+
+            int count = Math.Max(1, entry.Count);
+            if (entry.Carried && carried is not null)
+            {
+                int held = HeldCount(name, carried);
+                if (held == 0) { droppedFromManifest++; continue; }
+                count = Math.Min(count, held);
+            }
+
+            restored.Add(new PendingSortMove
+            {
+                From = from,
+                To = to,
+                ItemName = name,
+                Count = count,
+                RequiresSearch = entry.Hidden,
+                IsCarried = entry.Carried,
+            });
+        }
+
+        _log?.Info(LogCategory,
+            $"rehydrated {restored.Count} unfinished move(s) from the last session's sweep"
+            + (droppedFromManifest > 0
+                ? $"; {droppedFromManifest} carried item(s) no longer in the pack and dropped from the manifest"
+                : string.Empty));
+        return restored.Count > 0 ? restored : null;
+    }
+
+    private static RoomKey? ParseRoom(string? coordinate)
+    {
+        (int? map, int? room) = RoomSearchService.TryParseCoordinate(coordinate ?? string.Empty);
+        return map is int m && room is int r ? new RoomKey(m, r) : null;
     }
 
     // Recon capture. An arrival description is staged while RoomTracker still
@@ -1132,6 +1524,10 @@ public sealed class GhSweepManager : IDisposable
         _commandQueue.Clear();
         foreach (PendingSortMove move in drops) _commandQueue.Enqueue(("drop", move));
         foreach (PendingSortMove move in gets) _commandQueue.Enqueue(("get", move));
+        // The floor paces commands WITHIN a batch. Reaching a new room means we
+        // just walked here, which is seconds of wall clock on its own, so the
+        // first command of a batch shouldn't wait on the previous room's last one.
+        _lastCommandSentAt = DateTimeOffset.MinValue;
         SendNextQueuedCommand();
     }
 
@@ -1143,7 +1539,21 @@ public sealed class GhSweepManager : IDisposable
         _promptWait.Stop();
         if (_commandQueue.Count == 0) return;
 
+        // Never send early, whatever woke us. A prompt arriving sooner than the
+        // floor means the game is talking to us for some other reason — very often
+        // a rate-limit line, whose prompt would otherwise release the next command
+        // and earn another one. Re-arm and wait out the remainder instead.
+        TimeSpan since = DateTimeOffset.UtcNow - _lastCommandSentAt;
+        if (since < MinCommandInterval)
+        {
+            _promptWait.Interval = MinCommandInterval - since;
+            _promptWait.Start();
+            return;
+        }
+        _promptWait.Interval = PromptWaitTimeout;
+
         (string verb, PendingSortMove move) = _commandQueue.Dequeue();
+        _lastCommandSentAt = DateTimeOffset.UtcNow;
         _lastQueuedCommand = (verb, move);
         _dispatchSettle.Stop();
         _dispatchSettle.Start();
@@ -1167,6 +1577,46 @@ public sealed class GhSweepManager : IDisposable
         SendNextQueuedCommand();
     }
 
+    // Which groups of rooms ran out of space, and what couldn't be placed because
+    // of it. Keyed by the set of rooms an item could legitimately have gone to, so
+    // the end-of-sweep summary can say "these rooms are all full — label another
+    // one for that category" instead of a flat list of items that went nowhere.
+    private readonly Dictionary<string, (List<RoomKey> Rooms, List<string> Items)> _saturated = new();
+
+    private void NoteSaturatedCategory(string itemName, GhItemClass? cls)
+    {
+        if (cls is not { } item) return;
+        IReadOnlyList<RoomKey> candidates = GhDestinationResolver.CandidateRooms(item, _labels.Labels);
+        if (candidates.Count == 0) return;   // nothing labelled for it — a different problem
+
+        List<RoomKey> ordered = candidates.OrderBy(r => r.Map).ThenBy(r => r.Room).ToList();
+        string key = string.Join(",", ordered);
+        if (!_saturated.TryGetValue(key, out (List<RoomKey> Rooms, List<string> Items) entry))
+        {
+            entry = (ordered, new List<string>());
+            _saturated[key] = entry;
+        }
+        if (!entry.Items.Contains(itemName)) entry.Items.Add(itemName);
+    }
+
+    // Spell out what to do about it. The per-item warnings say an item went
+    // nowhere; this says WHICH rooms are saturated, which is the thing the user
+    // can act on — label another room for that category.
+    private void ReportSaturatedCategories()
+    {
+        if (_saturated.Count == 0) return;
+        foreach ((List<RoomKey> rooms, List<string> items) in _saturated.Values
+                     .OrderByDescending(e => e.Items.Count))
+        {
+            _log?.Warn(LogCategory,
+                $"out of space for {items.Count} item type(s) — every room that takes them is full: "
+                + string.Join(", ", rooms)
+                + $". Examples: {string.Join(", ", items.Take(4))}"
+                + (items.Count > 4 ? $" (+{items.Count - 4} more)" : string.Empty)
+                + ". Label another room for this category to give them somewhere to go.");
+        }
+    }
+
     // Abandon whatever is left of the batch. Anything unsent stays on _pending
     // and is retried on a later visit, exactly like an unconfirmed command.
     private void ClearCommandQueue()
@@ -1178,14 +1628,39 @@ public sealed class GhSweepManager : IDisposable
     }
 
     // Test seams — drive the paced dispatch headless, without a wire or timers.
+    // A prompt arriving right now. Deliberately does NOT fast-forward the pace
+    // clock — a test asserting that an early prompt is ignored depends on that.
     internal void FirePromptForTests() => OnPromptObserved();
-    internal void FirePromptWaitTimeoutForTests() => SendNextQueuedCommand();
+
+    // The pacing timer elapsing, which in production means the minimum interval
+    // has genuinely passed. Tests have no wall clock to wait on, so age the last
+    // send to match rather than sleeping.
+    internal void FirePromptWaitTimeoutForTests()
+    {
+        _lastCommandSentAt = DateTimeOffset.MinValue;
+        SendNextQueuedCommand();
+    }
+    // The rate-limit backoff elapsing. Like the pace timer, real time has passed
+    // by the time this fires in production (the backoff is several times the
+    // minimum interval), so age the clock to match.
     internal void FireRateLimitBackoffForTests()
     {
         _rateLimitBackoff.Stop();
+        _lastCommandSentAt = DateTimeOffset.MinValue;
         SendNextQueuedCommand();
     }
     internal int QueuedCommandCountForTests => _commandQueue.Count;
+
+    // Weight model, for asserting that a pack temporarily loaded with things
+    // Roomba didn't collect narrows headroom without writing anything off.
+    internal int BestCaseBudgetForTests => BestCaseBudget();
+    internal void SetCarryWeightsForTests(int max, int baseWeight)
+    {
+        _maxCarryWeight = max;
+        _baseCarryWeight = baseWeight;
+        _minBaseCarryWeight = Math.Min(_minBaseCarryWeight, baseWeight);
+    }
+    internal void StrandUnmovableForTests() => StrandUnmovableItems();
 
     // The game reported a rate-limit clobber. On the hard form the last command
     // was DROPPED, so re-queue it at the front; on the soft nudge it probably
@@ -1194,6 +1669,12 @@ public sealed class GhSweepManager : IDisposable
     {
         if (Phase != SweepPhase.Sorting) return;
         if (_commandQueue.Count == 0 && _lastQueuedCommand is null) return;
+
+        // The game answers one over-fast batch with a run of these lines, and
+        // they arrive together. Treat the run as one event: already backing off
+        // and not told a command was lost means there's nothing new to do, and
+        // logging each line turns one incident into a wall of warnings.
+        if (_rateLimitBackoff.IsEnabled && !commandDropped) return;
 
         if (commandDropped && _lastQueuedCommand is { } last)
         {
@@ -1322,9 +1803,32 @@ public sealed class GhSweepManager : IDisposable
 
             if (dest is not { } target)
             {
+                // Never forget an item we are actually holding. Dropping the move
+                // while the item stays in the pack loses it three ways at once:
+                // the player is left holding it with nothing tracking it, its
+                // weight is misread as their gear at the next resync (which
+                // collapses the carry budget), and the sweep re-collects the same
+                // item on a later lap and abandons it again — one run left six
+                // copies of the same gloves in the pack that way.
+                //
+                // Keep it queued instead. It has nowhere to go right now, so the
+                // planner won't route to it (see the full-room filter on carried
+                // destinations), but the ledger stays honest and the
+                // suspended-sweep record hands it to the next sweep, by which time
+                // a room may have space.
+                if (move.IsCarried)
+                {
+                    NoteSaturatedCategory(move.ItemName, cls);
+                    _log?.Warn(LogCategory,
+                        $"nowhere left for {move.ItemName} and it's in the pack — still carrying it; "
+                        + "the next sweep delivers it once a room has space");
+                    continue;
+                }
+
+                NoteSaturatedCategory(move.ItemName, cls);
                 _log?.Warn(LogCategory,
                     $"nowhere left for {move.ItemName}: every matching room and the catch-all are full "
-                    + $"— leaving it{(move.IsCarried ? " carried" : $" at {move.From}")}");
+                    + $"— leaving it at {move.From}");
                 _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.AllDestinationsFull));
                 _pending.Remove(move);
                 continue;
@@ -1338,7 +1842,7 @@ public sealed class GhSweepManager : IDisposable
 
     private void ResolveConfirm(string token, bool isDrop)
     {
-        (_, string name) = CountedCommand.SplitLeadingCount(token);
+        (int unitsThisLine, string name) = CountedCommand.SplitLeadingCount(token);
         if (_tracker.State.CurrentRoom is not { } current) return;
         if (_dispatchRoom is not { } dispatchRoom || !dispatchRoom.Equals(current.Key))
         {
@@ -1364,6 +1868,24 @@ public sealed class GhSweepManager : IDisposable
             return;
         }
 
+        // One confirmation line reports however many UNITS that command moved, not
+        // one move. Stock sends a 3x move as three separate commands answered by three
+        // count-less lines (1 unit each); Paradigm sends it as one bulk `drop 3 orc-head`
+        // answered by a single count-prefixed line (3 units at once). Add the line's own
+        // count: a raw ++ left a Paradigm bulk move stuck at 1/3 forever, and on Stock
+        // completing on the first line left two orphans that get misread as someone
+        // else's drop — deleting an unrelated carried move and losing a real item.
+        match.ConfirmedUnits += unitsThisLine;
+        if (match.ConfirmedUnits < match.Count)
+        {
+            _log?.Debug(LogCategory,
+                $"{(isDrop ? "dropped" : "took")} {match.ConfirmedUnits}/{match.Count} "
+                + $"{match.ItemName} — awaiting the rest of the stack");
+            _dispatchSettle.Stop();
+            _dispatchSettle.Start();
+            return;
+        }
+
         if (isDrop)
         {
             match.Delivered = true;
@@ -1373,6 +1895,8 @@ public sealed class GhSweepManager : IDisposable
         else
         {
             match.IsCarried = true;
+            // The next leg is the delivery, which confirms its own units.
+            match.ConfirmedUnits = 0;
             _log?.Info(LogCategory,
                 $"picked up {match.Count}x {match.ItemName} at {match.From}, carrying to {match.To}");
         }
@@ -1449,10 +1973,20 @@ public sealed class GhSweepManager : IDisposable
                 StrandFailedGet(move, $"game reports it isn't there (\"{line.Text.Trim()}\")");
             return;
         }
-        // The currency-syntax misparse names no item, so only attribute it when a
-        // single get is outstanding; retrying the same name can't help either way.
-        if (GetCurrencySyntaxRegex.IsMatch(line.Text) && gets.Count == 1)
-            StrandFailedGet(gets[0], "game misparsed the get as a currency command");
+        // The currency-syntax misparse names no item. Dispatch is paced one
+        // command per prompt, so the command just sent is the one that failed —
+        // attribute to it rather than requiring a single outstanding get, which
+        // was rarely true in a batch and left the failure unattributed. Retrying
+        // the same name can't help, so it's stranded either way.
+        if (GetCurrencySyntaxRegex.IsMatch(line.Text))
+        {
+            PendingSortMove? failed =
+                _lastQueuedCommand is { Verb: "get", Move: { } sent } && gets.Contains(sent)
+                    ? sent
+                    : gets.Count == 1 ? gets[0] : null;
+            if (failed is not null)
+                StrandFailedGet(failed, "game misparsed the get as a currency command");
+        }
     }
 
     // The game didn't recognise our drop's item name, which almost always means we
@@ -1491,6 +2025,16 @@ public sealed class GhSweepManager : IDisposable
     private void ReconcileForeignDrop(string name)
     {
         if (Phase != SweepPhase.Sorting) return;
+
+        // Only a drop we had no part in. A drop of an item we are dispatching
+        // right now is ours — an extra unit of a stack, or a reply arriving just
+        // after its move completed — and claiming it here deletes a DIFFERENT
+        // carried move of the same item, losing a real item and corrupting the
+        // weight ledger with it.
+        if (_outstandingDispatch.Any(p => SameItem(p.ItemName, name))) return;
+        if (_lastQueuedCommand is { Verb: "drop", Move: { } justSent }
+            && SameItem(justSent.ItemName, name)) return;
+
         PendingSortMove? carried = _pending.FirstOrDefault(
             p => p.IsCarried && !p.Delivered && SameItem(p.ItemName, name));
         if (carried is null) return;
@@ -1678,8 +2222,12 @@ public sealed class GhSweepManager : IDisposable
         // Weight-aware, trip-minimizing pick: keep filling the pack (nearest source
         // whose batch fits the live headroom) before delivering (nearest carried
         // destination). See GhSortPlanner.
+        // Carried items whose destination is full aren't routable — walking there
+        // only earns another refusal. They stay in the pack (and in the ledger, so
+        // the weight model stays honest) and ride out to the suspended-sweep
+        // record, which the next sweep re-adopts once a room has space.
         List<GhSortPlanner.CarriedLoad> carried = _pending
-            .Where(p => p.IsCarried && !p.Delivered)
+            .Where(p => p.IsCarried && !p.Delivered && !_fullRooms.Contains(p.To))
             .GroupBy(p => p.To)
             .Select(g => new GhSortPlanner.CarriedLoad(g.Key, g.Sum(MoveWeight)))
             .ToList();
@@ -1704,6 +2252,32 @@ public sealed class GhSweepManager : IDisposable
                 ? $"pack at {LedgerCarriedWeight()}/{WorkingBudget()} — delivering until it's back under "
                   + $"{GhSortPlanner.UnloadExitLoad:P0} before collecting again"
                 : $"pack down to {LedgerCarriedWeight()}/{WorkingBudget()} — collecting again");
+
+        // A pack with room for barely one item can't sort — it collects one thing,
+        // immediately crosses the unload threshold, walks the whole way to deliver
+        // it, and walks back for the next. Every item costs a full round trip and
+        // the sweep looks hung. That happens when the pack is mostly full of
+        // weight Roomba didn't collect (auto-get loot), which no amount of
+        // delivering on our side will free. Stop collecting, deliver what we're
+        // holding, and end with the reason — the queue is kept, so Resume carries
+        // on once there's room.
+        int lightestPickup = pickups.Count == 0 ? 0 : pickups.Min(p => p.Weight);
+        bool tooTightToCollect = pickups.Count > 0
+            && WorkingBudget() != int.MaxValue
+            && WorkingBudget() < Math.Max(1, lightestPickup) * 2;
+        if (tooTightToCollect)
+        {
+            if (!_reportedTightPack)
+            {
+                _reportedTightPack = true;
+                _log?.Warn(LogCategory,
+                    $"pack has only {WorkingBudget()} of {_maxCarryWeight} usable — the rest is weight Roomba "
+                    + $"didn't collect. The lightest thing left to move is {lightestPickup}, so every item would "
+                    + "cost its own delivery trip. Delivering what's carried, then stopping; free some space and "
+                    + "Resume.");
+            }
+            pickups = new List<GhSortPlanner.PickupRoom>();
+        }
 
         RoomKey? target = GhSortPlanner.NextTarget(
             carried, pickups, CurrentHeadroom(), _bfs.ComputeDistancesFrom(here), _fullRooms, _unloading);
@@ -1743,6 +2317,14 @@ public sealed class GhSweepManager : IDisposable
             return leftNumber.Value == rightNumber.Value;
         return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     }
+
+    // How many of `name` a live 'i' read still shows carried. The carried list holds
+    // one entry per unit (InventoryManager decrements it a unit at a time), so this is
+    // the real held quantity — 0 means gone, a value below the manifest's count means
+    // the stack was partially reduced. Used to clamp a re-adopted carried move to what
+    // the pack actually holds.
+    private int HeldCount(string name, IReadOnlyList<string> carried)
+        => carried.Count(held => SameItem(name, held));
 
     private bool WasObservedHidden(RoomKey room, string itemName) =>
         _hiddenByRoom.TryGetValue(room, out List<string>? hidden)

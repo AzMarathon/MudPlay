@@ -1335,6 +1335,23 @@ public sealed class HealthManager : IDisposable
                 steps.AddRange(engine.PeekPlannedDirections(distance));
                 break;
         }
+
+        // A flee goes out as bare direction commands, so the route has to be
+        // cardinals all the way. Both sources can yield a CMD-teleport hop —
+        // BFS routes through them, and so does the engine's own plan — and a
+        // teleport is crossed by that exit's command, which we don't have here.
+        // Truncate at the first one: retreat as far as the cardinals go and stop.
+        // Report Crash-20260908-181131 — fleeing out of the Negative Power Plane,
+        // whose trail back is a teleport, threw off the dispatcher and killed the
+        // app mid-fight at -467 HP.
+        int blocked = steps.FindIndex(d => !d.IsCardinal());
+        if (blocked >= 0)
+        {
+            _log?.Warn(LogCategory,
+                $"flee route truncated at step {blocked + 1} — {steps[blocked]} can't be sent as a "
+                + $"move; retreating {blocked} room(s) instead of {steps.Count}.");
+            steps.RemoveRange(blocked, steps.Count - blocked);
+        }
         return steps;
     }
 

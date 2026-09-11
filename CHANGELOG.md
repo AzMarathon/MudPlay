@@ -1,5 +1,18 @@
 # Version history
 
+## 3.68.0
+
+- An interrupted Roomba sweep no longer dumps its load on you: what it was carrying and where each piece was headed are remembered per character, verified against a real inventory read, and delivered next time
+- New **Resume** button on the Roomba tab — carries on from a stopped sweep without re-walking the whole circuit, and survives closing the client
+- Auto-get and auto-discard now pause for the duration of a Roomba sweep, so loot can't eat the carry headroom Roomba needs for its moves and nothing Roomba is relocating gets binned
+- Roomba now sorts auto-get- and auto-discard-flagged items into their labeled rooms like anything else (the engines that used to fight it are held off during the sweep)
+- A Roomba sweep now stops once nothing more can be moved — one fruitless lap plus a verification lap and it finishes, instead of circling the house forever (a sweep once ran 70 laps re-trying moves it had no headroom for); anything left unsortable is listed in the Roomba Log
+- The Roomba Log gains an **Out of space** section naming the categories that need another room, and the map rings a Roomba room that ran out of space
+- A loop blocked because it lost track of where it is asks the game for its position without waiting out the repeat-ask delay, so the retry isn't denied every time
+- Recovery attempts are spaced out, so a reroute that instantly re-blocks can't spend the whole retry budget in one second
+- Fixed a crash when fleeing a fight from a room whose way back is a teleport (e.g. the Negative Power Plane) — the retreat now stops at the teleport instead of taking the client down
+- bug reports addressed: stock-20260904-135419, stock-20260904-143436, Crash-20260908-181131, stock-20260910-223956
+
 ## 3.67.0
 
 - `@help <command>` now replies with that remote command's syntax + a one-line description (the command name is accepted with or without the leading `@`, so `@help suicide` and `@help @suicide` both work)

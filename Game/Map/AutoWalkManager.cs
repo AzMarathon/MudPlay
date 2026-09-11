@@ -295,7 +295,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         {
             // Stop at the first command / action step — a forward flee sends
             // plain cardinals only, so we can't cross a lever / door step here.
-            if (_path[i] is not MoveStep move) break;
+            // A teleport MoveStep is the same case: it's crossed by that exit's
+            // own command, not by sending "teleport" at the game.
+            if (_path[i] is not MoveStep move || !move.Direction.IsCardinal()) break;
             dirs.Add(move.Direction);
         }
         return dirs;
@@ -305,6 +307,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         // Tier-3 reverse-walk send. Don't advance _index; the gate
         // tracks its own progress against ExecutedSinceAnchor.
+        //
+        // A bare direction arrives with no RoomExit beside it, so this can only
+        // ever cross a cardinal — callers must keep Direction.Teleport out. It's
+        // deliberately not guarded here: EncodeMove throwing is how the one caller
+        // that got this wrong was found at all (Crash-20260908-181131).
         _tracker.NoteMoveSent(direction);
         byte[] bytes = EncodeMove(direction);
         EmitMoveBytes(bytes, $"tier3 backtrack {direction}");

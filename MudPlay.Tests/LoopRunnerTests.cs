@@ -410,6 +410,11 @@ public sealed class LoopRunnerTests : IDisposable
         // Nav chip and toolbar don't hang in a "recovering" state indefinitely.
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        // This test spends the budget deliberately, back-to-back. Production
+        // spaces attempts so a reroute that instantly re-blocks can't burn all
+        // three in one millisecond; that pacing isn't what's under test here.
+        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
         h.Runner.Start(AbCycle());
 
         // Four explicit refusals: three consume the retry budget (each reroutes
@@ -641,6 +646,11 @@ public sealed class LoopRunnerTests : IDisposable
         // real-time one, not an unbounded retry loop.
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        // This test spends the budget deliberately, back-to-back. Production
+        // spaces attempts so a reroute that instantly re-blocks can't burn all
+        // three in one millisecond; that pacing isn't what's under test here.
+        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
         h.Runner.Start(AbCycle());
 
         for (int i = 0; i < 4; i++)
@@ -690,6 +700,11 @@ public sealed class LoopRunnerTests : IDisposable
         // genuine attempts, exactly like BlockedAtSource_PersistentBlock above.
         Harness h = NewHarness();
         bool confused = true;
+
+        // This test spends the budget deliberately, back-to-back. Production
+        // spaces attempts so a reroute that instantly re-blocks can't burn all
+        // three in one millisecond; that pacing isn't what's under test here.
+        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
         h.Runner.SetConfusedCheck(() => confused);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
@@ -1797,5 +1812,26 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Idle, h.Runner.State);
         Assert.Contains(h.Events,
             e => e.Kind == LoopEventKind.Failed && e.Detail.Contains("door open failed"));
+    }
+
+    [Fact]
+    public void RecoveryAttemptsArrivingInTheSameInstantDoNotBurnTheBudget()
+    {
+        // A reroute from a room the tracker has wrong re-blocks immediately and
+        // re-enters recovery, so the budget could be spent inside one millisecond —
+        // three "attempts" none of which could have gone differently, because
+        // nothing about the world changed between them. Observed live: three
+        // attempts and a failed loop, all stamped the same second.
+        Harness h = NewHarness(wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+
+        // Same block, over and over, with no time passing between.
+        for (int i = 0; i < 6; i++)
+            h.Tracker.NoteMoveBlocked();
+
+        // Still alive: the repeats were the same attempt echoing, not fresh chances.
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 }

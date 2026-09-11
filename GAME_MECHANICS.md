@@ -984,9 +984,15 @@ A `get <item>` that can't succeed replies with one of two shapes:
   player took it). `<echo>` is whatever text followed `get`, echoed back verbatim (`get rod` →
   `You don't see rod here.`; `get warhorn` → `You don't see warhorn here.`), so it can be a bare
   word rather than the item's full name.
-- **`Syntax: GET [Amount] [Currency]`** — the game misparsed the item name as a **currency** get
-  (observed for some multi-word names, e.g. `get silk cape`). No item name is echoed. Retrying the
-  same name can't help.
+- **`Syntax: GET {Amount} {Currency}`** — the game misparsed the item name as a **currency** get
+  (observed for some multi-word names, e.g. `get silk cape`, and for gem/stone names like `piece of
+  amber`). No item name is echoed. Retrying the same name can't help.
+  **Note the BRACES** *([CORRECTED] 2026-09-03, live capture)*: this was recorded here with square
+  brackets, and the client's matcher implemented that faithfully — so it matched nothing on the live
+  realm for as long as it existed. The failure was invisible and expensive: an unmatched refusal is
+  not stranded, so the item is retried every lap forever (`get piece of amber` sent 42 times in one
+  capture) and can pin a sweep ping-ponging between the rooms holding such items. Match **either**
+  form; the DROP counterpart below uses braces too.
 - **`Syntax: DROP {Amount} {Currency}`** — the **drop** counterpart, confirmed 2026-09-02. Note the
   **braces**, where the get form uses brackets. Same shape otherwise: no item name is echoed, and it
   means the game didn't recognise the name as something you're holding — usually because you aren't.
@@ -1034,6 +1040,25 @@ Two details that matter:
 
 The exact capacity is unknown, and the client never needs it: "full" is only ever learned by being
 refused.
+
+**Capacity is per OBJECT, not per item — so a stacking drop may still fit a "full" room**
+*(2026-09-03, user; mechanism UNVERIFIED)*. The sysop dump counts floor *objects*, and an id can
+appear more than once: two black star keys dropped singly read `172(0) 172(0)` (two objects), while
+two diamonds read `902(1)` (one object of two). So stacking is item-dependent, and an item that
+stacks onto a pile already on the floor consumes no new slot — meaning a room that refuses one item
+can still accept another that stacks with its existing contents.
+
+**What isn't known**: which items stack. There may be a column in the Items table for it (unchecked —
+don't assume a plausibly-named column means this without confirming), and a stack may itself have a
+size limit. **The experiment**: in a room that has just refused a drop, try dropping an item that
+matches something already on its floor. Success means stacking bypasses the object cap; a second
+refusal means it doesn't, or that pile is itself full.
+
+**Client implication (Roomba Mode)**: the sweep currently treats a refusal as "this room is full for
+everything" and re-targets the whole batch, which is correct but conservative — it gives up on
+stackable items that would have fitted. The cheap empirical fix (retry an item whose name already
+appears in that room's survey, once, before re-targeting it) is deliberately NOT implemented while
+the mechanism is unverified.
 
 **Client implication (Roomba Mode):** a refusal marks that room full for the rest of the sweep. Every
 pending move bound there — carried or not yet collected — is re-resolved onto the next room labeled
@@ -2796,7 +2821,12 @@ the movement command that followed it, which left the tracker Pending on a move 
 never processed and took the sweep down with it. The collateral damage to the *next* command
 is the part worth remembering: a flood doesn't just cost you the flooded batch. Roomba now
 releases get/drop one command per wire prompt, which needs no guess at the rate because the
-game's own prompt is the meter. This is distinct from the outbound-write **interleaving** bug
+game's own prompt is the meter — but the prompt alone is NOT sufficient as a rate signal.
+**Every rate-limit line the game emits carries its own prompt** *(2026-09-03, observed)*, so gating
+purely on prompts accelerates under exactly the condition that should slow a client down: the nudge
+arrives with a prompt, the prompt releases another command, which earns another nudge. Observed as
+bursts of five nudges inside 200ms, repeating every back-off. Pace on a time floor with the prompt as
+a gate on top of it, never as the sole trigger. This is distinct from the outbound-write **interleaving** bug
 (that was a client-side concurrency defect in `TelnetClient`, not a game rate limit).
 
 ## Spell targeting: monster type tags

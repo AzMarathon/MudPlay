@@ -47,8 +47,28 @@ public sealed class SysStatusProbe : IDisposable
     // Test seam — lets a test drive the timeout without real time.
     public Func<TimeSpan, Task> DelayProvider { get; set; } = Task.Delay;
 
-    // True once a probe timed out this session. Cleared by ResetAutoDisable.
-    public bool AutoDisabled { get; private set; }
+    // True while probing is switched off after a timeout. NOT permanent: a single
+    // unanswered probe used to disable sysop status for the rest of the session,
+    // which cost one user ~7 hours of position recovery after one slow reply — the
+    // same command answered fine 16 minutes later. The point of auto-disable is to
+    // stop hammering an account that lacks the privilege, and one retry every few
+    // minutes does that just as well while surviving a hiccup.
+    public bool AutoDisabled
+        => !_provenAvailable && _disabledUntilUtc is { } until && DateTimeOffset.UtcNow < until;
+
+    // Set the first time a probe actually returns a room block. That answers the
+    // only question auto-disable exists to ask — does this account have the
+    // privilege — and answers it permanently for the session. Every later timeout
+    // is lag, a mangled block, or output racing the window, none of which are
+    // reasons to stop using a capability we have watched work.
+    private bool _provenAvailable;
+
+    // How long a timeout switches probing off for. Long enough that an account
+    // without sysop powers sends a handful of refused commands an hour rather than
+    // one per recovery; short enough that a transient failure costs minutes.
+    public TimeSpan AutoDisableFor { get; set; } = TimeSpan.FromMinutes(5);
+
+    private DateTimeOffset? _disabledUntilUtc;
 
     // Whether a probe would actually be sent right now.
     public bool Available => !_disposed && !AutoDisabled && _wireSender is not null && _capabilityEnabled();
@@ -70,13 +90,21 @@ public sealed class SysStatusProbe : IDisposable
         _wireSender = sender;
     }
 
-    // Clear a session's auto-disable — called on profile load, so switching
-    // characters doesn't inherit a previous session's failed probe.
+    // Clear a session's probe state — called on profile load, so switching characters
+    // doesn't inherit a previous session's result. BOTH latches must reset: the
+    // auto-disable timer AND _provenAvailable. A non-powered alt that inherited
+    // _provenAvailable from a powered character could never AutoDisable (it gates on
+    // !_provenAvailable), so every recovery escalation would send a `sys st` and eat the
+    // full probe timeout, forever — the wasted-recovery cost this auto-disable exists to
+    // avoid. Cleared unconditionally: re-proving on the first probe of a new session is
+    // one cheap round-trip.
     public void ResetAutoDisable()
     {
-        if (!AutoDisabled) return;
-        AutoDisabled = false;
-        _log?.Log(LogSeverity.Info, LogCategory, "Auto-disable cleared.");
+        bool hadState = _disabledUntilUtc is not null || _provenAvailable;
+        _disabledUntilUtc = null;
+        _provenAvailable = false;
+        if (hadState)
+            _log?.Log(LogSeverity.Info, LogCategory, "Sysop-status session state reset for the new character.");
     }
 
     // Send a sysop status for the current room and await the parsed block.
@@ -106,9 +134,17 @@ public sealed class SysStatusProbe : IDisposable
         if (completed != tcs.Task)
         {
             _pending = null;
-            AutoDisabled = true;
+            if (_provenAvailable)
+            {
+                _log?.Log(LogSeverity.Info, LogCategory,
+                    $"No room block within {Timeout.TotalSeconds:0}s. Sysop status has worked this "
+                    + "session, so this is a hiccup — staying enabled.");
+                return null;
+            }
+            _disabledUntilUtc = DateTimeOffset.UtcNow + AutoDisableFor;
             _log?.Log(LogSeverity.Info, LogCategory,
-                $"No room block within {Timeout.TotalSeconds:0}s — sysop status auto-disabled for this session.");
+                $"No room block within {Timeout.TotalSeconds:0}s and none has ever come back — sysop "
+                + $"status off for {AutoDisableFor.TotalMinutes:0} minute(s), then retried.");
             return null;
         }
 
@@ -117,6 +153,16 @@ public sealed class SysStatusProbe : IDisposable
 
     private void OnStatusParsed(SysRoomStatus status)
     {
+        // Any block at all — solicited or a hand-typed `sys st` — proves the
+        // privilege exists.
+        if (!_provenAvailable)
+        {
+            _provenAvailable = true;
+            _disabledUntilUtc = null;
+            _log?.Log(LogSeverity.Info, LogCategory,
+                "Sysop status confirmed working — it won't be auto-disabled again this session.");
+        }
+
         TaskCompletionSource<SysRoomStatus?>? pending = _pending;
         _pending = null;
         pending?.TrySetResult(status);
