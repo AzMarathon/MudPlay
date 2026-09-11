@@ -16,6 +16,8 @@ public sealed class LevelProjectionRow
     // Cumulative exp threshold to reach this level (absolute).
     public string TotalXp { get; }
     public string HpRange { get; }
+    // HP regen per tick as "idle / resting" (resting is 3× idle) — so the column
+    // shows both the passive and the sit-and-rest rate.
     public string HpRegen { get; }
     // Max mana (or Kai for Mystics); "—" for non-casters.
     public string Mana { get; }
@@ -51,7 +53,7 @@ public sealed class LevelProjectionRow
         HpRange = p.HpMin == p.HpMax
             ? p.HpMin.ToString("N0", CultureInfo.InvariantCulture)
             : string.Create(CultureInfo.InvariantCulture, $"{p.HpMin:N0}–{p.HpMax:N0}");
-        HpRegen = p.HpRegen.ToString(CultureInfo.InvariantCulture);
+        HpRegen = string.Create(CultureInfo.InvariantCulture, $"{p.HpRegen} / {p.HpRegenResting}");
         Mana = isCaster ? p.Mana.ToString("N0", CultureInfo.InvariantCulture) : "—";
         MpRegen = isCaster ? p.MpRegen.ToString(CultureInfo.InvariantCulture) : "—";
         // Raw copper, ungrouped (no thousands separators) — the train cost pastes

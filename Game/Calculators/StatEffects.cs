@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 namespace MudPlay.Game.Calculators;
@@ -33,6 +32,16 @@ public readonly record struct StatBlock(
 }
 
 public enum BaseStat { Strength, Intellect, Willpower, Agility, Health, Charm }
+
+// The class/race-derived context the HP and mana-regen breakpoints need on top of
+// a StatBlock: realm, the class hit-dice + race per-level HP (for max-HP growth),
+// and the magery type/level (for mana-regen scaling). MageryType maps the casting
+// stat: 1=INT (Mage), 2=WIL (Priest), 3=(INT+WIL)/2 (Druid), 4=CHM (Bard), 5=Kai
+// (Mystic, fixed-rate), 0=non-caster.
+public readonly record struct StatContext(
+    RealmType Realm,
+    int MinHits, int MaxHits, int RaceHpPerLevel,
+    int MageryType, int MageryLevel);
 
 // The stat-derived secondary numbers a combat profile / CP plan cares about — the
 // gear-independent, stat-and-level portion. All sourced from the existing verified
@@ -76,98 +85,121 @@ public static class StatEffects
 
     // ----- per-stat effect lines (tooltips) --------------------------------
 
-    // One derived effect a base stat drives: a label, the marginal rate ("~N points
-    // → +1"), and the function that computes the derived value so the exact next
-    // breakpoint can be found by stepping the base stat (offsets / truncation quirks
-    // handled by evaluating the real formula, not re-deriving them). Ratio overrides
-    // the default "~PerPoint → +1 Label" text for stats whose marginal isn't a clean
-    // 1-per-N (magic resist off Willpower is +3 per 4 points).
-    private sealed record Effect(string Label, int PerPoint, Func<StatBlock, int> Compute, string? Ratio = null);
+    // One derived effect a base stat drives, as one tooltip line: a label, the
+    // pre-formatted marginal rate ("~6 AGL → +1", "+48 per pt", "≈ +3 HP/pt"), and
+    // an optional Compute that yields the derived value so the exact next breakpoint
+    // can be found by stepping the base stat (offsets / truncation handled by
+    // evaluating the real formula). Compute null = descriptive line with no numeric
+    // breakpoint (carry weight / spellcasting). ShowNext false suppresses the "next
+    // at" for effects that rise every single point (max HP).
+    private sealed record Effect(string Label, string Ratio, Func<StatBlock, int>? Compute, bool ShowNext = true);
 
-    private static IReadOnlyList<Effect> EffectsFor(BaseStat stat, RealmType realm)
+    private static string Abbrev(BaseStat s) => s switch
     {
+        BaseStat.Strength => "STR", BaseStat.Intellect => "INT", BaseStat.Willpower => "WIL",
+        BaseStat.Agility => "AGL", BaseStat.Health => "HEA", _ => "CHM",
+    };
+
+    private static IReadOnlyList<Effect> EffectsFor(BaseStat stat, StatContext ctx, StatBlock current)
+    {
+        RealmType realm = ctx.Realm;
         bool para = realm == RealmType.ParaMud;
-        return stat switch
+        string ab = Abbrev(stat);
+        // Which base stat(s) scale mana regen, per magery type.
+        bool manaFromInt = ctx.MageryType is 1 or 3;   // Mage, Druid
+        bool manaFromWil = ctx.MageryType is 2 or 3;    // Priest, Druid
+        bool manaFromChm = ctx.MageryType == 4;         // Bard
+
+        Effect ManaRegen() => new("Mana regen",
+            "casting stat", s => CharacterCalculator.CalcManaRegen(
+                s.Level, s.Intellect, s.Willpower, s.Charm, ctx.MageryType, ctx.MageryLevel, 0, false, realm));
+
+        var effects = new List<Effect>();
+        switch (stat)
         {
-            BaseStat.Strength => new List<Effect>
-            {
-                new("min dmg", 10, MinDamageBonus),
-                new("max dmg", 10, MaxDamageBonus),
+            case BaseStat.Strength:
+                effects.Add(new("Max melee dmg", $"~10 {ab} → +1 (above 50)", MaxDamageBonus));
+                effects.Add(new("Min melee dmg", $"~10 {ab} → +1 (above 100)", MinDamageBonus));
                 // Stock folds STR into normal accuracy (~3/pt); Paradigm normal does not.
-                para ? null! : new Effect("accy", 3, s => AccuracyFromStats(s, realm)),
-            }.Where(e => e is not null).ToList(),
+                if (!para) effects.Add(new("Accuracy", $"~3 {ab} → +1", s => AccuracyFromStats(s, realm)));
+                effects.Add(new("Carry weight", "+48 per pt (steeper past 100)", MaxEncumbrance, ShowNext: false));
+                break;
 
-            BaseStat.Agility => new List<Effect>
-            {
-                new("accy", para ? 3 : 6, s => AccuracyFromStats(s, realm)),
-                new("dodge", 3, DodgeValue),
-                new("crit", 20, CritRating),
-                new("stealth", 4, Stealth),
-            },
+            case BaseStat.Agility:
+                effects.Add(new("Accuracy", $"~{(para ? 3 : 6)} {ab} → +1", s => AccuracyFromStats(s, realm)));
+                effects.Add(new("Dodge", $"~3 {ab} → +1", DodgeValue));
+                effects.Add(new("Crit", $"~20 {ab} → +1", CritRating));
+                effects.Add(new("Stealth", $"~4 {ab} → +1", Stealth));
+                break;
 
-            BaseStat.Intellect => new List<Effect>
-            {
+            case BaseStat.Intellect:
                 // Paradigm folds INT into normal accuracy (~6/pt); Stock does not.
-                para ? new Effect("accy", 6, s => AccuracyFromStats(s, realm)) : null!,
-                new("crit", 10, CritRating),
-                new("stealth", 8, Stealth),
-                new("magic res", 4, MagicResistance),
-            }.Where(e => e is not null).ToList(),
+                if (para) effects.Add(new("Accuracy", $"~6 {ab} → +1", s => AccuracyFromStats(s, realm)));
+                effects.Add(new("Crit", $"~10 {ab} → +1", CritRating));
+                effects.Add(new("Stealth", $"~8 {ab} → +1", Stealth));
+                effects.Add(new("Magic resist", $"+1 per 4 {ab}", MagicResistance));
+                if (manaFromInt) effects.Add(ManaRegen());
+                if (ctx.MageryType is 1 or 3) effects.Add(new("Spellcasting", "Mage / Druid casting stat", null));
+                break;
 
-            BaseStat.Charm => new List<Effect>
-            {
+            case BaseStat.Willpower:
+                // WIL is the heaviest magic-res term: +3 per 4 points (INT's is +1 per 4).
+                effects.Add(new("Magic resist", $"+3 per 4 {ab}", MagicResistance));
+                // WIL does NOT raise MAX mana (that's level × magery only) — it scales
+                // mana REGEN for Priests, and for Druids alongside INT.
+                if (manaFromWil) effects.Add(ManaRegen());
+                if (ctx.MageryType is 2 or 3) effects.Add(new("Spellcasting", "Priest / Druid casting stat", null));
+                break;
+
+            case BaseStat.Charm:
                 // Paradigm folds CHM into normal accuracy (~10/pt); Stock does not.
-                para ? new Effect("accy", 10, s => AccuracyFromStats(s, realm)) : null!,
-                new("dodge", 5, DodgeValue),
-                new("crit", 30, CritRating),
-                new("stealth", 6, Stealth),
-            }.Where(e => e is not null).ToList(),
+                if (para) effects.Add(new("Accuracy", $"~10 {ab} → +1", s => AccuracyFromStats(s, realm)));
+                effects.Add(new("Dodge", $"~5 {ab} → +1", DodgeValue));
+                effects.Add(new("Crit", $"~30 {ab} → +1", CritRating));
+                effects.Add(new("Stealth", $"~6 {ab} → +1", Stealth));
+                if (manaFromChm) effects.Add(ManaRegen());
+                if (ctx.MageryType == 4) effects.Add(new("Spellcasting", "Bard casting stat", null));
+                break;
 
-            // Willpower is the heaviest magic-res term: +3 per 4 points (~0.75/pt,
-            // vs INT's ~0.25/pt). The generic "~N → +1" template would misread it,
-            // so the ratio text is given explicitly; the breakpoint stepper is exact.
-            BaseStat.Willpower => new List<Effect>
-            {
-                new("magic res", 1, MagicResistance, Ratio: "~4 → +3 magic res"),
-            },
-
-            // Health has no clean "per-N" combat breakpoint — its effect (max HP,
-            // HP regen) is level-scaled and lives in the projection's HP columns.
-            _ => Array.Empty<Effect>(),
-        };
+            case BaseStat.Health:
+                // Max HP rises (nearly) every point, fractional and level-scaled, so
+                // show the exact marginal at the current value — computed straight off
+                // CalcMaxHp so it can't drift — rather than a discrete "next at".
+                Func<StatBlock, int> maxHp = s => CharacterCalculator.CalcMaxHp(
+                    s.Health, s.Level, ctx.MinHits, ctx.MaxHits, ctx.RaceHpPerLevel, 0, HpRollMode.Average);
+                int perPoint = maxHp(current.With(BaseStat.Health, current.Health + 1)) - maxHp(current);
+                effects.Add(new("Max HP", $"≈ +{Math.Max(0, perPoint)} per {ab} (at {current.Health})",
+                    maxHp, ShowNext: false));
+                effects.Add(new("HP regen", "idle, per tick",
+                    s => CharacterCalculator.CalcHpRegen(s.Level, s.Health, 0, false, realm)));
+                break;
+        }
+        return effects;
     }
 
     // ----- tooltip text ----------------------------------------------------
 
-    // The mouseover tooltip for a base stat's CP-allocation column: a one-line
-    // effect summary plus, per breakpoint effect, the next value of THIS stat that
-    // ticks the derived stat up for the given character. `realm` selects Stock vs
-    // Paradigm weighting. Health / Willpower show a plain-English effect line.
-    public static string Tooltip(BaseStat stat, RealmType realm, StatBlock current)
+    // The mouseover tooltip for a base stat's CP-allocation column: a header naming
+    // everything the stat affects, then one line per effect with its marginal rate
+    // and, where it's a discrete breakpoint, the next value of THIS stat that ticks
+    // it up for the given character. `ctx` supplies realm + the class/race data the
+    // HP / mana-regen effects need.
+    public static string Tooltip(BaseStat stat, StatBlock current, StatContext ctx)
     {
+        IReadOnlyList<Effect> effects = EffectsFor(stat, ctx, current);
         var sb = new StringBuilder();
-        sb.Append(HeaderFor(stat)).Append('\n');
+        sb.Append(HeaderFor(stat, effects));
 
-        IReadOnlyList<Effect> effects = EffectsFor(stat, realm);
-        if (effects.Count > 0)
+        int cur = current.Get(stat);
+        foreach (Effect e in effects)
         {
-            sb.Append(string.Join(" · ", effects.Select(e => e.Ratio ?? $"~{e.PerPoint} → +1 {e.Label}")));
-            int cur = current.Get(stat);
-            if (cur > 0)
+            sb.Append("\n• ").Append(e.Label).Append(" — ").Append(e.Ratio);
+            if (e.Compute is { } compute && e.ShowNext && cur > 0)
             {
-                var next = effects
-                    .Select(e => (e.Label, Value: NextBreakpoint(current, stat, cur, e.Compute)))
-                    .Where(x => x.Value is > 0)
-                    .OrderBy(x => x.Value)
-                    .ToList();
-                if (next.Count > 0)
-                    sb.Append("\nNext from ").Append(cur).Append(": ")
-                      .Append(string.Join(", ", next.Select(x => $"{x.Value} → +1 {x.Label}")));
+                int bp = NextBreakpoint(current, stat, cur, compute);
+                if (bp > 0) sb.Append("  (next at ").Append(bp).Append(')');
             }
         }
-
-        string extra = ExtraEffectLine(stat, realm);
-        if (extra.Length > 0) sb.Append('\n').Append(extra);
         return sb.ToString();
     }
 
@@ -182,25 +214,15 @@ public static class StatEffects
         return 0;
     }
 
-    private static string HeaderFor(BaseStat stat) => stat switch
+    private static string HeaderFor(BaseStat stat, IReadOnlyList<Effect> effects)
     {
-        BaseStat.Strength => "Strength — melee damage, carry weight",
-        BaseStat.Intellect => "Intellect — crit, magic resist, caster mana",
-        BaseStat.Willpower => "Willpower — magic resist, caster mana",
-        BaseStat.Agility => "Agility — accuracy, dodge, crit, stealth",
-        BaseStat.Health => "Health — max HP, HP regen",
-        _ => "Charm — dodge, crit, stealth, Bard mana",
-    };
-
-    // Effects that aren't clean per-point breakpoints (carry weight, HP/mana), shown
-    // as a plain line under the ratios.
-    private static string ExtraEffectLine(BaseStat stat, RealmType realm) => stat switch
-    {
-        BaseStat.Strength => "Carry weight +48/pt (steeper past 100)",
-        BaseStat.Health => "Max HP and HP regen (scale with level)",
-        BaseStat.Intellect => "Mage mana + spellcasting",
-        BaseStat.Willpower => "Priest / Druid mana + spellcasting",
-        BaseStat.Charm => "Bard mana",
-        _ => string.Empty,
-    };
+        string name = stat switch
+        {
+            BaseStat.Strength => "Strength", BaseStat.Intellect => "Intellect",
+            BaseStat.Willpower => "Willpower", BaseStat.Agility => "Agility",
+            BaseStat.Health => "Health", _ => "Charm",
+        };
+        if (effects.Count == 0) return name;
+        return $"{name} affects:";
+    }
 }

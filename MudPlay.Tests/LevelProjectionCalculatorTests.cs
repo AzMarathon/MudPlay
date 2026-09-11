@@ -163,4 +163,56 @@ public sealed class LevelProjectionCalculatorTests
         Assert.True(hi.HpMax > lo.HpMax);
         Assert.True(hi.HpRegen >= lo.HpRegen);
     }
+
+    // ----- equipment / quest direct-bonus folding + resting regen --------
+
+    [Fact]
+    public void ProjectLevel_FoldsGearDirectBonuses()
+    {
+        var gear = new EquipmentStatSummary
+        {
+            PlusMaxHp = 100, PlusDodge = 7, PlusMagicResist = 5, PlusEncumbrance = 500,
+            PlusCrits = 3, PlusStealth = 4, PlusMinDamage = 2, PlusMaxDamage = 6,
+        };
+        LevelProjection bare = LevelProjectionCalculator.ProjectLevel(
+            level: 20, Chart, Strength, 40, 40, Agility, Health, 40,
+            MinHits, MaxHits, RaceHpPerLevel, 0, 0, RealmType.Stock);
+        LevelProjection geared = LevelProjectionCalculator.ProjectLevel(
+            level: 20, Chart, Strength, 40, 40, Agility, Health, 40,
+            MinHits, MaxHits, RaceHpPerLevel, 0, 0, RealmType.Stock, gear);
+
+        Assert.Equal(bare.HpMax + 100, geared.HpMax);
+        Assert.Equal(bare.Dodge + 7, geared.Dodge);
+        Assert.Equal(bare.MagicRes + 5, geared.MagicRes);
+        Assert.Equal(bare.MaxEnc + 500, geared.MaxEnc);
+        Assert.Equal(bare.Crit + 3, geared.Crit);
+        Assert.Equal(bare.Stealth + 4, geared.Stealth);
+        Assert.Equal(bare.MinDmg + 2, geared.MinDmg);
+        Assert.Equal(bare.MaxDmg + 6, geared.MaxDmg);
+        // Accuracy is the stat contribution only (weapon accy isn't projectable).
+        Assert.Equal(bare.Accuracy, geared.Accuracy);
+    }
+
+    [Fact]
+    public void ProjectLevel_Caster_FoldsGearMaxMana()
+    {
+        var gear = new EquipmentStatSummary { PlusMaxMana = 40 };
+        LevelProjection bare = LevelProjectionCalculator.ProjectLevel(
+            level: 15, Chart, Strength, intellect: 80, willpower: 40, agility: Agility, health: Health, charm: 40,
+            MinHits, MaxHits, RaceHpPerLevel, mageryType: 1, mageryLevel: 4, RealmType.Stock);
+        LevelProjection geared = LevelProjectionCalculator.ProjectLevel(
+            level: 15, Chart, Strength, intellect: 80, willpower: 40, agility: Agility, health: Health, charm: 40,
+            MinHits, MaxHits, RaceHpPerLevel, mageryType: 1, mageryLevel: 4, RealmType.Stock, gear);
+
+        Assert.Equal(bare.Mana + 40, geared.Mana);
+    }
+
+    [Fact]
+    public void ProjectLevel_RestingRegenIsTripleIdle()
+    {
+        LevelProjection p = LevelProjectionCalculator.ProjectLevel(
+            level: 20, Chart, Strength, 40, 40, Agility, Health, 40,
+            MinHits, MaxHits, RaceHpPerLevel, 0, 0, RealmType.Stock);
+        Assert.Equal(p.HpRegen * 3, p.HpRegenResting);
+    }
 }

@@ -69,8 +69,8 @@
                 <DataGridTextColumn Header="HP" Binding="{ReflectionBinding HpRange}"
                                     Width="120" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="HP / tick" Binding="{ReflectionBinding HpRegen}"
-                                    Width="90" FontFamily="{StaticResource FontMono}"
+                <DataGridTextColumn Header="HP/tick (idle/rest)" Binding="{ReflectionBinding HpRegen}"
+                                    Width="130" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
                 <DataGridTextColumn Header="Mana / Kai" Binding="{ReflectionBinding Mana}"
                                     Width="100" FontFamily="{StaticResource FontMono}"

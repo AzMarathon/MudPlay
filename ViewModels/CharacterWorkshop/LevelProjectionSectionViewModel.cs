@@ -35,6 +35,8 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
     private readonly PlayerStats _stats;
     private readonly GameDataCache _gameData;
     private readonly CpPlanState _planState;
+    private readonly Game.Inventory.InventoryManager _inventory;
+    private readonly QuestBonusState _questBonuses;
     private Control? _view;
     private bool _suppress;
     // Last character race/class we synced to — lets a what-if pick survive
@@ -60,20 +62,30 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
     // False when no class/race resolves — drives the empty-state hint.
     [ObservableProperty] private bool _hasProjection;
 
-    public LevelProjectionSectionViewModel(PlayerStats stats, GameDataCache gameData, CpPlanState planState)
+    public LevelProjectionSectionViewModel(PlayerStats stats, GameDataCache gameData, CpPlanState planState,
+                                           Game.Inventory.InventoryManager inventory, QuestBonusState questBonuses)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(planState);
+        ArgumentNullException.ThrowIfNull(inventory);
+        ArgumentNullException.ThrowIfNull(questBonuses);
         _stats = stats;
         _gameData = gameData;
         _planState = planState;
+        _inventory = inventory;
+        _questBonuses = questBonuses;
 
         SeedFromCurrent();
         _stats.PropertyChanged += OnStatsChanged;
         _gameData.ActiveSetChanged += OnActiveSetChanged;
         _planState.Changed += OnPlanChanged;
+        // Equipment / completed-quest changes shift the folded direct bonuses.
+        _inventory.Changed += OnInventoryOrQuestsChanged;
+        _questBonuses.Changed += OnInventoryOrQuestsChanged;
     }
+
+    private void OnInventoryOrQuestsChanged() => Rebuild();
 
     // The CP plan changed (a cell edit on the CP Allocation tab) — re-project so
     // HP / HP-regen / MP-regen reflect the planned stat increases.
@@ -247,6 +259,14 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         bool hasPlan = _planState.HasData;
         var planBase = _planState.Baseline;   // raw-base stats the plan deltas are measured from
 
+        // The live character's DIRECT equipment + completed-quest bonuses, folded on
+        // top of the stat-and-level base so HP / mana / the derived combat columns
+        // reflect the real character. Level-independent, so resolve once. The base
+        // ATTRIBUTES below are already gear/quest-inclusive (the `stat` screen is
+        // effective), so only the aggregate's direct derived/HP/mana abilities are
+        // added — its attribute fields would double-count.
+        EquipmentStatSummary bonuses = BuildLiveBonuses();
+
         for (int lvl = from; lvl <= to; lvl++)
         {
             // Layer the CP-plan's planned stat increase (target minus the plan's
@@ -269,7 +289,7 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
 
             LevelProjection p = LevelProjectionCalculator.ProjectLevel(
                 lvl, chart, str, intel, wil, agi, hea, chm,
-                minHits, maxHits, raceHpPerLevel, mageryType, mageryLevel, realm);
+                minHits, maxHits, raceHpPerLevel, mageryType, mageryLevel, realm, bonuses);
             int? markup = TrainerCatalog.CheapestMarkup(trainers, lvl, classNumber);
             long? trainCost = markup is { } m ? (long)ShopPriceCalculator.TrainCopper(lvl - 1, m) : null;
             Rows.Add(new LevelProjectionRow(p, currentExp, lvl == currentLevel, isCaster, trainCost));
@@ -283,6 +303,20 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
         _stats.PropertyChanged -= OnStatsChanged;
         _gameData.ActiveSetChanged -= OnActiveSetChanged;
         _planState.Changed -= OnPlanChanged;
+        _inventory.Changed -= OnInventoryOrQuestsChanged;
+        _questBonuses.Changed -= OnInventoryOrQuestsChanged;
+    }
+
+    // The live character's DIRECT equipment + completed-quest bonuses, aggregated
+    // through the same CharacterCalculator path Monster Intel uses. Only the direct
+    // derived / HP / mana abilities are consumed by ProjectLevel — attribute bonuses
+    // are already in the effective `stat` values the projection builds on.
+    private EquipmentStatSummary BuildLiveBonuses()
+    {
+        EquipmentStatBreakdown gear =
+            CharacterCalculator.AggregateEquipmentStats(_inventory.Snapshot.EquippedItems, _gameData);
+        CharacterCalculator.ApplyQuestBonuses(gear, _questBonuses.Bonuses, "Quests");
+        return gear.Totals;
     }
 
     private static int GetInt(JsonElement row, string property)

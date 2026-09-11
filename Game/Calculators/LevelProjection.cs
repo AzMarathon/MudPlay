@@ -28,4 +28,6 @@ public readonly record struct LevelProjection(
     int MinDmg = 0,
     int MaxDmg = 0,
     int MaxEnc = 0,
-    int MagicRes = 0);
+    int MagicRes = 0,
+    // HP regen per tick while RESTING (3× idle), shown alongside idle regen.
+    int HpRegenResting = 0);

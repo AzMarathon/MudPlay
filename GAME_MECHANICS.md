@@ -288,9 +288,18 @@ STR > 100 (steeper past 100). So +48/pt (more above 100).
 stock formula used for both, flag)*: `(INT + 3*WIL)/4`. WIL is the heaviest term (~0.75/pt vs INT
 ~0.25/pt).
 
-**Health (HEA)** feeds **max HP** and **HP regen**, both level-scaled (see the Vitality section) —
-there is no clean per-point combat breakpoint, so it surfaces in the projection's HP columns rather
-than as a ratio.
+**Health (HEA)** feeds **max HP** and **HP regen**, both level-scaled (see the Vitality section).
+Max-HP marginal per HEA point is `(1/2 + level/16)` (the `HEA/2` + `(HEA-50)*level/16` terms of
+`CalcMaxHp`), so it rises nearly every point and steepens with level; HP regen idle is
+`(level+20)*HEA/divisor` (750 stock / 500 Para), tripled while resting. The CP tooltip shows the
+current-value max-HP marginal and the next HEA that ticks regen up.
+
+**Mana regen scales off ONE stat per class** *([CONFIRMED] — user + `CharacterCalculator.CalcManaRegen`,
+matches the mana-regen section below)*: magery type 1 = INT (Mage), 2 = WIL (Priest), 3 = (INT+WIL)/2
+(Druid), 4 = CHM (Bard), 5 = fixed Kai rate (Mystic). Core `((level+20)*stat*(mageryLevel+2))/1650`.
+**Maximum mana is NOT stat-driven** — it's `mageryLevel*level*2 + 6` — so a caster raises mana *regen*
+by training its casting stat, never max mana. The CP tooltip lists mana regen only under the
+character's actual casting stat(s).
 
 **Paradigm-verification summary.** Accuracy (both realms, incl. the MMUD-Explorer Paradigm branch),
 dodge, stealth (PNG-confirmed identical), and melee damage are realm-verified. **Crit's AGL term,

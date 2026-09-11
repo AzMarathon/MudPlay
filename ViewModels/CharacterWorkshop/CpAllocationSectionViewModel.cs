@@ -388,19 +388,44 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     // Rebuild the six column tooltips from the live raw-base stats + realm. Anchored
     // on the character's current base value so the "next breakpoint" is the real
-    // next point that ticks a derived stat, gear aside.
+    // next point that ticks a derived stat, gear aside. The class/race context feeds
+    // the HP and (class-specific) mana-regen effects.
     private void RefreshStatTips()
     {
         var block = new StatBlock(
             _stats.Level, _baseline.Strength, _baseline.Intellect, _baseline.Willpower,
             _baseline.Agility, _baseline.Health, _baseline.Charm);
-        StrStatTip = StatEffects.Tooltip(BaseStat.Strength, _realm, block);
-        IntStatTip = StatEffects.Tooltip(BaseStat.Intellect, _realm, block);
-        WilStatTip = StatEffects.Tooltip(BaseStat.Willpower, _realm, block);
-        AgiStatTip = StatEffects.Tooltip(BaseStat.Agility, _realm, block);
-        HeaStatTip = StatEffects.Tooltip(BaseStat.Health, _realm, block);
-        ChmStatTip = StatEffects.Tooltip(BaseStat.Charm, _realm, block);
+        StatContext ctx = ResolveStatContext();
+        StrStatTip = StatEffects.Tooltip(BaseStat.Strength, block, ctx);
+        IntStatTip = StatEffects.Tooltip(BaseStat.Intellect, block, ctx);
+        WilStatTip = StatEffects.Tooltip(BaseStat.Willpower, block, ctx);
+        AgiStatTip = StatEffects.Tooltip(BaseStat.Agility, block, ctx);
+        HeaStatTip = StatEffects.Tooltip(BaseStat.Health, block, ctx);
+        ChmStatTip = StatEffects.Tooltip(BaseStat.Charm, block, ctx);
     }
+
+    // Resolve the class hit-dice + magery and race per-level HP the HP / mana-regen
+    // tooltip effects need, from the live character's class/race game-data rows.
+    private StatContext ResolveStatContext()
+    {
+        int minHits = 0, maxHits = 0, mageryType = 0, mageryLevel = 0, raceHp = 0;
+        if (_gameData.FindRowByName("Classes", _stats.Class) is System.Text.Json.JsonElement cls
+            && cls.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            minHits = TipInt(cls, "MinHits");
+            maxHits = TipInt(cls, "MaxHits");
+            mageryType = TipInt(cls, "MageryType");
+            mageryLevel = TipInt(cls, "MageryLVL");
+        }
+        if (_gameData.FindRowByName("Races", _stats.Race) is System.Text.Json.JsonElement race
+            && race.ValueKind == System.Text.Json.JsonValueKind.Object)
+            raceHp = TipInt(race, "HPPerLVL");
+        return new StatContext(_realm, minHits, maxHits, raceHp, mageryType, mageryLevel);
+    }
+
+    private static int TipInt(System.Text.Json.JsonElement row, string property) =>
+        row.TryGetProperty(property, out System.Text.Json.JsonElement v)
+        && v.ValueKind == System.Text.Json.JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
 
     private void RecalcGrid()
     {

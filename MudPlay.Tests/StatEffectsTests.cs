@@ -69,43 +69,87 @@ public sealed class StatEffectsTests
 
     // ----- tooltip content ----------------------------------------------------
 
+    // Warrior-ish non-caster by default; pass a magery type for caster cases.
+    private static StatContext Ctx(RealmType realm = RealmType.Stock, int mageryType = 0,
+                                   int mageryLevel = 0, int minHits = 6, int maxHits = 4, int raceHp = 0)
+        => new(realm, minHits, maxHits, raceHp, mageryType, mageryLevel);
+
     [Fact]
-    public void Tooltip_Agility_ListsRatiosAndNextBreakpoint()
+    public void Tooltip_Agility_ListsEveryEffectWithBreakpoints()
     {
         var b = Block(agi: 61);
-        string tip = StatEffects.Tooltip(BaseStat.Agility, RealmType.Stock, b);
-        Assert.Contains("dodge", tip);
-        Assert.Contains("crit", tip);
-        Assert.Contains("stealth", tip);
-        Assert.Contains("Next from 61", tip);
+        string tip = StatEffects.Tooltip(BaseStat.Agility, b, Ctx(RealmType.Stock));
+        Assert.Contains("Accuracy", tip);
+        Assert.Contains("Dodge", tip);
+        Assert.Contains("Crit", tip);
+        Assert.Contains("Stealth", tip);
+        Assert.Contains("next at", tip);
     }
 
     [Fact]
     public void Tooltip_Strength_Paradigm_OmitsAccuracy()
     {
-        // STR drives accuracy on Stock but not on Paradigm normal attacks.
-        string stock = StatEffects.Tooltip(BaseStat.Strength, RealmType.Stock, Block(str: 90));
-        string para = StatEffects.Tooltip(BaseStat.Strength, RealmType.ParaMud, Block(str: 90));
-        Assert.Contains("accy", stock);
-        Assert.DoesNotContain("accy", para);
+        // STR drives accuracy on Stock but not on Paradigm normal attacks; carry
+        // weight + melee damage show on both.
+        string stock = StatEffects.Tooltip(BaseStat.Strength, Block(str: 90), Ctx(RealmType.Stock));
+        string para = StatEffects.Tooltip(BaseStat.Strength, Block(str: 90), Ctx(RealmType.ParaMud));
+        Assert.Contains("Accuracy", stock);
+        Assert.DoesNotContain("Accuracy", para);
+        Assert.Contains("Carry weight", para);
+        Assert.Contains("melee dmg", para);
     }
 
     [Fact]
     public void Tooltip_Intellect_Paradigm_IncludesAccuracy()
     {
-        // INT drives accuracy on Paradigm normal attacks but not on Stock.
-        string stock = StatEffects.Tooltip(BaseStat.Intellect, RealmType.Stock, Block(intel: 90));
-        string para = StatEffects.Tooltip(BaseStat.Intellect, RealmType.ParaMud, Block(intel: 90));
-        Assert.DoesNotContain("accy", stock);
-        Assert.Contains("accy", para);
+        string stock = StatEffects.Tooltip(BaseStat.Intellect, Block(intel: 90), Ctx(RealmType.Stock));
+        string para = StatEffects.Tooltip(BaseStat.Intellect, Block(intel: 90), Ctx(RealmType.ParaMud));
+        Assert.DoesNotContain("Accuracy", stock);
+        Assert.Contains("Accuracy", para);
     }
 
     [Fact]
-    public void Tooltip_Health_HasNoBreakpoints_ShowsEffectLine()
+    public void Tooltip_Health_ShowsMaxHpAndRegen()
     {
-        string tip = StatEffects.Tooltip(BaseStat.Health, RealmType.Stock, Block(hea: 70));
-        Assert.DoesNotContain("Next from", tip);
-        Assert.Contains("HP", tip);
+        string tip = StatEffects.Tooltip(BaseStat.Health, Block(hea: 70), Ctx(RealmType.Stock));
+        Assert.Contains("Max HP", tip);
+        Assert.Contains("HP regen", tip);
+    }
+
+    // WIL drives magic resist and — for Priests/Druids — mana REGEN, never MAX mana.
+    [Fact]
+    public void Tooltip_Willpower_Priest_ShowsManaRegenNotMaxMana()
+    {
+        string tip = StatEffects.Tooltip(BaseStat.Willpower, Block(wil: 70), Ctx(RealmType.Stock, mageryType: 2, mageryLevel: 4));
+        Assert.Contains("Magic resist", tip);
+        Assert.Contains("+3 per 4", tip);       // WIL's magic-res marginal, not "~1 → +1"
+        Assert.Contains("Mana regen", tip);
+        Assert.DoesNotContain("Max mana", tip);  // max mana is level×magery, not stat-driven
+    }
+
+    // Mana regen scales off the class's casting stat only.
+    [Theory]
+    [InlineData(1, true, false, false)]   // Mage → INT
+    [InlineData(2, false, true, false)]   // Priest → WIL
+    [InlineData(3, true, true, false)]    // Druid → INT + WIL
+    [InlineData(4, false, false, true)]   // Bard → CHM
+    public void Tooltip_ManaRegen_UnderCastingStatByClass(int mageryType, bool onInt, bool onWil, bool onChm)
+    {
+        StatContext ctx = Ctx(RealmType.Stock, mageryType: mageryType, mageryLevel: 5);
+        var b = Block(intel: 70, wil: 70, chm: 70);
+        Assert.Equal(onInt, StatEffects.Tooltip(BaseStat.Intellect, b, ctx).Contains("Mana regen"));
+        Assert.Equal(onWil, StatEffects.Tooltip(BaseStat.Willpower, b, ctx).Contains("Mana regen"));
+        Assert.Equal(onChm, StatEffects.Tooltip(BaseStat.Charm, b, ctx).Contains("Mana regen"));
+    }
+
+    [Fact]
+    public void Tooltip_NonCaster_NoManaRegenAnywhere()
+    {
+        StatContext ctx = Ctx(RealmType.Stock, mageryType: 0);
+        var b = Block(intel: 70, wil: 70, chm: 70);
+        Assert.DoesNotContain("Mana regen", StatEffects.Tooltip(BaseStat.Intellect, b, ctx));
+        Assert.DoesNotContain("Mana regen", StatEffects.Tooltip(BaseStat.Willpower, b, ctx));
+        Assert.DoesNotContain("Mana regen", StatEffects.Tooltip(BaseStat.Charm, b, ctx));
     }
 
     // The advertised "next breakpoint" for a stat must actually raise a derived
@@ -116,14 +160,13 @@ public sealed class StatEffectsTests
     {
         var b = Block(chm: 60, level: 20);
         int before = StatEffects.CritRating(b);
-        // Walk Charm up until crit rating increments; that value must be < 60+60.
         int hit = 0;
         for (int v = 61; v <= 60 + 60; v++)
         {
             if (StatEffects.CritRating(b with { Charm = v }) > before) { hit = v; break; }
         }
         Assert.True(hit > 60);
-        string tip = StatEffects.Tooltip(BaseStat.Charm, RealmType.Stock, b);
-        Assert.Contains(hit + " → +1 crit", tip);
+        string tip = StatEffects.Tooltip(BaseStat.Charm, b, Ctx(RealmType.Stock));
+        Assert.Contains("next at " + hit, tip);
     }
 }
