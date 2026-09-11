@@ -1,8 +1,12 @@
 # Version history
 
-## 3.68.2
+## 3.69.0
 
-- The navigation engine no longer loses track of itself when looping a block of identically-named rooms (e.g. the Soldier's Quarters grid): a movement command the game silently drops to its typing-rate limiter ("You are typing too quickly - command ignored") is now un-counted, so the tracker can't run a room ahead of you and spiral into a Lost state
+- Navigation no longer loses track of itself looping a block of identically-named rooms (e.g. the Soldier's Quarters grid), reworked across three layers:
+  - A movement command the game silently drops to its typing-rate limiter ("You are typing too quickly - command ignored") is un-counted, so the tracker can't run a room ahead of you
+  - Position now advances on the server's **command echo** ("[HP=..]:e") — the causal proof your move executed — instead of a timing guess, so a stray room redisplay (a passing mob, a regen tick, a combat redraw) can no longer be mistaken for your move's landing, no matter when it arrives
+  - While walking an ambiguous area, the path itself now narrows down where you are and re-anchors you without the slower reverse-walk recovery
+- **Fear** is now a tracked condition in its own right (the "You are afraid!" debuff, e.g. a terror beast's shriek): it shows as **Fear** in the Messages game-data editor and the condition log, distinct from a plain movement-held, while still halting navigation so the client doesn't walk while being shoved around
 - bug reports addressed: issue #478
 
 ## 3.68.1

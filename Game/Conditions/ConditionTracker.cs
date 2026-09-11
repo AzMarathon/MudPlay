@@ -81,6 +81,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
 
     public bool IsBlinded            => ActiveFlags.HasFlag(MessageFlags.Blinded);
     public bool IsConfused           => ActiveFlags.HasFlag(MessageFlags.Confused);
+    public bool IsFeared             => ActiveFlags.HasFlag(MessageFlags.Fear);
     public bool IsPoisoned           => ActiveFlags.HasFlag(MessageFlags.Poisoned);
     public bool IsDiseased           => ActiveFlags.HasFlag(MessageFlags.Diseased);
     public bool IsMovementPrevented  => ActiveFlags.HasFlag(MessageFlags.MovementPrevented);
