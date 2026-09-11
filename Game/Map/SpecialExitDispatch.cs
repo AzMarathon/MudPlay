@@ -93,6 +93,12 @@ internal static class SpecialExitDispatch
             {
                 if (action.Commands.Count == 0) continue;
                 string cmd = action.Commands[0];
+                // Claim the echo first: several of these prerequisites begin with a
+                // text-exit verb ("step tile", "climb rope", "cross plank"), so
+                // without a claim the observer reads our own bytes as a hand-typed
+                // move — which both enqueues a phantom and pauses navigation as a
+                // user override.
+                tracker.NoteAuxCommandSent(cmd);
                 writeAux(Encoding.Latin1.GetBytes(cmd + "\r"), $"multi-action #{action.StepNumber}: '{cmd}'");
             }
             tracker.NoteMoveSent(direction);

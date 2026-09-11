@@ -9,7 +9,9 @@
 - Room info panel gained the room-commands section it was already documented as having
 - A locked door whose key id matches no item reads as the plain door it behaves like, instead of naming a key that doesn't exist
 - Choosing "obtain then cross" in the route picker now actually fetches the route's gate items — it only ever armed hazard counters, so an item-gated pick crossed the gate having arranged nothing unless "search rooms if item needed" happened to be on
-- bug reports addressed: paradigm-20260911-010954, paradigm-20260911-095404
+- Auto-search no longer fires a `sea` in every room while detouring for an item an NPC hands over on a keyword — searching stays on for shop items and percentage drops, where finding one loose actually helps
+- The walker no longer reads its own multi-action command (`step tile`, `climb rope`) as a hand-typed move and pauses itself mid-detour
+- bug reports addressed: paradigm-20260911-010954, paradigm-20260911-095404, paradigm-20260911-100708
 
 ## 3.68.1
 

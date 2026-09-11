@@ -4916,6 +4916,13 @@ public sealed class AppServices
             isEnabled: () =>
                 Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded
                 || _forcedPathObtain.Count > 0,
+            // Searching is only a plausible way to get an item nobody hands over on
+            // demand. An NPC keyword give or a guaranteed room-command summon is
+            // already being walked to, so a `sea` in every room en route is pure
+            // noise. A shop item or a percentage drop stays search-worthy — finding
+            // one loose beats paying or grinding for it.
+            isSearchWorthy: id =>
+                !DeterministicGiveExists(id) && SummonSourcesForItem(id).Count == 0,
             log: Log);
         Inventory.Changed += PathItemDemand.OnInventoryChanged;
 
