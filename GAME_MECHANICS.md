@@ -301,6 +301,24 @@ matches the mana-regen section below)*: magery type 1 = INT (Mage), 2 = WIL (Pri
 by training its casting stat, never max mana. The CP tooltip lists mana regen only under the
 character's actual casting stat(s).
 
+**Spellcasting skill (spellLvl, 0x604)** *([CONFIRMED] stock — RE'd DLL `dll-stats-map.md`, verified asm
+0x41aae0; Paradigm unverified)*: `Level*2 + manaStat + mageryLevel*5 + spellcastingAbility(70)`. The
+blended `manaStat` differs from the mana-regen stat above: type 1 = (3*Int+Wil)/6, 2 = (3*Wil+Int)/6,
+3 = (Int+Wil)/3, 4 = (3*Chm+Wil)/6. So for a Priest each WIL point is ~+0.5 spellcasting (+1 per 2);
+the CP tooltip shows it under the casting stat(s) with the exact next breakpoint. Non-casters / Mystics
+have no standard spellcasting skill. (`CharacterCalculator.CalcSpellcasting`.)
+
+**Realm-difference note** *([CONFIRMED] 2026-09-10 — inspected syntax53/MMUD-Explorer `modMMudFunc.bas`)*:
+MMUD-Explorer **reads** crit / encumbrance / magic-resist / spellcasting / mana-regen / HP straight from
+the pasted character (`tCharStats.nCrit`, `.nEncumMax`, `.nMagicRes`, `.nSpellcasting`, …) — it does NOT
+derive them from primary stats, so it provides no independent Paradigm derivation to compare against.
+The only stat→derived formulas that exist are the RE'd stock ones here. The realm differences that ARE
+known live in how these get *applied* in combat (MMUD-Explorer's `bGreaterMUD` branches: accuracy
+weighting, dodge-vs-accuracy curve, spell-damage multiplier, resist application) and in the two stat
+derivations that already realm-split in code — **normal-attack accuracy** (Stock STR+AGL vs Paradigm
+AGL+INT+CHM) and **HP-regen divisor** (750 stock / 500 Paradigm). Those two the CP tooltip already
+reflects per realm; the rest use the stock derivation for both, flagged below.
+
 **Paradigm-verification summary.** Accuracy (both realms, incl. the MMUD-Explorer Paradigm branch),
 dodge, stealth (PNG-confirmed identical), and melee damage are realm-verified. **Crit's AGL term,
 encumbrance, and magic resistance use the stock formula for Paradigm as well and are unverified

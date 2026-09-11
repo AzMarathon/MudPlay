@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.66.0**
 > - Character Workshop CP Allocation tab: each stat column header now has a mouseover listing everything that stat drives, one effect per line, with this character's next breakpoint for each — spend CP to a real stopping point instead of guessing every 5th/10th point
-> - Tooltips are complete and class-aware: Health shows max-HP-per-point + HP regen; casters show mana regen under their actual casting stat (Mage INT, Priest WIL, Druid INT+WIL, Bard CHM — max mana is level×magery, not a stat)
+> - Tooltips are complete and class-aware, showing each effect's current value + magnitude: Health shows max HP + HP regen (idle/resting); carry weight shows current capacity + rate; casters show mana regen AND spellcasting under their actual casting stat (Mage INT, Priest WIL, Druid INT+WIL, Bard CHM — max mana is level×magery, not a stat)
 > - Level Projection tab gained derived-stat columns — Accuracy, Crit, Dodge, Stealth, Melee damage, Max encumbrance, Magic resist — projected per level the way HP/Mana already are
 > - Level Projection now reflects the real character: it folds your equipment's and completed quests' direct bonuses (max HP/mana, regen %, +dodge/crit/stealth/magic-resist/damage/carry) on top of your gear-boosted stats; the HP/tick column shows idle / resting
 > - Help guide gained a "What your stats do" section explaining what each of the six base stats affects

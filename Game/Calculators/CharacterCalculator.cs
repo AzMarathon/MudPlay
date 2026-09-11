@@ -222,6 +222,27 @@ public static class CharacterCalculator
     public static int CalcMagicResistance(int intellect, int willpower)
         => (intellect + 3 * willpower) / 4;
 
+    // Spellcasting skill (spellLvl, 0x604): Level*2 + manaStat + mageryLevel*5 +
+    // the +spellcasting ability (0x46 = 70, gear/innate). manaStat blends the caster
+    // stat by class type — 1=(3*Int+Wil)/6 (Mage), 2=(3*Wil+Int)/6 (Priest),
+    // 3=(Int+Wil)/3 (Druid), 4=(3*Chm+Wil)/6 (Bard). Non-casters and Mystics (Kai)
+    // have no standard spellcasting skill. Stock DLL (verified asm 0x41aae0);
+    // Paradigm unverified.
+    public static int CalcSpellcasting(int level, int intellect, int willpower, int charm,
+                                       int mageryType, int mageryLevel, int plusSpellcasting)
+    {
+        int manaStat = mageryType switch
+        {
+            1 => (3 * intellect + willpower) / 6,
+            2 => (3 * willpower + intellect) / 6,
+            3 => (intellect + willpower) / 3,
+            4 => (3 * charm + willpower) / 6,
+            _ => -1,   // non-caster / Kai — no standard spellcasting
+        };
+        if (manaStat < 0) return 0;
+        return level * 2 + manaStat + mageryLevel * 5 + plusSpellcasting;
+    }
+
     // ----- equipment stat aggregation --------------------------------------
 
     // MajorMUD items carry up to 20 ability slots (Abil-0..Abil-19); race /

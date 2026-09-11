@@ -152,6 +152,45 @@ public sealed class StatEffectsTests
         Assert.DoesNotContain("Mana regen", StatEffects.Tooltip(BaseStat.Charm, b, ctx));
     }
 
+    // Spellcasting appears under the casting stat only — a Priest (WIL caster)
+    // shows it on WIL, not INT.
+    [Fact]
+    public void Tooltip_Spellcasting_UnderCastingStatOnly()
+    {
+        StatContext priest = Ctx(RealmType.Stock, mageryType: 2, mageryLevel: 4);
+        var b = Block(intel: 60, wil: 80);
+        Assert.Contains("Spellcasting", StatEffects.Tooltip(BaseStat.Willpower, b, priest));
+        Assert.DoesNotContain("Spellcasting", StatEffects.Tooltip(BaseStat.Intellect, b, priest));
+    }
+
+    [Fact]
+    public void CalcSpellcasting_Priest_MatchesFormula()
+    {
+        // spellLvl = Level*2 + (3*Wil + Int)/6 + mageryLevel*5 (+ gear spellcasting).
+        int expected = 20 * 2 + (3 * 80 + 60) / 6 + 4 * 5;
+        Assert.Equal(expected, CharacterCalculator.CalcSpellcasting(20, 60, 80, 40, 2, 4, 0));
+        // Non-casters have no spellcasting skill.
+        Assert.Equal(0, CharacterCalculator.CalcSpellcasting(20, 60, 80, 40, 0, 0, 0));
+    }
+
+    // The magnitude complaints: HP regen and carry weight must show real numbers.
+    [Fact]
+    public void Tooltip_Health_HpRegen_ShowsIdleAndResting()
+    {
+        string tip = StatEffects.Tooltip(BaseStat.Health, Block(hea: 70), Ctx(RealmType.Stock));
+        Assert.Contains("idle", tip);
+        Assert.Contains("rest", tip);
+    }
+
+    [Fact]
+    public void Tooltip_Strength_CarryWeight_ShowsCurrentAndSteeperRate()
+    {
+        string tip = StatEffects.Tooltip(BaseStat.Strength, Block(str: 90), Ctx(RealmType.Stock));
+        Assert.Contains("Carry weight", tip);
+        Assert.Contains("max", tip);          // current capacity value
+        Assert.Contains("+84 beyond", tip);   // the steeper past-100 rate
+    }
+
     // The advertised "next breakpoint" for a stat must actually raise a derived
     // stat when the base stat reaches it — the whole point is a real stopping
     // point, not a guess. Verify via crit rating off Charm (~30/pt).
