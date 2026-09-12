@@ -4945,9 +4945,7 @@ public sealed class AppServices
             // fulfillers (the reliable acquire path), so it must stay open on a forced
             // obtain even with master auto-search off — that's what lets the buy-at-shop
             // fallback fire when searching is off or turns nothing up.
-            isEnabled: () =>
-                Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded
-                || _forcedPathObtain.Count > 0,
+            isEnabled: () => _forcedPathObtain.Count > 0,
             // Searching is only a plausible way to get an item nobody hands over on
             // demand. An NPC keyword give or a guaranteed room-command summon is
             // already being walked to, so a `sea` in every room en route is pure
@@ -4955,15 +4953,15 @@ public sealed class AppServices
             // one loose beats paying or grinding for it.
             isSearchWorthy: id =>
                 !DeterministicGiveExists(id) && SummonSourcesForItem(id).Count == 0,
-            // SEARCH-DEMAND gate. Auto-search is the driver of `sea` while moving: a
-            // forced obtain no longer arms the per-room search on its own — only the
-            // "search rooms if item needed" setting does (and the master AutoSearch
-            // toggle, which AutoSearchManager ORs in separately). So a route picked
-            // with master auto-search OFF walks straight to the shop-buy fallback with
-            // no searching, and toggling auto-search off mid-route stops the `sea` live
-            // while the shop-buy carries on.
-            searchEnabled: () =>
-                Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded,
+            // SEARCH-DEMAND gate. The master Auto-Search toggle is the driver of the
+            // `sea` while moving (the retired "search rooms if item needed" setting
+            // used to be an independent arm). So the demand-search only rides along
+            // when Auto-Search is on: the route picker's "Search en route" card turns
+            // it on for the leg, and toggling it off mid-route stops the `sea` live
+            // while the shop-buy fallback carries on. This still feeds the search
+            // settle-hold (AutoSearchManager holds the walker so a revealed counter is
+            // collected before it steps on).
+            searchEnabled: () => ReadAutoModeFlag(d => d.AutoSearch),
             log: Log);
         Inventory.Changed += PathItemDemand.OnInventoryChanged;
 
@@ -4985,8 +4983,7 @@ public sealed class AppServices
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
             perPersonQuantity: PathPerPersonQuantity,
-            searchEnabled: () =>
-                Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded,
+            searchEnabled: () => ReadAutoModeFlag(d => d.AutoSearch),
             inParty: () => PartyState.IsInParty,
             selfIsLeader: () => PartyState.SelfIsLeader,
             selfGivenName: () => GivenNameOf(Party.LocalCharacterName ?? Profile.Current?.Name),

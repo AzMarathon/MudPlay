@@ -66,15 +66,12 @@ public sealed class OtherSettings
     // it's the same verb, kept separate so the user can tune them independently.
     public int MaxHiddenSearchAttempts { get; set; } = 20;
 
-    // When true, arm auto-search on demand: while the walker is travelling a
-    // route that crosses an (Item: N) / (Ticket: N) exit whose item the
-    // character isn't carrying (e.g. a boat for the Silver River, a
-    // rope-and-grapple for a climb), Game.Map.AutoSearchManager issues a bare
-    // sea on every room entry to hunt the missing item until it's found — even
-    // when the persisted Auto-Search master toggle is off. Read live by
-    // Game.Map.PathItemDemandTracker through the resolver. Default false
-    // (opt-in). Char-tier; surfaced in Settings → Other.
-    public bool SearchRoomsIfItemNeeded { get; set; }
+    // Note: the former "search rooms if item needed" opt-in was retired — arming
+    // the per-room `sea` for a route item is now driven by the master Auto-Search
+    // toggle (the route picker's "Search en route" card turns it on for the leg),
+    // and the shop/give/drop acquisition is armed by that card's forced obtain. So
+    // there's no separate setting; see Game.Map.AutoSearchManager (search = master
+    // toggle) and AppServices' path-item wiring (posting = per-walk forced obtain).
 
     // Note: the former "Avoid party-impassable level gates" opt-in graduated to
     // always-on built-in behaviour. Routing a following party around a

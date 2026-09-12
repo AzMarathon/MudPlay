@@ -105,11 +105,9 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // where both verbs are viable. Thieves typically flip this on.
     [ObservableProperty] private bool _picklocksOverBash;
 
-    // When checked, auto-search arms on demand: travelling a route that
-    // crosses an Item/Ticket exit whose item we're not carrying makes the
-    // walker sea every room until the item turns up, even with the
-    // Auto-Search master toggle off. Read live by PathItemDemandTracker.
-    [ObservableProperty] private bool _searchRoomsIfItemNeeded;
+    // (The former "search rooms if item needed" toggle was retired — arming the
+    // per-room `sea` for a route item is now the master Auto-Search toggle's job,
+    // and the route picker's "Search en route" card turns it on for the leg.)
 
     // When checked, the auto-discard engine conceals each excess flagged item
     // with hide <item> instead of drop <item>. Engine hides are kept out of the
@@ -229,7 +227,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             MaxTrapDisarmAttempts = Math.Clamp(MaxTrapDisarmAttempts, 1, 50),
             MaxPickAttempts       = Math.Clamp(MaxPickAttempts,       1, 100),
             PicklocksOverBash     = PicklocksOverBash,
-            SearchRoomsIfItemNeeded = SearchRoomsIfItemNeeded,
             HideWhenDiscarding    = HideWhenDiscarding,
             MaxComebackBacktrackRooms = Math.Clamp(MaxComebackBacktrackRooms, 1, 50),
             AutoRequestComebackWhenLeftBehind = AutoRequestComebackWhenLeftBehind,
@@ -292,7 +289,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         MaxTrapDisarmAttempts = dto.MaxTrapDisarmAttempts;
         MaxPickAttempts       = dto.MaxPickAttempts;
         PicklocksOverBash     = dto.PicklocksOverBash;
-        SearchRoomsIfItemNeeded = dto.SearchRoomsIfItemNeeded;
         HideWhenDiscarding    = dto.HideWhenDiscarding;
         MaxComebackBacktrackRooms = dto.MaxComebackBacktrackRooms;
         AutoRequestComebackWhenLeftBehind = dto.AutoRequestComebackWhenLeftBehind;
@@ -354,7 +350,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnMaxTrapDisarmAttemptsChanged(int value) => MarkDirty();
     partial void OnMaxPickAttemptsChanged(int value)       => MarkDirty();
     partial void OnPicklocksOverBashChanged(bool value)    => MarkDirty();
-    partial void OnSearchRoomsIfItemNeededChanged(bool value) => MarkDirty();
     partial void OnHideWhenDiscardingChanged(bool value) => MarkDirty();
     partial void OnMaxComebackBacktrackRoomsChanged(int value) => MarkDirty();
     partial void OnAutoRequestComebackWhenLeftBehindChanged(bool value) => MarkDirty();
