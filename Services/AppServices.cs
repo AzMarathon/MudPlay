@@ -306,10 +306,14 @@ public sealed class AppServices
     // DialogKeyboardFallthrough forwards through it. Enabled gated by a setting.
     public TerminalInputRouter TerminalInput { get; } = new();
 
-    // Tab-completion cursor for the terminal's line buffer, matching the
-    // in-progress word against carried/worn/key-ring item names. Enabled
-    // gated by a setting, same pattern as TerminalInput above.
-    public InventoryAutoCompleter InventoryAutoComplete { get; } = new();
+    // Master enable for inventory Tab-completion (Settings -> General), read by
+    // every input widget that offers it (the terminal, the Conversation window).
+    // Each widget owns its own InventoryAutoCompleter instance — the cycling
+    // state (stem/tail/candidates/index) is per-widget, like
+    // CommandHistoryNavigator over the shared CommandHistory below — but the
+    // on/off setting is one value they all share, so it lives here instead of
+    // being pushed into every instance separately.
+    public bool InventoryTabCompleteEnabled { get; set; } = true;
 
     public Game.PartyState PartyState { get; }
 
@@ -9088,7 +9092,7 @@ public sealed class AppServices
         // profile-load would let an auto-loaded named profile re-enable the splash the
         // user turned off, and flash the animation for a beat before connect.
         TerminalInput.Enabled = general.TypeToTerminalFromOtherWindows;
-        InventoryAutoComplete.Enabled = general.InventoryTabCompleteEnabled;
+        InventoryTabCompleteEnabled = general.InventoryTabCompleteEnabled;
 
         // Game-menu commands are BBS-tier too — HangupHandler consumes
         // ExitCommand synchronously on @hangup; MainMenuEntryAutomation +

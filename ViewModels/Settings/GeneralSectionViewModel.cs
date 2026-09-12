@@ -392,7 +392,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // reach the live canvas on Apply.
         AppServices.Current.Display.ScaleToWindow = ScaleTerminalToWindow;
         AppServices.Current.TerminalInput.Enabled = TypeToTerminalFromOtherWindows;
-        AppServices.Current.InventoryAutoComplete.Enabled = InventoryTabCompleteEnabled;
+        AppServices.Current.InventoryTabCompleteEnabled = InventoryTabCompleteEnabled;
         AppServices.Current.Display.FontFamily =
             SelectedFontFamily?.Uri ?? DisplayConfig.DefaultFontFamily;
         AppServices.Current.Display.FontSize =

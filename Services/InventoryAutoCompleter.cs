@@ -4,15 +4,26 @@ namespace MudPlay.Services;
 
 // Tab-completion cursor over the player's carried/worn/key-ring item names, in
 // the style of CommandHistoryNavigator: it caches the in-progress completion
-// cycle (the stem before the completed word, the ordered candidate list, and
-// the current position) so repeated Tab / Shift+Tab presses step through
-// matches instead of re-scanning the inventory each time.
+// cycle (the stem/tail around the completed word, the ordered candidate list,
+// and the current position) so repeated Tab / Shift+Tab presses step through
+// matches instead of re-scanning the inventory each time. Each input widget
+// (the terminal, the Conversation window) owns its own instance, the same way
+// CommandHistoryNavigator is one-per-widget over the one shared CommandHistory.
+//
+// Caret-aware: completion always targets the word immediately BEFORE the
+// caret and preserves whatever text follows it untouched. The terminal's
+// LocalInputBuffer has no mid-line cursor (append/backspace-from-the-end
+// only), so it always calls in with caretIndex == text.Length, which
+// collapses to "complete the trailing word" — but the Conversation window's
+// TextBox supports moving the cursor mid-line like any normal text box, and
+// completing based on the trailing word regardless of caret position would
+// silently edit the wrong word there.
 //
 // Takes an InventorySnapshot per call rather than holding the InventoryManager
 // itself — InventoryManager is replaced wholesale on a character/profile swap
 // (see AppServices.Inventory), so caching a reference to it here would risk
-// completing against a torn-down character's pack. The caller (TerminalControl)
-// fetches the live snapshot fresh on every keypress instead.
+// completing against a torn-down character's pack. Callers fetch the live
+// snapshot fresh on every keypress instead.
 //
 // A Tab press does a handful of string splits over a small inventory — there is
 // no caching or background work because none is needed, and this deliberately
@@ -20,39 +31,44 @@ namespace MudPlay.Services;
 // typing can never see added latency from it.
 public sealed class InventoryAutoCompleter
 {
-    // Master enable, mirroring the "Tab-complete inventory item names" Settings
-    // -> General toggle. When off, Next/Previous always return null so Tab
-    // keeps its old straight-to-wire behaviour.
-    public bool Enabled { get; set; } = true;
+    // A produced completion: the full replacement text, and where the caret
+    // should land afterward (immediately after the inserted word, before
+    // whatever text followed the original caret).
+    public readonly record struct Completion(string Text, int CaretIndex);
 
-    // The line text this completer last produced, so a repeat Tab/Shift+Tab
-    // press on an UNCHANGED line is recognised as "keep cycling" rather than a
-    // fresh match. Any other edit (typing, backspace, Enter, history recall)
-    // changes the line text, which this class detects on its own — no explicit
-    // reset call is needed from the caller.
-    private string? _lastProduced;
+    // The completion this instance last produced, so a repeat Tab/Shift+Tab
+    // press on an UNCHANGED (text, caret) pair is recognised as "keep cycling"
+    // rather than a fresh match. Any other edit (typing, backspace, Enter,
+    // history recall, moving the caret) changes one or the other, which this
+    // class detects on its own — no explicit reset call is needed from the caller.
+    private Completion? _lastProduced;
     private string _stem = "";
+    private string _tail = "";
     private IReadOnlyList<string> _candidates = System.Array.Empty<string>();
     private int _index;
 
     // Step to the next match (Tab).
-    public string? Next(string currentLine, InventorySnapshot snapshot) => Step(currentLine, snapshot, +1);
+    public Completion? Next(string text, int caretIndex, InventorySnapshot snapshot)
+        => Step(text, caretIndex, snapshot, +1);
 
     // Step to the previous match (Shift+Tab).
-    public string? Previous(string currentLine, InventorySnapshot snapshot) => Step(currentLine, snapshot, -1);
+    public Completion? Previous(string text, int caretIndex, InventorySnapshot snapshot)
+        => Step(text, caretIndex, snapshot, -1);
 
-    private string? Step(string currentLine, InventorySnapshot snapshot, int direction)
+    private Completion? Step(string text, int caretIndex, InventorySnapshot snapshot, int direction)
     {
-        if (!Enabled) return null;
-
-        if (_lastProduced is not null && currentLine == _lastProduced && _candidates.Count > 0)
+        if (_lastProduced is { } last && text == last.Text && caretIndex == last.CaretIndex
+            && _candidates.Count > 0)
         {
             _index = ((_index + direction) % _candidates.Count + _candidates.Count) % _candidates.Count;
-            return _lastProduced = _stem + _candidates[_index];
+            return Produce(_candidates[_index]);
         }
 
-        int sep = currentLine.LastIndexOf(' ');
-        string prefix = sep >= 0 ? currentLine[(sep + 1)..] : currentLine;
+        // The word immediately before the caret — search backward from just
+        // before it for the nearest space, ignoring anything past the caret.
+        int searchEnd = caretIndex - 1;
+        int sep = searchEnd >= 0 ? text.LastIndexOf(' ', searchEnd) : -1;
+        string prefix = text[(sep + 1)..caretIndex];
         if (prefix.Length == 0)
         {
             _lastProduced = null;
@@ -66,10 +82,18 @@ public sealed class InventoryAutoCompleter
             return null;
         }
 
-        _stem = sep >= 0 ? currentLine[..(sep + 1)] : "";
+        _stem = text[..(sep + 1)];
+        _tail = text[caretIndex..];
         _candidates = candidates;
         _index = 0;
-        return _lastProduced = _stem + candidates[0];
+        return Produce(candidates[0]);
+    }
+
+    private Completion Produce(string candidate)
+    {
+        Completion c = new(_stem + candidate + _tail, _stem.Length + candidate.Length);
+        _lastProduced = c;
+        return c;
     }
 
     // For every carried, worn, and key-ring item name, find each word that

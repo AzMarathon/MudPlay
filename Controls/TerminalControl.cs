@@ -191,6 +191,11 @@ public sealed class TerminalControl : Control
     private MudPlay.Services.CommandHistoryNavigator HistoryNav =>
         _historyNav ??= new(MudPlay.Services.AppServices.Current.CommandHistory);
 
+    // Per-control Tab-completion cursor — cycling state (stem/candidates/index)
+    // is this control's own, the same reasoning as HistoryNav above; the on/off
+    // setting is shared (AppServices.InventoryTabCompleteEnabled).
+    private readonly MudPlay.Services.InventoryAutoCompleter _autoComplete = new();
+
     public TerminalControl()
     {
         Focusable = true;
@@ -917,20 +922,23 @@ public sealed class TerminalControl : Control
             }
             // Tab / Shift+Tab: complete the word under the caret against
             // carried, worn, and key-ring item names (InventoryAutoCompleter).
-            // Consumed unconditionally — even a no-match press — because
-            // letting Tab fall through to MapKey below would put a raw 0x09 on
-            // the wire mid-compose, breaking the same "nothing reaches the
-            // server before Enter" invariant Backspace/Up/Down already keep.
-            if (key == Key.Tab)
+            // Only claimed while the setting is on — off restores the old
+            // fall-through-to-MapKey behaviour below. While on, consumed
+            // unconditionally — even a no-match press — because letting Tab
+            // fall through would put a raw 0x09 on the wire mid-compose,
+            // breaking the same "nothing reaches the server before Enter"
+            // invariant Backspace/Up/Down already keep.
+            if (key == Key.Tab && MudPlay.Services.AppServices.Current.InventoryTabCompleteEnabled)
             {
                 MudPlay.Services.AppServices svc = MudPlay.Services.AppServices.Current;
                 bool forward = (modifiers & KeyModifiers.Shift) == 0;
-                string? completed = forward
-                    ? svc.InventoryAutoComplete.Next(buf.Text, svc.Inventory.Snapshot)
-                    : svc.InventoryAutoComplete.Previous(buf.Text, svc.Inventory.Snapshot);
-                if (completed is not null)
+                MudPlay.Services.InventoryAutoCompleter.Completion? completed = forward
+                    ? _autoComplete.Next(buf.Text, buf.Text.Length, svc.Inventory.Snapshot)
+                    : _autoComplete.Previous(buf.Text, buf.Text.Length, svc.Inventory.Snapshot);
+                if (completed is { } c)
                 {
-                    buf.Set(completed);
+                    buf.Set(c.Text);
+                    HistoryNav.Reset();
                     InvalidateVisual();
                 }
                 return true;
