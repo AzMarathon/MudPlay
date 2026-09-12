@@ -1,14 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.74.0**
-> - Party-ailment signalling reworked to interoperate with MegaMUD in a mixed party:
->   - A partymate's **poison** chip is read from the `par` party-screen `P` flag (even when they're on MegaMUD); poison is no longer announced on say (its `@wait` to the leader stays).
->   - **Blind / confused / diseased / held** announce a bare `@blind` / `@confused` / `@diseased` / `@held` on say at apply only (MegaMUD parity — no `on`/`off`); nothing is said on clear.
->   - The client witnesses a monster's ailment-apply landing on a partymate, lights their chip, and clears it when the spell's own duration elapses — so a chip no longer sticks forever. A chip clears on whichever comes first: a witnessed cure, the spell duration, the `par` `P` drop (poison), or a `@status` reply.
-> - **`@panic`** (MegaMUD party bail-out): a leader at their "hang if below" floor can say `@panic` to the party and escape (hang up, or break + sys-goto-wimpy). Two Settings → Party checkboxes: **Use @panic while leading** and **Ignore @panics** (both off by default).
-> - Party window now shows **your own entry while solo**, live-updating HP/mana + ailment chips from your state (watch the client recognize an ailment apply/clear). Display-only — a lone self row is never treated as a party.
-> - Settings → Spells ailment section simplified: one **"Ignore X"** per ailment now suppresses both the party `@wait` and the say announce (the "Don't announce X" checkboxes are gone).
+> **Version 3.74.6**
+> - Unrecognized-line capture now recognizes **templated** catalogue messages, so known casts (`Raijin casts minor healing on Raijin!`, `You invoke the way of the swan.`) are no longer staged for review — previously every templated message in the game read as unknown.
+> - Buff wear-off lines matched as phrases rather than exact text, so the server's trailing punctuation no longer defeats them.
+> - Shipped templates too vague to identify a line (`The {source} {spellname}!`) are skipped for recognition instead of swallowing genuine unknown messages.
+> - Capture skips `par` party-screen rows, room-light announcements, third-party physical attacks, and another player's failed cast.
+> - Monster death messages dropped by position (the line before an experience gain), and rows captured for them earlier are cleared out.
+> - Engine-issued commands no longer leave their echo (`swan`, `tige`) in the queue.
+> - Unrecognized Lines table updates in place — live capture no longer snaps the list back to the top or drops your selection.
+> - Monster spell messages and ambient room-spell flavour still captured, deliberately.
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

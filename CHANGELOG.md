@@ -1,5 +1,17 @@
 # Version history
 
+## 3.74.6
+
+- Unrecognized-line capture now recognizes **templated** catalogue messages, so known casts (`Raijin casts minor healing on Raijin!`, `You invoke the way of the swan.`) are no longer staged for review — previously every templated message in the game read as unknown
+- Buff wear-off lines matched as phrases rather than exact text, so the server's trailing punctuation no longer defeats them
+- Shipped templates too vague to identify a line (`The {source} {spellname}!`) are skipped for recognition instead of swallowing genuine unknown messages
+- Capture skips `par` party-screen rows, room-light announcements, third-party physical attacks, and another player's failed cast
+- Monster death messages dropped by position (the line before an experience gain), and rows captured for them earlier are cleared out
+- Engine-issued commands no longer leave their echo (`swan`, `tige`) in the queue
+- Unrecognized Lines table updates in place — live capture no longer snaps the list back to the top or drops your selection
+- Monster spell messages and ambient room-spell flavour still captured, deliberately
+- bug reports addressed: unrecognized-lines-20260912-122401
+
 ## 3.74.0
 
 - Party-ailment signalling reworked to interoperate with MegaMUD in a mixed party:

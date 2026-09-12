@@ -3614,7 +3614,12 @@ public sealed class AppServices
             // A room-display title line is not a server message — the room-display
             // parser reads it directly and registers no router pattern, so exclude
             // any line that's a known room name in the active set (O(1) name index).
-            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null);
+            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null,
+            // Stateful block parsers read the wire directly and register no router
+            // pattern, so AnyPatternMatches can't speak for the lines they consume.
+            // Each contributes its OWN matcher here rather than have the shapes
+            // restated in the watcher.
+            isRecognizedByDirectParser: Game.PartyManager.IsRosterRow);
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a VERBOSE
         // ailment (blind / confused / diseased / held) it announces a BARE token
