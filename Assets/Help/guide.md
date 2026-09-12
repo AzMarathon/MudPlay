@@ -952,7 +952,19 @@ curl -H "Authorization: Bearer $(cat ~/.local/share/MudPlay/.apitoken)" \
 
 (On macOS the path is `~/Library/Application Support/MudPlay/.apitoken`.)
 
-**Notes.** Requests are logged at Debug, so they only appear in the program log while Debug diagnostics are on. `/state/full` and `/scrollback` answer *503* until a terminal session exists. The status line under the checkbox says whether the socket actually came up — if the port is already taken, that's where it tells you. This release is **read-only**; issuing commands through the API is a separate feature.
+**Issuing commands.** Beyond reading, the API can act:
+
+| Endpoint | What it does |
+|---|---|
+| `POST /command` | Runs any `@`-command — `{"command":"@goto","args":["Newhaven"]}`. Replies the command would have telepathed back come to you in the response instead of going out on chat. |
+| `POST /send` | Types one line at the game exactly as if you'd typed it in the terminal. |
+| `GET /commands` | Lists every dispatchable command with its permission category and whether it counts as destructive. |
+
+These reuse the same handlers as the `@`-commands a party member can send you, so behaviour is identical — no second implementation to drift. The **per-player permission check is skipped**, because that gate answers "may this *other player*, over chat, do this to me?" and the answer is meaningless for whoever is holding the keyboard. Your own master switch (Settings → Talk → disallow remote commands) and the unconditional hard-blocks (reroll) still apply. Every local invocation is logged at Info, so the program log shows what drove the client even with Debug diagnostics off.
+
+**Allow destructive commands** (the second checkbox, off by default) governs anything that ends the session or can't be undone — `@suicide`, `@hangup`, `@relog` — and the raw `POST /send`, which is destructive by nature since a raw line can carry any command the game accepts. While it's off those return *403* and nothing is sent. Which commands count is derived from each command's permission category rather than a hand-kept list, so a command added later is classified automatically instead of defaulting to allowed; an unrecognised command name is refused too. `POST /send` also rejects multi-line input — one command per request, so nothing can smuggle a burst past the game's own rate limiting.
+
+**Notes.** Requests are logged at Debug, so individual requests only appear in the program log while Debug diagnostics are on (the *actions* are logged at Info regardless). `/state/full` and `/scrollback` answer *503* until a terminal session exists. The status line under the checkbox says whether the socket actually came up — if the port is already taken, that's where it tells you. A bug report records whether the API was listening **and whether destructive commands were allowed**, since that changes how the rest of the report should be read.
 
 
 ---

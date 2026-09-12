@@ -220,11 +220,16 @@ public sealed class LocalApiServer : IAsyncDisposable
 
         _log.Debug(LogCategory, $"{req.HttpMethod} {path}{req.Url?.Query}");
 
+        bool isPost = string.Equals(req.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase);
+        if (isPost)
+        {
+            await HandlePostAsync(req, res, path).ConfigureAwait(false);
+            return;
+        }
+
         if (!string.Equals(req.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
         {
-            // PR 1 is read-only; actions land in the follow-up. Say so explicitly
-            // rather than 404-ing a path that will exist shortly.
-            WriteJson(res, 405, new { error = "read-only API; actions are not enabled in this build" });
+            WriteJson(res, 405, new { error = "only GET and POST are supported", method = req.HttpMethod });
             return;
         }
 
@@ -258,6 +263,25 @@ public sealed class LocalApiServer : IAsyncDisposable
                 WriteJson(res, 200, await OnUiAsync(() => LocalApiState.Gates(_services)).ConfigureAwait(false));
                 return;
 
+            case "/commands":
+                // Self-describing surface: what can be dispatched, and which
+                // entries need the destructive opt-in, so a caller can tell the
+                // difference without trying one and reading a 403.
+                WriteJson(res, 200, new
+                {
+                    allowDestructive = _services.Settings.Current.LocalApiAllowDestructive,
+                    commands = Game.Remote.RemoteCommandCatalog.Map
+                        .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                        .Select(kv => new
+                        {
+                            command = kv.Key,
+                            category = kv.Value.ToString(),
+                            destructive = LocalApiActions.IsDestructive(kv.Key),
+                        })
+                        .ToArray(),
+                });
+                return;
+
             case "/log":
             {
                 long since = ParseLong(req.QueryString["since"], 0);
@@ -289,6 +313,81 @@ public sealed class LocalApiServer : IAsyncDisposable
             default:
                 WriteJson(res, 404, new { error = "no such endpoint", path });
                 return;
+        }
+    }
+
+    // Action routes. Each marshals to the UI thread before touching an engine.
+    private async Task HandlePostAsync(HttpListenerRequest req, HttpListenerResponse res, string path)
+    {
+        // Resolved per request, not cached: the user can flip the destructive
+        // opt-in while a caller is connected, and the next request must see it.
+        bool allowDestructive = _services.Settings.Current.LocalApiAllowDestructive;
+
+        switch (path)
+        {
+            case "/command":
+            {
+                if (await ReadJsonAsync<CommandRequest>(req, res).ConfigureAwait(false) is not { } body) return;
+                if (string.IsNullOrWhiteSpace(body.Command))
+                {
+                    WriteJson(res, 400, new { error = "command is required" });
+                    return;
+                }
+                LocalApiActions.CommandOutcome outcome = await OnUiAsync(() =>
+                    LocalApiActions.Command(_services, body.Command, body.Args, allowDestructive))
+                    .ConfigureAwait(false);
+                // 403 for the destructive refusal specifically — it's a policy
+                // decision the caller can act on (flip the setting), unlike a
+                // malformed request.
+                int status = outcome.Ok ? 200
+                    : outcome.Status.StartsWith("destructive", StringComparison.Ordinal) ? 403
+                    : 400;
+                WriteJson(res, status, outcome);
+                return;
+            }
+
+            case "/send":
+            {
+                if (await ReadJsonAsync<SendRequest>(req, res).ConfigureAwait(false) is not { } body) return;
+                LocalApiActions.CommandOutcome outcome = await OnUiAsync(() =>
+                    LocalApiActions.Send(_services, body.Line ?? string.Empty, allowDestructive))
+                    .ConfigureAwait(false);
+                int status = outcome.Ok ? 200 : allowDestructive ? 400 : 403;
+                WriteJson(res, status, outcome);
+                return;
+            }
+
+            default:
+                WriteJson(res, 404, new { error = "no such endpoint", path });
+                return;
+        }
+    }
+
+    private sealed record CommandRequest(string? Command, string[]? Args);
+    private sealed record SendRequest(string? Line);
+
+    // Read and deserialise a JSON body, answering 400 and returning null if it
+    // can't be parsed — so every caller doesn't repeat the same guard.
+    private static async Task<T?> ReadJsonAsync<T>(HttpListenerRequest req, HttpListenerResponse res)
+        where T : class
+    {
+        try
+        {
+            using StreamReader reader = new(req.InputStream, Encoding.UTF8);
+            string raw = await reader.ReadToEndAsync().ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                WriteJson(res, 400, new { error = "a JSON body is required" });
+                return null;
+            }
+            T? parsed = JsonSerializer.Deserialize<T>(raw, LocalApiJson.Options);
+            if (parsed is null) WriteJson(res, 400, new { error = "body did not parse" });
+            return parsed;
+        }
+        catch (JsonException ex)
+        {
+            WriteJson(res, 400, new { error = "malformed JSON", detail = ex.Message });
+            return null;
         }
     }
 

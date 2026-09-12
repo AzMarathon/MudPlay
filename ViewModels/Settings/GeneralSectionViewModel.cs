@@ -105,6 +105,10 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _localApiEnabled;
     [ObservableProperty] private int _localApiPort = GlobalSettings.LocalApiDefaultPort;
 
+    // Separate opt-in for commands that end the session or can't be undone.
+    // Off by default — see GlobalSettings.LocalApiAllowDestructive.
+    [ObservableProperty] private bool _localApiAllowDestructive;
+
     // Read-only mirrors for the status line under the checkbox, refreshed on
     // load: whether the socket actually came up, and why not if it didn't.
     [ObservableProperty] private string _localApiStatus = string.Empty;
@@ -466,6 +470,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         _globalSettings.Current.LocalApiEnabled = LocalApiEnabled;
         _globalSettings.Current.LocalApiPort =
             LocalApiPort is >= 1024 and <= 65535 ? LocalApiPort : GlobalSettings.LocalApiDefaultPort;
+        _globalSettings.Current.LocalApiAllowDestructive = LocalApiAllowDestructive;
         _globalSettings.Current.RecentProfilesShown =
             System.Math.Clamp(RecentProfilesShown, 0, GlobalSettings.MaxRecentProfilesShown);
         _globalSettings.Save();
@@ -531,6 +536,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         SnapWindows = _globalSettings.Current.SnapWindows;
         LocalApiEnabled = _globalSettings.Current.LocalApiEnabled;
         LocalApiPort = _globalSettings.Current.LocalApiPort;
+        LocalApiAllowDestructive = _globalSettings.Current.LocalApiAllowDestructive;
         RefreshLocalApiStatus();
         RecentProfilesShown = _globalSettings.Current.RecentProfilesShown;
 
@@ -675,6 +681,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnSnapWindowsChanged(bool value)                    => Dirty();
     partial void OnLocalApiEnabledChanged(bool value)                => Dirty();
     partial void OnLocalApiPortChanged(int value)                    => Dirty();
+    partial void OnLocalApiAllowDestructiveChanged(bool value)       => Dirty();
     partial void OnRecentProfilesShownChanged(int value)             => Dirty();
     partial void OnSelectedBuffWatchdogLayoutChanged(BuffLayoutOption? value) => Dirty();
     // Live preview: push straight to the terminal canvas as the picker

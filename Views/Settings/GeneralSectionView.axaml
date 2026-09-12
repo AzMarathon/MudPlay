@@ -409,6 +409,10 @@
                              FontFamily="{StaticResource FontMono}"
                              IsVisible="{Binding LocalApiToken, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                              ToolTip.Tip="Select and copy this into your client's Authorization header."/>
+                    <CheckBox Margin="0,4,0,0"
+                              IsChecked="{Binding LocalApiAllowDestructive, Mode=TwoWay}"
+                              Content="Allow destructive commands"
+                              ToolTip.Tip="Off by default. While off, the API can read everything and drive ordinary things (walk somewhere, start a loop, flip an auto-toggle) but is refused anything that ends the session or can't be undone — @suicide, @hangup, @relog — and is refused the raw-line passthrough entirely, since a raw line can carry any command the game accepts. Turn this on only if you want an automated caller to be able to disconnect or kill your character. Which commands count is derived from their permission category, so a newly added command is classified automatically rather than defaulting to allowed."/>
                     <TextBlock Text="{Binding LocalApiStatus}" TextWrapping="Wrap"
                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                IsVisible="{Binding LocalApiStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
