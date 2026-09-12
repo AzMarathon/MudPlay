@@ -1,5 +1,20 @@
 # Version history
 
+## 3.74.8
+
+- Unrecognized-line capture now recognizes **templated** catalogue messages, so known casts (`Raijin casts minor healing on Raijin!`, `You invoke the way of the swan.`) are no longer staged for review — previously every templated message in the game read as unknown
+- Buff wear-off lines matched as phrases rather than exact text, so the server's trailing punctuation no longer defeats them
+- Shipped templates too vague to identify a line (`The {source} {spellname}!`) are skipped for recognition instead of swallowing genuine unknown messages
+- Capture skips `par` party-screen rows, room-light announcements, third-party physical attacks, and another player's failed cast
+- Monster death messages dropped by position (the line before an experience gain), and rows captured for them earlier are cleared out
+- Engine-issued commands no longer leave their echo (`swan`, `tige`) in the queue
+- Unrecognized Lines table updates in place — live capture no longer snaps the list back to the top or drops your selection
+- A ranged attack that names ammunition but no weapon (`Suijin shoots an arrow at bandit!`) reads exactly like a projectile spell, so it's settled by the actor's class: a player whose class has no magery can't be casting, so the line is dropped — while the same line from a caster stays captured
+- Monster spell messages and ambient room-spell flavour still captured, deliberately
+- **Likely source** now derives from the line instead of the room, so it stops answering the same thing for every row: a line naming a room monster gets that monster's spells tagged with how each fires (`bites (#80) — forest spider, on hit`), a line naming none gets the room's own on-entry spell (the source of the atmosphere lines — `An ominous wind blows through the trees` is the darkwood forest spell), and with neither the column is blank rather than a guess
+- Never-firing monster attack slots (0% chance) no longer contribute to attribution
+- bug reports addressed: unrecognized-lines-20260912-122401
+
 ## 3.74.0
 
 - Party-ailment signalling reworked to interoperate with MegaMUD in a mixed party:

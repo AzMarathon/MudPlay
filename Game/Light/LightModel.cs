@@ -39,14 +39,46 @@ public static class LightModel
         return v < SeeThreshold ? SeeThreshold - v : 0;
     }
 
+    // Every room-light line opens with this, then the band's wording. Split out so
+    // Describe (what we show) and IsRoomLightPhrase (what we recognize off the wire)
+    // read the same band vocabulary and can't drift apart.
+    private const string RoomLightPrefix = "The room is ";
+
+    private static string BandWording(LightVisibility visibility) => visibility switch
+    {
+        LightVisibility.PitchBlack    => "pitch black",
+        LightVisibility.VeryDark      => "very dark",
+        LightVisibility.BarelyVisible => "barely visible",
+        LightVisibility.DimlyLit      => "dimly lit",
+        _                             => string.Empty,
+    };
+
     // The room-light phrase MajorMUD prints for a visibility band, or the empty
     // string for Normal (no line).
     public static string Describe(LightVisibility visibility) => visibility switch
     {
-        LightVisibility.PitchBlack    => "The room is pitch black",
-        LightVisibility.VeryDark      => "The room is very dark — you can't see anything",
-        LightVisibility.BarelyVisible => "The room is barely visible",
-        LightVisibility.DimlyLit      => "The room is dimly lit",
-        _                             => string.Empty,
+        // Very-dark is the only band that spells out the consequence.
+        LightVisibility.VeryDark => RoomLightPrefix + "very dark — you can't see anything",
+        LightVisibility.Normal   => string.Empty,
+        _ => BandWording(visibility) is { Length: > 0 } w ? RoomLightPrefix + w : string.Empty,
     };
+
+    // True when the line is the room's light announcement for any visibility band.
+    // Matched as a prefix because the tail varies per realm — a trailing period,
+    // and very-dark's "you can't see anything" clause with either a hyphen or an
+    // em dash. Room light is fully known from game data, so the unrecognized-line
+    // capture uses this to keep light announcements out of the review queue.
+    public static bool IsRoomLightPhrase(string? line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+        string text = line.Trim();
+        if (!text.StartsWith(RoomLightPrefix, StringComparison.Ordinal)) return false;
+
+        string rest = text[RoomLightPrefix.Length..];
+        foreach (LightVisibility band in Enum.GetValues<LightVisibility>())
+            if (BandWording(band) is { Length: > 0 } wording
+                && rest.StartsWith(wording, StringComparison.Ordinal))
+                return true;
+        return false;
+    }
 }

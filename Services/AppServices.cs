@@ -3614,7 +3614,17 @@ public sealed class AppServices
             // A room-display title line is not a server message — the room-display
             // parser reads it directly and registers no router pattern, so exclude
             // any line that's a known room name in the active set (O(1) name index).
-            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null);
+            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null,
+            // Stateful block parsers read the wire directly and register no router
+            // pattern, so AnyPatternMatches can't speak for the lines they consume.
+            // Each contributes its OWN matcher here rather than have the shapes
+            // restated in the watcher.
+            isRecognizedByDirectParser: Game.PartyManager.IsRosterRow,
+            // "<Actor> <verb> an <ammo> at <target>!" reads identically whether it's
+            // archery or a projectile spell, so the shape can't be a router pattern —
+            // it needs to know who acted. A no-magery class settles it.
+            isNonCasterPhysicalAction: text =>
+                Game.Combat.NonCasterAttackLine.Matches(text, PlayerCanCast));
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a VERBOSE
         // ailment (blind / confused / diseased / held) it announces a BARE token
@@ -9112,6 +9122,37 @@ public sealed class AppServices
         int sp = full.IndexOf(' ');
         string first = sp < 0 ? full : full[..sp];
         return string.Equals(first, name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Whether a named player's class can cast anything: true for a magery class,
+    // false for the no-magery ones, null when we don't know the player or their
+    // class. Consumers must treat null as "don't know" — never as "can't cast".
+    //
+    // Class sources in precedence order, strongest first: the party roster (`par`
+    // states a member's class outright), our own stat screen, then the player
+    // database — an explicitly observed class from `look`, else the class implied by
+    // their title when exactly one class uses it (a shared title tells us nothing).
+    private bool? PlayerCanCast(string givenName) =>
+        SpellCatalog.ClassCanCast(ResolveKnownPlayerClass(givenName));
+
+    private string? ResolveKnownPlayerClass(string givenName)
+    {
+        if (string.IsNullOrWhiteSpace(givenName)) return null;
+
+        foreach (Game.PartyMember m in Party.State.Members)
+            if (FirstTokenEquals(m.Name, givenName) && m.Class.Length > 0)
+                return m.Class;
+
+        if (FirstTokenEquals(PlayerStats.Name, givenName)
+            && PlayerStats.Class is { Length: > 0 } own)
+            return own;
+
+        if (Players.Find(givenName) is not { } record) return null;
+        if (record.Class is { Length: > 0 } observed) return observed;
+        // A title only identifies a class when it isn't shared across classes.
+        return Game.GameData.ClassTitleTable.LookupClasses(record.Title) is { Count: 1 } implied
+            ? implied[0]
+            : null;
     }
 
     // Parse the active BBS's nightly-cleanup time + zone into a config for the

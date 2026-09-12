@@ -239,6 +239,22 @@ public sealed partial class PartyManager : IDisposable
         RegexOptions.CultureInvariant)]
     private static partial Regex ParInvitedRow();
 
+    // True when text is a row of the `par` party screen — an active member or a
+    // pending invitee. The unrecognized-line capture asks this because par is read
+    // here as a stateful block rather than through a router pattern, so
+    // MessageRouter.AnyPatternMatches can't vouch for these rows and every poll
+    // staged the whole roster for review.
+    //
+    // Both row patterns anchor on the indent par emits, and callers hand us
+    // already-trimmed text, so the indent is re-supplied instead of keeping a
+    // second, drift-prone copy of each pattern.
+    public static bool IsRosterRow(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        string indented = " " + text.TrimStart();
+        return ParRow().IsMatch(indented) || ParInvitedRow().IsMatch(indented);
+    }
+
     // Construct with the app-singleton MessageRouter and a fresh PartyState. The
     // per-session LineExtractor is supplied later via AttachLineExtractor — the
     // main-window VM owns it because it lives only for the active terminal
