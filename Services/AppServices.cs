@@ -5027,6 +5027,12 @@ public sealed class AppServices
             }
         };
 
+        // Registered AFTER the two forced-obtain draining handlers above so the set is
+        // fully emptied before this checks it: once the route counter lands (found on
+        // the floor or bought), the forced set drains → flip auto-search back off if
+        // WE turned it on for a "search en route" pick.
+        Inventory.Changed += () => RestoreRouteSearchAutoSearchIfDone("counter obtained");
+
         // Party-level probe + tracker. The probe broadcasts @level and
         // persists each reply into the players table (RecordLevel) — the sole
         // @level recorder, so a level (from the route-gate probe, the once-a-day
@@ -5396,7 +5402,12 @@ public sealed class AppServices
         Walker.Event += e =>
         {
             if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed)
+            {
                 _forcedPathObtain.Clear();
+                // Walk abandoned before the counter landed — undo a "search en route"
+                // auto-search flip so it doesn't leak on past the leg it was for.
+                RestoreRouteSearchAutoSearchIfDone("walk ended");
+            }
         };
 
         // Search the room a walk / loop / auto-lair STARTS from. Auto-search fires on
@@ -8324,6 +8335,44 @@ public sealed class AppServices
         ArgumentNullException.ThrowIfNull(itemIds);
         _forcedPathObtain.Clear();
         foreach (int id in itemIds) if (id > 0) _forcedPathObtain.Add(id);
+    }
+
+    // True only while WE enabled auto-search for a route picker's "Search en route"
+    // leg — so the restore below flips it back off once the counter lands and never
+    // touches a toggle the user set themselves.
+    private bool _autoSearchFlippedForRouteSearch;
+
+    // UI bridge to flip the master Auto-Search toggle (the observable that persists +
+    // updates the toolbar); bound by MainWindowViewModel after construction. Null in
+    // headless/test contexts, where the route-search flip is simply a no-op.
+    public Action<bool>? SetAutoSearchEnabled { get; set; }
+
+    // Picking the route picker's "Search en route" card turns Auto-Search on for the
+    // leg so the card always actually searches — even when the user had it off. The
+    // counter's arrival (found on the floor OR bought) drains _forcedPathObtain, which
+    // flips it back off (RestoreRouteSearchAutoSearchIfDone); an abandoned walk clears
+    // the same way. Only flips when it was OFF, so a user who already had Auto-Search
+    // on keeps it on afterward.
+    public void BeginRouteSearchAutoSearch()
+    {
+        if (_autoSearchFlippedForRouteSearch) return;   // already flipped for an in-flight leg
+        if (SetAutoSearchEnabled is null) return;
+        if (ReadAutoModeFlag(d => d.AutoSearch)) return;   // already on — nothing to flip / restore
+        _autoSearchFlippedForRouteSearch = true;
+        SetAutoSearchEnabled(true);
+        Log.Info(Game.Map.AutoSearchManager.LogCategory,
+            "route 'search en route' picked — auto-search enabled for this leg");
+    }
+
+    // Flip auto-search back off if WE turned it on and the route counter is no longer
+    // outstanding (obtained, or the walk was abandoned and the forced set cleared).
+    private void RestoreRouteSearchAutoSearchIfDone(string reason)
+    {
+        if (!_autoSearchFlippedForRouteSearch || _forcedPathObtain.Count > 0) return;
+        _autoSearchFlippedForRouteSearch = false;
+        SetAutoSearchEnabled?.Invoke(false);
+        Log.Info(Game.Map.AutoSearchManager.LogCategory,
+            $"route search {reason} — auto-search restored to off");
     }
 
     // Per-item on-demand path acquisition gate: the persistent AutoObtainForPath

@@ -1178,6 +1178,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Base auto-search — the per-room `sea` rides the same gate-wrapped
         // pipeline so it can't land mid-password-prompt.
         AppServices.Current.AutoSearch.SetWireSender(engineSend);
+        // Let the route picker's "Search en route" card flip the master Auto-Search
+        // toggle on for its leg (and back off when the counter lands) through the same
+        // observable the toolbar/menu drive, so the badge + persistence stay in sync.
+        AppServices.Current.SetAutoSearchEnabled = on => IsAutoSearchActive = on;
         // Active auto-light — the route's `use <light>` / `rem <old>` swap
         // rides the same gate-wrapped pipeline.
         AppServices.Current.AutoLightProvisioner.SetWireSender(engineSend);

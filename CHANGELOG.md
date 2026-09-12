@@ -2,8 +2,8 @@
 
 ## 3.73.2
 
-- Route picker's "Search en route" now buys the counter at a shop as a last resort — with auto-search off, or when nothing turns up en route — instead of just stopping at the hazard's edge
-- Auto-Search is now the driver of the per-room `sea` while moving: toggling it off mid-route stops searching and leaves the shop-buy to finish the walk; the "Obtain, then cross" (buy) card conversely uses a counter found loose en route instead of buying it when auto-search is on
+- Route picker's "Search en route" now buys the counter at a shop as a last resort — when nothing turns up en route — instead of just stopping at the hazard's edge
+- Auto-Search drives the per-room `sea` while moving: picking "Search en route" turns Auto-Search on for the leg and flips it back off once the counter lands (found or bought); the "Obtain, then cross" (buy) card conversely uses a counter found loose en route instead of buying it when Auto-Search is on
 - A walk that didn't begin on a teleport route no longer silently switches to one when it re-plans mid-trip (e.g. after a searched-for counter turns up) — it keeps to the walking route and only uses a teleport if walking is genuinely impossible
 
 ## 3.73.0

@@ -593,6 +593,10 @@ public static class RouteChoicePrompt
                 // toggling it off mid-route stops the `sea` and leaves the buy running.
                 if (hazardCounterIds.Count > 0)
                     services.ForcePathObtain(hazardCounterIds);
+                // Picking Search asserts intent to search, so turn auto-search on for
+                // this leg if it's off — the card always actually searches. It flips
+                // back off once the counter lands (found or bought) or the walk ends.
+                services.BeginRouteSearchAutoSearch();
                 CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
                 break;
             case RouteChoiceResult.AvoidOverrideAlt:
