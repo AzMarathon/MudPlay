@@ -9,17 +9,17 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Outbound ailment-sync (<see cref="AilmentSyncEngine"/>): on a local VERBOSE
-/// ailment (blind / confuse / disease / held), announce <c>.@blind on</c> etc.
-/// on say (so other clients mirror our state); the four curable ailments also
-/// <c>@wait</c> the leader; on clear, say the balanced <c>.@blind off</c> and
-/// <c>@ok</c> the leader. POISON is NOT announced (an observer reads it from the
-/// par <c>P</c> flag) but still telepaths its <c>@wait</c>. The say only fires
-/// when in a party AND no cure spell is configured for that ailment;
-/// DoNotAnnounce* further gates the say, Ignore* gates the @wait — independently.
-/// Held never telepaths <c>@wait</c> (its pause rides the say, released by @ok).
-/// </summary>
+// Outbound ailment-sync (AilmentSyncEngine): on a local VERBOSE ailment
+// (blind / confuse / disease / held), announce a BARE '.@blind' on say (MegaMUD
+// parity — no 'on'/'off' suffix) so other clients mirror our state; the four
+// curable ailments also @wait the leader. On CLEAR the engine says NOTHING (no
+// 'off' token) — the receiver clears the chip via a witnessed cure / spell-data
+// duration / par P drop / @status reconcile — it only @ok's the leader to release
+// the wait. POISON is NOT announced (an observer reads it from the par P flag) but
+// still telepaths its @wait. The say only fires when in a party AND no cure spell
+// is configured for that ailment; DoNotAnnounce* further gates the say, Ignore*
+// gates the @wait — independently. Held never telepaths @wait (its pause rides the
+// say, released by @ok).
 public sealed class AilmentSyncEngineTests
 {
     private sealed class Harness : IDisposable
@@ -113,9 +113,9 @@ public sealed class AilmentSyncEngineTests
     }
 
     [Theory]
-    [InlineData("blinded!",  ".@blind on\r")]
-    [InlineData("confused!", ".@confused on\r")]
-    [InlineData("diseased!", ".@diseased on\r")]
+    [InlineData("blinded!",  ".@blind\r")]
+    [InlineData("confused!", ".@confused\r")]
+    [InlineData("diseased!", ".@diseased\r")]
     public void EachAilment_UsesItsSayToken(string applied, string expected)
     {
         using Harness h = new();
@@ -151,7 +151,7 @@ public sealed class AilmentSyncEngineTests
 
         h.Feed("You have been blinded!");
 
-        Assert.Equal(".@blind on\r", Assert.Single(h.Say));
+        Assert.Equal(".@blind\r", Assert.Single(h.Say));
         Assert.Empty(h.Telepath);
     }
 
@@ -172,11 +172,11 @@ public sealed class AilmentSyncEngineTests
     }
 
     [Fact]
-    public void Cleared_WhenWaitWasIgnored_StillSaysOff()
+    public void Cleared_SendsBareApplyOnly_NoOffOnSay()
     {
-        // Blindness (verbose) with its @wait ignored: no telepath at all, but the
-        // paired say toggle still fires, so a receiver clears the chip on
-        // '.@blind off' regardless of the @wait gate.
+        // Blindness (verbose) with its @wait ignored: the bare apply token is the
+        // ONLY say that ever goes out — there's no '.@blind off' on clear (MegaMUD
+        // parity). A receiver clears the chip via cure / duration / @status instead.
         using Harness h = new();
         SeedAll(h);
         h.Spells = new SpellsSettings { IgnoreBlindness = true };
@@ -185,7 +185,7 @@ public sealed class AilmentSyncEngineTests
         h.Feed("Your vision returns.");
 
         Assert.Empty(h.Telepath);
-        Assert.Equal(new[] { ".@blind on\r", ".@blind off\r" }, h.Say);
+        Assert.Equal(new[] { ".@blind\r" }, h.Say);   // apply only, no off
     }
 
     [Fact]
@@ -214,15 +214,15 @@ public sealed class AilmentSyncEngineTests
 
         h.Feed("You cannot move!");
 
-        // Held now rides the paired broadcast toggle like the curable four: '.@held on'
-        // on set (no @wait telepath — the leader-pause is driven by that say on the
-        // receiving side).
-        Assert.Equal(".@held on\r", Assert.Single(h.Say));
+        // Held broadcasts a bare '.@held' on set (MegaMUD parity — no 'on'/'off'
+        // suffix) and never telepaths @wait: the leader-pause is driven by that say
+        // on the receiving side.
+        Assert.Equal(".@held\r", Assert.Single(h.Say));
         Assert.Empty(h.Telepath);
     }
 
     [Fact]
-    public void Held_Cleared_SaysOff_AndSendsOk()
+    public void Held_Cleared_SendsNoSayOff_ButSendsOk()
     {
         using Harness h = new();
         SeedAll(h);
@@ -230,11 +230,12 @@ public sealed class AilmentSyncEngineTests
         h.Feed("You cannot move!");
         h.Feed("You can move again.");
 
-        // The paired '.@held off' now broadcasts on clear — this is what finally
-        // clears the party-window HELD badge on every observer (reports
-        // paradigm-20260820-122200 / -153540). The @ok still balances the say-driven
-        // leader pause.
-        Assert.Equal(new[] { ".@held on\r", ".@held off\r" }, h.Say);
+        // No '.@held off' on clear — MegaMUD sends no 'off' token. The bare '.@held'
+        // apply is the only say that ever goes out; observers clear the HELD badge via
+        // a witnessed cure, the spell-data duration timing out, or a @status reconcile
+        // (reports paradigm-20260820-122200 / -153540). The @ok still balances the
+        // say-driven leader pause.
+        Assert.Equal(new[] { ".@held\r" }, h.Say);
         Assert.Equal("/Leader @ok\r", Assert.Single(h.Telepath));
     }
 
@@ -245,7 +246,7 @@ public sealed class AilmentSyncEngineTests
         SeedAll(h);
 
         h.Feed("You cannot move!");       // silent Held reason, .@held say
-        h.Feed("You have been poisoned!"); // poison: say + (suppressed) @wait — leader already paused via @held
+        h.Feed("You have been poisoned!"); // poison: no say (par-driven) + (suppressed) @wait — leader already paused via @held
         Assert.Empty(h.Telepath);          // no @wait telepath yet (Held holds the 0→1 slot silently)
 
         h.Feed("You can move again.");      // Held clears; poison still holds

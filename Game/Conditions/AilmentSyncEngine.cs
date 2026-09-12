@@ -8,17 +8,17 @@ namespace MudPlay.Game.Conditions;
 
 // Outbound ailment-sync: when the local character catches a curable ailment
 // (poison / blindness / confusion / disease) or is held (movement-prevented),
-// this engine (1) announces the VERBOSE ones on the say channel — blindness /
-// confusion / disease / held as a paired toggle '.@blind on' … '.@blind off' —
-// so other clients in the room can mirror our state on their party window (and a
-// member with a cure spell can help), and (2) for the four curable ailments
-// telepaths an @wait to the party leader so the party pauses while we're
-// afflicted. POISON is deliberately NOT announced (Verbose:false) — an observer
-// reads it from the par `P` flag (PartyManager), the cross-client source — but it
-// still telepaths its @wait. On clear the engine (a) says the matching '.@X off'
-// for the verbose ones — the authoritative chip-clear the receiver keys on, so a
-// natural wear-off with no cure line still clears — and (b) telepaths @ok (only
-// when the last wait reason releases — see PartyRestSync).
+// this engine (1) announces the VERBOSE ones on the say channel as a BARE token —
+// '.@blind' / '.@confused' / '.@diseased' / '.@held', no 'on'/'off' suffix
+// (MegaMUD parity) — so other clients in the room mirror our state on their party
+// window, and (2) for the four curable ailments telepaths an @wait to the party
+// leader so the party pauses while we're afflicted. POISON is NOT announced
+// (Verbose:false) — an observer reads it from the par `P` flag (PartyManager) —
+// but it still telepaths its @wait. On CLEAR the engine sends NOTHING on say
+// (MegaMUD sends no 'off'); the receiver clears the chip via a witnessed cure, the
+// spell-data duration timing out, the par `P` drop, or a @status reconcile
+// (PartyAilmentTracker). It only telepaths @ok (when the last wait reason releases
+// — see PartyRestSync), which also releases held's say-driven leader pause.
 //
 // Transitions are read off ConditionTracker.ActiveFlags directly — we diff the
 // added / removed bits per change rather than subscribing to
@@ -69,10 +69,6 @@ public sealed class AilmentSyncEngine : IDisposable
     private readonly LogService? _log;
 
     private MessageFlags _lastFlags;
-    // Flags we've actually announced an ON for (say-gated by ShouldAnnounce). Used
-    // to emit a BALANCED '.@X off' on clear only when the room heard the '.@X on' —
-    // a self-cured / DoNotAnnounce'd ailment set no chip, so it needs no off.
-    private MessageFlags _announcedFlags;
     private Action<byte[]>? _wireSender;
     private bool _disposed;
 
@@ -124,25 +120,15 @@ public sealed class AilmentSyncEngine : IDisposable
 
         foreach ((MessageFlags flag, string token, WaitReason reason, bool telepathWait, bool verbose) in Ailments)
         {
-            // Every ailment — held included — rides a paired '.@X on' / '.@X off'
-            // broadcast toggle, so a receiver clears the party-window chip on the
-            // matching 'off' regardless of who observed it and without witnessing a
-            // cure. Held used to announce bare '.@held' (on only) and lean on @ok for
-            // the clear, but @ok is directed to the leader (and never sent when the
-            // held member IS the leader) and never actually cleared the Held chip, so
-            // the badge stuck forever (reports paradigm-20260820-122200 / -153540 /
-            // -130600). A bare '.@held' from an older client still reads as "on" on
-            // the receiver, so this stays backward-compatible.
-            bool paired = true;
             if (added.HasFlag(flag))
             {
+                // Bare apply-only announce (MegaMUD parity): '.@blind', no 'on'/'off'
+                // suffix. The receiver clears the chip via a witnessed cure, the
+                // spell-data duration timing out, the par `P` flag (poison), or a
+                // @status reconcile (PartyAilmentTracker) — never an 'off' say.
                 // Non-verbose ailments (poison) never say anything — par carries them.
                 bool announced = verbose && ShouldAnnounce(flag, spells, inParty);
-                if (announced)
-                {
-                    Say(paired ? token + " on" : token);
-                    _announcedFlags |= flag;
-                }
+                if (announced) Say(token);
 
                 if (telepathWait)
                 {
@@ -151,26 +137,17 @@ public sealed class AilmentSyncEngine : IDisposable
                 }
                 else if (announced)
                 {
-                    // Held: no @wait telepath — the leader is paused by the
-                    // inbound .@held say. Register the reason silently (only
-                    // when we actually announced) so the balanced @ok on
-                    // last-clear releases that say-driven pause.
+                    // Held: no @wait telepath — the leader is paused by the inbound
+                    // .@held say. Register the reason silently (only when we actually
+                    // announced) so the balanced @ok on last-clear releases that pause.
                     _restSync.RequestWait(reason, announce: false);
                 }
             }
             else if (removed.HasFlag(flag))
             {
-                // Paired off-signal — only when we announced the on (so the room
-                // actually set a chip to clear). Now fires for held too, which is
-                // what finally clears the party-window HELD badge on every observer.
-                if (paired && _announcedFlags.HasFlag(flag))
-                    Say(token + " off");
-                _announcedFlags &= ~flag;
-
-                // Balance any wait we placed for this ailment. RequestOk
-                // is a no-op when no matching reason is held, so calling
-                // it unconditionally (even when the wait was suppressed)
-                // is safe.
+                // No say on clear — MegaMUD sends no 'off'. Only the @ok telepath goes
+                // out, releasing the leader's wait. RequestOk is a no-op when no
+                // matching reason is held, so calling it unconditionally is safe.
                 _restSync.RequestOk(reason);
             }
         }
