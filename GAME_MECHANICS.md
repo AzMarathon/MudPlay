@@ -91,6 +91,18 @@ it isn't here and you're unsure, ask.
   `monsterHp`, sorts eligible spells most-efficient first). Related:
   [[project_monster_intel_matchup_arc_20260902]].
 
+**Monster on-hit procs (`AttHitSpell-N`) are physical attacks, not casts** *([CONFIRMED] 2026-09-12, user)*
+- An `AttHitSpell-N` proc rides a **physical** attack slot. It is **not** a spell cast, so it has no
+  cast level of its own — there is no per-slot level field for it (`AttMax-N` is the physical
+  attack's max damage), and the Monsters table has **no monster-level column** at all (only
+  `CharmLVL` and the per-mid-spell `MidSpellLVL-N`).
+- Consequence: a proc must **not** feed anything that needs a cast level. Witnessed-ailment chip
+  durations (`AppServices.ResolveAilmentDurationSeconds` → `MonsterCatalogEntry.CastLevelFor`)
+  therefore count only real spell slots (`AttType-N == 2`) and between-rounds spells, and skip
+  `AttHitSpell` entirely. The proc's spell record still *has* messages, so it remains a legitimate
+  candidate for attributing an unrecognized line (`RoomSpellAttributor`) — recognizing the message
+  and timing a duration are different questions.
+
 **Monster spell-attack damage — single cast, monster-owned energy** *([CONFIRMED] 2026-09-04, user)*
 - A monster's spell attack (`AttType-N == 2`) stores the **spell number** in its `AttAcc-N` field
   and the **cast level** in `AttMax-N`; the linked **Spells** record holds the scaling formula

@@ -7179,10 +7179,11 @@ public sealed class AppServices
             {
                 if (e.MonsterNumber is not { } mn) continue;
                 if (MonsterCatalog.Get(mn) is not { } entry) continue;
-                foreach (Game.Combat.MonsterAttackSlot a in entry.Attacks)
-                    if (a.Accuracy == spellNumber && a.MaxDamage > bestLevel) bestLevel = a.MaxDamage;
-                foreach (Game.Combat.MonsterMidSpellSlot s in entry.MidSpells)
-                    if (s.SpellId == spellNumber && s.Level > bestLevel) bestLevel = s.Level;
+                // Slot-type handling lives on the entry — Accuracy only means a spell
+                // number on an AttType-2 slot, and reading it off a physical slot used
+                // to match unrelated spells and feed their damage in as a cast level.
+                if (entry.CastLevelFor(spellNumber) is var level && level > bestLevel)
+                    bestLevel = level;
             }
         if (bestLevel <= 0) return null;
         long rounds = Game.Spells.SpellCalculator.Duration(formula, bestLevel);

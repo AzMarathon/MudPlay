@@ -1,5 +1,11 @@
 # Version history
 
+## 3.74.9
+
+- A partymate's ailment chip no longer expires off the wrong number: the duration read a monster's to-hit value as if it were a spell number, so any physical attack whose accuracy happened to equal the ailment's spell number matched, and that attack's damage was then used as the cast level (431 such collisions ship in the Paradigm data — `fear` vs an accuracy of 60 being the common one)
+- Monster attacks that can never land no longer influence ailment durations
+- bug reports addressed: ailment-duration-misattribution-20260912
+
 ## 3.74.8
 
 - Unrecognized-line capture now recognizes **templated** catalogue messages, so known casts (`Raijin casts minor healing on Raijin!`, `You invoke the way of the swan.`) are no longer staged for review — previously every templated message in the game read as unknown
