@@ -2550,10 +2550,13 @@ round seconds, at the caster's cast level) and auto-clears the chip when it elap
 beyond clock jitter.
 
 **`@wait` / `@ok` (follower → leader, TELEPATH).** A follower afflicted by poison / blind /
-confused / diseased telepaths **`@wait`** to the leader unless that ailment's `Ignore<X>` is set,
-and **`@ok`** when its last non-ignored ailment clears. Held always sends `@held` (say) and rides
-the `@ok` release; held is never suppressible. The leader pauses on `@wait` until timeout or a
-matching `@ok`.
+confused / diseased / **held** telepaths **`@wait`** to the leader unless that ailment's
+`Ignore<X>` is set, and **`@ok`** when its last non-ignored ailment clears. Held is the same as
+the others here — it telepaths `@wait`/`@ok` *in addition to* announcing its `.@held` on say (the
+say lights the member's chip, the `@wait` pauses the leader); held has no `Ignore` gate, so it is
+never suppressible. The leader pauses on `@wait` until timeout or a matching `@ok`. **All of this is
+party-only:** solo (no party / no leader / you ARE the leader), nothing is telepathed — self
+recognition + clearing runs entirely off the apply/wear-off spell messages.
 
 **`@panic` (leader → party, SAY).** A party **leader** whose HP crosses its **"hang if below"**
 floor says the bare token **`@panic`**, then hangs up (or `break` + `sys goto <wimpy>` if opted in)

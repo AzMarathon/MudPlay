@@ -11,14 +11,16 @@ namespace MudPlay.Game.Conditions;
 // this engine (1) announces the VERBOSE ones on the say channel as a BARE token —
 // '.@blind' / '.@confused' / '.@diseased' / '.@held', no 'on'/'off' suffix
 // (MegaMUD parity) — so other clients in the room mirror our state on their party
-// window, and (2) for the four curable ailments telepaths an @wait to the party
-// leader so the party pauses while we're afflicted. POISON is NOT announced
-// (Verbose:false) — an observer reads it from the par `P` flag (PartyManager) —
-// but it still telepaths its @wait. On CLEAR the engine sends NOTHING on say
-// (MegaMUD sends no 'off'); the receiver clears the chip via a witnessed cure, the
+// window, and (2) telepaths an @wait to the party leader so the party pauses
+// while we're afflicted. POISON is NOT announced (Verbose:false) — an observer
+// reads it from the par `P` flag (PartyManager) — but it still telepaths its
+// @wait. HELD is the same as the others here: it announces '.@held' on say AND
+// telepaths @wait (MegaMUD parity — an observed hold both lights the member's
+// chip and pauses the leader). On CLEAR the engine sends NOTHING on say (MegaMUD
+// sends no 'off'); the receiver clears the chip via a witnessed cure, the
 // spell-data duration timing out, the par `P` drop, or a @status reconcile
-// (PartyAilmentTracker). It only telepaths @ok (when the last wait reason releases
-// — see PartyRestSync), which also releases held's say-driven leader pause.
+// (PartyAilmentTracker). It only telepaths @ok when the last wait reason releases
+// (see PartyRestSync).
 //
 // Transitions are read off ConditionTracker.ActiveFlags directly — we diff the
 // added / removed bits per change rather than subscribing to
@@ -30,13 +32,9 @@ namespace MudPlay.Game.Conditions;
 // configured for that ailment — if we can self-cure we just clear our own
 // condition silently, and out of a party there's no one to tell. On top of that
 // the per-ailment DoNotAnnounce<X> gate (SpellsSettings, Char tier) suppresses
-// the curable four; the Ignore<X> gate independently suppresses their @wait.
-// Held has no settings gate — only the in-party / no-cure rule applies.
-//
-// Held is special: it never telepaths an @wait. The leader is paused by the
-// inbound .@held say (which doubles as a "cure my hold" identifier), so the
-// affliction registers a silent WaitReason.Held purely so the balanced @ok on
-// last-clear releases the leader once every reason clears.
+// the curable four's say; the Ignore<X> gate independently suppresses their @wait.
+// Held has no settings gate — only the in-party / no-cure rule applies to its say,
+// and its @wait is never suppressible.
 //
 // The say wire format prefixes the token with a period — MajorMUD's say-channel
 // prefix — so .@poisoned is what lands on the wire.
@@ -46,19 +44,20 @@ public sealed class AilmentSyncEngine : IDisposable
     public const string LogCategory = "Ailment";
 
     // The ailments we sync, with their say token, the WaitReason they hold on the
-    // leader, whether they telepath an @wait, and whether they announce on say
-    // (Verbose). Poison is NOT verbose — an observer reads it from the par `P`
-    // flag (PartyManager), the cross-client source; it still telepaths @wait.
-    // Confusion IS verbose even though no realm cure exists for it (stock /
-    // paradigm) — the announce still lets the party react. Held (TelepathWait
-    // false) never sends @wait: its leader-pause rides the .@held say.
-    private static readonly (MessageFlags Flag, string SayToken, WaitReason Reason, bool TelepathWait, bool Verbose)[] Ailments =
+    // leader, and whether they announce on say (Verbose). Every ailment telepaths
+    // @wait (gated per-ailment by Ignore<X>, except held which has no gate). Poison
+    // is NOT verbose — an observer reads it from the par `P` flag (PartyManager),
+    // the cross-client source; it still telepaths @wait. Confusion IS verbose even
+    // though no realm cure exists for it (stock / paradigm) — the announce still
+    // lets the party react. Held announces '.@held' AND telepaths @wait, like the
+    // curable four (MegaMUD parity).
+    private static readonly (MessageFlags Flag, string SayToken, WaitReason Reason, bool Verbose)[] Ailments =
     {
-        (MessageFlags.Poisoned, "@poisoned", WaitReason.Poison,    true,  false),
-        (MessageFlags.Blinded,  "@blind",    WaitReason.Blindness, true,  true),
-        (MessageFlags.Confused, "@confused", WaitReason.Confusion, true,  true),
-        (MessageFlags.Diseased, "@diseased", WaitReason.Disease,   true,  true),
-        (MessageFlags.MovementPrevented, "@held", WaitReason.Held, false, true),
+        (MessageFlags.Poisoned, "@poisoned", WaitReason.Poison,    false),
+        (MessageFlags.Blinded,  "@blind",    WaitReason.Blindness, true),
+        (MessageFlags.Confused, "@confused", WaitReason.Confusion, true),
+        (MessageFlags.Diseased, "@diseased", WaitReason.Disease,   true),
+        (MessageFlags.MovementPrevented, "@held", WaitReason.Held, true),
     };
 
     private readonly ConditionTracker _conditions;
@@ -118,7 +117,7 @@ public sealed class AilmentSyncEngine : IDisposable
         SpellsSettings spells = _readSpells();
         bool inParty = _isInParty();
 
-        foreach ((MessageFlags flag, string token, WaitReason reason, bool telepathWait, bool verbose) in Ailments)
+        foreach ((MessageFlags flag, string token, WaitReason reason, bool verbose) in Ailments)
         {
             if (added.HasFlag(flag))
             {
@@ -127,21 +126,14 @@ public sealed class AilmentSyncEngine : IDisposable
                 // spell-data duration timing out, the par `P` flag (poison), or a
                 // @status reconcile (PartyAilmentTracker) — never an 'off' say.
                 // Non-verbose ailments (poison) never say anything — par carries them.
-                bool announced = verbose && ShouldAnnounce(flag, spells, inParty);
-                if (announced) Say(token);
+                if (verbose && ShouldAnnounce(flag, spells, inParty)) Say(token);
 
-                if (telepathWait)
-                {
-                    if (!IsWaitSuppressed(flag, spells))
-                        _restSync.RequestWait(reason);
-                }
-                else if (announced)
-                {
-                    // Held: no @wait telepath — the leader is paused by the inbound
-                    // .@held say. Register the reason silently (only when we actually
-                    // announced) so the balanced @ok on last-clear releases that pause.
-                    _restSync.RequestWait(reason, announce: false);
-                }
+                // Telepath @wait unless this ailment's Ignore<X> gate suppresses it.
+                // Held has no gate (never suppressible) but still @waits like the
+                // others — its '.@held' say drives the chip / cure on the receiver,
+                // the @wait drives the leader-pause, and the balanced @ok releases it.
+                if (!IsWaitSuppressed(flag, spells))
+                    _restSync.RequestWait(reason);
             }
             else if (removed.HasFlag(flag))
             {
@@ -153,22 +145,21 @@ public sealed class AilmentSyncEngine : IDisposable
         }
     }
 
-    // Reconcile the @wait state of the curable ailments against the CURRENT
-    // settings. Called when the user toggles an Ignore<X> gate mid-affliction:
-    // the onset-time decision is latched (OnConditionsChanged only fires on a
-    // flag transition), so without this a "turn IgnorePoison on while poisoned"
-    // leaves the @wait we already telepathed standing and the party never
-    // resumes. Flipping the gate ON releases the wait (@ok); flipping it OFF
-    // while still afflicted (re)places it (@wait). Idempotent — PartyRestSync
-    // dedupes reasons, so an unchanged reason is a no-op on the wire. Held is
-    // excluded (no Ignore setting; its wait rides the .@held say lifecycle).
+    // Reconcile the @wait state of every ailment against the CURRENT settings.
+    // Called when the user toggles an Ignore<X> gate mid-affliction: the onset-time
+    // decision is latched (OnConditionsChanged only fires on a flag transition), so
+    // without this a "turn IgnorePoison on while poisoned" leaves the @wait we
+    // already telepathed standing and the party never resumes. Flipping the gate ON
+    // releases the wait (@ok); flipping it OFF while still afflicted (re)places it
+    // (@wait). Idempotent — PartyRestSync dedupes reasons, so an unchanged reason is
+    // a no-op on the wire. Held carries no Ignore gate (IsWaitSuppressed is always
+    // false for it), so it's simply kept asserted while the hold is active.
     public void ReevaluateWaits()
     {
         MessageFlags active = _conditions.ActiveFlags;
         SpellsSettings spells = _readSpells();
-        foreach ((MessageFlags flag, _, WaitReason reason, bool telepathWait, _) in Ailments)
+        foreach ((MessageFlags flag, _, WaitReason reason, _) in Ailments)
         {
-            if (!telepathWait) continue;
             if (active.HasFlag(flag) && !IsWaitSuppressed(flag, spells))
                 _restSync.RequestWait(reason);
             else
