@@ -38,7 +38,18 @@ public sealed class MessageCandidateReportReplayTests : IDisposable
         DefaultPatterns.Seed(_router);
         _watcher = new MessageCandidateWatcher(
             _router, _messages, _candidates, log: _log,
-            isRecognizedByDirectParser: PartyManager.IsRosterRow);
+            isRecognizedByDirectParser: PartyManager.IsRosterRow,
+            // The report's party: Suijin the Witchunter casts nothing, Raijin the
+            // Priest does. AppServices resolves this from the live roster + the
+            // Classes table; here it's stated directly.
+            isNonCasterPhysicalAction: text => Game.Combat.NonCasterAttackLine.Matches(
+                text, name => name switch
+                {
+                    "Suijin" => false,
+                    "Raijin" => true,
+                    "Fujin"  => true,   // Mystic — Kai magery
+                    _        => null,
+                }));
         _watcher.NotifyInGame();
     }
 
@@ -92,6 +103,10 @@ public sealed class MessageCandidateReportReplayTests : IDisposable
     [InlineData("Raijin swipes at wild dog!")]
     [InlineData("Raijin swipes at nasty bandit!")]
     [InlineData("Raijin swipes at bandit!")]
+    // Ranged attack naming ammunition but no weapon. Textually identical to a
+    // projectile spell, so only the actor's class settles it: Suijin is a Witchunter
+    // (no magery), which proves this can't be a spell message.
+    [InlineData("Suijin shoots an arrow at bandit!")]
     public void ReportedNoise_IsNoLongerCaptured(string line)
     {
         Feed(line);
@@ -127,14 +142,19 @@ public sealed class MessageCandidateReportReplayTests : IDisposable
     [InlineData("A flock of birds fly overhead.")]
     [InlineData("The forest becomes strangely silent.")]
     [InlineData("The leaves begin to rustle, as if some beast were about to spring forth!")]
-    // A ranged attack naming its ammunition but no weapon reads exactly like a
-    // projectile SPELL ("<name> hurls a fireball at <target>!"), so it is left
-    // captured on purpose: suppressing this shape would cost real monster spell
-    // messages, and an extra row to dismiss is the cheaper mistake.
-    [InlineData("Suijin shoots an arrow at bandit!")]
     public void GenuineUnknowns_AreStillCaptured(string line)
     {
         Feed(line);
+        Assert.Single(_candidates.Candidates);
+    }
+
+    [Fact]
+    public void SameRangedShapeFromACaster_IsStillCaptured()
+    {
+        // The mirror of the Suijin case: Raijin is a Priest, so an identical line
+        // could be an uncatalogued projectile spell and has to stay in the queue.
+        // This is what keeps the actor check from becoming a blanket suppressor.
+        Feed("Raijin shoots a searing bolt at bandit!");
         Assert.Single(_candidates.Candidates);
     }
 }

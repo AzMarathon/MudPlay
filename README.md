@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.74.6**
+> **Version 3.74.7**
 > - Unrecognized-line capture now recognizes **templated** catalogue messages, so known casts (`Raijin casts minor healing on Raijin!`, `You invoke the way of the swan.`) are no longer staged for review — previously every templated message in the game read as unknown.
 > - Buff wear-off lines matched as phrases rather than exact text, so the server's trailing punctuation no longer defeats them.
 > - Shipped templates too vague to identify a line (`The {source} {spellname}!`) are skipped for recognition instead of swallowing genuine unknown messages.
@@ -9,6 +9,7 @@
 > - Monster death messages dropped by position (the line before an experience gain), and rows captured for them earlier are cleared out.
 > - Engine-issued commands no longer leave their echo (`swan`, `tige`) in the queue.
 > - Unrecognized Lines table updates in place — live capture no longer snaps the list back to the top or drops your selection.
+> - A ranged attack naming ammunition but no weapon (`Suijin shoots an arrow at bandit!`) reads exactly like a projectile spell, so it's settled by the actor's class: a player whose class has no magery can't be casting, so the line is dropped — while the same line from a caster stays captured.
 > - Monster spell messages and ambient room-spell flavour still captured, deliberately.
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

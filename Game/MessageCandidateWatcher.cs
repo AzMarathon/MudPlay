@@ -23,7 +23,8 @@ namespace MudPlay.Game;
 //     {source} casts {spellname} on {target}! shapes, which are the bulk of the
 //     catalogue and cannot be compared as text;
 //   * the stateful block parsers that register no router pattern (the `par`
-//     roster), each asked through its own matcher;
+//     roster), each asked through its own matcher, plus the one attack shape that
+//     needs a class lookup rather than a regex to tell it from a spell;
 //   * every pattern in MessageRouter's catalog (movement, combat-round text,
 //     chat, item get/drop, party, doors, and more) — reusing already-reviewed
 //     domain knowledge instead of inventing a "looks like a spell line" heuristic.
@@ -70,6 +71,7 @@ public sealed class MessageCandidateWatcher : IDisposable
     private readonly Func<RoomKey?>? _currentRoom;
     private readonly Func<string, bool>? _isKnownRoomName;
     private readonly Func<string, bool>? _isRecognizedByDirectParser;
+    private readonly Func<string, bool>? _isNonCasterPhysicalAction;
     private readonly LogService? _log;
 
     // Built from MessageStore on every CollectionChanged — trimmed text of every
@@ -129,10 +131,16 @@ public sealed class MessageCandidateWatcher : IDisposable
     // them — the `par` roster rows PartyManager consumes are the case that drove this.
     // Composed in AppServices from each parser's own matcher so the shapes aren't
     // duplicated here.
+    //
+    // isNonCasterPhysicalAction settles the one attack shape whose text alone is
+    // ambiguous ("<Actor> shoots an arrow at <target>!" vs "<Actor> hurls a fireball
+    // at <target>!") by asking whether the named player's class can cast at all.
+    // Needs the live roster plus the Classes table, so it can't be a router pattern.
     public MessageCandidateWatcher(MessageRouter router, MessageStore messages,
         MessageCandidateStore candidates, Func<RoomKey?>? currentRoom = null,
         LogService? log = null, Func<string, bool>? isKnownRoomName = null,
-        Func<string, bool>? isRecognizedByDirectParser = null)
+        Func<string, bool>? isRecognizedByDirectParser = null,
+        Func<string, bool>? isNonCasterPhysicalAction = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(messages);
@@ -143,6 +151,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         _currentRoom = currentRoom;
         _isKnownRoomName = isKnownRoomName;
         _isRecognizedByDirectParser = isRecognizedByDirectParser;
+        _isNonCasterPhysicalAction = isNonCasterPhysicalAction;
         _log = log;
 
         _templates = new MessageTemplateIndex(messages.Messages);
@@ -317,6 +326,9 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (MatchesAppliedEndsWith(text)) return;
         if (_templates.Matches(text)) return;
         if (_router.AnyPatternMatches(line)) return;
+        // Last, because it's the only check that consults the live roster and game
+        // data: an attack shape that only a class lookup can tell from a spell.
+        if (_isNonCasterPhysicalAction?.Invoke(text) == true) return;
         // A dismissed candidate is a final verdict — drop every recurrence
         // outright: no re-add, no occurrence bump, no re-alert.
         if (_candidates.IsDismissed(text)) return;
