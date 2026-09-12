@@ -7859,6 +7859,10 @@ public sealed class AppServices
     private bool IsPartyMemberName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return false;
+        // Members now carries a lone self row even when solo (PartyWindow self-
+        // display); only treat a name as a party member when we're actually in a
+        // party, so a "hold person on <self>" line while solo isn't misread.
+        if (!PartyState.IsInParty) return false;
         foreach (Game.PartyMember m in PartyState.Members)
         {
             string full = m.Name;

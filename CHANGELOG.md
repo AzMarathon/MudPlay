@@ -8,6 +8,7 @@
   - The client now **witnesses a monster's ailment-apply** landing on a partymate and lights their chip, then clears it when the spell's own duration (derived from the casting monster's level) elapses — so a member's chip no longer sticks forever waiting for an `off` that never comes.
   - A member's chip clears on whichever is observed first: a witnessed cure on them, the spell-data duration timing out, the `par` `P` flag dropping (poison), or a `@status` reply.
 - **`@panic`** (MegaMUD party bail-out): a leader whose HP crosses the "hang if below" floor can say `@panic` to the whole party and then escape (hang up, or break + sys-goto-wimpy per the Health tab). Two Settings → Party checkboxes: **Use @panic while leading** (send, off by default) and **Ignore @panics** (off by default — an un-ignored `@panic` makes you bail the same way your own low-HP emergency would). A received `@panic` still honours the Disable-hangups master switch for the carrier-drop (it'll wimpy-jump if configured but never be force-dropped).
+- Party window now shows **your own entry while solo** (not just in a party), live-updating its HP/mana and ailment chips from your state — handy for watching the client recognize an ailment apply/clear in real time. It's display-only: a lone self row is never treated as a party.
 
 ## 3.73.2
 

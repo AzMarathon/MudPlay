@@ -326,6 +326,8 @@ Open it from **View → Party**, a toolbar button, or **right-click the terminal
 - **status chips** that light up as conditions apply — **REST** resting · **MED** meditating · **BLD** blinded · **PSN** poisoned · **DIS** diseased · **CNF** confused · **HELD** held · **WAIT** waiting · **INVITED** invite pending;
 - an **uninvite (⨯)** button — active only when *you* lead — that kicks a follower or withdraws a pending invitation.
 
+**Even while solo**, the window shows **your own entry** — the same row, live-updating your HP / MA and status chips from your state — so you can watch the client recognize an ailment applying and clearing in real time without needing a party. It's display-only: your lone self row is never treated as a party (automation that only runs in a real party stays off), and the row folds into the roster seamlessly the moment a party forms.
+
 The healing, ranks, nags, and re-invite behaviour the window reflects are all configured on **Settings → Party**.
 
 ### Configuring party buffs
