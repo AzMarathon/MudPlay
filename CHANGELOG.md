@@ -1,5 +1,11 @@
 # Version history
 
+## 3.74.0
+
+- New **Local control API** (Settings → General, off by default): a loopback-only HTTP endpoint serving live client state, the pause-gate history with who asserted each one, the program log with a tail cursor, the terminal scrollback, and every section a bug report captures — so a stuck client can be inspected while it's stuck instead of reconstructed from a log tail afterwards
+- Includes a live event stream (Server-Sent Events) of log entries and gate changes as they happen
+- Bound to 127.0.0.1 and gated on a bearer token, since any local program — or a web page you're visiting — can otherwise reach loopback; the token is revealed on request in Settings and never appears in the log or a bug report
+
 ## 3.73.2
 
 - Route picker's "Search en route" now buys the counter at a shop as a last resort — when nothing turns up en route — instead of just stopping at the hazard's edge

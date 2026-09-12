@@ -175,6 +175,11 @@ public static class BugReportBuilder
         // them off has Info-only logs. Surface the state so a triager knows why.
         Kv(sb, "Debug diagnostics", (svc.Log.Diagnostics?.DebugDiagnostics ?? false) ? "on" : "off");
         Kv(sb, "Combat diagnostics", (svc.Log.Diagnostics?.CombatDiagnostics ?? false) ? "on" : "off");
+        // Local control API. Worth recording because something may have been
+        // driving this client over it, which changes how a report should be read.
+        // The TOKEN IS NEVER INCLUDED — a bug report gets attached to public
+        // issues, and the token grants control of the character.
+        Kv(sb, "Local API", DescribeLocalApi(svc));
         // Direct-input (character) mode: on while a trainer / character-creation
         // stat box owns the keyboard, so arrow keys pass to the wire instead of
         // recalling command history. An "arrows don't move between stat fields"
@@ -826,6 +831,22 @@ public static class BugReportBuilder
         sb.Append("**Stat screen (PlayerStats)**\n\n");
         sb.Append(Json(svc.PlayerStats));
         return sb.ToString();
+    }
+
+    // Enabled / listening state, subscriber count, and whether anything has been
+    // rejected. Never the token.
+    private static string DescribeLocalApi(AppServices svc)
+    {
+        if (!svc.Settings.Current.LocalApiEnabled) return "off";
+        Api.LocalApiServer api = svc.LocalApi;
+        string state = api.IsListening
+            ? $"listening on 127.0.0.1:{api.Port}"
+            : $"ENABLED BUT NOT LISTENING ({api.LastStartError ?? "reason unknown"})";
+        string subs = $", {api.Events.SubscriberCount} event subscriber(s)";
+        string failed = api.Auth.LastAuthFailureUtc is { } at
+            ? $", last rejected request {at:u}"
+            : string.Empty;
+        return state + subs + failed;
     }
 
     private static string BuildInventory(AppServices svc)

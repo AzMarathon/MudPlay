@@ -388,6 +388,32 @@
                           Content="Snap windows together"
                           ToolTip.Tip="When checked (default), MudPlay's panel windows — Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, Session Stats — snap flush to each other's edges as you drag them near, and dragging the main window carries the whole snapped cluster with it. Grab any other panel to pull it off freely. When unchecked, every window floats independently. Install-wide preference; applies on Apply."/>
 
+                <CheckBox Margin="0,10,0,0"
+                          IsChecked="{Binding LocalApiEnabled, Mode=TwoWay}"
+                          Content="Local control API (for diagnostics / automation)"
+                          ToolTip.Tip="When checked, MudPlay serves a small HTTP API on 127.0.0.1 exposing live client state, the program log, the terminal scrollback, and the same sections a bug report captures — plus a live event stream — so a stuck or misbehaving client can be inspected while it's happening instead of reconstructed from a log tail afterwards. Bound to loopback ONLY: nothing outside this machine can reach it. A bearer token is required as well, because any local program (or a web page you're visiting) can otherwise reach 127.0.0.1. Off by default; install-wide; applies on Apply."/>
+
+                <StackPanel Margin="22,4,0,0" Spacing="4" IsEnabled="{Binding LocalApiEnabled}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Port" VerticalAlignment="Center"
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
+                        <NumericUpDown Value="{Binding LocalApiPort}" Minimum="1024" Maximum="65535"
+                                       Increment="1" FormatString="0" Width="120"
+                                       ToolTip.Tip="Default 6683 (MMUD on a phone keypad). Change it only if something else already has the port — the status line below says so if the bind failed."/>
+                        <Button Content="Show token" Command="{Binding ShowLocalApiTokenCommand}"
+                                ToolTip.Tip="Reveal the bearer token to paste into a client (Authorization: Bearer &lt;token&gt;). It also lives in .apitoken inside the app data folder, owner-readable only. Revealed on request rather than shown here by default, since merely opening Settings shouldn't create or display a credential."/>
+                        <Button Content="Regenerate" Command="{Binding RegenerateLocalApiTokenCommand}"
+                                ToolTip.Tip="Replace the token, immediately invalidating anything still using the old one. Use this if it has been pasted somewhere it shouldn't have been."/>
+                    </StackPanel>
+                    <TextBox Text="{Binding LocalApiToken, Mode=OneWay}" IsReadOnly="True"
+                             FontFamily="{StaticResource FontMono}"
+                             IsVisible="{Binding LocalApiToken, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                             ToolTip.Tip="Select and copy this into your client's Authorization header."/>
+                    <TextBlock Text="{Binding LocalApiStatus}" TextWrapping="Wrap"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               IsVisible="{Binding LocalApiStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                </StackPanel>
+
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0"
                             ToolTip.Tip="How many recently-loaded characters the File → Recent submenu lists (0–10). The client always remembers the last ten; this just controls how many show. Install-wide; applies on Apply.">
                     <TextBlock Text="Recent profiles shown in File menu"
