@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.74.0**
+> **Version 3.74.1**
 > - Tab-completes the word you're typing — in the terminal or the Conversation window — against the leading word of your carried, worn, and key-ring item names (`drop emerald-` + Tab → `drop emerald-hilted rapier`; a "bronze emblem" needs `bro`/`bronze`, not `e`); Shift+Tab steps backward through other matches; never active while a full-screen form (trainer stats, character creation) owns the keyboard
 > - New Settings → General toggle, "Tab-complete inventory item names while typing" (default on)
 > - Fixed a ~29s UI freeze on profile load / game-data switch on realms with a large Monsters.json (e.g. Paradigm) — the room→monster spawn index deduped with an O(n) list scan per insert, which blew up into an O(n²) build on rooms with many "Summoned By" references; now O(1) per insert and warmed in the background like the other per-set indexes
 > - Fixed auto-rest/meditate firing on a momentary HP/MA dip that recovered again a tick later (e.g. a kill's mana cost dipping below the rest-trigger right as a regen tick was about to bring it back up) — the rest command now waits one dispatch tick to reconfirm the pool is still below its trigger before committing, so a blip that self-resolves no longer interrupts movement
+> - Fixed auto-rest/meditate still firing after a genuine mid-combat dip fully recovered on its own before the fight ended — a confirmed gate was holding out for the full rest-target instead of the ordinary rest-trigger, so combat ending committed to a rest the pool wasn't low for anymore; it now clears at the trigger until the rest command actually goes out
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

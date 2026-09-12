@@ -18,13 +18,22 @@ namespace MudPlay.Game.Health;
 //     ConfirmHpGate / ConfirmMaGate re-check the pool one dispatch tick later,
 //     so a momentary dip that a regen tick immediately undoes (both parsed from
 //     the same wire read) retracts the gate instead of sitting down for it.
+//     Before the rest command actually goes out, a confirmed gate keeps
+//     re-checking against that same trigger on every tick — a fight can run on
+//     for several more rounds after the confirm, and if regen climbs the pool
+//     back past the trigger before combat ends, the gate clears there instead
+//     of holding out for the full target (see hpClearFloor / maClearFloor).
 //   Rest-out: when either gate is HELD AND CONFIRMED AND the player is out of
 //     combat (PlayerState.InCombat false), send any configured pre-rest
 //     command(s) and then `rest`. Idempotent — won't re-send rest while one is
 //     already in flight.
-//   Recovery complete: both pools have climbed to or past their configured
-//     rest-target. Clears both gates, sends `stand`, and emits any post-rest
-//     command(s). Walker resumes when the last gate clears.
+//   Recovery complete: once the rest/meditate send is in flight, the clear
+//     floor switches from the trigger to the configured rest-target (a much
+//     higher bar) — hysteresis so an active rest holds out to a full recovery
+//     instead of standing back up the instant the pool ticks one point above
+//     the trigger. Both pools reaching target clears both gates, sends
+//     `stand`, and emits any post-rest command(s). Walker resumes when the
+//     last gate clears.
 //
 // In-combat semantics: the HP/MA gates can assert mid-fight (so the walker
 // doesn't try to leave the room when a fight is going badly), but `rest` is NEVER
@@ -711,6 +720,17 @@ public sealed class HealthManager : IDisposable
         int hpRestTarget  = follower
             ? Math.Min(hpRestTrigger + 1, hpRestMax)
             : hpRestMax;
+        // Before the rest command has actually gone out, the gate's clear floor
+        // is the ordinary trigger, not the (much higher) target: a gate can assert
+        // and confirm mid-fight, then combat runs on for several more rounds while
+        // regen climbs the pool back past the trigger well before the fight ends —
+        // holding out for the full target in that window means committing to a
+        // rest the instant combat clears even though the pool isn't actually low
+        // anymore (report paradigm-20260912-103110). Once the rest/meditate SEND
+        // has fired (_restInFlight), switch to the target floor so the sit-down
+        // holds out to a full recovery instead of standing back up the moment it
+        // ticks one point above the trigger.
+        int hpClearFloor = _restInFlight ? hpRestTarget : hpRestTrigger;
 
         // Strictly below — "rest if below N" rests only when the pool is
         // under N, never AT N. (Equal-or-less traps a level-2 mystic: 1 max
@@ -727,7 +747,7 @@ public sealed class HealthManager : IDisposable
             // rest send — see ConfirmHpGate for why.
             _post(ConfirmHpGate);
         }
-        else if (_hpGateAsserted && (skipRest || _state.Hp >= hpRestTarget))
+        else if (_hpGateAsserted && (skipRest || _state.Hp >= hpClearFloor))
         {
             _hpGateAsserted = false;
             _hpGateConfirmed = false;
@@ -735,7 +755,9 @@ public sealed class HealthManager : IDisposable
                 AsserterName,
                 skipRest
                     ? "do-not-rest room — advancing instead of resting"
-                    : $"HP {_state.Hp}/{_state.MaxHp} >= rest-target={hpRestTarget}");
+                    : _restInFlight
+                        ? $"HP {_state.Hp}/{_state.MaxHp} >= rest-target={hpRestTarget}"
+                        : $"HP {_state.Hp}/{_state.MaxHp} recovered above rest-trigger={hpRestTrigger} before rest started");
         }
 
         // ----- MA gate transitions ---------------------------------
@@ -745,6 +767,8 @@ public sealed class HealthManager : IDisposable
         int maRestTarget  = follower
             ? Math.Min(maRestTrigger + 1, maRestMax)
             : maRestMax;
+        // See hpClearFloor above — same pre-send-vs-resting distinction for MA.
+        int maClearFloor = _restInFlight ? maRestTarget : maRestTrigger;
 
         // Strictly below (see HP gate above) — the mystic-at-level-2 case.
         if (!skipRest && !_maGateAsserted && _state.Ma < maRestTrigger && _state.MaxMa > 0)
@@ -758,7 +782,7 @@ public sealed class HealthManager : IDisposable
             // rest send — see ConfirmMaGate for why.
             _post(ConfirmMaGate);
         }
-        else if (_maGateAsserted && (skipRest || _state.Ma >= maRestTarget))
+        else if (_maGateAsserted && (skipRest || _state.Ma >= maClearFloor))
         {
             _maGateAsserted = false;
             _maGateConfirmed = false;
@@ -766,7 +790,9 @@ public sealed class HealthManager : IDisposable
                 AsserterName,
                 skipRest
                     ? "do-not-rest room — advancing instead of resting"
-                    : $"MA {_state.Ma}/{_state.MaxMa} >= rest-target={maRestTarget}");
+                    : _restInFlight
+                        ? $"MA {_state.Ma}/{_state.MaxMa} >= rest-target={maRestTarget}"
+                        : $"MA {_state.Ma}/{_state.MaxMa} recovered above rest-trigger={maRestTrigger} before rest started");
         }
 
         // A do-not-rest room can't raise (and clears) the recovery gate even when

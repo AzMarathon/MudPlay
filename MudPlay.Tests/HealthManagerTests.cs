@@ -402,10 +402,10 @@ public sealed class HealthManagerTests
         Assert.False(h.Health.RestInFlight);
 
         h.SetPrompt(hp: 362, maxHp: 362, ma: 245, maxMa: 394);   // regen tick lands before confirm runs — above trigger
-        Assert.True(h.ManaGateHeld);          // still asserted: confirm hasn't run yet
+        Assert.False(h.ManaGateHeld);         // cleared immediately — recovered above trigger, confirm not even needed
         Assert.Empty(h.SentLines);
 
-        h.DrainPost();                        // the deferred re-check runs now
+        h.DrainPost();                        // the deferred re-check runs — no-op, gate's already gone
 
         Assert.False(h.ManaGateHeld);         // retracted — the breach was momentary
         Assert.Empty(h.SentLines);            // meditate was never sent
@@ -454,6 +454,69 @@ public sealed class HealthManagerTests
         h.DrainPost();
 
         Assert.False(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    // ----- confirmed mid-combat breach that fully recovers before combat ends ---
+    // Regression for paradigm-20260912-103110: the one-tick confirm above only
+    // catches a same-burst regen recovery. A genuine breach confirmed mid-fight
+    // can still fully self-resolve over several more rounds of regen, well
+    // before the fight itself ends — holding the confirmed gate out for the
+    // full rest-target (instead of the ordinary trigger) meant combat ending
+    // committed to a rest/meditate the pool wasn't actually low for anymore.
+
+    [Fact]
+    public void MaGateConfirmed_RecoversAboveTriggerWhileStillInCombat_NoRestWhenCombatEnds()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 335,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 150, maxMa: 394);   // genuine breach, still fighting
+        Assert.True(h.ManaGateHeld);
+        h.DrainPost();                                           // confirm runs — still below trigger
+        Assert.True(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);                                // withheld — still in combat
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 229, maxMa: 394);   // regen climbs it back past 197, fight still on
+        Assert.False(h.ManaGateHeld);                             // cleared at the trigger, not held for target
+        Assert.Empty(h.SentLines);
+
+        h.State.InCombat = false;                                 // combat ends
+        Assert.Empty(h.SentLines);                                // never rests — it wasn't low anymore
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    [Fact]
+    public void HpGateConfirmed_RecoversAboveTriggerWhileStillInCombat_NoRestWhenCombatEnds()
+    {
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowHp = 100,
+            RestMaxHp = 195,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 80, maxHp: 200);       // genuine breach, still fighting
+        Assert.True(h.HealthGateHeld);
+        h.DrainPost();                          // confirm runs — still below trigger
+        Assert.True(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+
+        h.SetPrompt(hp: 150, maxHp: 200);      // heals back past 100, fight still on
+        Assert.False(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+
+        h.State.InCombat = false;               // combat ends
         Assert.Empty(h.SentLines);
         Assert.False(h.Health.RestInFlight);
     }
