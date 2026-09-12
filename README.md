@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.74.0**
-> - Tab-completes the word you're typing — in the terminal or the Conversation window — against your carried, worn, and key-ring item names (`drop emerald-` + Tab → `drop emerald-hilted rapier`); Shift+Tab steps backward through other matches; never active while a full-screen form (trainer stats, character creation) owns the keyboard
+> - Tab-completes the word you're typing — in the terminal or the Conversation window — against the leading word of your carried, worn, and key-ring item names (`drop emerald-` + Tab → `drop emerald-hilted rapier`; a "bronze emblem" needs `bro`/`bronze`, not `e`); Shift+Tab steps backward through other matches; never active while a full-screen form (trainer stats, character creation) owns the keyboard
 > - New Settings → General toggle, "Tab-complete inventory item names while typing" (default on)
 > - Fixed a ~29s UI freeze on profile load / game-data switch on realms with a large Monsters.json (e.g. Paradigm) — the room→monster spawn index deduped with an O(n) list scan per insert, which blew up into an O(n²) build on rooms with many "Summoned By" references; now O(1) per insert and warmed in the background like the other per-set indexes
 >

@@ -96,14 +96,22 @@ public sealed class InventoryAutoCompleter
         return c;
     }
 
-    // For every carried, worn, and key-ring item name, find each word that
-    // starts with prefix (case-insensitive — the same convention
-    // InventorySnapshot.Has uses) and take that word PLUS every word after it
-    // in the same name, not just the matched word alone. Completing "drop
-    // holy" against "holy medallion" must produce "drop holy medallion", not
-    // "drop holy" — the matched word is already what's typed, so completing
-    // to itself would silently leave the line unchanged and look like Tab did
-    // nothing (the bug this fixes). Distinct completions, first-seen order.
+    // For every carried, worn, and key-ring item name, check only its FIRST
+    // meaningful word (skipping a leading "a"/"an") against prefix
+    // (case-insensitive — the same convention InventorySnapshot.Has uses),
+    // and if it starts with prefix take that word plus every word after it in
+    // the same name. Matching any word ANYWHERE in the name used to mean
+    // typing "e" surfaced "bronze emblem" (via its second word "emblem")
+    // ahead of items that actually start with "e" like "emerald-tipped
+    // crozier" — surprising and not what a short prefix is trying to narrow
+    // down to. Reaching "bronze emblem" now takes typing "bro" or "bronze",
+    // its real leading word.
+    //
+    // Completing "drop holy" against "holy medallion" must still produce
+    // "drop holy medallion", not "drop holy" — the matched word is already
+    // what's typed, so completing to itself would silently leave the line
+    // unchanged and look like Tab did nothing. Distinct completions,
+    // first-seen order.
     private static IReadOnlyList<string> MatchingCompletions(string prefix, InventorySnapshot snapshot)
     {
         List<string> matches = new();
@@ -111,13 +119,12 @@ public sealed class InventoryAutoCompleter
         void Scan(string name)
         {
             string[] words = name.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < words.Length; i++)
-            {
-                if (!words[i].StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase)) continue;
-                string completion = string.Join(' ', words, i, words.Length - i);
-                if (!matches.Contains(completion, System.StringComparer.OrdinalIgnoreCase))
-                    matches.Add(completion);
-            }
+            if (words.Length == 0) return;
+            int start = words.Length > 1 && IsArticle(words[0]) ? 1 : 0;
+            if (!words[start].StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase)) return;
+            string completion = string.Join(' ', words, start, words.Length - start);
+            if (!matches.Contains(completion, System.StringComparer.OrdinalIgnoreCase))
+                matches.Add(completion);
         }
 
         foreach (string item in snapshot.CarriedItems) Scan(item);
@@ -127,4 +134,8 @@ public sealed class InventoryAutoCompleter
 
         return matches;
     }
+
+    private static bool IsArticle(string word)
+        => word.Equals("a", System.StringComparison.OrdinalIgnoreCase)
+        || word.Equals("an", System.StringComparison.OrdinalIgnoreCase);
 }

@@ -113,10 +113,26 @@ public sealed class InventoryAutoCompleterTests
         Assert.Equal("wield keen longsword", first); // equipped, since no carried item starts with "k"
 
         string? second = NextAtEnd(ac, first!, snap);
-        Assert.Equal("wield keyring key", second);   // then the key-ring's first matching word...
+        Assert.Equal("wield keyring key", second);   // then the key-ring, by its leading word "keyring"
 
         string? third = NextAtEnd(ac, second!, snap);
-        Assert.Equal("wield key", third);            // ...and its second ("key" in "a keyring key")
+        Assert.Equal("wield keen longsword", third); // wraps back to the first candidate
+    }
+
+    // Regression: typing a short prefix must not surface an item via a word
+    // BURIED in its name ("emblem", the second word of "bronze emblem")
+    // ahead of — or instead of — items that actually start with that prefix.
+    // Only the leading word (skipping "a"/"an") is checked; reaching "bronze
+    // emblem" takes typing "bro" or "bronze".
+    [Fact]
+    public void OnlyMatchesTheItemsLeadingWord_NotAWordBuriedInTheName()
+    {
+        InventoryAutoCompleter ac = new();
+        InventorySnapshot snap = Snap(carried: new[] { "bronze emblem", "emerald-tipped crozier" });
+
+        Assert.Equal("drop emerald-tipped crozier", NextAtEnd(ac, "drop e", snap));
+        Assert.Null(NextAtEnd(ac, "drop emb", snap));       // "emblem" is not a leading word anywhere
+        Assert.Equal("drop bronze emblem", NextAtEnd(ac, "drop bro", snap));
     }
 
     [Fact]
