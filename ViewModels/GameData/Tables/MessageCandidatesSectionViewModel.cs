@@ -23,9 +23,10 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
     private readonly GameDataCache? _cache;
     private readonly MessageCandidateWatcher? _watcher;
     private readonly LogDiagnosticState? _diagnostics;
-    // (map, room) -> a "Likely source" hint (spells castable by monsters in that
-    // room). Null when no attributor was supplied (tests / no game data).
-    private readonly Func<int, int, string?>? _likelySource;
+    // (map, room, rawText) -> a "Likely source" hint. Takes the captured text because
+    // the attribution is derived from it — a monster the line names, else the room's
+    // own on-entry spell. Null when no attributor was supplied (tests / no game data).
+    private readonly Func<int, int, string, string?>? _likelySource;
 
     public override string Id => "message-candidates";
     public override string Title => "Unrecognized Lines";
@@ -86,7 +87,7 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         GameDataCache? cache = null,
         MessageCandidateWatcher? watcher = null,
         LogDiagnosticState? diagnostics = null,
-        Func<int, int, string?>? likelySource = null)
+        Func<int, int, string, string?>? likelySource = null)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(messages);
@@ -145,9 +146,12 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
             // Map:Room where the line was first seen — the locator hint for
             // tracking down its source. Blank when position wasn't yet known.
             ["Seen In"]     = c.Map is { } m && c.Room is { } rm ? $"{m}:{rm}" : "",
-            // Spells castable by monsters in that room — a starting point for
-            // "which spell's message is this?". Blank when no location / no attributor.
-            ["Likely source"] = c.Map is { } lm && c.Room is { } lr ? (_likelySource?.Invoke(lm, lr) ?? "") : "",
+            // The spell that probably produced this line — a monster the line names,
+            // else the room's own on-entry spell. Blank when nothing ties the two
+            // together, which is more useful than a hint every row shares.
+            ["Likely source"] = c.Map is { } lm && c.Room is { } lr
+                ? (_likelySource?.Invoke(lm, lr, c.RawText) ?? "")
+                : "",
             ["Occurrences"] = c.Occurrences.ToString(),
             ["First Seen"]  = c.FirstSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
             ["Last Seen"]   = c.LastSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
@@ -279,7 +283,7 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
             sb.Append("  - seen in: ").Append(loc)
               .Append("  ·  occurrences: ").Append(c.Occurrences).Append('\n');
             if (c.Map is { } lm && c.Room is { } lr
-                && _likelySource?.Invoke(lm, lr) is { Length: > 0 } src)
+                && _likelySource?.Invoke(lm, lr, c.RawText) is { Length: > 0 } src)
                 sb.Append("  - likely source: ").Append(src).Append('\n');
         }
 
