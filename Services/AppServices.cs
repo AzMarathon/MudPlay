@@ -4938,9 +4938,13 @@ public sealed class AppServices
             Needs,
             carriedCount: CountItemCarried,
             inventoryLoaded: () => Inventory.IsLoaded,
-            // The route picker's explicit "obtain then cross" pick forces a per-walk
-            // obtain regardless of the global search-if-needed preference — the pick
-            // IS the consent, so open the demand gate whenever a forced obtain is live.
+            // POSTING gate. The route picker's explicit "obtain then cross" / "search
+            // en route" pick forces a per-walk obtain regardless of the global
+            // search-if-needed preference — the pick IS the consent, so register the
+            // need whenever a forced obtain is live. This drives the shop/give/drop
+            // fulfillers (the reliable acquire path), so it must stay open on a forced
+            // obtain even with master auto-search off — that's what lets the buy-at-shop
+            // fallback fire when searching is off or turns nothing up.
             isEnabled: () =>
                 Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded
                 || _forcedPathObtain.Count > 0,
@@ -4951,6 +4955,15 @@ public sealed class AppServices
             // one loose beats paying or grinding for it.
             isSearchWorthy: id =>
                 !DeterministicGiveExists(id) && SummonSourcesForItem(id).Count == 0,
+            // SEARCH-DEMAND gate. Auto-search is the driver of `sea` while moving: a
+            // forced obtain no longer arms the per-room search on its own — only the
+            // "search rooms if item needed" setting does (and the master AutoSearch
+            // toggle, which AutoSearchManager ORs in separately). So a route picked
+            // with master auto-search OFF walks straight to the shop-buy fallback with
+            // no searching, and toggling auto-search off mid-route stops the `sea` live
+            // while the shop-buy carries on.
+            searchEnabled: () =>
+                Resolver.Resolve<Models.Profile.OtherSettings>("Other").SearchRoomsIfItemNeeded,
             log: Log);
         Inventory.Changed += PathItemDemand.OnInventoryChanged;
 

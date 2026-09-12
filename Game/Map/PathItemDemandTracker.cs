@@ -39,7 +39,21 @@ public sealed class PathItemDemandTracker
     private readonly NeedsRegistry _needs;
     private readonly Func<int, int> _carriedCount;
     private readonly Func<bool> _inventoryLoaded;
+    // Posting gate: whether a PathItem need is registered at all when the walker
+    // demands one. On when the "search rooms if item needed" setting is on OR the
+    // route picker forced a per-walk obtain — posting the need is what arms the
+    // shop / give / drop fulfillers (the reliable acquire path), so it must stay
+    // open on a forced obtain even with master auto-search off, or the buy-at-shop
+    // fallback would never fire.
     private readonly Func<bool> _isEnabled;
+    // Search-demand gate: whether an outstanding need should arm the per-room `sea`.
+    // Deliberately SEPARATE from _isEnabled — a picker forced-obtain still posts
+    // (so the shop buys) but its en-route searching is governed by the master
+    // auto-search toggle, not the forced-obtain flag: "auto-search is the driver of
+    // `sea` while moving", so toggling it off stops the search and leaves the walk
+    // to the shop-buy fallback. Falls back to _isEnabled when not supplied
+    // (preserves the original coupling for tests that don't split them).
+    private readonly Func<bool> _searchEnabled;
     // "Is a room search a plausible way to get this item?" — false for an item with
     // a deterministic source (a keyword give, a guaranteed summon), which the run
     // is already detouring to collect. Null means every need is search-worthy,
@@ -53,6 +67,7 @@ public sealed class PathItemDemandTracker
         Func<bool> inventoryLoaded,
         Func<bool> isEnabled,
         Func<int, bool>? isSearchWorthy = null,
+        Func<bool>? searchEnabled = null,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(needs);
@@ -63,14 +78,14 @@ public sealed class PathItemDemandTracker
         _carriedCount = carriedCount;
         _inventoryLoaded = inventoryLoaded;
         _isEnabled = isEnabled;
+        _searchEnabled = searchEnabled ?? isEnabled;
         _isSearchWorthy = isSearchWorthy;
         _log = log;
     }
 
-    // True when the "search rooms if item needed" feature is on AND at least one
-    // outstanding PathItem need is actually worth searching for — i.e. auto-search
-    // should arm to hunt the missing route item. Read live by AutoSearchManager's
-    // demand gate.
+    // True when the search-demand gate is open AND at least one outstanding PathItem
+    // need is actually worth searching for — i.e. auto-search should arm to hunt the
+    // missing route item. Read live by AutoSearchManager's demand gate.
     //
     // A need whose item has a DETERMINISTIC source is not worth searching for: the
     // run is already walking to an NPC who hands it over on a keyword, or to a room
@@ -84,7 +99,7 @@ public sealed class PathItemDemandTracker
     {
         get
         {
-            if (!_isEnabled()) return false;
+            if (!_searchEnabled()) return false;
             IReadOnlyList<Need> outstanding = _needs.Outstanding(NeedKind.PathItem);
             if (outstanding.Count == 0) return false;
             if (_isSearchWorthy is null) return true;

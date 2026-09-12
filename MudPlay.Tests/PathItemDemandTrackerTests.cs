@@ -13,6 +13,14 @@ public sealed class PathItemDemandTrackerTests
         public readonly Dictionary<int, int> Carried = new();
         public bool InventoryLoaded = true;
         public bool Enabled = true;
+        // The search-demand gate, distinct from the posting gate (Enabled). When
+        // SplitSearchGate is set the tracker is built with this as a SEPARATE
+        // searchEnabled delegate — modelling AppServices, where a forced obtain
+        // posts (so the shop buys) but the master auto-search toggle governs the
+        // `sea`. When left off, searchEnabled is omitted and falls back to Enabled,
+        // preserving the historical coupling the other tests rely on.
+        public bool SearchEnabled = true;
+        public bool SplitSearchGate;
         // Item ids whose source is deterministic (a keyword give / guaranteed
         // summon) and therefore NOT worth searching for. Empty = search everything,
         // which is the historical behaviour.
@@ -23,7 +31,8 @@ public sealed class PathItemDemandTrackerTests
             carriedCount: id => Carried.TryGetValue(id, out int n) ? n : 0,
             inventoryLoaded: () => InventoryLoaded,
             isEnabled: () => Enabled,
-            isSearchWorthy: id => !DeterministicallySourced.Contains(id));
+            isSearchWorthy: id => !DeterministicallySourced.Contains(id),
+            searchEnabled: SplitSearchGate ? () => SearchEnabled : null);
 
         public void Carry(int id, int n = 1) => Carried[id] = n;
 
@@ -329,6 +338,56 @@ public sealed class PathItemDemandTrackerTests
         t.OnPathItemsRequired(new[] { 807, 806 });
 
         Assert.Contains("806", offered);
+    }
+
+    // ----- decoupled posting vs search-demand gate -------------------
+    //
+    // The route picker's "search en route" / "obtain then cross" picks force an
+    // obtain so the shop-buy fallback is armed, but the per-room `sea` is governed
+    // by the master auto-search toggle: with it off the walk goes straight to the
+    // shop and buys, with no searching. The tracker models this as two gates — the
+    // POSTING gate (registers the need → drives the shop) stays open while the
+    // SEARCH-DEMAND gate (arms the `sea`) can be shut independently.
+
+    [Fact]
+    public void SearchGateOff_StillPostsNeedButDoesNotArmSearch()
+    {
+        // Posting on (forced obtain), search-demand off (master auto-search off).
+        var h = new Harness { SplitSearchGate = true, Enabled = true, SearchEnabled = false };
+        PathItemDemandTracker t = h.Build();
+
+        t.OnPathItemsRequired(new[] { 42 });
+
+        // The need posts — the shop router fulfils it (buy as the reliable path)...
+        Assert.Equal(1, h.OutstandingCount);
+        // ...but the `sea` stays disarmed, so nothing searches en route.
+        Assert.False(t.SearchDemandActive);
+    }
+
+    [Fact]
+    public void SearchGateToggledOffMidRoute_DisarmsSearchButKeepsNeed()
+    {
+        var h = new Harness { SplitSearchGate = true, Enabled = true, SearchEnabled = true };
+        PathItemDemandTracker t = h.Build();
+        t.OnPathItemsRequired(new[] { 42 });
+        Assert.True(t.SearchDemandActive);
+
+        h.SearchEnabled = false;   // user flips master auto-search off mid-walk
+
+        Assert.False(t.SearchDemandActive);   // `sea` stops firing live
+        Assert.Equal(1, h.OutstandingCount);   // shop-buy fallback stays armed
+    }
+
+    [Fact]
+    public void SearchGateOn_ArmsSearchAndPosts()
+    {
+        var h = new Harness { SplitSearchGate = true, Enabled = true, SearchEnabled = true };
+        PathItemDemandTracker t = h.Build();
+
+        t.OnPathItemsRequired(new[] { 42 });
+
+        Assert.Equal(1, h.OutstandingCount);
+        Assert.True(t.SearchDemandActive);
     }
 
     // Nothing left to fetch → nothing announced, so a plain walk stays quiet.

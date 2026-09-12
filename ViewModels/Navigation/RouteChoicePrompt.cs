@@ -488,8 +488,9 @@ public static class RouteChoicePrompt
                     CommitWalk(services, destination, gated: false, avoidTeleports: true);
                     break;
                 case RouteChoiceResult.Gated:
-                    // "Teleport" — allow the shortcut, the walker's default.
-                    CommitWalk(services, destination, gated: false);
+                    // "Teleport" — the user explicitly chose the shortcut, so drop the
+                    // prefer-walk bias and let the walker plan the teleport hop.
+                    CommitWalk(services, destination, gated: false, preferTeleportFree: false);
                     break;
                 // null → cancelled: walk nothing.
             }
@@ -582,11 +583,14 @@ public static class RouteChoicePrompt
                     armAcquisition: false, avoidTraps: !choice.HasFreeRoute);
                 break;
             case RouteChoiceResult.SearchEnRoute:
-                // "Search en route": force-obtain every any-of counter (which opens
-                // the path-item demand gate → arms AutoSearch's per-room `sea`), then
-                // walk the gated route. The floor collector grabs whichever counter a
-                // search reveals; once it's in hand the walk crosses, and if none turns
-                // up the walker halts at a grave hazard's edge — nothing bought.
+                // "Search en route": force-obtain every any-of counter, then walk the
+                // gated route. The forced obtain both arms the shop-buy fallback (the
+                // reliable acquire path — see PathItemShopRouter) and, when the master
+                // auto-search toggle is on, the per-room `sea`. The floor collector
+                // grabs whichever counter a search reveals first; found-first aborts the
+                // buy and the walk crosses. With auto-search off (or if nothing turns up
+                // en route) the shop-buy is the last resort. Auto-search is the driver:
+                // toggling it off mid-route stops the `sea` and leaves the buy running.
                 if (hazardCounterIds.Count > 0)
                     services.ForcePathObtain(hazardCounterIds);
                 CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
@@ -608,10 +612,16 @@ public static class RouteChoicePrompt
     // (AutoWalkManager.WalkToImmediate honours the coordinator's paused state), so
     // the destination changed but the walker stayed frozen. Engine waits (Combat /
     // rest / party) are left asserted and re-pause on their own if still relevant.
+    // preferTeleportFree defaults TRUE for every user-picker commit: a walk the user
+    // launched from the picker (or a plain walk-to) should take the pure-walking route
+    // and only fall back to a teleport hop when walking is genuinely impossible — so a
+    // mid-walk re-plan (e.g. after a search-en-route counter turns up) never silently
+    // pivots onto a vortex the user didn't ask for. The one exception is the teleport
+    // fork's explicit "Teleport" pick, which passes false to allow the shortcut.
     private static void CommitWalk(
         AppServices services, RoomKey destination, bool gated,
         bool armAcquisition = true, bool avoidTeleports = false, bool avoidTraps = false,
-        bool ignoreAvoids = false)
+        bool ignoreAvoids = false, bool preferTeleportFree = true)
     {
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
@@ -629,7 +639,8 @@ public static class RouteChoicePrompt
             armItemAcquisition: armAcquisition,
             avoidTeleports: avoidTeleports,
             avoidTraps: avoidTraps,
-            ignoreAvoids: ignoreAvoids);
+            ignoreAvoids: ignoreAvoids,
+            preferTeleportFree: preferTeleportFree);
     }
 
     private static string DestinationLabel(AppServices services, RoomKey destination) =>

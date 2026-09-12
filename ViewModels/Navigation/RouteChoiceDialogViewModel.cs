@@ -152,18 +152,23 @@ public sealed partial class RouteChoiceDialogViewModel
     // valid alternative (find one free by searching each room on the way).
     private bool _hazardCounterNeeded;
 
-    // The "search en route" card: walk toward the hazard searching each room, and
-    // cross if a counter turns up (the obtain pipeline's floor collector grabs it),
-    // else halt at the edge. Offered whenever a hazard counter is needed — a way to
-    // source it free instead of (or before) buying / detouring. Not on a teleport /
-    // trap-avoid / avoid-override / blocked fork.
+    // The "search en route" card: search each room on the way (when auto-search is
+    // on) and cross the moment a counter turns up (the obtain pipeline's floor
+    // collector grabs it), falling back to buying it at a shop otherwise. Offered
+    // whenever a hazard counter is needed — a way to source it free instead of (or
+    // before) buying. Not on a teleport / trap-avoid / avoid-override / blocked fork.
     public bool ShowSearchCard =>
         _hazardCounterNeeded && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice;
 
     public string SearchSummary { get; private set; } = "";
+    // Auto-search is the driver of the en-route `sea`: with it on, each room is
+    // searched and a found counter is grabbed to cross for free; with it off (or if
+    // nothing turns up), the walk falls back to buying at a shop when one stocks the
+    // counter — and only stops at the hazard's edge if there's nowhere to get one.
     public string SearchDetail =>
-        "Searches each room on the way; if a counter turns up it's grabbed and you cross, "
-        + "otherwise you stop at the hazard's edge. Turn up nothing, lose nothing.";
+        "Searches each room on the way while auto-search is on, crossing the moment a counter "
+        + "turns up. Falls back to buying at a shop if nothing's found or auto-search is off; "
+        + "stops at the hazard's edge only when there's nowhere to get one.";
 
     // The muted sub-line under the send-it card — reframed for the hazard flavour
     // (take the damage) vs the item-gate flavour (carry the gate items yourself).
