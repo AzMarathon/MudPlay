@@ -295,6 +295,30 @@ public sealed class PartyAilmentTrackerTests
     }
 
     [Fact]
+    public void InboundOk_ClearsVerboseChips_LeavesPoison()
+    {
+        using Harness h = new();
+        PartyMember mage = h.AddMember("Mage");
+
+        h.Say(@"Mage says ""@blind""");
+        h.Say(@"Mage says ""@held""");
+        h.Say(@"Mage says ""@poisoned""");
+        Assert.True(mage.Blinded);
+        Assert.True(mage.Held);
+        Assert.True(mage.Poisoned);
+
+        // @ok from the member means every NON-ignored ailment cleared on their side
+        // (the sender holds @ok until its last one clears), so drop their VERBOSE
+        // chips (blind / confused / diseased / held). Poison is par-owned — left for
+        // its own P-flag drop.
+        h.Say(@"Mage telepaths: @ok");
+
+        Assert.False(mage.Blinded);
+        Assert.False(mage.Held);
+        Assert.True(mage.Poisoned);   // untouched by @ok
+    }
+
+    [Fact]
     public void NonMemberSpeaker_CreatesNoPhantomMember()
     {
         using Harness h = new();

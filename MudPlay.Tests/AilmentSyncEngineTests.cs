@@ -207,6 +207,24 @@ public sealed class AilmentSyncEngineTests
     }
 
     [Fact]
+    public void IgnoredAilment_DoesNotHoldOrTriggerOk()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.Spells = new SpellsSettings { IgnorePoison = true };   // push through poison
+
+        h.Feed("You have been poisoned!");  // ignored → no @wait reason placed
+        h.Feed("You have been blinded!");    // not ignored → @wait
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+
+        h.Feed("The poison wears off.");      // ignored poison clears → must NOT emit @ok
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+
+        h.Feed("Your vision returns.");       // last NON-ignored clears → @ok now
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+    }
+
+    [Fact]
     public void Held_AnnouncesSay_AndTelepathsWait()
     {
         using Harness h = new();

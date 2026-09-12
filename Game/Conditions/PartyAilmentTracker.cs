@@ -27,8 +27,11 @@ namespace MudPlay.Game.Conditions;
 // none of which is an outbound say: (1) a witnessed cure landing on the member —
 // the fastest path; (2) the spell-data duration timing out (SweepExpiredChips,
 // armed from the apply-cast's cast level or a generous fallback cap); (3) the par
-// `P` flag dropping (poison only, PartyManager); (4) a @status reconcile. For the
-// cure path, each configured cure spell's CasterMessage (OUR cast) and
+// `P` flag dropping (poison only, PartyManager); (4) a @status reconcile; (5) the
+// member's @ok telepath — they hold @ok until their last non-ignored ailment
+// clears, so it clears every VERBOSE chip (blind / confused / diseased / held) at
+// once (ClearVerboseChipsOnOk). For the cure path, each configured cure spell's
+// CasterMessage (OUR cast) and
 // WitnessMessage (a cast by another member, seen in the room) templates are
 // compiled to CasterMessageMatchers; a server line naming BOTH the cure spell AND
 // the member (CasterMessageMatcher.ConfirmsSpellTarget) clears that member's chip —
@@ -140,12 +143,45 @@ public sealed class PartyAilmentTracker : IDisposable
         if (entry.Channel == ChatChannel.Local)
             HandleAilmentToggle(entry, speaker);
 
+        // @ok (telepath → leader): the member's afflictions have all cleared. The
+        // sender holds @ok until its LAST non-ignored ailment clears (PartyRestSync),
+        // so an inbound @ok means every VERBOSE ailment they flagged is gone — drop
+        // their say-driven chips. Poison is par-owned (its own P-flag drop clears it),
+        // so it's left untouched here.
+        if (entry.Channel == ChatChannel.TelepathIncoming
+            && entry.Message.Trim().Equals("@ok", StringComparison.OrdinalIgnoreCase))
+            ClearVerboseChipsOnOk(speaker);
+
         // @status reply reconcile — the reply rides whichever channel the @status
         // arrived on (telepath / gangpath / say), so watch all three.
         if (entry.Channel is ChatChannel.TelepathIncoming
                            or ChatChannel.Gangpath
                            or ChatChannel.Local)
             HandleStatusReply(entry, speaker);
+    }
+
+    // The verbose say-flagged ailments — the ones a member announces on say (so the
+    // leader's chip for them is set by the member's broadcast, and an @ok means they
+    // cleared). Poison is excluded: it's never said (par-owned).
+    private static readonly MessageFlags[] VerboseAilments =
+    {
+        MessageFlags.Blinded, MessageFlags.Confused,
+        MessageFlags.Diseased, MessageFlags.MovementPrevented,
+    };
+
+    // Clear a member's verbose ailment chips on their @ok (all non-ignored
+    // afflictions cleared on their side). Drops any armed expiry too, so the sweep
+    // can't re-fire on a stale window. Idempotent — SetMemberAilment no-ops a chip
+    // that's already clear or a non-member speaker.
+    private void ClearVerboseChipsOnOk(string speaker)
+    {
+        string given = GivenName(speaker);
+        foreach (MessageFlags flag in VerboseAilments)
+        {
+            _party.SetMemberAilment(speaker, flag, false);
+            _expiryAtMs.Remove((given, flag));
+        }
+        _log?.Info(LogCategory, $"@ok from {speaker} — cleared verbose ailment chips");
     }
 
     private void HandleAilmentToggle(ChatLogEntry entry, string speaker)
