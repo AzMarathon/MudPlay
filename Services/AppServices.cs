@@ -2693,6 +2693,12 @@ public sealed class AppServices
         // see the right realm's catalogue.
         Messages = new MessageStore(Log);
         GameData.ActiveSetChanged += Messages.Load;
+        // The apply-cast matcher list + spell-formula cache (PartyAilmentTracker's
+        // witness-SET + duration clear) are derived from Messages + the Spells
+        // table, so drop them when either changes: a set switch (reseeds both) or a
+        // message edit in the Game Data Browser. Rebuilt lazily on next use.
+        GameData.ActiveSetChanged += _ => { _applyMatchers = null; _spellFormulas = null; };
+        Messages.Messages.CollectionChanged += (_, _) => _applyMatchers = null;
         // Monster-message catalogue parallels the spell-message one —
         // same per-set storage + universal seed fallback pattern.
         MonsterMessages = new MonsterMessageStore(Log);
@@ -3620,7 +3626,10 @@ public sealed class AppServices
         // rebuilding the tracker. AttachLineExtractor lands in
         // MainWindowViewModel alongside the other line consumers.
         PartyAilment = new Game.Conditions.PartyAilmentTracker(
-            Chat, Party, PartyEssentials, CureCastMatchers, Log);
+            Chat, Party, PartyEssentials, CureCastMatchers,
+            readApplyMatchers: ApplyCastMatchers,
+            resolveDurationSeconds: ResolveAilmentDurationSeconds,
+            log: Log);
 
         // Self-confusion bridge — the local side of our own confusion. A
         // confused follower telepaths the leader @wait (AilmentSyncEngine above);
@@ -7048,6 +7057,99 @@ public sealed class AppServices
     // a Game.Spells.CasterMessageMatcher. Confusion has no
     // cure spell, so it's never listed. Re-read on every call so
     // re-configuring a cure spell takes effect immediately.
+    // Apply-cast matchers for PartyAilmentTracker's witness-SET path: every Messages
+    // record that inflicts a witnessable ailment (blind / confuse / disease / held —
+    // poison is par-owned, excluded), carries a WitnessMessage (a monster casting it
+    // on a member, seen in the room), and links to its Spells row (so we know the
+    // spell number for its duration). Cached; invalidated on a Messages change / set
+    // switch (wired where Messages is constructed). Rebuilt lazily here.
+    private IReadOnlyList<Game.Conditions.ApplyCastMatcher>? _applyMatchers;
+
+    private IReadOnlyList<Game.Conditions.ApplyCastMatcher> ApplyCastMatchers()
+    {
+        if (_applyMatchers is { } cached) return cached;
+
+        const Models.GameData.MessageFlags Witnessable =
+            Models.GameData.MessageFlags.Blinded | Models.GameData.MessageFlags.Confused
+            | Models.GameData.MessageFlags.Diseased | Models.GameData.MessageFlags.MovementPrevented;
+        Models.GameData.MessageFlags[] bits =
+        {
+            Models.GameData.MessageFlags.Blinded, Models.GameData.MessageFlags.Confused,
+            Models.GameData.MessageFlags.Diseased, Models.GameData.MessageFlags.MovementPrevented,
+        };
+
+        List<Game.Conditions.ApplyCastMatcher> list = new();
+        foreach (Models.GameData.MessageRecord rec in Messages.Messages)
+        {
+            if ((rec.Flags & Witnessable) == Models.GameData.MessageFlags.None) continue;
+            if (rec.Flags.HasFlag(Models.GameData.MessageFlags.Disabled)) continue;
+            if (Game.Spells.CasterMessageMatcher.TryCreate(rec.WitnessMessage) is not { } witness) continue;
+            int spellNumber = SpellNumberOf(rec);
+            if (spellNumber <= 0) continue;
+            foreach (Models.GameData.MessageFlags bit in bits)
+                if (rec.Flags.HasFlag(bit))
+                    list.Add(new Game.Conditions.ApplyCastMatcher(bit, rec.Name, spellNumber, witness));
+        }
+        return _applyMatchers = list;
+    }
+
+    // The Spells-table Number a message record is anchored to (via its back-links),
+    // or 0 when it isn't spell-linked.
+    private static int SpellNumberOf(Models.GameData.MessageRecord rec)
+    {
+        if (rec.Links is null) return 0;
+        foreach (Models.GameData.GameDataLink link in rec.Links)
+            if (link.Table.Equals("Spells", StringComparison.OrdinalIgnoreCase))
+                return link.Number;
+        return 0;
+    }
+
+    // Spell-formula cache for duration lookups; rebuilt lazily, invalidated on set
+    // switch (wired with the apply-matcher cache).
+    private Dictionary<int, Game.Spells.SpellFormulaInput>? _spellFormulas;
+
+    private Game.Spells.SpellFormulaInput? SpellFormulaFor(int spellNumber)
+    {
+        if (_spellFormulas is null)
+        {
+            Dictionary<int, Game.Spells.SpellFormulaInput> map = new();
+            if (GameData.GetRawTable("Spells") is { } doc
+                && doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                foreach (System.Text.Json.JsonElement row in doc.RootElement.EnumerateArray())
+                    if (row.TryGetProperty("Number", out System.Text.Json.JsonElement n)
+                        && n.TryGetInt32(out int num))
+                        map[num] = Game.Spells.SpellFormulaReader.Read(row);
+            _spellFormulas = map;
+        }
+        return _spellFormulas.TryGetValue(spellNumber, out Game.Spells.SpellFormulaInput f) ? f : null;
+    }
+
+    // Duration (seconds) a witnessed ailment spell will last on a party member —
+    // deterministic from the CASTING monster's cast level (a "resist" prints no
+    // apply line, so never reaches here). We can't pin which in-room monster cast
+    // it from the witness line, so take the LONGEST cast level among in-room
+    // monsters that cast this spell — clearing a chip late is safe, clearing it
+    // early (stopping a still-needed cure) is not. Null when no in-room caster has
+    // the spell or it has no duration formula — the tracker falls back to its cap.
+    private double? ResolveAilmentDurationSeconds(int spellNumber)
+    {
+        if (SpellFormulaFor(spellNumber) is not { } formula) return null;
+        int bestLevel = 0;
+        if (RoomClassifier.Current is { } obs)
+            foreach (Game.Combat.RoomEntity e in obs.Entities)
+            {
+                if (e.MonsterNumber is not { } mn) continue;
+                if (MonsterCatalog.Get(mn) is not { } entry) continue;
+                foreach (Game.Combat.MonsterAttackSlot a in entry.Attacks)
+                    if (a.Accuracy == spellNumber && a.MaxDamage > bestLevel) bestLevel = a.MaxDamage;
+                foreach (Game.Combat.MonsterMidSpellSlot s in entry.MidSpells)
+                    if (s.SpellId == spellNumber && s.Level > bestLevel) bestLevel = s.Level;
+            }
+        if (bestLevel <= 0) return null;
+        long rounds = Game.Spells.SpellCalculator.Duration(formula, bestLevel);
+        return rounds > 0 ? rounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock : null;
+    }
+
     private IReadOnlyList<Game.Conditions.CureCastMatcher> CureCastMatchers()
     {
         Models.Profile.SpellsSettings spells =

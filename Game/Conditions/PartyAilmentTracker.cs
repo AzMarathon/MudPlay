@@ -65,10 +65,28 @@ public sealed class PartyAilmentTracker : IDisposable
     public static IReadOnlyList<string> AnnounceTokens { get; } =
         Array.ConvertAll(Tokens, t => t.Token);
 
+    // A generous cap applied when we set a chip we can't arm a real duration for
+    // (a bare say announce with no witnessed cast, or a witnessed cast whose
+    // duration couldn't be resolved). Not a duration claim — a backstop so a chip
+    // can never stick forever when no cure / par / @status clear ever arrives.
+    private const double FallbackDurationSeconds = 180;
+
     private readonly ChatRouter _chat;
     private readonly PartyManager _party;
     private readonly PartyEssentialHandlers _essentials;
     private readonly Func<IReadOnlyList<CureCastMatcher>> _readCureMatchers;
+    // Apply-cast matchers (ailment-inflicting monster spells) + the spell-data
+    // duration resolver. Null when apply-witnessing is disabled (tests that only
+    // exercise the cure/say paths). See AppServices for the production bindings.
+    private readonly Func<IReadOnlyList<ApplyCastMatcher>>? _readApplyMatchers;
+    private readonly Func<int, double?>? _resolveDurationSeconds;
+    private readonly Func<long> _now;
+    // Chips with an armed expiry, keyed by member given-name + flag → absolute
+    // expiry (monotonic ms). The "duration timed out" clear: SweepExpiredChips
+    // drops a chip whose window elapsed. Every non-timeout clear (cure / par /
+    // @status / inbound off) removes the entry first, so the sweep only fires when
+    // nothing else cleared. Poison is never armed here — it's par-owned (PR A).
+    private readonly Dictionary<(string Given, MessageFlags Flag), long> _expiryAtMs = new();
     private readonly LogService? _log;
     private LineExtractor? _lines;
     private bool _disposed;
@@ -78,6 +96,9 @@ public sealed class PartyAilmentTracker : IDisposable
         PartyManager party,
         PartyEssentialHandlers essentials,
         Func<IReadOnlyList<CureCastMatcher>> readCureMatchers,
+        Func<IReadOnlyList<ApplyCastMatcher>>? readApplyMatchers = null,
+        Func<int, double?>? resolveDurationSeconds = null,
+        Func<long>? nowMs = null,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
@@ -88,6 +109,9 @@ public sealed class PartyAilmentTracker : IDisposable
         _party = party;
         _essentials = essentials;
         _readCureMatchers = readCureMatchers;
+        _readApplyMatchers = readApplyMatchers;
+        _resolveDurationSeconds = resolveDurationSeconds;
+        _now = nowMs ?? (static () => Environment.TickCount64);
         _log = log;
         _chat.EntryClassified += OnChat;
     }
@@ -140,12 +164,27 @@ public sealed class PartyAilmentTracker : IDisposable
                 continue;
 
             _party.SetMemberAilment(speaker, flag, !off);
-            // Held also pauses the leader on set: a held member can't move, so
-            // the party must wait for them exactly as an explicit @wait would.
-            // Held sends no 'off' — its release rides the member's @ok (sent on
-            // cure / last-clear) via PartyEssentialHandlers.OnOk.
-            if (flag == MessageFlags.MovementPrevented && !off)
-                _essentials.NotePause(speaker);
+            if (off)
+            {
+                // An old client's explicit '.@X off' clears the chip — drop any
+                // armed expiry so it doesn't re-fire on a stale window.
+                _expiryAtMs.Remove((GivenName(speaker), flag));
+            }
+            else
+            {
+                // Held also pauses the leader on set: a held member can't move, so
+                // the party must wait for them exactly as an explicit @wait would.
+                // Its release rides the member's @ok via PartyEssentialHandlers.OnOk.
+                if (flag == MessageFlags.MovementPrevented)
+                    _essentials.NotePause(speaker);
+                // A bare say announce carries no spell → no real duration. Arm the
+                // fallback cap only when a (more precise) witnessed-apply expiry
+                // isn't already set (TryAdd), so a say-only chip can't stick forever.
+                // Poison is par-owned — never capped here.
+                if (flag != MessageFlags.Poisoned)
+                    _expiryAtMs.TryAdd((GivenName(speaker), flag),
+                        _now() + (long)(FallbackDurationSeconds * 1000));
+            }
             _log?.Info(LogCategory, $"inbound {token} {(off ? "off" : "on")} from {speaker}");
             return;
         }
@@ -181,7 +220,16 @@ public sealed class PartyAilmentTracker : IDisposable
         foreach ((string token, MessageFlags flag) in Tokens)
         {
             if (flag == MessageFlags.MovementPrevented) continue; // held rides @ok
-            _party.SetMemberAilment(speaker, flag, reported.Contains(token[1..]));
+            bool present = reported.Contains(token[1..]);
+            _party.SetMemberAilment(speaker, flag, present);
+            // Keep the armed-expiry bookkeeping consistent with the reconciled
+            // truth: a present ailment gets the fallback cap (unless a precise
+            // witnessed expiry is already armed), an absent one drops any entry.
+            if (!present)
+                _expiryAtMs.Remove((GivenName(speaker), flag));
+            else if (flag != MessageFlags.Poisoned)
+                _expiryAtMs.TryAdd((GivenName(speaker), flag),
+                    _now() + (long)(FallbackDurationSeconds * 1000));
         }
         _log?.Info(LogCategory,
             $"@status reconcile from {speaker}: {(reported.Count == 0 ? "no ailments" : string.Join(",", reported))}");
@@ -189,25 +237,69 @@ public sealed class PartyAilmentTracker : IDisposable
 
     private void OnLine(LineExtractor.EmittedLine line)
     {
+        // Drop any chip whose armed duration elapsed (the "duration timed out"
+        // clear), then witness fresh applies (set + arm duration) and cures (clear
+        // + drop the armed expiry). Sweeping on each line keeps this timer-free — a
+        // quiet stream just clears on the next line, and the 5s par poll keeps lines
+        // flowing — so a chip never outlives its duration by more than the gap to
+        // the next line.
+        SweepExpiredChips();
+        WitnessApplies(line);
+        WitnessCures(line);
+    }
+
+    // Witness a monster's ailment-apply line naming a party member → set that
+    // member's chip and arm its spell-data duration (the authoritative clear for a
+    // landed effect; a "resist" prints no apply line, so no chip). Poison is
+    // excluded (par-owned, PR A); self is excluded (ConditionTracker owns it).
+    // No-op when no apply-matchers are wired (cure/say-only test harnesses).
+    private void WitnessApplies(LineExtractor.EmittedLine line)
+    {
+        if (_readApplyMatchers is null) return;
+        IReadOnlyList<ApplyCastMatcher> matchers = _readApplyMatchers();
+        if (matchers.Count == 0) return;
+
+        foreach (PartyMember m in _party.State.Members)
+        {
+            if (m.IsSelf) continue;
+            string given = GivenName(m.Name);
+            // Cheap pre-filter: the matcher also pins the target, but skipping the
+            // regex sweep when the member isn't even named keeps a busy combat
+            // stream cheap against a large apply-matcher set.
+            if (!line.Text.Contains(given, StringComparison.OrdinalIgnoreCase)
+                && !line.Text.Contains(m.Name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            foreach (ApplyCastMatcher am in matchers)
+            {
+                if (!am.Witness.ConfirmsSpellTarget(line.Text, am.SpellName, m.Name)
+                    && !am.Witness.ConfirmsSpellTarget(line.Text, am.SpellName, given))
+                    continue;
+                _party.SetMemberAilment(m.Name, am.Ailment, true);
+                double secs = _resolveDurationSeconds?.Invoke(am.SpellNumber) ?? FallbackDurationSeconds;
+                if (secs <= 0) secs = FallbackDurationSeconds;
+                _expiryAtMs[(given, am.Ailment)] = _now() + (long)(secs * 1000);
+                _log?.Info(LogCategory,
+                    $"witnessed {am.Ailment} on {m.Name} (spell '{am.SpellName}') — chip set, clears in ~{secs:0}s");
+            }
+        }
+    }
+
+    // Clear a member's chip when we witness a cure land on them — the fastest clear
+    // path, before any par/@status reconcile. Requires BOTH the cure spell's name
+    // and the member's name so a different spell on the same member can't clear the
+    // wrong chip. Matches OUR cast or a cure another member casts that we see in the
+    // room; the caster of a witnessed cure doesn't matter, only spell + target.
+    private void WitnessCures(LineExtractor.EmittedLine line)
+    {
         IReadOnlyList<CureCastMatcher> matchers = _readCureMatchers();
         if (matchers.Count == 0) return;
 
         foreach (PartyMember m in _party.State.Members)
         {
             if (m.IsSelf) continue;
-            // The game may print the cure target as either the full "Given
-            // Family" name or just the given name — confirm against both so a
-            // family-name member still clears.
             string given = GivenName(m.Name);
             foreach (CureCastMatcher cm in matchers)
             {
-                // Require BOTH the cure spell's name and the member's name to
-                // appear — a different spell landing on the same member (a buff
-                // on a poisoned ally) must not clear the wrong chip. Match OUR
-                // cast ("You cast cure on X!") or a cure another member casts
-                // that we witness in the room ("Y casts cure on X!"); the
-                // caster of a witnessed cure doesn't matter, only the spell and
-                // the target do.
                 bool hit =
                     cm.Caster.ConfirmsSpellTarget(line.Text, cm.SpellName, m.Name)
                  || cm.Caster.ConfirmsSpellTarget(line.Text, cm.SpellName, given)
@@ -216,8 +308,29 @@ public sealed class PartyAilmentTracker : IDisposable
                       || w.ConfirmsSpellTarget(line.Text, cm.SpellName, given)));
                 if (!hit) continue;
                 _party.SetMemberAilment(m.Name, cm.Ailment, false);
+                _expiryAtMs.Remove((given, cm.Ailment));
                 _log?.Info(LogCategory, $"cure confirmed ailment={cm.Ailment} target={m.Name}");
             }
+        }
+    }
+
+    // Clear any chip whose armed duration has elapsed — the spell-data "duration
+    // timed out" clear. Every non-timeout clear (cure / par / @status / inbound
+    // off) removes the entry first, so this only fires when nothing else cleared.
+    // Internal so tests can drive it with a controlled clock.
+    internal void SweepExpiredChips()
+    {
+        if (_expiryAtMs.Count == 0) return;
+        long now = _now();
+        List<(string Given, MessageFlags Flag)>? expired = null;
+        foreach (KeyValuePair<(string Given, MessageFlags Flag), long> kv in _expiryAtMs)
+            if (kv.Value <= now) (expired ??= new()).Add(kv.Key);
+        if (expired is null) return;
+        foreach ((string given, MessageFlags flag) in expired)
+        {
+            _expiryAtMs.Remove((given, flag));
+            _party.SetMemberAilment(given, flag, false);
+            _log?.Info(LogCategory, $"ailment {flag} on {given} timed out — chip cleared");
         }
     }
 
@@ -234,6 +347,7 @@ public sealed class PartyAilmentTracker : IDisposable
         _disposed = true;
         _chat.EntryClassified -= OnChat;
         if (_lines is not null) _lines.LineEmitted -= OnLine;
+        _expiryAtMs.Clear();
     }
 }
 
@@ -247,3 +361,14 @@ public sealed class PartyAilmentTracker : IDisposable
 public readonly record struct CureCastMatcher(
     MessageFlags Ailment, string SpellName,
     CasterMessageMatcher Caster, CasterMessageMatcher? Witness = null);
+
+// One compiled ailment-APPLY confirmation: the ailment it inflicts, the spell's
+// name + number (number → spell-data duration at the in-room caster's cast level),
+// and the WitnessMessage matcher (a monster casting it on a member, seen in the
+// room — "The kobold shaman blinds Forged!"). Built by AppServices from every
+// Messages record carrying an ailment Flags bit, a Spells link, and a witness
+// template; re-read live so game-data edits take effect. Poison is excluded (par-
+// owned). A "resist" prints no apply line, so a resisted cast sets no chip.
+public readonly record struct ApplyCastMatcher(
+    MessageFlags Ailment, string SpellName, int SpellNumber,
+    CasterMessageMatcher Witness);
