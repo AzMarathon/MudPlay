@@ -14,10 +14,14 @@ namespace MudPlay.Game.Health;
 // State model — three transitions per pool (HP and MA each track independently):
 //   Threshold breach: HP / MA drops to or below the configured rest-trigger.
 //     Asserts the corresponding recovery gate. Walker (and any other gate
-//     consumer) pauses immediately.
-//   Rest-out: when either gate is held AND the player is out of combat
-//     (PlayerState.InCombat false), send any configured pre-rest command(s) and
-//     then `rest`. Idempotent — won't re-send rest while one is already in flight.
+//     consumer) pauses immediately. The gate itself doesn't commit to a rest —
+//     ConfirmHpGate / ConfirmMaGate re-check the pool one dispatch tick later,
+//     so a momentary dip that a regen tick immediately undoes (both parsed from
+//     the same wire read) retracts the gate instead of sitting down for it.
+//   Rest-out: when either gate is HELD AND CONFIRMED AND the player is out of
+//     combat (PlayerState.InCombat false), send any configured pre-rest
+//     command(s) and then `rest`. Idempotent — won't re-send rest while one is
+//     already in flight.
 //   Recovery complete: both pools have climbed to or past their configured
 //     rest-target. Clears both gates, sends `stand`, and emits any post-rest
 //     command(s). Walker resumes when the last gate clears.
@@ -84,10 +88,12 @@ public sealed class HealthManager : IDisposable
     // with it ON the engine already fights the blocker, so there's nothing to force.
     private Func<bool>? _isAutoCombatEnabled;
     private Action? _requestRestClearEngage;
-    // Defers the flee firing one dispatch tick so the round's death line (parsed
-    // AFTER the end-of-round prompt in the same wire read) can settle before we
-    // commit — see the flee branch in Evaluate. Synchronous (a => a()) when
-    // unwired, so tests stay deterministic.
+    // Defers a reaction one dispatch tick so a LATER line in the same wire read
+    // can settle before we commit to it. Two uses: the flee branch in Evaluate
+    // (the round's death line is parsed AFTER the end-of-round prompt in the
+    // same read) and ConfirmHpGate / ConfirmMaGate (a regen tick can follow the
+    // prompt that dropped a pool below its rest-trigger). Synchronous (a => a())
+    // when unwired, so tests stay deterministic.
     private readonly Action<Action> _post;
     private readonly Func<int>? _readDeathFloor;
     private readonly HangupSignal? _hangupSignal;
@@ -127,6 +133,13 @@ public sealed class HealthManager : IDisposable
     private bool _partyWaitSignaled;            // @wait sent, awaiting @ok
     private bool _hpGateAsserted;
     private bool _maGateAsserted;
+    // True once a just-asserted gate has survived one deferred dispatch-tick
+    // re-check (ConfirmHpGate / ConfirmMaGate below) without recovering back
+    // above its trigger. Only the actual rest/meditate SEND waits on this —
+    // the gate flags above still assert immediately, so the walker still
+    // pauses and @wait still fires the instant a pool dips, unchanged.
+    private bool _hpGateConfirmed;
+    private bool _maGateConfirmed;
     private bool _restInFlight;          // sent rest, awaiting recovery
     private bool _restConfirmedByPrompt; // observed (Resting) since the last rest emit
     private bool _wasPoisoned;           // poison state last Evaluate — for the poison-cleared re-rest edge
@@ -706,13 +719,18 @@ public sealed class HealthManager : IDisposable
         if (!skipRest && !_hpGateAsserted && _state.MaxHp > 0 && _state.Hp < hpRestTrigger)
         {
             _hpGateAsserted = true;
+            _hpGateConfirmed = false;
             _coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate,
                 AsserterName,
                 $"HP {_state.Hp}/{_state.MaxHp} < rest-trigger={hpRestTrigger}");
+            // Re-check one dispatch tick later before committing to an actual
+            // rest send — see ConfirmHpGate for why.
+            _post(ConfirmHpGate);
         }
         else if (_hpGateAsserted && (skipRest || _state.Hp >= hpRestTarget))
         {
             _hpGateAsserted = false;
+            _hpGateConfirmed = false;
             _coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate,
                 AsserterName,
                 skipRest
@@ -732,13 +750,18 @@ public sealed class HealthManager : IDisposable
         if (!skipRest && !_maGateAsserted && _state.Ma < maRestTrigger && _state.MaxMa > 0)
         {
             _maGateAsserted = true;
+            _maGateConfirmed = false;
             _coordinator.AssertGate(MovementCoordinator.ManaRecoveryGate,
                 AsserterName,
                 $"MA {_state.Ma}/{_state.MaxMa} < rest-trigger={maRestTrigger}");
+            // Re-check one dispatch tick later before committing to an actual
+            // rest send — see ConfirmMaGate for why.
+            _post(ConfirmMaGate);
         }
         else if (_maGateAsserted && (skipRest || _state.Ma >= maRestTarget))
         {
             _maGateAsserted = false;
+            _maGateConfirmed = false;
             _coordinator.ClearGate(MovementCoordinator.ManaRecoveryGate,
                 AsserterName,
                 skipRest
@@ -867,6 +890,12 @@ public sealed class HealthManager : IDisposable
         // (which the resumed nav engine fires once both gates clear)
         // is what actually exits the (resting) state.
         bool anyGate = _hpGateAsserted || _maGateAsserted;
+        // Confirmed subset of anyGate — only a gate that's survived its one-tick
+        // ConfirmHpGate/ConfirmMaGate re-check. anyGate itself stays the gate used
+        // everywhere else below (walker pause already happened via AssertGate,
+        // @wait, engage-to-clear-a-blocker) — those are fine to react immediately;
+        // it's only the actual rest/meditate SEND further down that waits on this.
+        bool anyGateConfirmed = _hpGateConfirmed || _maGateConfirmed;
 
         // A poisoned character skips the downtime-rest paths below: poison ticks
         // keep breaking rest, so sitting during the leader's / our own wait just
@@ -918,6 +947,10 @@ public sealed class HealthManager : IDisposable
             && NeedsWaitDowntimeTopOff();
 
         bool shouldRest = anyGate || opportunistic || leaderWaitedRest;
+        // Gate for the actual send below — a just-asserted, unconfirmed gate
+        // doesn't count yet (see anyGateConfirmed above), so a maybe-transient
+        // breach can't fire the command before its one-tick re-check runs.
+        bool shouldSendRestCommand = anyGateConfirmed || opportunistic || leaderWaitedRest;
 
         // Don't even try to rest while the room contains an engageable
         // hostile — every combat round breaks rest, so spamming `rest`
@@ -1017,7 +1050,7 @@ public sealed class HealthManager : IDisposable
                 $"rest held — combat force-cleared, awaiting room re-confirm " +
                 $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa})");
         }
-        else if (shouldRest && !_state.InCombat && !_restInFlight && !equipmentApplying
+        else if (shouldSendRestCommand && !_state.InCombat && !_restInFlight && !equipmentApplying
             && (!hostilesPresent || shadowRest || _restHostilesBypassArmed))
         {
             // Pick rest vs meditate based on user settings + which
@@ -1033,11 +1066,11 @@ public sealed class HealthManager : IDisposable
             //   most classes.
             // The opportunistic path has no gate to read, so it picks on
             // live pool percentages instead (ChooseOpportunisticRestCommand).
-            string command = anyGate
+            string command = anyGateConfirmed
                 ? ChooseRestCommand(s)
                 : ChooseOpportunisticRestCommand(s);
 
-            string restReason = anyGate ? ""
+            string restReason = anyGateConfirmed ? ""
                 : leaderWaitedRest ? " (waited — resting to use the downtime)"
                 : " (opportunistic, leader resting)";
             SendChained(s.PreRestCommand);
@@ -1078,6 +1111,71 @@ public sealed class HealthManager : IDisposable
         bool recovering = IsRecoveringRest;
         if (_wasRecovering && !recovering) _onRecoveryComplete?.Invoke();
         _wasRecovering = recovering;
+    }
+
+    // Re-verify a just-asserted HP threshold breach one dispatch tick later,
+    // before letting it commit to an actual rest/meditate send — the same
+    // shape of race the flee defer above closes (see _post's field comment):
+    // PromptScanner parses prompt digits ahead of the rest of a wire read, so
+    // a hit that drops a pool below its trigger can be followed, within the
+    // same burst, by a regen tick that brings it back up — and without this,
+    // the gate would already have fired the rest command off the momentary
+    // low reading before that later line was even processed (report
+    // paradigm-20260912-093819: HP/MA never actually stayed below the
+    // rest-trigger, but the character sat down anyway). If the pool is still
+    // below its trigger once this runs, the breach was real: confirm it and
+    // re-run Evaluate so the rest-out branch can act on the confirmation right
+    // away instead of waiting on some unrelated future state change. That
+    // re-entrant call is safe — Evaluate's own !_hpGateAsserted / !_restInFlight
+    // guards make a second pass (this one, or the outer call resuming after
+    // _post returns) a no-op once the first pass has acted, the same way any
+    // two Evaluate calls in quick succession already coexist. Otherwise the
+    // breach was a blip: retract the gate instead of resting on stale,
+    // momentary information — nothing else to do; ClearGate itself is what
+    // un-pauses the walker.
+    private void ConfirmHpGate()
+    {
+        if (!_hpGateAsserted || _hpGateConfirmed) return;
+        HealthSettings s = _readSettings();
+        (int hpRestTrigger, _) = ResolveRestThresholds(
+            s.HpThresholdMode, s.RestIfBelowHp, s.RestMaxHp,
+            _defaultSetMaxHp, _realMaxHp, _state.MaxHp);
+        if (_state.MaxHp > 0 && _state.Hp < hpRestTrigger)
+        {
+            _hpGateConfirmed = true;
+            Evaluate();
+            return;
+        }
+        _hpGateAsserted = false;
+        _coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate,
+            AsserterName,
+            $"HP {_state.Hp}/{_state.MaxHp} recovered above rest-trigger={hpRestTrigger} before rest committed");
+        _log?.Combat(LogCategory,
+            $"HP rest-trigger breach was momentary — recovered to {_state.Hp}/{_state.MaxHp} " +
+            "before the rest command went out; standing down");
+    }
+
+    // MA counterpart of ConfirmHpGate — see its comment for the full rationale.
+    private void ConfirmMaGate()
+    {
+        if (!_maGateAsserted || _maGateConfirmed) return;
+        HealthSettings s = _readSettings();
+        (int maRestTrigger, _) = ResolveRestThresholds(
+            s.MaThresholdMode, s.RestIfBelowMa, s.RestMaxMa,
+            _defaultSetMaxMa, _realMaxMa, _state.MaxMa);
+        if (_state.MaxMa > 0 && _state.Ma < maRestTrigger)
+        {
+            _maGateConfirmed = true;
+            Evaluate();
+            return;
+        }
+        _maGateAsserted = false;
+        _coordinator.ClearGate(MovementCoordinator.ManaRecoveryGate,
+            AsserterName,
+            $"MA {_state.Ma}/{_state.MaxMa} recovered above rest-trigger={maRestTrigger} before rest committed");
+        _log?.Combat(LogCategory,
+            $"MA rest-trigger breach was momentary — recovered to {_state.Ma}/{_state.MaxMa} " +
+            "before the rest command went out; standing down");
     }
 
     // Re-check ONLY the emergency-hangup gate — wired to room-entity observations
