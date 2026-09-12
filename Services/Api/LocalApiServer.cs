@@ -306,12 +306,16 @@ public sealed class LocalApiServer : IAsyncDisposable
                 return;
             }
 
+            case "/loops":
+                WriteJson(res, 200, await OnUiAsync(() => LocalApiCatalog.Loops(_services)).ConfigureAwait(false));
+                return;
+
             case "/events":
                 await StreamEventsAsync(res).ConfigureAwait(false);
                 return;
 
             default:
-                WriteJson(res, 404, new { error = "no such endpoint", path });
+                await HandleParameterisedGetAsync(res, path).ConfigureAwait(false);
                 return;
         }
     }
@@ -389,6 +393,62 @@ public sealed class LocalApiServer : IAsyncDisposable
             WriteJson(res, 400, new { error = "malformed JSON", detail = ex.Message });
             return null;
         }
+    }
+
+    // Routes carrying a value in the path. Kept out of the switch above because a
+    // switch can only match constants, and these need prefix matching.
+    //
+    // Segments are unescaped explicitly: loop names contain spaces and brackets
+    // ("Storm Mountain Path (Top Third)"), so a caller must percent-encode them
+    // and we must decode before looking anything up.
+    private async Task HandleParameterisedGetAsync(HttpListenerResponse res, string path)
+    {
+        if (TrySegment(path, "/loops/", out string loopName))
+        {
+            object? loop = await OnUiAsync(() => LocalApiCatalog.Loop(_services, loopName)).ConfigureAwait(false);
+            if (loop is null) WriteJson(res, 404, new { error = "no such loop", name = loopName });
+            else WriteJson(res, 200, loop);
+            return;
+        }
+
+        if (TrySegment(path, "/monsters/", out string monsterRaw))
+        {
+            if (!int.TryParse(monsterRaw, out int id))
+            {
+                WriteJson(res, 400, new { error = "monster id must be a number", got = monsterRaw });
+                return;
+            }
+            object? mon = await OnUiAsync(() => LocalApiCatalog.Monster(_services, id)).ConfigureAwait(false);
+            if (mon is null) WriteJson(res, 404, new { error = "no such monster", id });
+            else WriteJson(res, 200, mon);
+            return;
+        }
+
+        if (TrySegment(path, "/rooms/", out string roomRaw))
+        {
+            string[] parts = roomRaw.Split('/', 2);
+            if (parts.Length != 2 || !int.TryParse(parts[0], out int map) || !int.TryParse(parts[1], out int room))
+            {
+                WriteJson(res, 400, new { error = "expected /rooms/{map}/{room}", got = roomRaw });
+                return;
+            }
+            WriteJson(res, 200, await OnUiAsync(() =>
+                LocalApiCatalog.Room(_services, new RoomKey(map, room))).ConfigureAwait(false));
+            return;
+        }
+
+        WriteJson(res, 404, new { error = "no such endpoint", path });
+    }
+
+    private static bool TrySegment(string path, string prefix, out string rest)
+    {
+        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            rest = string.Empty;
+            return false;
+        }
+        rest = Uri.UnescapeDataString(path[prefix.Length..]);
+        return rest.Length > 0;
     }
 
     // Holds the response open until the reader disconnects. The task parked here
