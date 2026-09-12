@@ -849,6 +849,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // the user chose to override their own avoid list for this walk) across the deferral.
     private bool _deferredWalkIgnoreAvoids;
 
+    // Carries the prefer-walking-over-teleport preference (true for every user-picked route
+    // except an explicit "Teleport" choice) across the deferral.
+    private bool _deferredWalkPreferTeleportFree;
+
     // One-shot watchdog for the tracker-Pending deferral. A move the server
     // refuses with no room redisplay leaves the tracker stuck Pending, so the
     // Confirmed transition the deferral waits on never arrives and the walk would
@@ -869,6 +873,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // must re-issue WalkTo with these, or a no-teleport (or gate-planned) walk
     // silently reverts to the defaults and takes a teleport it was told to avoid.
     private bool _activeAvoidTeleports;
+    // True when the active walk prefers a pure-walking route and takes a teleport only when
+    // walking is impossible. Preserved across re-plans so a walk that started on foot never
+    // silently switches to a teleport a re-plan happens to find shorter (report: search-en-route
+    // found the raft, then the re-plan pivoted onto the Black Wastelands vortex).
+    private bool _activePreferTeleportFree;
     private bool _activeAvoidTraps;
     // True when the active walk overrides the user's avoid list (the picker's
     // "route through avoided rooms" choice). A mid-walk replan must keep it, or the
@@ -916,7 +925,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // "avoid". The route picker's "route through avoided rooms" choice passes
         // true; every other caller keeps the default (false) so the avoid list is
         // honoured as before.
-        bool ignoreAvoids = false)
+        bool ignoreAvoids = false,
+        // preferTeleportFree: plan the pure-walking route when one exists, falling back to a
+        // teleport hop only when walking is impossible. Every user-picked route passes true
+        // except an explicit "Teleport" choice, so a walk never silently teleports on a re-plan.
+        bool preferTeleportFree = false)
     {
         if (State is WalkState.Walking or WalkState.Paused)
         {
@@ -947,6 +960,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _deferredWalkAvoidTeleports = avoidTeleports;
             _deferredWalkAvoidTraps = avoidTraps;
             _deferredWalkIgnoreAvoids = ignoreAvoids;
+            _deferredWalkPreferTeleportFree = preferTeleportFree;
             _destination = destination;       // populated so status surfaces show the target
             State = WalkState.Walking;
             // Watchdog: if the tracker never settles (the in-flight move was
@@ -960,7 +974,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return true;
         }
 
-        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps, ignoreAvoids);
+        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps, ignoreAvoids, preferTeleportFree);
     }
 
     private bool WalkToImmediate(
@@ -969,7 +983,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool armItemAcquisition = true,
         bool avoidTeleports = false,
         bool avoidTraps = false,
-        bool ignoreAvoids = false)
+        bool ignoreAvoids = false,
+        bool preferTeleportFree = false)
     {
         // Callers may arrive here from the WalkTo entry (Idle) OR from
         // the deferred dispatch in OnTrackerStateChanged (Walking with
@@ -1033,8 +1048,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
         SysopGotoRoutePlan? sysGotoPlan = null;
         try
         {
+            // preferTeleportFree: try the pure-walking route FIRST and only fall back to a
+            // teleport hop when walking is genuinely impossible — so a walk that didn't begin
+            // on a teleport (every user-picked route except an explicit "Teleport" choice)
+            // never silently switches to a vortex on a mid-walk re-plan. A hard avoidTeleports
+            // still refuses teleports outright with no fallback.
             path = _bfs.FindPath(source.Key, destination, _filter,
-                refuseTeleports: avoidTeleports, avoidTraps: avoidTraps, ignoreAvoids: ignoreAvoids);
+                refuseTeleports: avoidTeleports || preferTeleportFree, avoidTraps: avoidTraps, ignoreAvoids: ignoreAvoids);
+            if (path is null && preferTeleportFree && !avoidTeleports)
+                path = _bfs.FindPath(source.Key, destination, _filter,
+                    refuseTeleports: false, avoidTraps: avoidTraps, ignoreAvoids: ignoreAvoids);
 
             // A sea-captain sailing can beat (or replace) the land route. Weigh
             // the boat's stitched land-legs against the pure land route; the
@@ -1140,6 +1163,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _index = 0;
         _destination = destination;
         _activeAvoidTeleports = avoidTeleports;
+        _activePreferTeleportFree = preferTeleportFree;
         _activeAvoidTraps = avoidTraps;
         _activeIgnoreAvoids = ignoreAvoids;
         _activeThroughGates = planThroughAcquirableGates;
@@ -2208,15 +2232,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool avoidTeleports = _deferredWalkAvoidTeleports;
         bool avoidTraps = _deferredWalkAvoidTraps;
         bool ignoreAvoids = _deferredWalkIgnoreAvoids;
+        bool preferTeleportFree = _deferredWalkPreferTeleportFree;
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
         _deferredWalkArmAcquisition = true;
         _deferredWalkAvoidTeleports = false;
         _deferredWalkAvoidTraps = false;
         _deferredWalkIgnoreAvoids = false;
+        _deferredWalkPreferTeleportFree = false;
         _deferredWalkTimer?.Dispose();
         _deferredWalkTimer = null;
-        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps, ignoreAvoids);
+        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps, ignoreAvoids, preferTeleportFree);
     }
 
     // Watchdog fire for a deferral whose Confirmed transition never arrived (the
@@ -2462,7 +2488,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     armItemAcquisition: _activeArmAcquisition,
                     avoidTeleports: _activeAvoidTeleports,
                     avoidTraps: _activeAvoidTraps,
-                    ignoreAvoids: _activeIgnoreAvoids);
+                    ignoreAvoids: _activeIgnoreAvoids,
+                    preferTeleportFree: _activePreferTeleportFree);
             }
             finally
             {
@@ -3018,7 +3045,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _deferredWalkAvoidTeleports = false;
         _deferredWalkAvoidTraps = false;
         _deferredWalkIgnoreAvoids = false;
+        _deferredWalkPreferTeleportFree = false;
         _activeAvoidTeleports = false;
+        _activePreferTeleportFree = false;
         _activeAvoidTraps = false;
         _activeIgnoreAvoids = false;
         _activeThroughGates = false;
