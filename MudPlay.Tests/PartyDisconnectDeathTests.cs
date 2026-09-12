@@ -97,7 +97,9 @@ public sealed class PartyDisconnectDeathTests
         // Dissolution arrives with no per-player signal.
         router.Dispatch(Line("You are not in a party at the present time."));
 
-        Assert.Empty(mgr.State.Members);
+        // Lone self row remains (solo self-display); party fully dissolved.
+        Assert.Single(mgr.State.Members);
+        Assert.True(mgr.State.Members[0].IsSelf);
         // Snapshot key is the given name — matches the lookup
         // OnPlayerEnters does when "Raijin just entered the Realm" fires.
         Assert.Contains("Raijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
@@ -308,7 +310,9 @@ public sealed class PartyDisconnectDeathTests
 
         router.Dispatch(Line("MudPlay just disconnected!!!."));
 
-        Assert.Empty(mgr.State.Members);
+        // Lone self row remains (solo self-display); party dissolved to solo.
+        Assert.Single(mgr.State.Members);
+        Assert.True(mgr.State.Members[0].IsSelf);
         Assert.False(mgr.State.IsInParty);
         Assert.Null(mgr.State.LeaderName);
         Assert.DoesNotContain("MudPlay", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
@@ -435,7 +439,9 @@ public sealed class PartyDisconnectDeathTests
 
         router.Dispatch(Line("MudPlay just left the Realm."));
 
-        Assert.Empty(mgr.State.Members);
+        // Lone self row remains (solo self-display); party dissolved to solo.
+        Assert.Single(mgr.State.Members);
+        Assert.True(mgr.State.Members[0].IsSelf);
         Assert.False(mgr.State.IsInParty);
         Assert.Null(mgr.State.LeaderName);
         Assert.DoesNotContain("MudPlay", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);

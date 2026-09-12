@@ -326,6 +326,8 @@ Open it from **View → Party**, a toolbar button, or **right-click the terminal
 - **status chips** that light up as conditions apply — **REST** resting · **MED** meditating · **BLD** blinded · **PSN** poisoned · **DIS** diseased · **CNF** confused · **HELD** held · **WAIT** waiting · **INVITED** invite pending;
 - an **uninvite (⨯)** button — active only when *you* lead — that kicks a follower or withdraws a pending invitation.
 
+**Even while solo**, the window shows **your own entry** — the same row, live-updating your HP / MA and status chips from your state — so you can watch the client recognize an ailment applying and clearing in real time without needing a party. It's display-only: your lone self row is never treated as a party (automation that only runs in a real party stays off), and the row folds into the roster seamlessly the moment a party forms.
+
 The healing, ranks, nags, and re-invite behaviour the window reflects are all configured on **Settings → Party**.
 
 ### Configuring party buffs
@@ -415,13 +417,14 @@ Active party members get a few things for free regardless of the grid: the party
 - `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
 - `@share` — splits your held coin evenly across the party.
 - `@party` — bare, it reports whether you're solo / following / leading. Sent on **say** *with* arguments, it relays whatever follows verbatim to your character as if you typed it (the party version of `@do`) — `@party rest`, `@party use chime`, and so on. The directive form only works on the say channel, and Settings → Talk can disallow it.
+- `@panic` — the party-wide bail-out (MegaMUD parity). A **leader** whose HP crosses its **"hang if below"** floor says a bare `@panic` on say and then escapes (hangs up, or breaks + `sys goto <wimpy>` per the Health tab) — warning the whole party to get out. It's opt-in on both sides via two **Settings → Party** checkboxes: **Use @panic while leading** (whether you send it) and **Ignore @panics** (whether a received one makes *you* bail). Both default off. A received `@panic` makes you escape exactly as your own low-HP emergency would; it still respects the *Disable hangups* master switch for the carrier-drop (you'll `sys goto` wimpy if configured, but never be force-disconnected by someone else's panic).
 
 ### Irreversible and always-blocked
 
 - `@suicide` — forces your character's death, using the suicide password MudPlay captured from your in-game `set suicide`. It's an **Elevated Command**, and Settings → Other blocks it when your remaining lives are at or below your threshold.
 - A few things are **always refused, silently, no matter what's granted**: anything containing `reroll`, and `@party set suicide` — these can't be leaked or overridden.
 
-**Not commands:** the ailment broadcasts `@poisoned` / `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid.
+**Not commands:** the ailment broadcasts `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid. (Poison isn't broadcast — a member's **poison** chip is read from the `par` party screen's `P` flag, so it lights even for a partymate on another client.)
 
 ## Reconnecting
 
@@ -729,7 +732,7 @@ Every numeric filter is a **min / max range** — either box can be blank for no
 
 **Flavor Prefixes** is a small editor of its own in the *Tables + editors* list (not a double-click table). It's the vocabulary of adjectives the game prepends to a monster's name — *large*, *nasty*, *huge*, and so on. The room classifier strips a leading word in this list so "large giant rat" resolves to "giant rat" with no per-monster data. It starts from the built-in stock list and applies to the **active game-data set**, so a custom realm that uses different adjectives just adds them here (type a word → **Add**; **✕** removes one; **Reset to defaults** restores the built-ins). Edits save to that set immediately. If the classifier ever meets a prefixed name whose leading adjective isn't in the list, it flags a Program-Log row you can double-click to add the word in one click.
 
-**Unrecognized Lines** lists wire lines the Messages catalogue doesn't recognize, staged automatically by the **Capture unrecognized messages** diagnostic (Program Log window, on by default — see *Diagnostics / Log Pane*). Each row shows **Seen In** — the map and room (`map:room`) where that line was *first* noticed — and **Likely source** — the spells castable by the monsters (placed / assigned / lair) in that room, a shortlist of what might have produced the line so you can narrow it to a probable spell whose message you're missing. Double-click a row to open the same editor Messages uses, pre-filled with the raw text, and Save it in as a real record. That editor is spell-only — type the **spell number** the line belongs to and **Add**; if that spell's record already carries message text, its empty slots fill in for you, and any slot where your captured line *differs* pops an inline **picker** so you choose per field between the record's value and the captured line. For the selected row(s) you have three actions: **Dismiss** marks them decided and *frozen* — the row stays but the client then ignores every future recurrence of that text (no re-add, no re-count, no re-alert); **Remove** hard-deletes the row (if the line shows up again later it's captured fresh); and **Export** writes every *non-dismissed* line — with its Seen-In location, occurrence count, and Likely-source shortlist — to a timestamped file on your Desktop (the Program Log notes the path) so a batch can be handed off for attribution.
+**Unrecognized Lines** lists wire lines the Messages catalogue doesn't recognize, staged automatically by the **Capture unrecognized messages** diagnostic (Program Log window, on by default — see *Diagnostics / Log Pane*). Each row shows **Seen In** — the map and room (`map:room`) where that line was *first* noticed — and **Likely source** — the spell that probably produced *that* line, worked out from the line itself. If the line names a monster the room hosts, you get that monster's own spells, each tagged with how it fires (`bites (#80) — forest spider, on hit`), which also tells you which message slot the text belongs in: an on-hit proc reads as the target's line, an on-death spell can only fire as the monster dies. If the line names no monster, you get the room's **own** on-entry spell (`Rooms.Spell`) — that's the source of the atmosphere lines that read like scenery, e.g. `An ominous wind blows through the trees` is the darkwood forest spell. When neither applies the column is **blank**, on purpose: a hint that every row shares tells you nothing, so no guess is shown. The list updates live as lines come in without moving you — new rows append at the bottom and a rising occurrence count refreshes in place, so you keep your scroll position and your selected row while the game is running. Double-click a row to open the same editor Messages uses, pre-filled with the raw text, and Save it in as a real record. That editor is spell-only — type the **spell number** the line belongs to and **Add**; if that spell's record already carries message text, its empty slots fill in for you, and any slot where your captured line *differs* pops an inline **picker** so you choose per field between the record's value and the captured line. For the selected row(s) you have three actions: **Dismiss** marks them decided and *frozen* — the row stays but the client then ignores every future recurrence of that text (no re-add, no re-count, no re-alert); **Remove** hard-deletes the row (if the line shows up again later it's captured fresh); and **Export** writes every *non-dismissed* line — with its Seen-In location, occurrence count, and Likely-source shortlist — to a timestamped file on your Desktop (the Program Log notes the path) so a batch can be handed off for attribution.
 
 ## Monster Intel
 
@@ -1605,14 +1608,9 @@ The self-buff slots (which spells, `#item`-cast buffs, per-slot recast timers) l
 
 ### Ignore poison / blindness / confusion / diseased
 
-**Default:** all Off (i.e. every ailment pauses the party)
-**What it does:** Normally, catching one of these ailments makes MudPlay ask the party leader to pause (`@wait`) until it clears. Checking a box here suppresses that pause request for that specific ailment — useful for "push through it, don't stop the group" situations.
+**Default:** all Off (i.e. every ailment pauses the party *and* is announced)
+**What it does:** One toggle per ailment — the single "I don't care about this ailment" switch. Normally, catching one of these makes MudPlay ask the party leader to pause (`@wait`) until it clears **and** announces it on say (`.@blind`, so other MudPlay clients mirror it on their party display). Checking a box here suppresses **both** for that specific ailment — no pause request and no broadcast — useful for "push through it, don't stop the group" situations. (Poison is read from the party screen rather than said, so its checkbox only affects the pause.)
 **Important notes:** Some conditions (over-encumbered, being held, being stunned) always pause regardless of these checkboxes — they can't be suppressed this way.
-
-### Don't announce poison / blindness / confusion / diseased
-
-**Default:** all Off (i.e. announce)
-**What it does:** Separately from the Ignore checkboxes above, suppresses broadcasting your ailment status to other MudPlay users in your party (who otherwise mirror it on their own party display). You can suppress the pause and keep announcing, or vice versa — the two are independent.
 
 ---
 
@@ -1752,6 +1750,18 @@ Settings → Party.
 **Default:** Off
 **What it does:** Normally, if any party member sends `@wait`, your automation pauses until they say `@ok`. With this on, **while you're the leader**, incoming @wait requests are ignored — your automation keeps running instead of stalling for a follower.
 **When you might change it:** Leading a group where you don't want one slow member to stall everyone else's progress.
+
+### Use @panic while leading
+
+**Default:** Off
+**What it does:** When you're leading a party and your HP crosses your Health-tab **"hang if below"** floor (with a hostile present), you say a bare `@panic` on the say channel before escaping — warning the whole party to bail with you. Without this, you still escape yourself, but the party isn't told. (MegaMUD parity — a MegaMUD leader's `@panic` reaches your party the same way, and yours reaches theirs.)
+**When you might change it:** Leading a group through content where a leader going down means everyone should get out.
+
+### Ignore @panics
+
+**Default:** Off
+**What it does:** When **unchecked** (the default), a partymate's `@panic` makes you bail the same way your own low-HP emergency would — hang up, or break + `sys goto <wimpy>` if you've set that up on the Health tab. Check this to ignore others' panics and stay put. (A received panic always respects the *Disable hangups* master switch: you'll still `sys goto` wimpy if configured, but you're never force-disconnected by someone else.)
+**When you might change it:** Check it if you'd rather decide for yourself when to flee than have a partymate's panic drop you.
 
 ### Reset statistics on loop start
 
@@ -2206,7 +2216,13 @@ Not a Settings tab — these five toggles live in the **Program Log** window (de
 ### Capture unrecognized messages
 
 **Default:** On
-**What it does:** Stages any wire line the Messages catalogue doesn't recognize (and no other known line type matches) as a review candidate — logging a Warn row the first time that exact text is seen, and tagging it with the map and room you were in so you can trace where it came from. Capture only runs **once you're in the realm** — the startup splash, the BBS login menu, and connect banners never stage candidates — and it skips the client's own bracketed status notices (e.g. `[… Quest is Now Available]`), the echo of a command you just typed, and room-display title lines (a room name is read by the room parser, not the message catalogue, so it's matched against the Rooms table and excluded rather than staged), so the queue stays focused on genuine server messages. Double-click the row to open the same editor the Messages tab uses, pre-filled with the raw text, so you can turn it into a real catalogue entry on the spot. Repeated candidates are also listed in Game Data → **Unrecognized Lines** (with a **Seen In** map:room column) for batch review later; dismissing one there is sticky, so it won't quietly resurface as "new" if it recurs.
+**What it does:** Stages any wire line the Messages catalogue doesn't recognize (and no other known line type matches) as a review candidate — logging a Warn row the first time that exact text is seen, and tagging it with the map and room you were in so you can trace where it came from. Capture only runs **once you're in the realm** — the startup splash, the BBS login menu, and connect banners never stage candidates.
+
+The catalogue stores most messages as *templates* (`{source} casts {spellname} on {target}!`), so recognition matches those templates against the line rather than comparing text — a known cast like `Raijin casts minor healing on Raijin!` is recognized and never staged. A handful of shipped templates pin so little fixed wording (`The {source} {spellname}!`) that they would match almost any sentence; those are skipped for recognition so they can't swallow a genuine unknown message. Buff wear-off lines are matched as phrases, so the server's trailing punctuation doesn't matter.
+
+Beyond the catalogue, the queue skips: the client's own bracketed status notices (e.g. `[… Quest is Now Available]`); the echo of a command you or an automation just sent; room-display title lines (matched against the Rooms table, since a room name is read by the room parser rather than the message catalogue); **room-light announcements** (`The room is dimly lit` and the other bands — all known from game data); **`par` party-screen rows**, which the party parser reads directly; third-party **physical** attacks (a partymate swinging at a monster, or a monster swinging at a partymate with a named weapon or body part); and **monster death messages** — realms write those per species and don't publish them, so they're identified by position instead: the line immediately before an experience gain is treated as death flavour and dropped (any row an earlier session captured for that same text is cleared out too). One shape can't be settled by wording at all: `Suijin shoots an arrow at bandit!` and `Suijin hurls a fireball at bandit!` are the same sentence. That one is decided by **who acted** — if the named player's class has no magery (Warrior, Witchunter, Ninja, Thief), they cannot be casting, so the line is dropped; from a class that *can* cast, or from a name the client doesn't know, it's kept. Class comes from the party screen, your own `stat` line, or the Players database (an observed class, else an unambiguous title).
+
+A monster *casting* at a partymate is deliberately still captured — uncatalogued monster spell messages are the main thing this is for. So is any line where a non-caster is the *subject* rather than the actor (`Suijin convulses violently!`), since that's a monster's spell landing on them. So is ambient room flavour, which in many areas is a room-spell trigger rather than scenery. Double-click the row to open the same editor the Messages tab uses, pre-filled with the raw text, so you can turn it into a real catalogue entry on the spot. Repeated candidates are also listed in Game Data → **Unrecognized Lines** (with a **Seen In** map:room column) for batch review later; dismissing one there is sticky, so it won't quietly resurface as "new" if it recurs.
 **Important notes:** On by default — the point of this toggle is catching the game's devs changing or adding message wording before it silently breaks something else (navigation, combat, condition tracking) that depends on recognizing that line.
 
 ---
@@ -2376,7 +2392,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
 | Unified buff list (self + party bless, room light, mana-regen + reroll, when-HP/MA-full) | empty | spell / `#item` + targets + recast + conditions | `PartyBuffs` (`BuffSettings`) | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Bless self while resting / during combat | false / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
-| Ignore / Don't announce poison, blindness, confusion, diseased | false (all) | bool | `IgnorePoison` etc. / `DoNotAnnouncePoison` etc. | Models/Profile/SpellsSettings.cs |
+| Ignore poison, blindness, confusion, diseased (each suppresses both @wait + say) | false (all) | bool | `IgnorePoison` etc. | Models/Profile/SpellsSettings.cs |
 | HP/MA threshold mode | `Percentage` (both) | Percentage / Absolute | `HpThresholdMode` / `MaThresholdMode` | Models/Profile/HealthSettings.cs |
 | Rest max / Rest if below (HP, MA) | 95/60/95/30 (%) | 0–100,000 | `RestMaxHp`, `RestIfBelowHp`, `RestMaxMa`, `RestIfBelowMa` | Models/Profile/HealthSettings.cs |
 | Run if below (HP, MA) | 20 / 10 (%) | 0–100,000 (0=off) | `RunIfBelowHp` / `RunIfBelowMa` | Models/Profile/HealthSettings.cs |
@@ -2398,6 +2414,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Party bless slots (part of the unified buff list — see Spells/Health above) | empty | configured in the Buff Watchdog | `PartyBuffs` | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Bless while resting / during combat | false / false | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
 | Help leader open doors / Ignore @wait when leading / Reset stats on loop start | false/false/true | bool | `HelpLeaderOpenDoors`, `IgnoreWaitWhenLeading`, `ResetStatisticsOnLoopStart` | Models/Profile/PartySettings.cs |
+| Use @panic while leading / Ignore @panics | false / false | bool | `UsePanicWhileLeading`, `IgnorePanics` | Models/Profile/PartySettings.cs |
 | Re-invite lost members / send @join nags / send @health nags / probe on join | true (all) | bool | `AutoInviteReconnecting`, `SendJoinToInvited`, `SendHealthToMembers`, `ProbeStatsOnPartyJoin` | Models/Profile/PartySettings.cs |
 | Nag initial delay / frequency / max window (s) | 5/10/55 | 1–60 / 1–60 / 5–600 | `JoinNagInitialDelaySec`, `JoinNagFrequencySec`, `JoinNagMaxTotalSec` | Models/Profile/PartySettings.cs |
 | Max monsters when partying | `20` | 1–20 | `MaxMonstersWhenPartying` | Models/Profile/PartySettings.cs |

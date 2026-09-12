@@ -49,6 +49,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         "Help leader open doors",
         "Auto-invite", "Auto-Exp-Reset", "par frequency",
         "Wait for members", "Max monsters",
+        "@panic", "panic", "Use @panic while leading", "Ignore @panics",
     };
 
     // ----- Wired knobs -----
@@ -131,6 +132,14 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     // LeaderDoorAssistManager.
     [ObservableProperty] private bool _helpLeaderOpenDoors;
 
+    // ----- @panic (MegaMUD parity) -----------------------------------
+    // Leader-side send: broadcast "@panic" on say when our emergency-hangup floor
+    // is crossed while leading. Read by HealthManager. Default off.
+    [ObservableProperty] private bool _usePanicWhileLeading;
+    // Receive-side: ignore partymates' "@panic" instead of bailing with them.
+    // Read by PanicResponder. Default off (we bail by default, MegaMUD parity).
+    [ObservableProperty] private bool _ignorePanics;
+
     // ----- Party bless gating (consumed by CastingDirector) ----------
     // Two coarse gates the party-bless path honors before casting a
     // beneficial spell on a member. Both default ON. The buff SLOTS these gate
@@ -194,6 +203,8 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
             WaitIfMemberBelowPercent = Math.Clamp(WaitIfMemberBelowPercent, 0, 100),
             IgnoreWaitWhenLeading  = IgnoreWaitWhenLeading,
             HelpLeaderOpenDoors    = HelpLeaderOpenDoors,
+            UsePanicWhileLeading   = UsePanicWhileLeading,
+            IgnorePanics           = IgnorePanics,
             BlessWhileResting      = BlessWhileResting,
             BlessDuringCombat      = BlessDuringCombat,
         };
@@ -259,6 +270,8 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         WaitIfMemberBelowPercent = dto.WaitIfMemberBelowPercent;
         IgnoreWaitWhenLeading  = dto.IgnoreWaitWhenLeading;
         HelpLeaderOpenDoors    = dto.HelpLeaderOpenDoors;
+        UsePanicWhileLeading   = dto.UsePanicWhileLeading;
+        IgnorePanics           = dto.IgnorePanics;
         BlessWhileResting      = dto.BlessWhileResting;
         BlessDuringCombat      = dto.BlessDuringCombat;
 
@@ -347,6 +360,8 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     partial void OnWaitIfMemberBelowPercentChanged(int value)   => MarkDirty();
     partial void OnIgnoreWaitWhenLeadingChanged(bool value)     => MarkDirty();
     partial void OnHelpLeaderOpenDoorsChanged(bool value)       => MarkDirty();
+    partial void OnUsePanicWhileLeadingChanged(bool value)      => MarkDirty();
+    partial void OnIgnorePanicsChanged(bool value)              => MarkDirty();
     partial void OnBlessWhileRestingChanged(bool value)         => MarkDirty();
     partial void OnBlessDuringCombatChanged(bool value)         => MarkDirty();
 

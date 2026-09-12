@@ -80,8 +80,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         "Self bless while resting", "Self bless during combat", "Bless timing",
         "Ailment handling", "Coordination",
         "Ignore poison", "Ignore blindness", "Ignore confusion", "Ignore disease",
-        "Don't announce poison", "Don't announce blindness",
-        "Don't announce confusion", "Don't announce disease",
     };
 
     // ----- Category priority (1-7) ----------------------------------
@@ -154,19 +152,14 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _selfBlessDuringCombat;
 
     // ----- Ailment handling / coordination --------------------------
-    // The four "Ignore X" gates suppress the @wait sent to the party
-    // leader; the four "do not announce" gates suppress the say-channel
-    // broadcast. Both default off. Consumed by AilmentSyncEngine.
+    // Each "Ignore X" gate is the single per-ailment toggle: it suppresses BOTH the
+    // @wait sent to the party leader AND the say-channel announce. Default off
+    // (pause + announce). Consumed by AilmentSyncEngine.
 
     [ObservableProperty] private bool _ignorePoison;
     [ObservableProperty] private bool _ignoreBlindness;
     [ObservableProperty] private bool _ignoreConfusion;
     [ObservableProperty] private bool _ignoreDiseased;
-
-    [ObservableProperty] private bool _doNotAnnouncePoison;
-    [ObservableProperty] private bool _doNotAnnounceBlindness;
-    [ObservableProperty] private bool _doNotAnnounceConfusion;
-    [ObservableProperty] private bool _doNotAnnounceDiseased;
 
     // Standalone session for the parameterless (design-time) path; the Settings
     // window builds the shared instance and injects it.
@@ -337,11 +330,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         IgnoreBlindness = IgnoreBlindness,
         IgnoreConfusion = IgnoreConfusion,
         IgnoreDiseased  = IgnoreDiseased,
-
-        DoNotAnnouncePoison    = DoNotAnnouncePoison,
-        DoNotAnnounceBlindness = DoNotAnnounceBlindness,
-        DoNotAnnounceConfusion = DoNotAnnounceConfusion,
-        DoNotAnnounceDiseased  = DoNotAnnounceDiseased,
     };
 
     // Commit through the shared session (folds every tab + persists Settings
@@ -400,11 +388,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         IgnoreBlindness = dto.IgnoreBlindness;
         IgnoreConfusion = dto.IgnoreConfusion;
         IgnoreDiseased  = dto.IgnoreDiseased;
-
-        DoNotAnnouncePoison    = dto.DoNotAnnouncePoison;
-        DoNotAnnounceBlindness = dto.DoNotAnnounceBlindness;
-        DoNotAnnounceConfusion = dto.DoNotAnnounceConfusion;
-        DoNotAnnounceDiseased  = dto.DoNotAnnounceDiseased;
     }
 
     private SpellsSettings ReadOrDefault()
@@ -451,9 +434,4 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     partial void OnIgnoreBlindnessChanged(bool value)        => MarkDirty();
     partial void OnIgnoreConfusionChanged(bool value)        => MarkDirty();
     partial void OnIgnoreDiseasedChanged(bool value)         => MarkDirty();
-
-    partial void OnDoNotAnnouncePoisonChanged(bool value)    => MarkDirty();
-    partial void OnDoNotAnnounceBlindnessChanged(bool value) => MarkDirty();
-    partial void OnDoNotAnnounceConfusionChanged(bool value) => MarkDirty();
-    partial void OnDoNotAnnounceDiseasedChanged(bool value)  => MarkDirty();
 }

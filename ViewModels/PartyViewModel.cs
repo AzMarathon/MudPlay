@@ -43,17 +43,26 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
         get
         {
             if (State.Members.Count == 0) return "No party active";
-            PartyMember? leader = State.Members.FirstOrDefault(m => m.IsLeader);
-            if (leader is null || string.IsNullOrEmpty(leader.Name))
+            // In a party: the leader's name + HP. Solo (not in a party) we still
+            // keep a lone self row for the self-display, so fall back to it and show
+            // our own vitals in the same format rather than a misleading "Party (1)".
+            PartyMember? headerMember = State.Members.FirstOrDefault(m => m.IsLeader);
+            if ((headerMember is null || string.IsNullOrEmpty(headerMember.Name)) && !State.IsInParty)
+                headerMember = State.Members.FirstOrDefault(m => m.IsSelf);
+            if (headerMember is null || string.IsNullOrEmpty(headerMember.Name))
                 return $"Party ({State.Members.Count})";
-            // Leader name to given only — matches the single-word display
-            // and is the form MajorMUD itself uses when addressing the
-            // player at most prompts.
-            int space = leader.Name.IndexOf(' ');
-            string given = space >= 0 ? leader.Name[..space] : leader.Name;
-            return $"{given} ({leader.HpPercent}%)";
+            // Name to given only — matches the single-word display and is the form
+            // MajorMUD itself uses when addressing the player at most prompts.
+            int space = headerMember.Name.IndexOf(' ');
+            string given = space >= 0 ? headerMember.Name[..space] : headerMember.Name;
+            return $"{given} ({headerMember.HpPercent}%)";
         }
     }
+
+    // True when the roster has any row to show — drives the member-list visibility
+    // (and hides the empty hint). A lone self row while solo counts, so the window
+    // shows the local character out of a party, not just when IsInParty.
+    public bool HasRows => State.Members.Count > 0;
 
     // Local character's persisted rank (Front / Mid / Back). Read from the
     // loaded profile's "Party" settings on construction and on every
@@ -127,6 +136,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
             foreach (object? o in e.NewItems)
                 if (o is PartyMember m) m.PropertyChanged += OnMemberPropertyChanged;
         OnPropertyChanged(nameof(HeaderText));
+        OnPropertyChanged(nameof(HasRows));
     }
 
     private void OnStatePropertyChanged(object? sender, PropertyChangedEventArgs e) =>

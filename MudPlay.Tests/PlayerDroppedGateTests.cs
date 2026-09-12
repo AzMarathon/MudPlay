@@ -145,7 +145,9 @@ public sealed class PlayerDroppedGateTests
         h.SetPrompt(hp: 0, maxHp: 200);
 
         Assert.False(h.Party.State.IsInParty);
-        Assert.Empty(h.Party.State.Members);
+        // Party roster wound down to the lone self row (solo self-display).
+        Assert.Single(h.Party.State.Members);
+        Assert.True(h.Party.State.Members[0].IsSelf);
         Assert.Null(h.Party.State.LeaderName);
         Assert.False(h.Party.State.SelfIsLeader);
     }
@@ -164,7 +166,9 @@ public sealed class PlayerDroppedGateTests
         h.State.Hp = 40;   // recovered
 
         Assert.False(h.Party.State.IsInParty);
-        Assert.Empty(h.Party.State.Members);
+        // The party roster isn't resurrected — only the lone self row remains.
+        Assert.Single(h.Party.State.Members);
+        Assert.True(h.Party.State.Members[0].IsSelf);
     }
 
     [Fact]

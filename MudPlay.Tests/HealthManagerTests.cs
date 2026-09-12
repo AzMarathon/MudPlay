@@ -113,6 +113,16 @@ public sealed class HealthManagerTests
         /// Advance it to simulate the window elapsing with no room re-display.</summary>
         public DateTimeOffset Clock = DateTimeOffset.UtcNow;
 
+        /// <summary>Char-tier Party settings — drives the @panic send gate
+        /// (UsePanicWhileLeading) read by HealthManager. Default instance has
+        /// both panic flags off.</summary>
+        public PartySettings Party { get; set; } = new();
+
+        /// <summary>Whether HealthManager believes we're leading a party — the
+        /// @panic broadcast only fires while leading. AppServices wires this to
+        /// PartyState.IsInParty &amp;&amp; PartyState.SelfIsLeader. Default false.</summary>
+        public bool SelfIsLeader { get; set; }
+
         public Harness(HealthSettings? settings = null)
         {
             Settings = settings ?? new HealthSettings();
@@ -130,7 +140,9 @@ public sealed class HealthManagerTests
                 log: Log,
                 hangupSignal: Hangup,
                 hasHostileInRoom: () => HostileInRoom,
-                now: () => Clock);
+                now: () => Clock,
+                readPartySettings: () => Party,
+                selfIsPartyLeader: () => SelfIsLeader);
             Health.SetWireSender(b => Sent.Add(b));
             Health.SetHangupDisconnect(() => HangupDisconnectCount++);
             Health.SetWimpyGoto(name => { WimpyFiredWith = name; return WimpyFireResult; });
@@ -1920,6 +1932,132 @@ public sealed class HealthManagerTests
 
         Assert.DoesNotContain("=x", h.SentLines);
         Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
+    // ----- @panic (MegaMUD parity) -----------------------------------
+
+    [Fact]
+    public void Panic_WhenLeadingAndOptedIn_BroadcastsOnEmergencyHangup()
+    {
+        // Leader with "use @panic while leading": crossing the hang floor says a
+        // bare ".@panic" on say, then still escapes (the hangup fires too).
+        using Harness h = new()
+        {
+            SelfIsLeader = true,
+            Party = new PartySettings { UsePanicWhileLeading = true },
+        };
+
+        h.SetPrompt(hp: 5, maxHp: 200);   // below default 5% hang threshold
+
+        Assert.Contains(".@panic", h.SentLines);
+        Assert.Contains("=x", h.SentLines);           // escape still happens
+    }
+
+    [Fact]
+    public void Panic_NotLeading_NoBroadcast()
+    {
+        // Opted in but following, not leading — no @panic (only a leader panics).
+        using Harness h = new()
+        {
+            SelfIsLeader = false,
+            Party = new PartySettings { UsePanicWhileLeading = true },
+        };
+
+        h.SetPrompt(hp: 5, maxHp: 200);
+
+        Assert.DoesNotContain(".@panic", h.SentLines);
+        Assert.Contains("=x", h.SentLines);           // still hangs up for ourselves
+    }
+
+    [Fact]
+    public void Panic_LeadingButOptedOut_NoBroadcast()
+    {
+        // Leading but "use @panic while leading" is off — no broadcast.
+        using Harness h = new()
+        {
+            SelfIsLeader = true,
+            Party = new PartySettings { UsePanicWhileLeading = false },
+        };
+
+        h.SetPrompt(hp: 5, maxHp: 200);
+
+        Assert.DoesNotContain(".@panic", h.SentLines);
+        Assert.Contains("=x", h.SentLines);
+    }
+
+    [Fact]
+    public void RespondToReceivedPanic_HangsUp()
+    {
+        // A partymate's @panic makes us bail regardless of our own HP — default
+        // config has no wimpy location, so it drops the carrier.
+        using Harness h = new();
+        // Healthy HP: the response is driven by the panic, not our own floor.
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        bool acted = h.Health.RespondToReceivedPanic("Bob");
+
+        Assert.True(acted);
+        Assert.Contains("=x", h.SentLines);
+        Assert.Equal(1, h.HangupDisconnectCount);
+        Assert.True(h.Hangup.PeekForTests().DisconnectExpected);
+    }
+
+    [Fact]
+    public void RespondToReceivedPanic_WimpyJumps_WhenConfigured()
+    {
+        // With sys-goto-wimpy configured + firing, a received @panic jumps instead
+        // of dropping the carrier.
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        bool acted = h.Health.RespondToReceivedPanic("Bob");
+
+        Assert.True(acted);
+        Assert.Equal("wimpy-room", h.WimpyFiredWith);
+        Assert.DoesNotContain("=x", h.SentLines);     // jumped, didn't drop
+        Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
+    [Fact]
+    public void RespondToReceivedPanic_DisableHangups_SuppressesCarrierDrop()
+    {
+        // DisableHangups master switch: a received @panic must never force-drop the
+        // carrier. With no wimpy location it simply stays put.
+        using Harness h = new();
+        h.General.DisableHangups = true;
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        bool acted = h.Health.RespondToReceivedPanic("Bob");
+
+        Assert.False(acted);
+        Assert.DoesNotContain("=x", h.SentLines);
+        Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
+    [Fact]
+    public void RespondToReceivedPanic_DisableHangups_StillWimpyJumps()
+    {
+        // DisableHangups blocks the carrier drop but not the wimpy jump (which
+        // doesn't drop the carrier) — an opted-out character still escapes to safety.
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+        h.General.DisableHangups = true;
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        bool acted = h.Health.RespondToReceivedPanic("Bob");
+
+        Assert.True(acted);
+        Assert.Equal("wimpy-room", h.WimpyFiredWith);
+        Assert.DoesNotContain("=x", h.SentLines);
     }
 
     [Fact]

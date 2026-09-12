@@ -1070,6 +1070,14 @@ public static class BugReportBuilder
             healthCfg.SysGotoWimpyInsteadOfHanging
                 ? $"on → '{(string.IsNullOrWhiteSpace(healthCfg.SysGotoWimpyLocation) ? "(no location set)" : healthCfg.SysGotoWimpyLocation)}'"
                 : "off");
+        // @panic (party bail-out, MegaMUD parity) — send gate, receive gate, and
+        // whether we're currently leading (the send only fires while leading). A
+        // "@panic didn't fire / dropped me unexpectedly" report needs all three.
+        var partyCfg = svc.Resolver.Resolve<Models.Profile.PartySettings>("Party");
+        Kv(sb, "@panic",
+            $"send while leading={(partyCfg.UsePanicWhileLeading ? "on" : "off")}, "
+            + $"ignore incoming={(partyCfg.IgnorePanics ? "on" : "off")}, "
+            + $"leading now={(svc.PartyState.IsInParty && svc.PartyState.SelfIsLeader ? "yes" : "no")}");
 
         IReadOnlyList<Game.Map.RoomKey> history = svc.RoomTracker.GetHistory();
         if (history.Count > 0)

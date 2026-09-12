@@ -1211,6 +1211,12 @@ public sealed class AppServices
     // AilmentSync.
     public Game.Conditions.PartyAilmentTracker PartyAilment { get; private set; } = null!;
 
+    // Inbound @panic handler — when a party member says the bare "@panic" signal
+    // and we don't ignore it, bail the same way our own low-HP emergency would
+    // (via Health.RespondToReceivedPanic). The leader-side broadcast lives on
+    // HealthManager.
+    public Game.Conditions.PanicResponder PanicResponse { get; private set; } = null!;
+
     // Stealth state tracker. Owns
     // PlayerState.IsSneaking /
     // PlayerState.IsHidden and emits FSM-state
@@ -2094,6 +2100,11 @@ public sealed class AppServices
         // its own ChatRouter subscription.
         foreach (string token in Game.Conditions.PartyAilmentTracker.AnnounceTokens)
             RemoteCommands.RegisterIgnored(token);
+        // @panic rides the say channel as a party bail-out signal, not an
+        // @-command — reserve it so the engine swallows it instead of bouncing a
+        // "{command invalid}" reply. PanicResponder consumes it on its own
+        // ChatRouter subscription (gated by PartySettings.IgnorePanics).
+        RemoteCommands.RegisterIgnored("@panic");
         // Boss-timer sync responses ride the chat as `@timerdata …` lines the requester
         // scrapes itself (BossTimerSyncCollector); reserve the token so the engine
         // swallows it instead of bouncing "{command invalid}" at each responder.
@@ -2693,6 +2704,12 @@ public sealed class AppServices
         // see the right realm's catalogue.
         Messages = new MessageStore(Log);
         GameData.ActiveSetChanged += Messages.Load;
+        // The apply-cast matcher list + spell-formula cache (PartyAilmentTracker's
+        // witness-SET + duration clear) are derived from Messages + the Spells
+        // table, so drop them when either changes: a set switch (reseeds both) or a
+        // message edit in the Game Data Browser. Rebuilt lazily on next use.
+        GameData.ActiveSetChanged += _ => { _applyMatchers = null; _spellFormulas = null; };
+        Messages.Messages.CollectionChanged += (_, _) => _applyMatchers = null;
         // Monster-message catalogue parallels the spell-message one —
         // same per-set storage + universal seed fallback pattern.
         MonsterMessages = new MonsterMessageStore(Log);
@@ -3460,7 +3477,12 @@ public sealed class AppServices
             // Defer the flee one UI-thread hop so the round's death line (parsed
             // after the prompt in the same wire read) settles before we commit —
             // a killing blow that empties the room then rests instead of running.
-            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+            // @panic send gate: broadcast ".@panic" on say when we're leading and
+            // PartySettings.UsePanicWhileLeading is set, at the instant the
+            // emergency-hangup floor is crossed.
+            readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
+            selfIsPartyLeader: () => PartyState.IsInParty && PartyState.SelfIsLeader);
 
         // Late-wire the classifier's flee probe now that Health exists (it's
         // built after RoomClassifier). While fleeing, a monster that pursues us
@@ -3592,18 +3614,31 @@ public sealed class AppServices
             // A room-display title line is not a server message — the room-display
             // parser reads it directly and registers no router pattern, so exclude
             // any line that's a known room name in the active set (O(1) name index).
-            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null);
+            isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null,
+            // Stateful block parsers read the wire directly and register no router
+            // pattern, so AnyPatternMatches can't speak for the lines they consume.
+            // Each contributes its OWN matcher here rather than have the shapes
+            // restated in the watcher.
+            isRecognizedByDirectParser: Game.PartyManager.IsRosterRow,
+            // "<Actor> <verb> an <ammo> at <target>!" reads identically whether it's
+            // archery or a projectile spell, so the shape can't be a router pattern —
+            // it needs to know who acted. A no-magery class settles it.
+            isNonCasterPhysicalAction: text =>
+                Game.Combat.NonCasterAttackLine.Matches(text, PlayerCanCast));
 
-        // AilmentSyncEngine — outbound ailment broadcast. On catching a
-        // curable ailment (or being held) it announces ".@poisoned" /
-        // ".@held" etc. on say (so other MudPlay clients mirror our state
-        // and a cure-holds caster can free us) and, for the curable four,
-        // @waits the leader; on clear it @oks. The say only fires when we're
-        // in a party AND have no cure spell configured for that ailment (we
-        // self-cure silently otherwise); held rides its say-pause with no
-        // @wait. Per-ailment OtherSettings DoNotAnnounce* (say) and Ignore*
-        // (@wait) gate the curable four on top. Wire-sender for the say bound
-        // in MainWindowViewModel; the @wait routes via PartyRest's own sender.
+        // AilmentSyncEngine — outbound ailment broadcast. On catching a VERBOSE
+        // ailment (blind / confused / diseased / held) it announces a BARE token
+        // ".@blind" etc. on say at apply only (MegaMUD parity — no 'on'/'off'),
+        // so other MudPlay clients mirror our state and a cure-holds caster can
+        // free us, and for the four curable ailments @waits the leader. POISON is
+        // never announced on say — it's par-owned (PartyManager). On CLEAR nothing
+        // is said (MegaMUD sends no 'off'); only the @ok telepath releases the
+        // leader's wait. The say only fires when we're in a party AND have no cure
+        // spell configured for that ailment (we self-cure silently otherwise);
+        // held announces AND @waits like the curable four (no Ignore gate). Each
+        // per-ailment SpellsSettings Ignore* flag is the single toggle that gates
+        // BOTH the say and the @wait for the curable four. Wire-sender for the say
+        // bound in MainWindowViewModel; the @wait routes via PartyRest's own sender.
         AilmentSync = new Game.Conditions.AilmentSyncEngine(
             Conditions, PartyRest,
             readSpells: () => ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells"),
@@ -3620,7 +3655,10 @@ public sealed class AppServices
         // rebuilding the tracker. AttachLineExtractor lands in
         // MainWindowViewModel alongside the other line consumers.
         PartyAilment = new Game.Conditions.PartyAilmentTracker(
-            Chat, Party, PartyEssentials, CureCastMatchers, Log);
+            Chat, Party, PartyEssentials, CureCastMatchers,
+            readApplyMatchers: ApplyCastMatchers,
+            resolveDurationSeconds: ResolveAilmentDurationSeconds,
+            log: Log);
 
         // Self-confusion bridge — the local side of our own confusion. A
         // confused follower telepaths the leader @wait (AilmentSyncEngine above);
@@ -3644,6 +3682,16 @@ public sealed class AppServices
         // same way an other member's announced poison does.
         SelfAilmentChip = new Game.Conditions.SelfAilmentChipResponder(
             Conditions, Party, log: Log);
+
+        // PanicResponder — inbound @panic. When a partymate says the bare "@panic"
+        // and PartySettings.IgnorePanics is off, bail the same way our own low-HP
+        // emergency would (Health.RespondToReceivedPanic: sys-goto-wimpy if
+        // configured, else hang up). The leader-side broadcast is HealthManager's.
+        PanicResponse = new Game.Conditions.PanicResponder(
+            Chat, PartyState,
+            readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
+            respond: who => Health.RespondToReceivedPanic(who),
+            log: Log);
 
         // CastingDirector. Sits on top of Cast,
         // decides which heal / cure / buff (if any) to issue based on
@@ -7048,6 +7096,99 @@ public sealed class AppServices
     // a Game.Spells.CasterMessageMatcher. Confusion has no
     // cure spell, so it's never listed. Re-read on every call so
     // re-configuring a cure spell takes effect immediately.
+    // Apply-cast matchers for PartyAilmentTracker's witness-SET path: every Messages
+    // record that inflicts a witnessable ailment (blind / confuse / disease / held —
+    // poison is par-owned, excluded), carries a WitnessMessage (a monster casting it
+    // on a member, seen in the room), and links to its Spells row (so we know the
+    // spell number for its duration). Cached; invalidated on a Messages change / set
+    // switch (wired where Messages is constructed). Rebuilt lazily here.
+    private IReadOnlyList<Game.Conditions.ApplyCastMatcher>? _applyMatchers;
+
+    private IReadOnlyList<Game.Conditions.ApplyCastMatcher> ApplyCastMatchers()
+    {
+        if (_applyMatchers is { } cached) return cached;
+
+        const Models.GameData.MessageFlags Witnessable =
+            Models.GameData.MessageFlags.Blinded | Models.GameData.MessageFlags.Confused
+            | Models.GameData.MessageFlags.Diseased | Models.GameData.MessageFlags.MovementPrevented;
+        Models.GameData.MessageFlags[] bits =
+        {
+            Models.GameData.MessageFlags.Blinded, Models.GameData.MessageFlags.Confused,
+            Models.GameData.MessageFlags.Diseased, Models.GameData.MessageFlags.MovementPrevented,
+        };
+
+        List<Game.Conditions.ApplyCastMatcher> list = new();
+        foreach (Models.GameData.MessageRecord rec in Messages.Messages)
+        {
+            if ((rec.Flags & Witnessable) == Models.GameData.MessageFlags.None) continue;
+            if (rec.Flags.HasFlag(Models.GameData.MessageFlags.Disabled)) continue;
+            if (Game.Spells.CasterMessageMatcher.TryCreate(rec.WitnessMessage) is not { } witness) continue;
+            int spellNumber = SpellNumberOf(rec);
+            if (spellNumber <= 0) continue;
+            foreach (Models.GameData.MessageFlags bit in bits)
+                if (rec.Flags.HasFlag(bit))
+                    list.Add(new Game.Conditions.ApplyCastMatcher(bit, rec.Name, spellNumber, witness));
+        }
+        return _applyMatchers = list;
+    }
+
+    // The Spells-table Number a message record is anchored to (via its back-links),
+    // or 0 when it isn't spell-linked.
+    private static int SpellNumberOf(Models.GameData.MessageRecord rec)
+    {
+        if (rec.Links is null) return 0;
+        foreach (Models.GameData.GameDataLink link in rec.Links)
+            if (link.Table.Equals("Spells", StringComparison.OrdinalIgnoreCase))
+                return link.Number;
+        return 0;
+    }
+
+    // Spell-formula cache for duration lookups; rebuilt lazily, invalidated on set
+    // switch (wired with the apply-matcher cache).
+    private Dictionary<int, Game.Spells.SpellFormulaInput>? _spellFormulas;
+
+    private Game.Spells.SpellFormulaInput? SpellFormulaFor(int spellNumber)
+    {
+        if (_spellFormulas is null)
+        {
+            Dictionary<int, Game.Spells.SpellFormulaInput> map = new();
+            if (GameData.GetRawTable("Spells") is { } doc
+                && doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                foreach (System.Text.Json.JsonElement row in doc.RootElement.EnumerateArray())
+                    if (row.TryGetProperty("Number", out System.Text.Json.JsonElement n)
+                        && n.TryGetInt32(out int num))
+                        map[num] = Game.Spells.SpellFormulaReader.Read(row);
+            _spellFormulas = map;
+        }
+        return _spellFormulas.TryGetValue(spellNumber, out Game.Spells.SpellFormulaInput f) ? f : null;
+    }
+
+    // Duration (seconds) a witnessed ailment spell will last on a party member —
+    // deterministic from the CASTING monster's cast level (a "resist" prints no
+    // apply line, so never reaches here). We can't pin which in-room monster cast
+    // it from the witness line, so take the LONGEST cast level among in-room
+    // monsters that cast this spell — clearing a chip late is safe, clearing it
+    // early (stopping a still-needed cure) is not. Null when no in-room caster has
+    // the spell or it has no duration formula — the tracker falls back to its cap.
+    private double? ResolveAilmentDurationSeconds(int spellNumber)
+    {
+        if (SpellFormulaFor(spellNumber) is not { } formula) return null;
+        int bestLevel = 0;
+        if (RoomClassifier.Current is { } obs)
+            foreach (Game.Combat.RoomEntity e in obs.Entities)
+            {
+                if (e.MonsterNumber is not { } mn) continue;
+                if (MonsterCatalog.Get(mn) is not { } entry) continue;
+                foreach (Game.Combat.MonsterAttackSlot a in entry.Attacks)
+                    if (a.Accuracy == spellNumber && a.MaxDamage > bestLevel) bestLevel = a.MaxDamage;
+                foreach (Game.Combat.MonsterMidSpellSlot s in entry.MidSpells)
+                    if (s.SpellId == spellNumber && s.Level > bestLevel) bestLevel = s.Level;
+            }
+        if (bestLevel <= 0) return null;
+        long rounds = Game.Spells.SpellCalculator.Duration(formula, bestLevel);
+        return rounds > 0 ? rounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock : null;
+    }
+
     private IReadOnlyList<Game.Conditions.CureCastMatcher> CureCastMatchers()
     {
         Models.Profile.SpellsSettings spells =
@@ -7728,6 +7869,10 @@ public sealed class AppServices
     private bool IsPartyMemberName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return false;
+        // Members now carries a lone self row even when solo (PartyWindow self-
+        // display); only treat a name as a party member when we're actually in a
+        // party, so a "hold person on <self>" line while solo isn't misread.
+        if (!PartyState.IsInParty) return false;
         foreach (Game.PartyMember m in PartyState.Members)
         {
             string full = m.Name;
@@ -8977,6 +9122,37 @@ public sealed class AppServices
         int sp = full.IndexOf(' ');
         string first = sp < 0 ? full : full[..sp];
         return string.Equals(first, name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Whether a named player's class can cast anything: true for a magery class,
+    // false for the no-magery ones, null when we don't know the player or their
+    // class. Consumers must treat null as "don't know" — never as "can't cast".
+    //
+    // Class sources in precedence order, strongest first: the party roster (`par`
+    // states a member's class outright), our own stat screen, then the player
+    // database — an explicitly observed class from `look`, else the class implied by
+    // their title when exactly one class uses it (a shared title tells us nothing).
+    private bool? PlayerCanCast(string givenName) =>
+        SpellCatalog.ClassCanCast(ResolveKnownPlayerClass(givenName));
+
+    private string? ResolveKnownPlayerClass(string givenName)
+    {
+        if (string.IsNullOrWhiteSpace(givenName)) return null;
+
+        foreach (Game.PartyMember m in Party.State.Members)
+            if (FirstTokenEquals(m.Name, givenName) && m.Class.Length > 0)
+                return m.Class;
+
+        if (FirstTokenEquals(PlayerStats.Name, givenName)
+            && PlayerStats.Class is { Length: > 0 } own)
+            return own;
+
+        if (Players.Find(givenName) is not { } record) return null;
+        if (record.Class is { Length: > 0 } observed) return observed;
+        // A title only identifies a class when it isn't shared across classes.
+        return Game.GameData.ClassTitleTable.LookupClasses(record.Title) is { Count: 1 } implied
+            ? implied[0]
+            : null;
     }
 
     // Parse the active BBS's nightly-cleanup time + zone into a config for the

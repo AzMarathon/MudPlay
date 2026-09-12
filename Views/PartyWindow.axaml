@@ -60,11 +60,11 @@
         <!-- ===== Empty-state hint ===== -->
         <TextBlock DockPanel.Dock="Top"
                    Margin="10,12,10,0"
-                   Text="No party active. Members appear here as soon as someone follows you (or you follow someone)."
+                   Text="Your character appears here once a profile is loaded; party members join the list as they follow you (or you follow them)."
                    Foreground="{StaticResource ChromeFgMutedBrush}"
                    FontSize="11"
                    TextWrapping="Wrap"
-                   IsVisible="{Binding !State.IsInParty}"/>
+                   IsVisible="{Binding !HasRows}"/>
 
         <!-- ===== Member rows =====
              Column header row dropped — column purpose is obvious from
@@ -75,7 +75,7 @@
         <ItemsControl ItemsSource="{Binding State.Members}"
                       Background="{StaticResource ChromeBgSunkenBrush}"
                       Padding="2"
-                      IsVisible="{Binding State.IsInParty}">
+                      IsVisible="{Binding HasRows}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="game:PartyMember">
                     <Border BorderBrush="{StaticResource ChromeBorderSoftBrush}"

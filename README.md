@@ -1,11 +1,17 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.73.2**
-> - Route picker's "Search en route" now buys the counter at a shop as a last resort — when nothing turns up en route — instead of just stopping at the hazard's edge
-> - Auto-Search drives the per-room `sea` while moving: picking "Search en route" turns Auto-Search on for the leg and flips it back off once the counter lands (found or bought); the "Obtain, then cross" (buy) card conversely uses a counter found loose en route instead of buying it when Auto-Search is on
-> - A walk that didn't begin on a teleport route no longer silently switches to one when it re-plans mid-trip (e.g. after a searched-for counter turns up) — it keeps to the walking route and only uses a teleport if walking is genuinely impossible
-> - Removed the Settings → Other "search rooms if item needed" checkbox — searching for a route item is now driven by the master Auto-Search toggle (which the "Search en route" card turns on for the leg), and the shop/give/drop acquisition is armed by accepting a gated route in the picker
+> **Version 3.74.8**
+> - Unrecognized-line capture now recognizes **templated** catalogue messages, so known casts (`Raijin casts minor healing on Raijin!`, `You invoke the way of the swan.`) are no longer staged for review — previously every templated message in the game read as unknown.
+> - Buff wear-off lines matched as phrases rather than exact text, so the server's trailing punctuation no longer defeats them.
+> - Shipped templates too vague to identify a line (`The {source} {spellname}!`) are skipped for recognition instead of swallowing genuine unknown messages.
+> - Capture skips `par` party-screen rows, room-light announcements, third-party physical attacks, and another player's failed cast.
+> - Monster death messages dropped by position (the line before an experience gain), and rows captured for them earlier are cleared out.
+> - Engine-issued commands no longer leave their echo (`swan`, `tige`) in the queue.
+> - Unrecognized Lines table updates in place — live capture no longer snaps the list back to the top or drops your selection.
+> - A ranged attack naming ammunition but no weapon (`Suijin shoots an arrow at bandit!`) reads exactly like a projectile spell, so it's settled by the actor's class: a player whose class has no magery can't be casting, so the line is dropped — while the same line from a caster stays captured.
+> - Monster spell messages and ambient room-spell flavour still captured, deliberately.
+> - **Likely source** now derives from the line instead of the room, so it stops answering the same thing for every row: a line naming a room monster gets that monster's spells tagged with how each fires (`bites (#80) — forest spider, on hit`), a line naming none gets the room's own on-entry spell (the source of the atmosphere lines), and with neither the column is blank rather than a guess.
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
