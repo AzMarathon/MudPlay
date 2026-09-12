@@ -1211,6 +1211,12 @@ public sealed class AppServices
     // AilmentSync.
     public Game.Conditions.PartyAilmentTracker PartyAilment { get; private set; } = null!;
 
+    // Inbound @panic handler — when a party member says the bare "@panic" signal
+    // and we don't ignore it, bail the same way our own low-HP emergency would
+    // (via Health.RespondToReceivedPanic). The leader-side broadcast lives on
+    // HealthManager.
+    public Game.Conditions.PanicResponder PanicResponse { get; private set; } = null!;
+
     // Stealth state tracker. Owns
     // PlayerState.IsSneaking /
     // PlayerState.IsHidden and emits FSM-state
@@ -2094,6 +2100,11 @@ public sealed class AppServices
         // its own ChatRouter subscription.
         foreach (string token in Game.Conditions.PartyAilmentTracker.AnnounceTokens)
             RemoteCommands.RegisterIgnored(token);
+        // @panic rides the say channel as a party bail-out signal, not an
+        // @-command — reserve it so the engine swallows it instead of bouncing a
+        // "{command invalid}" reply. PanicResponder consumes it on its own
+        // ChatRouter subscription (gated by PartySettings.IgnorePanics).
+        RemoteCommands.RegisterIgnored("@panic");
         // Boss-timer sync responses ride the chat as `@timerdata …` lines the requester
         // scrapes itself (BossTimerSyncCollector); reserve the token so the engine
         // swallows it instead of bouncing "{command invalid}" at each responder.
@@ -3466,7 +3477,12 @@ public sealed class AppServices
             // Defer the flee one UI-thread hop so the round's death line (parsed
             // after the prompt in the same wire read) settles before we commit —
             // a killing blow that empties the room then rests instead of running.
-            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+            // @panic send gate: broadcast ".@panic" on say when we're leading and
+            // PartySettings.UsePanicWhileLeading is set, at the instant the
+            // emergency-hangup floor is crossed.
+            readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
+            selfIsPartyLeader: () => PartyState.IsInParty && PartyState.SelfIsLeader);
 
         // Late-wire the classifier's flee probe now that Health exists (it's
         // built after RoomClassifier). While fleeing, a monster that pursues us
@@ -3600,16 +3616,19 @@ public sealed class AppServices
             // any line that's a known room name in the active set (O(1) name index).
             isKnownRoomName: text => GameData.FindRowByName("Rooms", text) is not null);
 
-        // AilmentSyncEngine — outbound ailment broadcast. On catching a
-        // curable ailment (or being held) it announces ".@poisoned" /
-        // ".@held" etc. on say (so other MudPlay clients mirror our state
-        // and a cure-holds caster can free us) and, for the curable four,
-        // @waits the leader; on clear it @oks. The say only fires when we're
-        // in a party AND have no cure spell configured for that ailment (we
-        // self-cure silently otherwise); held rides its say-pause with no
-        // @wait. Per-ailment OtherSettings DoNotAnnounce* (say) and Ignore*
-        // (@wait) gate the curable four on top. Wire-sender for the say bound
-        // in MainWindowViewModel; the @wait routes via PartyRest's own sender.
+        // AilmentSyncEngine — outbound ailment broadcast. On catching a VERBOSE
+        // ailment (blind / confused / diseased / held) it announces a BARE token
+        // ".@blind" etc. on say at apply only (MegaMUD parity — no 'on'/'off'),
+        // so other MudPlay clients mirror our state and a cure-holds caster can
+        // free us, and for the four curable ailments @waits the leader. POISON is
+        // never announced on say — it's par-owned (PartyManager). On CLEAR nothing
+        // is said (MegaMUD sends no 'off'); only the @ok telepath releases the
+        // leader's wait. The say only fires when we're in a party AND have no cure
+        // spell configured for that ailment (we self-cure silently otherwise);
+        // held rides its say-pause with no @wait. Per-ailment SpellsSettings
+        // DoNotAnnounce* (say) and Ignore* (@wait) gate the curable four on top.
+        // Wire-sender for the say bound in MainWindowViewModel; the @wait routes
+        // via PartyRest's own sender.
         AilmentSync = new Game.Conditions.AilmentSyncEngine(
             Conditions, PartyRest,
             readSpells: () => ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells"),
@@ -3653,6 +3672,16 @@ public sealed class AppServices
         // same way an other member's announced poison does.
         SelfAilmentChip = new Game.Conditions.SelfAilmentChipResponder(
             Conditions, Party, log: Log);
+
+        // PanicResponder — inbound @panic. When a partymate says the bare "@panic"
+        // and PartySettings.IgnorePanics is off, bail the same way our own low-HP
+        // emergency would (Health.RespondToReceivedPanic: sys-goto-wimpy if
+        // configured, else hang up). The leader-side broadcast is HealthManager's.
+        PanicResponse = new Game.Conditions.PanicResponder(
+            Chat, PartyState,
+            readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
+            respond: who => Health.RespondToReceivedPanic(who),
+            log: Log);
 
         // CastingDirector. Sits on top of Cast,
         // decides which heal / cure / buff (if any) to issue based on

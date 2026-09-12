@@ -10,29 +10,30 @@ namespace MudPlay.Game.Conditions;
 // curable-ailment state onto their PartyMember chip so the PartyWindow shows it
 // and CastingDirector can party-cure them.
 //
-// Set — when a member running the same client catches a curable ailment (or is
-// held), the outbound AilmentSyncEngine announces on say: the curable four as a
-// paired toggle '.@poisoned on' … '.@poisoned off', held as a bare '.@held'. The
-// leading period is the say-shortcut, so other clients observe the bare token
-// (Forged says "@poisoned on"). We match that on the ChatChannel.Local channel
-// and set the speaker's chip via PartyManager.SetMemberAilment (a bare token or
-// the 'on' suffix sets it, 'off' clears it). @held additionally pauses the leader
-// through PartyEssentialHandlers.NotePause — a held member can't move, so the
-// party waits for them. Our own announce echoes as You say "@poisoned on" with a
-// null speaker, so it's ignored here (our state is owned by ConditionTracker).
+// Set — when a member running the same client catches a VERBOSE ailment (blind /
+// confused / diseased / held), the outbound AilmentSyncEngine announces a BARE
+// token on say — '.@blind', no 'on'/'off' suffix (MegaMUD parity). The leading
+// period is the say-shortcut, so other clients observe the bare token (Forged says
+// "@blind"). We match that on the ChatChannel.Local channel and set the speaker's
+// chip via PartyManager.SetMemberAilment. The inbound parse still accepts an
+// optional 'on'/'off' suffix for back-compat with an older client that paired the
+// toggle, but the current client never emits 'off'. @held additionally pauses the
+// leader through PartyEssentialHandlers.NotePause — a held member can't move, so
+// the party waits for them. POISON is never announced on say — it's par-owned
+// (PartyManager reads the par `P` flag). Our own announce echoes as You say
+// "@blind" with a null speaker, so it's ignored here (our state is ConditionTracker's).
 //
-// Clear — the authoritative clear is the paired '.@X off' say above: it fires on
-// every curable-ailment clear (including a natural wear-off with no cure cast),
-// so a chip never sticks. Held has no off-signal — its chip and leader-pause
-// release ride the member's @ok on last-clear (PartyEssentialHandlers.OnOk).
-// A second, faster clear path also runs: when we witness a cure land on the
-// member we drop the chip immediately, before their off-signal round-trips. Each
-// configured cure spell's CasterMessage (OUR cast) and WitnessMessage (a cast by
-// another member, seen in the room) templates are compiled to
-// CasterMessageMatchers; a server line naming BOTH the cure spell AND the member
-// (CasterMessageMatcher.ConfirmsSpellTarget) clears that member's chip —
+// Clear — MegaMUD sends no 'off', so a chip clears on whatever is observed first,
+// none of which is an outbound say: (1) a witnessed cure landing on the member —
+// the fastest path; (2) the spell-data duration timing out (SweepExpiredChips,
+// armed from the apply-cast's cast level or a generous fallback cap); (3) the par
+// `P` flag dropping (poison only, PartyManager); (4) a @status reconcile. For the
+// cure path, each configured cure spell's CasterMessage (OUR cast) and
+// WitnessMessage (a cast by another member, seen in the room) templates are
+// compiled to CasterMessageMatchers; a server line naming BOTH the cure spell AND
+// the member (CasterMessageMatcher.ConfirmsSpellTarget) clears that member's chip —
 // requiring the spell name too keeps an unrelated cast on the same member (a buff
-// on a poisoned ally) from clearing the wrong chip. Both paths are idempotent.
+// on a poisoned ally) from clearing the wrong chip. All clear paths are idempotent.
 //
 // Reconcile — a third path repairs a chip the push signals ever missed (a dropped
 // 'off', a cure witnessed out of the room). A member's @status reply carries an

@@ -415,6 +415,7 @@ Active party members get a few things for free regardless of the grid: the party
 - `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
 - `@share` — splits your held coin evenly across the party.
 - `@party` — bare, it reports whether you're solo / following / leading. Sent on **say** *with* arguments, it relays whatever follows verbatim to your character as if you typed it (the party version of `@do`) — `@party rest`, `@party use chime`, and so on. The directive form only works on the say channel, and Settings → Talk can disallow it.
+- `@panic` — the party-wide bail-out (MegaMUD parity). A **leader** whose HP crosses its **"hang if below"** floor says a bare `@panic` on say and then escapes (hangs up, or breaks + `sys goto <wimpy>` per the Health tab) — warning the whole party to get out. It's opt-in on both sides via two **Settings → Party** checkboxes: **Use @panic while leading** (whether you send it) and **Ignore @panics** (whether a received one makes *you* bail). Both default off. A received `@panic` makes you escape exactly as your own low-HP emergency would; it still respects the *Disable hangups* master switch for the carrier-drop (you'll `sys goto` wimpy if configured, but never be force-disconnected by someone else's panic).
 
 ### Irreversible and always-blocked
 
@@ -1753,6 +1754,18 @@ Settings → Party.
 **What it does:** Normally, if any party member sends `@wait`, your automation pauses until they say `@ok`. With this on, **while you're the leader**, incoming @wait requests are ignored — your automation keeps running instead of stalling for a follower.
 **When you might change it:** Leading a group where you don't want one slow member to stall everyone else's progress.
 
+### Use @panic while leading
+
+**Default:** Off
+**What it does:** When you're leading a party and your HP crosses your Health-tab **"hang if below"** floor (with a hostile present), you say a bare `@panic` on the say channel before escaping — warning the whole party to bail with you. Without this, you still escape yourself, but the party isn't told. (MegaMUD parity — a MegaMUD leader's `@panic` reaches your party the same way, and yours reaches theirs.)
+**When you might change it:** Leading a group through content where a leader going down means everyone should get out.
+
+### Ignore @panics
+
+**Default:** Off
+**What it does:** When **unchecked** (the default), a partymate's `@panic` makes you bail the same way your own low-HP emergency would — hang up, or break + `sys goto <wimpy>` if you've set that up on the Health tab. Check this to ignore others' panics and stay put. (A received panic always respects the *Disable hangups* master switch: you'll still `sys goto` wimpy if configured, but you're never force-disconnected by someone else.)
+**When you might change it:** Check it if you'd rather decide for yourself when to flee than have a partymate's panic drop you.
+
 ### Reset statistics on loop start
 
 **Default:** On
@@ -2398,6 +2411,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Party bless slots (part of the unified buff list — see Spells/Health above) | empty | configured in the Buff Watchdog | `PartyBuffs` | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Bless while resting / during combat | false / false | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
 | Help leader open doors / Ignore @wait when leading / Reset stats on loop start | false/false/true | bool | `HelpLeaderOpenDoors`, `IgnoreWaitWhenLeading`, `ResetStatisticsOnLoopStart` | Models/Profile/PartySettings.cs |
+| Use @panic while leading / Ignore @panics | false / false | bool | `UsePanicWhileLeading`, `IgnorePanics` | Models/Profile/PartySettings.cs |
 | Re-invite lost members / send @join nags / send @health nags / probe on join | true (all) | bool | `AutoInviteReconnecting`, `SendJoinToInvited`, `SendHealthToMembers`, `ProbeStatsOnPartyJoin` | Models/Profile/PartySettings.cs |
 | Nag initial delay / frequency / max window (s) | 5/10/55 | 1–60 / 1–60 / 5–600 | `JoinNagInitialDelaySec`, `JoinNagFrequencySec`, `JoinNagMaxTotalSec` | Models/Profile/PartySettings.cs |
 | Max monsters when partying | `20` | 1–20 | `MaxMonstersWhenPartying` | Models/Profile/PartySettings.cs |

@@ -1,8 +1,13 @@
 # Version history
 
-## 3.73.3
+## 3.74.0
 
-- Party window lights a member's **poison** chip from the `par` party-screen `P` flag (set and cleared each poll), so a partymate's poison shows even on another client (e.g. MegaMUD); the `.@poisoned` say announce is dropped (its `@wait` to the leader stays). Your own poison chip still comes from your apply/wear-off messages.
+- Party-ailment signalling reworked to interoperate with MegaMUD in a mixed party:
+  - A partymate's **poison** chip is read from the `par` party-screen `P` flag (set and cleared each poll), so it shows even when they're on MegaMUD; poison is no longer announced on say (the `@wait` to the leader stays). Your own poison chip still comes from your apply/wear-off messages.
+  - **Blind / confused / diseased / held** now announce a bare `@blind` / `@confused` / `@diseased` / `@held` on say at apply only (MegaMUD parity — no `on`/`off` suffix); on clear nothing is said.
+  - The client now **witnesses a monster's ailment-apply** landing on a partymate and lights their chip, then clears it when the spell's own duration (derived from the casting monster's level) elapses — so a member's chip no longer sticks forever waiting for an `off` that never comes.
+  - A member's chip clears on whichever is observed first: a witnessed cure on them, the spell-data duration timing out, the `par` `P` flag dropping (poison), or a `@status` reply.
+- **`@panic`** (MegaMUD party bail-out): a leader whose HP crosses the "hang if below" floor can say `@panic` to the whole party and then escape (hang up, or break + sys-goto-wimpy per the Health tab). Two Settings → Party checkboxes: **Use @panic while leading** (send, off by default) and **Ignore @panics** (off by default — an un-ignored `@panic` makes you bail the same way your own low-HP emergency would). A received `@panic` still honours the Disable-hangups master switch for the carrier-drop (it'll wimpy-jump if configured but never be force-dropped).
 
 ## 3.73.2
 

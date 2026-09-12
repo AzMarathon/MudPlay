@@ -1,8 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.73.3**
-> - Party window lights a member's **poison** chip from the `par` party-screen `P` flag (set and cleared each poll), so a partymate's poison shows even on another client (e.g. MegaMUD); the `.@poisoned` say announce is dropped (its `@wait` to the leader stays). Your own poison chip still comes from your apply/wear-off messages.
+> **Version 3.74.0**
+> - Party-ailment signalling reworked to interoperate with MegaMUD in a mixed party:
+>   - A partymate's **poison** chip is read from the `par` party-screen `P` flag (even when they're on MegaMUD); poison is no longer announced on say (its `@wait` to the leader stays).
+>   - **Blind / confused / diseased / held** announce a bare `@blind` / `@confused` / `@diseased` / `@held` on say at apply only (MegaMUD parity — no `on`/`off`); nothing is said on clear.
+>   - The client witnesses a monster's ailment-apply landing on a partymate, lights their chip, and clears it when the spell's own duration elapses — so a chip no longer sticks forever. A chip clears on whichever comes first: a witnessed cure, the spell duration, the `par` `P` drop (poison), or a `@status` reply.
+> - **`@panic`** (MegaMUD party bail-out): a leader at their "hang if below" floor can say `@panic` to the party and escape (hang up, or break + sys-goto-wimpy). Two Settings → Party checkboxes: **Use @panic while leading** and **Ignore @panics** (both off by default).
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
