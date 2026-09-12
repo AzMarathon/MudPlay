@@ -547,6 +547,52 @@ public sealed class PartyManagerTests
     }
 
     [Fact]
+    public void ParBlock_PoisonFlag_DrivesOtherMemberPoisonChip_SetAndClear()
+    {
+        // The par `P` flag is the authoritative cross-client source for an OTHER
+        // member's poison chip — poison is never announced verbosely, so par is
+        // the only way to see it. A poll with the flag sets the chip; a later poll
+        // without it clears the chip straight off the flag dropping.
+        var (_, p) = Setup(localCharacterName: "MindGoblin");
+        p.TestEnterParBlock();
+        p.FeedTestLines(new[]
+        {
+            "  Suijin                         (Mage)       [M: 98%] [H: 81%]P  - Backrank",
+            "  MindGoblin                     (Druid)      [M: 98%] [H:100%]   - Midrank",
+            string.Empty,
+        });
+        PartyMember suijin = p.State.Members.First(x => x.Name == "Suijin");
+        Assert.True(suijin.Poisoned);   // P flag present → chip set
+
+        p.TestEnterParBlock();
+        p.FeedTestLines(new[]
+        {
+            "  Suijin                         (Mage)       [M: 98%] [H: 95%]   - Backrank",
+            "  MindGoblin                     (Druid)      [M: 98%] [H:100%]   - Midrank",
+            string.Empty,
+        });
+        Assert.False(suijin.Poisoned);  // flag gone → chip cleared
+    }
+
+    [Fact]
+    public void ParBlock_PoisonFlag_OnSelfRow_DoesNotDriveSelfChip()
+    {
+        // Self's poison chip is owned by ConditionTracker (timelier than the 5s par
+        // poll and apply/wear-off-message-driven), so par must NOT set it even when
+        // our own row shows `P`.
+        var (_, p) = Setup(localCharacterName: "MindGoblin");
+        p.TestEnterParBlock();
+        p.FeedTestLines(new[]
+        {
+            "  MindGoblin                     (Druid)      [M: 98%] [H: 70%]P  - Midrank",
+            string.Empty,
+        });
+        PartyMember self = p.State.Members.First(x => x.IsSelf);
+        Assert.Equal("MindGoblin", self.Name);
+        Assert.False(self.Poisoned);    // par does not drive the self chip
+    }
+
+    [Fact]
     public void ParBlock_PoisonFlag_DoesNotDemoteLeaderAcrossPolls()
     {
         // Regression for the reported bug: a clean par poll sets the leader

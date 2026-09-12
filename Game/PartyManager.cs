@@ -157,9 +157,10 @@ public sealed partial class PartyManager : IDisposable
     // here, the `-` rank suffix never matched on a poisoned row, so `rank` fell
     // through to its Mid default and the PartyWindow silently demoted a
     // force-frontranked leader (or any poisoned member) to midrank every poll
-    // they were poisoned. The flag is captured but not authoritative for the
-    // poison chip — that stays owned by the @poisoned say tracker, which is more
-    // timely than the 5s par poll and avoids a stale-poll re-poison race.
+    // they were poisoned. The flag is now also the AUTHORITATIVE source for an
+    // OTHER member's poison chip (set/cleared each poll where it's processed) —
+    // poison is never announced verbosely, so par is the only cross-client way to
+    // see it. Self's poison chip stays owned by ConditionTracker, not par.
     //
     // - Rank is an optional trailing chip (Frontrank / Midrank / Backrank). par
     // doesn't carry Position — that field stays at its default (Standing) for
@@ -1248,6 +1249,14 @@ public sealed partial class PartyManager : IDisposable
         // status-chip strip (which keys on these booleans) lights up too.
         member.Resting    = position == PlayerPosition.Resting;
         member.Meditating = position == PlayerPosition.Meditating;
+        // Poison: the par `P` flag is the authoritative cross-client source for
+        // OTHER members' poison chip — no client announces poison verbosely (see
+        // GAME_MECHANICS "Party ailment signaling"), so drive it straight off the
+        // flag each poll: set when `P` is present, clear when it drops. Skip self —
+        // our own poison is owned by ConditionTracker (timelier than the 5s par
+        // poll), mirrored to the self chip by SelfAilmentChipResponder.
+        if (!isSelf)
+            member.Poisoned = m.Groups["poison"].Success;
 
         // A joined par row (this branch only matches a row carrying an [H:] bracket)
         // is proof the member is actually in the party — pending invitees print as a

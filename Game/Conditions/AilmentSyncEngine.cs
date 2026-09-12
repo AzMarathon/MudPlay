@@ -8,16 +8,17 @@ namespace MudPlay.Game.Conditions;
 
 // Outbound ailment-sync: when the local character catches a curable ailment
 // (poison / blindness / confusion / disease) or is held (movement-prevented),
-// this engine (1) announces it on the say channel — the curable four as a paired
-// toggle '.@poisoned on' … '.@poisoned off', held as a bare '.@held' — so other
-// clients in the room can mirror our state on their party window (and a member
-// with a cure-holds spell can free us), and (2) for the four curable ailments
+// this engine (1) announces the VERBOSE ones on the say channel — blindness /
+// confusion / disease / held as a paired toggle '.@blind on' … '.@blind off' —
+// so other clients in the room can mirror our state on their party window (and a
+// member with a cure spell can help), and (2) for the four curable ailments
 // telepaths an @wait to the party leader so the party pauses while we're
-// afflicted. On clear it (a) says the matching '.@X off' for the curable four —
-// the authoritative chip-clear the receiver keys on, so a natural wear-off with
-// no cure line still clears — and (b) telepaths @ok (only when the last wait
-// reason releases — see PartyRestSync), which releases held's say-driven pause.
-// Held has no off-signal; its release rides @ok alone.
+// afflicted. POISON is deliberately NOT announced (Verbose:false) — an observer
+// reads it from the par `P` flag (PartyManager), the cross-client source — but it
+// still telepaths its @wait. On clear the engine (a) says the matching '.@X off'
+// for the verbose ones — the authoritative chip-clear the receiver keys on, so a
+// natural wear-off with no cure line still clears — and (b) telepaths @ok (only
+// when the last wait reason releases — see PartyRestSync).
 //
 // Transitions are read off ConditionTracker.ActiveFlags directly — we diff the
 // added / removed bits per change rather than subscribing to
@@ -45,17 +46,19 @@ public sealed class AilmentSyncEngine : IDisposable
     public const string LogCategory = "Ailment";
 
     // The ailments we sync, with their say token, the WaitReason they hold on the
-    // leader, and whether they telepath an @wait on top of the say-announce.
-    // Confusion is included even though no realm cure exists for it (stock /
-    // paramud) — the announce still lets the party react. Held (TelepathWait
+    // leader, whether they telepath an @wait, and whether they announce on say
+    // (Verbose). Poison is NOT verbose — an observer reads it from the par `P`
+    // flag (PartyManager), the cross-client source; it still telepaths @wait.
+    // Confusion IS verbose even though no realm cure exists for it (stock /
+    // paradigm) — the announce still lets the party react. Held (TelepathWait
     // false) never sends @wait: its leader-pause rides the .@held say.
-    private static readonly (MessageFlags Flag, string SayToken, WaitReason Reason, bool TelepathWait)[] Ailments =
+    private static readonly (MessageFlags Flag, string SayToken, WaitReason Reason, bool TelepathWait, bool Verbose)[] Ailments =
     {
-        (MessageFlags.Poisoned, "@poisoned", WaitReason.Poison,    true),
-        (MessageFlags.Blinded,  "@blind",    WaitReason.Blindness, true),
-        (MessageFlags.Confused, "@confused", WaitReason.Confusion, true),
-        (MessageFlags.Diseased, "@diseased", WaitReason.Disease,   true),
-        (MessageFlags.MovementPrevented, "@held", WaitReason.Held, false),
+        (MessageFlags.Poisoned, "@poisoned", WaitReason.Poison,    true,  false),
+        (MessageFlags.Blinded,  "@blind",    WaitReason.Blindness, true,  true),
+        (MessageFlags.Confused, "@confused", WaitReason.Confusion, true,  true),
+        (MessageFlags.Diseased, "@diseased", WaitReason.Disease,   true,  true),
+        (MessageFlags.MovementPrevented, "@held", WaitReason.Held, false, true),
     };
 
     private readonly ConditionTracker _conditions;
@@ -119,7 +122,7 @@ public sealed class AilmentSyncEngine : IDisposable
         SpellsSettings spells = _readSpells();
         bool inParty = _isInParty();
 
-        foreach ((MessageFlags flag, string token, WaitReason reason, bool telepathWait) in Ailments)
+        foreach ((MessageFlags flag, string token, WaitReason reason, bool telepathWait, bool verbose) in Ailments)
         {
             // Every ailment — held included — rides a paired '.@X on' / '.@X off'
             // broadcast toggle, so a receiver clears the party-window chip on the
@@ -133,7 +136,8 @@ public sealed class AilmentSyncEngine : IDisposable
             bool paired = true;
             if (added.HasFlag(flag))
             {
-                bool announced = ShouldAnnounce(flag, spells, inParty);
+                // Non-verbose ailments (poison) never say anything — par carries them.
+                bool announced = verbose && ShouldAnnounce(flag, spells, inParty);
                 if (announced)
                 {
                     Say(paired ? token + " on" : token);
@@ -185,7 +189,7 @@ public sealed class AilmentSyncEngine : IDisposable
     {
         MessageFlags active = _conditions.ActiveFlags;
         SpellsSettings spells = _readSpells();
-        foreach ((MessageFlags flag, _, WaitReason reason, bool telepathWait) in Ailments)
+        foreach ((MessageFlags flag, _, WaitReason reason, bool telepathWait, _) in Ailments)
         {
             if (!telepathWait) continue;
             if (active.HasFlag(flag) && !IsWaitSuppressed(flag, spells))

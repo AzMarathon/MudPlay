@@ -1,5 +1,9 @@
 # Version history
 
+## 3.73.3
+
+- Party window lights a member's **poison** chip from the `par` party-screen `P` flag (set and cleared each poll), so a partymate's poison shows even on another client (e.g. MegaMUD); the `.@poisoned` say announce is dropped (its `@wait` to the leader stays). Your own poison chip still comes from your apply/wear-off messages.
+
 ## 3.73.2
 
 - Route picker's "Search en route" now buys the counter at a shop as a last resort — when nothing turns up en route — instead of just stopping at the hazard's edge

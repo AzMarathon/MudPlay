@@ -10,14 +10,15 @@ using Xunit;
 namespace MudPlay.Tests;
 
 /// <summary>
-/// Outbound ailment-sync (<see cref="AilmentSyncEngine"/>): on a local
-/// curable ailment, announce <c>.@poisoned on</c> etc. on say (so other
-/// MudPlay clients mirror our state) and <c>@wait</c> the leader; on
-/// clear, say the balanced <c>.@poisoned off</c> and <c>@ok</c> the leader.
-/// The say only fires when in a party AND no cure spell is configured for that
-/// ailment; DoNotAnnounce* further gates the say, Ignore* gates the @wait —
-/// independently. Held announces bare <c>.@held</c> (no off-signal) and never
-/// telepaths <c>@wait</c> (its pause rides the say, released by @ok).
+/// Outbound ailment-sync (<see cref="AilmentSyncEngine"/>): on a local VERBOSE
+/// ailment (blind / confuse / disease / held), announce <c>.@blind on</c> etc.
+/// on say (so other clients mirror our state); the four curable ailments also
+/// <c>@wait</c> the leader; on clear, say the balanced <c>.@blind off</c> and
+/// <c>@ok</c> the leader. POISON is NOT announced (an observer reads it from the
+/// par <c>P</c> flag) but still telepaths its <c>@wait</c>. The say only fires
+/// when in a party AND no cure spell is configured for that ailment;
+/// DoNotAnnounce* further gates the say, Ignore* gates the @wait — independently.
+/// Held never telepaths <c>@wait</c> (its pause rides the say, released by @ok).
 /// </summary>
 public sealed class AilmentSyncEngineTests
 {
@@ -98,14 +99,16 @@ public sealed class AilmentSyncEngineTests
     }
 
     [Fact]
-    public void Poisoned_AnnouncesSayAndWaits()
+    public void Poisoned_WaitsButDoesNotSay()
     {
         using Harness h = new();
         SeedAll(h);
 
         h.Feed("You have been poisoned!");
 
-        Assert.Equal(".@poisoned on\r", Assert.Single(h.Say));
+        // Poison is NOT announced verbosely — an observer reads it from the par
+        // `P` flag. It still telepaths its @wait to the leader.
+        Assert.Empty(h.Say);
         Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
     }
 
@@ -126,11 +129,13 @@ public sealed class AilmentSyncEngineTests
     [Fact]
     public void DoNotAnnounce_SuppressesSay_ButWaitStillFires()
     {
+        // Uses blindness (a VERBOSE ailment) — poison no longer exercises the say
+        // path, so the DoNotAnnounce<X> gate is shown against a token that does say.
         using Harness h = new();
         SeedAll(h);
-        h.Spells = new SpellsSettings { DoNotAnnouncePoison = true };
+        h.Spells = new SpellsSettings { DoNotAnnounceBlindness = true };
 
-        h.Feed("You have been poisoned!");
+        h.Feed("You have been blinded!");
 
         Assert.Empty(h.Say);
         Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
@@ -139,13 +144,14 @@ public sealed class AilmentSyncEngineTests
     [Fact]
     public void Ignore_SuppressesWait_ButSayStillFires()
     {
+        // Blindness is verbose, so its say fires even when its @wait is ignored.
         using Harness h = new();
         SeedAll(h);
-        h.Spells = new SpellsSettings { IgnorePoison = true };
+        h.Spells = new SpellsSettings { IgnoreBlindness = true };
 
-        h.Feed("You have been poisoned!");
+        h.Feed("You have been blinded!");
 
-        Assert.Equal(".@poisoned on\r", Assert.Single(h.Say));
+        Assert.Equal(".@blind on\r", Assert.Single(h.Say));
         Assert.Empty(h.Telepath);
     }
 
@@ -160,25 +166,26 @@ public sealed class AilmentSyncEngineTests
 
         // @wait then @ok on the telepath channel.
         Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
-        // Paired say toggle: '.@poisoned on' on apply, '.@poisoned off' on clear.
-        Assert.Equal(new[] { ".@poisoned on\r", ".@poisoned off\r" }, h.Say);
+        // Poison is not announced on say (observers read the par `P` flag) — so
+        // nothing lands on the say wire on apply or clear.
+        Assert.Empty(h.Say);
     }
 
     [Fact]
     public void Cleared_WhenWaitWasIgnored_StillSaysOff()
     {
+        // Blindness (verbose) with its @wait ignored: no telepath at all, but the
+        // paired say toggle still fires, so a receiver clears the chip on
+        // '.@blind off' regardless of the @wait gate.
         using Harness h = new();
         SeedAll(h);
-        h.Spells = new SpellsSettings { IgnorePoison = true };
+        h.Spells = new SpellsSettings { IgnoreBlindness = true };
 
-        h.Feed("You have been poisoned!");
-        h.Feed("The poison wears off.");
+        h.Feed("You have been blinded!");
+        h.Feed("Your vision returns.");
 
-        // @wait was ignored, so no telepath at all — the pre-fix stuck-chip bug
-        // (no @ok ever sent). The paired say toggle still fires, so the receiver
-        // clears the chip on '.@poisoned off' regardless of the @wait gate.
         Assert.Empty(h.Telepath);
-        Assert.Equal(new[] { ".@poisoned on\r", ".@poisoned off\r" }, h.Say);
+        Assert.Equal(new[] { ".@blind on\r", ".@blind off\r" }, h.Say);
     }
 
     [Fact]

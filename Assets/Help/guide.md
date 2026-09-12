@@ -421,7 +421,7 @@ Active party members get a few things for free regardless of the grid: the party
 - `@suicide` — forces your character's death, using the suicide password MudPlay captured from your in-game `set suicide`. It's an **Elevated Command**, and Settings → Other blocks it when your remaining lives are at or below your threshold.
 - A few things are **always refused, silently, no matter what's granted**: anything containing `reroll`, and `@party set suicide` — these can't be leaked or overridden.
 
-**Not commands:** the ailment broadcasts `@poisoned` / `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid.
+**Not commands:** the ailment broadcasts `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid. (Poison isn't broadcast — a member's **poison** chip is read from the `par` party screen's `P` flag, so it lights even for a partymate on another client.)
 
 ## Reconnecting
 
