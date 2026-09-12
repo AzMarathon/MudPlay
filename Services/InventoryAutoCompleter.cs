@@ -59,7 +59,7 @@ public sealed class InventoryAutoCompleter
             return null;
         }
 
-        IReadOnlyList<string> candidates = MatchingKeywords(prefix, snapshot);
+        IReadOnlyList<string> candidates = MatchingCompletions(prefix, snapshot);
         if (candidates.Count == 0)
         {
             _lastProduced = null;
@@ -72,21 +72,27 @@ public sealed class InventoryAutoCompleter
         return _lastProduced = _stem + candidates[0];
     }
 
-    // Distinct whitespace-separated words from every carried, worn, and
-    // key-ring item name that start with prefix (case-insensitive), in
-    // first-seen order — the same three lists, and the same OrdinalIgnoreCase
-    // convention, InventorySnapshot.Has scans for "does the pack contain this".
-    private static IReadOnlyList<string> MatchingKeywords(string prefix, InventorySnapshot snapshot)
+    // For every carried, worn, and key-ring item name, find each word that
+    // starts with prefix (case-insensitive — the same convention
+    // InventorySnapshot.Has uses) and take that word PLUS every word after it
+    // in the same name, not just the matched word alone. Completing "drop
+    // holy" against "holy medallion" must produce "drop holy medallion", not
+    // "drop holy" — the matched word is already what's typed, so completing
+    // to itself would silently leave the line unchanged and look like Tab did
+    // nothing (the bug this fixes). Distinct completions, first-seen order.
+    private static IReadOnlyList<string> MatchingCompletions(string prefix, InventorySnapshot snapshot)
     {
         List<string> matches = new();
 
         void Scan(string name)
         {
-            foreach (string word in name.Split(' ', System.StringSplitOptions.RemoveEmptyEntries))
+            string[] words = name.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < words.Length; i++)
             {
-                if (word.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase)
-                    && !matches.Contains(word, System.StringComparer.OrdinalIgnoreCase))
-                    matches.Add(word);
+                if (!words[i].StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase)) continue;
+                string completion = string.Join(' ', words, i, words.Length - i);
+                if (!matches.Contains(completion, System.StringComparer.OrdinalIgnoreCase))
+                    matches.Add(completion);
             }
         }
 
