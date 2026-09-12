@@ -2748,7 +2748,16 @@ public sealed class AppServices
         // teleport shadows (ring chime bypassing the Slum Street door). The
         // graph reads the typed store, so the raw JSON eviction here is fine.
         TBInfo = new TBInfoStore(GameData, Log);
+        // MonsterSpawns — reverse RoomKey -> monster-ids index for the room
+        // tooltip's Also Here line. Same lazy-but-warmed-in-the-background shape
+        // as ItemSourceIndex below: a first build walks every Monsters.json row
+        // and self-invalidates by comparing the cache's ActiveSet to the set it
+        // last built from, so there's no explicit invalidation subscription —
+        // only the warm trigger below, so a query never pays the build cost on
+        // the UI thread at an inconvenient moment (a room hover mid-walk).
         MonsterSpawns = new MonsterSpawnIndex(GameData, Log);
+        GameData.ActiveSetChanged += _ => Task.Run(MonsterSpawns.Warm);
+        if (GameData.ActiveSet is not null) Task.Run(MonsterSpawns.Warm);
         GameData.ActiveSetChanged += TBInfo.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
             TBInfo.OnActiveSetChanged(GameData.ActiveSet);
