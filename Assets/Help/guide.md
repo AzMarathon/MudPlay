@@ -940,6 +940,10 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 | `/log` | The program log, filterable by `severity=` (comma-separated names) and `source=`, with a `since=` cursor for tailing. |
 | `/scrollback` | The terminal transcript tail, with per-line timestamps. |
 | `/events` | A live stream (Server-Sent Events) of log entries and gate changes as they happen. |
+| `/loops` | Every saved loop with its area, room and lair-room counts, median and max exp of what spawns on it, the hardest-hitting monster, and the toughest three. |
+| `/loops/{name}` | One loop in full — each waypoint with its room name and the monsters at that stop. |
+| `/rooms/{map}/{room}` | A room: name, exits, its lair tag, and its monsters grouped as lair / placed / assigned, exactly as the map's ROOM INFO panel groups them. |
+| `/monsters/{id}` | A monster's record — exp (with its multiplier applied), HP, AC, resists, attacks and drop table. |
 
 **Access.** Two things are required, not one. The socket is bound to loopback, so nothing outside your machine can reach it — but that alone isn't enough, because any program on your machine (or a web page you happen to be visiting) can also reach 127.0.0.1. So every request must carry a **bearer token**: `Authorization: Bearer <token>`. Requiring a header is what stops a random web page forging a request. The token lives in `.apitoken` in your app data folder, readable only by you, and **Show token** in Settings reveals it. **Regenerate** replaces it, immediately invalidating anything still using the old one — use that if it ends up somewhere it shouldn't. The token is never written to the program log, and a bug report records only whether the API was on and listening, never the token itself.
 
@@ -951,6 +955,8 @@ curl -H "Authorization: Bearer $(cat ~/.local/share/MudPlay/.apitoken)" \
 ```
 
 (On macOS the path is `~/Library/Application Support/MudPlay/.apitoken`.)
+
+**Comparing loops.** `/loops` exists so "where should I be hunting?" is answerable without opening each one. Note that exp is reported with the **monster's exp multiplier already applied**, which is the number that actually matters and can differ from the raw table value by orders of magnitude — a loop showing a million-plus median is boss content, not a grind circuit. Lair monsters (campable, respawn on a timer) are reported separately from placed fixtures and assigned roamers (which wander in on their own schedule), because a room full of roamers is not a loop you can pace.
 
 **Notes.** Requests are logged at Debug, so they only appear in the program log while Debug diagnostics are on. `/state/full` and `/scrollback` answer *503* until a terminal session exists. The status line under the checkbox says whether the socket actually came up — if the port is already taken, that's where it tells you. This release is **read-only**; issuing commands through the API is a separate feature.
 
