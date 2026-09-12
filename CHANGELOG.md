@@ -1,5 +1,10 @@
 # Version history
 
+## 3.74.0
+
+- Tab-completes the word you're typing against your carried, worn, and key-ring item names (`drop emerald-` + Tab → `drop emerald-hilted rapier`); Shift+Tab steps backward through other matches
+- New Settings → General toggle, "Tab-complete inventory item names while typing" (default on)
+
 ## 3.73.2
 
 - Route picker's "Search en route" now buys the counter at a shop as a last resort — when nothing turns up en route — instead of just stopping at the hazard's edge

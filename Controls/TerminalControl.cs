@@ -840,13 +840,14 @@ public sealed class TerminalControl : Control
         // Backspace pops the last buffered char (and consumes the
         // event regardless so we never send 0x08 to the wire when in
         // line mode — per user: backspace just erases the buffer). Up /
-        // Down recall previously-sent commands into the buffer. The
-        // remaining special keys (Left/Right, F-keys, Ctrl+letter, Tab,
-        // Escape) pass straight through via MapKey because they're
-        // meaningful to the server immediately (login prompts, menu
-        // navigation) and aren't part of any "line" the user is
+        // Down recall previously-sent commands into the buffer. Tab /
+        // Shift+Tab complete the in-progress word against inventory item
+        // names. The remaining special keys (Left/Right, F-keys,
+        // Ctrl+letter, Escape) pass straight through via MapKey because
+        // they're meaningful to the server immediately (login prompts,
+        // menu navigation) and aren't part of any "line" the user is
         // composing. In character-mode (full-screen forms) the buffer is
-        // bypassed entirely — Enter/Backspace/arrows fall through to
+        // bypassed entirely — Enter/Backspace/arrows/Tab fall through to
         // MapKey so the server's form reads each keystroke as it lands.
         if (InputBuffer is { CharacterMode: false } buf)
         {
@@ -910,6 +911,26 @@ public sealed class TerminalControl : Control
                 if (recalled is not null)
                 {
                     buf.Set(recalled);
+                    InvalidateVisual();
+                }
+                return true;
+            }
+            // Tab / Shift+Tab: complete the word under the caret against
+            // carried, worn, and key-ring item names (InventoryAutoCompleter).
+            // Consumed unconditionally — even a no-match press — because
+            // letting Tab fall through to MapKey below would put a raw 0x09 on
+            // the wire mid-compose, breaking the same "nothing reaches the
+            // server before Enter" invariant Backspace/Up/Down already keep.
+            if (key == Key.Tab)
+            {
+                MudPlay.Services.AppServices svc = MudPlay.Services.AppServices.Current;
+                bool forward = (modifiers & KeyModifiers.Shift) == 0;
+                string? completed = forward
+                    ? svc.InventoryAutoComplete.Next(buf.Text, svc.Inventory.Snapshot)
+                    : svc.InventoryAutoComplete.Previous(buf.Text, svc.Inventory.Snapshot);
+                if (completed is not null)
+                {
+                    buf.Set(completed);
                     InvalidateVisual();
                 }
                 return true;

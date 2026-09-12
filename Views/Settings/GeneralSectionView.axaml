@@ -147,6 +147,11 @@
                           Content="Keep typing directed at the terminal when other windows are open"
                           ToolTip.Tip="When checked (default), keystrokes typed while another window (settings, editors, etc.) is focused fall through to the terminal — so you can keep sending commands with a window open — UNLESS you're editing a text field in that window, or the key is one the window needs (Tab, Escape, menu shortcuts). When unchecked, keys go only to the focused window (classic behaviour)."/>
 
+                <CheckBox Margin="0,2,0,0"
+                          IsChecked="{Binding InventoryTabCompleteEnabled, Mode=TwoWay}"
+                          Content="Tab-complete inventory item names while typing"
+                          ToolTip.Tip="When checked (default), pressing Tab while composing a command completes the word under the caret against your carried, worn, and key-ring item names — press Tab again (or Shift+Tab) to cycle through the other matches. When unchecked, Tab keeps its old behaviour."/>
+
                 <TextBlock Classes="SectionHeader" Text="Buff Watchdog layout"/>
                 <Grid ColumnDefinitions="120,*">
                     <TextBlock Grid.Column="0" Text="Config panel:"
