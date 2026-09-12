@@ -186,6 +186,7 @@ public sealed class HealthManager : IDisposable
     private DateTimeOffset _restClearLastEngageAt;
     private static readonly TimeSpan RestClearReEngageInterval = TimeSpan.FromSeconds(5);
     private bool _fledThisCombat;        // reacted to run-trigger (flee OR @heal), awaiting combat end
+    private bool _wasInCombat;           // previous Evaluate's InCombat — falling-edge detection for the rest-send reconfirm
     private bool _hangFired;             // emergency-hangup latch; re-arms when danger passes
     private Map.IRecoverableEngine? _fleeEngine;     // engine we paused mid-flee
     private readonly Queue<Map.Direction> _fleeQueue = new(); // remaining flee steps, one per room arrival
@@ -713,6 +714,12 @@ public sealed class HealthManager : IDisposable
         // the loop steps into another room this re-evaluates and rests normally.
         bool skipRest = _shouldSkipRestHere?.Invoke() ?? false;
 
+        // Falling edge: combat was on as of the previous Evaluate call, off now.
+        // See the re-confirm block below (after the gate transitions) for why
+        // this matters. Captured before _wasInCombat updates for next time.
+        bool combatJustEnded = _wasInCombat && !_state.InCombat;
+        _wasInCombat = _state.InCombat;
+
         // ----- HP gate transitions ---------------------------------
         (int hpRestTrigger, int hpRestMax) = ResolveRestThresholds(
             s.HpThresholdMode, s.RestIfBelowHp, s.RestMaxHp,
@@ -915,6 +922,31 @@ public sealed class HealthManager : IDisposable
         // when they next move or act, and the walker's next move
         // (which the resumed nav engine fires once both gates clear)
         // is what actually exits the (resting) state.
+        // Combat just ended while a gate is still confirmed: the same same-burst
+        // race ConfirmHpGate/ConfirmMaGate guard against at the initial breach
+        // can recur right here — a regen tick can land on Hp/Ma's PropertyChanged
+        // AFTER InCombat's within the same wire read, so THIS Evaluate call would
+        // otherwise fire the send off a value that's about to be overwritten a
+        // moment later in the same burst (report paradigm-20260912-123108: MA
+        // read 191 mid-fight, was confirmed, climbed to 239 by the time the kill
+        // landed, but the stale confirmation sent meditate anyway). Re-run the
+        // identical one-tick confirm the initial breach already goes through,
+        // gated on the combat-end edge instead of the assert edge — this tick's
+        // anyGateConfirmed below sees the reset, so the send waits one more tick.
+        if (combatJustEnded)
+        {
+            if (_hpGateConfirmed)
+            {
+                _hpGateConfirmed = false;
+                _post(ConfirmHpGate);
+            }
+            if (_maGateConfirmed)
+            {
+                _maGateConfirmed = false;
+                _post(ConfirmMaGate);
+            }
+        }
+
         bool anyGate = _hpGateAsserted || _maGateAsserted;
         // Confirmed subset of anyGate — only a gate that's survived its one-tick
         // ConfirmHpGate/ConfirmMaGate re-check. anyGate itself stays the gate used

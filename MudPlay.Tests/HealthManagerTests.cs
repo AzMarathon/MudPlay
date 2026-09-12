@@ -521,6 +521,109 @@ public sealed class HealthManagerTests
         Assert.False(h.Health.RestInFlight);
     }
 
+    // ----- combat-end / same-burst recovery race (successor to -103110) ---------
+    // Regression for paradigm-20260912-123108: -103110's fix (above) closes the
+    // gap where recovery lands as its OWN Evaluate tick while still in combat.
+    // But InCombat and the recovered Hp/Ma can update in the SAME wire burst as
+    // combat itself ending, as two separate PropertyChanged events fired back to
+    // back — and if InCombat's fires first, THIS Evaluate call sees the gate
+    // still confirmed against the stale, about-to-be-overwritten low reading and
+    // would otherwise commit the send right then. The combat-end edge now resets
+    // a confirmed gate and re-defers through the same one-tick ConfirmHpGate /
+    // ConfirmMaGate check the initial breach uses, so a same-burst recovery that
+    // lands moments after InCombat flips false still retracts the gate instead
+    // of sitting down for a pool that isn't actually low anymore.
+
+    [Fact]
+    public void MaGateConfirmed_CombatEndsBeforeSameBurstRecoveryApplies_NeverSendsRest()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 335,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 191, maxMa: 394);   // genuine breach mid-fight
+        Assert.True(h.ManaGateHeld);
+        h.DrainPost();                                            // confirm runs — still below trigger
+        Assert.True(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);
+
+        // Same wire burst as the kill landing: InCombat flips false BEFORE the
+        // accompanying regen tick updates Ma, so Ma is still the stale 191 here.
+        h.State.InCombat = false;
+        Assert.Empty(h.SentLines);            // send withheld — reconfirming instead of trusting the stale value
+        Assert.False(h.Health.RestInFlight);
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 239, maxMa: 394);   // the burst's regen tick lands now
+        h.DrainPost();                                            // deferred reconfirm runs
+
+        Assert.False(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);            // meditate never sent
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    [Fact]
+    public void MaGateConfirmed_CombatEndsWithGenuineBreachStillLow_SendsMeditateAfterReconfirm()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 335,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 150, maxMa: 394);   // genuine breach, well below trigger
+        h.DrainPost();                                            // confirm runs — still below trigger
+        Assert.True(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);
+
+        h.State.InCombat = false;              // combat ends — pool never recovered
+        Assert.Empty(h.SentLines);              // withheld one more tick for the combat-end reconfirm
+        h.DrainPost();                          // reconfirm runs — still genuinely below trigger
+
+        Assert.True(h.ManaGateHeld);
+        Assert.Contains("meditate", h.SentLines);
+        Assert.True(h.Health.RestInFlight);
+    }
+
+    [Fact]
+    public void HpGateConfirmed_CombatEndsBeforeSameBurstRecoveryApplies_NeverSendsRest()
+    {
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowHp = 100,
+            RestMaxHp = 195,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 80, maxHp: 200);       // genuine breach, still fighting
+        h.DrainPost();                          // confirm runs — still below trigger
+        Assert.True(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+
+        // Same wire burst: InCombat flips false before the heal/regen line updates Hp.
+        h.State.InCombat = false;
+        Assert.Empty(h.SentLines);
+        Assert.False(h.Health.RestInFlight);
+
+        h.SetPrompt(hp: 150, maxHp: 200);      // the burst's heal lands now
+        h.DrainPost();
+
+        Assert.False(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+        Assert.False(h.Health.RestInFlight);
+    }
+
     [Fact]
     public void PoisonCleared_ReRests_AfterUnconfirmedLatch()
     {
