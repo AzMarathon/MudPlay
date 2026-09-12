@@ -1608,14 +1608,9 @@ The self-buff slots (which spells, `#item`-cast buffs, per-slot recast timers) l
 
 ### Ignore poison / blindness / confusion / diseased
 
-**Default:** all Off (i.e. every ailment pauses the party)
-**What it does:** Normally, catching one of these ailments makes MudPlay ask the party leader to pause (`@wait`) until it clears. Checking a box here suppresses that pause request for that specific ailment — useful for "push through it, don't stop the group" situations.
+**Default:** all Off (i.e. every ailment pauses the party *and* is announced)
+**What it does:** One toggle per ailment — the single "I don't care about this ailment" switch. Normally, catching one of these makes MudPlay ask the party leader to pause (`@wait`) until it clears **and** announces it on say (`.@blind`, so other MudPlay clients mirror it on their party display). Checking a box here suppresses **both** for that specific ailment — no pause request and no broadcast — useful for "push through it, don't stop the group" situations. (Poison is read from the party screen rather than said, so its checkbox only affects the pause.)
 **Important notes:** Some conditions (over-encumbered, being held, being stunned) always pause regardless of these checkboxes — they can't be suppressed this way.
-
-### Don't announce poison / blindness / confusion / diseased
-
-**Default:** all Off (i.e. announce)
-**What it does:** Separately from the Ignore checkboxes above, suppresses broadcasting your ailment status to other MudPlay users in your party (who otherwise mirror it on their own party display). You can suppress the pause and keep announcing, or vice versa — the two are independent.
 
 ---
 
@@ -2391,7 +2386,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
 | Unified buff list (self + party bless, room light, mana-regen + reroll, when-HP/MA-full) | empty | spell / `#item` + targets + recast + conditions | `PartyBuffs` (`BuffSettings`) | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Bless self while resting / during combat | false / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
-| Ignore / Don't announce poison, blindness, confusion, diseased | false (all) | bool | `IgnorePoison` etc. / `DoNotAnnouncePoison` etc. | Models/Profile/SpellsSettings.cs |
+| Ignore poison, blindness, confusion, diseased (each suppresses both @wait + say) | false (all) | bool | `IgnorePoison` etc. | Models/Profile/SpellsSettings.cs |
 | HP/MA threshold mode | `Percentage` (both) | Percentage / Absolute | `HpThresholdMode` / `MaThresholdMode` | Models/Profile/HealthSettings.cs |
 | Rest max / Rest if below (HP, MA) | 95/60/95/30 (%) | 0–100,000 | `RestMaxHp`, `RestIfBelowHp`, `RestMaxMa`, `RestIfBelowMa` | Models/Profile/HealthSettings.cs |
 | Run if below (HP, MA) | 20 / 10 (%) | 0–100,000 (0=off) | `RunIfBelowHp` / `RunIfBelowMa` | Models/Profile/HealthSettings.cs |

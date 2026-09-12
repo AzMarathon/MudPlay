@@ -3625,10 +3625,10 @@ public sealed class AppServices
         // is said (MegaMUD sends no 'off'); only the @ok telepath releases the
         // leader's wait. The say only fires when we're in a party AND have no cure
         // spell configured for that ailment (we self-cure silently otherwise);
-        // held rides its say-pause with no @wait. Per-ailment SpellsSettings
-        // DoNotAnnounce* (say) and Ignore* (@wait) gate the curable four on top.
-        // Wire-sender for the say bound in MainWindowViewModel; the @wait routes
-        // via PartyRest's own sender.
+        // held announces AND @waits like the curable four (no Ignore gate). Each
+        // per-ailment SpellsSettings Ignore* flag is the single toggle that gates
+        // BOTH the say and the @wait for the curable four. Wire-sender for the say
+        // bound in MainWindowViewModel; the @wait routes via PartyRest's own sender.
         AilmentSync = new Game.Conditions.AilmentSyncEngine(
             Conditions, PartyRest,
             readSpells: () => ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells"),

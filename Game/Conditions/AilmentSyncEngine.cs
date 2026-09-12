@@ -31,10 +31,10 @@ namespace MudPlay.Game.Conditions;
 // The say-announce only fires when we're in a party AND we have no cure spell
 // configured for that ailment — if we can self-cure we just clear our own
 // condition silently, and out of a party there's no one to tell. On top of that
-// the per-ailment DoNotAnnounce<X> gate (SpellsSettings, Char tier) suppresses
-// the curable four's say; the Ignore<X> gate independently suppresses their @wait.
-// Held has no settings gate — only the in-party / no-cure rule applies to its say,
-// and its @wait is never suppressible.
+// the per-ailment Ignore<X> gate (SpellsSettings, Char tier) is the single "I
+// don't care about this ailment" toggle: it suppresses BOTH the say announce AND
+// the @wait telepath for the curable four. Held has no settings gate — only the
+// in-party / no-cure rule applies to its say, and its @wait is never suppressible.
 //
 // The say wire format prefixes the token with a period — MajorMUD's say-channel
 // prefix — so .@poisoned is what lands on the wire.
@@ -167,26 +167,18 @@ public sealed class AilmentSyncEngine : IDisposable
         }
     }
 
-    // Whether to say-announce flag. Two cross-cutting gates apply to every
-    // ailment: we must be in a party (no one to tell otherwise) and have no cure
-    // spell configured for it (if we can self-cure, we clear it silently). The
-    // per-ailment DoNotAnnounce<X> setting suppresses the curable four on top of
-    // that; held has no such setting.
+    // Whether to say-announce flag. Three gates apply to every ailment: we must be
+    // in a party (no one to tell otherwise), have no cure spell configured for it
+    // (if we can self-cure, we clear it silently), and the per-ailment Ignore<X>
+    // gate must be off. Ignore<X> is the single "I don't care about this ailment"
+    // toggle — it suppresses BOTH the say announce and the @wait telepath. Held has
+    // no Ignore gate, so it always announces (in-party / no-cure permitting).
     private bool ShouldAnnounce(MessageFlags flag, SpellsSettings s, bool inParty)
     {
         if (!inParty) return false;
         if (_hasCureConfigured(flag)) return false;
-        return !IsAnnounceSuppressed(flag, s);
+        return !IsWaitSuppressed(flag, s);
     }
-
-    private static bool IsAnnounceSuppressed(MessageFlags flag, SpellsSettings s) => flag switch
-    {
-        MessageFlags.Poisoned => s.DoNotAnnouncePoison,
-        MessageFlags.Blinded  => s.DoNotAnnounceBlindness,
-        MessageFlags.Confused => s.DoNotAnnounceConfusion,
-        MessageFlags.Diseased => s.DoNotAnnounceDiseased,
-        _ => false,
-    };
 
     private static bool IsWaitSuppressed(MessageFlags flag, SpellsSettings s) => flag switch
     {

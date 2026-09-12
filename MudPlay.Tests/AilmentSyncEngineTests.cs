@@ -17,9 +17,9 @@ namespace MudPlay.Tests;
 // duration / par P drop / @status reconcile — it only @ok's the leader to release
 // the wait. POISON is NOT announced (an observer reads it from the par P flag) but
 // still telepaths its @wait. The say only fires when in a party AND no cure spell
-// is configured for that ailment; DoNotAnnounce* further gates the say, Ignore*
-// gates the @wait — independently. Held telepaths @wait like the curable four
-// (plus its '.@held' say), balanced by @ok on clear; it has no Ignore gate.
+// is configured for that ailment; each Ignore<X> is the single per-ailment gate
+// that suppresses BOTH the say AND the @wait. Held telepaths @wait like the curable
+// four (plus its '.@held' say), balanced by @ok on clear; it has no Ignore gate.
 public sealed class AilmentSyncEngineTests
 {
     private sealed class Harness : IDisposable
@@ -127,31 +127,17 @@ public sealed class AilmentSyncEngineTests
     }
 
     [Fact]
-    public void DoNotAnnounce_SuppressesSay_ButWaitStillFires()
+    public void Ignore_SuppressesBothSayAndWait()
     {
-        // Uses blindness (a VERBOSE ailment) — poison no longer exercises the say
-        // path, so the DoNotAnnounce<X> gate is shown against a token that does say.
-        using Harness h = new();
-        SeedAll(h);
-        h.Spells = new SpellsSettings { DoNotAnnounceBlindness = true };
-
-        h.Feed("You have been blinded!");
-
-        Assert.Empty(h.Say);
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
-    }
-
-    [Fact]
-    public void Ignore_SuppressesWait_ButSayStillFires()
-    {
-        // Blindness is verbose, so its say fires even when its @wait is ignored.
+        // Ignore<X> is the single per-ailment gate: it suppresses BOTH the say
+        // announce AND the @wait telepath (one "I don't care about this" toggle).
         using Harness h = new();
         SeedAll(h);
         h.Spells = new SpellsSettings { IgnoreBlindness = true };
 
         h.Feed("You have been blinded!");
 
-        Assert.Equal(".@blind\r", Assert.Single(h.Say));
+        Assert.Empty(h.Say);
         Assert.Empty(h.Telepath);
     }
 
@@ -174,18 +160,18 @@ public sealed class AilmentSyncEngineTests
     [Fact]
     public void Cleared_SendsBareApplyOnly_NoOffOnSay()
     {
-        // Blindness (verbose) with its @wait ignored: the bare apply token is the
-        // ONLY say that ever goes out — there's no '.@blind off' on clear (MegaMUD
-        // parity). A receiver clears the chip via cure / duration / @status instead.
+        // Blindness (verbose): the bare apply token is the ONLY say that ever goes
+        // out — there's no '.@blind off' on clear (MegaMUD parity). A receiver clears
+        // the chip via cure / duration / @status / @ok instead. The @wait/@ok telepath
+        // still balances on the leader channel.
         using Harness h = new();
         SeedAll(h);
-        h.Spells = new SpellsSettings { IgnoreBlindness = true };
 
         h.Feed("You have been blinded!");
         h.Feed("Your vision returns.");
 
-        Assert.Empty(h.Telepath);
         Assert.Equal(new[] { ".@blind\r" }, h.Say);   // apply only, no off
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]

@@ -75,10 +75,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // value. Range 0..20. Pushed into the live engine on Apply + profile load.
     [ObservableProperty] private int _maxSuicideLivesThreshold = 5;
 
-    // Note: the ailment Ignore* (@wait gates) and DoNotAnnounce* (say-
-    // suppression gates) toggles graduated to the Spells tab — they sit
-    // next to the cure-spell picks they coordinate with. AilmentSyncEngine
-    // reads them from SpellsSettings now.
+    // Note: the ailment Ignore* toggles (each gates BOTH the @wait and the say
+    // announce for its ailment) graduated to the Spells tab — they sit next to the
+    // cure-spell picks they coordinate with. AilmentSyncEngine reads them from
+    // SpellsSettings now.
 
     // ----- @trap auto-disarm attempt caps -----
     // Both push into TrapDisarmManager on Apply via ApplyToServices, and via

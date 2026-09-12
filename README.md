@@ -8,6 +8,7 @@
 >   - The client witnesses a monster's ailment-apply landing on a partymate, lights their chip, and clears it when the spell's own duration elapses — so a chip no longer sticks forever. A chip clears on whichever comes first: a witnessed cure, the spell duration, the `par` `P` drop (poison), or a `@status` reply.
 > - **`@panic`** (MegaMUD party bail-out): a leader at their "hang if below" floor can say `@panic` to the party and escape (hang up, or break + sys-goto-wimpy). Two Settings → Party checkboxes: **Use @panic while leading** and **Ignore @panics** (both off by default).
 > - Party window now shows **your own entry while solo**, live-updating HP/mana + ailment chips from your state (watch the client recognize an ailment apply/clear). Display-only — a lone self row is never treated as a party.
+> - Settings → Spells ailment section simplified: one **"Ignore X"** per ailment now suppresses both the party `@wait` and the say announce (the "Don't announce X" checkboxes are gone).
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

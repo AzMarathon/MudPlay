@@ -232,30 +232,21 @@
                           ToolTip.Tip="When checked: recast self-buffs mid-fight — casting spends that combat round. Off by default; useful when a fast hunting loop rarely leaves combat long enough to bless between fights."/>
 
                 <!-- ============ Ailment handling / coordination ============ -->
-                <!-- Each ailment pairs its Ignore* (gates the @wait) with the
-                     matching Don't-announce* (gates the ".@poisoned" say
-                     broadcast that lets other MudPlay clients mirror our
-                     ailment on their party window). The two are independent —
-                     one suppresses the pause, the other the broadcast. Sits on
-                     the Spells tab next to the cure-spell picks it coordinates
-                     with; AilmentSyncEngine reads these from SpellsSettings. -->
+                <!-- One "Ignore X" toggle per ailment. It's the single "I don't
+                     care about this ailment" gate: checking it suppresses BOTH the
+                     @wait sent to the party leader AND the ".@blind" say broadcast
+                     that lets other MudPlay clients mirror it. Sits on the Spells
+                     tab next to the cure-spell picks it coordinates with;
+                     AilmentSyncEngine reads these from SpellsSettings. -->
                 <TextBlock Classes="SectionHeader" Text="Ailment handling / coordination"/>
                 <CheckBox Content="Ignore poison"    IsChecked="{Binding IgnorePoison, Mode=TwoWay}"
-                          ToolTip.Tip="When checked: poison ticks don't trigger @wait. Always-on triggers (over-encumbered, MovementPrevented, Stunned) still pause regardless."/>
-                <CheckBox Content="Don't announce poison"    IsChecked="{Binding DoNotAnnouncePoison, Mode=TwoWay}"
-                          ToolTip.Tip="When checked: catching poison doesn't send `.@poisoned` on say. The @wait (if any) is unaffected — that's gated by 'Ignore poison'."/>
+                          ToolTip.Tip="When checked: poison neither pauses the party (@wait) nor is announced on say. Always-on triggers (over-encumbered, MovementPrevented, Stunned) still pause regardless. (Poison is read from the par screen, so it never announces on say anyway.)"/>
                 <CheckBox Content="Ignore blindness" IsChecked="{Binding IgnoreBlindness, Mode=TwoWay}"
-                          ToolTip.Tip="When checked: being blinded doesn't trigger @wait."/>
-                <CheckBox Content="Don't announce blindness" IsChecked="{Binding DoNotAnnounceBlindness, Mode=TwoWay}"
-                          ToolTip.Tip="When checked: being blinded doesn't send `.@blind` on say."/>
+                          ToolTip.Tip="When checked: being blinded neither pauses the party (@wait) nor sends `.@blind` on say."/>
                 <CheckBox Content="Ignore confusion" IsChecked="{Binding IgnoreConfusion, Mode=TwoWay}"
-                          ToolTip.Tip="When checked: being confused doesn't trigger @wait. Caster parties often want to leave this UNCHECKED — confusion makes our cast fail randomly."/>
-                <CheckBox Content="Don't announce confusion" IsChecked="{Binding DoNotAnnounceConfusion, Mode=TwoWay}"
-                          ToolTip.Tip="When checked: being confused doesn't send `.@confused` on say."/>
+                          ToolTip.Tip="When checked: being confused neither pauses the party (@wait) nor sends `.@confused` on say. Caster parties often want to leave this UNCHECKED — confusion makes our cast fail randomly."/>
                 <CheckBox Content="Ignore diseased"  IsChecked="{Binding IgnoreDiseased, Mode=TwoWay}"
-                          ToolTip.Tip="When checked: being diseased doesn't trigger @wait."/>
-                <CheckBox Content="Don't announce diseased"  IsChecked="{Binding DoNotAnnounceDiseased, Mode=TwoWay}"
-                          ToolTip.Tip="When checked: being diseased doesn't send `.@diseased` on say."/>
+                          ToolTip.Tip="When checked: being diseased neither pauses the party (@wait) nor sends `.@diseased` on say."/>
 
             </StackPanel>
         </Grid>
