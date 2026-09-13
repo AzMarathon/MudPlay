@@ -100,6 +100,10 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _showStartupMudAnimation = true;
     // Install-global (GlobalSettings.SnapWindows), read live by WindowSnapManager.
     [ObservableProperty] private bool _snapWindows = true;
+    // Install-global (GlobalSettings.CheckForUpdatesOnStartup): a background check
+    // against GitHub Releases on launch that flags a newer build (splash banners +
+    // Help → Check for updates). Never installs on its own.
+    [ObservableProperty] private bool _checkForUpdatesOnStartup = true;
 
     // Install-global (GlobalSettings.LocalApiEnabled / LocalApiPort). Opens a
     // loopback HTTP endpoint exposing live state + the program log for
@@ -471,6 +475,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // Window snapping is install-global too; WindowSnapManager reads it live off
         // the same GlobalSettings, so this is all the wiring the toggle needs.
         _globalSettings.Current.SnapWindows = SnapWindows;
+        // Startup update check is install-global; AppServices reads it once at launch.
+        _globalSettings.Current.CheckForUpdatesOnStartup = CheckForUpdatesOnStartup;
         // The API server subscribes to GlobalSettingsChanged, so Save() below is
         // what opens or closes the socket — no extra call needed here.
         _globalSettings.Current.LocalApiEnabled = LocalApiEnabled;
@@ -542,6 +548,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
 
         // Window snapping is Global-tier — reflect the live GlobalSettings value.
         SnapWindows = _globalSettings.Current.SnapWindows;
+        CheckForUpdatesOnStartup = _globalSettings.Current.CheckForUpdatesOnStartup;
         LocalApiEnabled = _globalSettings.Current.LocalApiEnabled;
         LocalApiPort = _globalSettings.Current.LocalApiPort;
         LocalApiAllowDestructive = _globalSettings.Current.LocalApiAllowDestructive;
@@ -689,6 +696,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnInventoryTabCompleteEnabledChanged(bool value) => Dirty();
     partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
     partial void OnSnapWindowsChanged(bool value)                    => Dirty();
+    partial void OnCheckForUpdatesOnStartupChanged(bool value)       => Dirty();
     partial void OnLocalApiEnabledChanged(bool value)                => Dirty();
     partial void OnLocalApiPortChanged(int value)                    => Dirty();
     partial void OnLocalApiAllowDestructiveChanged(bool value)       => Dirty();

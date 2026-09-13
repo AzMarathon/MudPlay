@@ -80,6 +80,9 @@ public sealed class TerminalControl : Control
         set => SetValue(SplashAnimateProperty, value);
     }
     private MudSplashAnimator? _splash;
+    // One-shot guard so the update-availability handler is subscribed a single time
+    // across splash re-creations (the UpdateService singleton outlives the splash).
+    private bool _updateSubHooked;
 
     public TerminalEmulator? Emulator
     {
@@ -261,6 +264,15 @@ public sealed class TerminalControl : Control
             {
                 _splash = new MudSplashAnimator(cols, rows, SplashAnimate);
                 _splash.FrameAdvanced += OnSplashFrame;
+                // Flank the title with red UPDATE banners when a newer build has been
+                // detected — seed from the current verdict (the startup check may have
+                // already finished) and follow later flips via AvailabilityChanged.
+                _splash.UpdateAvailable = MudPlay.Services.AppServices.Current.Update.UpdateAvailable;
+                if (!_updateSubHooked)
+                {
+                    _updateSubHooked = true;
+                    MudPlay.Services.AppServices.Current.Update.AvailabilityChanged += OnUpdateAvailabilityChanged;
+                }
             }
             else _splash.Resize(cols, rows);
             _splash.Start();
@@ -276,6 +288,14 @@ public sealed class TerminalControl : Control
 
     // FrameAdvanced fires on the UI thread (DispatcherTimer); repaint directly.
     private void OnSplashFrame() => InvalidateVisual();
+
+    // The startup update check finished (or the verdict changed) — reflect it on the
+    // splash. Marshalled: the check runs off the UI thread.
+    private void OnUpdateAvailabilityChanged() =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (_splash is { } s) s.UpdateAvailable = MudPlay.Services.AppServices.Current.Update.UpdateAvailable;
+        });
 
     private void OnEmulatorChanged(TerminalEmulator? oldEm, TerminalEmulator? newEm)
     {

@@ -24,9 +24,30 @@ public sealed class MudSplashAnimator : IDisposable
     private static readonly CellAttributes Title  = SplashCanvas.Rgb(222, 190, 120);
     private static readonly CellAttributes Byline = SplashCanvas.Rgb(150, 128, 90);
     private static readonly CellAttributes Hint   = SplashCanvas.Rgb(120, 120, 120);
+    // Red filled tag (bright text on a red bar) for the "update available" banners
+    // that flank the title when a newer build has been detected.
+    private static readonly CellAttributes UpdateBanner =
+        SplashCanvas.Rgb(255, 236, 236).WithBackground(TerminalColor.Rgb(176, 32, 32));
+    private const string UpdateBannerText = " UPDATE ";
 
     public TerminalScreen Screen { get; private set; }
     public bool IsPlaying { get; private set; }
+
+    // When true, two red "UPDATE" banners flank the title (a newer build is
+    // available). Set from the update service via TerminalControl; toggling it
+    // redraws the header immediately.
+    public bool UpdateAvailable
+    {
+        get => _updateAvailable;
+        set
+        {
+            if (_updateAvailable == value) return;
+            _updateAvailable = value;
+            RenderFrame(_frame);
+            FrameAdvanced?.Invoke();
+        }
+    }
+    private bool _updateAvailable;
 
     // Whether the scenes animate. When false, only the header renders and the
     // frame timer never runs.
@@ -143,14 +164,46 @@ public sealed class MudSplashAnimator : IDisposable
         Screen.Bump();
     }
 
-    private static void DrawHeader(TerminalScreen s)
+    private void DrawHeader(TerminalScreen s)
     {
         const string title  = "M u d P l a y";
         const string byline = "Created By Fujin";
         const string hint   = "Load a profile or connect to a BBS to begin";
-        PutStr(s, (s.Cols - title.Length) / 2, 0, title, Title);
+        int titleX = (s.Cols - title.Length) / 2;
+        PutStr(s, titleX, 0, title, Title);
         PutStr(s, (s.Cols - byline.Length) / 2, 1, byline, Byline);
         PutStr(s, (s.Cols - hint.Length) / 2, 3, hint, Hint);
+
+        if (_updateAvailable) DrawUpdateBanners(s, titleX, title.Length);
+    }
+
+    // Two red "UPDATE" tags flanking the title on its row — an at-a-glance "a newer
+    // build is available; use Help → Check for updates". Each is drawn with an opaque
+    // red background (spaces included) so it reads as a solid banner; skipped when the
+    // terminal is too narrow to fit either without colliding with the title.
+    private static void DrawUpdateBanners(TerminalScreen s, int titleX, int titleLen)
+    {
+        const int gap = 2;
+        int leftEnd = titleX - gap;                     // last column before the left banner's gap
+        int leftStart = leftEnd - UpdateBannerText.Length;
+        int rightStart = titleX + titleLen + gap;
+        if (leftStart >= 0)
+            PutBanner(s, leftStart, 0, UpdateBannerText);
+        if (rightStart + UpdateBannerText.Length <= s.Cols)
+            PutBanner(s, rightStart, 0, UpdateBannerText);
+    }
+
+    // Like PutStr but writes EVERY cell (spaces included) so the red background forms
+    // an unbroken bar.
+    private static void PutBanner(TerminalScreen s, int x, int y, string text)
+    {
+        if (y < 0 || y >= s.Rows) return;
+        for (int i = 0; i < text.Length; i++)
+        {
+            int cx = x + i;
+            if (cx < 0 || cx >= s.Cols) continue;
+            s.Put(cx, y, new Cell(text[i], UpdateBanner));
+        }
     }
 
     private static void PutStr(TerminalScreen s, int x, int y, string text, CellAttributes attr)

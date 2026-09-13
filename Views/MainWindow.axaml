@@ -251,6 +251,9 @@
                 <Separator/>
                 <MenuItem Header="Clear chatlog"               Command="{Binding ClearChatlogCommand}"/>
                 <MenuItem Header="Open Logs folder…"           Command="{Binding OpenLogsFolderCommand}"/>
+                <Separator/>
+                <MenuItem Header="Check for updates…"          Command="{Binding OpenUpdateCommand}"
+                          ToolTip.Tip="See whether a newer build is available and install it."/>
             </MenuItem>
 
             <!-- Help: the website links are user-editable (Settings → Toolbar +

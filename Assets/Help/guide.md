@@ -131,6 +131,15 @@ The **Settings** window follows the same modeless rule — the terminal stays in
 
 **Snapping windows together.** As you drag the panel windows — Conversation, Party, Buff Watchdog, Player Workshop, Navigation, Spell Book, and Session Stats — they **snap flush to each other's edges** when you bring one within about a finger's width of another, so you can build a tidy layout without lining anything up by hand. Dragging the **main window** then carries the whole snapped cluster with it, keeping your arrangement intact; grab any of the other panels and it **pulls off freely**. Turn this off with **Settings → General → "Snap windows together"** if you'd rather every window float on its own. (Windows opened from *inside* a panel — editors and dialogs — don't snap.) If a panel ever drifts off-screen or the layout gets untidy, **View → Reset layout** returns every window to its default position and size.
 
+## Keeping MudPlay up to date
+
+MudPlay can update itself from its GitHub releases — but only when you ask it to. Nothing is ever downloaded or installed in the background.
+
+- **The startup check.** On launch, MudPlay quietly asks GitHub whether a newer build has been published for your platform. If one has, a red **UPDATE** banner appears on either side of the title on the startup splash screen — an at-a-glance "there's something newer." That's the whole effect of the check: a notice. Turn it off with **Settings → General → "Check for updates on startup"** (on by default); you can still check by hand any time.
+- **Check for updates.** **Help → Check for updates…** (also on the **Tools** menu) opens a small window that tells you whether you're up to date or what the latest version is, shows the download size and the release notes, and offers a **View release notes** link. If a newer build exists, click **Check again** to re-query, or **Download & Restart** to install it.
+- **What "Download & Restart" does.** MudPlay downloads the release archive for your exact platform, **verifies its SHA-256 checksum** against the release's published sums (it refuses to install anything that doesn't match), unpacks it, then closes, swaps the new build into place (keeping a one-time backup so a botched swap rolls back), and relaunches into the new version. Your profiles, settings, and data folder are untouched — only the program files are replaced.
+- **When it's unavailable.** Self-update only works for a real installed build. If you're running from source (`dotnet run`) or a build tree, the window will say so and point you to the release page to download by hand — the check and notice still work, only the one-click install is disabled.
+
 ---
 
 # Combat
@@ -2376,6 +2385,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Disable hangups (toolbar toggle) | `false` | bool | `DisableHangups` | Models/Profile/GeneralSettings.cs |
 | Sprint Mode (toolbar toggle) | `false` | bool | `SprintMode` | Models/Profile/GeneralSettings.cs |
 | Auto-load last profile (edited on MainWindow, not Settings) | `false` | bool | `GlobalSettings.AutoLoadLastProfile` | Models/Settings/GlobalSettings.cs |
+| Check for updates on startup | `true` | bool | `GlobalSettings.CheckForUpdatesOnStartup` | Models/Settings/GlobalSettings.cs |
 | Player cleanup days (edited on Other tab) | `90` | int, 0–3650 | `GlobalSettings.PlayerCleanupDays` | Models/Settings/GlobalSettings.cs |
 | Show toolbar | `true` | bool | `ToolbarSettings.Visible` | Models/Profile/ToolbarSettings.cs |
 | Toolbar position | `Top` | Top/Bottom/Left/Right | `ToolbarSettings.Position` | Models/Profile/ToolbarSettings.cs |
