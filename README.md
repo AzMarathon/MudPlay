@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.77.0**
-> - The Local control API can now issue commands: `POST /command` runs any `@`-command through the same handlers a party member's would, `POST /send` types a line at the game, and `GET /commands` lists what's available
-> - New **Allow destructive commands** checkbox (off by default) — while off, anything that ends the session or can't be undone (`@suicide`, `@hangup`, `@relog`) and the raw-line passthrough are refused; the classification comes from each command's permission category, so a command added later can't default to allowed
-> - Every command issued through the API is logged at Info, and a bug report now records whether destructive commands were permitted
+> **Version 3.77.2**
+> - The unrecognized-message capture no longer flags your own `stat` / `exp` / `health` sheet or `spells` / `pow` listing as review candidates — each is read by its own parser, not the message catalogue, so polling one no longer floods the queue with its rows
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

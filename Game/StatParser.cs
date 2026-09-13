@@ -237,6 +237,26 @@ public sealed partial class StatParser : IDisposable
         Spellcasting = Stats.Spellcasting,
     };
 
+    // True when text is a line of the stat / exp / health readout — the header
+    // (Name: … Lives/CP:), any stat-attribute row ("Hits: 22/22", "Picklocks: 0",
+    // "Race: Dark-Elf  Exp: …"), the single-line `exp` output, or the compact
+    // `health` output. The unrecognized-line capture asks this because the stat
+    // screen is read here as a gated block rather than through a router pattern, so
+    // MessageRouter.AnyPatternMatches can't vouch for these rows and a `stat` poll
+    // staged the whole sheet for review. Chat-shaped lines are rejected up front
+    // (the same guard ScanLine uses) so a gossip embedding a stat label can't be
+    // mistaken for the sheet. Recognizer only — the value-capturing regexes still
+    // do the actual parsing.
+    public static bool IsStatScreenLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (ChatLineRx().IsMatch(text)) return false;
+        return StatHeaderRx().IsMatch(text)
+            || ExpLineRx().IsMatch(text)
+            || HealthCommandRx().IsMatch(text)
+            || StatRowRx().IsMatch(text);
+    }
+
     // Bind the per-session LineExtractor. Same shape as
     // PartyManager.AttachLineExtractor — the extractor is owned by the
     // main-window VM (one per terminal session) while this parser is
@@ -778,6 +798,18 @@ public sealed partial class StatParser : IDisposable
     // command (typed a byte at a time in a full-screen form's character-mode).
     [GeneratedRegex(@"^\s*Name:\s+\S.*?\bLives/CP:\s+\d+/\d+", RegexOptions.CultureInvariant)]
     private static partial Regex StatHeaderRx();
+
+    // Any stat-sheet attribute row — used only by IsStatScreenLine, the
+    // unrecognized-line capture's recognizer, NOT by the parse path. The three
+    // string-valued labels (Name / Race / Class) are anchored at line start so a
+    // mid-line word can't fake them; the numeric labels may appear anywhere but
+    // must be followed by a colon + value (optionally `*`-prefixed for altered
+    // stats). Every stat row carries at least one numeric label, so this catches
+    // all of them without needing to re-list the value-capturing shapes above.
+    [GeneratedRegex(
+        @"^\s*(?:Name|Race|Class):\s+\S|\b(?:Lives/CP|Hits|Kai|Mana|Armour Class|Level|Exp|Perception|Stealth|Thievery|Traps|Picklocks|Tracking|Strength|Intellect|Willpower|Agility|Health|Charm|Martial Arts|MagicRes|Spellcasting):\s+\*?\s*\d",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex StatRowRx();
 
     // Always-on lives-update line — fires outside the stat-screen
     // window. MajorMUD emits this in two phrasings:

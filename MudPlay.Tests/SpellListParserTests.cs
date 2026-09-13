@@ -301,6 +301,28 @@ public sealed class SpellListParserTests : IDisposable
         Assert.True(book.IsObtained(101));
     }
 
+    [Theory]
+    // Header, column header, and data rows are all recognized so the
+    // unrecognized-line capture never stages the `spells` listing. Exact lines
+    // from a real export.
+    [InlineData("You have the following spells:")]
+    [InlineData("You have the following powers:")]
+    [InlineData("Level Mana Short Spell Name")]
+    [InlineData("1   1    harm  harm")]
+    [InlineData("2   4    bles  bless")]
+    [InlineData("3   2    turn  turn undead")]
+    [InlineData("You have no spells.")]
+    public void IsSpellListLine_RecognizesListLines(string line) =>
+        Assert.True(SpellListParser.IsSpellListLine(line));
+
+    [Theory]
+    // A genuine server message must not be mistaken for a spell-list line.
+    [InlineData("The forest becomes strangely silent.")]
+    [InlineData("A flock of birds fly overhead.")]
+    [InlineData("")]
+    public void IsSpellListLine_RejectsNonListLines(string line) =>
+        Assert.False(SpellListParser.IsSpellListLine(line));
+
     // ----- synthetic-row builders (mirror SpellbookStateTests) ----------
 
     private static Dictionary<string, object> ClassRow(int number, string name, int magery, int mageryLvl)

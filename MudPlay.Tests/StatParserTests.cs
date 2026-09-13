@@ -726,4 +726,29 @@ public sealed class StatParserTests
         Assert.False(parser.HasParsed);
         Assert.Equal(0, stats.Level);
     }
+
+    [Theory]
+    // Every row of the stat sheet is recognized so the unrecognized-line capture
+    // never stages it. Exact lines from a real `stat` export.
+    [InlineData("Name: Fujin              Lives/CP: 9/2")]
+    [InlineData("Race: Kang               Exp: 1234567         Perception: 40")]
+    [InlineData("Class: Paladin           Level: 28            Stealth: 0")]
+    [InlineData("Hits: 324/324            Armour Class: 78/16  Thievery: 0")]
+    [InlineData("Mana: * 56/72            Spellcasting: 94     Traps: 0")]
+    [InlineData("Picklocks: 0")]
+    // The single-line `exp` and compact `health` readouts count too.
+    [InlineData("Exp: 1234567 Level: 28 Exp needed for next level: 500 (2000000) [75%]")]
+    [InlineData("Health: 324/324 [100%] Mana: 56/72 [77%]")]
+    public void IsStatScreenLine_RecognizesSheetRows(string line) =>
+        Assert.True(StatParser.IsStatScreenLine(line));
+
+    [Theory]
+    // A genuine server message must NOT be mistaken for the stat sheet, and a
+    // gossip embedding a stat label stays out (the chat guard rejects it).
+    [InlineData("An ominous wind blows through the trees")]
+    [InlineData("The goblin swings at you with its club!")]
+    [InlineData("Villain gossips: my Strength: 60 is low")]
+    [InlineData("")]
+    public void IsStatScreenLine_RejectsNonStatLines(string line) =>
+        Assert.False(StatParser.IsStatScreenLine(line));
 }

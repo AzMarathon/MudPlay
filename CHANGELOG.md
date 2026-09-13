@@ -1,5 +1,10 @@
 # Version history
 
+## 3.77.2
+
+- The unrecognized-message capture no longer flags your own `stat` / `exp` / `health` sheet or `spells` / `pow` listing as review candidates — each is read by its own parser, not the message catalogue, so polling one no longer floods the queue with its rows
+- bug reports addressed: unrecognized-lines-20260912-235152, unrecognized-lines-20260912-235315
+
 ## 3.77.0
 
 - The Local control API can now issue commands: `POST /command` runs any `@`-command through the same handlers a party member's would, `POST /send` types a line at the game, and `GET /commands` lists what's available

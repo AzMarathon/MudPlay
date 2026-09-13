@@ -38,7 +38,12 @@ public sealed class MessageCandidateReportReplayTests : IDisposable
         DefaultPatterns.Seed(_router);
         _watcher = new MessageCandidateWatcher(
             _router, _messages, _candidates, log: _log,
-            isRecognizedByDirectParser: PartyManager.IsRosterRow,
+            // Same composition AppServices wires: the par roster, the stat/exp/health
+            // sheet, and the `spells` listing are all read as direct blocks.
+            isRecognizedByDirectParser: text =>
+                PartyManager.IsRosterRow(text)
+                || StatParser.IsStatScreenLine(text)
+                || Game.Spells.SpellListParser.IsSpellListLine(text),
             // The report's party: Suijin the Witchunter casts nothing, Raijin the
             // Priest does. AppServices resolves this from the live roster + the
             // Classes table; here it's stated directly.
@@ -107,6 +112,22 @@ public sealed class MessageCandidateReportReplayTests : IDisposable
     // projectile spell, so only the actor's class settles it: Suijin is a Witchunter
     // (no magery), which proves this can't be a spell message.
     [InlineData("Suijin shoots an arrow at bandit!")]
+    // Stat-screen rows — read by StatParser's gated block, not a router pattern.
+    // (Exact lines from the unrecognized-lines-20260912-235152 export.)
+    [InlineData("Name: Fujin              Lives/CP: 9/2")]
+    [InlineData("Race: Kang               Exp: 1234567         Perception: 40")]
+    [InlineData("Class: Paladin           Level: 28            Stealth: 0")]
+    [InlineData("Hits: 324/324            Armour Class: 78/16  Thievery: 0")]
+    [InlineData("Mana: * 56/72            Spellcasting: 94     Traps: 0")]
+    [InlineData("Picklocks: 0")]
+    // Spell-list rows — read by SpellListParser's block, not a router pattern.
+    // (Exact lines from the unrecognized-lines-20260912-235315 export.)
+    [InlineData("You have the following spells:")]
+    [InlineData("Level Mana Short Spell Name")]
+    [InlineData("1   1    harm  harm")]
+    [InlineData("1   2    mihe  minor healing")]
+    [InlineData("2   4    bles  bless")]
+    [InlineData("3   2    turn  turn undead")]
     public void ReportedNoise_IsNoLongerCaptured(string line)
     {
         Feed(line);
