@@ -1,5 +1,10 @@
 # Version history
 
+## 3.77.11
+
+- Fixed single-target attack spells that never switched to the configured alternate: a spell whose damage line doesn't start with "You " (many narrate the hit in third person, e.g. "Spiritual power strikes X for N damage!") never confirmed its cast, so MaxCastsPerRoom's tally froze and the spell auto-repeated forever instead of capping out
+- bug reports addressed: paradigm-20260913-040159
+
 ## 3.77.10
 
 - **Auto-connect when profile loads** now fires on the profile you **launch** with — a `--profile` start, or a new instance spawned by Profile Management's **Load** — not only on an in-session open; previously the launch profile loaded before the auto-connect handler was wired and silently skipped it
