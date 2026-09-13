@@ -68,6 +68,35 @@ public sealed class TrainBudgetCalculatorTests
         Assert.Equal(0, TrainBudgetCalculator.BankableLevels(long.MaxValue, currentLevel: 5, Chart, Realm, cap: 0));
     }
 
+    // ----- BankableLevelsFractional (the status-bar "(+N.NN lvls)") ------
+
+    [Fact]
+    public void BankableLevelsFractional_OnThreshold_IsWholeWithNoFraction()
+    {
+        // Exactly on the level-9 threshold at level 5: 4 whole banked (6..9), 0% to 10.
+        double v = TrainBudgetCalculator.BankableLevelsFractional(T(9), currentLevel: 5, Chart, Realm, Cap);
+        Assert.True(System.Math.Abs(v - 4.0) < 1e-6, $"expected 4.00, got {v}");
+    }
+
+    [Fact]
+    public void BankableLevelsFractional_HalfwayToNext_AddsHalf()
+    {
+        // Halfway between the level-9 and level-10 thresholds → 4 banked + 0.5 progress.
+        long mid = T(9) + (T(10) - T(9)) / 2;
+        double v = TrainBudgetCalculator.BankableLevelsFractional(mid, currentLevel: 5, Chart, Realm, Cap);
+        Assert.True(System.Math.Abs(v - 4.5) < 0.01, $"expected ~4.50, got {v}");
+    }
+
+    [Fact]
+    public void BankableLevelsFractional_NothingFullyBanked_IsPartialToNextOnly()
+    {
+        // Between the current level's threshold and the next: no whole level banked,
+        // just partial progress toward it — so 0 < v < 1.
+        long mid = T(5) + (T(6) - T(5)) / 2;
+        double v = TrainBudgetCalculator.BankableLevelsFractional(mid, currentLevel: 5, Chart, Realm, Cap);
+        Assert.True(System.Math.Abs(v - 0.5) < 0.01, $"expected ~0.50, got {v}");
+    }
+
     [Theory]
     [InlineData(0, 4)]    // keep nothing → train all 4 banked
     [InlineData(1, 3)]    // hold one in reserve

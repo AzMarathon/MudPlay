@@ -1,5 +1,9 @@
 # Version history
 
+## 3.77.15
+
+- The status-bar TNL now shows a bracketed **(+N.NN lvls)** ratio — how far past your current level your exp already sits (e.g. `(+2.91 lvls)` = two banked levels and 91% toward a third) — so a large TNL time on a lower level reads clearly, since TNL counts to the next level you can still earn
+
 ## 3.77.14
 
 - `@loop last` re-runs the last loop you ran this session — including an ad-hoc loop that was never saved — so a party member can put you back on it after a stop/@stop
