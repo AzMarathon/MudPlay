@@ -1,5 +1,10 @@
 # Version history
 
+## 3.77.3
+
+- Retired the defunct one-time message-data migrations (pre-split retirement + forced reseed) now that their rollout window has passed — the shipped message seed already refreshes itself on launch
+- Documented the clean-install fallback for anyone jumping from a very old build whose catalogue still looks stale
+
 ## 3.77.2
 
 - The unrecognized-message capture no longer flags your own `stat` / `exp` / `health` sheet or `spells` / `pow` listing as review candidates — each is read by its own parser, not the message catalogue, so polling one no longer floods the queue with its rows

@@ -1954,19 +1954,6 @@ public sealed class AppServices
         LogService bootstrapLog = new();
         DataMigration.RunIfNeeded(bootstrapLog);
 
-        // One-time forced retirement of the pre-split Messages catalogue (legacy single
-        // Global seed + per-set messages.json), so existing installs land on the new
-        // realm-flavored seeds bootstrapped just above. Guarded by a marker; backs up to
-        // .bak first. Remove-after-rollout (tracked as a GitHub issue).
-        DataMigration.RetireLegacyMessagesOnce(bootstrapLog);
-
-        // One-time forced reseed for the item-on-use → cast-spell recuration: this release
-        // rebuilt the Messages seeds (one message per cast spell, proc-damage records
-        // dropped, realm lines corrected), so an existing install's older Global seed /
-        // per-set edits are backed up to .bak and replaced with the shipped seed. Guarded
-        // by its own marker; remove-after-rollout.
-        DataMigration.ForceMessageReseedOnce(bootstrapLog);
-
         _current = new AppServices(bootstrapLog);
         return _current;
     }
