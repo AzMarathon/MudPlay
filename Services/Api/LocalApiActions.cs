@@ -34,28 +34,40 @@ public static class LocalApiActions
     // affects classification, never what actually runs.)
     public static bool IsDestructive(string command)
     {
-        if (string.IsNullOrWhiteSpace(command)) return true;
-        string normalised = command.Trim().ToLowerInvariant();
-        if (!normalised.StartsWith('@')) normalised = "@" + normalised;
-
-        // Suffix-form commands (@equip-<set>) aren't literal catalog keys; match
-        // the documented prefix so they classify with their base command.
-        if (normalised.StartsWith("@equip-", StringComparison.Ordinal)) return false;
-
-        if (!RemoteCommandCatalog.Map.TryGetValue(normalised, out PlayerRemoteControls category))
-            return true;
-        return (category & DestructiveCategories) != 0;
+        if (TryResolveCategory(command, out PlayerRemoteControls category))
+            return (category & DestructiveCategories) != 0;
+        return true;
     }
 
     // Whether the catalog knows this command at all. Used only to give a truthful
     // refusal message; IsDestructive remains the safety decision.
-    public static bool IsKnown(string command)
+    public static bool IsKnown(string command) => TryResolveCategory(command, out _);
+
+    // Resolve a command to its catalog permission category, matching the exact
+    // normalisation RemoteCommandManager.TryInvokeLocal applies before dispatch —
+    // if these two ever disagree about what a string means, the gate stops
+    // guarding what actually runs.
+    //
+    // Suffix-form commands (@equip-<set>) aren't literal catalog keys, so they
+    // resolve through their BASE command and inherit its category. Derived rather
+    // than special-cased: the point of reading categories out of the catalog is
+    // that a command added later is classified automatically, and a hardcoded
+    // "@equip- is safe" is precisely the hand-kept exception that would let a
+    // prefix handler registered later with a destructive category be classified
+    // safe by omission. Literal keys are tried first, so a command whose own name
+    // contains a dash still matches itself.
+    private static bool TryResolveCategory(string command, out PlayerRemoteControls category)
     {
+        category = default;
         if (string.IsNullOrWhiteSpace(command)) return false;
+
         string normalised = command.Trim().ToLowerInvariant();
         if (!normalised.StartsWith('@')) normalised = "@" + normalised;
-        return normalised.StartsWith("@equip-", StringComparison.Ordinal)
-            || RemoteCommandCatalog.Map.ContainsKey(normalised);
+
+        if (RemoteCommandCatalog.Map.TryGetValue(normalised, out category)) return true;
+
+        int dash = normalised.IndexOf('-');
+        return dash > 1 && RemoteCommandCatalog.Map.TryGetValue(normalised[..dash], out category);
     }
 
     public sealed record CommandOutcome(

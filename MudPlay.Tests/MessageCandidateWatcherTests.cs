@@ -26,29 +26,41 @@ public sealed class MessageCandidateWatcherTests
         public HashSet<string> RoomNames { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         // Default in-game so capture tests exercise the real path; a test that
-        // needs the pre-game gate passes inGame:false.
-        public Harness(bool inGame = true)
+        // needs the pre-game gate passes inGame:false. seedDefaultPatterns loads the
+        // real catalog for tests about shapes DefaultPatterns is supposed to cover.
+        public Harness(bool inGame = true, bool seedDefaultPatterns = false)
         {
+            if (seedDefaultPatterns) DefaultPatterns.Seed(Router);
             Watcher = new MessageCandidateWatcher(
                 Router, Messages, Candidates, currentRoom: () => Room, log: Log,
-                isKnownRoomName: RoomNames.Contains);
+                isKnownRoomName: RoomNames.Contains,
+                isRecognizedByDirectParser: PartyManager.IsRosterRow);
             if (inGame) Watcher.NotifyInGame();
         }
 
         // The watcher subscribes to LineExtractor in real life; tests reflect into
         // the private OnLine directly instead of standing up a fake extractor —
         // same pattern ConditionTrackerTests uses for the identical shape.
-        public void Feed(string text, DateTimeOffset? when = null)
+        //
+        // flush drives the private CommitPending: real capture holds a vetted line
+        // back one line so an experience gain can retire it as monster death flavour,
+        // so a test asserting on a single fed line has to release it. Tests about the
+        // death rule itself pass flush:false and feed the following line themselves.
+        public void Feed(string text, DateTimeOffset? when = null, bool flush = true)
         {
             var emitted = new LineExtractor.EmittedLine(
                 text, Array.Empty<CellAttributes>(),
                 when ?? DateTimeOffset.UtcNow, IsPromptLine: false);
+            Invoke("OnLine", emitted);
+            if (flush) Invoke("CommitPending");
+        }
+
+        private void Invoke(string method, params object[] args) =>
             typeof(MessageCandidateWatcher)
-                .GetMethod("OnLine",
+                .GetMethod(method,
                     System.Reflection.BindingFlags.Instance |
                     System.Reflection.BindingFlags.NonPublic)!
-                .Invoke(Watcher, new object[] { emitted });
-        }
+                .Invoke(Watcher, args);
     }
 
     private static MessageRecord MakeRecord(string casterMessage) => new(
@@ -337,6 +349,234 @@ public sealed class MessageCandidateWatcherTests
         h.Watcher.ObserveOutbound(System.Text.Encoding.Latin1.GetBytes("wave banner\r\n"));
 
         h.Feed("wave banner", t0.AddSeconds(30));   // well past the 3s echo window
+
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    // ----- Templated catalogue slots -------------------------------------
+    // The catalogue stores most messages as templates, which can never string-equal
+    // a real line. Comparing them as text meant every templated message in the game
+    // read as unrecognized and known casts were staged for review.
+
+    private static MessageRecord MakeTemplateRecord(
+        string name, string caster = "", string witness = "",
+        string applied = "", string endsWith = "") => new(
+            Id: MessageRecord.ComputeId(name, caster, "", witness, applied, endsWith),
+            Name: name,
+            Flags: MessageFlags.None,
+            RawFlagsHex: 0,
+            CasterMessage: caster,
+            TargetMessage: string.Empty,
+            WitnessMessage: witness,
+            AppliedMessage: applied,
+            AppliedEndsWith: endsWith);
+
+    [Theory]
+    [InlineData("Raijin casts minor healing on Raijin!")]
+    [InlineData("Raijin casts bless on Suijin!")]
+    public void TemplatedWitnessCast_IsNotStaged(string line)
+    {
+        Harness h = new();
+        h.Messages.Messages.Add(MakeTemplateRecord(
+            "Minor Healing", witness: "{source} casts {spellname} on {target}!"));
+
+        h.Feed(line);
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void TemplatedCasterLine_IsNotStaged()
+    {
+        Harness h = new();
+        h.Messages.Messages.Add(MakeTemplateRecord(
+            "Way of the Swan", caster: "You invoke the {spellname}."));
+
+        h.Feed("You invoke the way of the swan.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void LiteralAppliedEndsWith_IsMatchedAsSubstring()
+    {
+        // The stored wording omits the server's trailing punctuation, so an exact
+        // comparison never fired and every buff-expiry line looked unrecognized.
+        Harness h = new();
+        h.Messages.Messages.Add(MakeTemplateRecord(
+            "Way of the Tiger",
+            applied: "You feel the power of the tiger.",
+            endsWith: "The effects of way of the tiger wear off"));
+
+        h.Feed("The effects of way of the tiger wear off!");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void PlaceholderOnlyTemplate_DoesNotSuppressUnrelatedLines()
+    {
+        // A template with no literal text compiles to a pattern matching virtually
+        // any line. Indexing one would silently disable the whole feature, so it has
+        // to be dropped — the stock catalogue really does contain one.
+        Harness h = new();
+        h.Messages.Messages.Add(MakeTemplateRecord("Degenerate", witness: "{source} {target}"));
+
+        h.Feed("The gnarled tree groans ominously.");
+
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    // ----- Shapes the client already knows -------------------------------
+
+    [Theory]
+    [InlineData("The room is dimly lit")]
+    [InlineData("The room is dimly lit.")]
+    [InlineData("The room is barely visible")]
+    [InlineData("The room is pitch black")]
+    [InlineData("The room is very dark - you can't see anything")]
+    public void RoomLightAnnouncement_IsNotStaged(string line)
+    {
+        // Room light is fully derivable from game data, so none of the bands belong
+        // in a review queue. "Dimly lit" alone was the noisiest line captured.
+        Harness h = new();
+
+        h.Feed(line);
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Theory]
+    [InlineData("  Raijin WuzHere                 (Priest)     [M:100%] [H: 85%]   - Backrank")]
+    [InlineData("  Suijin WuzHere                 (Witchunter)          [H:100%]   - Midrank")]
+    [InlineData("  Fujin WuzHere                  (Mystic)     [K:100%] [H: 94%]   - Frontrank")]
+    [InlineData("  Raijin WuzHere                 (Priest)     [Invited]")]
+    public void PartyRosterRow_IsNotStaged(string line)
+    {
+        // `par` output is consumed by PartyManager's stateful block parser, which
+        // registers no router pattern — so the whole roster staged on every poll.
+        Harness h = new();
+
+        h.Feed(line);
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Theory]
+    [InlineData("The wild dog snaps at Suijin with its teeth!")]
+    [InlineData("The dark goblin archer shoots an arrow at Suijin with their shortbow!")]
+    [InlineData("The nasty bandit swings at Suijin with their broadsword!")]
+    [InlineData("Raijin swipes at dark goblin archer!")]
+    public void ThirdPartyPhysicalAttack_IsNotStaged(string line)
+    {
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed(line);
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void MonsterCastAtAPartyMember_IsStillStaged()
+    {
+        // The physical-attack patterns must stay narrow enough to let a monster's
+        // SPELL through — unrecognized monster spell messages are the whole point of
+        // the capture, so a pattern that swallowed one would defeat the feature.
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed("The dark elf priest hurls a searing bolt at Suijin!");
+
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void ThirdPartyCastFizzle_IsNotStaged()
+    {
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed("Raijin attempted to cast minor healing, but failed.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    // ----- Monster death flavour ------------------------------------------
+
+    [Theory]
+    [InlineData("The dog yelps loudly, and dies.")]
+    [InlineData("The dark goblin archer collapses with a spiteful hiss.")]
+    public void DeathFlavourBeforeExperienceLine_IsNotStaged(string deathLine)
+    {
+        // Realms author death messages per species and don't publish them, so no
+        // catalogue can hold one. Position identifies them: the line immediately
+        // before the experience gain.
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed(deathLine, flush: false);
+        h.Feed("You gain 350 experience.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void DeathFlavour_RetiresARowCapturedEarlier()
+    {
+        // Rows staged before the positional rule existed heal themselves on the next
+        // kill rather than sitting in the queue forever.
+        Harness h = new(seedDefaultPatterns: true);
+        h.Feed("The dog yelps loudly, and dies.");
+        Assert.Single(h.Candidates.Candidates);
+
+        h.Feed("The dog yelps loudly, and dies.", flush: false);
+        h.Feed("You gain 350 experience.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void DeathFlavour_SurvivesABlankLineBeforeTheExperienceGain()
+    {
+        // Only a substantive server line releases the held candidate. A blank line or
+        // the client's own status notice between the two would otherwise let the death
+        // message through.
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed("The dog yelps loudly, and dies.", flush: false);
+        h.Feed("", flush: false);
+        h.Feed("[Something the client printed]", flush: false);
+        h.Feed("You gain 350 experience.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void LineNotFollowedByExperience_IsStagedNormally()
+    {
+        // The deferral must not swallow ordinary lines — only the one an experience
+        // gain directly follows.
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed("The gnarled tree groans ominously.", flush: false);
+        h.Feed("A cold wind stirs the branches.", flush: false);
+
+        Assert.Single(h.Candidates.Candidates);
+        Assert.Equal("The gnarled tree groans ominously.", h.Candidates.Candidates[0].RawText);
+    }
+
+    // ----- Room-spell flavour must survive --------------------------------
+
+    [Theory]
+    [InlineData("An ominous wind blows through the trees")]
+    [InlineData("A flock of birds fly overhead.")]
+    [InlineData("The forest becomes strangely silent.")]
+    [InlineData("The leaves begin to rustle, as if some beast were about to spring forth!")]
+    public void RoomSpellFlavour_IsStillStaged(string line)
+    {
+        // These read like scenery but are room-spell triggers the catalogue doesn't
+        // have yet — surfacing them is exactly what the capture is for, so none of
+        // the new exclusions may touch them.
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed(line);
 
         Assert.Single(h.Candidates.Candidates);
     }

@@ -27,6 +27,40 @@ public sealed class LocalApiActionsTests
     public void OrdinaryQueryAndMovementCommands_AreNotDestructive(string command)
         => Assert.False(LocalApiActions.IsDestructive(command));
 
+    // Suffix-form commands inherit their base command's category from the
+    // catalog. The classification must come from the lookup, not from knowing
+    // that today's only prefix happens to be harmless — a prefix handler
+    // registered later with a destructive category has to classify as
+    // destructive without anyone remembering to update this layer.
+    [Theory]
+    [InlineData("@equip-backstab")]
+    [InlineData("@equip-all")]
+    [InlineData("@equip-two-handed")]   // a dash in the SET name, not the command
+    public void SuffixFormCommands_InheritTheirBaseCommandsCategory(string command)
+    {
+        Assert.True(LocalApiActions.IsKnown(command));
+        Assert.Equal(LocalApiActions.IsDestructive("@equip"), LocalApiActions.IsDestructive(command));
+    }
+
+    // The base must actually be consulted: a suffix form of a DESTRUCTIVE base
+    // stays destructive. @suicide takes no suffix today, which is the point —
+    // the gate answers from the catalog rather than from a list of known shapes.
+    [Fact]
+    public void SuffixFormOfADestructiveBase_StaysDestructive()
+        => Assert.True(LocalApiActions.IsDestructive("@suicide-now"));
+
+    // An unresolvable command is destructive AND unknown — refusing what we
+    // can't classify is the safe default, and the two answers must agree.
+    [Theory]
+    [InlineData("@notacommand")]
+    [InlineData("@-")]
+    [InlineData("@nosuchbase-suffix")]
+    public void UnclassifiableCommands_AreUnknownAndDestructive(string command)
+    {
+        Assert.False(LocalApiActions.IsKnown(command));
+        Assert.True(LocalApiActions.IsDestructive(command));
+    }
+
     [Fact]
     public void UnknownCommand_CountsAsDestructive()
     {

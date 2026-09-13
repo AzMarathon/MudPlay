@@ -139,15 +139,15 @@ public sealed class SelfConfusionResponderTests
     }
 
     [Fact]
-    public void Solo_NoSelfRow_StillHoldsGate()
+    public void Solo_SelfRow_HoldsGateAndLightsChip()
     {
         using Harness h = new();
-        // No FormParty — LocalCharacterName is set but there's no member row.
-        // The chip write is a harmless no-op; the local hold must still apply.
+        // No FormParty — but solo now keeps a lone self row (PartyWindow self-
+        // display), so the local hold applies AND the self row's chip lights.
         h.Confuse();
 
         Assert.True(h.GateHeld);
-        Assert.False(h.SelfChip);   // no self row to carry a chip
+        Assert.True(h.SelfChip);   // solo self row carries the chip
     }
 
     [Fact]

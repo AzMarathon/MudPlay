@@ -39,6 +39,27 @@ public sealed class PartySettings
     // Game.Remote.PartyEssentialHandlers.
     public bool IgnoreWaitWhenLeading { get; set; }
 
+    // ----- @panic (MegaMUD parity) -----------------------------------
+    // @panic is the party-wide bail-out signal: a leader whose HP falls to its
+    // "hang if below" floor says a bare "@panic" on the say channel and then
+    // escapes (hang up, or break + sys-goto-wimpy per HealthSettings). Every
+    // partymate that doesn't ignore it escapes the same way, so the whole group
+    // bails together. Modelled on the say-channel ailment signals — the token
+    // rides say, not a telepath @-command. Consumed by Game.Health.HealthManager
+    // (send) and Game.Conditions.PanicResponder (receive).
+
+    // Leader-side send gate: when leading a party, broadcast "@panic" on say the
+    // moment our own emergency-hangup floor is crossed (HealthSettings.HangIfBelowHp
+    // with a hostile present). OFF by default — broadcasting an order that drops
+    // the whole party is opt-in. Read by Game.Health.HealthManager.
+    public bool UsePanicWhileLeading { get; set; }
+
+    // Receive-side gate: when true, a partymate's "@panic" is ignored (we don't
+    // bail). OFF by default (MegaMUD parity) — an un-ignored @panic makes us
+    // escape exactly as our own low-HP emergency would. Read by
+    // Game.Conditions.PanicResponder.
+    public bool IgnorePanics { get; set; }
+
     // When the party leader fails to bash a door we can see ("You see <leader>
     // attempt to bash the door to the <dir>."), pitch in by forcing the same
     // door — bash <dir> or pick <dir> depending on

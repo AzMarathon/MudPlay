@@ -101,6 +101,36 @@ public sealed record MonsterCatalogEntry(
     // the raw Exp field.
     public long EffectiveExp => (long)Exp * (ExpMulti > 0 ? ExpMulti : 1);
 
+    // The level this monster casts spellNumber at, or 0 when it doesn't cast it.
+    //
+    // Only real SPELL slots (AttType 2) and between-rounds spells count. On a spell
+    // slot Accuracy carries the spell's Number and MaxDamage its cast level; on a
+    // PHYSICAL slot Accuracy is a to-hit value, so comparing it against a spell
+    // number false-matches whenever the two happen to be equal — and then MaxDamage,
+    // the attack's damage, gets used as a cast level. That is not hypothetical: 431
+    // physical slots in the shipped Paradigm data have an Accuracy equal to some
+    // ailment spell's number (AttAcc 60 vs `fear` being the common one), which is
+    // what made witnessed-ailment chips expire at the wrong time.
+    //
+    // On-hit procs (AttHitSpell) are deliberately excluded: a proc is a physical
+    // attack rather than a cast, so it has no cast level and doesn't drive spell
+    // duration. Slots that can never land (Percent 0) are skipped for the same
+    // reason they're skipped in the monster info panel — they can't have applied
+    // anything.
+    public int CastLevelFor(int spellNumber)
+    {
+        if (spellNumber <= 0) return 0;
+        int best = 0;
+        foreach (MonsterAttackSlot a in Attacks)
+        {
+            if (a.Type != 2 || a.Percent <= 0) continue;
+            if (a.Accuracy == spellNumber && a.MaxDamage > best) best = a.MaxDamage;
+        }
+        foreach (MonsterMidSpellSlot m in MidSpells)
+            if (m.SpellId == spellNumber && m.Level > best) best = m.Level;
+        return best;
+    }
+
     // The physical-attack accuracy summary: (majority, max) across every
     // physical/rob slot (Type 1 or 3) with a positive Percent — "majority" is
     // the slot with the highest TruePercent chance, "max" the highest Accuracy

@@ -193,25 +193,35 @@ public sealed class LogService
     }
 
     // Entries appended after `afterSeq` (see TotalAppended for what a sequence
-    // is), oldest first, capped at `limit`. newestSeq comes back as the sequence
-    // of the last entry in the ring so the caller can pass it as the next
-    // afterSeq — correct even when nothing matched.
+    // is), oldest first, capped at `limit`.
+    //
+    // TWO sequences come back because they are not the same number and confusing
+    // them loses entries. `newestSeq` is the newest in the RING; `lastSeq` is the
+    // last entry actually RETURNED, and is the only safe cursor to pass as the
+    // next afterSeq. They coincide only when `limit` didn't truncate — reuse
+    // newestSeq as a cursor on a truncated batch and everything past the cap is
+    // skipped, silently, which is the one failure a log tail must not have. Both
+    // are read under the lock so they can't drift against the returned batch.
+    // When nothing is returned both are the ring head, so a poller on a quiet log
+    // still moves forward.
     //
     // An afterSeq older than the ring still holds returns what survives rather
     // than failing: a poller that fell behind gets the oldest available entries
     // and a sequence gap, which is honest about the ring having dropped them.
-    public LogEntry[] SnapshotAfter(long afterSeq, out long newestSeq, int limit = int.MaxValue)
+    public LogEntry[] SnapshotAfter(long afterSeq, out long newestSeq, out long lastSeq, int limit = int.MaxValue)
     {
         if (limit < 0) limit = 0;
         lock (_gate)
         {
             newestSeq = _totalAppended;
+            lastSeq = _totalAppended;
             long oldestSeq = _totalAppended - _count + 1;
             long from = Math.Max(afterSeq + 1, oldestSeq);
             if (_count == 0 || from > _totalAppended) return Array.Empty<LogEntry>();
 
             int take = (int)Math.Min(_totalAppended - from + 1, limit);
             if (take <= 0) return Array.Empty<LogEntry>();
+            lastSeq = from + take - 1;
 
             // Offset of `from` within the live region, which starts at the oldest entry.
             int skip = (int)(from - oldestSeq);

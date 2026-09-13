@@ -51,7 +51,7 @@
             <DockPanel Grid.Column="0" Margin="0,0,10,0">
                 <StackPanel DockPanel.Dock="Top">
                     <TextBlock Classes="PaneHeader" Text="BBSes"/>
-                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="4" Margin="0,0,0,6">
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="4" Margin="0,0,0,4">
                         <Button Grid.Column="0" Content="Add" HorizontalAlignment="Stretch"
                                 Command="{Binding AddBbsCommand}"/>
                         <Button Grid.Column="1" Content="Rename" HorizontalAlignment="Stretch"
@@ -59,12 +59,18 @@
                         <Button Grid.Column="2" Content="Remove" HorizontalAlignment="Stretch"
                                 Command="{Binding RemoveBbsCommand}" IsEnabled="{Binding HasBbsSelection}"/>
                     </Grid>
+                    <Button Content="Edit settings…" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center" Margin="0,0,0,6"
+                            Command="{Binding EditBbsCommand}" IsEnabled="{Binding HasBbsSelection}"
+                            ToolTip.Tip="Open Settings → BBS for this BBS: host, port, terminal size, logon steps."/>
                 </StackPanel>
                 <ListBox ItemsSource="{Binding Bbses}"
                          SelectedItem="{Binding SelectedBbs, Mode=TwoWay}"
+                         DoubleTapped="OnBbsRowDoubleTapped"
                          Background="{StaticResource ChromeBgSunkenBrush}"
                          BorderBrush="{StaticResource ChromeBorderBrush}"
-                         BorderThickness="1"/>
+                         BorderThickness="1"
+                         ToolTip.Tip="Double-click a BBS to edit its settings."/>
             </DockPanel>
 
             <Border Grid.Column="1" Background="{StaticResource ChromeBorderBrush}"/>

@@ -186,6 +186,12 @@
                 <CheckBox Content="Ignore @wait when leading"
                           IsChecked="{Binding IgnoreWaitWhenLeading, Mode=TwoWay}"
                           ToolTip.Tip="When leading, drop incoming @wait broadcasts from party members — use this character's own Wait-if-members-below threshold instead of pausing on every member's personal wait setting."/>
+                <CheckBox Content="Use @panic while leading"
+                          IsChecked="{Binding UsePanicWhileLeading, Mode=TwoWay}"
+                          ToolTip.Tip="When leading, say &quot;@panic&quot; to the whole party the instant your HP crosses the Health-tab 'hang if below' floor (with a hostile present), then escape (hang up, or break + sys-goto-wimpy per the Health tab). Partymates that don't ignore @panics bail with you. Off by default."/>
+                <CheckBox Content="Ignore @panics"
+                          IsChecked="{Binding IgnorePanics, Mode=TwoWay}"
+                          ToolTip.Tip="When checked, a partymate's &quot;@panic&quot; is ignored. When unchecked (default), receiving @panic makes you escape the same way your own low-HP emergency would — sys-goto-wimpy if configured, else hang up."/>
                 <CheckBox Content="Reset statistics on loop start"
                           IsChecked="{Binding ResetStatisticsOnLoopStart, Mode=TwoWay}"
                           ToolTip.Tip="Sends `@Reset` so the party EXP / kill counters zero at the start of every loop run."/>

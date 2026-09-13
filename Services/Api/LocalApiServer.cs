@@ -106,6 +106,10 @@ public sealed class LocalApiServer : IAsyncDisposable
         _cts?.Cancel();
         try { _listener.Stop(); _listener.Close(); } catch { /* shutting down */ }
         _listener = null;
+        // ApplySettings cycles Stop/Start on every toggle or port edit, so the
+        // outgoing source has to go with it rather than being left to the finaliser.
+        _cts?.Dispose();
+        _cts = null;
         _log.Info(LogCategory, "stopped listening.");
     }
 
@@ -178,6 +182,14 @@ public sealed class LocalApiServer : IAsyncDisposable
     private async Task HandleSafelyAsync(HttpListenerContext ctx)
     {
         try { await HandleAsync(ctx).ConfigureAwait(false); }
+        catch (UiUnresponsiveException ex)
+        {
+            // Not an internal error — a finding. Say it plainly in the body: a
+            // caller chasing a wedge gets the answer from the status alone.
+            _log.Warn(LogCategory, $"state read abandoned — {ex.Message}");
+            try { WriteJson(ctx.Response, 504, new { error = "ui thread unresponsive", waitedSeconds = ex.Waited.TotalSeconds }); }
+            catch { /* peer gone */ }
+        }
         catch (Exception ex)
         {
             _log.Warn(LogCategory, $"request failed: {ex.Message}");
@@ -456,6 +468,13 @@ public sealed class LocalApiServer : IAsyncDisposable
     private async Task StreamEventsAsync(HttpListenerResponse res)
     {
         Guid id = Events.Add(res);
+        if (id == Guid.Empty)
+        {
+            // At the concurrent-stream limit. Say so rather than handing back a
+            // connection that would never carry an event.
+            WriteJson(res, 503, new { error = "too many event subscribers", active = Events.SubscriberCount });
+            return;
+        }
         _log.Info(LogCategory, $"event subscriber attached ({Events.SubscriberCount} active).");
         try
         {
@@ -473,12 +492,37 @@ public sealed class LocalApiServer : IAsyncDisposable
         }
     }
 
+    // How long a state read waits for the UI thread before giving up. Generous
+    // for a read that normally lands in microseconds; short enough that a caller
+    // gets an answer rather than a hang.
+    private static readonly TimeSpan UiReadTimeout = TimeSpan.FromSeconds(5);
+
     // Marshal onto the UI thread and bring the value back. Everything reading
     // game state goes through here — see the threading note on the class.
-    private static Task<T> OnUiAsync<T>(Func<T> read)
-        => Dispatcher.UIThread.CheckAccess()
-            ? Task.FromResult(read())
-            : Dispatcher.UIThread.InvokeAsync(read).GetTask();
+    //
+    // Bounded on purpose. A wedged UI thread is the headline case this API exists
+    // to investigate, and an unbounded InvokeAsync would hang precisely then:
+    // every request parked forever holding its connection and its thread-pool
+    // task, so the more the user polled to find out what was stuck, the more they
+    // piled up. Timing out turns that into the most useful answer the API can
+    // give — 504 plus "the UI thread isn't responding", which IS the diagnosis.
+    // The abandoned read still runs whenever the dispatcher recovers; it only
+    // reads state, so nothing minds it arriving late.
+    private static async Task<T> OnUiAsync<T>(Func<T> read)
+    {
+        if (Dispatcher.UIThread.CheckAccess()) return read();
+        Task<T> pending = Dispatcher.UIThread.InvokeAsync(read).GetTask();
+        if (await Task.WhenAny(pending, Task.Delay(UiReadTimeout)).ConfigureAwait(false) != pending)
+            throw new UiUnresponsiveException(UiReadTimeout);
+        return await pending.ConfigureAwait(false);
+    }
+
+    // Signals "the dispatcher never got to us", mapped to 504 by HandleSafelyAsync.
+    private sealed class UiUnresponsiveException(TimeSpan waited)
+        : Exception($"UI thread did not respond within {waited.TotalSeconds:0.#}s")
+    {
+        public TimeSpan Waited { get; } = waited;
+    }
 
     private static void WriteJson(HttpListenerResponse res, int status, object payload)
         => WriteText(res, status, JsonSerializer.Serialize(payload, LocalApiJson.Options),
@@ -515,7 +559,15 @@ public sealed class LocalApiServer : IAsyncDisposable
         HashSet<LogSeverity> set = [];
         if (string.IsNullOrWhiteSpace(raw)) return set;
         foreach (string part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            if (Enum.TryParse(part, ignoreCase: true, out LogSeverity s)) set.Add(s);
+        {
+            // IsDefined as well as TryParse: TryParse happily accepts the string
+            // form of any integer, so `?severity=99` would parse to (LogSeverity)99
+            // and make the set non-empty — filtering everything out and returning
+            // zero entries, which reads as "nothing happened". That's the exact
+            // outcome the empty-set fallback above exists to avoid.
+            if (Enum.TryParse(part, ignoreCase: true, out LogSeverity s) && Enum.IsDefined(s))
+                set.Add(s);
+        }
         return set;
     }
 

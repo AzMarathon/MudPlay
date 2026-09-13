@@ -7,13 +7,18 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// One labeled gang-house room in the GH Management tab's list. Read-only
-// display + a Remove button — editing a label re-opens the same right-click
-// picker the map uses (RenameFavorite mirrors this "map is the editor"
-// pattern for favourites), so this row doesn't duplicate the picker UI.
+// One SORT RULE of a labeled gang-house room in the Roomba tab's list — a room
+// with three rules shows as three rows, so a rule can be edited or dropped on
+// its own instead of taking the room's whole rule set with it. A room with no
+// explicit rules (a pure catch-all) still gets one row, RuleIndex -1, so it
+// stays visible, manageable and removable.
 public sealed partial class GhRoomLabelRowViewModel : ObservableObject
 {
     public RoomKey Key { get; }
+
+    // Index into the room label's rule list; -1 for a room that has no rules.
+    public int RuleIndex { get; }
+
     public string RoomName { get; }
     public string RoomKeyText => Key.ToString();
     public string CategoryText { get; }
@@ -27,33 +32,34 @@ public sealed partial class GhRoomLabelRowViewModel : ObservableObject
     // room for THIS character. Two-way bound; a user toggle writes back through
     // _onManageToggle to the per-character GhManagedRoomStore. Sourced from that
     // store (not the shared label), so alts on the same BBS manage independently;
-    // rooms adopted via @roomba sync arrive unchecked.
+    // rooms adopted via @roomba sync arrive unchecked. Every row of the same room
+    // carries the same tick — the section VM keeps the siblings in step.
     [ObservableProperty] private bool _activelyManaged;
 
-    private readonly Action<GhRoomLabelRowViewModel> _onRemove;
     private readonly Action<RoomKey, bool> _onManageToggle;
     private readonly Action<RoomKey> _onGoto;
     // Guards the ctor's initial assignment from writing back to the store — rows are
     // rebuilt on every label/managed-set change, so a write there would loop.
     private readonly bool _loaded;
 
-    public GhRoomLabelRowViewModel(GhRoomLabel label, string? roomName, bool activelyManaged,
-        Action<GhRoomLabelRowViewModel> onRemove, Action<RoomKey, bool> onManageToggle,
-        Action<RoomKey> onGoto)
+    public GhRoomLabelRowViewModel(GhRoomLabel label, int ruleIndex, string? roomName, bool activelyManaged,
+        Action<RoomKey, bool> onManageToggle, Action<RoomKey> onGoto)
     {
-        ArgumentNullException.ThrowIfNull(onRemove);
+        ArgumentNullException.ThrowIfNull(label);
         ArgumentNullException.ThrowIfNull(onManageToggle);
         ArgumentNullException.ThrowIfNull(onGoto);
         Key = new RoomKey(label.Map, label.Room);
+        RuleIndex = ruleIndex;
         RoomName = string.IsNullOrWhiteSpace(roomName) ? "(unknown)" : roomName;
-        _onRemove = onRemove;
         _onManageToggle = onManageToggle;
         _onGoto = onGoto;
 
-        string rules = label.Rules.Count == 0
-            ? "(no rules)"
-            : string.Join("; ", label.Rules.Select(DescribeRule));
-        CategoryText = label.IsCatchAll ? $"{rules} [catch-all]" : rules;
+        string rule = ruleIndex >= 0 && ruleIndex < label.Rules.Count
+            ? DescribeRule(label.Rules[ruleIndex])
+            : "(no rules)";
+        // The catch-all flag belongs to the room, not the rule, so it repeats on each
+        // of the room's rows — a sorted grid otherwise hides it on whichever row drifts.
+        CategoryText = label.IsCatchAll ? $"{rule} [catch-all]" : rule;
 
         _activelyManaged = activelyManaged;
         _loaded = true;
@@ -77,9 +83,6 @@ public sealed partial class GhRoomLabelRowViewModel : ObservableObject
             category += " > " + (LookupEnums.FormatArmourType(at.ToString()) ?? "Unknown");
         return category;
     }
-
-    [RelayCommand]
-    private void Remove() => _onRemove(this);
 
     // Queue + start a walk-to this room (the full "Walk here" path). Handed up to the
     // section VM, which routes it through AppServices.GoWalkTo.

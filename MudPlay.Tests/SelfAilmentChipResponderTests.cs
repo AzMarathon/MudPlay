@@ -120,27 +120,27 @@ public sealed class SelfAilmentChipResponderTests
     }
 
     [Fact]
-    public void Solo_NoSelfRow_NoThrow()
+    public void Solo_SelfRowPresent_LightsChip()
     {
         using Harness h = new();
-        // No party — SetMemberAilment is find-only, so the chip write is a harmless
-        // no-op and nothing throws.
+        // Solo now keeps a lone self row (PartyWindow self-display), so an ailment
+        // landing while solo lights that row's chip immediately.
+        Assert.NotNull(h.Self);
         h.Feed("You feel ill.");
 
-        Assert.Null(h.Self);
+        Assert.True(h.Self!.Poisoned);
     }
 
     [Fact]
-    public void PoisonBeforeParty_LightsOncePartyForms()
+    public void PoisonWhileSolo_LightsImmediately_StaysThroughPartyForm()
     {
         using Harness h = new();
-        // Poison lands while solo (no self row yet). When the party forms the
-        // self-row add re-evaluates and stamps the still-active poison — no
-        // ActiveFlags edge follows the join, so the CollectionChanged hook is what
-        // makes this show.
+        // Poison lands while solo — the self row already exists, so it lights at once
+        // (no longer a "waits for the party to form" case).
         h.Feed("You feel ill.");
-        Assert.Null(h.Self);
+        Assert.True(h.Self!.Poisoned);
 
+        // Forming a party reuses the same self row, chip still lit.
         h.FormParty();
 
         Assert.True(h.Self!.Poisoned);
