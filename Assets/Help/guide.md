@@ -1196,6 +1196,8 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. **Adding, removing, and renaming BBSes now lives in Profile Management** (View → Profile Management, or the button on this tab's left rail); this tab's list is for **selecting** a saved BBS to edit its details, and selecting one here only edits it — it never moves your loaded character (that's Profile Management's *Assign to BBS*). To make it obvious which persistence level each setting falls under, the tab is split into three banner-headed sections: **BBS settings** (stored with the board, shared by every character on it — connection, retry/reconnect, display size + scrollback, game-menu commands, realm mechanics, board disconnect line, runic-currency name); **Character profile settings** (only for the loaded character — username/password, the read-only captured suicide password, SYSOP powers, the Sys Goto table, and the automated logon-menu steps); and **Global client settings** (app-wide, regardless of BBS or character — the confirmation prompts, documented separately below).
 
+You can edit **several boards in one visit**: click between them freely and everything you changed — connection fields *and* credentials/logon steps alike — is written when you press **OK**. **Cancel** (or the title-bar X) still throws away every board's pending edits, not just the one on screen.
+
 ### Name
 
 **Default:** empty
