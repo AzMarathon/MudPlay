@@ -3667,8 +3667,13 @@ public sealed class AppServices
             // Stateful block parsers read the wire directly and register no router
             // pattern, so AnyPatternMatches can't speak for the lines they consume.
             // Each contributes its OWN matcher here rather than have the shapes
-            // restated in the watcher.
-            isRecognizedByDirectParser: Game.PartyManager.IsRosterRow,
+            // restated in the watcher: the `par` roster (PartyManager), the stat /
+            // exp / health sheet (StatParser), and the `spells` / `pow` listing
+            // (SpellListParser) — otherwise every such poll flooded the queue.
+            isRecognizedByDirectParser: text =>
+                Game.PartyManager.IsRosterRow(text)
+                || Game.StatParser.IsStatScreenLine(text)
+                || Game.Spells.SpellListParser.IsSpellListLine(text),
             // "<Actor> <verb> an <ammo> at <target>!" reads identically whether it's
             // archery or a projectile spell, so the shape can't be a router pattern —
             // it needs to know who acted. A no-magery class settles it.

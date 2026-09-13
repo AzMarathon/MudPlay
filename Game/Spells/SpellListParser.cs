@@ -42,6 +42,23 @@ public sealed class SpellListParser : IDisposable
         _log = log;
     }
 
+    // True when text is a line of the `spells` / `pow` output — a header/intro
+    // line, the authoritative "you have no spells" line, or a parseable table row.
+    // The unrecognized-line capture asks this because the spell list is read here
+    // as a stateful block rather than through a router pattern, so
+    // MessageRouter.AnyPatternMatches can't vouch for these rows and a `spells`
+    // poll staged the whole list for review. Reuses the same classifiers the block
+    // parser itself runs, so the recognizer can't drift from what gets consumed.
+    public static bool IsSpellListLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        string trimmed = text.Trim();
+        string lower = trimmed.ToLowerInvariant();
+        return IsHeaderLine(NormalizeSpaces(lower))
+            || IsEmptyListLine(lower)
+            || TryParseRow(trimmed, out _);
+    }
+
     // Bind the per-session LineExtractor. Same shape as
     // StatParser.AttachLineExtractor — the extractor is owned by the main-window
     // VM (one per terminal session) while this parser is app-level. Calling again
