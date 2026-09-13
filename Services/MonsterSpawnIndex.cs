@@ -104,7 +104,9 @@ public sealed class MonsterSpawnIndex
     {
         try
         {
-            EnsureBuilt();
+            // mayEvictRaw: false — see EnsureBuilt. Reading the shared table off
+            // this thread is fine; disposing it is not.
+            EnsureBuilt(mayEvictRaw: false);
         }
         catch (Exception ex)
         {
@@ -115,7 +117,16 @@ public sealed class MonsterSpawnIndex
         }
     }
 
-    private Snapshot EnsureBuilt()
+    // mayEvictRaw gates the post-build EvictTable("Monsters"). GameDataCache
+    // DISPOSES the JsonDocument on evict, and ~20 other consumers read that same
+    // shared document from the UI thread — so evicting from the warm's worker
+    // thread can pull it out from under a UI-thread enumeration mid-flight
+    // (ObjectDisposedException on whichever index happened to be mid-build).
+    // Reading it off-thread is what ItemSourceIndex's warm already does and is
+    // safe; disposing it isn't. Only a build on the caller's own thread evicts —
+    // and the raw table still gets reclaimed either way, since MonsterCatalog,
+    // RoomGraphManager, SeeHiddenIndex and friends all evict "Monsters" too.
+    private Snapshot EnsureBuilt(bool mayEvictRaw = true)
     {
         string? active = _cache.ActiveSet;
         if (_snapshot is { } current && current.Set == active) return current;
@@ -124,13 +135,13 @@ public sealed class MonsterSpawnIndex
         {
             // Another thread may have published while we waited for the gate.
             if (_snapshot is { } published && published.Set == active) return published;
-            Snapshot built = Build(active);
+            Snapshot built = Build(active, mayEvictRaw);
             _snapshot = built;
             return built;
         }
     }
 
-    private Snapshot Build(string? active)
+    private Snapshot Build(string? active, bool mayEvictRaw)
     {
         var summonedAt = new Dictionary<RoomKey, List<int>>();
         var placedAt = new Dictionary<RoomKey, List<int>>();
@@ -189,8 +200,9 @@ public sealed class MonsterSpawnIndex
                 }
             }
 
-            // Folded into the spawn maps — release the pinned raw Monsters JsonDocument.
-            _cache.EvictTable("Monsters");
+            // Folded into the spawn maps — release the pinned raw Monsters
+            // JsonDocument, but only when it's safe to dispose it here.
+            if (mayEvictRaw) _cache.EvictTable("Monsters");
             _log?.Log(LogSeverity.Info, "MonsterSpawnIndex",
                 $"Built spawn index — {summonedAt.Count} room(s) host {linked} monster reference(s) "
                 + $"({placedAt.Count} placed, {assignedAt.Count} assigned).");

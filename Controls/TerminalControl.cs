@@ -923,12 +923,16 @@ public sealed class TerminalControl : Control
             // Tab / Shift+Tab: complete the word under the caret against
             // carried, worn, and key-ring item names (InventoryAutoCompleter).
             // Only claimed while the setting is on — off restores the old
-            // fall-through-to-MapKey behaviour below. While on, consumed
-            // unconditionally — even a no-match press — because letting Tab
-            // fall through would put a raw 0x09 on the wire mid-compose,
-            // breaking the same "nothing reaches the server before Enter"
-            // invariant Backspace/Up/Down already keep.
-            if (key == Key.Tab && MudPlay.Services.AppServices.Current.InventoryTabCompleteEnabled)
+            // fall-through-to-MapKey behaviour below. While on AND a line is
+            // actually being composed, consumed even on a no-match press:
+            // letting Tab fall through mid-compose would put a raw 0x09 on the
+            // wire, breaking the same "nothing reaches the server before Enter"
+            // invariant Backspace/Up/Down already keep. An EMPTY buffer isn't
+            // mid-compose and has nothing to complete, so Tab still reaches the
+            // server there — some BBS login / menu screens navigate fields with
+            // it, and swallowing those would be a regression.
+            if (key == Key.Tab && buf.Text.Length > 0
+                && MudPlay.Services.AppServices.Current.InventoryTabCompleteEnabled)
             {
                 MudPlay.Services.AppServices svc = MudPlay.Services.AppServices.Current;
                 bool forward = (modifiers & KeyModifiers.Shift) == 0;

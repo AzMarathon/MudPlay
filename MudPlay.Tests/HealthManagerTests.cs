@@ -447,6 +447,41 @@ public sealed class HealthManagerTests
         Assert.True(h.Health.RestInFlight);
     }
 
+    // The engine-disabled branch resets every other in-flight latch, so the gate
+    // CONFIRMATIONS have to drop there too. They're only ever cleared alongside an
+    // asserted gate, so one left standing across the toggle can never be retracted
+    // afterwards — it feeds the send path with no gate asserted, sitting the
+    // character down at full mana and doing it again on every rest completion.
+    [Fact]
+    public void AutoHealToggledOffWhileConfirmed_ThenBackOnAtFullMa_NeverSendsMeditate()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 350,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 150, maxMa: 394);   // genuine breach
+        h.DrainPost();                                           // confirmed → meditate goes out
+        Assert.Contains("meditate", h.SentLines);
+
+        h.AutoHealRestEnabled = false;                           // user flips Auto-Heal / Rest off
+        h.Health.Evaluate();
+        h.Sent.Clear();
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 394, maxMa: 394);   // tops off while the engine is off
+        h.AutoHealRestEnabled = true;                            // and back on
+        h.Health.Evaluate();
+        h.DrainPost();
+
+        Assert.False(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);
+        Assert.False(h.Health.RestInFlight);
+    }
+
     [Fact]
     public void HpGateAsserted_RecoversAboveTriggerBeforeConfirm_NeverSendsRest()
     {

@@ -613,6 +613,14 @@ public sealed class HealthManager : IDisposable
                 _coordinator.ClearGate(MovementCoordinator.ManaRecoveryGate,
                     AsserterName, "auto-heal disabled");
             }
+            // The confirmations have to drop with the gates that earned them.
+            // They're only ever cleared alongside an ASSERTED gate elsewhere, so
+            // a confirmation left standing here survives the toggle — and on
+            // re-enable it feeds anyGateConfirmed with no gate asserted at all,
+            // firing a rest at full health that re-fires every time _restInFlight
+            // clears (nothing can reach the clear branch to retract it).
+            _hpGateConfirmed = false;
+            _maGateConfirmed = false;
             // Don't leave a follower's leader hanging on a stale @wait when
             // the engine toggles off mid-recovery.
             if (_partyWaitSignaled)

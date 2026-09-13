@@ -57,6 +57,12 @@ public sealed class InventoryAutoCompleter
 
     private Completion? Step(string text, int caretIndex, InventorySnapshot snapshot, int direction)
     {
+        // Callers source the text and the caret from two different objects (the
+        // Conversation window passes the view-model's InputText alongside the
+        // TextBox's own CaretIndex), so they can momentarily disagree. Clamp
+        // rather than letting a caret past the end throw out of LastIndexOf.
+        caretIndex = Math.Clamp(caretIndex, 0, text.Length);
+
         if (_lastProduced is { } last && text == last.Text && caretIndex == last.CaretIndex
             && _candidates.Count > 0)
         {
