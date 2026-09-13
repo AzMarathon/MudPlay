@@ -175,6 +175,31 @@ public static class LocalApiState
         return new { requested = lines, count = rows.Length, lines = rows };
     }
 
+    // How long a capture is reused before a fresh one is built. One call costs
+    // what pressing the Bug Report button costs — unnoticeable once. But this is
+    // the obvious "just give me everything" endpoint to put on a timer, and a
+    // full build runs on the UI thread, so poll rate turns it into a stutter on
+    // the render loop. Reusing for a beat makes a hot loop nearly free and leaves
+    // a single manual call byte-for-byte unchanged. A second of staleness doesn't
+    // change what the answer means, and the response carries the capture's own
+    // capturedAt, so a consumer can always see exactly how old it is.
+    private static readonly TimeSpan CaptureReuseWindow = TimeSpan.FromSeconds(1);
+
+    // UI-thread confined, like everything else here: both callers arrive through
+    // LocalApiServer.OnUiAsync, so these need no lock. A caller reaching them from
+    // anywhere else would be racing, which is reason enough not to.
+    private static BugReportBuilder.BugReportCapture? _lastCapture;
+    private static DateTimeOffset _lastCaptureAt;
+
+    private static BugReportBuilder.BugReportCapture RecentCapture(AppServices svc, TerminalEmulator emulator)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        if (_lastCapture is { } cached && now - _lastCaptureAt < CaptureReuseWindow) return cached;
+        _lastCapture = BugReportBuilder.Capture(svc, emulator);
+        _lastCaptureAt = now;
+        return _lastCapture;
+    }
+
     // The exhaustive dump. BugReportBuilder already assembles every section a bug
     // report carries, each defensively so one broken subsystem can't take the
     // whole capture down — exactly the property this endpoint wants, since it's
@@ -183,7 +208,7 @@ public static class LocalApiState
     {
         ArgumentNullException.ThrowIfNull(svc);
         ArgumentNullException.ThrowIfNull(emulator);
-        BugReportBuilder.BugReportCapture capture = BugReportBuilder.Capture(svc, emulator);
+        BugReportBuilder.BugReportCapture capture = RecentCapture(svc, emulator);
         return new
         {
             capturedAt = capture.CapturedAt,
@@ -193,5 +218,9 @@ public static class LocalApiState
     }
 
     public static string FullMarkdown(AppServices svc, TerminalEmulator emulator)
-        => BugReportBuilder.RenderStateOnly(BugReportBuilder.Capture(svc, emulator));
+    {
+        ArgumentNullException.ThrowIfNull(svc);
+        ArgumentNullException.ThrowIfNull(emulator);
+        return BugReportBuilder.RenderStateOnly(RecentCapture(svc, emulator));
+    }
 }
