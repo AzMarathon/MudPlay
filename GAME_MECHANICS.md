@@ -1894,9 +1894,11 @@ Some gates are opened by a **winch** in the room (a `MultiActionHidden` exit who
     tolls — a member needs `price` copper-value on hand. (Contrast: a `(Toll: N)` exit is `N` **gold**
     = `N*100` copper; a boat `price` is already copper.)
   - **`checkability <flag> <rank>`** (optional, present only on talkiran below) is a **quest-flag /
-    rank** gate the client does **not** read — attunement (e.g. MerchantCaptain rank 3) is the user's
-    responsibility. If a member routes to that port un-attuned the captain rejects *them*; the client
-    never boards and **fails out** (see fail-out below). We do not read or infer quest flags.
+    rank** gate the client does **not** read *for boat routing* — attunement (e.g. MerchantCaptain rank 3)
+    is the user's responsibility. If a member routes to that port un-attuned the captain rejects *them*;
+    the client never boards and **fails out** (see fail-out below). (The client *does* read live quest-flag
+    values elsewhere — the login quest-completion sync, see "Quest-flag values" below — but never uses them
+    to decide boat passage; attunement stays the user's call.)
 
   **TBInfo Action format** (verified verbatim off `data-Paradigm-1.9.1`, TBInfo #4986 / #5012, each
   reached from the dock room's `CMD`). One newline-separated line per port; colon-separated directives:
@@ -4344,3 +4346,50 @@ The flags are recomputed **additively** (add what the codes prove, never strip a
 hand-authored flag except the LastActionFailed-on-confuse cleanup). `SelfAilmentChipResponder` /
 `PartyAilmentTracker` / `ConditionTracker` all read these flags, so a missing flag silently
 breaks ailment + confuse-fumble recognition (the reason rose book #199 was invisible).
+
+## Quest-flag values (`abil` / `sys god abil`) *([CONFIRMED] 2026-09-13, user captures + mudinfo.net)*
+
+A character's quest progress lives in **ability flags** — the same `giveability <flag> <value>` targets
+`QuestCrawler` keys quests on. The value a flag currently holds is readable live, differently per realm:
+
+- **Paradigm** (built-in, ungated): `abil <flag>` → one line **`<Name>(<flag>)   <value>`**, e.g.
+  `GoodQuest(126)             8`. Queries one flag at a time; the flag number is in the reply, so replies
+  need no order-correlation. Also answers non-quest abilities (`AC(2)  780`).
+- **Stock** (behind **sys-god** access): `sys god <name> abil` → one wrapped line dumping **every** ability
+  as `flag(value)` pairs, no names: `User abilities: 126(17) 2(1) 129(3) 133(9) …`. One command, full dump.
+
+**"Complete" is a per-quest value, not a universal one.** Each quest finishes when its flag reaches a
+specific value that depends on the quest line — Phoenix `133(9)`, Dao Lord `134(12)`, Red Dragon `131(3)`,
+High Druid `129(2)` (`129(1)` = reward granted but "go back for the exp bonus", `(2)` = fully done). The
+value is the **terminal reachable flag value** and `QuestCrawler.CompleteValue` derives it: the highest
+absolute `giveability` value for a single-part quest / a ladder's last band, and, for an earlier band, the
+highest give value that falls inside the band's give-step range.
+
+**Alignment quests (126 Good / 127 Neutral / 128 Evil) are five value-tiers on one flag** — a running
+counter, not a boolean. Each tier completes at its own value; Evil's tiers cap at **128(2) / 128(3) /
+128(11) / 128(13) / 128(31)** (the last is "as far as you can currently go"). A live value of 11 means
+tiers 1–3 are done and tier 4 (needs 13) isn't. Per-band `observed >= that band's complete value` marks it.
+
+**Exceptions with no auto-detectable complete** (`CompleteValue` = null; left to the manual box / the editor
+override): **MageBane / Witchunter (flag 50)** has no "finished" flag at all — it climbs 1→4 by `addability`
+and just stops; **Perfect Stealth (186(0))** completes at value **0**, indistinguishable from "not started"
+via `abil`.
+
+**Alignment "check" helper flags (GoodCheck / NeutralCheck / EvilCheck — 216 / 217 / 218 on Paradigm) are NOT
+quests.** They're sub-markers granted only inside an alignment quest chain — the grant is gated on being at a
+specific progress value of a canonical alignment flag (`checkability 126 7 : … : giveability 216 1`), it hands
+the 2nd-alignment turn-in item (severed head 684 for Good, etc.), and it's `failability`-gated at the
+alignment pledge, then reverts to 0. So they never indicate a completed quest and `QuestCrawler` drops them
+(`DiscoverAlignmentHelperFlags`: a granted flag — other than 126/127/128 themselves — whose every grant chain
+checks/tests a canonical alignment flag). The alignment quests' own completion rides flag 126/127/128, not
+these. Verified: the rule catches exactly {216,217,218} on `data-Paradigm-1.9.1` and nothing on the stock
+sets.
+
+**Sync scope:** the login/manual sync only reads flags for quests the character can complete at its current
+level (the same eligible + level-met + incomplete set the availability announce uses) — on Paradigm that
+bounds the per-flag `abil` burst; on both realms it keeps marking to quests the character could really do.
+
+**Client use:** the login quest-completion sync (`QuestFlagSyncManager`, opt-in via
+`GeneralSettings.AutoSyncQuestFlagsOnLogin`) reads these values before the availability announce and marks
+`QuestProgress.Complete` for any quest whose flag has reached its effective complete value (the per-quest
+`QuestDefinition.CompleteValueOverride` if set, else the crawl's). Strictly one-way — never clears.

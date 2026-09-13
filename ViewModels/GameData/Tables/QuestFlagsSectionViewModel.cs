@@ -34,9 +34,11 @@ public sealed class QuestFlagsSectionViewModel : GameDataTableSectionViewModel
     public override bool ShowInTableGroup => true;
     public override bool ShowUseColumn => false;
 
+    // "Step" (the directive's second argument — the give value / required value / addability
+    // delta) sits right after the name so a flag's step reads at a glance beside what it is.
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Flag", "Name", "Relationship", "Kind", "Source", "Location", "Value",
+        "Flag", "Name", "Step", "Relationship", "Kind", "Source", "Location",
     };
 
     public override string SearchKeyColumn => "Name";
@@ -66,11 +68,11 @@ public sealed class QuestFlagsSectionViewModel : GameDataTableSectionViewModel
             {
                 ["Flag"]         = r.Flag.ToString(CultureInfo.InvariantCulture),
                 ["Name"]         = r.FlagName,
+                ["Step"]         = r.Value != 0 ? r.Value.ToString(CultureInfo.InvariantCulture) : string.Empty,
                 ["Relationship"] = RelationLabel(r.Relation),
                 ["Kind"]         = r.SourceKind.ToString(),
                 ["Source"]       = r.SourceName,
                 ["Location"]     = r.Map > 0 ? $"{r.Map}/{r.Room}" : string.Empty,
-                ["Value"]        = r.Value != 0 ? r.Value.ToString(CultureInfo.InvariantCulture) : string.Empty,
             };
             rows.Add(GameDataRow.FromDictionary(cells, Columns));
         }

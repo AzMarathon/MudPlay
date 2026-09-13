@@ -827,4 +827,60 @@ public sealed class QuestCrawlerTests : IDisposable
         Assert.False(q.ProgressByValue);
         Assert.Equal(new[] { 406 }, q.AwardItems);
     }
+
+    [Fact]
+    public void Crawl_SinglePart_CompleteValueIsHighestGiveValue()
+    {
+        // Phoenix-shaped: gives climb 1 → 9; the quest completes at the top value (133(9)).
+        CrawledQuest q = Assert.Single(QuestCrawler.Crawl(
+            CacheWithTbInfo("giveability 133 1", "giveability 133 5", "giveability 133 9"), classId: null));
+        Assert.Equal(9, q.CompleteValue);
+
+        // Smash (32(1)) — a single give at value 1 completes at 1.
+        CrawledQuest smash = Assert.Single(QuestCrawler.Crawl(
+            CacheWithTbInfo("takeitem 1247:giveability 32 1"), classId: null));
+        Assert.Equal(1, smash.CompleteValue);
+    }
+
+    [Fact]
+    public void Crawl_ValueZeroComplete_IsUndetectable()
+    {
+        // Perfect Stealth (186(0)) tops out at value 0 — indistinguishable from "not started"
+        // via abil, so the crawl reports no complete value (never auto-marked).
+        CrawledQuest q = Assert.Single(QuestCrawler.Crawl(
+            CacheWithTbInfo("giveability 186 0"), classId: null));
+        Assert.Null(q.CompleteValue);
+    }
+
+    [Fact]
+    public void Crawl_TierLadder_EachBandCompletesAtItsOwnGiveValue()
+    {
+        // A minlevel staircase whose gives land at 2 / 3 / 11 (the Evil-alignment shape):
+        // each crawler band completes at the highest give value inside its range, NOT the
+        // gap up to the next tier — so the bands read 2, 3, 11, not 2, 10, 11.
+        IReadOnlyList<CrawledQuest> quests = QuestCrawler.Crawl(
+            CacheWithTbInfo(
+                "giveability 128 2:minlevel 10",
+                "giveability 128 3:minlevel 20",
+                "giveability 128 11:minlevel 30"), classId: null);
+
+        int[] completes = quests.OrderBy(q => q.BandOrdinal).Select(q => q.CompleteValue ?? -1).ToArray();
+        Assert.Equal(new[] { 2, 3, 11 }, completes);
+    }
+
+    [Fact]
+    public void Crawl_AlignmentCheckHelperFlag_IsNotAQuest()
+    {
+        // 216 (GoodCheck) is granted ONLY inside a chain gated on the Good alignment quest
+        // flag's progress (checkability 126 7) — a turn-in sub-marker, not a quest. 126 itself
+        // stays a quest even though its conversion pledge cross-checks another alignment flag.
+        IReadOnlyList<CrawledQuest> quests = QuestCrawler.Crawl(
+            CacheWithTbInfo(
+                "minlevel 20:checkability 126 7:testability 126 7:giveitem 684:giveability 216 1",
+                "minlevel 10:giveability 126 2",
+                "checkability 127 7:removeability 127:giveability 126 6"), classId: null);
+
+        Assert.DoesNotContain(quests, q => q.Flag == 216);   // helper flag dropped
+        Assert.Contains(quests, q => q.Flag == 126);         // the alignment quest itself stays
+    }
 }

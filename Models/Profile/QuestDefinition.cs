@@ -58,6 +58,15 @@ public sealed class QuestDefinition
     // mark a quest ungated when the crawl over-reads one.
     public int? RequiredLevel { get; set; }
 
+    // User-set flag value at which this quest reads as complete in-game, or null to
+    // fall back to the crawler's derived CompleteValue. The auto-completion sync compares
+    // the character's live `abil` flag value against the effective value
+    // (this override ?? the crawl's) and marks the quest done when it's reached. Lets the
+    // user supply a value the crawl can't derive (Perfect Stealth, which tops out at 0) or
+    // correct a mis-banded one; a quest with neither an override nor a crawl value is never
+    // auto-marked. Editable per quest in the Quest editor.
+    public int? CompleteValueOverride { get; set; }
+
     // True to suppress this quest from the journal entirely — a "block" for a
     // crawled quest a particular game-data set surfaces spuriously. Distinct
     // from Visible (a per-taste hide the user toggles freely): a block flags the
@@ -78,7 +87,7 @@ public sealed class QuestDefinition
 
     public QuestDefinition(int flag, int step, string name = "", bool visible = true,
                            string? steps = null, string? rewards = null, int? requiredLevel = null,
-                           bool blocked = false)
+                           bool blocked = false, int? completeValueOverride = null)
     {
         Flag = flag;
         Step = step;
@@ -88,5 +97,6 @@ public sealed class QuestDefinition
         Rewards = rewards;
         RequiredLevel = requiredLevel;
         Blocked = blocked;
+        CompleteValueOverride = completeValueOverride;
     }
 }

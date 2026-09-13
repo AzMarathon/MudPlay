@@ -125,7 +125,12 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         // The overlay is BBS-tier now, so re-resolve the displayed text when it
         // reloads (BBS change) — a set switch alone no longer implies an overlay swap.
         _quests.Reloaded += Rebuild;
+        // The login flag-sync writes completions straight to the profile's QuestLog; reload
+        // so an open tab reflects them (and doesn't overwrite them on its next Persist).
+        if (AppServices.CurrentOrNull?.QuestFlagSync is { } sync) sync.Synced += OnQuestFlagsSynced;
     }
+
+    private void OnQuestFlagsSynced() => Avalonia.Threading.Dispatcher.UIThread.Post(Rebuild);
 
     // ----- build ----------------------------------------------------------
 
@@ -540,5 +545,6 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         _profile.ProfileLoaded -= OnProfileLoaded;
         _gameData.ActiveSetChanged -= OnActiveSetChanged;
         _quests.Reloaded -= Rebuild;
+        if (AppServices.CurrentOrNull?.QuestFlagSync is { } sync) sync.Synced -= OnQuestFlagsSynced;
     }
 }

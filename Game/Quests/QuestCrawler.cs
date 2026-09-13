@@ -104,10 +104,17 @@ public static class QuestCrawler
         // Evil/Neutral/Good checkboxes filter on this.
         IReadOnlyDictionary<int, AlignmentBucket> flagAlignments = DetectFlagAlignments(rawChains);
 
+        // Pass 6: alignment "check" helper flags (GoodCheck/NeutralCheck/EvilCheck — 216/217/218
+        // in Paradigm) — sub-markers granted only inside an alignment quest chain, never quests
+        // in their own right. Dropped so they don't surface as standalone quests. See
+        // DiscoverAlignmentHelperFlags.
+        HashSet<int> helperFlags = DiscoverAlignmentHelperFlags(rawChains);
+
         var quests = new List<CrawledQuest>();
         foreach (IGrouping<int, ParsedChain> flagGroup in chains.GroupBy(c => c.Flag).OrderBy(g => g.Key))
         {
             int flag = flagGroup.Key;
+            if (helperFlags.Contains(flag)) continue;
             List<ParsedChain> flagChains = flagGroup.ToList();
             (IReadOnlyList<int>? classRestrict, IReadOnlyList<int>? raceRestrict) = ResolveRestrictions(flagChains);
             IReadOnlyDictionary<int, int>? classLevels = ResolveClassLevels(flagChains, classRestrict);
@@ -232,6 +239,53 @@ public static class QuestCrawler
                     flags.Add(gf);
             }
         return flags;
+    }
+
+    // The canonical Good / Neutral / Evil alignment quest flags.
+    private static readonly int[] AlignmentFlags = { 126, 127, 128 };
+
+    // Alignment "check" helper flags — GoodCheck / NeutralCheck / EvilCheck (216 / 217 / 218 in
+    // Paradigm). Each is a sub-marker granted ONLY inside an alignment quest chain: its grant is
+    // gated on being at a specific progress value of a canonical alignment flag (e.g.
+    // `checkability 126 7 … giveability 216 1`), it hands the 2nd-alignment turn-in item, and it's
+    // failability-gated at the pledge then reverts to 0 — so it never represents a completed quest
+    // and must not surface as one. A granted flag qualifies when EVERY chain that grants it
+    // check/tests a canonical alignment flag at value >= 1; the alignment flags themselves are
+    // never treated as helpers (they cross-check each other in the conversion pledges).
+    private static HashSet<int> DiscoverAlignmentHelperFlags(IEnumerable<string> rawChains)
+    {
+        var grantTotal = new Dictionary<int, int>();
+        var grantGatedOnAlignment = new Dictionary<int, int>();
+        foreach (string raw in rawChains)
+        {
+            int? granted = null;
+            bool checksAlignment = false;
+            foreach (string segment in raw.Split(':'))
+            {
+                string[] p = segment.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (p.Length < 2) continue;
+                switch (p[0].ToLowerInvariant())
+                {
+                    case "giveability" when p.Length >= 3 && int.TryParse(p[1], out int gf):
+                        granted = gf; // last giveability wins, matching ParseChain
+                        break;
+                    case "checkability" or "testability"
+                        when p.Length >= 3 && int.TryParse(p[1], out int cf) && int.TryParse(p[2], out int cv)
+                        && cv >= 1 && Array.IndexOf(AlignmentFlags, cf) >= 0:
+                        checksAlignment = true;
+                        break;
+                }
+            }
+            if (granted is not int g) continue;
+            grantTotal[g] = grantTotal.GetValueOrDefault(g) + 1;
+            if (checksAlignment) grantGatedOnAlignment[g] = grantGatedOnAlignment.GetValueOrDefault(g) + 1;
+        }
+
+        var helpers = new HashSet<int>();
+        foreach ((int flag, int total) in grantTotal)
+            if (Array.IndexOf(AlignmentFlags, flag) < 0 && grantGatedOnAlignment.GetValueOrDefault(flag) == total)
+                helpers.Add(flag);
+        return helpers;
     }
 
     // The tier ladder of every multi-part flag, read from its progress gates. A flag's
@@ -431,7 +485,10 @@ public static class QuestCrawler
             yield return new CrawledQuest(
                 flag, upper, level, bonuses, awards, classRestrict, raceRestrict, classLevels,
                 BandOrdinal: i + 1, StepRangeStart: rangeStart, StepRangeEnd: rangeEnd,
-                ProgressByValue: true, ExpAward: exp, RequiredAlignment: alignment);
+                ProgressByValue: true, ExpAward: exp, RequiredAlignment: alignment,
+                // A value-laddered band tops out at its own boundary value (MageBane 1→4);
+                // its climbed ability value IS the completion mark.
+                CompleteValue: DetectableValue(upper));
         }
     }
 
@@ -518,8 +575,20 @@ public static class QuestCrawler
         int exp = SumDistinctStepExp(chains.Select(c => (c.GiveStep, c.Exp)));
         return new CrawledQuest(
             flag, 0, requiredLevel, bonuses, awardItems, classRestrict, raceRestrict, classLevels,
-            AwardsAbility: awardsAbility, ExpAward: exp, RequiredAlignment: alignment);
+            AwardsAbility: awardsAbility, ExpAward: exp, RequiredAlignment: alignment,
+            CompleteValue: DetectableValue(MaxGiveValue(chains)));
     }
+
+    // The highest absolute value any `giveability <flag> V` sets across a flag's chains —
+    // the terminal value a completed give-step quest reaches. 0 when the flag is only ever
+    // set to 0 (Perfect Stealth) or never set absolutely.
+    private static int MaxGiveValue(IEnumerable<ParsedChain> chains) =>
+        chains.Select(c => c.GiveStep).DefaultIfEmpty(0).Max();
+
+    // A completion value the client can actually detect via `abil`, or null: a flag that
+    // tops out at 0 reads identically whether or not the quest is done, so it can't be
+    // auto-marked and is left to the manual checkbox / the editor override.
+    private static int? DetectableValue(int value) => value > 0 ? value : null;
 
     // A multi-part quest: one quest per ladder tier. Each band carries the reward group
     // and keeper items that fall in it, class-resolved; its required level is the band
@@ -579,10 +648,17 @@ public static class QuestCrawler
             int rangeStart = i == 0 ? 1 : ladder[i].Step;
             int rangeEnd = i == ladder.Count - 1 ? int.MaxValue : ladder[i + 1].Step - 1;
 
+            // A tier completes at the highest actual give value that falls inside its range —
+            // NOT the range's upper edge (which runs up to the next tier's entry). So the
+            // Evil tiers, whose gives land at 2 / 3 / 11 / 13 / 31, complete at those values
+            // rather than at the gaps between them.
+            int? completeValue = DetectableValue(
+                chains.Select(c => c.GiveStep).Where(v => v <= rangeEnd).DefaultIfEmpty(0).Max());
+
             yield return new CrawledQuest(
                 flag, level, level, bonuses, items, classRestrict, raceRestrict, classLevels,
                 BandOrdinal: i + 1, StepRangeStart: rangeStart, StepRangeEnd: rangeEnd, ExpAward: exp,
-                RequiredAlignment: alignment);
+                RequiredAlignment: alignment, CompleteValue: completeValue);
         }
     }
 

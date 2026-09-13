@@ -375,8 +375,8 @@
                                   Content="Sysop status"
                                   ToolTip.Tip="`sys st` (SYSOP STATUS) — lets the client read the game's own room dump to recover its location when the walker gets lost. Per-character, per-BBS."/>
                         <CheckBox IsChecked="{Binding SysopGodLives, Mode=TwoWay}"
-                                  Content="Sysop god lives"
-                                  ToolTip.Tip="`sys god &lt;name&gt; add life` — when this character dies, automatically send the sysop command to restore the life just lost. Per-character, per-BBS."/>
+                                  Content="Sysop god lives / abil"
+                                  ToolTip.Tip="Grants the client sys-god commands for this character. `sys god &lt;name&gt; add life` restores a life on death; the same access also lets the quest-flag sync read all your flags in one shot via `sys god &lt;name&gt; abil` (Settings → General → &quot;Auto-detect completed quests from flags on login&quot;). Per-character, per-BBS."/>
                         <CheckBox IsChecked="{Binding SysopGoto, Mode=TwoWay}"
                                   Content="Sysop goto"
                                   ToolTip.Tip="`sys goto &lt;name&gt;` — jump to a curated location from the table below. Independent of the other powers (a board can grant this alone) and unrelated to the party @goto command. Per-character, per-BBS."/>

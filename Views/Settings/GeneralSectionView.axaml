@@ -236,6 +236,10 @@
                           Content="Load last ran loop into the Loop builder"
                           ToolTip.Tip="When checked (the default), hitting the Navigation window's Loop button pre-loads the last loop you ran this session — ready to Run again or re-Save, or wipe with Clear all to build a fresh one. Unchecked, the Loop button opens an empty builder. The @loop last remote command re-runs the last loop either way."/>
 
+                <CheckBox IsChecked="{Binding AutoSyncQuestFlagsOnLogin, Mode=TwoWay}"
+                          Content="Auto-detect completed quests from flags on login"
+                          ToolTip.Tip="When checked, MudPlay reads your live quest-flag values right after login and auto-marks any quest whose flag has reached its complete value (in the Player Workshop → Quest Status tab), then sends the availability announce so freshly-completed quests drop off it. It only ever MARKS complete, never un-marks. Paradigm queries each incomplete quest's flag with `abil`; Stock uses the one-shot `sys god &lt;name&gt; abil`, which needs sys-god powers granted for the BBS (Settings → BBS). Off by default because it sends commands on connect. The complete value the sync looks for is shown (and editable) per quest in the Quest editor."/>
+
                 <CheckBox IsChecked="{Binding BackupOnSave, Mode=TwoWay}"
                           Content="Backup profile when making changes"
                           ToolTip.Tip="Copy the existing profile JSON to {name}.json.bak before each save."/>

@@ -158,13 +158,14 @@ public sealed class QuestStore
             string.IsNullOrWhiteSpace(d.Steps) ? null : d.Steps,
             string.IsNullOrWhiteSpace(d.Rewards) ? null : d.Rewards,
             d.RequiredLevel,
-            d.Blocked)
+            d.Blocked,
+            d.CompleteValueOverride)
         { ClassRestrict = d.ClassRestrict is { Count: > 0 } ? d.ClassRestrict : null };
 
     // A manual row the user added but left wholly blank — nothing worth persisting.
     private static bool IsEmptyManual(QuestDefinition d) =>
         string.IsNullOrWhiteSpace(d.Name) && d.Steps is null && d.Rewards is null
-        && d.RequiredLevel is null && !d.Blocked
+        && d.RequiredLevel is null && !d.Blocked && d.CompleteValueOverride is null
         && (d.ClassRestrict is null || d.ClassRestrict.Count == 0);
 
     private static bool SameContent(QuestDefinition a, QuestDefinition b) =>
@@ -174,6 +175,7 @@ public sealed class QuestStore
         && string.Equals(a.Rewards, b.Rewards, StringComparison.Ordinal)
         && a.RequiredLevel == b.RequiredLevel
         && a.Blocked == b.Blocked
+        && a.CompleteValueOverride == b.CompleteValueOverride
         && SameClassRestrict(a.ClassRestrict, b.ClassRestrict);
 
     // Order-insensitive equality of two class-restriction lists, treating null and

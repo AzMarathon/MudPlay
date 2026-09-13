@@ -93,6 +93,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private string? _defaultAutoLairName;
     [ObservableProperty] private bool _autoConnect;
     [ObservableProperty] private bool _loadLastRanLoop = true;
+    // Char-tier (GeneralSettings.AutoSyncQuestFlagsOnLogin). Read live by
+    // QuestFlagSyncManager at login. Off by default — it sends commands on connect.
+    [ObservableProperty] private bool _autoSyncQuestFlagsOnLogin;
     [ObservableProperty] private bool _backupOnSave;
     [ObservableProperty] private bool _scaleTerminalToWindow;
     [ObservableProperty] private bool _typeToTerminalFromOtherWindows = true;
@@ -384,6 +387,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             DefaultAutoLairName = string.IsNullOrWhiteSpace(DefaultAutoLairName) ? null : DefaultAutoLairName,
             AutoConnect = AutoConnect,
             LoadLastRanLoop = LoadLastRanLoop,
+            AutoSyncQuestFlagsOnLogin = AutoSyncQuestFlagsOnLogin,
             BackupOnSave = BackupOnSave,
             ScaleTerminalToWindow = ScaleTerminalToWindow,
             TypeToTerminalFromOtherWindows = TypeToTerminalFromOtherWindows,
@@ -492,6 +496,12 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // layout actually changed, to avoid firing the mutated fan-out on every Save.
         if (layoutChanged) _profile.NotifyMutated();
 
+        // Turning quest-flag sync ON while already playing: fire the check now (the
+        // login trigger already passed), then re-report the now-current available quests.
+        // The manager no-ops when not in-realm, so flipping it at the menu is harmless.
+        if (!existing.AutoSyncQuestFlagsOnLogin && AutoSyncQuestFlagsOnLogin)
+            _ = AppServices.Current?.QuestFlagSync.RunNowAsync();
+
         ClearDirty();
     }
 
@@ -532,6 +542,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         DefaultAutoLairName  = dto.DefaultAutoLairName;
         AutoConnect          = dto.AutoConnect;
         LoadLastRanLoop      = dto.LoadLastRanLoop;
+        AutoSyncQuestFlagsOnLogin = dto.AutoSyncQuestFlagsOnLogin;
         BackupOnSave         = dto.BackupOnSave;
         ScaleTerminalToWindow = dto.ScaleTerminalToWindow;
         TypeToTerminalFromOtherWindows = dto.TypeToTerminalFromOtherWindows;
@@ -690,6 +701,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnDefaultAutoLairNameChanged(string? value) => Dirty();
     partial void OnAutoConnectChanged(bool value)            => Dirty();
     partial void OnLoadLastRanLoopChanged(bool value)        => Dirty();
+    partial void OnAutoSyncQuestFlagsOnLoginChanged(bool value) => Dirty();
     partial void OnBackupOnSaveChanged(bool value)           => Dirty();
     partial void OnScaleTerminalToWindowChanged(bool value)  => Dirty();
     partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();

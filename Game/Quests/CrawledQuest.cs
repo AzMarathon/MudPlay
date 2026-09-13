@@ -100,4 +100,14 @@ public sealed record CrawledQuest(
     // Evil/Neutral/Good checkboxes filter on this — a player commits to one alignment
     // quest chain and is locked to it, so which they can complete is their call, not
     // something derivable from live alignment.
-    AlignmentBucket? RequiredAlignment = null);
+    AlignmentBucket? RequiredAlignment = null,
+    // The quest-flag value at which this quest (or band) reads as complete in-game — what
+    // an `abil <flag>` / `sys god … abil` query must show for the flag before the client
+    // auto-marks it done. It is the terminal reachable flag value: the highest absolute
+    // `giveability <flag> V` for a single-part quest or a ladder's last band, and the
+    // band's own upper value (StepRangeEnd / value boundary) for an earlier band — so the
+    // five alignment tiers cap at their own values (Evil 2/3/11/13/31). null when it can't
+    // be told from "not started": the flag tops out at value 0 (Perfect Stealth 186(0)),
+    // or nothing sets it absolutely. A null CompleteValue is never auto-marked; the Quest
+    // editor's per-quest override is where the user supplies one (or corrects a miss).
+    int? CompleteValue = null);

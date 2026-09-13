@@ -48,6 +48,11 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
     // The crawler's inferred level gate — pre-fills RequiredLevelInput and is its delta baseline (0 when ungated / not found).
     public int AutoRequiredLevel { get; }
 
+    // The crawler's derived complete value (the flag value the auto-sync looks for) — pre-fills
+    // CompleteValueInput and is its delta baseline. null when the crawl couldn't derive one
+    // (undetectable: tops out at 0, or no absolute grant), which the user can fill in.
+    public int? AutoCompleteValue { get; }
+
     // Class / race restriction the crawl found; empty when the quest is open to all.
     public string RequirementsText { get; }
     public bool HasRequirements => RequirementsText.Length > 0;
@@ -92,6 +97,11 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
     // (including 0 to force ungated) persists as a user override.
     [ObservableProperty] private int? _requiredLevelInput;
 
+    // Live complete-value override bound to the editor's spinner: the flag value at which
+    // the login sync marks this quest done. Empty = no override (falls back to the crawl's
+    // AutoCompleteValue); a value persists as QuestDefinition.CompleteValueOverride.
+    [ObservableProperty] private int? _completeValueInput;
+
     // The classes this quest is restricted to, one checkable row per class in the active
     // set. IsSelected persists as class Numbers on QuestDefinition.ClassRestrict — the
     // editor VM builds these (it owns the Classes table). The explicit override for the
@@ -104,7 +114,8 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
                                  string name, bool visible, string steps, string rewards,
                                  int? requiredLevel, bool ineligible = false,
                                  bool showIfIneligible = false,
-                                 IReadOnlyList<ClassRestrictOption>? classOptions = null)
+                                 IReadOnlyList<ClassRestrictOption>? classOptions = null,
+                                 int? autoCompleteValue = null, int? completeValueOverride = null)
     {
         Flag = flag;
         Step = step;
@@ -114,6 +125,7 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
         BonusText = bonusText;
         LevelText = levelText;
         AutoRequiredLevel = autoRequiredLevel;
+        AutoCompleteValue = autoCompleteValue;
         RequirementsText = requirementsText;
         IsIneligible = ineligible;
         _showIfIneligible = showIfIneligible;
@@ -126,6 +138,9 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
         // Show the crawled level when there's one to correct, blank when the crawl found
         // none — so an empty box always reads as "no override".
         _requiredLevelInput = requiredLevel ?? (autoRequiredLevel > 0 ? autoRequiredLevel : null);
+        // Same prefill rule: the saved override wins, else the crawl's derived value (blank
+        // when it couldn't derive one, so an empty box reads as "no override").
+        _completeValueInput = completeValueOverride ?? autoCompleteValue;
 
         if (classOptions is not null)
             foreach (ClassRestrictOption option in classOptions)
@@ -208,7 +223,7 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
                 Flag, Step, (Name ?? string.Empty).Trim(), Visible,
                 string.IsNullOrWhiteSpace(Steps) ? null : Steps,
                 string.IsNullOrWhiteSpace(Rewards) ? null : Rewards,
-                RequiredLevelInput)
+                RequiredLevelInput, completeValueOverride: CompleteValueInput)
             { ClassRestrict = SelectedClassNumbers() };
 
         string name = (Name ?? string.Empty).Trim();
@@ -228,7 +243,12 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
         int? requiredLevel = RequiredLevelInput;
         if (requiredLevel is null || requiredLevel == AutoRequiredLevel) requiredLevel = null;
 
-        return new QuestDefinition(Flag, Step, name, Visible, steps, rewards, requiredLevel, Blocked)
+        // Same delta rule for the complete value: collapse when empty or still equal to the
+        // crawl's derived value.
+        int? completeValue = CompleteValueInput;
+        if (completeValue is null || completeValue == AutoCompleteValue) completeValue = null;
+
+        return new QuestDefinition(Flag, Step, name, Visible, steps, rewards, requiredLevel, Blocked, completeValue)
             { ClassRestrict = SelectedClassNumbers() };
     }
 }

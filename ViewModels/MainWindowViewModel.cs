@@ -963,6 +963,9 @@ public partial class MainWindowViewModel : ObservableObject
         // "On deposit: N copper farthings" blocks so the route picker can weigh a
         // buy the purse can't cover against money on deposit.
         AppServices.Current.BankBalance.AttachLineExtractor(Lines);
+        // Quest-flag reader — parses the `abil` / `sys god … abil` replies during the
+        // login completion sync.
+        AppServices.Current.QuestFlagReader.AttachLineExtractor(Lines);
         // Inbound ailment chip-clear — PartyAilmentTracker watches server
         // lines for OUR cure spell landing on a party member (matched by the
         // cure spell's CasterMessage template) and clears that member's
@@ -1709,8 +1712,23 @@ public partial class MainWindowViewModel : ObservableObject
     private static async Task AnnounceAvailableQuestsAfterLoginAsync()
     {
         await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        Avalonia.Threading.Dispatcher.UIThread.Post(
-            () => AppServices.Current.QuestAvailability.AnnounceLoginAvailable());
+        // Run the sync-then-announce on the UI thread: the flag probe collects on the
+        // line-emit (UI) thread and paces its sends off the dispatcher, and when the
+        // opt-in sync is on it must finish marking completes BEFORE the availability dump
+        // so a freshly-completed quest doesn't announce as still-available.
+        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            AppServices svc = AppServices.Current;
+            if (svc.QuestFlagSync.EnabledForCurrentProfile)
+            {
+                try { await svc.QuestFlagSync.SyncAsync().ConfigureAwait(true); }
+                catch (Exception ex)
+                {
+                    svc.Log.Warn("QuestFlags", $"login quest-flag sync failed: {ex.Message}");
+                }
+            }
+            svc.QuestAvailability.AnnounceLoginAvailable();
+        });
     }
 
     private void OnRecoveryFailed(Game.Map.RecoveryFailedEvent e)

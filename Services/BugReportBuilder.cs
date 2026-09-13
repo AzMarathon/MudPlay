@@ -173,6 +173,10 @@ public static class BugReportBuilder
         // notice showed" report can tell whether the check ran and what it found.
         Kv(sb, "Update check on startup", svc.Settings.Current.CheckForUpdatesOnStartup ? "on" : "off");
         Kv(sb, "Last update check", DescribeUpdate(svc));
+        // Quest-flag completion sync — the opt-in toggle + the last run's result, so a
+        // "my quest didn't auto-complete" report shows whether the sync ran and what it found.
+        Kv(sb, "Quest flag sync on login", svc.QuestFlagSync.EnabledForCurrentProfile ? "on" : "off");
+        Kv(sb, "Last quest flag sync", svc.QuestFlagSync.LastResult ?? "(not run this session)");
         // Diagnostic-channel state gates whether the Program-log tail carries any
         // decision trail: both flags default off, and every _log?.Debug/Combat
         // site is skipped at generation time when off, so a report captured with
