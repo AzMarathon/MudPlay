@@ -787,6 +787,27 @@ public sealed class AppServices
         _emulatorProvider = provider;
     }
 
+    // Whether there's a live session, and if not whether a redial is armed. The
+    // TelnetClient is per-connection and owned by the main view-model, so this
+    // arrives as a provider the same way the emulator does.
+    //
+    // Worth its own accessor because "is it even connected?" is the first
+    // question asked of a client that appears stuck, and without it a consumer
+    // has to infer a dropped session from the absence of log traffic — which
+    // looks identical to a client that's simply quiet.
+    public sealed record ConnectionSnapshot(bool Connected, bool Connecting, bool ReconnectPending);
+
+    private Func<ConnectionSnapshot>? _connectionProvider;
+
+    public void SetConnectionProvider(Func<ConnectionSnapshot> provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _connectionProvider = provider;
+    }
+
+    public ConnectionSnapshot Connection
+        => _connectionProvider?.Invoke() ?? new ConnectionSnapshot(false, false, false);
+
     private void ApplyLocalApiFromGlobalSettings()
         => LocalApi.ApplySettings(Settings.Current.LocalApiEnabled, Settings.Current.LocalApiPort);
 

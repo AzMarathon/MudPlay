@@ -26,6 +26,15 @@ public static class LocalApiState
             version = AppInfo.Version,
             character = svc.PlayerStats.Name,
             realm = svc.GameData.ActiveRealm.ToString(),
+            // First thing to check on a client that looks stuck. Without it a
+            // consumer has to infer a dropped session from the log going quiet,
+            // which is indistinguishable from a client that's merely idle.
+            connection = new
+            {
+                connected = svc.Connection.Connected,
+                connecting = svc.Connection.Connecting,
+                reconnectPending = svc.Connection.ReconnectPending,
+            },
             player = new
             {
                 hp = svc.PlayerState.Hp,

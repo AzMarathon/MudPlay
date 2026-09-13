@@ -567,6 +567,8 @@ public partial class MainWindowViewModel : ObservableObject
         // it. AppServices is built before this ctor, so it takes a provider rather
         // than the instance.
         AppServices.Current.SetEmulatorProvider(() => Emulator);
+        AppServices.Current.SetConnectionProvider(() =>
+            new AppServices.ConnectionSnapshot(IsConnected, IsConnecting, IsReconnectPending));
 
         // Live-screen watch for the character-creation stat box. It's drawn with
         // cursor positioning, so its marker row never completes as an emitted

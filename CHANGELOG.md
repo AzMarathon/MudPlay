@@ -1,5 +1,9 @@
 # Version history
 
+## 3.77.7
+
+- `/state` reports whether the client is connected and whether an auto-redial is armed — the first thing you check on a client that looks stuck, and previously only inferable from the log going quiet
+
 ## 3.77.6
 
 - A party member's **blind / diseased / held / poisoned** chip now clears the moment you witness *any* cure land on them — including a cure cast by a party-mate using a spell your own class can't cast (a Priest's cure poison, antidote, freedom, cure disease, or a heal+cure). Previously only your own configured cures were recognized, so a cross-cast cure left the chip stuck until the next `par`

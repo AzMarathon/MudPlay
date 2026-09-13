@@ -937,7 +937,7 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 | Endpoint | What you get |
 |---|---|
 | `/health` | Whether MudPlay is up. The only endpoint that needs no token. |
-| `/state` | Live vitals, room and tracker confidence, engine states, **which pause gates are asserted**, combat target. |
+| `/state` | Whether it's **connected** (and whether a redial is armed), live vitals, room and tracker confidence, engine states, **which pause gates are asserted**, combat target. |
 | `/state/full` | Every section a bug report captures, as JSON — add `?format=markdown` for the familiar rendered form. Builds the whole report, so repeat calls within a second reuse the previous one; poll `/state` instead if you want a fast tick. |
 | `/gates` | Recent pause/resume history: which gate, **who asserted it**, why, and when. |
 | `/log` | The program log, filterable by `severity=` (comma-separated names) and `source=`, with a `since=` cursor for tailing. |
