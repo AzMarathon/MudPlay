@@ -166,6 +166,8 @@ public sealed class UpdateServiceTests
         Assert.Contains("DST=\"$3\"", s);
         Assert.Contains("EXE=\"$4\"", s);
         Assert.Contains("STAGE=\"$5\"", s);
+        Assert.Contains("PROFILE=\"$6\"", s);
+        Assert.Contains("RECONNECT=\"$7\"", s);
         // Waits for the app to exit, keeps a backup, and relaunches the exe.
         Assert.Contains("kill -0", s);
         Assert.Contains("mv \"$DST\" \"$BAK\"", s);
@@ -183,6 +185,11 @@ public sealed class UpdateServiceTests
         string s = SwapScriptBuilder.BuildWindows();
         Assert.Contains("%~1", s);
         Assert.Contains("%~5", s);
+        Assert.Contains("%~6", s);
+        Assert.Contains("%~7", s);
+        // Session carried across the restart the same way the posix helper does it.
+        Assert.Contains("set ARGS=--profile \"%PROFILE%\"", s);
+        Assert.Contains("--reconnect", s);
         // Waits on the PID, mirrors install ↔ backup, treats robocopy >=8 as failure.
         Assert.Contains("tasklist", s);
         Assert.Contains("robocopy", s);

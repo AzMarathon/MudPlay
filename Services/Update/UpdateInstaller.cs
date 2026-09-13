@@ -30,7 +30,8 @@ public sealed class UpdateInstaller
     }
 
     public async Task<UpdateApplyResult> ApplyAsync(
-        UpdateCheckResult result, IProgress<double>? progress, Action onExit, CancellationToken ct)
+        UpdateCheckResult result, IProgress<double>? progress,
+        Func<Task<UpdateRelaunch>> prepareExit, Action onExit, CancellationToken ct)
     {
         if (result.Asset is not { } asset) return UpdateApplyResult.Fail("no asset to download");
         if (UpdatePlatform.InstallDirectory() is not { } installDir)
@@ -76,9 +77,18 @@ public sealed class UpdateInstaller
             File.WriteAllText(scriptPath, windows ? SwapScriptBuilder.BuildWindows() : SwapScriptBuilder.BuildPosix());
             if (!windows) TryChmodExec(scriptPath);
 
+            // Last point where a failure still leaves the install untouched, so this
+            // is where the app stands the session down: it closes the connection and
+            // tells us what the relaunch has to restore. Everything above this line
+            // is recoverable; everything below assumes we're on our way out.
+            UpdateRelaunch relaunch = await prepareExit().ConfigureAwait(false);
+
             SpawnSwap(scriptPath, windows,
-                Environment.ProcessId.ToString(), newRoot, installDir, exe, work);
-            _log?.Info("Update", "swap helper launched — exiting to let it replace the install");
+                Environment.ProcessId.ToString(), newRoot, installDir, exe, work,
+                relaunch.ProfileToken ?? "", relaunch.Reconnect ? "1" : "");
+            _log?.Info("Update", "swap helper launched — exiting to let it replace the install"
+                                 + $" (relaunch: profile={relaunch.ProfileToken ?? "none"},"
+                                 + $" reconnect={relaunch.Reconnect})");
 
             onExit();
             return UpdateApplyResult.Started();

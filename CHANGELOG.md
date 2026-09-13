@@ -1,5 +1,12 @@
 # Version history
 
+## 3.79.10
+
+- Updating while connected now closes the connection cleanly instead of letting the socket die with the process
+- The update restart reopens the same character, and reconnects on its own when you were connected before it ran
+- The profile is reliably saved on the way out of an update (with "Confirm exit" on it could be skipped, and a prompt nobody could answer appeared mid-update)
+- File → Quit's "Confirm exit" prompt actually holds the exit now — cancelling it no longer quits anyway
+
 ## 3.79.6
 
 - Route picker no longer marks an optional shortcut item as "required": it now tells a genuinely-required gate (the route can't be reached without it) from a shortcut an item merely unlocks, commits the reliable route, and offers the shortcut separately with the rooms it would save

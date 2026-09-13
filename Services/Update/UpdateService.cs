@@ -89,11 +89,14 @@ public sealed class UpdateService : IDisposable
     }
 
     // Download + verify + swap-in + relaunch the update in `result`. Delegates the
-    // risky part to UpdateInstaller; returns its outcome. `onExit` is invoked to
-    // close the app once the detached swap helper is running (the helper waits for
-    // this process to exit before replacing files). Refuses in a dev build.
+    // risky part to UpdateInstaller; returns its outcome. `prepareExit` is invoked
+    // once the new build is staged and verified — the app closes its connection there
+    // and reports what the relaunch should restore. `onExit` then closes the app so
+    // the detached swap helper (which waits for this process to exit before replacing
+    // files) can do its work. Refuses in a dev build.
     public async Task<UpdateApplyResult> ApplyAsync(
-        UpdateCheckResult result, IProgress<double>? progress, Action onExit, CancellationToken ct = default)
+        UpdateCheckResult result, IProgress<double>? progress,
+        Func<Task<UpdateRelaunch>> prepareExit, Action onExit, CancellationToken ct = default)
     {
         if (!result.UpdateAvailable || result.Asset is null)
             return UpdateApplyResult.Fail("no update to apply");
@@ -101,7 +104,7 @@ public sealed class UpdateService : IDisposable
             return UpdateApplyResult.Fail("self-update isn't available for this build — download it from the release page");
 
         var installer = new UpdateInstaller(_http, _log);
-        return await installer.ApplyAsync(result, progress, onExit, ct).ConfigureAwait(false);
+        return await installer.ApplyAsync(result, progress, prepareExit, onExit, ct).ConfigureAwait(false);
     }
 
     // Fetch CHANGELOG.md at the release's tag and pull out that version's entry — the
