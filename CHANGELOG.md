@@ -1,5 +1,11 @@
 # Version history
 
+## 3.74.13
+
+- Settings → BBS saves the login you typed even if you click to another board before pressing OK — username, password, sysop flags, Sys Goto table and logon steps were silently dropped on every board but the selected one
+- Imported logon steps survive a board switch the same way
+- Cancel still discards every board's pending edits, and a character swap mid-window drops them rather than writing one character's logins onto another
+
 ## 3.74.12
 
 - Profile Management gains "Edit settings…" on the BBS rail (and double-click a row), opening Settings → BBS with that board already selected

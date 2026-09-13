@@ -14,10 +14,13 @@ namespace MudPlay.ViewModels.Settings;
 // credentials (username, password, menu-nav sequence) live on the character
 // profile.
 //
-// Apply walks the cached in-memory BBS profiles and persists every dirty one.
-// Discard reloads the currently-selected BBS from disk so pending edits are
-// dropped. Adding / deleting a BBS commits immediately (those are structural, not
-// field-level edits — the OK / Cancel commit only covers field tweaks).
+// Apply walks the cached in-memory BBS profiles and persists every dirty one,
+// then commits the credential edits staged for every board the user touched —
+// both halves of the tab honour edits made across several boards in one visit,
+// not just the one selected when OK was pressed. Discard drops both caches and
+// reloads the currently-selected BBS from disk. Adding / deleting a BBS commits
+// immediately (those are structural, not field-level edits — the OK / Cancel
+// commit only covers field tweaks).
 public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 {
     private readonly BbsProfileStore _bbsStore;
@@ -30,6 +33,39 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     private bool _suppressDirty = true;
     private bool _dirty;
     private Control? _view;
+
+    // Per-BBS staging for the credential block, the counterpart to _loaded. The
+    // BBS-profile fields survive a click to another board because PushToCache
+    // writes them into _loaded on every keystroke; credentials are read and
+    // written as one bundle, so instead of pushing per-field they're captured
+    // here the moment the selection leaves a board. Without this, editing a login
+    // and then clicking a different BBS before OK dropped the edit silently —
+    // Apply only ever committed whichever board happened to be selected.
+    private readonly Dictionary<string, StagedCredentials> _stagedCredentials =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // Whether the credential block has been edited since the current board was
+    // loaded. Gates staging so merely clicking through boards doesn't author a
+    // credential entry on every one of them.
+    private bool _credentialsTouched;
+
+    // One board's pending credential edits. The password is held encrypted — the
+    // plaintext is deliberately short-lived (see LoadCredentialsFor), and staging
+    // it across several boards would otherwise keep every typed password in
+    // memory for the life of the window. PasswordTouched separates "leave the
+    // stored password alone" from "clear it".
+    private sealed class StagedCredentials
+    {
+        public string Username = string.Empty;
+        public bool PasswordTouched;
+        public string? EncryptedPassword;
+        public bool SysopMap;
+        public bool SysopStatus;
+        public bool SysopGodLives;
+        public bool SysopGoto;
+        public List<MenuStep> MenuNavSteps = new();
+        public List<SysopGotoLocation> SysopGotos = new();
+    }
 
     public override string Id => "bbs";
     public override string Title => "BBS + Display";
@@ -306,7 +342,19 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         ApplyToCurrentProfile();
         SaveConfirmToGlobalSettings();
 
+        ResetCredentialStaging();
         ClearDirty();
+    }
+
+    // Drop every staged credential edit and the in-flight plaintext password.
+    // Called once the edits have been committed (Apply) or abandoned (Discard,
+    // character swap) — holding them past that point would re-commit stale
+    // values onto whatever profile is loaded next.
+    private void ResetCredentialStaging()
+    {
+        _stagedCredentials.Clear();
+        _credentialsTouched = false;
+        _pendingPassword = null;
     }
 
     // Hydrate the four Confirm* observables from the Global-tier settings file.
@@ -361,19 +409,35 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // whichever BBS the user is editing; the profile stays where it lives.
     private void ApplyToCurrentProfile()
     {
-        if (SelectedBbsName is not { } bbs) return;
         if (_profile.Current is not { } character) return;
-        CommitCredentials(bbs, character);
+
+        // Fold the board on screen into the staging map so it commits alongside
+        // the ones already staged. Unconditional (not gated on _credentialsTouched)
+        // because an untouched selection still persists the starter sys-goto set —
+        // see the seed in LoadCredentialsFor.
+        if (SelectedBbsName is { } selected) StageCredentials(selected);
+        if (_stagedCredentials.Count == 0) return;
+
+        foreach ((string bbs, StagedCredentials staged) in _stagedCredentials)
+            WriteCredentials(bbs, character, staged);
+
+        // Save() no-ops on drafts (no name to write to). NotifyMutated always
+        // fires so observers refresh either way. NotifyBbsPinApplied is NOT
+        // fired here: editing a BBS's credentials no longer changes the active-BBS
+        // identity (re-home moved to Profile Management), so a credential edit
+        // warrants only a mutation signal — BbsPinApplied now fires solely on a
+        // real active-BBS change.
+        _profile.Save();
+        _profile.NotifyMutated();
     }
 
-    // Write the per-BBS credential slice (username, password, menu-nav, sysop
-    // flag) onto the loaded profile and persist. Runs whenever any
-    // CharacterProfile is loaded (draft or named) because the inline
-    // EncryptedPassword is keyed off the per-user .credkey, not the profile name —
-    // a draft's BbsCredentials survive into its first Save. Ends in the mutate /
-    // pin notifications so the main window's title / Host / Port re-resolve and any
-    // Quick Connect override clears.
-    private void CommitCredentials(string bbs, CharacterProfile character)
+    // Write one board's staged credential slice (username, password, menu-nav,
+    // sysop flags) onto the loaded profile. Runs whenever any CharacterProfile is
+    // loaded (draft or named) because the inline EncryptedPassword is keyed off
+    // the per-user .credkey, not the profile name — a draft's BbsCredentials
+    // survive into its first Save. Persisting is the caller's job: one Save covers
+    // every board committed in the same Apply.
+    private void WriteCredentials(string bbs, CharacterProfile character, StagedCredentials staged)
     {
         // Case-insensitive: BBS names are folder names on a case-insensitive
         // FS, so a 'Playpen' credential must resolve for a 'playpen' BBS.
@@ -383,30 +447,17 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             cred = new BbsCredentials();
             character.BbsCredentials[bbs] = cred;
         }
-        cred.EncryptedUsername = string.IsNullOrEmpty(Username) ? null : _passwords.Protect(Username);
-        cred.MenuNavSteps = MenuNavSteps.Select(vm => vm.ToModel()).ToList();
-        cred.SysopMap = SysopMap;
-        cred.SysopStatus = SysopStatus;
-        cred.SysopGodLives = SysopGodLives;
-        cred.SysopGoto = SysopGoto;
-        cred.SysopGotos = SysopGotos.Select(vm => vm.ToModel()).ToList();
+        cred.EncryptedUsername = string.IsNullOrEmpty(staged.Username)
+            ? null
+            : _passwords.Protect(staged.Username);
+        cred.MenuNavSteps = staged.MenuNavSteps;
+        cred.SysopMap = staged.SysopMap;
+        cred.SysopStatus = staged.SysopStatus;
+        cred.SysopGodLives = staged.SysopGodLives;
+        cred.SysopGoto = staged.SysopGoto;
+        cred.SysopGotos = staged.SysopGotos;
 
-        if (_pendingPassword is not null)
-        {
-            cred.EncryptedPassword = _pendingPassword.Length == 0
-                ? null
-                : _passwords.Protect(_pendingPassword);
-            _pendingPassword = null;
-        }
-
-        // Save() no-ops on drafts (no name to write to). NotifyMutated always
-        // fires so observers refresh either way. NotifyBbsPinApplied is NOT
-        // fired here anymore: editing a BBS's credentials no longer changes the
-        // active-BBS identity (re-home moved to Profile Management), so a
-        // credential edit warrants only a mutation signal — BbsPinApplied now
-        // fires solely on a real active-BBS change.
-        _profile.Save();
-        _profile.NotifyMutated();
+        if (staged.PasswordTouched) cred.EncryptedPassword = staged.EncryptedPassword;
     }
 
     private void RenameSelected(string oldName, string newName)
@@ -441,6 +492,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         profile.Name = newName;
         _loaded.Remove(oldName);
         _loaded[newName] = profile;
+        // ProfileService.RenameBbs re-keys the stored credentials below; carry
+        // any *staged* ones across too, or an unsaved login edit would commit
+        // under the name the board no longer has.
+        if (_stagedCredentials.Remove(oldName, out StagedCredentials? stagedCred))
+            _stagedCredentials[newName] = stagedCred;
 
         // The BBS name keys per-character credentials and the recent-profiles
         // refs — cascade the rename so logon-nav / passwords, the File → Recent
@@ -459,6 +515,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // Drop every cached in-memory edit and re-fetch from disk on the
         // next selection. Keeps the Apply contract: Cancel really cancels.
         _loaded.Clear();
+        ResetCredentialStaging();
         if (SelectedBbsName is not null)
         {
             _suppressDirty = true;
@@ -497,12 +554,58 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [RelayCommand]
     private void OpenProfileManager() => AppServices.Current.OpenProfileManager();
 
+    // Capture the outgoing board's credential edits before the incoming one
+    // overwrites the fields. This is the only transition that can lose them, so
+    // it's the only place that has to stage — cheaper than mirroring PushToCache
+    // across every credential control and the menu-step / sys-goto row VMs.
+    partial void OnSelectedBbsNameChanging(string? oldValue, string? newValue)
+    {
+        if (_suppressDirty || !_credentialsTouched) return;
+        if (oldValue is { } previous) StageCredentials(previous);
+    }
+
     partial void OnSelectedBbsNameChanged(string? value)
     {
         if (_suppressDirty) return;
         _suppressDirty = true;
         ReloadSelected();
         _suppressDirty = false;
+    }
+
+    // Snapshot the credential block for one board into the staging map.
+    private void StageCredentials(string bbsName)
+    {
+        if (!HasProfile) return;
+        _stagedCredentials.TryGetValue(bbsName, out StagedCredentials? previous);
+
+        StagedCredentials staged = new()
+        {
+            Username = Username,
+            SysopMap = SysopMap,
+            SysopStatus = SysopStatus,
+            SysopGodLives = SysopGodLives,
+            SysopGoto = SysopGoto,
+            MenuNavSteps = MenuNavSteps.Select(vm => vm.ToModel()).ToList(),
+            SysopGotos = SysopGotos.Select(vm => vm.ToModel()).ToList(),
+        };
+
+        if (_pendingPassword is not null)
+        {
+            staged.PasswordTouched = true;
+            staged.EncryptedPassword = _pendingPassword.Length == 0
+                ? null
+                : _passwords.Protect(_pendingPassword);
+        }
+        else if (previous is not null)
+        {
+            // Re-staging a board the user came back to but didn't retype the
+            // password on — the box shows empty by design, so an earlier
+            // password edit would read as "untouched" and be dropped here.
+            staged.PasswordTouched = previous.PasswordTouched;
+            staged.EncryptedPassword = previous.EncryptedPassword;
+        }
+
+        _stagedCredentials[bbsName] = staged;
     }
 
     private void ReloadBbsList()
@@ -559,6 +662,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     private void LoadCredentialsFor(string bbsName)
     {
         _pendingPassword = null;
+        _credentialsTouched = false;
         MenuNavSteps.Clear();
         SysopGotos.Clear();
         if (!HasProfile)
@@ -568,6 +672,26 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             SysopMap = SysopStatus = SysopGodLives = SysopGoto = false;
             return;
         }
+
+        // Pending edits win over what's on the profile — same contract _loaded
+        // gives the BBS-profile fields, so clicking back and forth between two
+        // boards doesn't reset either one's half-finished login.
+        if (_stagedCredentials.TryGetValue(bbsName, out StagedCredentials? staged))
+        {
+            Username = staged.Username;
+            Password = string.Empty;
+            SysopMap = staged.SysopMap;
+            SysopStatus = staged.SysopStatus;
+            SysopGodLives = staged.SysopGodLives;
+            SysopGoto = staged.SysopGoto;
+            foreach (MenuStep step in staged.MenuNavSteps)
+                MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, CredentialsDirty));
+            foreach (SysopGotoLocation loc in staged.SysopGotos)
+                SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, CredentialsDirty, RoomName));
+            RefreshImportSources(bbsName);
+            return;
+        }
+
         CharacterProfile? character = _profile.Current;
         if (character?.BbsCredentials is not null
             && character.BbsCredentials.TryGetValue(bbsName, out BbsCredentials? cred))
@@ -588,11 +712,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             SysopGoto = cred.SysopGoto;
             foreach (MenuStep step in cred.MenuNavSteps)
             {
-                MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, Dirty));
+                MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, CredentialsDirty));
             }
             foreach (SysopGotoLocation loc in cred.SysopGotos)
             {
-                SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, Dirty, RoomName));
+                SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, CredentialsDirty, RoomName));
             }
         }
         else
@@ -606,7 +730,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             // so the seed has to live here too (mirrors BbsCredentials.SysopGotos).
             foreach (SysopGotoLocation loc in SysopGotoLocation.DefaultStarterSet())
             {
-                SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, Dirty, RoomName));
+                SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, CredentialsDirty, RoomName));
             }
         }
 
@@ -650,6 +774,10 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
     private void RefreshProfileState()
     {
+        // Runs on profile load / close. Credentials are per-character, so a swap
+        // while the window is open invalidates everything staged — committing it
+        // would write the outgoing character's logins onto the incoming one.
+        ResetCredentialStaging();
         HasProfile = _profile.Current is not null;
         OnPropertyChanged(nameof(CredentialsHint));
         OnPropertyChanged(nameof(IsCredentialsHintWarning));
@@ -722,6 +850,16 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(IsDirty));
     }
 
+    // Dirty() for the credential block. The extra flag arms the staging pass on
+    // the next board switch, so untouched boards the user merely clicked through
+    // don't get a credential entry authored for them.
+    private void CredentialsDirty()
+    {
+        if (_suppressDirty) return;
+        _credentialsTouched = true;
+        Dirty();
+    }
+
     // Field-change hooks: writes the new value into the in-memory cache for
     // the currently-selected BBS so Apply has something fresh to persist.
     private void PushToCache()
@@ -763,12 +901,12 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     }
 
     partial void OnNameChanged(string value)                    { Dirty(); }
-    partial void OnUsernameChanged(string value)                { Dirty(); }
+    partial void OnUsernameChanged(string value)                { CredentialsDirty(); }
     partial void OnPasswordChanged(string value)
     {
         if (_suppressDirty) return;
         _pendingPassword = value;
-        Dirty();
+        CredentialsDirty();
     }
 
     // Toggling Show ON pulls the stored password out of the credential store on
@@ -784,10 +922,22 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         if (_pendingPassword is not null) return;
         if (SelectedBbsName is not { } bbs) return;
 
-        CharacterProfile? character = _profile.Current;
-        if (character?.BbsCredentials is null) return;
-        if (!character.BbsCredentials.TryGetValue(bbs, out BbsCredentials? cred)) return;
-        if (cred.EncryptedPassword is not { } blob) return;
+        // A password edited earlier in this window sits in the staging map, not
+        // on the profile — reveal what OK would write, not what's on disk. A
+        // staged clear (touched with no blob) correctly reveals nothing.
+        string? blob;
+        if (_stagedCredentials.TryGetValue(bbs, out StagedCredentials? staged) && staged.PasswordTouched)
+        {
+            blob = staged.EncryptedPassword;
+        }
+        else
+        {
+            CharacterProfile? character = _profile.Current;
+            if (character?.BbsCredentials is null) return;
+            if (!character.BbsCredentials.TryGetValue(bbs, out BbsCredentials? cred)) return;
+            blob = cred.EncryptedPassword;
+        }
+        if (blob is null) return;
 
         string? pw = _passwords.Unprotect(blob);
         if (string.IsNullOrEmpty(pw)) return;
@@ -811,10 +961,10 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnReconnectOnCarrierLostChanged(bool value)    { PushToCache(); Dirty(); }
     partial void OnReconnectOnNoResponseChanged(bool value)     { PushToCache(); Dirty(); }
     partial void OnReconnectAfterCleanupChanged(bool value)     { PushToCache(); Dirty(); }
-    partial void OnSysopMapChanged(bool value)                  { Dirty(); }
-    partial void OnSysopStatusChanged(bool value)               { Dirty(); }
-    partial void OnSysopGodLivesChanged(bool value)             { Dirty(); }
-    partial void OnSysopGotoChanged(bool value)                 { Dirty(); }
+    partial void OnSysopMapChanged(bool value)                  { CredentialsDirty(); }
+    partial void OnSysopStatusChanged(bool value)               { CredentialsDirty(); }
+    partial void OnSysopGodLivesChanged(bool value)             { CredentialsDirty(); }
+    partial void OnSysopGotoChanged(bool value)                 { CredentialsDirty(); }
     partial void OnTerminalColsChanged(int value)               { PushToCache(); Dirty(); }
     partial void OnTerminalRowsChanged(int value)               { PushToCache(); Dirty(); }
 
@@ -841,16 +991,16 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     private void AddMenuStep()
     {
         if (_suppressDirty) return;
-        MenuNavSteps.Add(new MenuStepEditorViewModel(Dirty));
-        Dirty();
+        MenuNavSteps.Add(new MenuStepEditorViewModel(CredentialsDirty));
+        CredentialsDirty();
     }
 
     [RelayCommand]
     private void AddSysopGoto()
     {
         if (_suppressDirty) return;
-        SysopGotos.Add(new SysopGotoRowViewModel(Dirty, RoomName));
-        Dirty();
+        SysopGotos.Add(new SysopGotoRowViewModel(CredentialsDirty, RoomName));
+        CredentialsDirty();
     }
 
     [RelayCommand]
@@ -858,7 +1008,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     {
         if (row is null || _suppressDirty) return;
         if (!SysopGotos.Remove(row)) return;
-        Dirty();
+        CredentialsDirty();
     }
 
     // Resolve a landing room's name for a row's read-only preview cell. Reads the
@@ -874,7 +1024,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     {
         if (step is null) return;
         if (!MenuNavSteps.Remove(step)) return;
-        Dirty();
+        CredentialsDirty();
     }
 
     [RelayCommand]
@@ -884,7 +1034,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         int i = MenuNavSteps.IndexOf(step);
         if (i <= 0) return;
         MenuNavSteps.Move(i, i - 1);
-        Dirty();
+        CredentialsDirty();
     }
 
     [RelayCommand]
@@ -894,7 +1044,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         int i = MenuNavSteps.IndexOf(step);
         if (i < 0 || i >= MenuNavSteps.Count - 1) return;
         MenuNavSteps.Move(i, i + 1);
-        Dirty();
+        CredentialsDirty();
     }
 
     // Replace the current character's logon steps with a copy of the chosen
@@ -906,8 +1056,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         if (SelectedImportSource is not { } src) return;
         MenuNavSteps.Clear();
         foreach (MenuStep step in src.Steps)
-            MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, Dirty));
-        Dirty();
+            MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, CredentialsDirty));
+        CredentialsDirty();
     }
 
     private bool CanImportMenuNav() => SelectedImportSource is not null;
