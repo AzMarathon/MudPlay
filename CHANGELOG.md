@@ -1,7 +1,9 @@
 # Version history
 
-## 3.74.11
+## 3.74.12
 
+- Profile Management gains "Edit settings…" on the BBS rail (and double-click a row), opening Settings → BBS with that board already selected
+- Adding a BBS hands straight off to its settings, so a fresh board isn't left hostless with nothing pointing at the fix
 - Roomba table lists one row per sort rule, so a room's rules can be dealt with one at a time
 - Remove drops the highlighted rule(s) instead of the room's whole rule set — the room leaves the list only when nothing is left to sort by
 - Remove takes a multi-row highlight (ctrl/shift-click) and clears every highlighted rule
