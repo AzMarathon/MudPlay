@@ -195,7 +195,7 @@
                       IsChecked="{Binding SelectedQuest.Blocked, Mode=TwoWay}"
                       IsVisible="{Binding SelectedQuest.IsCrawled, FallbackValue=False}"
                       Foreground="{StaticResource ChromeFgMutedBrush}"
-                      ToolTip.Tip="Suppress this crawled quest from the journal — for a flag a set surfaces spuriously. The row stays here so you can un-block it."/>
+                      ToolTip.Tip="Remove this crawled quest from both the journal and the login availability announce — for a flag a set surfaces spuriously. The row stays here so you can un-block it."/>
             <Button Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"
                     Content="Delete quest" Command="{Binding DeleteSelectedCommand}"
                     IsVisible="{Binding SelectedQuest.IsManual, FallbackValue=False}"
