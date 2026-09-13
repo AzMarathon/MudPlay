@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.77.10**
 > - **Auto-connect when profile loads** now fires on the profile you launch with (a `--profile` start, or a new instance spawned by Profile Management's Load), not only on an in-session open
-> - Auto-deposit bank runs walk back *into* a gated grind area (key-door, hidden exit, summon-drop key, lever/ask-NPC gate) instead of going idle at the bank — the return leg uses the full gate-aware pathfinder
+> - Auto-deposit bank runs walk to and from a gated grind area (key-door, hidden exit, summon-drop key, lever/ask-NPC gate) instead of going idle at the bank — both legs uses the full gate-aware pathfinder
 > - Auto-train trainer runs use the same gate-aware pathing out to the trainer and back into the loop
 > - Fixed a deposit that ran its completion twice on arrival and doubled the return walk
 >
