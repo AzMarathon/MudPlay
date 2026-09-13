@@ -406,9 +406,9 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     // Copy the current selection to the system clipboard as plain text. Returns
     // false when nothing is selected or no clipboard is reachable. Lives on the
     // control because it's the focused element after a drag-select — so its own
-    // OnKeyDown catches Ctrl+C reliably, without depending on the key event
-    // bubbling to a window-level handler past a focus/"is a TextBox" guard. The
-    // window's right-click Copy calls this same method.
+    // OnKeyDown catches the copy chord (Ctrl+C / Cmd+C) reliably, without depending
+    // on the key event bubbling to a window-level handler past a focus/"is a TextBox"
+    // guard. The window's right-click Copy calls this same method.
     public bool CopySelectionToClipboard()
     {
         string sel = SelectedText;
@@ -431,7 +431,11 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     {
         base.OnKeyDown(e);
         if (e.Handled) return;
-        if (e.Key == Key.C && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        // Accept Meta (Cmd) as well as Control so the native macOS copy chord
+        // (Cmd+C) works here, not just Ctrl+C — a Mac user could otherwise only
+        // copy via the right-click menu.
+        if (e.Key == Key.C &&
+            (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)))
         {
             if (CopySelectionToClipboard()) e.Handled = true;
         }
