@@ -165,7 +165,10 @@ public sealed class PartyManagerTests
 
         router.Dispatch(Line("You are no longer following MudPlay."));
 
-        Assert.Empty(p.State.Members);
+        // Solo now — the roster keeps the lone self row (PartyWindow self-display),
+        // but it's no longer a party.
+        Assert.Single(p.State.Members);
+        Assert.True(p.State.Members[0].IsSelf);
         Assert.False(p.State.IsInParty);
         Assert.Null(p.State.LeaderName);
         Assert.False(p.State.SelfIsLeader);
@@ -183,7 +186,9 @@ public sealed class PartyManagerTests
 
         p.NoteSelfDropped();
 
-        Assert.Empty(p.State.Members);
+        // Lone self row remains (solo self-display); not a party.
+        Assert.Single(p.State.Members);
+        Assert.True(p.State.Members[0].IsSelf);
         Assert.False(p.State.IsInParty);
         Assert.Null(p.State.LeaderName);
     }
@@ -200,7 +205,9 @@ public sealed class PartyManagerTests
 
         router.Dispatch(Line("You are not in a party at the present time."));
 
-        Assert.Empty(p.State.Members);
+        // Lone self row remains (solo self-display); not a party.
+        Assert.Single(p.State.Members);
+        Assert.True(p.State.Members[0].IsSelf);
         Assert.False(p.State.IsInParty);
         Assert.False(p.State.SelfIsLeader);
         Assert.Null(p.State.LeaderName);
@@ -219,7 +226,9 @@ public sealed class PartyManagerTests
 
         p.NoteSelfDropped();
 
-        Assert.Empty(p.State.Members);
+        // Lone self row remains (solo self-display); not a party.
+        Assert.Single(p.State.Members);
+        Assert.True(p.State.Members[0].IsSelf);
         Assert.False(p.State.IsInParty);
         Assert.False(p.State.SelfIsLeader);
         Assert.Null(p.State.LeaderName);
@@ -249,7 +258,9 @@ public sealed class PartyManagerTests
 
         p.NoteTrainStatsExcursion();
 
-        Assert.Empty(p.State.Members);
+        // Lone self row remains (solo self-display); following state cleared.
+        Assert.Single(p.State.Members);
+        Assert.True(p.State.Members[0].IsSelf);
         Assert.False(p.State.IsInParty);
         Assert.Null(p.State.LeaderName);
     }
@@ -295,7 +306,9 @@ public sealed class PartyManagerTests
         router.Dispatch(Line("Raijin has been removed from your followers."));
         router.Dispatch(Line("You are not in a party at the present time."));
 
-        Assert.Empty(p.State.Members);
+        // Lone self row remains (solo self-display); party fully wound down.
+        Assert.Single(p.State.Members);
+        Assert.True(p.State.Members[0].IsSelf);
         Assert.False(p.State.IsInParty);
         Assert.False(p.State.SelfIsLeader);
         Assert.Null(p.State.LeaderName);
@@ -396,7 +409,9 @@ public sealed class PartyManagerTests
         router.Dispatch(Line("You are no longer following MudPlay."));
         router.Dispatch(Line("You are not in a party at the present time."));
 
-        Assert.Empty(p.State.Members);
+        // Lone self row remains (solo self-display); following state wound down.
+        Assert.Single(p.State.Members);
+        Assert.True(p.State.Members[0].IsSelf);
         Assert.False(p.State.IsInParty);
         Assert.Null(p.State.LeaderName);
     }
@@ -457,7 +472,11 @@ public sealed class PartyManagerTests
             "  MudPlay WuzHere                   (Mystic)                [H:100%]   - Midrank",
         });
 
-        Assert.Empty(p.State.Members);
+        // The flushed par-block parser ignores the trailing solo row, so no GHOST
+        // member is added and IsInParty stays false. The roster holds only the lone
+        // self row (solo self-display), re-seeded by the dissolution reset.
+        Assert.Single(p.State.Members);
+        Assert.True(p.State.Members[0].IsSelf);
         Assert.False(p.State.IsInParty);
     }
 
@@ -544,6 +563,52 @@ public sealed class PartyManagerTests
         Assert.Equal(Models.Profile.PartyRank.Back,  suijin.Rank);
         Assert.Equal(89, mudplay.HpPercent);
         Assert.Equal(81, suijin.HpPercent);
+    }
+
+    [Fact]
+    public void ParBlock_PoisonFlag_DrivesOtherMemberPoisonChip_SetAndClear()
+    {
+        // The par `P` flag is the authoritative cross-client source for an OTHER
+        // member's poison chip — poison is never announced verbosely, so par is
+        // the only way to see it. A poll with the flag sets the chip; a later poll
+        // without it clears the chip straight off the flag dropping.
+        var (_, p) = Setup(localCharacterName: "MindGoblin");
+        p.TestEnterParBlock();
+        p.FeedTestLines(new[]
+        {
+            "  Suijin                         (Mage)       [M: 98%] [H: 81%]P  - Backrank",
+            "  MindGoblin                     (Druid)      [M: 98%] [H:100%]   - Midrank",
+            string.Empty,
+        });
+        PartyMember suijin = p.State.Members.First(x => x.Name == "Suijin");
+        Assert.True(suijin.Poisoned);   // P flag present → chip set
+
+        p.TestEnterParBlock();
+        p.FeedTestLines(new[]
+        {
+            "  Suijin                         (Mage)       [M: 98%] [H: 95%]   - Backrank",
+            "  MindGoblin                     (Druid)      [M: 98%] [H:100%]   - Midrank",
+            string.Empty,
+        });
+        Assert.False(suijin.Poisoned);  // flag gone → chip cleared
+    }
+
+    [Fact]
+    public void ParBlock_PoisonFlag_OnSelfRow_DoesNotDriveSelfChip()
+    {
+        // Self's poison chip is owned by ConditionTracker (timelier than the 5s par
+        // poll and apply/wear-off-message-driven), so par must NOT set it even when
+        // our own row shows `P`.
+        var (_, p) = Setup(localCharacterName: "MindGoblin");
+        p.TestEnterParBlock();
+        p.FeedTestLines(new[]
+        {
+            "  MindGoblin                     (Druid)      [M: 98%] [H: 70%]P  - Midrank",
+            string.Empty,
+        });
+        PartyMember self = p.State.Members.First(x => x.IsSelf);
+        Assert.Equal("MindGoblin", self.Name);
+        Assert.False(self.Poisoned);    // par does not drive the self chip
     }
 
     [Fact]
@@ -1573,5 +1638,76 @@ public sealed class PartyManagerTests
 
         Assert.DoesNotContain(p.State.Members, m => m.Name == "Stranger");
         Assert.All(p.State.Members, m => Assert.False(m.Resting));
+    }
+
+    // ===== Solo self row (PartyWindow self-display) =====
+
+    [Fact]
+    public void SoloSelfRow_AppearsWhenCharacterNameSet_NotAParty()
+    {
+        var (_, p) = Setup(localCharacterName: "Forged");
+
+        // A lone self row is kept while solo so the PartyWindow shows the local
+        // character — but it is NOT a party.
+        PartyMember self = Assert.Single(p.State.Members);
+        Assert.True(self.IsSelf);
+        Assert.Equal("Forged", self.Name);
+        Assert.False(self.IsLeader);
+        Assert.False(p.State.IsInParty);
+    }
+
+    [Fact]
+    public void SoloSelfRow_RemovedWhenNameCleared()
+    {
+        var (_, p) = Setup(localCharacterName: "Forged");
+        Assert.Single(p.State.Members);
+
+        p.LocalCharacterName = null;   // profile close
+
+        Assert.Empty(p.State.Members);
+    }
+
+    [Fact]
+    public void SoloSelfRow_SwappedWhenNameChanges()
+    {
+        var (_, p) = Setup(localCharacterName: "Forged");
+
+        p.LocalCharacterName = "Raijin";   // profile swap to another character
+
+        PartyMember self = Assert.Single(p.State.Members);
+        Assert.True(self.IsSelf);
+        Assert.Equal("Raijin", self.Name);
+    }
+
+    [Fact]
+    public void SoloSelfRow_ReusedWhenPartyForms()
+    {
+        var (router, p) = Setup(localCharacterName: "Forged");
+        Assert.Single(p.State.Members);   // solo self row
+
+        router.Dispatch(Line("Helper started to follow you."));
+
+        // The solo self row is reused (marked leader), not duplicated; Helper joins.
+        Assert.True(p.State.IsInParty);
+        Assert.Equal(2, p.State.Members.Count);
+        Assert.Single(p.State.Members, m => m.IsSelf);
+        Assert.Contains(p.State.Members, m => m.IsSelf && m.IsLeader && m.Name == "Forged");
+        Assert.Contains(p.State.Members, m => m.Name == "Helper" && !m.IsSelf);
+    }
+
+    [Fact]
+    public void SoloSelfRow_HpSyncsFromPlayerState()
+    {
+        var (_, p) = Setup(localCharacterName: "Forged");
+        PlayerState player = new();
+        p.AttachPlayerState(player);   // mirrors PlayerState onto the self row
+
+        player.MaxHp = 200;
+        player.Hp = 50;
+
+        PartyMember self = Assert.Single(p.State.Members);
+        Assert.True(self.IsSelf);
+        Assert.Equal(200, self.BaselineHp);
+        Assert.Equal(25, self.HpPercent);   // 50 / 200
     }
 }

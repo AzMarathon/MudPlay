@@ -41,6 +41,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         "Terminal font", "Font", "Font family", "Font size",
         "Navigation tooltip font", "Navigation tooltip", "Map tooltip font",
         "Scale terminal to window",
+        "Tab-complete inventory item names", "Tab autocomplete", "Inventory autocomplete",
         "Manual-Mode Defaults", "Auto-Mode Defaults",
         "Auto-Engines enabled on start",
         "Auto-Combat", "Auto-Nuke",
@@ -94,6 +95,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _backupOnSave;
     [ObservableProperty] private bool _scaleTerminalToWindow;
     [ObservableProperty] private bool _typeToTerminalFromOtherWindows = true;
+    [ObservableProperty] private bool _inventoryTabCompleteEnabled = true;
     [ObservableProperty] private bool _showStartupMudAnimation = true;
     // Install-global (GlobalSettings.SnapWindows), read live by WindowSnapManager.
     [ObservableProperty] private bool _snapWindows = true;
@@ -375,6 +377,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             BackupOnSave = BackupOnSave,
             ScaleTerminalToWindow = ScaleTerminalToWindow,
             TypeToTerminalFromOtherWindows = TypeToTerminalFromOtherWindows,
+            InventoryTabCompleteEnabled = InventoryTabCompleteEnabled,
             ShowStartupMudAnimation = ShowStartupMudAnimation,
             // Store null when the default is selected so the delta stays clean
             // and follows the app default if it ever changes (the picker label
@@ -440,6 +443,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // reach the live canvas on Apply.
         AppServices.Current.Display.ScaleToWindow = ScaleTerminalToWindow;
         AppServices.Current.TerminalInput.Enabled = TypeToTerminalFromOtherWindows;
+        AppServices.Current.InventoryTabCompleteEnabled = InventoryTabCompleteEnabled;
         AppServices.Current.Display.FontFamily =
             SelectedFontFamily?.Uri ?? DisplayConfig.DefaultFontFamily;
         AppServices.Current.Display.FontSize =
@@ -517,6 +521,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         BackupOnSave         = dto.BackupOnSave;
         ScaleTerminalToWindow = dto.ScaleTerminalToWindow;
         TypeToTerminalFromOtherWindows = dto.TypeToTerminalFromOtherWindows;
+        InventoryTabCompleteEnabled = dto.InventoryTabCompleteEnabled;
         // The splash is install-global — always reflect the Global default profile's
         // value, not the loaded profile's (possibly stale) copy of the field.
         ShowStartupMudAnimation = _profile.ReadDefaultProfileStartupAnimation();
@@ -671,6 +676,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnBackupOnSaveChanged(bool value)           => Dirty();
     partial void OnScaleTerminalToWindowChanged(bool value)  => Dirty();
     partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();
+    partial void OnInventoryTabCompleteEnabledChanged(bool value) => Dirty();
     partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
     partial void OnSnapWindowsChanged(bool value)                    => Dirty();
     partial void OnLocalApiEnabledChanged(bool value)                => Dirty();

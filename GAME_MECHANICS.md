@@ -91,6 +91,18 @@ it isn't here and you're unsure, ask.
   `monsterHp`, sorts eligible spells most-efficient first). Related:
   [[project_monster_intel_matchup_arc_20260902]].
 
+**Monster on-hit procs (`AttHitSpell-N`) are physical attacks, not casts** *([CONFIRMED] 2026-09-12, user)*
+- An `AttHitSpell-N` proc rides a **physical** attack slot. It is **not** a spell cast, so it has no
+  cast level of its own — there is no per-slot level field for it (`AttMax-N` is the physical
+  attack's max damage), and the Monsters table has **no monster-level column** at all (only
+  `CharmLVL` and the per-mid-spell `MidSpellLVL-N`).
+- Consequence: a proc must **not** feed anything that needs a cast level. Witnessed-ailment chip
+  durations (`AppServices.ResolveAilmentDurationSeconds` → `MonsterCatalogEntry.CastLevelFor`)
+  therefore count only real spell slots (`AttType-N == 2`) and between-rounds spells, and skip
+  `AttHitSpell` entirely. The proc's spell record still *has* messages, so it remains a legitimate
+  candidate for attributing an unrecognized line (`RoomSpellAttributor`) — recognizing the message
+  and timing a duration are different questions.
+
 **Monster spell-attack damage — single cast, monster-owned energy** *([CONFIRMED] 2026-09-04, user)*
 - A monster's spell attack (`AttType-N == 2`) stores the **spell number** in its `AttAcc-N` field
   and the **cast level** in `AttMax-N`; the linked **Spells** record holds the scaling formula
@@ -2513,6 +2525,56 @@ identification differs by ailment because of how the engine models each:
 
 The ailment→flag map: Diseased, Poisoned, Blinded, MovementPrevented. Both realm seeds are
 flagged from their own realm MDB (Euphoria-Stock-ish for stock, Paradigm-1.9.1 for paradigm).
+
+## Party ailment signaling & cross-client sync (MegaMUD parity) *([CONFIRMED] 2026-09-12, user)*
+
+How a client learns which ailments afflict itself and its party members, and how it warns the
+party. Modelled to interoperate with MegaMUD so MudPlay + MegaMUD clients can party together and
+each engine reacts identically.
+
+**Self (most reliable).** A client knows its OWN ailments from the **apply + wear-off spell
+messages** (MudPlay: `ConditionTracker` against the Messages table). Authoritative for self; the
+statline carries no ailment flag.
+
+**Other members — how each ailment is learned:**
+- **Poison** — NOT announced. Read from the **`par` party-screen `P` flag** per member (in a
+  party); solo, from the poison apply message. A member's poison chip is set when `P` is present
+  in the par row and cleared when it drops. `par` carries no other ailment letter.
+- **Blind / Diseased / Confused / Held** — announced **verbosely on SAY as a bare token**:
+  `@blind`, `@diseased`, `@confused`, `@held` — **no `on`/`off` argument** (MegaMUD sends the bare
+  token on apply only). An observer sets the named member's chip on the bare token. Confusion has
+  no realm cure, so its announce only lights the chip — kept because ignore-confusion behavior
+  applies to party members too.
+  - *Historical:* MudPlay formerly sent a paired `.@X on` / `.@X off` toggle (it lacked wear-off
+    detection at the time). MegaMUD uses bare tokens; the clear comes from the signals below.
+
+**Clear — no say signal is sent on wear-off.** A member's chip clears on **whichever is observed
+first**: a **witnessed cure** on that member (our cast, or one seen cast on them in the room) · the
+**spell's duration timing out** · the **par `P` flag dropping** (poison) · a **`@status`** reply of
+"no ailments". The only clear signal the afflicted emits is `@ok` (telepath to the leader, to
+release the wait).
+
+**Duration is deterministic.** When a monster's ailment spell *lands* (a "resist" = it never
+landed → no chip at all), the duration is a specific number the spell record computes from **that
+monster's cast level**. The same spell on different monsters differs only because their cast levels
+differ. So an observer that witnessed the apply computes the exact duration (`Dur` rounds × spell-
+round seconds, at the caster's cast level) and auto-clears the chip when it elapses — no fudge
+beyond clock jitter.
+
+**`@wait` / `@ok` (follower → leader, TELEPATH).** A follower afflicted by poison / blind /
+confused / diseased / **held** telepaths **`@wait`** to the leader unless that ailment's
+`Ignore<X>` is set, and **`@ok`** when its last non-ignored ailment clears. Held is the same as
+the others here — it telepaths `@wait`/`@ok` *in addition to* announcing its `.@held` on say (the
+say lights the member's chip, the `@wait` pauses the leader); held has no `Ignore` gate, so it is
+never suppressible. The leader pauses on `@wait` until timeout or a matching `@ok`. **All of this is
+party-only:** solo (no party / no leader / you ARE the leader), nothing is telepathed — self
+recognition + clearing runs entirely off the apply/wear-off spell messages.
+
+**`@panic` (leader → party, SAY).** A party **leader** whose HP crosses its **"hang if below"**
+floor says the bare token **`@panic`**, then hangs up (or `break` + `sys goto <wimpy>` if opted in)
+— a party-wipe warning. Two checkboxes gate it: **"use @panic while leading"** (send) and
+**"ignore @panics"** (receive). A member not ignoring it reacts the same — hang, or break + sys-
+goto-wimpy — per its own settings.
 
 ## Attack spells: why one fails to damage a monster
 

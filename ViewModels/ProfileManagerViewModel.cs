@@ -11,7 +11,9 @@ namespace MudPlay.ViewModels;
 
 // Modeless Profile Management window VM — the one place to add / rename / delete
 // / swap characters, assign a character to a BBS, and add / remove / rename
-// BBSes. Structural ops commit immediately via ProfileService / BbsProfileStore
+// BBSes. A BBS's actual settings (host, port, logon) stay in the Settings BBS
+// tab; Edit hands off there with the row's record selected.
+// Structural ops commit immediately via ProfileService / BbsProfileStore
 // (folder moves + deletes on disk), so the window needs no Save/Cancel staging.
 // Mutating the LOADED character (swap / delete / rename / assign of the current
 // profile, or removing the BBS it lives on) requires being disconnected; every
@@ -25,6 +27,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private readonly Action _newProfile;
     private readonly Action _saveCurrent;
     private readonly Func<Task> _saveCurrentAs;
+    private readonly Action<string> _editBbsSettings;
     private readonly ProfileService _profile;
     private readonly BbsProfileStore _bbs;
     private readonly DialogService _dialogs;
@@ -66,13 +69,15 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         Action<ProfileRef> swapToProfile,
         Action newProfile,
         Action saveCurrent,
-        Func<Task> saveCurrentAs)
+        Func<Task> saveCurrentAs,
+        Action<string> editBbsSettings)
     {
         _isDisconnected = isDisconnected;
         _swapToProfile = swapToProfile;
         _newProfile = newProfile;
         _saveCurrent = saveCurrent;
         _saveCurrentAs = saveCurrentAs;
+        _editBbsSettings = editBbsSettings;
         _profile = AppServices.Current.Profile;
         _bbs = AppServices.Current.Bbs;
         _dialogs = AppServices.Current.Dialogs;
@@ -178,6 +183,20 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         _log?.Info("BBS", $"Added BBS '{name}'.");
         ReloadBbses();
         SelectedBbs = name;
+        // A fresh record has a placeholder name and no host — useless until it's
+        // filled in, and nothing else in this window would tell the user that.
+        // Hand straight off to the editor rather than leaving a dead entry.
+        _editBbsSettings(name);
+    }
+
+    // Structural ops (add / rename / remove) live here; everything else about a
+    // BBS — host, port, redial, terminal size, logon steps — is the Settings BBS
+    // tab, so this jumps there with the selected record already loaded.
+    [RelayCommand]
+    private void EditBbs()
+    {
+        if (SelectedBbs is not { } name) return;
+        _editBbsSettings(name);
     }
 
     [RelayCommand]

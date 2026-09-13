@@ -85,6 +85,21 @@ public sealed class KnownSpellCatalog
         return ReadInt(row.Value, "MageryType");
     }
 
+    // Whether a class can cast ANY spell, by class name — true for a magery class,
+    // false for the no-magery classes (Warrior / Witchunter / Ninja / Thief), and
+    // NULL when the name isn't a class in the active set.
+    //
+    // The null case matters as much as the other two: callers use this to rule a
+    // spell out, and an unrecognized name means "we don't know", which must never be
+    // read as "can't cast". Distinct from ResolveClassMagery, which collapses unknown
+    // and no-magery into the same 0.
+    public bool? ClassCanCast(string? className)
+    {
+        if (string.IsNullOrWhiteSpace(className)) return null;
+        if (ResolveClassNumber(className) is not { } number) return null;
+        return ResolveClassMagery(number, out _) != MageryNone;
+    }
+
     // Every spell classNumber can learn, gated to level (pass 0 for the full
     // list ignoring the level requirement). Sorted by ReqLevel then Name. Empty
     // for classes with no magery (Warriors, Thieves, etc.).

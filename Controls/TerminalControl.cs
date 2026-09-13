@@ -191,6 +191,11 @@ public sealed class TerminalControl : Control
     private MudPlay.Services.CommandHistoryNavigator HistoryNav =>
         _historyNav ??= new(MudPlay.Services.AppServices.Current.CommandHistory);
 
+    // Per-control Tab-completion cursor — cycling state (stem/candidates/index)
+    // is this control's own, the same reasoning as HistoryNav above; the on/off
+    // setting is shared (AppServices.InventoryTabCompleteEnabled).
+    private readonly MudPlay.Services.InventoryAutoCompleter _autoComplete = new();
+
     public TerminalControl()
     {
         Focusable = true;
@@ -840,13 +845,14 @@ public sealed class TerminalControl : Control
         // Backspace pops the last buffered char (and consumes the
         // event regardless so we never send 0x08 to the wire when in
         // line mode — per user: backspace just erases the buffer). Up /
-        // Down recall previously-sent commands into the buffer. The
-        // remaining special keys (Left/Right, F-keys, Ctrl+letter, Tab,
-        // Escape) pass straight through via MapKey because they're
-        // meaningful to the server immediately (login prompts, menu
-        // navigation) and aren't part of any "line" the user is
+        // Down recall previously-sent commands into the buffer. Tab /
+        // Shift+Tab complete the in-progress word against inventory item
+        // names. The remaining special keys (Left/Right, F-keys,
+        // Ctrl+letter, Escape) pass straight through via MapKey because
+        // they're meaningful to the server immediately (login prompts,
+        // menu navigation) and aren't part of any "line" the user is
         // composing. In character-mode (full-screen forms) the buffer is
-        // bypassed entirely — Enter/Backspace/arrows fall through to
+        // bypassed entirely — Enter/Backspace/arrows/Tab fall through to
         // MapKey so the server's form reads each keystroke as it lands.
         if (InputBuffer is { CharacterMode: false } buf)
         {
@@ -910,6 +916,33 @@ public sealed class TerminalControl : Control
                 if (recalled is not null)
                 {
                     buf.Set(recalled);
+                    InvalidateVisual();
+                }
+                return true;
+            }
+            // Tab / Shift+Tab: complete the word under the caret against
+            // carried, worn, and key-ring item names (InventoryAutoCompleter).
+            // Only claimed while the setting is on — off restores the old
+            // fall-through-to-MapKey behaviour below. While on AND a line is
+            // actually being composed, consumed even on a no-match press:
+            // letting Tab fall through mid-compose would put a raw 0x09 on the
+            // wire, breaking the same "nothing reaches the server before Enter"
+            // invariant Backspace/Up/Down already keep. An EMPTY buffer isn't
+            // mid-compose and has nothing to complete, so Tab still reaches the
+            // server there — some BBS login / menu screens navigate fields with
+            // it, and swallowing those would be a regression.
+            if (key == Key.Tab && buf.Text.Length > 0
+                && MudPlay.Services.AppServices.Current.InventoryTabCompleteEnabled)
+            {
+                MudPlay.Services.AppServices svc = MudPlay.Services.AppServices.Current;
+                bool forward = (modifiers & KeyModifiers.Shift) == 0;
+                MudPlay.Services.InventoryAutoCompleter.Completion? completed = forward
+                    ? _autoComplete.Next(buf.Text, buf.Text.Length, svc.Inventory.Snapshot)
+                    : _autoComplete.Previous(buf.Text, buf.Text.Length, svc.Inventory.Snapshot);
+                if (completed is { } c)
+                {
+                    buf.Set(c.Text);
+                    HistoryNav.Reset();
                     InvalidateVisual();
                 }
                 return true;

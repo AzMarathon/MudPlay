@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.74.0**
+> **Version 3.76.0**
 > - New **Local control API** (Settings → General, off by default): a loopback-only HTTP endpoint serving live client state, the pause-gate history with who asserted each one, the program log with a tail cursor, the terminal scrollback, and every section a bug report captures — so a stuck client can be inspected while it's stuck instead of reconstructed from a log tail afterwards
 > - Includes a live event stream (Server-Sent Events) of log entries and gate changes as they happen
 > - Also serves the reference side: the saved loop library with per-loop exp / danger rollups, one loop's waypoints with the monsters at each stop, any room's monsters grouped lair / placed / assigned, and a monster's full record — so "which loop should I run?" is answerable from the data rather than by opening each one

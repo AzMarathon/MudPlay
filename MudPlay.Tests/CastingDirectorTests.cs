@@ -2363,6 +2363,7 @@ public sealed class CastingDirectorTests
                 MpPercent = 100,
             };
             Party.Members.Add(m);
+            Party.IsInParty = true;   // a member present ⇒ in a party (party-heal is party-only)
             return m;
         }
 

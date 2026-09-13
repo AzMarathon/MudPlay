@@ -1891,6 +1891,10 @@ public sealed class CastingDirector : IDisposable
     {
         if (_party is null) return null;
         if (settings is null) return null;
+        // Party-heal is a party-only concern. The roster now keeps a lone self row
+        // even when solo (PartyWindow self-display) — gate on IsInParty so that row
+        // never draws a party-heal cast at the solo player (self-heal owns self).
+        if (!_party.IsInParty) return null;
         if (_party.Members.Count == 0) return null;
         if (string.IsNullOrWhiteSpace(singleSpell)
          && string.IsNullOrWhiteSpace(aoeSpell)) return null;

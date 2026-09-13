@@ -83,7 +83,63 @@ public sealed partial class PartyManager : IDisposable
     // in that case the par parser can't tell which row is us and IsSelf stays
     // false on every row. AppServices sets this from ProfileService.ProfileLoaded
     // / ProfileClosed.
-    public string? LocalCharacterName { get; set; }
+    //
+    // Setting it (re)seeds the SOLO self row: while we're NOT in a party, a lone
+    // self row is kept in Members so the PartyWindow shows the local character —
+    // HP/mana (via SyncSelfFromPlayerState) and ailment chips (via the Self*
+    // responders) live-update on it exactly as they would in a party. Clearing
+    // the name (profile close) removes it. The party lifecycle still owns the self
+    // row while IsInParty is true, so this is a no-op then. See RefreshSoloSelfRow.
+    private string? _localCharacterName;
+    public string? LocalCharacterName
+    {
+        get => _localCharacterName;
+        set
+        {
+            if (string.Equals(_localCharacterName, value, StringComparison.Ordinal)) return;
+            _localCharacterName = value;
+            RefreshSoloSelfRow();
+        }
+    }
+
+    // Keep a live self row in the roster while SOLO so the PartyWindow always shows
+    // the local character out of a party (a diagnostic surface for watching ailment
+    // apply/clear + state, and groundwork for future self-in-roster features). Never
+    // touches IsInParty — a lone self row here is explicitly NOT "a party" (the
+    // IsInParty recomputes elsewhere only run during real par/party flows, which
+    // don't happen while solo). While in a party the party lifecycle owns the self
+    // row, so this stands down.
+    private void RefreshSoloSelfRow()
+    {
+        if (State.IsInParty) return;   // party lifecycle owns the self row
+        // Drop a stale solo self row — name cleared (profile close) or swapped to a
+        // different character (profile swap).
+        for (int i = State.Members.Count - 1; i >= 0; i--)
+        {
+            PartyMember m = State.Members[i];
+            if (!m.IsSelf) continue;
+            bool matchesCurrent = !string.IsNullOrEmpty(LocalCharacterName)
+                && GivenNameOf(m.Name).Equals(GivenNameOf(LocalCharacterName), StringComparison.OrdinalIgnoreCase);
+            if (!matchesCurrent) State.Members.RemoveAt(i);
+        }
+        if (string.IsNullOrEmpty(LocalCharacterName)) return;
+        foreach (PartyMember m in State.Members)
+            if (m.IsSelf) return;   // already present
+        // CollectionChanged.Add here triggers SyncSelfFromPlayerState (AttachPlayerState
+        // subscribed), so the new row gets its HP/mana from PlayerState immediately.
+        State.Members.Add(new PartyMember { Name = LocalCharacterName, IsSelf = true });
+    }
+
+    // True when we're in the solo shape — not in a party, no leader, and the only
+    // member (if any) is our own self row. The dissolution / self-dropped guards use
+    // this to recognise "already solo" now that a lone self row persists while solo.
+    private bool IsAlreadySolo()
+    {
+        if (State.IsInParty || State.LeaderName is not null || State.SelfIsLeader) return false;
+        foreach (PartyMember m in State.Members)
+            if (!m.IsSelf) return false;
+        return true;
+    }
 
     // Fires with the joiner's name whenever a member confirms they are
     // following us ("X started to follow you."). Distinct from the invite echo —
@@ -157,9 +213,10 @@ public sealed partial class PartyManager : IDisposable
     // here, the `-` rank suffix never matched on a poisoned row, so `rank` fell
     // through to its Mid default and the PartyWindow silently demoted a
     // force-frontranked leader (or any poisoned member) to midrank every poll
-    // they were poisoned. The flag is captured but not authoritative for the
-    // poison chip — that stays owned by the @poisoned say tracker, which is more
-    // timely than the 5s par poll and avoids a stale-poll re-poison race.
+    // they were poisoned. The flag is now also the AUTHORITATIVE source for an
+    // OTHER member's poison chip (set/cleared each poll where it's processed) —
+    // poison is never announced verbosely, so par is the only cross-client way to
+    // see it. Self's poison chip stays owned by ConditionTracker, not par.
     //
     // - Rank is an optional trailing chip (Frontrank / Midrank / Backrank). par
     // doesn't carry Position — that field stays at its default (Standing) for
@@ -181,6 +238,22 @@ public sealed partial class PartyManager : IDisposable
         @"^\s+(?<name>\S[\w '-]*?)\s+\((?<class>[^)]+)\)\s*\[Invited\]\s*$",
         RegexOptions.CultureInvariant)]
     private static partial Regex ParInvitedRow();
+
+    // True when text is a row of the `par` party screen — an active member or a
+    // pending invitee. The unrecognized-line capture asks this because par is read
+    // here as a stateful block rather than through a router pattern, so
+    // MessageRouter.AnyPatternMatches can't vouch for these rows and every poll
+    // staged the whole roster for review.
+    //
+    // Both row patterns anchor on the indent par emits, and callers hand us
+    // already-trimmed text, so the indent is re-supplied instead of keeping a
+    // second, drift-prone copy of each pattern.
+    public static bool IsRosterRow(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        string indented = " " + text.TrimStart();
+        return ParRow().IsMatch(indented) || ParInvitedRow().IsMatch(indented);
+    }
 
     // Construct with the app-singleton MessageRouter and a fresh PartyState. The
     // per-session LineExtractor is supplied later via AttachLineExtractor — the
@@ -574,13 +647,7 @@ public sealed partial class PartyManager : IDisposable
         _parState = ParState.Idle;
         _parBlockNames.Clear();
 
-        if (State.Members.Count == 0
-            && !State.IsInParty
-            && State.LeaderName is null
-            && !State.SelfIsLeader)
-        {
-            return;
-        }
+        if (IsAlreadySolo()) return;
         // If WE were the leader, snapshot every other-member name into
         // the grace-window map before clearing. Covers the "BBS only
         // emits account-name logoff" failure mode where we never get a
@@ -617,6 +684,10 @@ public sealed partial class PartyManager : IDisposable
         State.LeaderName   = null;
         State.SelfIsLeader = false;
         State.IsInParty    = false;
+        // Back to solo but still connected — re-seed the lone self row so the
+        // PartyWindow keeps showing the local character (no-op if no character is
+        // loaded, e.g. a profile-close disband).
+        RefreshSoloSelfRow();
     }
 
     // Flush the par-block machine and wipe the roster to solo — the shared exit for
@@ -642,13 +713,7 @@ public sealed partial class PartyManager : IDisposable
     // through the normal signals.
     public void NoteSelfDropped()
     {
-        if (State.Members.Count == 0
-            && !State.IsInParty
-            && State.LeaderName is null
-            && !State.SelfIsLeader)
-        {
-            return;
-        }
+        if (IsAlreadySolo()) return;
         LeavePartySolo();
     }
 
@@ -1248,6 +1313,14 @@ public sealed partial class PartyManager : IDisposable
         // status-chip strip (which keys on these booleans) lights up too.
         member.Resting    = position == PlayerPosition.Resting;
         member.Meditating = position == PlayerPosition.Meditating;
+        // Poison: the par `P` flag is the authoritative cross-client source for
+        // OTHER members' poison chip — no client announces poison verbosely (see
+        // GAME_MECHANICS "Party ailment signaling"), so drive it straight off the
+        // flag each poll: set when `P` is present, clear when it drops. Skip self —
+        // our own poison is owned by ConditionTracker (timelier than the 5s par
+        // poll), mirrored to the self chip by SelfAilmentChipResponder.
+        if (!isSelf)
+            member.Poisoned = m.Groups["poison"].Success;
 
         // A joined par row (this branch only matches a row carrying an [H:] bracket)
         // is proof the member is actually in the party — pending invitees print as a

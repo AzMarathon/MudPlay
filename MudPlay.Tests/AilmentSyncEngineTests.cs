@@ -9,16 +9,17 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Outbound ailment-sync (<see cref="AilmentSyncEngine"/>): on a local
-/// curable ailment, announce <c>.@poisoned on</c> etc. on say (so other
-/// MudPlay clients mirror our state) and <c>@wait</c> the leader; on
-/// clear, say the balanced <c>.@poisoned off</c> and <c>@ok</c> the leader.
-/// The say only fires when in a party AND no cure spell is configured for that
-/// ailment; DoNotAnnounce* further gates the say, Ignore* gates the @wait —
-/// independently. Held announces bare <c>.@held</c> (no off-signal) and never
-/// telepaths <c>@wait</c> (its pause rides the say, released by @ok).
-/// </summary>
+// Outbound ailment-sync (AilmentSyncEngine): on a local VERBOSE ailment
+// (blind / confuse / disease / held), announce a BARE '.@blind' on say (MegaMUD
+// parity — no 'on'/'off' suffix) so other clients mirror our state; the four
+// curable ailments also @wait the leader. On CLEAR the engine says NOTHING (no
+// 'off' token) — the receiver clears the chip via a witnessed cure / spell-data
+// duration / par P drop / @status reconcile — it only @ok's the leader to release
+// the wait. POISON is NOT announced (an observer reads it from the par P flag) but
+// still telepaths its @wait. The say only fires when in a party AND no cure spell
+// is configured for that ailment; each Ignore<X> is the single per-ailment gate
+// that suppresses BOTH the say AND the @wait. Held telepaths @wait like the curable
+// four (plus its '.@held' say), balanced by @ok on clear; it has no Ignore gate.
 public sealed class AilmentSyncEngineTests
 {
     private sealed class Harness : IDisposable
@@ -98,21 +99,23 @@ public sealed class AilmentSyncEngineTests
     }
 
     [Fact]
-    public void Poisoned_AnnouncesSayAndWaits()
+    public void Poisoned_WaitsButDoesNotSay()
     {
         using Harness h = new();
         SeedAll(h);
 
         h.Feed("You have been poisoned!");
 
-        Assert.Equal(".@poisoned on\r", Assert.Single(h.Say));
+        // Poison is NOT announced verbosely — an observer reads it from the par
+        // `P` flag. It still telepaths its @wait to the leader.
+        Assert.Empty(h.Say);
         Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
     }
 
     [Theory]
-    [InlineData("blinded!",  ".@blind on\r")]
-    [InlineData("confused!", ".@confused on\r")]
-    [InlineData("diseased!", ".@diseased on\r")]
+    [InlineData("blinded!",  ".@blind\r")]
+    [InlineData("confused!", ".@confused\r")]
+    [InlineData("diseased!", ".@diseased\r")]
     public void EachAilment_UsesItsSayToken(string applied, string expected)
     {
         using Harness h = new();
@@ -124,28 +127,17 @@ public sealed class AilmentSyncEngineTests
     }
 
     [Fact]
-    public void DoNotAnnounce_SuppressesSay_ButWaitStillFires()
+    public void Ignore_SuppressesBothSayAndWait()
     {
+        // Ignore<X> is the single per-ailment gate: it suppresses BOTH the say
+        // announce AND the @wait telepath (one "I don't care about this" toggle).
         using Harness h = new();
         SeedAll(h);
-        h.Spells = new SpellsSettings { DoNotAnnouncePoison = true };
+        h.Spells = new SpellsSettings { IgnoreBlindness = true };
 
-        h.Feed("You have been poisoned!");
+        h.Feed("You have been blinded!");
 
         Assert.Empty(h.Say);
-        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
-    }
-
-    [Fact]
-    public void Ignore_SuppressesWait_ButSayStillFires()
-    {
-        using Harness h = new();
-        SeedAll(h);
-        h.Spells = new SpellsSettings { IgnorePoison = true };
-
-        h.Feed("You have been poisoned!");
-
-        Assert.Equal(".@poisoned on\r", Assert.Single(h.Say));
         Assert.Empty(h.Telepath);
     }
 
@@ -160,25 +152,26 @@ public sealed class AilmentSyncEngineTests
 
         // @wait then @ok on the telepath channel.
         Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
-        // Paired say toggle: '.@poisoned on' on apply, '.@poisoned off' on clear.
-        Assert.Equal(new[] { ".@poisoned on\r", ".@poisoned off\r" }, h.Say);
+        // Poison is not announced on say (observers read the par `P` flag) — so
+        // nothing lands on the say wire on apply or clear.
+        Assert.Empty(h.Say);
     }
 
     [Fact]
-    public void Cleared_WhenWaitWasIgnored_StillSaysOff()
+    public void Cleared_SendsBareApplyOnly_NoOffOnSay()
     {
+        // Blindness (verbose): the bare apply token is the ONLY say that ever goes
+        // out — there's no '.@blind off' on clear (MegaMUD parity). A receiver clears
+        // the chip via cure / duration / @status / @ok instead. The @wait/@ok telepath
+        // still balances on the leader channel.
         using Harness h = new();
         SeedAll(h);
-        h.Spells = new SpellsSettings { IgnorePoison = true };
 
-        h.Feed("You have been poisoned!");
-        h.Feed("The poison wears off.");
+        h.Feed("You have been blinded!");
+        h.Feed("Your vision returns.");
 
-        // @wait was ignored, so no telepath at all — the pre-fix stuck-chip bug
-        // (no @ok ever sent). The paired say toggle still fires, so the receiver
-        // clears the chip on '.@poisoned off' regardless of the @wait gate.
-        Assert.Empty(h.Telepath);
-        Assert.Equal(new[] { ".@poisoned on\r", ".@poisoned off\r" }, h.Say);
+        Assert.Equal(new[] { ".@blind\r" }, h.Say);   // apply only, no off
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -200,22 +193,40 @@ public sealed class AilmentSyncEngineTests
     }
 
     [Fact]
-    public void Held_AnnouncesSay_ButNeverTelepathsWait()
+    public void IgnoredAilment_DoesNotHoldOrTriggerOk()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.Spells = new SpellsSettings { IgnorePoison = true };   // push through poison
+
+        h.Feed("You have been poisoned!");  // ignored → no @wait reason placed
+        h.Feed("You have been blinded!");    // not ignored → @wait
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+
+        h.Feed("The poison wears off.");      // ignored poison clears → must NOT emit @ok
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+
+        h.Feed("Your vision returns.");       // last NON-ignored clears → @ok now
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
+    }
+
+    [Fact]
+    public void Held_AnnouncesSay_AndTelepathsWait()
     {
         using Harness h = new();
         SeedAll(h);
 
         h.Feed("You cannot move!");
 
-        // Held now rides the paired broadcast toggle like the curable four: '.@held on'
-        // on set (no @wait telepath — the leader-pause is driven by that say on the
-        // receiving side).
-        Assert.Equal(".@held on\r", Assert.Single(h.Say));
-        Assert.Empty(h.Telepath);
+        // Held broadcasts a bare '.@held' on set (MegaMUD parity — no 'on'/'off'
+        // suffix) AND telepaths @wait to the leader, like the curable four: the say
+        // lights the member's chip on the receiver, the @wait pauses the leader.
+        Assert.Equal(".@held\r", Assert.Single(h.Say));
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
     }
 
     [Fact]
-    public void Held_Cleared_SaysOff_AndSendsOk()
+    public void Held_Cleared_SendsNoSayOff_AndWaitOkTelepaths()
     {
         using Harness h = new();
         SeedAll(h);
@@ -223,12 +234,13 @@ public sealed class AilmentSyncEngineTests
         h.Feed("You cannot move!");
         h.Feed("You can move again.");
 
-        // The paired '.@held off' now broadcasts on clear — this is what finally
-        // clears the party-window HELD badge on every observer (reports
-        // paradigm-20260820-122200 / -153540). The @ok still balances the say-driven
-        // leader pause.
-        Assert.Equal(new[] { ".@held on\r", ".@held off\r" }, h.Say);
-        Assert.Equal("/Leader @ok\r", Assert.Single(h.Telepath));
+        // No '.@held off' on clear — MegaMUD sends no 'off' token. The bare '.@held'
+        // apply is the only say that ever goes out; observers clear the HELD badge via
+        // a witnessed cure, the spell-data duration timing out, or a @status reconcile
+        // (reports paradigm-20260820-122200 / -153540). On the leader channel the
+        // @wait (apply) is balanced by the @ok (clear).
+        Assert.Equal(new[] { ".@held\r" }, h.Say);
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -237,15 +249,17 @@ public sealed class AilmentSyncEngineTests
         using Harness h = new();
         SeedAll(h);
 
-        h.Feed("You cannot move!");       // silent Held reason, .@held say
-        h.Feed("You have been poisoned!"); // poison: say + (suppressed) @wait — leader already paused via @held
-        Assert.Empty(h.Telepath);          // no @wait telepath yet (Held holds the 0→1 slot silently)
+        h.Feed("You cannot move!");       // held: .@held say + @wait (0→1 transition)
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
 
-        h.Feed("You can move again.");      // Held clears; poison still holds
-        Assert.Empty(h.Telepath);
+        h.Feed("You have been poisoned!"); // poison: no say (par-driven); @wait already held (1→2, no new telepath)
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
+
+        h.Feed("You can move again.");      // Held clears; poison still holds → no @ok yet
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
 
         h.Feed("The poison wears off.");    // last reason clears → @ok
-        Assert.Equal("/Leader @ok\r", Assert.Single(h.Telepath));
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -279,7 +293,7 @@ public sealed class AilmentSyncEngineTests
     }
 
     [Fact]
-    public void CureHoldsConfigured_SuppressesHeldSay_AndNoOk()
+    public void CureHoldsConfigured_SuppressesHeldSay_ButWaitStillFires()
     {
         using Harness h = new();
         SeedAll(h);
@@ -288,10 +302,11 @@ public sealed class AilmentSyncEngineTests
         h.Feed("You cannot move!");
         h.Feed("You can move again.");
 
-        // Self-cure: nothing announced, and because the Held reason is only
-        // registered when we announce, there's no @ok either.
+        // Self-cure: the '.@held' say is suppressed (the cure gate is say-only), but
+        // the @wait still pauses the leader while we cast — same as the curable four —
+        // balanced by the @ok on clear.
         Assert.Empty(h.Say);
-        Assert.Empty(h.Telepath);
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
