@@ -24,12 +24,12 @@
 
     <!-- MaxWidth keeps the tab from forcing the workshop window ultra-wide: without
          it the wrapping instructions text measures at infinite width. -->
-    <Grid Margin="22" MaxWidth="900" RowDefinitions="Auto,Auto,*,Auto">
+    <Grid Margin="22" MaxWidth="900" RowDefinitions="Auto,Auto,Auto,*,Auto">
 
         <!-- Header: instructions + live phase readout. -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,8">
             <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" TextWrapping="Wrap"
-                       Text="Right-click a map room → 'Toggle: Roomba Room' (or add one by number below) and set its sort rules, then Start Sweep to sort or Start Inventory to just scan and log without moving anything (needs 2+ rooms set to Actively Manage). Only 'Actively Manage' rooms are visited — this is per character, so alts in different gang houses each pick their own; rooms adopted from a @roomba sync start off, so Roomba never walks to another gang house. Double-click a room for its contents; 'Roomba Log' has the full run."/>
+                       Text="Right-click a map room → 'Toggle: Roomba Room' (or add one by number below) and set its sort rules, then Start Sweep to sort or Start Inventory to just scan and log without moving anything (needs 2+ rooms set to Actively Manage). Only 'Actively Manage' rooms are visited — this is per character, so alts in different gang houses each pick their own; rooms adopted from a @roomba sync start off, so Roomba never walks to another gang house. Each row below is one of a room's sort rules, so Edit / Remove change a single rule and leave the room's others alone. Double-click a room for its contents; 'Roomba Log' has the full run."/>
             <TextBlock Text="{Binding PhaseText}"
                        Foreground="{StaticResource ChromeFgBrush}"
                        FontWeight="SemiBold"
@@ -84,11 +84,25 @@
             </TextBlock>
         </WrapPanel>
 
-        <!-- Labeled rooms grid (double-click a row → its current contents below) -->
-        <DataGrid Grid.Row="2"
+        <!-- Selection actions for the grid below: one row is one sort rule, and both
+             buttons act on whatever is highlighted rather than on a row of their own. -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+            <Button Content="Edit" Command="{Binding EditSelectedCommand}" IsEnabled="{Binding CanEditSelection}"
+                    ToolTip.Tip="Open the highlighted row's room in the rule picker — fix what it sorts, add another rule, or flag it as the catch-all."/>
+            <Button Content="Remove" Command="{Binding RemoveSelectedCommand}" IsEnabled="{Binding CanRemoveSelection}"
+                    ToolTip.Tip="Drop the highlighted sort rule(s). The room stays on the list while it still has another rule (or is a catch-all); it leaves once nothing is left to sort by."/>
+            <TextBlock VerticalAlignment="Center" Margin="6,0,0,0"
+                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                       Text="Acts on the highlighted row(s) — ctrl/shift-click to pick several."/>
+        </StackPanel>
+
+        <!-- Labeled rooms grid, one row per sort rule (double-click → room contents below) -->
+        <DataGrid Grid.Row="3"
                   Name="RoomsGrid"
                   ItemsSource="{Binding Rooms}"
                   DoubleTapped="OnRoomDoubleTapped"
+                  SelectionMode="Extended"
+                  SelectionChanged="OnRoomsSelectionChanged"
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="1"
                   BorderBrush="{StaticResource ChromeBorderBrush}"
@@ -115,16 +129,13 @@
                 </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Status" Binding="{ReflectionBinding Status}"
                                     Width="90" Foreground="{StaticResource ChromeFgBrush}"/>
-                <DataGridTextColumn Header="Sorts" Binding="{ReflectionBinding CategoryText}"
+                <DataGridTextColumn Header="Sort" Binding="{ReflectionBinding CategoryText}"
                                     Width="200" Foreground="{StaticResource ChromeFgBrush}"/>
                 <DataGridTemplateColumn Header="" Width="Auto">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="vm:GhRoomLabelRowViewModel">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Content="Goto" Command="{Binding GotoCommand}"
-                                        ToolTip.Tip="Open the map and walk to this room now."/>
-                                <Button Content="Remove" Command="{Binding RemoveCommand}"/>
-                            </StackPanel>
+                            <Button Content="Goto" Command="{Binding GotoCommand}"
+                                    ToolTip.Tip="Open the map and walk to this room now."/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -132,7 +143,7 @@
         </DataGrid>
 
         <!-- Room contents (from double-click) — the current floor after the sweep. -->
-        <StackPanel Grid.Row="3" Spacing="4" Margin="0,10,0,0"
+        <StackPanel Grid.Row="4" Spacing="4" Margin="0,10,0,0"
                     IsVisible="{Binding RoomContentsTitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
             <TextBlock Classes="SectionHeader" Text="{Binding RoomContentsTitle}"/>
             <Border Padding="8" Background="{StaticResource ChromeBgElevBrush}"
