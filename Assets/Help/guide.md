@@ -176,7 +176,7 @@ Three areas:
 - The **map** on the left.
 - A **right rail** of collapsible panels: **ROOM INFO** (records for the last-clicked room — see below), **CURRENT NAV** (the live step list), **GOTO** (your favourites), **LOOPS + AUTO-LAIRS** (your saved circuits), and **EXP/HR ESTIMATOR** — with a **Navigation Management** button at the bottom for full editing.
 
-A row of action chips — **Save**, **Run**, **Loop mode**, **Lair mode** — sits just above the map.
+A row of action chips — **Save**, **Run**, **Loop mode**, **Lair mode** — sits just above the map. While you're in Loop mode a **Clear all** chip appears to the left of **Save**; it wipes every step from the loop you're building so you can start fresh.
 
 Any label too long for a narrow rail is trimmed with an ellipsis — **hover it to read the full text**. This covers the status line, the GOTO / loop / lair / favourite rows, the live CURRENT NAV step list, search results, folder names, and the EXP/HR estimator rows.
 
@@ -197,9 +197,11 @@ If you **type a movement command yourself** while a walk, loop, or auto-lair is 
 
 A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and looting as it goes. To build one the quick way:
 
-1. Click the **Loop mode** chip (it changes to **Building**).
+1. Click the **Loop mode** chip (it changes to **Building**). If you've run a loop this session, it's **pre-loaded** into the builder so you can **Run** it straight away or re-**Save** it — handy when a stop / `@stop` dropped you off one, or you ran an ad-hoc loop you never saved. Hit **Clear all** to wipe it and build a fresh one instead. (Turn the pre-load off under **Settings → General → "Load last ran loop"** if you'd rather always start empty.)
 2. **Left-click the rooms on the map, in order** — each becomes a waypoint. Reorder or remove them in the **CURRENT NAV** rail.
 3. Click **Run** to save and start it (you'll name it), or **Save** to keep it without running.
+
+To put yourself (or a party member) back on the **last loop run this session** without reopening the builder, use the **`@loop last`** remote command — it re-runs it even if it was an ad-hoc loop that was never saved. This works regardless of the "Load last ran loop" setting above.
 
 Or build it off the map: **Navigation Management → New Loop** opens an editor where you add rooms by name or key, name and annotate the loop, and set per-waypoint options.
 
@@ -384,7 +386,7 @@ Active party members get a few things for free regardless of the grid: the party
 | Command | Args | Does |
 |---|---|---|
 | `@goto` | `<destination>` | walks you to a saved GOTO favorite, a searched room (coords / name / acronym), or a boss |
-| `@loop` | `<name>` or ≥2 coords | starts a saved loop, or an ad-hoc coordinate loop |
+| `@loop` | `<name>`, ≥2 coords, or `last` | starts a saved loop, an ad-hoc coordinate loop, or (`@loop last`) re-runs the last loop run this session — including an ad-hoc one that was never saved |
 | `@lair` | `<name>` or coords | starts an Auto-Lair setup |
 | `@stop` | — | pauses your movement |
 | `@rego` | — | resumes it |
@@ -1063,6 +1065,12 @@ Settings → General. Everything here is character-tier (follows the loaded char
 **Default:** Off
 **What it does:** Dials the profile's saved BBS the instant the profile finishes loading, instead of waiting for you to click Connect.
 **Important notes:** Only checked once, right when a profile loads — not something that re-triggers mid-session. This covers **every** way a profile loads: opening one from File → Open / Recent, **launching** straight into it (a `--profile` start, or a new instance spawned by the Profile Management window's **Load**), and swapping between profiles.
+
+### Load last ran loop
+
+**Default:** On
+**What it does:** When checked, hitting the Navigation window's **Loop mode** chip pre-loads the last loop you ran this session into the builder — ready to **Run** again or re-**Save**, or to wipe with **Clear all** and build fresh. This is what gets you back on a loop quickly after a stop / `@stop`, or lets you re-run an ad-hoc loop you never saved. Uncheck it to have the Loop chip always open an empty builder.
+**Important notes:** Independent of the **`@loop last`** remote command, which re-runs the last loop regardless of this setting (the client always remembers the last loop run this session).
 
 ### Backup profile when making changes
 

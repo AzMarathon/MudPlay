@@ -262,7 +262,24 @@ public sealed class MovePlayerHandler : IDisposable
     private void OnLoop(RemoteCommandContext ctx)
     {
         string raw = string.Join(' ', ctx.Args).Trim();
-        if (raw.Length == 0) { ctx.Reply("@loop requires a name or coordinate list"); return; }
+        if (raw.Length == 0) { ctx.Reply("@loop requires a name, coordinate list, or 'last'"); return; }
+
+        // "@loop last" re-runs the most recent loop this session — including an
+        // ad-hoc, never-saved one (LoopRunner keeps the whole snapshot, not just its
+        // name). The fast way to put someone back on their loop after a stop/@stop
+        // without re-sending the name or coords.
+        if (string.Equals(raw, "last", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_loopRunner.LastRunLoop is not { } last)
+            {
+                ctx.Reply("no loop has run yet this session");
+                return;
+            }
+            StopConflictingEngines(ctx.Sender, keep: SupersedeKeep.Loop);
+            _loopRunner.Start(last);
+            ctx.Reply($"restarting last loop '{last.Name}' ({last.Waypoints.Count} rooms)");
+            return;
+        }
 
         if (RoomSearchService.TryParseCoordList(raw) is { Count: >= 2 } coords)
         {

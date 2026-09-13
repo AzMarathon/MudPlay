@@ -22,6 +22,14 @@ public sealed class GeneralSettings
     // Connect to the configured BBS as soon as the profile loads.
     public bool AutoConnect { get; set; }
 
+    // When on (the default), entering Loop-build mode (the Navigation window's Loop
+    // chip) pre-loads the last loop run this session into the builder — ready to Run
+    // again or re-Save, or to wipe with "Clear all" and build fresh. Off restores the
+    // old behavior (the Loop chip opens an empty builder). Independent of the @loop
+    // last remote command, which re-runs the last loop regardless of this toggle.
+    // Char-tier; surfaced in Settings → General.
+    public bool LoadLastRanLoop { get; set; } = true;
+
     // Before persisting changes, copy the existing profile JSON to
     // {name}.json.bak. Off by default; users who want a safety net for
     // hand-edits or settings churn can flip it on.
