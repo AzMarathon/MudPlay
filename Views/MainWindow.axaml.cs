@@ -238,7 +238,7 @@ public partial class MainWindow : Window
         HelpMenu.Items.Add(new Separator());
         HelpMenu.Items.Add(new MenuItem
         {
-            Header  = "Check for updates…",
+            Header  = "Update the Client",
             Command = vm.OpenUpdateCommand,
             [ToolTip.TipProperty] = "See whether a newer build is available and install it.",
         });

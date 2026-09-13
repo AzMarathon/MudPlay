@@ -4,7 +4,8 @@ namespace MudPlay.Services.Update;
 // this process exits — the running executable and its loaded libraries can't be
 // overwritten in place, so the app stages the new build, spawns one of these, and
 // quits; the helper waits for the PID to die, replaces the install (keeping a
-// backup for rollback), relaunches, and cleans up.
+// backup for rollback), relaunches, and cleans up. On success it removes the staged
+// download, the rollback backup, AND itself — no update leftovers survive in temp.
 //
 // Pure string generation so the scripts can be unit-tested without running them.
 // Every path is passed as a positional argument (never interpolated into the body)
@@ -41,10 +42,14 @@ public static class SwapScriptBuilder
         fi
         chmod +x "$EXE" 2>/dev/null || true
 
-        # Relaunch the new build, then clean up staging + the backup.
+        # Relaunch the new build, then clean up: the staged download (STAGE holds the
+        # archive + the extracted tree), the rollback backup, and finally this helper
+        # itself. Deleting $0 last is safe — bash keeps its open fd to the (now
+        # unlinked) script, so it still reads to EOF and exits 0.
         "$EXE" >/dev/null 2>&1 &
         rm -rf "$STAGE"
         rm -rf "$BAK"
+        rm -f "$0"
         exit 0
         """;
 
@@ -79,6 +84,8 @@ public static class SwapScriptBuilder
         start "" "%EXE%"
         rmdir /s /q "%STAGE%"
         rmdir /s /q "%BAK%"
-        exit /b 0
+        rem Pop the batch context so cmd stops reading this file, then delete it — a
+        rem .cmd can't del itself while cmd is still line-reading it.
+        (goto) 2>nul & del "%~f0"
         """;
 }

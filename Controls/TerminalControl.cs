@@ -264,8 +264,8 @@ public sealed class TerminalControl : Control
             {
                 _splash = new MudSplashAnimator(cols, rows, SplashAnimate);
                 _splash.FrameAdvanced += OnSplashFrame;
-                // Flank the title with red UPDATE banners when a newer build has been
-                // detected — seed from the current verdict (the startup check may have
+                // Flank the title with red UPDATE AVAILABLE!!! banners when a newer build
+                // has been detected — seed from the current verdict (the startup check may have
                 // already finished) and follow later flips via AvailabilityChanged.
                 _splash.UpdateAvailable = MudPlay.Services.AppServices.Current.Update.UpdateAvailable;
                 if (!_updateSubHooked)

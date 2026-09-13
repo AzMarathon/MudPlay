@@ -171,6 +171,10 @@ public sealed class UpdateServiceTests
         Assert.Contains("mv \"$DST\" \"$BAK\"", s);
         Assert.Contains("mv \"$NEW\" \"$DST\"", s);
         Assert.Contains("\"$EXE\"", s);
+        // On success it cleans up the staged download, the backup, and itself.
+        Assert.Contains("rm -rf \"$STAGE\"", s);
+        Assert.Contains("rm -rf \"$BAK\"", s);
+        Assert.Contains("rm -f \"$0\"", s);
     }
 
     [Fact]
@@ -184,5 +188,62 @@ public sealed class UpdateServiceTests
         Assert.Contains("robocopy", s);
         Assert.Contains("errorlevel 8", s);
         Assert.Contains("start \"\" \"%EXE%\"", s);
+        // On success it cleans up staging + backup and deletes itself.
+        Assert.Contains("rmdir /s /q \"%STAGE%\"", s);
+        Assert.Contains("del \"%~f0\"", s);
     }
+
+    // ----- ChangelogExtractor --------------------------------------------------
+
+    private const string SampleChangelog =
+        "# Version history\n" +
+        "\n" +
+        "## 3.79.0\n" +
+        "\n" +
+        "- Auto-detect completed quests from flags\n" +
+        "- Quest editor complete-value spinner\n" +
+        "- bug reports addressed: foo-123, bar-456\n" +
+        "\n" +
+        "## 3.78.0\n" +
+        "\n" +
+        "- Self-update feature\n";
+
+    [Fact]
+    public void TopEntry_ReturnsMatchingVersionBullets_DropsHeadingAndBugLine()
+    {
+        string? notes = ChangelogExtractor.TopEntry(SampleChangelog, "3.79.0");
+        Assert.Equal(
+            "- Auto-detect completed quests from flags\n- Quest editor complete-value spinner",
+            notes);
+    }
+
+    [Fact]
+    public void TopEntry_NoVersion_FallsBackToTopEntry()
+    {
+        string? notes = ChangelogExtractor.TopEntry(SampleChangelog);
+        Assert.StartsWith("- Auto-detect completed quests", notes);
+        Assert.DoesNotContain("Self-update", notes);        // stops at the next ## heading
+    }
+
+    [Fact]
+    public void TopEntry_PicksTheNamedOlderEntry_NotJustTheTop()
+    {
+        string? notes = ChangelogExtractor.TopEntry(SampleChangelog, "3.78.0");
+        Assert.Equal("- Self-update feature", notes);
+    }
+
+    [Fact]
+    public void TopEntry_ToleratesLeadingV_InVersion()
+        => Assert.StartsWith("- Auto-detect", ChangelogExtractor.TopEntry(SampleChangelog, "v3.79.0"));
+
+    [Fact]
+    public void TopEntry_UnknownVersion_FallsBackToTopEntry()
+        => Assert.StartsWith("- Auto-detect", ChangelogExtractor.TopEntry(SampleChangelog, "9.9.9"));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("# Version history\n\nno entries here\n")]   // no ## heading
+    public void TopEntry_ReturnsNull_WhenNothingToShow(string md)
+        => Assert.Null(ChangelogExtractor.TopEntry(md));
 }

@@ -68,7 +68,8 @@ public sealed class UpdateInstaller
             string newRoot = ResolveNewRoot(staging, exeName);
 
             // Write the swap helper OUTSIDE the work dir (it deletes work at the end,
-            // so it mustn't delete itself while running).
+            // so `rm -rf work` mustn't remove the helper before it's done). The helper
+            // deletes itself as its final step, so no update leftovers survive in temp.
             bool windows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
             string scriptPath = Path.Combine(Path.GetTempPath(),
                 $"mudplay-swap-{Guid.NewGuid():N}{(windows ? ".cmd" : ".sh")}");

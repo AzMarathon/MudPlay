@@ -25,9 +25,9 @@ public sealed class GlobalSettings
     public bool AutoLoadLastProfile { get; set; }
 
     // When true (the default), the app checks GitHub Releases for a newer build on
-    // startup and, if one exists, flags it (red banners on the splash + a Help-menu
+    // startup and, if one exists, flags it (red banners on the splash + a menu
     // entry) — it never downloads or installs on its own; the user triggers the
-    // update from Help → Check for updates. App-wide (Global tier); only meaningful
+    // update from Help / Tools → Update the Client. App-wide (Global tier); only meaningful
     // for a published self-contained install, a no-op for a `dotnet run` dev build.
     public bool CheckForUpdatesOnStartup { get; set; } = true;
 

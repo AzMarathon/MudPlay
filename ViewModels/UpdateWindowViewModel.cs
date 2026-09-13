@@ -11,7 +11,7 @@ using MudPlay.Services.Update;
 
 namespace MudPlay.ViewModels;
 
-// Backs Help → Check for updates. Reads the UpdateService's cached verdict (or
+// Backs Help / Tools → Update the Client. Reads the UpdateService's cached verdict (or
 // kicks a fresh check when none exists) and — only on the user's explicit
 // request — downloads, verifies, swaps the new build in, and relaunches. The
 // window is modeless; the only state it owns is transient UI (progress, button

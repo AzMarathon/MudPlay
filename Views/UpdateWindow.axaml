@@ -6,7 +6,7 @@
         mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="240"
         x:Class="MudPlay.Views.UpdateWindow"
         x:DataType="vm:UpdateWindowViewModel"
-        Title="Check for Updates"
+        Title="Update the Client"
         Width="520" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"

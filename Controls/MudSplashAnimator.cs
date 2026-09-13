@@ -28,14 +28,14 @@ public sealed class MudSplashAnimator : IDisposable
     // that flank the title when a newer build has been detected.
     private static readonly CellAttributes UpdateBanner =
         SplashCanvas.Rgb(255, 236, 236).WithBackground(TerminalColor.Rgb(176, 32, 32));
-    private const string UpdateBannerText = " UPDATE ";
+    private const string UpdateBannerText = " UPDATE AVAILABLE!!! ";
 
     public TerminalScreen Screen { get; private set; }
     public bool IsPlaying { get; private set; }
 
-    // When true, two red "UPDATE" banners flank the title (a newer build is
-    // available). Set from the update service via TerminalControl; toggling it
-    // redraws the header immediately.
+    // When true, two red "UPDATE AVAILABLE!!!" banners flank the title (a newer
+    // build is available). Set from the update service via TerminalControl;
+    // toggling it redraws the header immediately.
     public bool UpdateAvailable
     {
         get => _updateAvailable;
@@ -177,10 +177,11 @@ public sealed class MudSplashAnimator : IDisposable
         if (_updateAvailable) DrawUpdateBanners(s, titleX, title.Length);
     }
 
-    // Two red "UPDATE" tags flanking the title on its row — an at-a-glance "a newer
-    // build is available; use Help → Check for updates". Each is drawn with an opaque
-    // red background (spaces included) so it reads as a solid banner; skipped when the
-    // terminal is too narrow to fit either without colliding with the title.
+    // Two red "UPDATE AVAILABLE!!!" tags flanking the title on its row — an
+    // at-a-glance "a newer build is available; use Help → Update the Client". Each is
+    // drawn with an opaque red background (spaces included) so it reads as a solid
+    // banner; skipped when the terminal is too narrow to fit either without colliding
+    // with the title.
     private static void DrawUpdateBanners(TerminalScreen s, int titleX, int titleLen)
     {
         const int gap = 2;

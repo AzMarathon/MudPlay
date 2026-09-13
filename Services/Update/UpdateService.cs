@@ -19,6 +19,8 @@ public sealed class UpdateService : IDisposable
 {
     private const string LatestReleaseApi =
         "https://api.github.com/repos/Tehshortbus/MudPlay/releases/latest";
+    private const string RawContentBase =
+        "https://raw.githubusercontent.com/Tehshortbus/MudPlay";
     private const string ChecksumAssetName = "SHA256SUMS.txt";
 
     private readonly HttpClient _http;
@@ -60,15 +62,20 @@ public sealed class UpdateService : IDisposable
                 return Store(new(UpdateAvailability.UpToDate, current, rel.Version,
                     null, null, rel.HtmlUrl, rel.Notes, null));
 
+            // A newer build: show its CHANGELOG entry, not the hand-authored release
+            // body (that's publish boilerplate — the asset table + checksum notes).
+            // Fall back to the release body if the changelog can't be fetched/parsed.
+            string? notes = await TryFetchChangelogNotesAsync(rel, ct).ConfigureAwait(false) ?? rel.Notes;
+
             UpdateAsset? asset = rel.Assets.FirstOrDefault(a => UpdatePlatform.MatchesCurrentPlatform(a.Name));
             if (asset is null)
                 return Store(new(UpdateAvailability.NoAssetForPlatform, current, rel.Version,
-                    null, null, rel.HtmlUrl, rel.Notes, null));
+                    null, null, rel.HtmlUrl, notes, null));
 
             string? sha = await TryResolveChecksumAsync(rel, asset.Name, ct).ConfigureAwait(false);
             _log?.Info("Update", $"update available: {current} → {rel.Version} ({asset.Name}, {asset.Size / (1024 * 1024)} MB)");
             return Store(new(UpdateAvailability.UpdateAvailable, current, rel.Version,
-                asset, sha, rel.HtmlUrl, rel.Notes, null));
+                asset, sha, rel.HtmlUrl, notes, null));
         }
         catch (OperationCanceledException)
         {
@@ -95,6 +102,23 @@ public sealed class UpdateService : IDisposable
 
         var installer = new UpdateInstaller(_http, _log);
         return await installer.ApplyAsync(result, progress, onExit, ct).ConfigureAwait(false);
+    }
+
+    // Fetch CHANGELOG.md at the release's tag and pull out that version's entry — the
+    // real "what's new" the update window shows. Best-effort: a null (repo has no
+    // CHANGELOG at that ref, network hiccup, unparsable) falls back to the release body.
+    private async Task<string?> TryFetchChangelogNotesAsync(UpdateRelease rel, CancellationToken ct)
+    {
+        string url = $"{RawContentBase}/{rel.RawTag}/CHANGELOG.md";
+        try
+        {
+            string md = await _http.GetStringAsync(url, ct).ConfigureAwait(false);
+            return ChangelogExtractor.TopEntry(md, rel.Version);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // Fetch SHA256SUMS.txt (if the release carries it) and pull out the checksum for
