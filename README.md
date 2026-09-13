@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.77.3**
-> - Retired the defunct one-time message-data migrations (pre-split retirement + forced reseed) now that their rollout window has passed — the shipped message seed already refreshes itself on launch
-> - Documented the clean-install fallback for anyone jumping from a very old build whose catalogue still looks stale
+> **Version 3.77.4**
+> - macOS Cmd+C now copies the selection in the Backscroll and Conversation windows (previously only Ctrl+C or right-click → Copy worked there)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

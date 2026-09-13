@@ -1,5 +1,9 @@
 # Version history
 
+## 3.77.4
+
+- macOS Cmd+C now copies the selection in the Backscroll and Conversation windows (previously only Ctrl+C or right-click → Copy worked there)
+
 ## 3.77.3
 
 - Retired the defunct one-time message-data migrations (pre-split retirement + forced reseed) now that their rollout window has passed — the shipped message seed already refreshes itself on launch

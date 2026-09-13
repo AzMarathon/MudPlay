@@ -217,7 +217,8 @@ public partial class ConversationWindow : Window
     }
 
     // Row-list keys: Escape clears the selection (so a clicked line doesn't stay
-    // highlighted until it scrolls off), Ctrl+C copies the selected line(s) as text.
+    // highlighted until it scrolls off), Ctrl+C / Cmd+C copies the selected line(s)
+    // as text.
     private void OnRowsKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
@@ -226,7 +227,10 @@ public partial class ConversationWindow : Window
             e.Handled = true;
             return;
         }
-        if (e.Key == Key.C && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        // Accept Meta (Cmd) as well as Control so the native macOS copy chord works
+        // here, not just Ctrl+C.
+        if (e.Key == Key.C &&
+            (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)))
         {
             CopyRows(SelectedRows());
             e.Handled = true;

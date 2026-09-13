@@ -772,7 +772,7 @@ Each channel has its own color, and web links inside a message are clickable. Pa
 
 **Actions / emotes** (the socials from your board's `action list` — `hug`, `wave`, `smile`, `tickle`, and so on) are pulled in too, whether you perform them, someone aims one at you, or you just witness one in the room. They show under the **SAY** chip (they're room-local, like say) with the message text in **green** — the board's own color for them. Since the obvious-exits line is also fully green, MudPlay only captures true actions: your own start with "You <verb>", and someone else's must come from a **player who's actually in your room** — so obvious exits, room-entry/exit, and party-follow movement never get mistaken for an emote.
 
-**Selecting and copying:** click a line to select it, and click more lines to add them (each click toggles that line, so clicking a highlighted line again unselects it). You can also **click-hold and drag** across several lines to select — or deselect — a whole run at once; the line you press on sets the direction. With one or more lines selected, **Ctrl+C** or **right-click → Copy** puts the whole entry — time, speaker, and message — on the clipboard as plain text (one line per entry). Press **Escape** to clear the whole selection at once.
+**Selecting and copying:** click a line to select it, and click more lines to add them (each click toggles that line, so clicking a highlighted line again unselects it). You can also **click-hold and drag** across several lines to select — or deselect — a whole run at once; the line you press on sets the direction. With one or more lines selected, **Ctrl+C** (**⌘C** on macOS) or **right-click → Copy** puts the whole entry — time, speaker, and message — on the clipboard as plain text (one line per entry). Press **Escape** to clear the whole selection at once.
 
 ## Filtering and searching
 
@@ -813,7 +813,7 @@ Press **Alt+L** to open **Backscroll** — the full terminal history, including 
 - **Search** — type a term and press **Enter** (or **Find next**) to step through matches, newest to oldest, wrapping back to the top. The footer shows the line count and how many matches were found.
 - **Jump to end** — return to the newest line.
 - **Export…** — save the whole transcript to a text file, each line prefixed with its timestamp.
-- Drag to select a region, then **Ctrl+C** or **right-click → Copy** to put it on the clipboard as plain text. Right-click → **Select all** grabs the whole transcript to copy at once.
+- Drag to select a region, then **Ctrl+C** (**⌘C** on macOS) or **right-click → Copy** to put it on the clipboard as plain text. Right-click → **Select all** grabs the whole transcript to copy at once.
 
 Backscroll is a **snapshot taken when you open it**, not a live tail — to pick up newer output, close and reopen it (nothing is lost in the meantime). The transcript renders in your **terminal font** (family and size), so history looks exactly like the live screen; that font is captured when the window opens, so changing it takes effect the next time you open Backscroll.
 
