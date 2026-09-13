@@ -857,6 +857,16 @@ public sealed class AppServices
     // MainWindowViewModel subscribes to write the terminal line and fires the login dump.
     public Game.Quests.QuestAvailabilityAnnouncer QuestAvailability { get; }
 
+    // Reads the character's live quest-flag values off the wire (realm-aware). Its send is
+    // bound after telnet connects and its LineExtractor is attached in MainWindowViewModel,
+    // like the other probes.
+    public Game.Quests.QuestFlagProbe QuestFlagReader { get; private set; } = null!;
+
+    // Login-time quest-flag completion sync (opt-in per character): reads the flags via
+    // QuestFlagReader and marks newly-complete quests. Run by MainWindowViewModel before the
+    // availability dump.
+    public Game.Quests.QuestFlagSyncManager QuestFlagSync { get; private set; } = null!;
+
     // Loaded character's Models.GameData.Macro store.
     // Surfaced by the Game Data Browser → Macros tab; the
     // MacroManager engine intercepts keystrokes and dispatches from
@@ -5211,6 +5221,10 @@ public sealed class AppServices
         // Self bank-balance probe — sends `bank` and parses the deposit listing.
         BankBalance = new Game.Remote.BankBalanceProbe(send: cmd => SendGameCommand(cmd), log: Log);
 
+        // Quest-flag reader — sends `abil <flag>` (paradigm) / `sys god <name> abil` (stock)
+        // and parses the flag values. Consumed by QuestFlagSync at login.
+        QuestFlagReader = new Game.Quests.QuestFlagProbe(send: cmd => SendGameCommand(cmd), log: Log);
+
         // Base auto-search — a room-wide `sea` reveals hidden items for the
         // auto-get engines. Armed by the persisted master toggle OR the transient
         // path-item demand gate above. A search won't run mid-combat, so the engine
@@ -6164,6 +6178,20 @@ public sealed class AppServices
             // In the realm only once a status line has been observed — keeps the
             // login dump off the character-select / main menu.
             isInRealm: () => PlayerState.HasPromptData,
+            log: Log);
+
+        // Login-time quest-flag completion sync. Reads flags via QuestFlagReader, marks any
+        // quest whose flag has reached its (crawl-derived or user-overridden) complete value.
+        // Sysop-gate: the stock bulk read needs sys-god powers on the active BBS.
+        QuestFlagSync = new Game.Quests.QuestFlagSyncManager(
+            GameData, Profile, Quests, QuestFlagReader,
+            realm: () => GameData.ActiveRealm,
+            // Stock's bulk `sys god <name> abil` read needs sys-god access — the same
+            // capability the god-lives recovery uses.
+            hasSysopPowers: SysopGodLivesEnabledHere,
+            characterName: () => PlayerStats.Name,
+            classId: () => Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class),
+            enabled: () => ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").AutoSyncQuestFlagsOnLogin,
             log: Log);
 
         AutoDeposit = new Game.Cash.AutoDepositManager(

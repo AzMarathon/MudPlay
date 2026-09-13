@@ -431,7 +431,10 @@ public static class QuestCrawler
             yield return new CrawledQuest(
                 flag, upper, level, bonuses, awards, classRestrict, raceRestrict, classLevels,
                 BandOrdinal: i + 1, StepRangeStart: rangeStart, StepRangeEnd: rangeEnd,
-                ProgressByValue: true, ExpAward: exp, RequiredAlignment: alignment);
+                ProgressByValue: true, ExpAward: exp, RequiredAlignment: alignment,
+                // A value-laddered band tops out at its own boundary value (MageBane 1→4);
+                // its climbed ability value IS the completion mark.
+                CompleteValue: DetectableValue(upper));
         }
     }
 
@@ -518,8 +521,20 @@ public static class QuestCrawler
         int exp = SumDistinctStepExp(chains.Select(c => (c.GiveStep, c.Exp)));
         return new CrawledQuest(
             flag, 0, requiredLevel, bonuses, awardItems, classRestrict, raceRestrict, classLevels,
-            AwardsAbility: awardsAbility, ExpAward: exp, RequiredAlignment: alignment);
+            AwardsAbility: awardsAbility, ExpAward: exp, RequiredAlignment: alignment,
+            CompleteValue: DetectableValue(MaxGiveValue(chains)));
     }
+
+    // The highest absolute value any `giveability <flag> V` sets across a flag's chains —
+    // the terminal value a completed give-step quest reaches. 0 when the flag is only ever
+    // set to 0 (Perfect Stealth) or never set absolutely.
+    private static int MaxGiveValue(IEnumerable<ParsedChain> chains) =>
+        chains.Select(c => c.GiveStep).DefaultIfEmpty(0).Max();
+
+    // A completion value the client can actually detect via `abil`, or null: a flag that
+    // tops out at 0 reads identically whether or not the quest is done, so it can't be
+    // auto-marked and is left to the manual checkbox / the editor override.
+    private static int? DetectableValue(int value) => value > 0 ? value : null;
 
     // A multi-part quest: one quest per ladder tier. Each band carries the reward group
     // and keeper items that fall in it, class-resolved; its required level is the band
@@ -579,10 +594,17 @@ public static class QuestCrawler
             int rangeStart = i == 0 ? 1 : ladder[i].Step;
             int rangeEnd = i == ladder.Count - 1 ? int.MaxValue : ladder[i + 1].Step - 1;
 
+            // A tier completes at the highest actual give value that falls inside its range —
+            // NOT the range's upper edge (which runs up to the next tier's entry). So the
+            // Evil tiers, whose gives land at 2 / 3 / 11 / 13 / 31, complete at those values
+            // rather than at the gaps between them.
+            int? completeValue = DetectableValue(
+                chains.Select(c => c.GiveStep).Where(v => v <= rangeEnd).DefaultIfEmpty(0).Max());
+
             yield return new CrawledQuest(
                 flag, level, level, bonuses, items, classRestrict, raceRestrict, classLevels,
                 BandOrdinal: i + 1, StepRangeStart: rangeStart, StepRangeEnd: rangeEnd, ExpAward: exp,
-                RequiredAlignment: alignment);
+                RequiredAlignment: alignment, CompleteValue: completeValue);
         }
     }
 

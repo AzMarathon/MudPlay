@@ -82,4 +82,39 @@ public sealed class QuestEditRowViewModelTests
         Assert.Equal("Witchhunter, Priest", row.ClassRestrictSummary);
         Assert.Equal(new List<int> { 3, 8 }, row.SelectedClassNumbers());
     }
+
+    // A crawled row whose complete-value box is exercised: prefilled from the crawl, and
+    // diffed on save so an unchanged value collapses but an edit persists.
+    private static QuestEditRowViewModel CompleteRow(int? autoComplete, int? overrideValue = null) =>
+        new(50, 1, "Fallback", autoSteps: "", autoRewards: "", bonusText: "",
+            levelText: "", autoRequiredLevel: 0, requirementsText: "",
+            name: "Fallback", visible: true, steps: "", rewards: "",
+            requiredLevel: null, ineligible: false, showIfIneligible: false,
+            classOptions: null, autoCompleteValue: autoComplete, completeValueOverride: overrideValue);
+
+    [Fact]
+    public void CompleteValue_PrefillsFromCrawl_AndCollapsesWhenUnchanged()
+    {
+        QuestEditRowViewModel row = CompleteRow(autoComplete: 9);
+        Assert.Equal(9, row.CompleteValueInput);            // prefilled from the crawl
+        Assert.Null(row.ToDefinition().CompleteValueOverride); // still equal to baseline → no delta
+    }
+
+    [Fact]
+    public void CompleteValue_EditedValuePersistsAsOverride()
+    {
+        QuestEditRowViewModel row = CompleteRow(autoComplete: 9);
+        row.CompleteValueInput = 12;                        // correct the crawl's guess
+        Assert.Equal(12, row.ToDefinition().CompleteValueOverride);
+    }
+
+    [Fact]
+    public void CompleteValue_SuppliedWhenCrawlHadNone()
+    {
+        // Crawl derived nothing (undetectable); the user fills one in and it persists.
+        QuestEditRowViewModel row = CompleteRow(autoComplete: null);
+        Assert.Null(row.CompleteValueInput);
+        row.CompleteValueInput = 4;
+        Assert.Equal(4, row.ToDefinition().CompleteValueOverride);
+    }
 }

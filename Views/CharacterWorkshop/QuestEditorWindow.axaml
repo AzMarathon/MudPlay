@@ -87,19 +87,30 @@
                          Text="{Binding SelectedQuest.Name, Mode=TwoWay}"
                          PlaceholderText="(unnamed — shows the flag id)"/>
 
-                <!-- Required level — pre-filled with the crawled minlevel (blank when the
-                     crawl found none); override it when the gate lives in a chain the crawl
-                     can't see, or clear it to fall back to the crawl. -->
-                <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10"
-                            Margin="0,8,0,0" VerticalAlignment="Center">
-                    <TextBlock Classes="Label" Margin="0" Text="Required level"
-                               VerticalAlignment="Center"/>
-                    <NumericUpDown Value="{Binding SelectedQuest.RequiredLevelInput, Mode=TwoWay}"
-                                   Minimum="0" Maximum="1000" Increment="1" FormatString="0"
-                                   Width="120" ShowButtonSpinner="True"
-                                   ToolTip.Tip="The level gate shown on the quest card. Pre-filled with the crawled minlevel (blank when the crawl found none). Set a value to supply a missing gate, clear it to fall back to the crawl, or set 0 to mark the quest ungated."/>
-                    <TextBlock Classes="Label" Margin="0" Text="(blank = use crawled gate)"
-                               VerticalAlignment="Center"/>
+                <!-- Required level + complete-flag value — both pre-filled from the crawl
+                     (blank when the crawl found none); override when the crawl misses, or
+                     clear to fall back to it. -->
+                <StackPanel Grid.Row="3" Spacing="6" Margin="0,8,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <TextBlock Classes="Label" Margin="0" Text="Required level" Width="130"
+                                   VerticalAlignment="Center"/>
+                        <NumericUpDown Value="{Binding SelectedQuest.RequiredLevelInput, Mode=TwoWay}"
+                                       Minimum="0" Maximum="1000" Increment="1" FormatString="0"
+                                       Width="120" ShowButtonSpinner="True"
+                                       ToolTip.Tip="The level gate shown on the quest card. Pre-filled with the crawled minlevel (blank when the crawl found none). Set a value to supply a missing gate, clear it to fall back to the crawl, or set 0 to mark the quest ungated."/>
+                        <TextBlock Classes="Label" Margin="0" Text="(blank = use crawled gate)"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <TextBlock Classes="Label" Margin="0" Text="Completes at flag value" Width="130"
+                                   VerticalAlignment="Center"/>
+                        <NumericUpDown Value="{Binding SelectedQuest.CompleteValueInput, Mode=TwoWay}"
+                                       Minimum="0" Maximum="1000" Increment="1" FormatString="0"
+                                       Width="120" ShowButtonSpinner="True"
+                                       ToolTip.Tip="The flag value at which the login quest-flag sync marks this quest complete. Pre-filled with the value the crawl derived (blank when it couldn't — e.g. a quest that has no finished flag, or Perfect Stealth which completes at 0). Set a value to supply or correct one, clear it to fall back to the crawl."/>
+                        <TextBlock Classes="Label" Margin="0" Text="(blank = use crawled value)"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- Visibility + class-resolved bonus -->

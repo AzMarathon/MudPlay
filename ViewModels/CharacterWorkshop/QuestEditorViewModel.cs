@@ -110,7 +110,9 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
                 def.RequiredLevel,
                 ineligible,
                 _showAnyway.GetValueOrDefault((q.Flag, q.Step)),
-                BuildClassOptions(def.ClassRestrict))
+                BuildClassOptions(def.ClassRestrict),
+                autoCompleteValue: q.CompleteValue,
+                completeValueOverride: def.CompleteValueOverride)
             { Blocked = def.Blocked });
         }
 
@@ -163,7 +165,9 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
             requiredLevel: def.RequiredLevel,
             ineligible: false,
             showIfIneligible: _showAnyway.GetValueOrDefault((def.Flag, def.Step)),
-            classOptions: BuildClassOptions(def.ClassRestrict))
+            classOptions: BuildClassOptions(def.ClassRestrict),
+            autoCompleteValue: null,
+            completeValueOverride: def.CompleteValueOverride)
         { Blocked = def.Blocked };
 
     // A fresh checklist of every class for one row, ticking the ones already in this

@@ -93,6 +93,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private string? _defaultAutoLairName;
     [ObservableProperty] private bool _autoConnect;
     [ObservableProperty] private bool _loadLastRanLoop = true;
+    // Char-tier (GeneralSettings.AutoSyncQuestFlagsOnLogin). Read live by
+    // QuestFlagSyncManager at login. Off by default — it sends commands on connect.
+    [ObservableProperty] private bool _autoSyncQuestFlagsOnLogin;
     [ObservableProperty] private bool _backupOnSave;
     [ObservableProperty] private bool _scaleTerminalToWindow;
     [ObservableProperty] private bool _typeToTerminalFromOtherWindows = true;
@@ -384,6 +387,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             DefaultAutoLairName = string.IsNullOrWhiteSpace(DefaultAutoLairName) ? null : DefaultAutoLairName,
             AutoConnect = AutoConnect,
             LoadLastRanLoop = LoadLastRanLoop,
+            AutoSyncQuestFlagsOnLogin = AutoSyncQuestFlagsOnLogin,
             BackupOnSave = BackupOnSave,
             ScaleTerminalToWindow = ScaleTerminalToWindow,
             TypeToTerminalFromOtherWindows = TypeToTerminalFromOtherWindows,
@@ -532,6 +536,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         DefaultAutoLairName  = dto.DefaultAutoLairName;
         AutoConnect          = dto.AutoConnect;
         LoadLastRanLoop      = dto.LoadLastRanLoop;
+        AutoSyncQuestFlagsOnLogin = dto.AutoSyncQuestFlagsOnLogin;
         BackupOnSave         = dto.BackupOnSave;
         ScaleTerminalToWindow = dto.ScaleTerminalToWindow;
         TypeToTerminalFromOtherWindows = dto.TypeToTerminalFromOtherWindows;
@@ -690,6 +695,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnDefaultAutoLairNameChanged(string? value) => Dirty();
     partial void OnAutoConnectChanged(bool value)            => Dirty();
     partial void OnLoadLastRanLoopChanged(bool value)        => Dirty();
+    partial void OnAutoSyncQuestFlagsOnLoginChanged(bool value) => Dirty();
     partial void OnBackupOnSaveChanged(bool value)           => Dirty();
     partial void OnScaleTerminalToWindowChanged(bool value)  => Dirty();
     partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();

@@ -22,6 +22,14 @@ public sealed class GeneralSettings
     // Connect to the configured BBS as soon as the profile loads.
     public bool AutoConnect { get; set; }
 
+    // Auto-detect completed quests from the character's live quest-flag values at login:
+    // before the availability announce, query the flags (paradigm `abil <flag>`; stock
+    // `sys god <name> abil`, which needs sys-god powers on the BBS) and mark any quest whose
+    // flag has reached its complete value. One-way — never un-marks. Off by default because
+    // it sends commands on connect. Surfaced in Settings → General; read by
+    // QuestFlagSyncManager. Char-tier so it can be per-character or set once globally.
+    public bool AutoSyncQuestFlagsOnLogin { get; set; }
+
     // When on (the default), entering Loop-build mode (the Navigation window's Loop
     // chip) pre-loads the last loop run this session into the builder — ready to Run
     // again or re-Save, or to wipe with "Clear all" and build fresh. Off restores the
