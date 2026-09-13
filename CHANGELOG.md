@@ -1,5 +1,10 @@
 # Version history
 
+## 3.77.8
+
+- Fixed single-target attack spells that never switched to the configured alternate: a spell whose damage line doesn't start with "You " (many narrate the hit in third person, e.g. "Spiritual power strikes X for N damage!") never confirmed its cast, so MaxCastsPerRoom's tally froze and the spell auto-repeated forever instead of capping out
+- bug reports addressed: paradigm-20260913-040159
+
 ## 3.77.7
 
 - `/state` reports whether the client is connected and whether an auto-redial is armed — the first thing you check on a client that looks stuck, and previously only inferable from the log going quiet

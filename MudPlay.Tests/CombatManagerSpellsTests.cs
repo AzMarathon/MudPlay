@@ -826,6 +826,42 @@ public sealed class CombatManagerSpellsTests
         Assert.DoesNotContain("turn spectre", h.AllSent);
     }
 
+    // Report paradigm-20260913-040159: an attack spell whose damage line never starts
+    // with "You " — many single-target attack spells narrate the hit in third person
+    // ("Spiritual power strikes X for N damage!") instead of the physical "You hit X
+    // for N damage!" skeleton OnAttackCastConfirmed otherwise expects, and split the
+    // announce and the damage attribution across two lines entirely (an incantation
+    // line naming no target, then the third-person damage line). Neither line alone
+    // satisfies the physical shape, so ConfirmedAttackCastCount froze forever, the
+    // round-count tally never advanced, and MaxCastsPerRoom=1 was never perceived as
+    // reached — soul auto-repeated every round and god's wrath was never reached.
+    [Fact]
+    public void MaxCasts1_ThirdPersonCasterMessage_TalliesAndSwitchesToAlternate()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "soul", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "gwra", MinEnemies = 0 };
+        h.AddMonster(1, "fat giant squid");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+        h.Combat.ResolveAttackSpellMatcher = code => string.Equals(code, "soul", StringComparison.OrdinalIgnoreCase)
+            ? CasterMessageMatcher.TryCreate("Spiritual power strikes {target} for {damage} damage!")
+            : null;
+
+        h.Feed("Also here: fat giant squid.");
+        Assert.Equal("soul fat giant squid", h.LastSent);
+
+        // The incantation line alone confirms nothing (no target name in it) —
+        // matches production, where this line never advances the tally by itself.
+        h.Feed("You make a powerful incantation!");
+        Assert.Equal(0, h.Combat.ConfirmedAttackCastCount);
+
+        // The third-person damage line must confirm the cast via soul's own
+        // caster-message template and immediately cap-switch to god's wrath.
+        h.Feed("Spiritual power strikes fat giant squid for 171 damage!");
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("gwra fat giant squid", h.LastSent);
+    }
+
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even
     // with an exp gain sitting nearby, e.g. party share-exp) is NOT a kill — the
     // resume must still re-announce the spell rather than dropping a live target.

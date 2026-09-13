@@ -1,5 +1,6 @@
 using System.Text;
 using MudPlay.Game.Map;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -355,6 +356,23 @@ public sealed partial class CombatManager : IDisposable
     // observed cast-confirmation line, so it can't bundle two real casts into one tally.
     internal Func<int>? ReadRoundCount { get; set; }
     private int _lastTalliedRound = -1;
+
+    // Resolves an attack-spell cast-code to its game-data caster-message template
+    // (Models.GameData.MessageRecord.CasterMessage), wired in AppServices to the
+    // same per-spell lookup CombatSession already uses for its stats. OnAttackCastConfirmed
+    // needs this because a physical-shaped confirmation ("You <verb> <target> for N
+    // damage!") isn't the only cast wording a single-target attack spell can use —
+    // many attack spells narrate the hit in third person ("Spiritual power strikes
+    // <target> for N damage!", never starting with "You "), and some split the
+    // announce and the damage attribution across two lines entirely (an incantation
+    // line with no target name, then the third-person damage line). Neither line of
+    // such a spell ever satisfies the physical shape, so ConfirmedAttackCastCount
+    // never advanced for it — the round-count tally froze, MaxCastsPerRoom was never
+    // perceived as reached, and the configured alternate attack spell could never be
+    // reached (report paradigm-20260913-040159: soul capped at 1 cast/room, never
+    // switched to god's wrath). Null when unwired (tests) or the spell has no usable
+    // caster-message record — those callers keep the physical-only behavior.
+    internal Func<string, CasterMessageMatcher?>? ResolveAttackSpellMatcher { get; set; }
 
     // How many real single-target attack-spell casts OnAttackCastConfirmed has
     // observed landing this session — the precise signal ReadRoundCount is wired to
@@ -2499,21 +2517,36 @@ public sealed partial class CombatManager : IDisposable
     // Gated on _castingSpellTarget: that field is only set while the round's action
     // is our announced single-target spell (a weapon swing clears it on send), so any
     // qualifying combat-result line reaching here while it's set is that spell's own
-    // result, never a swing. The "You " prefix and target-name check mirror
+    // result, never a swing. The "You " prefix + target-name check (mirroring
     // OnBackstabResolutionLine's filtering — both UserHits and UserMisses also fire
-    // for party members' actions and (UserMisses) self-emotes. Consecutive lines
-    // inside ConfirmedCastGroupWindow are one cast's own multi-projectile results,
-    // not a second cast — only the group's first line increments. The grouping also
-    // requires the SAME target: a kill that immediately re-engages a fresh mob within
-    // the window must still count that mob's opening cast, not fold it into the
-    // corpse's tally.
+    // for party members' actions and (UserMisses) self-emotes) covers a physical-
+    // shaped line; ResolveAttackSpellMatcher covers the third-person shape some
+    // attack spells use instead. Consecutive lines inside ConfirmedCastGroupWindow
+    // are one cast's own multi-projectile results, not a second cast — only the
+    // group's first line increments. The grouping also requires the SAME target: a
+    // kill that immediately re-engages a fresh mob within the window must still count
+    // that mob's opening cast, not fold it into the corpse's tally.
     private void OnAttackCastConfirmed(MatchResult match)
     {
         if (_castingSpellTarget is not { } target) return;
 
         string text = match.Text;
-        if (!text.StartsWith("You ", StringComparison.Ordinal)) return;
-        if (text.IndexOf(target, StringComparison.OrdinalIgnoreCase) < 0) return;
+
+        // Two message shapes confirm our own single-target attack-spell round. The
+        // physical shape ("You hit the orc for 10 damage!") also covers a first-person
+        // attack spell and is checked first since it needs no game-data lookup. Some
+        // attack spells instead narrate the hit in third person and never start with
+        // "You " (ResolveAttackSpellMatcher's comment has the full story) — those are
+        // confirmed against the announced spell's own caster-message template instead,
+        // which pins down the target the same way the physical check's substring
+        // search does.
+        bool physicalShape = text.StartsWith("You ", StringComparison.Ordinal)
+            && text.IndexOf(target, StringComparison.OrdinalIgnoreCase) >= 0;
+        bool spellShape = !physicalShape
+            && _announcedSpellCode is { } announcedSpell
+            && ResolveAttackSpellMatcher?.Invoke(announcedSpell) is { } matcher
+            && matcher.ConfirmsTarget(text, target);
+        if (!physicalShape && !spellShape) return;
 
         DateTimeOffset now = _now();
         bool grouped = now - _lastConfirmedAttackCastAt < ConfirmedCastGroupWindow

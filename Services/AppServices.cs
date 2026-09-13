@@ -4053,6 +4053,10 @@ public sealed class AppServices
         // MaxCasts (report paradigm-20260822-003106). See ReadRoundCount's
         // declaration comment on CombatManager for the full reasoning.
         Combat.ReadRoundCount = () => Combat.ConfirmedAttackCastCount;
+        // Third-person-shaped attack-spell casts (e.g. "Spiritual power strikes X for
+        // N damage!") need the spell's own caster-message template to confirm — see
+        // CombatManager.ResolveAttackSpellMatcher's declaration comment.
+        Combat.ResolveAttackSpellMatcher = ResolveAttackSpellMatcherCached;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a
         // second of its threshold — a final kill that never triggered a resync
@@ -4347,9 +4351,9 @@ public sealed class AppServices
         // weapon swap (Inventory.Changed).
         CombatSession = new Game.Combat.CombatSessionTracker(
             Router, RoundDamage, AttackSpellMatchers, EquippedWeaponProcMatcher);
-        Profile.ProfileLoaded  += _ => { CombatSession.Reset(); CombatSession.RefreshMatchers(); };
-        Profile.ProfileMutated += _ => CombatSession.RefreshMatchers();
-        GameData.ActiveSetChanged += _ => { _procWeaponName = null; CombatSession.RefreshMatchers(); };
+        Profile.ProfileLoaded  += _ => { CombatSession.Reset(); CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
+        Profile.ProfileMutated += _ => { CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
+        GameData.ActiveSetChanged += _ => { _procWeaponName = null; CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         Inventory.Changed += () => CombatSession.RefreshMatchers();
 
         // TimeAnalysisTracker. Divides the session's wall-clock time
@@ -7866,6 +7870,27 @@ public sealed class AppServices
             return rec is null ? null : Game.Spells.CasterMessageMatcher.TryCreate(rec.CasterMessage);
         }
         return null;
+    }
+
+    // CombatManager.ResolveAttackSpellMatcher's wiring — confirms a single-target
+    // attack-spell cast (MaxCastsPerRoom tally) whose damage line uses the spell's own
+    // (often third-person) caster-message template instead of the physical "You ...
+    // for N damage!" skeleton (see that property's declaration comment). Keyed by
+    // cast-code and cached: this runs off OnAttackCastConfirmed, on every UserHits /
+    // UserMisses line while a spell round is in flight, so recompiling
+    // AttackSpellMatcherFor's regex per line would be wasteful. Cleared alongside
+    // CombatSession's own RefreshMatchers() below — a profile load or game-data set
+    // swap can change which spell a cast-code resolves to.
+    private readonly Dictionary<string, Game.Spells.CasterMessageMatcher?> _attackSpellMatcherCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private Game.Spells.CasterMessageMatcher? ResolveAttackSpellMatcherCached(string spellCode)
+    {
+        if (_attackSpellMatcherCache.TryGetValue(spellCode, out Game.Spells.CasterMessageMatcher? cached))
+            return cached;
+        Game.Spells.CasterMessageMatcher? matcher = AttackSpellMatcherFor(spellCode);
+        _attackSpellMatcherCache[spellCode] = matcher;
+        return matcher;
     }
 
     // Equipped-weapon proc matcher, cached by weapon name so a hot
