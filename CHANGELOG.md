@@ -1,5 +1,11 @@
 # Version history
 
+## 3.78.0
+
+- Self-update: **Help → Check for updates…** downloads the latest release for your platform, verifies its checksum, swaps it in, and relaunches
+- Startup update check flags a newer build with red **UPDATE** banners flanking the title on the splash screen — notify-only, never auto-installs
+- New Settings → General "Check for updates on startup" toggle (on by default)
+
 ## 3.77.15
 
 - The status-bar TNL now shows a bracketed **(+N.NN lvls)** ratio — how far past your current level your exp already sits (e.g. `(+2.91 lvls)` = two banked levels and 91% toward a third) — so a large TNL time on a lower level reads clearly, since TNL counts to the next level you can still earn

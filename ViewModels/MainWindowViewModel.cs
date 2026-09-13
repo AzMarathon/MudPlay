@@ -5017,6 +5017,33 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
+    private MudPlay.Views.UpdateWindow? _updateWindow;
+
+    // Help → Check for updates. A modeless window that reads the update service's
+    // cached verdict (or checks fresh), and — on the user's request — downloads,
+    // verifies, swaps the new build in, and relaunches. Same toggle convention —
+    // pressing the command while it's open closes it.
+    [RelayCommand]
+    private void OpenUpdate()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_updateWindow is { } existing)
+        {
+            existing.Close();
+            return;
+        }
+
+        MudPlay.Views.UpdateWindow window = new()
+        {
+            DataContext = new UpdateWindowViewModel(AppServices.Current.Update),
+        };
+        window.Closed += (_, _) => _updateWindow = null;
+        _updateWindow = window;
+        window.Show(main);
+    }
+
     private MudPlay.Views.Help.HelpWindow? _helpWindow;
 
     // Help → Help topics. A modeless, read-only compendium: a searchable table of

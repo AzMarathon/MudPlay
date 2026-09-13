@@ -169,6 +169,10 @@ public static class BugReportBuilder
         Kv(sb, "Auto-load last profile", svc.Settings.Current.AutoLoadLastProfile ? "on" : "off");
         Kv(sb, "Last-used profile", svc.Settings.Current.LastUsedProfile is { } lp
             ? $"{lp.Name} on {lp.Bbs}" : "(none)");
+        // Update check — the startup toggle plus the last verdict, so a "no update
+        // notice showed" report can tell whether the check ran and what it found.
+        Kv(sb, "Update check on startup", svc.Settings.Current.CheckForUpdatesOnStartup ? "on" : "off");
+        Kv(sb, "Last update check", DescribeUpdate(svc));
         // Diagnostic-channel state gates whether the Program-log tail carries any
         // decision trail: both flags default off, and every _log?.Debug/Combat
         // site is skipped at generation time when off, so a report captured with
@@ -852,6 +856,21 @@ public static class BugReportBuilder
             ? $", last rejected request {at:u}"
             : string.Empty;
         return state + subs + failed;
+    }
+
+    // The last update-check verdict (never checked / up to date / a newer build /
+    // no-asset / an error). Answers "why didn't I get an update notice" — was the
+    // check even run, and what did GitHub say.
+    private static string DescribeUpdate(AppServices svc)
+    {
+        if (svc.Update.Last is not { } r) return "(not checked this session)";
+        return r.State switch
+        {
+            Update.UpdateAvailability.UpToDate         => $"up to date ({r.CurrentVersion})",
+            Update.UpdateAvailability.UpdateAvailable  => $"{r.CurrentVersion} → {r.LatestVersion} available",
+            Update.UpdateAvailability.NoAssetForPlatform => $"{r.LatestVersion} available, no asset for this platform",
+            _                                          => $"check failed ({r.Error ?? "reason unknown"})",
+        };
     }
 
     private static string BuildInventory(AppServices svc)

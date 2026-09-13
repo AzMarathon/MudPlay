@@ -168,6 +168,12 @@ public sealed class AppServices
     // App-wide severity-tagged ring-buffer log. Status bar + log pane subscribe.
     public LogService Log { get; }
 
+    // Self-update against GitHub Releases (check + user-triggered download/replace).
+    // A startup check (gated on GlobalSettings.CheckForUpdatesOnStartup) sets its
+    // availability flag; the splash banner + Help menu read it. It never installs on
+    // its own.
+    public Services.Update.UpdateService Update { get; }
+
     // Tees Log to a rolling on-disk file (Data/Logs/{ts}-program.log) so a
     // hard hang / kill leaves a post-mortem trail the in-memory ring can't.
     // Only writes while LogDiagnostics.AutoCollectLogs is on (default off).
@@ -1997,6 +2003,9 @@ public sealed class AppServices
         // Same gating for the memory-footprint sampler: the timer runs for the
         // whole process, but samples land on disk only while AutoCollectLogs is on.
         MemoryLog = new MemoryUsageLog(LogDiagnostics);
+        // Self-update checker. Constructed early (only needs Log); the startup check
+        // itself is kicked off at the end of construction, gated on the setting.
+        Update = new Services.Update.UpdateService(Log);
         // Background memory hygiene. CombatTracker is bound later in construction;
         // the combat-active probe is lazy and the first periodic tick is minutes
         // out, so it's always assigned before the Func is ever invoked.
@@ -6521,6 +6530,12 @@ public sealed class AppServices
         // builds along the way (the movement coordinator in particular). Anything
         // added below this line is NOT visible to the API's event stream.
         ApplyLocalApiFromGlobalSettings();
+
+        // Startup update check — fire-and-forget off the UI thread, gated on the
+        // Global "Check for updates on startup" toggle. It only sets the availability
+        // flag (splash banner + Help menu read it); nothing installs on its own.
+        if (Settings.Current.CheckForUpdatesOnStartup)
+            _ = Update.CheckAsync();
     }
 
     private void ApplyToolbarFromActiveProfile()
