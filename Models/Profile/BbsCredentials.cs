@@ -39,11 +39,6 @@ public sealed class BbsCredentials
     // solely by the per-player PlayerRemoteControls.MovePlayer permission — the two
     // never share gating.
 
-    // `sys map` — the client may request the game's own text area map to help
-    // locate itself. (Reading the map to recover position is a later addition;
-    // for now this only records that the power is available.)
-    public bool SysopMap { get; set; }
-
     // `sys st` (SYSOP STATUS) — the client may read the room dump to recover its
     // position when the walker gets lost. This is the master gate on SysStatusProbe.
     public bool SysopStatus { get; set; }

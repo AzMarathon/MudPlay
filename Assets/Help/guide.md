@@ -1320,9 +1320,7 @@ You can edit **several boards in one visit**: click between them freely and ever
 ### I have the following SYSOP powers
 
 **Default:** all off
-**What it does:** Declares which elevated sysop commands this character can actually use on this specific board — four independent checkboxes, saved per-character per-BBS. None of them touch `@goto`: that remote command is gated purely by the per-player **Move player** permission on the Players tab, not by anything here. Only tick a power if you genuinely have that sysop access on the board — the underlying command is refused on an ordinary account.
-
-**Sysop map** — lets MudPlay use the game's **`sys map`** command (a text area map with no map/room numbers) to help work out where you are. For now this only records that you hold the power; reading the map to recover position is coming in a follow-up.
+**What it does:** Declares which elevated sysop commands this character can actually use on this specific board — three independent checkboxes, saved per-character per-BBS. None of them touch `@goto`: that remote command is gated purely by the per-player **Move player** permission on the Players tab, not by anything here. Only tick a power if you genuinely have that sysop access on the board — the underlying command is refused on an ordinary account.
 
 **Sysop status** — lets MudPlay use the game's **`sysop status`** command (`sys st`), which prints the server's own debug dump for a room — including its **true map and room number**. That exact number is the fastest possible answer to "where am I?": without it, a client that loses track has to walk you backwards one room at a time until only one room fits, and if that fails you're left right-clicking **I am here** on the map. With this power, one command replaces all of that. MudPlay asks at every point it would otherwise start reversing moves or give up — the first sign of a mismatch, a wedged engine, the moment before it starts backtracking, the last resort before declaring **Lost**, a loop that's blocked because it lost its place, and a `@where` re-fix — mirroring how the Paradigm `room` command is used on that realm. If the answer doesn't come back (refused, too slow, or naming a room your active game-data set doesn't contain) nothing changes: you get the same walk-backwards recovery and **Lost** dialog you'd get without it. It never guesses. Because a `sys st` dump is much larger than Paradigm's one-line `room` reply (8+ lines, more with items on the floor), repeated asks are spaced out so they don't flood your screen, it won't ask while a move you've already sent is still unconfirmed (the answer would describe the room you just left), and it stays out of the way while a teleport maze is being solved, since the maze solver does its own position fixing.
 
@@ -2408,7 +2406,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Scrollback (lines) | `4000` | 100–100,000 | `ScrollbackLines` | Models/Settings/BbsProfile.cs |
 | Wheel scroll (lines) | `5` | 1–50 | `BackscrollWheelLines` | Models/Settings/BbsProfile.cs |
 | Username / Password (per-char) | `null` | encrypted string | `EncryptedUsername` / `EncryptedPassword` | Models/Profile/BbsCredentials.cs |
-| Sysop powers — map / status / god lives (per-char) | `false` | bool ×3 | `SysopMap` / `SysopStatus` / `SysopGodLives` | Models/Profile/BbsCredentials.cs |
+| Sysop powers — status / god lives (per-char) | `false` | bool ×2 | `SysopStatus` / `SysopGodLives` | Models/Profile/BbsCredentials.cs |
 | Menu nav steps (per-char) | `[]` | list of `MenuStep{WaitForPattern, Send}` | `MenuNavSteps` | Models/Profile/BbsCredentials.cs |
 | Confirm exit / hangup / save settings / deletes | `false` (all) | bool | `ConfirmExit`, `ConfirmHangup`, `ConfirmSaveSettings`, `ConfirmDeletes` | Models/Settings/ConfirmSettings.cs |
 

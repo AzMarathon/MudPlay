@@ -59,7 +59,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         public string Username = string.Empty;
         public bool PasswordTouched;
         public string? EncryptedPassword;
-        public bool SysopMap;
         public bool SysopStatus;
         public bool SysopGodLives;
         public bool SysopGoto;
@@ -112,7 +111,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _reconnectOnCarrierLost;
     [ObservableProperty] private bool _reconnectOnNoResponse;
     [ObservableProperty] private bool _reconnectAfterCleanup;
-    [ObservableProperty] private bool _sysopMap;
     [ObservableProperty] private bool _sysopStatus;
     [ObservableProperty] private bool _sysopGodLives;
     [ObservableProperty] private bool _sysopGoto;
@@ -451,7 +449,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             ? null
             : _passwords.Protect(staged.Username);
         cred.MenuNavSteps = staged.MenuNavSteps;
-        cred.SysopMap = staged.SysopMap;
         cred.SysopStatus = staged.SysopStatus;
         cred.SysopGodLives = staged.SysopGodLives;
         cred.SysopGoto = staged.SysopGoto;
@@ -581,7 +578,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         StagedCredentials staged = new()
         {
             Username = Username,
-            SysopMap = SysopMap,
             SysopStatus = SysopStatus,
             SysopGodLives = SysopGodLives,
             SysopGoto = SysopGoto,
@@ -669,7 +665,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         {
             Username = string.Empty;
             Password = string.Empty;
-            SysopMap = SysopStatus = SysopGodLives = SysopGoto = false;
+            SysopStatus = SysopGodLives = SysopGoto = false;
             return;
         }
 
@@ -680,7 +676,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         {
             Username = staged.Username;
             Password = string.Empty;
-            SysopMap = staged.SysopMap;
             SysopStatus = staged.SysopStatus;
             SysopGodLives = staged.SysopGodLives;
             SysopGoto = staged.SysopGoto;
@@ -706,7 +701,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             // the user clicks around. Show empty + a placeholder; typing a
             // new one replaces, leaving it empty preserves the existing.
             Password = string.Empty;
-            SysopMap = cred.SysopMap;
             SysopStatus = cred.SysopStatus;
             SysopGodLives = cred.SysopGodLives;
             SysopGoto = cred.SysopGoto;
@@ -723,7 +717,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         {
             Username = string.Empty;
             Password = string.Empty;
-            SysopMap = SysopStatus = SysopGodLives = SysopGoto = false;
+            SysopStatus = SysopGodLives = SysopGoto = false;
             // A BBS with no credential yet still shows the starter goto locations, so
             // saving it persists them instead of an empty table — CommitCredentials
             // writes this collection wholesale over the model's own starter default,
@@ -961,7 +955,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnReconnectOnCarrierLostChanged(bool value)    { PushToCache(); Dirty(); }
     partial void OnReconnectOnNoResponseChanged(bool value)     { PushToCache(); Dirty(); }
     partial void OnReconnectAfterCleanupChanged(bool value)     { PushToCache(); Dirty(); }
-    partial void OnSysopMapChanged(bool value)                  { CredentialsDirty(); }
     partial void OnSysopStatusChanged(bool value)               { CredentialsDirty(); }
     partial void OnSysopGodLivesChanged(bool value)             { CredentialsDirty(); }
     partial void OnSysopGotoChanged(bool value)                 { CredentialsDirty(); }
