@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.77.4**
-> - macOS Cmd+C now copies the selection in the Backscroll and Conversation windows (previously only Ctrl+C or right-click → Copy worked there)
+> **Version 3.77.5**
+> - Removed the non-functional **Sysop map** checkbox (Settings → BBS): the game's `sys map` output can't be reliably matched to the room graph, so it never drove anything — `sys st` remains the working location-recovery power
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

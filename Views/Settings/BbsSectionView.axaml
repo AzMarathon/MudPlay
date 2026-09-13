@@ -371,9 +371,6 @@
                                IsEnabled="{Binding HasProfile}"
                                Margin="0,12,0,2"/>
                     <StackPanel Margin="12,0,0,0" Spacing="2" IsEnabled="{Binding HasProfile}">
-                        <CheckBox IsChecked="{Binding SysopMap, Mode=TwoWay}"
-                                  Content="Sysop map"
-                                  ToolTip.Tip="`sys map` — the client may request the game's own text area map to help work out where it is. Per-character, per-BBS."/>
                         <CheckBox IsChecked="{Binding SysopStatus, Mode=TwoWay}"
                                   Content="Sysop status"
                                   ToolTip.Tip="`sys st` (SYSOP STATUS) — lets the client read the game's own room dump to recover its location when the walker gets lost. Per-character, per-BBS."/>
