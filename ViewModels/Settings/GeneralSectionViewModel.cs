@@ -496,6 +496,12 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // layout actually changed, to avoid firing the mutated fan-out on every Save.
         if (layoutChanged) _profile.NotifyMutated();
 
+        // Turning quest-flag sync ON while already playing: fire the check now (the
+        // login trigger already passed), then re-report the now-current available quests.
+        // The manager no-ops when not in-realm, so flipping it at the menu is harmless.
+        if (!existing.AutoSyncQuestFlagsOnLogin && AutoSyncQuestFlagsOnLogin)
+            _ = AppServices.Current?.QuestFlagSync.RunNowAsync();
+
         ClearDirty();
     }
 

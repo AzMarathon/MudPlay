@@ -2,7 +2,7 @@
 
 ## 3.79.0
 
-- Auto-detect completed quests from your in-game flags on login (opt-in, Settings → General) — reads flag values (paradigm `abil`, stock `sys god abil`) and ticks Complete; one-way, never un-marks
+- Auto-detect completed quests from your in-game flags on login (opt-in, Settings → General) — reads flag values (paradigm `abil`, stock `sys god abil`) and ticks Complete; one-way, never un-marks. Turning it on mid-session fires the check immediately and re-reports what's still available
 - Quest editor: per-quest "Completes at flag value" — the crawler's guess, editable to cover quests it can't derive
 - Game Data → Quest Flags: Step shown beside the flag name
 - Stock flag read uses the BBS "Sysop god lives" sys-god access

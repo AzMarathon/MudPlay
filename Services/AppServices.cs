@@ -6192,6 +6192,10 @@ public sealed class AppServices
             characterName: () => PlayerStats.Name,
             classId: () => Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class),
             enabled: () => ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").AutoSyncQuestFlagsOnLogin,
+            // In-realm only (a status line has been seen) so turning the toggle on at the
+            // character-select menu doesn't fire; re-report re-lists the now-current quests.
+            isInRealm: () => PlayerState.HasPromptData,
+            reannounce: () => QuestAvailability.AnnounceLoginAvailable(),
             log: Log);
 
         AutoDeposit = new Game.Cash.AutoDepositManager(

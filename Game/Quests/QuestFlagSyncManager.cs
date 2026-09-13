@@ -29,7 +29,10 @@ public sealed class QuestFlagSyncManager
     private readonly Func<string?> _characterName;
     private readonly Func<int?> _classId;
     private readonly Func<bool> _enabled;
+    private readonly Func<bool> _isInRealm;
+    private readonly Action _reannounce;
     private readonly LogService? _log;
+    private bool _running;
 
     // Raised after a sync that marked at least one quest complete, so an open Quest tab
     // reloads its cards from the freshly-saved log.
@@ -41,7 +44,8 @@ public sealed class QuestFlagSyncManager
     public QuestFlagSyncManager(
         GameDataCache gameData, ProfileService profile, QuestStore quests, QuestFlagProbe probe,
         Func<RealmType> realm, Func<bool> hasSysopPowers, Func<string?> characterName,
-        Func<int?> classId, Func<bool> enabled, LogService? log = null)
+        Func<int?> classId, Func<bool> enabled, Func<bool> isInRealm, Action reannounce,
+        LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(profile);
@@ -52,6 +56,8 @@ public sealed class QuestFlagSyncManager
         ArgumentNullException.ThrowIfNull(characterName);
         ArgumentNullException.ThrowIfNull(classId);
         ArgumentNullException.ThrowIfNull(enabled);
+        ArgumentNullException.ThrowIfNull(isInRealm);
+        ArgumentNullException.ThrowIfNull(reannounce);
         _gameData = gameData;
         _profile = profile;
         _quests = quests;
@@ -61,11 +67,30 @@ public sealed class QuestFlagSyncManager
         _characterName = characterName;
         _classId = classId;
         _enabled = enabled;
+        _isInRealm = isInRealm;
+        _reannounce = reannounce;
         _log = log;
     }
 
     // Whether the active character has opted into the login sync (Settings → General).
     public bool EnabledForCurrentProfile => _profile.Current is not null && _enabled();
+
+    // On-demand run — for turning the setting on mid-session, when we're already playing.
+    // Gated on enabled + in-realm (so flipping it at the character-select menu does nothing),
+    // it syncs then RE-reports the now-current available quests (freshly-completed ones drop
+    // off). Guarded against overlap; swallows its own errors since callers fire and forget.
+    public async Task RunNowAsync(CancellationToken ct = default)
+    {
+        if (_running || !EnabledForCurrentProfile || !_isInRealm()) return;
+        _running = true;
+        try
+        {
+            await SyncAsync(ct).ConfigureAwait(true);
+            _reannounce();
+        }
+        catch (Exception ex) { _log?.Warn("QuestFlags", $"on-demand sync failed: {ex.Message}"); }
+        finally { _running = false; }
+    }
 
     // Read the flags, mark newly-complete quests, persist. Returns the number marked. Must
     // be awaited on the UI thread (the probe collects on the line-emit thread and paces its

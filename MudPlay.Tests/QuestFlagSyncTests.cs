@@ -85,6 +85,24 @@ public sealed class QuestFlagSyncTests
     }
 
     [Fact]
+    public void ResolveNewlyComplete_EvilFlag17_CompletesTiersOneThroughFour()
+    {
+        // The five Evil tiers complete at their LAST flag value — 2 / 3 / 11 / 13 / 31. A live
+        // 128(17) sits partway through tier 5 (14–31), so tiers 1–4 read complete and tier 5
+        // does not. Bands keyed by their crawl step (band ordinal here for clarity).
+        var targets = new[]
+        {
+            T(128, 1, 2), T(128, 2, 3), T(128, 3, 11), T(128, 4, 13), T(128, 5, 31),
+        };
+        var observed = new Dictionary<int, int> { [128] = 17 };
+        var marked = QuestFlagCompletion.ResolveNewlyComplete(
+                targets, observed, new HashSet<QuestFlagCompletion.QuestKey>())
+            .Select(k => k.Step).OrderBy(s => s).ToArray();
+
+        Assert.Equal(new[] { 1, 2, 3, 4 }, marked);   // tier 5 (needs 31) stays incomplete
+    }
+
+    [Fact]
     public void ResolveNewlyComplete_NeverReMarksOrClears()
     {
         var targets = new[] { T(133, 0, 9), T(126, 0, 8) };
