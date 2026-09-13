@@ -2716,9 +2716,16 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (IsConnected || IsConnecting) return;
 
+        // A --reconnect relaunch (the self-updater restoring a session that was live
+        // when the update ran) dials regardless of the toggle. Consumed here so only
+        // the startup profile load honours it — a later File → Open in the same
+        // session falls back to the user's actual Auto-connect preference.
+        bool forced = StartupOptions.ForceReconnect;
+        StartupOptions.ForceReconnect = false;
+
         Models.Profile.GeneralSettings general =
             AppServices.Current.Resolver.Resolve<Models.Profile.GeneralSettings>("General");
-        if (!general.AutoConnect) return;
+        if (!general.AutoConnect && !forced) return;
 
         // No usable BBS resolves → silently skip. Explicit Connect prints
         // the "no BBS selected" guidance; the auto-connect path doesn't
@@ -2726,7 +2733,9 @@ public partial class MainWindowViewModel : ObservableObject
         if (ResolveActiveBbs() is null) return;
         if (string.IsNullOrWhiteSpace(Host) || Port <= 0) return;
 
-        AppServices.Current.Log.Info("Connect", "Auto-connect on profile load — General → Auto-connect is on.");
+        AppServices.Current.Log.Info("Connect", forced
+            ? "Auto-connect on profile load — restoring the session the update restarted."
+            : "Auto-connect on profile load — General → Auto-connect is on.");
         await ConnectWithRetriesAsync();
     }
 
@@ -3347,13 +3356,58 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // Bound to File → Quit.
+    //
+    // The confirm prompt has to happen HERE, not in the window's Closing handler:
+    // desktop.Shutdown() is the forced variant, which still raises Closing but
+    // discards the handler's e.Cancel — so the handler's prompt would appear over an
+    // app already on its way out, and its Save would never be reached.
     [RelayCommand]
-    private void Quit()
+    private async Task QuitAsync()
     {
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-        {
-            desktop.Shutdown();
-        }
+        if (AppServices.Current.Confirm.Settings.ConfirmExit
+            && !await AppServices.Current.Confirm.ConfirmExitAsync())
+            return;
+        ShutdownNow();
+    }
+
+    // Close the app after the caller has already settled confirmation. Latches the
+    // window's exit-confirmed flag first so its Closing handler skips straight to the
+    // profile save instead of popping a prompt nobody can answer. Marshalled because
+    // the updater calls this from whatever thread its download continuation ran on.
+    private static void ShutdownNow() => Dispatcher.UIThread.Post(() =>
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+            return;
+        if (desktop.MainWindow is MudPlay.Views.MainWindow main) main.MarkExitConfirmed();
+        desktop.Shutdown();
+    });
+
+    // Stand the live session down for the self-updater's restart, and report what the
+    // relaunched build has to restore. Called once the new build is staged and
+    // verified, so by the time we drop the connection the update is going to happen.
+    //
+    // The socket is closed through the normal user-initiated path, which stamps the
+    // cause and stops the carrier-lost auto-reconnect from racing the shutdown. The
+    // profile itself is saved by the window's Closing handler on the way out.
+    // The installer awaits this from wherever its download continuation landed, so it
+    // hops to the UI thread before touching connection state.
+    public Task<Services.Update.UpdateRelaunch> PrepareForUpdateRestartAsync() =>
+        Dispatcher.UIThread.InvokeAsync(StandDownForUpdateAsync);
+
+    private async Task<Services.Update.UpdateRelaunch> StandDownForUpdateAsync()
+    {
+        bool wasLive = IsConnected || IsConnecting;
+        if (IsConnected) await DisconnectInternalAsync();
+        else if (IsConnecting) _connectCts?.Cancel();
+
+        ProfileService profiles = AppServices.Current.Profile;
+        string? token = profiles.CurrentProfileName is { } name && profiles.CurrentBbsName is { } bbs
+            ? $"{bbs}/{name}"
+            : null;
+
+        AppServices.Current.Log.Info("Update",
+            $"Session stood down for update restart (profile={token ?? "none"}, reconnect={wasLive}).");
+        return new Services.Update.UpdateRelaunch(token, wasLive && token is not null);
     }
 
     // ----- Placeholder shell-window plumbing -----------------------------
@@ -5055,7 +5109,8 @@ public partial class MainWindowViewModel : ObservableObject
 
         MudPlay.Views.UpdateWindow window = new()
         {
-            DataContext = new UpdateWindowViewModel(AppServices.Current.Update),
+            DataContext = new UpdateWindowViewModel(
+                AppServices.Current.Update, PrepareForUpdateRestartAsync, ShutdownNow),
         };
         window.Closed += (_, _) => _updateWindow = null;
         _updateWindow = window;

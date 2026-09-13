@@ -23,6 +23,12 @@ public partial class MainWindow : Window
     // Set once the user (or programmatic shutdown) has confirmed exit, so the second Close call sails through.
     private bool _exitConfirmed;
 
+    // Latched by the app-initiated exits (File → Quit, the self-updater's restart)
+    // before they call Shutdown. Those paths ask for confirmation themselves, and a
+    // forced Shutdown discards this handler's e.Cancel anyway — so without the latch
+    // the prompt would appear over a dying app AND swallow the save below it.
+    public void MarkExitConfirmed() => _exitConfirmed = true;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -103,8 +109,9 @@ public partial class MainWindow : Window
         // intercept the first Closing fire, cancel it, run the modeless
         // confirm dialog async, then re-issue Close() if the user said
         // yes. The _exitConfirmed latch makes the second Close skip the
-        // prompt so we don't loop. App-initiated shutdowns (none today)
-        // would set _exitConfirmed=true before calling Close.
+        // prompt so we don't loop. App-initiated shutdowns (File → Quit,
+        // the self-updater) call MarkExitConfirmed first — they prompt on
+        // their own, before the shutdown that would ignore a cancel here.
         //
         // ProfileService.Save no-ops on blank drafts (no name on disk to
         // write to) and when nothing is loaded, so the only path that

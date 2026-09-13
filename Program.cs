@@ -1,3 +1,4 @@
+using System.Linq;
 using Avalonia;
 using MudPlay.Services;
 
@@ -30,6 +31,12 @@ internal static class Program
                 if (TryLaunchProfileInstance(profileTokens[i])) spawned++;
             StartupOptions.SpawnedSiblings = spawned;
         }
+
+        // --reconnect rides along with the self-updater's relaunch. Deliberately NOT
+        // forwarded to the spawned siblings above: only this instance was the one
+        // that was connected before the update.
+        StartupOptions.ForceReconnect = args.Any(a =>
+            string.Equals(a, "--reconnect", StringComparison.OrdinalIgnoreCase));
 
         // Install the crash net before anything can fault. CrashReporter.Guard
         // captures exceptions escaping the UI run loop; Install hooks the

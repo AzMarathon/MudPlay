@@ -24,6 +24,13 @@ public static class StartupOptions
     // entries. Purely informational — logged once at startup.
     public static int SpawnedSiblings { get; set; }
 
+    // --reconnect: dial the loaded profile's BBS on startup even when Settings →
+    // General → Auto-connect is off. Only the self-updater passes it, so a client
+    // that was mid-session before an update comes back in-game instead of cold.
+    // Consumed once by the startup auto-connect check and cleared, so a later
+    // profile load in the same session doesn't re-dial off a stale flag.
+    public static bool ForceReconnect { get; set; }
+
     // Set when a --profile token was given but didn't resolve (a typo, or an
     // ambiguous bare name on more than one BBS). The main window surfaces it on
     // the terminal at startup so the user sees WHY their named profile didn't

@@ -1,9 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Services;
@@ -19,6 +16,8 @@ namespace MudPlay.ViewModels;
 public sealed partial class UpdateWindowViewModel : ObservableObject
 {
     private readonly UpdateService _update;
+    private readonly Func<Task<UpdateRelaunch>> _prepareExit;
+    private readonly Action _exit;
     private readonly CancellationTokenSource _cts = new();
     private string? _releaseUrl;
 
@@ -35,9 +34,14 @@ public sealed partial class UpdateWindowViewModel : ObservableObject
 
     public string CurrentVersionLine => $"Installed version: {AppInfo.Version}";
 
-    public UpdateWindowViewModel(UpdateService update)
+    // prepareExit stands the live session down (close the connection, report what the
+    // relaunch has to restore); exit closes the app. Both come from the main window's
+    // view-model — this window doesn't own the session and shouldn't reach for it.
+    public UpdateWindowViewModel(UpdateService update, Func<Task<UpdateRelaunch>> prepareExit, Action exit)
     {
         _update = update;
+        _prepareExit = prepareExit;
+        _exit = exit;
         // Show the cached verdict instantly when we have a usable one; otherwise
         // (never checked, or the last check errored) run a fresh check on open.
         if (_update.Last is { } cached && cached.State != UpdateAvailability.Error)
@@ -83,7 +87,7 @@ public sealed partial class UpdateWindowViewModel : ObservableObject
             DownloadProgress = p;
             ProgressText = $"{p:P0}";
         });
-        UpdateApplyResult result = await _update.ApplyAsync(r, progress, RequestExit, _cts.Token);
+        UpdateApplyResult result = await _update.ApplyAsync(r, progress, _prepareExit, _exit, _cts.Token);
         if (!result.Relaunching)
         {
             IsDownloading = false;
@@ -153,10 +157,4 @@ public sealed partial class UpdateWindowViewModel : ObservableObject
                 break;
         }
     }
-
-    private static void RequestExit() => Dispatcher.UIThread.Post(() =>
-    {
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            desktop.Shutdown();
-    });
 }
