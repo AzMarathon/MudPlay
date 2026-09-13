@@ -486,7 +486,7 @@ You don't have to wait for the engines, either: the **Action menu** (and the mat
 
 ## Banking
 
-When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand. Set the bank and thresholds on Settings → Cash. To bank right now regardless of the threshold, use **Action → Deposit All** (or its toolbar button / the `@deposit-all` remote command), which banks down to your keep-on-hand floor.
+When your wealth crosses a threshold, MudPlay routes to a configured bank and deposits, keeping a set amount on hand, then **walks back to where it left off and resumes the loop / Auto-Lair** it interrupted. The trip home uses the **full pathfinder** — the same one that handles your GOTOs — so if the grind area is walled behind a key-door, a hidden exit, a summon-drop key, or a lever/ask-NPC gate, it plans and crosses back *in* rather than stranding at the bank (getting *out* of such an area is easy; getting back *in* needs the gate-aware routing). Set the bank and thresholds on Settings → Cash. To bank right now regardless of the threshold, use **Action → Deposit All** (or its toolbar button / the `@deposit-all` remote command), which banks down to your keep-on-hand floor.
 
 ## Equipment sets
 
@@ -1062,7 +1062,7 @@ Settings → General. Everything here is character-tier (follows the loaded char
 
 **Default:** Off
 **What it does:** Dials the profile's saved BBS the instant the profile finishes loading, instead of waiting for you to click Connect.
-**Important notes:** Only checked once, right when a profile loads — not something that re-triggers mid-session.
+**Important notes:** Only checked once, right when a profile loads — not something that re-triggers mid-session. This covers **every** way a profile loads: opening one from File → Open / Recent, **launching** straight into it (a `--profile` start, or a new instance spawned by the Profile Management window's **Load**), and swapping between profiles.
 
 ### Backup profile when making changes
 

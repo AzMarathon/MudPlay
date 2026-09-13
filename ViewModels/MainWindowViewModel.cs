@@ -1402,6 +1402,20 @@ public partial class MainWindowViewModel : ObservableObject
                 WriteTerminalStatus($"[{profileNotice}]", TerminalStatusKind.Error);
             });
         }
+
+        // Startup auto-connect. The profile the app launched with — a --profile
+        // argument (how Profile Management's "Load" spawns an instance) or the
+        // auto-load-last profile — is loaded by AppServices BEFORE this ctor
+        // subscribes OnProfileLoadedForConnect above, so that load's ProfileLoaded
+        // fired with no handler attached and Settings → General "Auto-connect when
+        // profile loads" was never honoured (report paradigm-20260913-005647).
+        // Replay the decision once now that the handler + BBS bindings are live.
+        // OnProfileLoadedForConnect self-guards — a blank draft, no resolved BBS, no
+        // host/port, Auto-connect off, or an already-live connection all early-return
+        // — so this is a no-op except the intended case: launching straight into a
+        // profile with Auto-connect on. Posted so it lands after the window shows.
+        if (AppServices.Current.Profile.Current is { } startupProfile)
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => OnProfileLoadedForConnect(startupProfile));
     }
 
     // Enabler for view-handled toolbar buttons (no CommandName) — a command-less

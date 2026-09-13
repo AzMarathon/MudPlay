@@ -270,7 +270,11 @@ public sealed class TrainerWalkManager : IDisposable
         {
             SendTrain();
         }
-        else if (_walker.WalkTo(room))
+        // planThroughAcquirableGates: the trainer may sit behind (or the walk home
+        // may re-enter) a gated area — key-doors, hidden exits, summon-drop keys,
+        // multi-action gates — that a plain walk can't route through (report
+        // paradigm-20260913-022254, same class of strand as the bank run).
+        else if (_walker.WalkTo(room, planThroughAcquirableGates: true))
         {
             _phase = Phase.Walking;
             _log?.Info("AutoTrain", $"Walking to {t.Name} ({t.Map}/{t.Room}) to train.");
@@ -316,7 +320,8 @@ public sealed class TrainerWalkManager : IDisposable
         {
             SendStatRefresh();
         }
-        else if (_walker.WalkTo(room))
+        // planThroughAcquirableGates: same gated-area reasoning as the train walk.
+        else if (_walker.WalkTo(room, planThroughAcquirableGates: true))
         {
             _phase = Phase.Walking;
             _log?.Info("AutoTrain", $"Walking to {t.Name} ({t.Map}/{t.Room}) to allocate CP.");
@@ -680,7 +685,11 @@ public sealed class TrainerWalkManager : IDisposable
                 _autoLair.Start();
                 break;
             case ResumeKind.Loop:
-                if (resume.Loop is { } loop) _loopRunner.Start(loop);
+                // ResumeAfterDetour (not Start): the train detour is a continuation of
+                // the same grind session, so it must not re-fire the first-waypoint
+                // reset (session stats + party @reset). throughGates lets the loop
+                // re-approach back INTO a gated grind area the detour walked out of.
+                if (resume.Loop is { } loop) _loopRunner.ResumeAfterDetour(loop, throughGates: true);
                 break;
         }
     }

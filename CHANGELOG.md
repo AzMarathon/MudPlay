@@ -1,5 +1,13 @@
 # Version history
 
+## 3.77.10
+
+- **Auto-connect when profile loads** now fires on the profile you **launch** with — a `--profile` start, or a new instance spawned by Profile Management's **Load** — not only on an in-session open; previously the launch profile loaded before the auto-connect handler was wired and silently skipped it
+- Auto-deposit bank runs now **walk back into** a gated grind area (key-door, hidden exit, summon-drop key, lever/ask-NPC gate) instead of going idle at the bank — the return leg uses the full gate-aware pathfinder, not a plain walk (walking out is easy; walking back in needed it)
+- Auto-train trainer runs use the same gate-aware pathing out to the trainer and back into the loop
+- Fixed a deposit that ran its completion twice on arrival (the second pass found nothing to bank) and doubled the return walk
+- bug reports addressed: paradigm-20260913-005647, paradigm-20260913-022254
+
 ## 3.77.7
 
 - `/state` reports whether the client is connected and whether an auto-redial is armed — the first thing you check on a client that looks stuck, and previously only inferable from the log going quiet

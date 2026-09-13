@@ -332,7 +332,14 @@ public sealed class AutoDepositManager : IDisposable
     private bool RerouteWalkTo(RoomKey destination)
     {
         _drivingWalker = true;
-        try { return _walker.WalkTo(destination); }
+        // planThroughAcquirableGates: walking OUT of a gated area (hidden exits,
+        // key-doors, summon-drop keys, multi-action gates) is trivial, but walking
+        // back IN needs the same acquirable-gate planning a user GOTO uses. Without
+        // it the return leg plans over the plain graph, which has no route back into
+        // e.g. the dark-elf city, so the walker can't get home and the engine strands
+        // at the bank, never resuming the loop (report paradigm-20260913-022254).
+        // armItemAcquisition stays on (WalkTo's default) so the crossing actions fire.
+        try { return _walker.WalkTo(destination, planThroughAcquirableGates: true); }
         finally { _drivingWalker = false; }
     }
 
@@ -451,7 +458,17 @@ public sealed class AutoDepositManager : IDisposable
     // return leg.
     private void CompleteBankDeposit()
     {
+        // Re-entrancy guard. DepositAtBank's _noteAutoDeposit drives
+        // InventoryManager.Changed SYNCHRONOUSLY, which re-enters OnInventoryChanged
+        // mid-complete — were the phase still AwaitingInventoryForDeposit that re-entry
+        // would run the whole deposit + return leg a second time (report
+        // paradigm-20260913-022254: a "nothing to deposit" second pass and a doubled
+        // return walk). Leave the awaiting phase BEFORE depositing so the re-entrant
+        // call early-returns; BeginReturnLeg then sets the real leg (it only diverges
+        // to the light-shop leg when the trip home runs dark).
+        if (_phase != DepositPhase.AwaitingInventoryForDeposit) return;
         _depositSyncTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _phase = DepositPhase.WalkingBackToOrigin;
         DepositAtBank();
         BeginReturnLeg();
     }
@@ -688,8 +705,10 @@ public sealed class AutoDepositManager : IDisposable
                 // ResumeAfterDetour, not Start: the loop's first-waypoint reset
                 // (session stats + party @reset) already fired at the user's
                 // original Start. This bank detour is a continuation, so it must
-                // not re-fire that reset.
-                if (r.Loop is { } loop) _loopRunner.ResumeAfterDetour(loop);
+                // not re-fire that reset. throughGates: if the walk back to origin
+                // above couldn't land us inside the grind area, the loop re-approach
+                // still plans through the acquirable gates to re-enter it.
+                if (r.Loop is { } loop) _loopRunner.ResumeAfterDetour(loop, throughGates: true);
                 break;
         }
     }
