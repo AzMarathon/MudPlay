@@ -2,7 +2,7 @@
 
 ## 3.78.0
 
-- Self-update: **Help → Check for updates…** downloads the latest release for your platform, verifies its checksum, swaps it in, and relaunches
+- Self-update: **Help / Tools → Check for updates…** downloads the latest release for your platform, verifies its checksum, swaps it in, and relaunches
 - Startup update check flags a newer build with red **UPDATE** banners flanking the title on the splash screen — notify-only, never auto-installs
 - New Settings → General "Check for updates on startup" toggle (on by default)
 
