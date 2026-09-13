@@ -2736,8 +2736,8 @@ public sealed class AppServices
         // table, so drop them when either changes: a set switch (reseeds both) or a
         // message edit in the Game Data Browser. Rebuilt lazily on next use.
         _cureSpells = new Game.GameData.CureSpellIndex(GameData, DiseaseApplySpellNumbers);
-        GameData.ActiveSetChanged += _ => { _applyMatchers = null; _spellFormulas = null; _cureSpells.Invalidate(); };
-        Messages.Messages.CollectionChanged += (_, _) => { _applyMatchers = null; _cureSpells.Invalidate(); };
+        GameData.ActiveSetChanged += _ => { _applyMatchers = null; _spellFormulas = null; _cureSpells.Invalidate(); _cureMatchers = null; };
+        Messages.Messages.CollectionChanged += (_, _) => { _applyMatchers = null; _cureSpells.Invalidate(); _cureMatchers = null; };
         // Monster-message catalogue parallels the spell-message one —
         // same per-set storage + universal seed fallback pattern.
         MonsterMessages = new MonsterMessageStore(Log);
@@ -7158,6 +7158,13 @@ public sealed class AppServices
     // (its Diseased-flagged records are the disease-apply source).
     private readonly Game.GameData.CureSpellIndex _cureSpells;
 
+    // Compiled cure-confirmation matchers, cached like _applyMatchers — the party
+    // tracker re-reads them on every inbound line, and rebuilding scans the Messages
+    // catalogue once per cure spell, so caching avoids that sweep per line. Depends
+    // only on the active set + the Messages catalogue (no per-character input), so
+    // the same two invalidations that reset _applyMatchers / _cureSpells cover it.
+    private IReadOnlyList<Game.Conditions.CureCastMatcher>? _cureMatchers;
+
     private IReadOnlyList<Game.Conditions.ApplyCastMatcher> ApplyCastMatchers()
     {
         if (_applyMatchers is { } cached) return cached;
@@ -7255,6 +7262,8 @@ public sealed class AppServices
     // member's chip. Re-read live, so a game-data set swap takes effect.
     private IReadOnlyList<Game.Conditions.CureCastMatcher> CureCastMatchers()
     {
+        if (_cureMatchers is { } cached) return cached;
+
         List<Game.Conditions.CureCastMatcher> list = new();
         foreach (Game.GameData.CureSpellIndex.CureSpell cure in _cureSpells.AllCures())
         {
@@ -7268,7 +7277,7 @@ public sealed class AppServices
             foreach (Models.GameData.MessageFlags ailment in CuredAilmentBits(cure.Cures))
                 list.Add(new Game.Conditions.CureCastMatcher(ailment, cure.Name, caster, witness));
         }
-        return list;
+        return _cureMatchers = list;
     }
 
     // Split a spell's combined cured-flags value into the individual ailment bits the
