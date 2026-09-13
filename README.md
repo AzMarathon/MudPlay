@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.79.4**
-> - Splash update banners now read **UPDATE AVAILABLE!!!**
-> - The "check for updates" menu entries (Help and Tools) are now **Update the Client**
-> - The update window shows the new version's CHANGELOG entry instead of the release page's publish boilerplate
-> - Self-update cleanup: the swap helper now deletes itself along with the download + backup, leaving no temp files behind
+> **Version 3.79.5**
+> - Fixed a crash when opening Game Data → Quest Flags (the index could rebuild on two threads at once, corrupting its sort)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
