@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.77.11**
-> - Fixed single-target attack spells that never switched to the configured alternate: a spell whose damage line doesn't start with "You " (many narrate the hit in third person, e.g. "Spiritual power strikes X for N damage!") never confirmed its cast, so MaxCastsPerRoom's tally froze and the spell auto-repeated forever instead of capping out
+> **Version 3.77.14**
+> - `@loop last` re-runs the last loop you ran this session — including an ad-hoc loop that was never saved — so a party member can put you back on it after a stop/@stop
+> - The Navigation window's Loop button pre-loads the last loop run this session into the builder, ready to Run again or re-Save; new Settings → General "Load last ran loop" toggle (on by default) turns it off
+> - Added a "Clear all" button (left of Save in Loop mode) that wipes every selected step so you can start a fresh loop
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

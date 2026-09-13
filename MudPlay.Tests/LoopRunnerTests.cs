@@ -222,6 +222,30 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void LastRunLoop_CapturedAsCanonicalCopy_SurvivesStop()
+    {
+        // What "@loop last" and the Loop-chip pre-load read: the whole last-run loop,
+        // retained past Stop (unlike CurrentLoop), as a distinct copy so the run's
+        // in-place rotation can't reorder the snapshot.
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Loop loop = AbCycle();
+
+        h.Runner.Start(loop);
+        Assert.NotNull(h.Runner.LastRunLoop);
+        Assert.Equal("ab", h.Runner.LastRunLoop!.Name);
+        Assert.Equal(new[] { new RoomKey(1, 1), new RoomKey(1, 2) },
+            h.Runner.LastRunLoop.Waypoints.Select(w => w.Key));
+        Assert.NotSame(loop, h.Runner.LastRunLoop);
+
+        // Survives a stop — CurrentLoop nulls, LastRunLoop persists.
+        h.Runner.Stop();
+        Assert.Null(h.Runner.CurrentLoop);
+        Assert.NotNull(h.Runner.LastRunLoop);
+        Assert.Equal("ab", h.Runner.LastRunLoop!.Name);
+    }
+
+    [Fact]
     public void Stop_DuringRun_GoesIdle()
     {
         Harness h = NewHarness();

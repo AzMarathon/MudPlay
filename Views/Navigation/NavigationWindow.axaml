@@ -573,6 +573,18 @@
                             Orientation="Horizontal"
                             Spacing="6"
                             IsVisible="{Binding MapExpanded}">
+                    <!-- Clear all — wipes every selected step from the current
+                         loop-build session so the user can start fresh (or clear
+                         the last-loop the Loop chip pre-loaded). Loop-build only:
+                         shown throughout the mode, enabled once there's a step to
+                         clear. Sits left of Save. -->
+                    <Button Classes="ActionChip"
+                            Content="Clear all"
+                            ToolTip.Tip="Remove every selected step from the loop you're building."
+                            IsVisible="{Binding IsLoopMode}"
+                            Command="{Binding ClearBuilderCommand}"
+                            IsEnabled="{Binding CanClearBuilder}"/>
+
                     <!-- Save — opens the appropriate editor dialog
                          (LoopEditor / LairEditor) pre-seeded with the
                          current build session OR running engine state.

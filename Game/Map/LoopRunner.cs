@@ -236,6 +236,16 @@ public sealed class LoopRunner : IRecoverableEngine
     public string? LastRunLoopName { get; private set; }
     public DateTimeOffset LastRunLoopAt { get; private set; } = DateTimeOffset.MinValue;
 
+    // A snapshot of the most recently RUN loop, retained past Stop/Reset like
+    // LastRunLoopName — but the whole Loop (waypoints + notes + settings), so it can
+    // be re-RUN, not just named. This is what lets "@loop last" and the Loop-mode
+    // chip re-run / re-open the last loop even when it was an ad-hoc one that was
+    // never saved (LastRunLoopName alone can't be resolved back to a Loop for an
+    // unsaved run). Captured BEFORE the in-place waypoint rotation below, so it keeps
+    // the canonical (waypoint-0-first) order. A distinct copy from the running _loop,
+    // so the rotation a run performs never mutates the retained snapshot.
+    public Loop? LastRunLoop { get; private set; }
+
     // Loop the user has "loaded" (staged) but not yet started — the Manage dialog's
     // Load action records it here. Distinct from CurrentLoop (which is only set
     // while a run is live): a staged loop sits idle until something begins it. The
@@ -681,6 +691,15 @@ public sealed class LoopRunner : IRecoverableEngine
         _loop = loop;
         LastRunLoopName = loop.Name;   // retained past Stop/Reset for @path recovery
         LastRunLoopAt = DateTimeOffset.UtcNow;
+        // Retain a canonical-order COPY (waypoints not yet rotated here) so "@loop
+        // last" / the Loop-mode chip can re-run or re-open this exact loop even if it
+        // was an ad-hoc, never-saved run. A copy, not the same object, so RotateLoopTo
+        // below can't reorder the snapshot.
+        LastRunLoop = new Loop(loop.Name, new List<LoopWaypoint>(loop.Waypoints))
+        {
+            Notes = loop.Notes,
+            OnlyAttackInLairRooms = loop.OnlyAttackInLairRooms,
+        };
         _index = 0;
         _stepInFlight = false;
         _awaitingPromptForCommand = false;

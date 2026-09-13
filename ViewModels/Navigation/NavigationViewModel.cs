@@ -1625,6 +1625,26 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
     }
 
+    // True when the "Clear all" chip (left of Save) should be active — Loop build
+    // mode with at least one selected step. Wipes the whole click list so the user
+    // can start a fresh loop, or clear the last-loop the Loop chip pre-loaded.
+    public bool CanClearBuilder =>
+        CurrentMode == NavigationMode.LoopBuild && LoopBuilder is { HasClicks: true };
+
+    // "Clear all" chip. Drops every selected step from the current loop-build
+    // session (LoopBuilderSession.Clear already resets the preview + save-ability),
+    // then repaints the map so the red preview polyline + numbered pins disappear.
+    [RelayCommand]
+    private void ClearBuilder()
+    {
+        if (LoopBuilder is not { } builder) return;
+        builder.Clear();
+        LoopBuilderPath = null;
+        LoopBuilderWaypoints = null;
+        RefreshLoopOverlays();
+        OnPropertyChanged(nameof(CanClearBuilder));
+    }
+
     // Dispatcher for the top-bar Save chip. Opens the right editor dialog
     // (Loop or Lair) pre-seeded with the current state — the user reviews /
     // renames / commits there. Mirrors the dispatch in RunStop so the chip's
@@ -2746,16 +2766,42 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 CurrentMode = NavigationMode.Idle;
             }
 
-            LoopBuilder = new LoopBuilderSessionViewModel(
+            var builder = new LoopBuilderSessionViewModel(
                 _services.Loops, _services.RoomGraph, _services.Movement);
             // Mirror the builder's PreviewedRoomKeys onto our own
             // observable so the map's LoopBuilderPath binding picks
             // up every click without a Navigation-VM-side timer.
-            LoopBuilder.PropertyChanged += OnLoopBuilderPropertyChanged;
+            builder.PropertyChanged += OnLoopBuilderPropertyChanged;
+
+            // Pre-load the last loop run this session, so hitting the Loop chip after
+            // a stop/@stop drops you straight back onto it — ready to Run again, or to
+            // re-Save if it was an ad-hoc loop never persisted. "Clear all" (the chip
+            // left of Save) wipes it to build a fresh loop instead. Seed handler-first
+            // (mirrors LoadLoop) so the click notifications reach OnLoopBuilderPropertyChanged.
+            // Gated on Settings → General "Load last ran loop" (on by default); off
+            // restores the old empty-builder behavior. The @loop last remote command is
+            // independent of this — it re-runs the last loop regardless.
+            bool preloadLast = _services.Resolver
+                .Resolve<Models.Profile.GeneralSettings>("General").LoadLastRanLoop;
+            if (preloadLast && _services.LoopRunner.LastRunLoop is { Waypoints.Count: >= 2 } last)
+            {
+                builder.ProposedName = last.Name;
+                builder.Notes        = last.Notes;
+                foreach (LoopWaypoint w in last.Waypoints)
+                    builder.AddClick(w.Key);
+            }
+
+            LoopBuilder = builder;
             CurrentMode = NavigationMode.LoopBuild;
+            // Paint the red preview + numbered markers immediately when we pre-loaded
+            // a loop (the AddClick notifications above fired before the field was set).
+            LoopBuilderPath      = builder.PreviewedRoomKeys;
+            LoopBuilderWaypoints = builder.WaypointKeys;
+            RefreshLoopOverlays();
         }
         OnPropertyChanged(nameof(LoopBuilder));
         OnPropertyChanged(nameof(IsLoopBuilding));
+        OnPropertyChanged(nameof(CanClearBuilder));
     }
 
     private void OnLoopBuilderPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -2792,6 +2838,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             case nameof(LoopBuilderSessionViewModel.ProposedName):
                 RebuildCurrentNavRows();
                 RaiseTopBarStatus();
+                OnPropertyChanged(nameof(CanClearBuilder));
                 break;
         }
     }
@@ -3926,6 +3973,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsLairBuilding));
         OnPropertyChanged(nameof(LairBuildStatusText));
         OnPropertyChanged(nameof(CanSaveCurrent));
+        OnPropertyChanged(nameof(CanClearBuilder));
         OnPropertyChanged(nameof(CurrentNavProgress));
         OnPropertyChanged(nameof(CurrentNavHasProgress));
         RebuildCurrentNavRows();

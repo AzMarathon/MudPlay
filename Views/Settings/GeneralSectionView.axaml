@@ -232,6 +232,10 @@
                           Content="Auto-connect when profile loads"
                           ToolTip.Tip="When checked, MudPlay dials the profile's pinned BBS immediately after the profile loads (skipped if you're already connected or there's no BBS pinned yet)."/>
 
+                <CheckBox IsChecked="{Binding LoadLastRanLoop, Mode=TwoWay}"
+                          Content="Load last ran loop into the Loop builder"
+                          ToolTip.Tip="When checked (the default), hitting the Navigation window's Loop button pre-loads the last loop you ran this session — ready to Run again or re-Save, or wipe with Clear all to build a fresh one. Unchecked, the Loop button opens an empty builder. The @loop last remote command re-runs the last loop either way."/>
+
                 <CheckBox IsChecked="{Binding BackupOnSave, Mode=TwoWay}"
                           Content="Backup profile when making changes"
                           ToolTip.Tip="Copy the existing profile JSON to {name}.json.bak before each save."/>
