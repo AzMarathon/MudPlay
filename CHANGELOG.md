@@ -1,5 +1,12 @@
 # Version history
 
+## 3.79.6
+
+- Route picker no longer marks an optional shortcut item as "required": it now tells a genuinely-required gate (the route can't be reached without it) from a shortcut an item merely unlocks, commits the reliable route, and offers the shortcut separately with the rooms it would save
+- A required gate item you already carry now shows in the requirement list ("— you have it") instead of silently vanishing
+- Shortcut items are never auto-fetched (their source may be unreliable, e.g. a monster drop)
+- bug reports addressed: paradigm-20260913-100733
+
 ## 3.79.5
 
 - Fixed a crash when opening Game Data → Quest Flags (the index could rebuild on two threads at once, corrupting its sort)

@@ -163,6 +163,13 @@ public sealed class MovementFilter : IRoomFilter
     // set and cleared through SuspendAcquirableGates' disposable scope.
     private bool _acquirableGateSuspended;
 
+    // While gates are suspended, the gates for these item ids are kept evaluated
+    // normally (null/empty = none), so a planning pass can ask "is the destination
+    // still reachable if these item gates stay closed?" — the test that separates a
+    // genuinely required gate from an optional shortcut an item merely unlocks.
+    // Set/cleared through SuspendAcquirableGatesExcept's disposable scope.
+    private IReadOnlyCollection<int>? _keepClosedGateItems;
+
     // Read-only snapshot of the currently-avoided room keys.
     public IReadOnlyCollection<RoomKey> Avoided => _avoided;
 
@@ -232,7 +239,9 @@ public sealed class MovementFilter : IRoomFilter
     // can't yet tell whether we satisfy.
     private bool IsItemGateBlocked(in RoomExit exit)
     {
-        if (_acquirableGateSuspended) return false;
+        // Suspended — UNLESS this exit gates on an item we're keeping closed to probe
+        // whether it's genuinely required (then fall through to the live check).
+        if (_acquirableGateSuspended && !ExitGatesOnAny(in exit, _keepClosedGateItems)) return false;
         if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
 
         switch (exit.Hint)
@@ -339,17 +348,42 @@ public sealed class MovementFilter : IRoomFilter
     // Dispose to restore gating. Single-threaded planning use. Returns the
     // IRoomFilter-typed scope (boxes the struct) so a caller holding only the
     // interface can suspend without knowing the concrete filter.
-    public IDisposable SuspendAcquirableGates() => new GateSuspensionScope(this);
+    public IDisposable SuspendAcquirableGates() => new GateSuspensionScope(this, keepClosed: null);
+
+    // Suspends the acquirable gates EXCEPT ones that gate on an item in `keepClosed`,
+    // which stay live (blocked unless carried). A BFS in this scope answers "can the
+    // crosser still reach the destination WITHOUT relying on those items?" — reachable
+    // means they merely unlock an optional shortcut; unreachable means one is a genuine
+    // requirement. Single-threaded planning use; dispose to restore gating.
+    public IDisposable SuspendAcquirableGatesExcept(IReadOnlyCollection<int> keepClosed) =>
+        new GateSuspensionScope(this, keepClosed);
 
     public readonly struct GateSuspensionScope : IDisposable
     {
         private readonly MovementFilter _filter;
-        internal GateSuspensionScope(MovementFilter filter)
+        internal GateSuspensionScope(MovementFilter filter, IReadOnlyCollection<int>? keepClosed)
         {
             _filter = filter;
             _filter._acquirableGateSuspended = true;
+            _filter._keepClosedGateItems = keepClosed;
         }
-        public void Dispose() => _filter._acquirableGateSuspended = false;
+        public void Dispose()
+        {
+            _filter._acquirableGateSuspended = false;
+            _filter._keepClosedGateItems = null;
+        }
+    }
+
+    // Does this exit gate on any item in the set? Unions the carryable-item gates
+    // (ExitGateItems covers Item/Ticket/Teleport/MultiActionHidden) with the
+    // KeyLocked door key, which ExitGateItems deliberately omits. Empty/null → never.
+    private static bool ExitGatesOnAny(in RoomExit exit, IReadOnlyCollection<int>? items)
+    {
+        if (items is null || items.Count == 0) return false;
+        if (exit.Hint == RoomExitHint.KeyLocked && items.Contains(exit.KeyItemId)) return true;
+        foreach (int gid in ExitGateItems.Of(in exit))
+            if (items.Contains(gid)) return true;
+        return false;
     }
 
     // A "(Class: N OK)" exit only admits class Number N. Gate only when our

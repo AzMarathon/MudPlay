@@ -18,7 +18,19 @@ public enum RouteRequirementKind
 // One requirement the direct route imposes: the item id(s) that satisfy it. For
 // CarryItem / Ticket / DoorKey the list is the single gate item; for
 // HazardProtection it's the any-of counter set (hold at least one).
-public sealed record RouteRequirement(RouteRequirementKind Kind, IReadOnlyList<int> ItemIds);
+public sealed record RouteRequirement(RouteRequirementKind Kind, IReadOnlyList<int> ItemIds)
+{
+    // True when this gate merely unlocks a SHORTER route — the crosser can reach the
+    // destination without it (an optional shortcut, not a hard requirement). Never
+    // auto-obtained: a shortcut item may have no reliable source (e.g. a monster drop
+    // that may be dead), so fetching it could strand the walk with nothing gained.
+    public bool Optional { get; init; }
+
+    // True when the crosser ALREADY carries this gate's item. Surfaced (rather than
+    // silently dropped as "not blocked") so the requirement list is complete — the
+    // route genuinely crosses this gate, the crosser just already satisfies it.
+    public bool Carried { get; init; }
+}
 
 // Which kind of route fork the picker is presenting. ItemGate: a shorter direct
 // route crosses an acquirable item / ticket / key / hazard gate the free route
@@ -88,7 +100,16 @@ public sealed record RouteChoice(
     // through the avoided rooms needs no raft, so it's a real second way there. Null
     // on every fork that doesn't offer it.
     IReadOnlyList<RoomKey>? AvoidAlternativePath = null,
-    int AvoidAlternativeCount = 0)
+    int AvoidAlternativeCount = 0,
+    // An OPTIONAL shortcut alternative to the committed (GatedPath) route: a shorter
+    // route unlocked by carrying extra item(s) the committed route avoids. Non-null
+    // only when the committed route deliberately took the longer, gate-item-fewer way
+    // and a genuine shortcut exists — the picker surfaces it as "shortcut via X, saves
+    // N rooms" so the user can weigh fetching the (possibly unsourceable) shortcut item
+    // against the reliable long route. ShortcutItems is never auto-obtained.
+    IReadOnlyList<RoomKey>? ShortcutPath = null,
+    int ShortcutStepCount = 0,
+    IReadOnlyList<int>? ShortcutItems = null)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -187,10 +208,25 @@ public static class RouteChoicePlanner
             // item's AutoObtainForPath flag: flagged arms the acquisition pipeline
             // and crosses the gate; unflagged falls back to the plain walk whose
             // failure names the missing item.
-            return new RouteChoice(
-                0, gated.Count, reqs,
+            //
+            // But first separate genuinely-required gates from optional shortcuts an
+            // item merely unlocks: commit the route that avoids every optional shortcut
+            // (so the walk takes the reliable way and its carried gates surface), and
+            // offer the shortcut as an alternative rather than mislabelling its item as
+            // required (report paradigm-20260913-100733).
+            GateClassification gc = ClassifyGates(bfs, filter, graph, source, destination, gated);
+            RouteChoice sole = new(
+                0, gc.CommittedPath.Count, gc.Requirements,
                 Array.Empty<RoomKey>(),
-                BuildKeyPath(graph, source, gated));
+                BuildKeyPath(graph, source, gc.CommittedPath));
+            if (gc.ShortcutPath is { } scp)
+                sole = sole with
+                {
+                    ShortcutPath = BuildKeyPath(graph, source, scp),
+                    ShortcutStepCount = scp.Count,
+                    ShortcutItems = gc.ShortcutItems,
+                };
+            return sole;
         }
 
         // A free route exists — only offer the direct one when it's actually
@@ -542,6 +578,109 @@ public static class RouteChoicePlanner
         return keys;
     }
 
+    private readonly record struct GateClassification(
+        IReadOnlyList<Direction> CommittedPath,
+        List<RouteRequirement> Requirements,
+        IReadOnlyList<Direction>? ShortcutPath,
+        IReadOnlyList<int> ShortcutItems);
+
+    // Separates a sole route's item gates into genuinely-required (the destination is
+    // unreachable without them), optional shortcuts (a longer route avoids them), and
+    // already-carried. Returns the committed route that avoids every optional shortcut
+    // — so the walk takes the reliable way and its carried gates surface — its tagged
+    // requirements, and (when a real saving exists) the shortcut route + the optional
+    // items it needs. Optionality is a topology fact (does a route avoiding the gate
+    // exist?), independent of what the crosser currently carries.
+    private static GateClassification ClassifyGates(
+        BfsMapper bfs, MovementFilter filter, RoomGraphManager graph,
+        RoomKey source, RoomKey destination, IReadOnlyList<Direction> gated)
+    {
+        // Distinct unheld item-gate ids on the shortest all-suspended route.
+        var unheld = new List<int>();
+        foreach ((RouteRequirement req, bool held) in ItemGatesOnPath(graph, filter, source, gated))
+            if (!held)
+                foreach (int id in req.ItemIds)
+                    if (id > 0 && !unheld.Contains(id)) unheld.Add(id);
+
+        // An unheld gate is an OPTIONAL shortcut when the destination is still reachable
+        // with it kept closed (a longer route avoids it).
+        var optional = new List<int>();
+        foreach (int id in unheld)
+        {
+            IReadOnlyList<Direction>? around;
+            using (filter.SuspendAcquirableGatesExcept(new[] { id }))
+                around = bfs.FindPath(source, destination, filter);
+            if (around is not null) optional.Add(id);
+        }
+
+        if (optional.Count == 0)
+            return new(gated, TaggedRequirements(graph, filter, source, gated), null, Array.Empty<int>());
+
+        // Re-plan avoiding EVERY optional shortcut at once. If that disconnects the
+        // destination the optionals were mutually substitutable ("need one of them") —
+        // fall back to the original route + all-required so nothing is under-reported.
+        IReadOnlyList<Direction>? committed;
+        using (filter.SuspendAcquirableGatesExcept(optional))
+            committed = bfs.FindPath(source, destination, filter);
+        if (committed is null || committed.Count == 0)
+            return new(gated, TaggedRequirements(graph, filter, source, gated), null, Array.Empty<int>());
+
+        IReadOnlyList<Direction>? shortcut = committed.Count > gated.Count ? gated : null;
+        return new(committed, TaggedRequirements(graph, filter, source, committed),
+                   shortcut, shortcut is null ? Array.Empty<int>() : optional);
+    }
+
+    // The committed route's requirements: the still-blocked gates + hazards (required,
+    // as CollectRequirements sees them) PLUS the item-gates the crosser already carries,
+    // surfaced with Carried=true so the list is complete rather than silently dropping a
+    // satisfied gate.
+    private static List<RouteRequirement> TaggedRequirements(
+        RoomGraphManager graph, MovementFilter filter, RoomKey source, IReadOnlyList<Direction> path)
+    {
+        List<RouteRequirement> reqs = CollectRequirements(graph, filter, source, path);
+        foreach ((RouteRequirement req, bool held) in ItemGatesOnPath(graph, filter, source, path))
+            if (held && !AlreadyHave(reqs, req))
+                reqs.Add(req with { Carried = true });
+        return reqs;
+    }
+
+    // Every item-gate exit on a path, with whether the crosser carries all its item(s).
+    // Item gates only (Item/Ticket/KeyLocked/MultiActionHidden/Teleport) — hazards and
+    // plain doors are not carryable possession gates.
+    private static IEnumerable<(RouteRequirement Req, bool Held)> ItemGatesOnPath(
+        RoomGraphManager graph, MovementFilter filter, RoomKey source, IReadOnlyList<Direction> path)
+    {
+        Func<int, bool>? carries = filter.ItemCarriedProbe;
+        RoomKey cur = source;
+        foreach (Direction dir in path)
+        {
+            Room? room = graph.GetRoom(cur);
+            if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            if (ClassifyItemGate(in exit) is { } req)
+            {
+                bool held = req.ItemIds.Count > 0 && req.ItemIds.All(id => carries?.Invoke(id) == true);
+                yield return (req, held);
+            }
+            cur = exit.Target;
+        }
+    }
+
+    // The item-possession subset of Classify (no hazard fallback) — the gate items an
+    // exit demands in hand, or null for a plain / hazard exit.
+    private static RouteRequirement? ClassifyItemGate(in RoomExit exit) => exit.Hint switch
+    {
+        RoomExitHint.Item when exit.KeyItemId > 0 =>
+            new RouteRequirement(RouteRequirementKind.CarryItem, new[] { exit.KeyItemId }),
+        RoomExitHint.Ticket when exit.KeyItemId > 0 =>
+            new RouteRequirement(RouteRequirementKind.Ticket, new[] { exit.KeyItemId }),
+        RoomExitHint.KeyLocked when exit.KeyItemId > 0 =>
+            new RouteRequirement(RouteRequirementKind.DoorKey, new[] { exit.KeyItemId }),
+        RoomExitHint.MultiActionHidden or RoomExitHint.Teleport
+            when ExitGateItems.Of(in exit) is { Count: > 0 } gateItems =>
+            new RouteRequirement(RouteRequirementKind.CarryItem, gateItems),
+        _ => null,
+    };
+
     // Walk the direct path hop by hop; every hop the live filter still blocks is
     // an acquirable gate (level/toll/class gates were never suspended, so the
     // direct route can't contain one). Classify and dedupe.
@@ -607,6 +746,9 @@ public static class RouteChoicePlanner
         foreach (RouteRequirement req in requirements)
         {
             if (req.Kind is RouteRequirementKind.HazardProtection) continue;
+            // Never source an optional shortcut item (may be unsourceable) or one the
+            // crosser already carries.
+            if (req.Optional || req.Carried) continue;
             foreach (int id in req.ItemIds)
             {
                 if (id <= 0 || ids.Contains(id)) continue;
