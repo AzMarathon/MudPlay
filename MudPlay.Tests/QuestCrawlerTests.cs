@@ -867,4 +867,20 @@ public sealed class QuestCrawlerTests : IDisposable
         int[] completes = quests.OrderBy(q => q.BandOrdinal).Select(q => q.CompleteValue ?? -1).ToArray();
         Assert.Equal(new[] { 2, 3, 11 }, completes);
     }
+
+    [Fact]
+    public void Crawl_AlignmentCheckHelperFlag_IsNotAQuest()
+    {
+        // 216 (GoodCheck) is granted ONLY inside a chain gated on the Good alignment quest
+        // flag's progress (checkability 126 7) — a turn-in sub-marker, not a quest. 126 itself
+        // stays a quest even though its conversion pledge cross-checks another alignment flag.
+        IReadOnlyList<CrawledQuest> quests = QuestCrawler.Crawl(
+            CacheWithTbInfo(
+                "minlevel 20:checkability 126 7:testability 126 7:giveitem 684:giveability 216 1",
+                "minlevel 10:giveability 126 2",
+                "checkability 127 7:removeability 127:giveability 126 6"), classId: null);
+
+        Assert.DoesNotContain(quests, q => q.Flag == 216);   // helper flag dropped
+        Assert.Contains(quests, q => q.Flag == 126);         // the alignment quest itself stays
+    }
 }

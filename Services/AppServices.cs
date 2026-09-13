@@ -6196,6 +6196,15 @@ public sealed class AppServices
             // character-select menu doesn't fire; re-report re-lists the now-current quests.
             isInRealm: () => PlayerState.HasPromptData,
             reannounce: () => QuestAvailability.AnnounceLoginAvailable(),
+            // The eligible + level-met + incomplete set at the current level — the same
+            // resolver the availability announce uses. Bounds the sync to quests the
+            // character can actually complete now (not every quest in the realm).
+            availableQuests: () => Game.Quests.QuestEligibility.Resolve(
+                GameData, Quests, PlayerStats, Profile,
+                resolveName: static (q, def) => string.IsNullOrWhiteSpace(def.Name)
+                    ? ViewModels.CharacterWorkshop.QuestTextFormatter.FallbackTitle(q)
+                    : def.Name,
+                PlayerStats.Level),
             log: Log);
 
         AutoDeposit = new Game.Cash.AutoDepositManager(

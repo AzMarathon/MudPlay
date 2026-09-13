@@ -4375,6 +4375,20 @@ override): **MageBane / Witchunter (flag 50)** has no "finished" flag at all —
 and just stops; **Perfect Stealth (186(0))** completes at value **0**, indistinguishable from "not started"
 via `abil`.
 
+**Alignment "check" helper flags (GoodCheck / NeutralCheck / EvilCheck — 216 / 217 / 218 on Paradigm) are NOT
+quests.** They're sub-markers granted only inside an alignment quest chain — the grant is gated on being at a
+specific progress value of a canonical alignment flag (`checkability 126 7 : … : giveability 216 1`), it hands
+the 2nd-alignment turn-in item (severed head 684 for Good, etc.), and it's `failability`-gated at the
+alignment pledge, then reverts to 0. So they never indicate a completed quest and `QuestCrawler` drops them
+(`DiscoverAlignmentHelperFlags`: a granted flag — other than 126/127/128 themselves — whose every grant chain
+checks/tests a canonical alignment flag). The alignment quests' own completion rides flag 126/127/128, not
+these. Verified: the rule catches exactly {216,217,218} on `data-Paradigm-1.9.1` and nothing on the stock
+sets.
+
+**Sync scope:** the login/manual sync only reads flags for quests the character can complete at its current
+level (the same eligible + level-met + incomplete set the availability announce uses) — on Paradigm that
+bounds the per-flag `abil` burst; on both realms it keeps marking to quests the character could really do.
+
 **Client use:** the login quest-completion sync (`QuestFlagSyncManager`, opt-in via
 `GeneralSettings.AutoSyncQuestFlagsOnLogin`) reads these values before the availability announce and marks
 `QuestProgress.Complete` for any quest whose flag has reached its effective complete value (the per-quest

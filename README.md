@@ -6,6 +6,7 @@
 > - Quest editor: per-quest "Completes at flag value" — the crawler's guess, editable to cover quests it can't derive
 > - Game Data → Quest Flags: Step shown beside the flag name
 > - Stock flag read uses the BBS "Sysop god lives" sys-god access
+> - Sync only checks quests you can complete at your current level, and never treats alignment "check" helper flags (internal turn-in markers) as quests
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -31,6 +31,7 @@ public sealed class QuestFlagSyncManager
     private readonly Func<bool> _enabled;
     private readonly Func<bool> _isInRealm;
     private readonly Action _reannounce;
+    private readonly Func<IReadOnlyList<QuestAvailabilityInfo>> _availableQuests;
     private readonly LogService? _log;
     private bool _running;
 
@@ -45,7 +46,7 @@ public sealed class QuestFlagSyncManager
         GameDataCache gameData, ProfileService profile, QuestStore quests, QuestFlagProbe probe,
         Func<RealmType> realm, Func<bool> hasSysopPowers, Func<string?> characterName,
         Func<int?> classId, Func<bool> enabled, Func<bool> isInRealm, Action reannounce,
-        LogService? log = null)
+        Func<IReadOnlyList<QuestAvailabilityInfo>> availableQuests, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(profile);
@@ -58,6 +59,7 @@ public sealed class QuestFlagSyncManager
         ArgumentNullException.ThrowIfNull(enabled);
         ArgumentNullException.ThrowIfNull(isInRealm);
         ArgumentNullException.ThrowIfNull(reannounce);
+        ArgumentNullException.ThrowIfNull(availableQuests);
         _gameData = gameData;
         _profile = profile;
         _quests = quests;
@@ -69,6 +71,7 @@ public sealed class QuestFlagSyncManager
         _enabled = enabled;
         _isInRealm = isInRealm;
         _reannounce = reannounce;
+        _availableQuests = availableQuests;
         _log = log;
     }
 
@@ -103,10 +106,24 @@ public sealed class QuestFlagSyncManager
         IReadOnlyList<CrawledQuest> crawled = QuestCrawler.Crawl(_gameData, classId);
         if (crawled.Count == 0) return 0;
 
+        // Only quests this character can actually complete at its current level — the same
+        // eligible + level-met + incomplete set the availability announce uses. On paradigm
+        // this bounds the `abil` burst to relevant flags (not every quest in the realm); on
+        // both realms it keeps the marking to quests the character could really have done.
+        var eligible = new HashSet<(int Flag, int Step)>(
+            _availableQuests().Select(q => (q.Flag, q.Step)));
+
         List<QuestFlagCompletion.Target> targets = crawled
+            .Where(q => eligible.Contains((q.Flag, q.Step)))
             .Select(q => new QuestFlagCompletion.Target(
                 q.Flag, q.Step, _quests.Resolve(q.Flag, q.Step).CompleteValueOverride ?? q.CompleteValue))
             .ToList();
+        if (targets.Count == 0)
+        {
+            LastResult = "nothing to check (no eligible incomplete quests at this level)";
+            _log?.Info("QuestFlags", $"sync: {LastResult}");
+            return 0;
+        }
 
         HashSet<QuestFlagCompletion.QuestKey> alreadyComplete = BuildAlreadyComplete(prof.QuestLog);
         IReadOnlyList<int> flags = QuestFlagCompletion.FlagsToQuery(targets, alreadyComplete);
