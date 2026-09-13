@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.77.7**
-> - `/state` reports whether the client is connected and whether an auto-redial is armed — the first thing you check on a client that looks stuck, and previously only inferable from the log going quiet
+> **Version 3.77.10**
+> - **Auto-connect when profile loads** now fires on the profile you launch with (a `--profile` start, or a new instance spawned by Profile Management's Load), not only on an in-session open
+> - Auto-deposit bank runs walk back *into* a gated grind area (key-door, hidden exit, summon-drop key, lever/ask-NPC gate) instead of going idle at the bank — the return leg uses the full gate-aware pathfinder
+> - Auto-train trainer runs use the same gate-aware pathing out to the trainer and back into the loop
+> - Fixed a deposit that ran its completion twice on arrival and doubled the return walk
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

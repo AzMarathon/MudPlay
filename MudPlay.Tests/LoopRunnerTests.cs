@@ -47,6 +47,23 @@ public sealed class LoopRunnerTests : IDisposable
     {
         public HashSet<RoomKey> Avoided { get; } = new();
         public bool IsAvoided(RoomKey key) => Avoided.Contains(key);
+
+        // Acquirable-gate model for the gate-aware resume test: an exit whose Target
+        // is in GatedTargets is blocked UNLESS gates are suspended. Empty by default,
+        // so existing tests stay fail-open.
+        public HashSet<RoomKey> GatedTargets { get; } = new();
+        private int _suspendDepth;
+        public bool IsExitBlocked(in RoomExit exit)
+            => _suspendDepth == 0 && GatedTargets.Contains(exit.Target);
+        public IDisposable SuspendAcquirableGates()
+        {
+            _suspendDepth++;
+            return new SuspendScope(this);
+        }
+        private sealed class SuspendScope(TestAvoidFilter f) : IDisposable
+        {
+            public void Dispose() => f._suspendDepth--;
+        }
     }
 
     private sealed class Harness : IDisposable
@@ -182,6 +199,26 @@ public sealed class LoopRunnerTests : IDisposable
             new HashSet<Direction> { Direction.N }));
 
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.RepeatStarted);
+    }
+
+    [Fact]
+    public void ResumeAfterDetour_ThroughGates_ReEntersGatedGrindArea()
+    {
+        // A bank / trainer detour ends at C (1/3); the loop's waypoints (1/1, 1/2)
+        // are reachable only back through a gated exit into 1/2. A plain resume finds
+        // no reachable waypoint and fails (the reported strand). The detour-resume
+        // plans through the acquirable gate and re-approaches (paradigm-20260913-022254).
+        Harness h = NewHarness(withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        h.Filter.GatedTargets.Add(new RoomKey(1, 2));   // entering B is gated
+
+        // Plain resume: no reachable waypoint → fails, stays Idle.
+        Assert.False(h.Runner.ResumeAfterDetour(AbCycle(), throughGates: false));
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        // Gate-aware detour resume: plans through the gate and re-approaches.
+        Assert.True(h.Runner.ResumeAfterDetour(AbCycle(), throughGates: true));
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
     }
 
     [Fact]

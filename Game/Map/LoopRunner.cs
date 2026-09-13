@@ -624,12 +624,20 @@ public sealed class LoopRunner : IRecoverableEngine
     // false when the loop is empty.
     public bool Start(Loop loop) => StartInternal(loop, isRecovery: false);
 
-    // Resume a loop after an auto-deposit / bank detour that Stop()ed it for its
-    // own walk. Re-plans from the current room exactly like a fresh Start, but
+    // Resume a loop after an auto-deposit / bank / trainer detour that Stop()ed it
+    // for its own walk. Re-plans from the current room exactly like a fresh Start, but
     // suppresses the one-shot ReachedFirstWaypoint event — the session began at
     // the user's original Start, so the session-stats reset and party @reset
     // broadcast wired to that event must not re-fire on a mid-session detour.
-    public bool ResumeAfterDetour(Loop loop) => StartInternal(loop, isRecovery: false, suppressFirstWaypointEvent: true);
+    //
+    // throughGates: plan the re-approach through acquirable gates (key-doors, hidden
+    // exits, summon-drop keys, multi-action gates). A detour walks OUT of a gated grind
+    // area trivially but getting back IN needs the same acquirable-gate planning a user
+    // GOTO uses — without it PickClosestWaypoint finds no reachable waypoint and the loop
+    // never resumes, stranding the character where the detour ended (report
+    // paradigm-20260913-022254).
+    public bool ResumeAfterDetour(Loop loop, bool throughGates = false)
+        => StartInternal(loop, isRecovery: false, suppressFirstWaypointEvent: true, throughGates: throughGates);
 
     // Shared engine for both a fresh user Start and an auto-recovery reroute. On a
     // recovery reroute (isRecovery) we deliberately keep the session-scoped state —
@@ -637,7 +645,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // — so the reroute continues the same lap instead of re-arming ReachedFirstWaypoint
     // (which would re-fire the party @reset side effect on every recovery). EnterRecovery
     // has already detached the gate + cleared the in-flight step by the time we land here.
-    private bool StartInternal(Loop loop, bool isRecovery, bool suppressFirstWaypointEvent = false)
+    private bool StartInternal(Loop loop, bool isRecovery, bool suppressFirstWaypointEvent = false, bool throughGates = false)
     {
         ArgumentNullException.ThrowIfNull(loop);
         if (loop.Waypoints.Count < 2)
@@ -734,7 +742,7 @@ public sealed class LoopRunner : IRecoverableEngine
             return true;
         }
 
-        RoomKey? closest = PickClosestWaypoint(currentKey.Value, loop.Waypoints);
+        RoomKey? closest = PickClosestWaypoint(currentKey.Value, loop.Waypoints, throughGates);
         if (closest is null)
         {
             // No reachable waypoint — bail; gate would fail us anyway.
@@ -759,16 +767,22 @@ public sealed class LoopRunner : IRecoverableEngine
         Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
         _log?.Info("LoopRunner",
             $"approach: walking from {currentKey} → {closest} (closest of {loop.Waypoints.Count} waypoints)");
-        _walker.WalkTo(closest.Value);
+        _walker.WalkTo(closest.Value, planThroughAcquirableGates: throughGates);
         return true;
     }
 
     // Pick the user-waypoint with the shortest BFS path from from. Returns null when
     // no waypoint is reachable (disconnected graph, all waypoints behind avoided
     // rooms, etc.).
-    private RoomKey? PickClosestWaypoint(RoomKey from, IReadOnlyList<LoopWaypoint> waypoints)
+    private RoomKey? PickClosestWaypoint(RoomKey from, IReadOnlyList<LoopWaypoint> waypoints, bool throughGates = false)
     {
         if (_bfs is null) return waypoints.Count > 0 ? waypoints[0].Key : null;
+        // throughGates: suspend the acquirable gates (item / key-door / hidden exit /
+        // hazard) for the reachability probe so a waypoint reachable only by acquiring
+        // something en route (e.g. the key to re-enter a walled city after a detour)
+        // still counts as reachable; the approach walk then plans + acquires through
+        // them. Level / toll / class gates stay active regardless.
+        using IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGates() : null;
         RoomKey? best = null;
         int bestLen = int.MaxValue;
         foreach (LoopWaypoint w in waypoints)
