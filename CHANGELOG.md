@@ -1,5 +1,10 @@
 # Version history
 
+## 3.77.6
+
+- A party member's **blind / diseased / held / poisoned** chip now clears the moment you witness *any* cure land on them — including a cure cast by a party-mate using a spell your own class can't cast (a Priest's cure poison, antidote, freedom, cure disease, or a heal+cure). Previously only your own configured cures were recognized, so a cross-cast cure left the chip stuck until the next `par`
+- bug reports addressed: stock-20260913-010407, stock-20260913-010452
+
 ## 3.77.5
 
 - Removed the non-functional **Sysop map** checkbox (Settings → BBS): the game's `sys map` output can't be reliably matched to the room graph, so it never drove anything — `sys st` remains the working location-recovery power

@@ -2526,6 +2526,15 @@ identification differs by ailment because of how the engine models each:
 The ailment→flag map: Diseased, Poisoned, Blinded, MovementPrevented. Both realm seeds are
 flagged from their own realm MDB (Euphoria-Stock-ish for stock, Paradigm-1.9.1 for paradigm).
 
+**Cure-spell identification — which spells REMOVE each ailment** *([CONFIRMED] 2026-09-13, user + real stock/paradigm Spells data)* — the inverse map. Used to clear a party member's ailment chip when **any** member casts a cure: a party-mate cures with their own class's spells (a Priest's cure poison), which the local character may never learn, so recognition must come from game data, not the local cure config. The codes (`CureSpellIndex`):
+
+- **poison** — `CurePoison` (**20**), or `DispellMagic` (**73**) whose `AbilVal` is the Poison apply code (19).
+- **hold / paralysis** (MovementPrevented) — `Freedom` (**81**), or `DispellMagic` (73) targeting HoldPerson (74) / Paralyze (75).
+- **blind** — `DispellMagic` (73) targeting BlindingLight (53) / BlindUser (107).
+- **disease** — `RemovesSpell` (**122**) whose `AbilVal` is a disease-applying Spell.Number (the disease-apply set = spells whose Messages record carries the Diseased flag — same source used above).
+
+The `DispellMagic` / `RemovesSpell` **indirection** is what separates cure from apply: a DIRECT `BlindUser(107)` code is the blind APPLY (spell "blind"), while `DispellMagic(73)=107` is the blind CURE ("cure blindness"). Combined heal+cures (curing wind `curi`, merciful grace `mgra`) carry `CurePoison(20)` beside `Heal(18)`, so they register as poison cures for free.
+
 ## Party ailment signaling & cross-client sync (MegaMUD parity) *([CONFIRMED] 2026-09-12, user)*
 
 How a client learns which ailments afflict itself and its party members, and how it warns the
