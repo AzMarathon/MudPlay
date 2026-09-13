@@ -369,6 +369,13 @@ public sealed class LocalApiServer : IAsyncDisposable
     private async Task StreamEventsAsync(HttpListenerResponse res)
     {
         Guid id = Events.Add(res);
+        if (id == Guid.Empty)
+        {
+            // At the concurrent-stream limit. Say so rather than handing back a
+            // connection that would never carry an event.
+            WriteJson(res, 503, new { error = "too many event subscribers", active = Events.SubscriberCount });
+            return;
+        }
         _log.Info(LogCategory, $"event subscriber attached ({Events.SubscriberCount} active).");
         try
         {
@@ -453,7 +460,15 @@ public sealed class LocalApiServer : IAsyncDisposable
         HashSet<LogSeverity> set = [];
         if (string.IsNullOrWhiteSpace(raw)) return set;
         foreach (string part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            if (Enum.TryParse(part, ignoreCase: true, out LogSeverity s)) set.Add(s);
+        {
+            // IsDefined as well as TryParse: TryParse happily accepts the string
+            // form of any integer, so `?severity=99` would parse to (LogSeverity)99
+            // and make the set non-empty — filtering everything out and returning
+            // zero entries, which reads as "nothing happened". That's the exact
+            // outcome the empty-set fallback above exists to avoid.
+            if (Enum.TryParse(part, ignoreCase: true, out LogSeverity s) && Enum.IsDefined(s))
+                set.Add(s);
+        }
         return set;
     }
 

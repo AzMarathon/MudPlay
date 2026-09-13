@@ -113,7 +113,7 @@ public static class LocalApiState
         // query return whatever happened to fall inside the first N. Asking for
         // `?source=LocalApi&limit=50` really would come back empty while the
         // entries sat further along.
-        LogEntry[] entries = svc.Log.SnapshotAfter(since, out long newestSeq);
+        LogEntry[] entries = svc.Log.SnapshotAfter(since, out long newestSeq, out _);
 
         // Sequences are derived rather than stored per entry: the batch is
         // contiguous and ends at newestSeq. Numbering BEFORE filtering is what

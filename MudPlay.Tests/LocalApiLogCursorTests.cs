@@ -35,12 +35,12 @@ public sealed class LocalApiLogCursorTests
         log.Info("T", "a");
         log.Info("T", "b");
 
-        LogEntry[] first = log.SnapshotAfter(0, out long seq);
+        LogEntry[] first = log.SnapshotAfter(0, out long seq, out _);
         Assert.Equal(2, first.Length);
         Assert.Equal(2, seq);
 
         log.Info("T", "c");
-        LogEntry[] next = log.SnapshotAfter(seq, out long seq2);
+        LogEntry[] next = log.SnapshotAfter(seq, out long seq2, out _);
         Assert.Equal("c", Assert.Single(next).Message);
         Assert.Equal(3, seq2);
     }
@@ -50,7 +50,7 @@ public sealed class LocalApiLogCursorTests
     {
         LogService log = NewLog();
         log.Info("T", "a");
-        Assert.Empty(log.SnapshotAfter(log.TotalAppended, out _));
+        Assert.Empty(log.SnapshotAfter(log.TotalAppended, out _, out _));
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public sealed class LocalApiLogCursorTests
         for (int i = 0; i < 6; i++) log.Info("T", $"m{i}");
 
         // Sequences 1 and 2 are gone; 3..6 remain.
-        LogEntry[] entries = log.SnapshotAfter(0, out long seq);
+        LogEntry[] entries = log.SnapshotAfter(0, out long seq, out _);
         Assert.Equal(6, seq);
         Assert.Equal(4, entries.Length);
         Assert.Equal(new[] { "m2", "m3", "m4", "m5" }, entries.Select(e => e.Message));
@@ -73,8 +73,28 @@ public sealed class LocalApiLogCursorTests
         LogService log = NewLog();
         for (int i = 0; i < 5; i++) log.Info("T", $"m{i}");
 
-        LogEntry[] two = log.SnapshotAfter(0, out _, limit: 2);
+        LogEntry[] two = log.SnapshotAfter(0, out _, out long lastOfTwo, limit: 2);
         Assert.Equal(new[] { "m0", "m1" }, two.Select(e => e.Message));
+        Assert.Equal(2, lastOfTwo);   // the last RETURNED entry, not the ring head
+    }
+
+    // The cursor a truncated batch hands back must resume at the cap, not at the
+    // newest entry in the ring. Resuming from the ring head skips everything the
+    // limit held back — silently, which for a log tail is the worst possible
+    // failure: the caller believes it read everything.
+    [Fact]
+    public void SnapshotAfter_TruncatedByLimit_CursorResumesWithoutSkipping()
+    {
+        LogService log = NewLog();
+        for (int i = 0; i < 5; i++) log.Info("T", $"m{i}");
+
+        LogEntry[] first = log.SnapshotAfter(0, out long newest, out long cursor, limit: 2);
+        Assert.Equal(new[] { "m0", "m1" }, first.Select(e => e.Message));
+        Assert.Equal(5, newest);      // ring head — five entries exist
+        Assert.NotEqual(newest, cursor);
+
+        LogEntry[] rest = log.SnapshotAfter(cursor, out _, out _);
+        Assert.Equal(new[] { "m2", "m3", "m4" }, rest.Select(e => e.Message));
     }
 
     [Fact]
@@ -91,7 +111,7 @@ public sealed class LocalApiLogCursorTests
         log.Info("T", "b");
 
         Assert.True(log.TotalAppended > before);
-        Assert.Equal("b", Assert.Single(log.SnapshotAfter(before, out _)).Message);
+        Assert.Equal("b", Assert.Single(log.SnapshotAfter(before, out _, out _)).Message);
     }
 
     [Fact]
