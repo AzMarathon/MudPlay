@@ -387,12 +387,6 @@ public static class AppPaths
     public static string BundledMessagesSeedFile(string realm) =>
         Path.Combine(BundledSeedsDir, $"Messages.{realm}.seed.json");
 
-    // The pre-split single universal Messages seed in Global/. Retained only so the
-    // one-time migration can detect and retire an existing user's stale copy — nothing
-    // reads it for message content anymore now that the seed is realm-flavored.
-    public static string LegacyMessagesSeedFile =>
-        Path.Combine(DataRoot, "Global", "Messages.seed.json");
-
     // User-writable Triggers seed JSON, hosted in the XDG-resolved Global/
     // folder. TriggerEngine falls back to this when a set has no per-set
     // TriggersFile. Bootstrapped from BundledTriggersSeedFile on first app

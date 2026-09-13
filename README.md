@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.77.2**
-> - The unrecognized-message capture no longer flags your own `stat` / `exp` / `health` sheet or `spells` / `pow` listing as review candidates — each is read by its own parser, not the message catalogue, so polling one no longer floods the queue with its rows
+> **Version 3.77.3**
+> - Retired the defunct one-time message-data migrations (pre-split retirement + forced reseed) now that their rollout window has passed — the shipped message seed already refreshes itself on launch
+> - Documented the clean-install fallback for anyone jumping from a very old build whose catalogue still looks stale
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -58,7 +59,7 @@ Everything is stored under a single app-data folder, resolved per platform:
 - **Windows** — `%AppData%\MudPlay\`
 - **macOS** — `~/Library/Application Support/MudPlay/`
 
-Profiles, per-BBS settings, global settings, imported game data, and logs each live in their own subfolder. Settings files store only deltas from the tier beneath them, so they stay small and easy to back up. (Updating from an older build automatically lifts your data out of the previous nested `Data/` subfolder on first launch.)
+Profiles, per-BBS settings, global settings, imported game data, and logs each live in their own subfolder. Settings files store only deltas from the tier beneath them, so they stay small and easy to back up. (Updating from an older build automatically lifts your data out of the previous nested `Data/` subfolder on first launch. If you're jumping from a **very old build** and the message catalogue looks stale or wrong, the one-time cleanup that used to fix that is retired — do a clean install of the data folder, or delete the obsolete `Global/Messages.seed.json` and each set's `messages.json` to fall back to the shipped data.)
 
 ## Reporting a bug
 
