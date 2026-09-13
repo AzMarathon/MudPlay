@@ -105,6 +105,16 @@ public sealed class GlobalSettings
     // Port for the above. 6683 spells MMUD on a phone keypad.
     public int LocalApiPort { get; set; } = LocalApiDefaultPort;
 
+    // Whether the API may issue commands that end the session or can't be undone:
+    // @suicide, @hangup, @relog, and the raw-line passthrough (which is destructive
+    // by nature — it can carry anything the game accepts). Classified from
+    // RemoteCommandCatalog's permission categories, not a hand-kept list.
+    //
+    // Default FALSE and separate from LocalApiEnabled on purpose: the common case
+    // is reading state and driving movement, and a bug in an automated caller
+    // shouldn't be able to suicide or disconnect the character.
+    public bool LocalApiAllowDestructive { get; set; }
+
     public const int LocalApiDefaultPort = 6683;
 
     // Per-tab settings deltas — keyed by tab name (Health / Combat / Talk /

@@ -842,7 +842,12 @@ public static class BugReportBuilder
         string state = api.IsListening
             ? $"listening on 127.0.0.1:{api.Port}"
             : $"ENABLED BUT NOT LISTENING ({api.LastStartError ?? "reason unknown"})";
-        string subs = $", {api.Events.SubscriberCount} event subscriber(s)";
+        // Whether an automated caller could have suicided / disconnected this
+        // character materially changes how the rest of the report reads.
+        string destructive = svc.Settings.Current.LocalApiAllowDestructive
+            ? ", DESTRUCTIVE COMMANDS ALLOWED"
+            : ", destructive commands blocked";
+        string subs = $"{destructive}, {api.Events.SubscriberCount} event subscriber(s)";
         string failed = api.Auth.LastAuthFailureUtc is { } at
             ? $", last rejected request {at:u}"
             : string.Empty;

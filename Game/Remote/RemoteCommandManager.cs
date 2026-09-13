@@ -241,6 +241,88 @@ public sealed class RemoteCommandManager : IDisposable
     // Test seam — drives the engine without going through ChatRouter.
     internal void DispatchForTests(ChatLogEntry entry) => OnChatEntry(entry);
 
+    // Outcome of TryInvokeLocal, so the caller can map a refusal to the right
+    // status rather than guessing from a bool.
+    public enum LocalInvokeResult
+    {
+        Ok,
+        // No handler registered for the command.
+        UnknownCommand,
+        // The whole remote-command engine is switched off.
+        Disabled,
+        // An unconditional hard-block (reroll, `@party set suicide`) — denied for
+        // anyone, by any route.
+        HardBlocked,
+    }
+
+    // Run a registered @-command from the LOCAL machine rather than from a chat
+    // channel, collecting whatever the handler would have replied.
+    //
+    // Deliberately skips the per-player PlayerRemoteControls check. That gate
+    // answers "may this OTHER PLAYER, over chat, do this to me?" — a question with
+    // no meaning here: the caller already has the machine and the client. What it
+    // does NOT skip is MasterDisable (the user's own off switch for the whole
+    // subsystem) or the hard-blocks, which are absolute rather than
+    // permission-shaped. Anything further — whether a destructive command is
+    // allowed at all — is the API layer's decision, not this one's.
+    //
+    // Replies arrive through the collector instead of being sent to a channel, so
+    // invoking @health locally answers the caller and puts nothing on the wire.
+    public LocalInvokeResult TryInvokeLocal(
+        string command, IReadOnlyList<string>? args, Action<string> reply)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(command);
+        ArgumentNullException.ThrowIfNull(reply);
+        if (MasterDisable) return LocalInvokeResult.Disabled;
+
+        string normalised = command.Trim().ToLowerInvariant();
+        if (!normalised.StartsWith('@')) normalised = "@" + normalised;
+        string[] argv = args?.ToArray() ?? [];
+
+        if (IsHardBlocked(normalised, argv, out string? blockReason))
+        {
+            _log?.Log(LogSeverity.Warn, "RemoteCmd",
+                $"Local invocation of {normalised} denied — {blockReason}.");
+            return LocalInvokeResult.HardBlocked;
+        }
+
+        if (!_handlers.TryGetValue(normalised, out Registration registration))
+        {
+            if (!TryMatchPrefixHandler(normalised, out registration, out string suffix))
+                return LocalInvokeResult.UnknownCommand;
+            argv = Prepend(suffix, argv);
+        }
+
+        // Sender is a literal rather than a player name: handlers use it for reply
+        // addressing and logging, and naming the origin keeps a locally-driven
+        // action distinguishable from a party member's in the log.
+        RemoteCommandContext ctx = new(
+            Sender:          LocalSenderName,
+            Command:         normalised,
+            Args:            argv,
+            OriginalMessage: string.Join(' ', new[] { normalised }.Concat(argv)),
+            Channel:         RemoteChannel.Telepath,
+            Reply:           reply);
+
+        _log?.Log(LogSeverity.Info, "RemoteCmd",
+            $"Local invocation: {normalised}{(argv.Length > 0 ? " " + string.Join(' ', argv) : "")}");
+        try { registration.Handler(ctx); }
+        catch (Exception ex)
+        {
+            // Same policy as the chat path: a throwing handler must not tear the
+            // engine down. Surfaced to the caller so an API response isn't a
+            // silent success.
+            _log?.Log(LogSeverity.Warn, "RemoteCmd",
+                $"Handler for {normalised} threw on local invocation: {ex.Message}");
+            reply($"command failed: {ex.Message}");
+        }
+        return LocalInvokeResult.Ok;
+    }
+
+    // Sender name stamped on locally-invoked commands. Not a real player, and
+    // chosen to be obvious in a log line.
+    public const string LocalSenderName = "(local api)";
+
     // Enumerate the catalog commands sender is permitted to issue, given their
     // merged per-player permission grant. Backs the @help handler's reply.
     // Party-whitelist commands (those mapped to PlayerRemoteControls.None — @wait
