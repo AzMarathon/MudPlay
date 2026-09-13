@@ -105,7 +105,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _snapWindows = true;
     // Install-global (GlobalSettings.CheckForUpdatesOnStartup): a background check
     // against GitHub Releases on launch that flags a newer build (splash banners +
-    // Help → Check for updates). Never installs on its own.
+    // Help / Tools → Update the Client). Never installs on its own.
     [ObservableProperty] private bool _checkForUpdatesOnStartup = true;
 
     // Install-global (GlobalSettings.LocalApiEnabled / LocalApiPort). Opens a

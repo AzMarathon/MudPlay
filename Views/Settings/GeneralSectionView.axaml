@@ -404,7 +404,7 @@
                 <CheckBox Margin="0,2,0,0"
                           IsChecked="{Binding CheckForUpdatesOnStartup, Mode=TwoWay}"
                           Content="Check for updates on startup"
-                          ToolTip.Tip="When checked (default), MudPlay asks GitHub whether a newer build has been published each time it launches. It only NOTIFIES — a red 'UPDATE' banner flanks the title on the startup splash, and Help → Check for updates shows what's new. Nothing is ever downloaded or installed without you choosing Download &amp; Restart there. When unchecked, no check runs and you can still check manually any time from the Help menu. Install-wide preference; applies on Apply."/>
+                          ToolTip.Tip="When checked (default), MudPlay asks GitHub whether a newer build has been published each time it launches. It only NOTIFIES — a red 'UPDATE AVAILABLE!!!' banner flanks the title on the startup splash, and Help / Tools → Update the Client shows what's new. Nothing is ever downloaded or installed without you choosing Download &amp; Restart there. When unchecked, no check runs and you can still check manually any time from the Help or Tools menu. Install-wide preference; applies on Apply."/>
 
                 <CheckBox Margin="0,10,0,0"
                           IsChecked="{Binding LocalApiEnabled, Mode=TwoWay}"

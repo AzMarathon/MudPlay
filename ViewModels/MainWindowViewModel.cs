@@ -5037,7 +5037,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     private MudPlay.Views.UpdateWindow? _updateWindow;
 
-    // Help → Check for updates. A modeless window that reads the update service's
+    // Help / Tools → Update the Client. A modeless window that reads the update service's
     // cached verdict (or checks fresh), and — on the user's request — downloads,
     // verifies, swaps the new build in, and relaunches. Same toggle convention —
     // pressing the command while it's open closes it.

@@ -1,5 +1,12 @@
 # Version history
 
+## 3.79.4
+
+- Splash update banners now read **UPDATE AVAILABLE!!!**
+- The "check for updates" menu entries (Help and Tools) are now **Update the Client**
+- The update window shows the new version's CHANGELOG entry instead of the release page's publish boilerplate
+- Self-update cleanup: the swap helper now deletes itself along with the download + backup, leaving no temp files behind
+
 ## 3.79.0
 
 - Auto-detect completed quests from your in-game flags on login (opt-in, Settings → General) — reads flag values (paradigm `abil`, stock `sys god abil`) and ticks Complete; one-way, never un-marks. Turning it on mid-session fires the check immediately and re-reports what's still available
