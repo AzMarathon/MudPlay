@@ -29,7 +29,16 @@ public readonly record struct QuestFlagRef(
 public sealed class QuestFlagIndex
 {
     private readonly GameDataCache _cache;
-    private readonly List<QuestFlagRef> _refs = new();
+    // Serializes builds and guards the published-snapshot fields. The build runs on a
+    // background thread (GameDataTableSectionViewModel.LoadAsync → Task.Run), and two
+    // overlapping loads (tab re-activation, a set swap mid-load) would otherwise both
+    // enter Rebuild — one clearing/adding the list while the other is mid-Sort, which
+    // trips List.Sort's "IComparer returns inconsistent results" guard and crashes.
+    private readonly object _gate = new();
+    // Published atomically at the end of Rebuild under _gate: Entries hands this out as
+    // a live view, so it's built into a fresh local list and swapped in whole — never
+    // mutated in place after a reader could be holding it.
+    private List<QuestFlagRef> _refs = new();
     private string? _loadedSet;
     private bool _built;
 
@@ -56,78 +65,83 @@ public sealed class QuestFlagIndex
 
     // Every quest-flag reference in the active set, sorted flag → relationship → source. Live
     // view — read, don't mutate.
-    public IReadOnlyList<QuestFlagRef> Entries
-    {
-        get { EnsureBuilt(); return _refs; }
-    }
+    public IReadOnlyList<QuestFlagRef> Entries => EnsureBuilt();
 
-    private void EnsureBuilt()
+    private List<QuestFlagRef> EnsureBuilt()
     {
         string? active = _cache.ActiveSet;
-        if (_built && _loadedSet == active) return;
-        Rebuild(active);
+        lock (_gate)
+        {
+            if (_built && _loadedSet == active) return _refs;
+            return Rebuild(active);
+        }
     }
 
     private readonly record struct TbRow(string? Action, string? CalledFrom);
 
-    private void Rebuild(string? active)
+    // Caller holds _gate. Builds into a fresh local list, then publishes it whole — so a
+    // concurrent reader (Entries) sees either the previous snapshot or this finished one,
+    // never a list being cleared/appended/sorted underneath it.
+    private List<QuestFlagRef> Rebuild(string? active)
     {
-        _refs.Clear();
-        _loadedSet = active;
-        _built = true;
-        if (string.IsNullOrWhiteSpace(active)) return;
-
-        JsonDocument? doc = _cache.GetRawTable("TBInfo");
-        if (doc is null) return;
-
-        // Number → (Action, Called-From) so the provenance walk can hop between blocks.
-        Dictionary<int, TbRow> tb = new();
-        foreach (JsonElement el in doc.RootElement.EnumerateArray())
+        List<QuestFlagRef> refs = new();
+        JsonDocument? doc = string.IsNullOrWhiteSpace(active) ? null : _cache.GetRawTable("TBInfo");
+        if (doc is not null)
         {
-            if (el.ValueKind != JsonValueKind.Object) continue;
-            if (!el.TryGetProperty("Number", out JsonElement numEl)
-                || numEl.ValueKind != JsonValueKind.Number || !numEl.TryGetInt32(out int num))
-                continue;
-            tb[num] = new TbRow(ReadString(el, "Action"), ReadString(el, "Called From"));
-        }
-
-        Dictionary<(int, int), string> roomNames = BuildRoomNameMap();
-
-        HashSet<(int, QuestFlagRelation, QuestFlagSourceKind, int, int, int, int)> seen = new();
-        List<SourceRoot> roots = new();
-        foreach ((int number, TbRow row) in tb)
-        {
-            if (string.IsNullOrEmpty(row.Action)
-                || row.Action.IndexOf("ability", StringComparison.OrdinalIgnoreCase) < 0)
-                continue;
-
-            ResolveRoots(number, tb, roots);
-            foreach ((QuestFlagRelation rel, int flag, int value) in ParseAbilities(row.Action))
+            // Number → (Action, Called-From) so the provenance walk can hop between blocks.
+            Dictionary<int, TbRow> tb = new();
+            foreach (JsonElement el in doc.RootElement.EnumerateArray())
             {
-                foreach (SourceRoot root in roots)
+                if (el.ValueKind != JsonValueKind.Object) continue;
+                if (!el.TryGetProperty("Number", out JsonElement numEl)
+                    || numEl.ValueKind != JsonValueKind.Number || !numEl.TryGetInt32(out int num))
+                    continue;
+                tb[num] = new TbRow(ReadString(el, "Action"), ReadString(el, "Called From"));
+            }
+
+            Dictionary<(int, int), string> roomNames = BuildRoomNameMap();
+
+            HashSet<(int, QuestFlagRelation, QuestFlagSourceKind, int, int, int, int)> seen = new();
+            List<SourceRoot> roots = new();
+            foreach ((int number, TbRow row) in tb)
+            {
+                if (string.IsNullOrEmpty(row.Action)
+                    || row.Action.IndexOf("ability", StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                ResolveRoots(number, tb, roots);
+                foreach ((QuestFlagRelation rel, int flag, int value) in ParseAbilities(row.Action))
                 {
-                    var key = (flag, rel, root.Kind, root.Number, root.Map, root.Room, value);
-                    if (!seen.Add(key)) continue;
-                    _refs.Add(new QuestFlagRef(
-                        flag, AbilityNames.FormatId(flag), rel, root.Kind,
-                        root.Number, root.Map, root.Room, ResolveSourceName(root, roomNames), value));
+                    foreach (SourceRoot root in roots)
+                    {
+                        var key = (flag, rel, root.Kind, root.Number, root.Map, root.Room, value);
+                        if (!seen.Add(key)) continue;
+                        refs.Add(new QuestFlagRef(
+                            flag, AbilityNames.FormatId(flag), rel, root.Kind,
+                            root.Number, root.Map, root.Room, ResolveSourceName(root, roomNames), value));
+                    }
                 }
             }
+
+            refs.Sort(static (a, b) =>
+            {
+                int c = a.Flag.CompareTo(b.Flag);
+                if (c != 0) return c;
+                c = a.Relation.CompareTo(b.Relation);
+                if (c != 0) return c;
+                c = a.SourceKind.CompareTo(b.SourceKind);
+                if (c != 0) return c;
+                c = a.SourceNumber.CompareTo(b.SourceNumber);
+                if (c != 0) return c;
+                c = a.Map.CompareTo(b.Map);
+                return c != 0 ? c : a.Room.CompareTo(b.Room);
+            });
         }
 
-        _refs.Sort(static (a, b) =>
-        {
-            int c = a.Flag.CompareTo(b.Flag);
-            if (c != 0) return c;
-            c = a.Relation.CompareTo(b.Relation);
-            if (c != 0) return c;
-            c = a.SourceKind.CompareTo(b.SourceKind);
-            if (c != 0) return c;
-            c = a.SourceNumber.CompareTo(b.SourceNumber);
-            if (c != 0) return c;
-            c = a.Map.CompareTo(b.Map);
-            return c != 0 ? c : a.Room.CompareTo(b.Room);
-        });
+        _refs = refs;
+        _loadedSet = active;
+        _built = true;
+        return refs;
     }
 
     // Every ability directive in an Action string. Action is newline-separated, each line a

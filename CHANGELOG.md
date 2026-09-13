@@ -1,5 +1,10 @@
 # Version history
 
+## 3.79.5
+
+- Fixed a crash when opening Game Data → Quest Flags (the index could rebuild on two threads at once, corrupting its sort)
+- bug reports addressed: Crash-20260913-120450
+
 ## 3.79.4
 
 - Splash update banners now read **UPDATE AVAILABLE!!!**

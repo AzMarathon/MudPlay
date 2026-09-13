@@ -167,4 +167,33 @@ public sealed class QuestFlagIndexTests : IDisposable
 
         Assert.Empty(index.Entries);
     }
+
+    // The first Entries read builds the index; the build runs on a background thread in
+    // the app (LoadAsync → Task.Run). Two loads racing the first build would both enter
+    // Rebuild and mutate the shared list mid-Sort, tripping List.Sort's inconsistent-
+    // comparer guard (the Crash-20260913-120450 report). All threads must see the same
+    // fully-built snapshot with no exception.
+    [Fact]
+    public void Entries_ConcurrentFirstRead_IsThreadSafe()
+    {
+        GameDataCache cache = NewCache();
+        int expected = new QuestFlagIndex(cache).Entries.Count;   // baseline off a warm index
+        Assert.True(expected > 0);
+
+        for (int round = 0; round < 40; round++)
+        {
+            QuestFlagIndex index = new(cache);                    // fresh: every thread races the build
+            const int threads = 8;
+            using var barrier = new System.Threading.Barrier(threads);
+            var counts = new int[threads];
+
+            System.Threading.Tasks.Parallel.For(0, threads, i =>
+            {
+                barrier.SignalAndWait();                          // line them up on the unbuilt index
+                counts[i] = index.Entries.Count;
+            });
+
+            Assert.All(counts, c => Assert.Equal(expected, c));
+        }
+    }
 }
