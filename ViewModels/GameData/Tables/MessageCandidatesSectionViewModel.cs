@@ -23,9 +23,10 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
     private readonly GameDataCache? _cache;
     private readonly MessageCandidateWatcher? _watcher;
     private readonly LogDiagnosticState? _diagnostics;
-    // (map, room) -> a "Likely source" hint (spells castable by monsters in that
-    // room). Null when no attributor was supplied (tests / no game data).
-    private readonly Func<int, int, string?>? _likelySource;
+    // (map, room, rawText) -> a "Likely source" hint. Takes the captured text because
+    // the attribution is derived from it — a monster the line names, else the room's
+    // own on-entry spell. Null when no attributor was supplied (tests / no game data).
+    private readonly Func<int, int, string, string?>? _likelySource;
 
     public override string Id => "message-candidates";
     public override string Title => "Unrecognized Lines";
@@ -86,7 +87,7 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         GameDataCache? cache = null,
         MessageCandidateWatcher? watcher = null,
         LogDiagnosticState? diagnostics = null,
-        Func<int, int, string?>? likelySource = null)
+        Func<int, int, string, string?>? likelySource = null)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(messages);
@@ -97,7 +98,7 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         _watcher = watcher;
         _diagnostics = diagnostics;
         _likelySource = likelySource;
-        _handler = (_, _) => Reload();
+        _handler = OnCandidatesChanged;
         _candidates.Candidates.CollectionChanged += _handler;
         OpenEditAsyncCommand  = new AsyncRelayCommand<GameDataRow?>(OpenEditAsync);
         RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => SelectedRow is not null);
@@ -134,24 +135,91 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
     protected override void PopulateRows(IList<GameDataRow> rows)
     {
         foreach (MessageCandidateRecord c in _candidates.Candidates)
+            rows.Add(BuildRow(c));
+    }
+
+    private GameDataRow BuildRow(MessageCandidateRecord c)
+    {
+        var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
-            var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            ["Raw Text"]    = c.RawText,
+            // Map:Room where the line was first seen — the locator hint for
+            // tracking down its source. Blank when position wasn't yet known.
+            ["Seen In"]     = c.Map is { } m && c.Room is { } rm ? $"{m}:{rm}" : "",
+            // The spell that probably produced this line — a monster the line names,
+            // else the room's own on-entry spell. Blank when nothing ties the two
+            // together, which is more useful than a hint every row shares.
+            ["Likely source"] = c.Map is { } lm && c.Room is { } lr
+                ? (_likelySource?.Invoke(lm, lr, c.RawText) ?? "")
+                : "",
+            ["Occurrences"] = c.Occurrences.ToString(),
+            ["First Seen"]  = c.FirstSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+            ["Last Seen"]   = c.LastSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+            ["Status"]      = c.Dismissed ? "Dismissed" : "Pending",
+        };
+        GameDataRow row = GameDataRow.FromDictionary(dict, Columns);
+        row.Tag = c;
+        return row;
+    }
+
+    // Reload() replaces AllRows / FilteredRows with fresh collections, which resets
+    // the grid's scroll offset and clears the selection. Candidates arrive and bump
+    // their occurrence counts continuously during play, so reloading per change made
+    // the table impossible to read — it jumped back to the top every few seconds
+    // while the user was scrolled down looking at a line. A new line is therefore
+    // appended and a bump patched in place; only structural changes (a removal, or a
+    // whole-catalogue swap on a game-data set switch) still need the full rebuild.
+    private void OnCandidatesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add
+                when e.NewItems?.Count == 1 && e.NewItems[0] is MessageCandidateRecord added:
+                AppendRow(added);
+                break;
+            case NotifyCollectionChangedAction.Replace
+                when e.NewItems?.Count == 1 && e.NewItems[0] is MessageCandidateRecord bumped:
+                PatchRow(bumped);
+                break;
+            default:
+                Reload();
+                break;
+        }
+    }
+
+    private void AppendRow(MessageCandidateRecord added)
+    {
+        GameDataRow row = BuildRow(added);
+        AllRows.Add(row);
+        // Unfiltered, FilteredRows is the SAME instance as AllRows (the base aliases
+        // them), so adding twice would double the row.
+        if (!ReferenceEquals(FilteredRows, AllRows)
+            && RowMatches(row, (SearchText ?? string.Empty).Trim()))
+            FilteredRows.Add(row);
+        OnPropertyChanged(nameof(StatusText));
+    }
+
+    private void PatchRow(MessageCandidateRecord bumped)
+    {
+        for (int i = 0; i < AllRows.Count; i++)
+        {
+            if (AllRows[i].Tag is not MessageCandidateRecord existing
+                || existing.Id != bumped.Id) continue;
+
+            GameDataRow old = AllRows[i];
+            GameDataRow row = BuildRow(bumped);
+            bool wasSelected = ReferenceEquals(SelectedRow, old);
+            AllRows[i] = row;
+            if (!ReferenceEquals(FilteredRows, AllRows))
             {
-                ["Raw Text"]    = c.RawText,
-                // Map:Room where the line was first seen — the locator hint for
-                // tracking down its source. Blank when position wasn't yet known.
-                ["Seen In"]     = c.Map is { } m && c.Room is { } rm ? $"{m}:{rm}" : "",
-                // Spells castable by monsters in that room — a starting point for
-                // "which spell's message is this?". Blank when no location / no attributor.
-                ["Likely source"] = c.Map is { } lm && c.Room is { } lr ? (_likelySource?.Invoke(lm, lr) ?? "") : "",
-                ["Occurrences"] = c.Occurrences.ToString(),
-                ["First Seen"]  = c.FirstSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
-                ["Last Seen"]   = c.LastSeenAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
-                ["Status"]      = c.Dismissed ? "Dismissed" : "Pending",
-            };
-            GameDataRow row = GameDataRow.FromDictionary(dict, Columns);
-            row.Tag = c;
-            rows.Add(row);
+                int f = FilteredRows.IndexOf(old);
+                if (f >= 0) FilteredRows[f] = row;
+            }
+            // Replacing the item drops the grid's selection; put it back on the
+            // refreshed row so a bump can't steal the row the user is working on.
+            if (wasSelected) SelectedRow = row;
+            return;
         }
     }
 
@@ -215,7 +283,7 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
             sb.Append("  - seen in: ").Append(loc)
               .Append("  ·  occurrences: ").Append(c.Occurrences).Append('\n');
             if (c.Map is { } lm && c.Room is { } lr
-                && _likelySource?.Invoke(lm, lr) is { Length: > 0 } src)
+                && _likelySource?.Invoke(lm, lr, c.RawText) is { Length: > 0 } src)
                 sb.Append("  - likely source: ").Append(src).Append('\n');
         }
 

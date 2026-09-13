@@ -1,4 +1,5 @@
 using MudPlay.Game.Map;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.Terminal;
@@ -12,15 +13,26 @@ namespace MudPlay.Game;
 // misbehaves and someone goes digging through logs to find out why.
 //
 // A line survives to become a candidate only if it clears every exclusion in
-// order: not a prompt line, not near-empty, not an exact match against any of
-// MessageStore's recognized wire lines — the five perspective slots plus the
-// Confused records' ConfuseFumbleLine (own index, rebuilt on
-// MessageStore.Messages.CollectionChanged — mirrors ConditionTracker's
-// identical rebuild trigger), and not matched by ANY
-// pattern already registered in MessageRouter's catalog (movement, combat-
-// round text, chat, item get/drop, party, doors, and more — reusing already-
-// reviewed domain knowledge instead of inventing a new "looks like a spell
-// line" heuristic). What's left is genuinely unclassified text.
+// order: not a prompt line, not near-empty, not our own echoed command, not the
+// room's light announcement, and unrecognized by all four catalogues the app
+// already carries —
+//   * MessageStore's LITERAL slots, compared as text, plus the Confused records'
+//     ConfuseFumbleLine (rebuilt on MessageStore.Messages.CollectionChanged,
+//     mirroring ConditionTracker's identical trigger);
+//   * MessageStore's TEMPLATED slots via MessageTemplateIndex — the
+//     {source} casts {spellname} on {target}! shapes, which are the bulk of the
+//     catalogue and cannot be compared as text;
+//   * the stateful block parsers that register no router pattern (the `par`
+//     roster), each asked through its own matcher, plus the one attack shape that
+//     needs a class lookup rather than a regex to tell it from a spell;
+//   * every pattern in MessageRouter's catalog (movement, combat-round text,
+//     chat, item get/drop, party, doors, and more) — reusing already-reviewed
+//     domain knowledge instead of inventing a "looks like a spell line" heuristic.
+// What's left is genuinely unclassified text.
+//
+// Staging lags the wire by one line so a monster's death flavour, which no
+// catalogue can hold (realms author it per species and don't publish it), can be
+// identified by the experience line that always follows it and dropped.
 //
 // Several multi-line parsers in this codebase (who-list, spellbook, stat
 // screen, inventory, shop stock) read the wire directly and never register an
@@ -58,14 +70,28 @@ public sealed class MessageCandidateWatcher : IDisposable
     private readonly MessageCandidateStore _candidates;
     private readonly Func<RoomKey?>? _currentRoom;
     private readonly Func<string, bool>? _isKnownRoomName;
+    private readonly Func<string, bool>? _isRecognizedByDirectParser;
+    private readonly Func<string, bool>? _isNonCasterPhysicalAction;
     private readonly LogService? _log;
 
-    // Built from MessageStore on every CollectionChanged — trimmed text of
-    // every non-empty perspective slot across every record. Exact-match only
-    // (not ConditionTracker's substring-Contains semantics): a false negative
-    // here only means an extra, harmless candidate-queue entry, never a
-    // missed exclusion of real catalogue text.
+    // Built from MessageStore on every CollectionChanged — trimmed text of every
+    // non-empty LITERAL perspective slot across every record. Exact-match: a
+    // literal slot is the whole line the server prints, so anything looser would
+    // start swallowing lines the catalogue doesn't actually describe.
     private HashSet<string> _knownLines = new(StringComparer.Ordinal);
+
+    // The TEMPLATED slots ({source} casts {spellname} on {target}!) — never
+    // comparable as text, so they're compiled and matched. Without this every
+    // templated message in the catalogue reads as unrecognized, which is what used
+    // to stage known casts ("Raijin casts minor healing on Raijin!") for review.
+    private MessageTemplateIndex _templates;
+
+    // Literal AppliedEndsWith wordings, matched as SUBSTRINGS to mirror what
+    // ConditionTracker actually does with them. The stored wording omits the
+    // server's trailing punctuation ("The effects of way of the tiger wear off"
+    // vs the wire's "… wear off!"), so an exact test never fires and every
+    // buff-expiry line in the game looked unrecognized.
+    private List<string> _appliedEndsWith = new();
 
     private LineExtractor? _lines;
     private bool _disposed;
@@ -100,9 +126,21 @@ public sealed class MessageCandidateWatcher : IDisposable
     // time so a staged candidate carries a "first seen here" locator hint.
     // Null-tolerant: a null provider (or a null return before the room is
     // known) simply stages the candidate without a location.
+    // isRecognizedByDirectParser covers the stateful block parsers that read the wire
+    // straight and register no router pattern, so AnyPatternMatches can't speak for
+    // them — the `par` roster rows PartyManager consumes are the case that drove this.
+    // Composed in AppServices from each parser's own matcher so the shapes aren't
+    // duplicated here.
+    //
+    // isNonCasterPhysicalAction settles the one attack shape whose text alone is
+    // ambiguous ("<Actor> shoots an arrow at <target>!" vs "<Actor> hurls a fireball
+    // at <target>!") by asking whether the named player's class can cast at all.
+    // Needs the live roster plus the Classes table, so it can't be a router pattern.
     public MessageCandidateWatcher(MessageRouter router, MessageStore messages,
         MessageCandidateStore candidates, Func<RoomKey?>? currentRoom = null,
-        LogService? log = null, Func<string, bool>? isKnownRoomName = null)
+        LogService? log = null, Func<string, bool>? isKnownRoomName = null,
+        Func<string, bool>? isRecognizedByDirectParser = null,
+        Func<string, bool>? isNonCasterPhysicalAction = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(messages);
@@ -112,8 +150,11 @@ public sealed class MessageCandidateWatcher : IDisposable
         _candidates = candidates;
         _currentRoom = currentRoom;
         _isKnownRoomName = isKnownRoomName;
+        _isRecognizedByDirectParser = isRecognizedByDirectParser;
+        _isNonCasterPhysicalAction = isNonCasterPhysicalAction;
         _log = log;
 
+        _templates = new MessageTemplateIndex(messages.Messages);
         RebuildIndex();
         _messages.Messages.CollectionChanged += OnMessagesChanged;
     }
@@ -131,6 +172,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         // A new session's extractor means we're back at the splash / login — hold
         // capture until the first in-game prompt of this session (NotifyInGame).
         _inGame = false;
+        _pending = null;
     }
 
     // Set on the first game prompt this session (PromptScanner.PromptObserved, wired
@@ -158,13 +200,19 @@ public sealed class MessageCandidateWatcher : IDisposable
     private void RebuildIndex()
     {
         HashSet<string> known = new(StringComparer.Ordinal);
+        List<string> endsWith = new();
         foreach (MessageRecord r in _messages.Messages)
         {
             AddIfNotEmpty(known, r.CasterMessage);
             AddIfNotEmpty(known, r.TargetMessage);
             AddIfNotEmpty(known, r.WitnessMessage);
             AddIfNotEmpty(known, r.AppliedMessage);
-            AddIfNotEmpty(known, r.AppliedEndsWith);
+            // Substring, not exact — see _appliedEndsWith. Templated wordings are
+            // the template index's job; only literals land here.
+            if (!MessageRecord.IsBlankOrAbsent(r.AppliedEndsWith)
+                && r.AppliedEndsWith!.Trim() is { Length: > 0 } ends
+                && !ends.Contains('{'))
+                endsWith.Add(ends);
             // ConfuseFumbleLine is a recognized wire line too (it drives
             // MovementRefusalDetector via ConditionTracker.IsConfuseFumbleLine),
             // but it reaches the app through a predicate, NOT a router pattern —
@@ -176,11 +224,26 @@ public sealed class MessageCandidateWatcher : IDisposable
                     AddIfNotEmpty(known, wording);
         }
         _knownLines = known;
+        _appliedEndsWith = endsWith;
+        _templates = new MessageTemplateIndex(_messages.Messages);
     }
 
+    // Templated text is skipped: a slot carrying a {placeholder} can't be compared
+    // to a line as text, so it belongs to MessageTemplateIndex instead.
     private static void AddIfNotEmpty(HashSet<string> set, string? text)
     {
-        if (!string.IsNullOrWhiteSpace(text)) set.Add(text.Trim());
+        if (string.IsNullOrWhiteSpace(text)) return;
+        string trimmed = text.Trim();
+        if (!trimmed.Contains('{')) set.Add(trimmed);
+    }
+
+    // True when a literal AppliedEndsWith wording appears in the line, matching
+    // ConditionTracker's own Contains semantics for these.
+    private bool MatchesAppliedEndsWith(string text)
+    {
+        foreach (string wording in _appliedEndsWith)
+            if (text.Contains(wording, StringComparison.Ordinal)) return true;
+        return false;
     }
 
     // A full-line "[ … ]" is the client's own WriteTerminalStatus notice
@@ -227,15 +290,45 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (!_inGame) return;
 
         string text = line.Text.Trim();
-        if (text.Length < MinLineLength) return;
-        // Cheap own-output filters first, before the O(patterns) router scan:
+
+        // A monster's death flavour is the line immediately before the experience
+        // line. Realms author those per species and don't publish them, so the
+        // catalogue can never recognize one and every kill would stage a fresh
+        // candidate. Staging is therefore held back by a single line: an experience
+        // gain retires the held line as death flavour instead of committing it.
+        // Room-spell flavour is unaffected — nothing follows it.
+        if (IsExperienceGain(line))
+        {
+            RetirePendingAsDeathLine();
+            return;
+        }
+
+        // Cheap own-output filters first, before the costlier catalogue scans:
+        //  - near-empty noise ("OK", a blank continuation)
         //  - the client's own "[…]" status notices (WriteTerminalStatus)
-        //  - the echo of a command the user just sent
+        //  - the echo of a command we or the user just sent
+        // None of these can become a candidate, and none may RELEASE the held one
+        // either: a blank line or a status notice landing between the death message
+        // and the experience line would otherwise defeat the positional rule above.
+        if (text.Length < MinLineLength) return;
         if (IsClientStatusLine(text)) return;
         if (IsRecentCommand(text, line.Timestamp)) return;
+
+        // A real server line that isn't the experience gain — whatever was held can't
+        // be death flavour, so stage it.
+        CommitPending();
+
+        // Known from game data, so never a review candidate.
+        if (Light.LightModel.IsRoomLightPhrase(text)) return;
         if (_knownLines.Contains(text)) return;
         if (IsKnownRoomName(text)) return;
+        if (_isRecognizedByDirectParser?.Invoke(text) == true) return;
+        if (MatchesAppliedEndsWith(text)) return;
+        if (_templates.Matches(text)) return;
         if (_router.AnyPatternMatches(line)) return;
+        // Last, because it's the only check that consults the live roster and game
+        // data: an attack shape that only a class lookup can tell from a spell.
+        if (_isNonCasterPhysicalAction?.Invoke(text) == true) return;
         // A dismissed candidate is a final verdict — drop every recurrence
         // outright: no re-add, no occurrence bump, no re-alert.
         if (_candidates.IsDismissed(text)) return;
@@ -273,10 +366,47 @@ public sealed class MessageCandidateWatcher : IDisposable
         (int? map, int? room) = _currentRoom?.Invoke() is { } key
             ? ((int?)key.Map, (int?)key.Room)
             : (null, null);
-        (_, bool isNew) = _candidates.RecordSighting(text, now, map, room);
+        // Held rather than staged — see the death-flavour rule at the top of OnLine.
+        _pending = new PendingCandidate(text, now, map, room);
+    }
+
+    // A vetted line waiting to see whether an experience gain follows it (which
+    // would make it a monster's death flavour rather than a candidate).
+    private sealed record PendingCandidate(string Text, DateTimeOffset When, int? Map, int? Room);
+
+    private PendingCandidate? _pending;
+
+    private bool IsExperienceGain(LineExtractor.EmittedLine line) =>
+        _router.TryGetPattern(Services.Patterns.KnownPatterns.UserGainExperience,
+            out IMessagePattern pattern) && pattern.TryMatch(line, out _);
+
+    // Stage the held line for real.
+    private void CommitPending()
+    {
+        if (_pending is not { } p) return;
+        _pending = null;
+        (_, bool isNew) = _candidates.RecordSighting(p.Text, p.When, p.Map, p.Room);
         if (isNew)
             _log?.Warn(LogCategory,
-                $"unrecognized line — double-click to review: '{Truncate(text, 80)}'", context: text);
+                $"unrecognized line — double-click to review: '{Truncate(p.Text, 80)}'",
+                context: p.Text);
+    }
+
+    // The held line turned out to be death flavour. Drop it, and also un-stage any
+    // row an earlier session already captured for the same text so the queue heals
+    // itself instead of carrying death messages forever. A room-spell line that
+    // happens to land right before an experience gain once loses its row and
+    // re-stages on its next sighting — cheaper than leaving every kill in the queue.
+    private void RetirePendingAsDeathLine()
+    {
+        if (_pending is not { } p) return;
+        _pending = null;
+        // Only the clean-up is worth a log line — every kill hits this path, so
+        // logging the routine case would bury the log during a grind.
+        if (!_candidates.Contains(p.Text)) return;
+        _candidates.Remove(MessageCandidateRecord.ComputeId(p.Text));
+        _log?.Debug(LogCategory,
+            $"un-staged a monster death message (it precedes the experience line): '{Truncate(p.Text, 80)}'");
     }
 
     // Test-only counter so each SimulateCapture() call injects a distinct
@@ -295,6 +425,9 @@ public sealed class MessageCandidateWatcher : IDisposable
         string line = $"A shimmering test rune flickers and fades. [sim {++_simCounter}]";
         OnLine(new LineExtractor.EmittedLine(
             line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        // Real capture defers staging by one line to catch death flavour; the test
+        // button has no following line, so commit now or nothing would ever appear.
+        CommitPending();
         return line;
     }
 

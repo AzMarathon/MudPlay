@@ -1,6 +1,6 @@
 # Version history
 
-## 3.74.2
+## 3.75.0
 
 - Tab-completes the word you're typing — in the terminal or the Conversation window — against the leading word of your carried, worn, and key-ring item names (`drop emerald-` + Tab → `drop emerald-hilted rapier`; a "bronze emblem" needs `bro`/`bronze`, not `e`); Shift+Tab steps backward through other matches; never active while a full-screen form (trainer stats, character creation) owns the keyboard
 - New Settings → General toggle, "Tab-complete inventory item names while typing" (default on)
@@ -9,6 +9,52 @@
 - Fixed auto-rest/meditate still firing after a genuine mid-combat dip fully recovered on its own before the fight ended — a confirmed gate was holding out for the full rest-target instead of the ordinary rest-trigger, so combat ending committed to a rest the pool wasn't low for anymore; it now clears at the trigger until the rest command actually goes out
 - Fixed auto-rest/meditate still firing on a mid-combat dip that recovered in the very same wire burst as combat ending — HP/MA and the "combat's over" flag can update as two separate ticks off one server read, and when the combat flag lands first the rest command was committing off the about-to-be-overwritten stale low reading; combat ending now re-runs the same one-tick reconfirm the initial breach uses before actually sending
 - bug reports addressed: paradigm-20260911-231808, paradigm-20260912-093819, paradigm-20260912-103110, paradigm-20260912-123108
+## 3.74.13
+
+- Settings → BBS saves the login you typed even if you click to another board before pressing OK — username, password, sysop flags, Sys Goto table and logon steps were silently dropped on every board but the selected one
+- Imported logon steps survive a board switch the same way
+- Cancel still discards every board's pending edits, and a character swap mid-window drops them rather than writing one character's logins onto another
+
+## 3.74.12
+
+- Profile Management gains "Edit settings…" on the BBS rail (and double-click a row), opening Settings → BBS with that board already selected
+- Adding a BBS hands straight off to its settings, so a fresh board isn't left hostless with nothing pointing at the fix
+- Roomba table lists one row per sort rule, so a room's rules can be dealt with one at a time
+- Remove drops the highlighted rule(s) instead of the room's whole rule set — the room leaves the list only when nothing is left to sort by
+- Remove takes a multi-row highlight (ctrl/shift-click) and clears every highlighted rule
+- New Edit button reopens the highlighted row's room in the rule picker, prefilled — fix a rule, add another, or flag catch-all without removing and re-adding
+
+## 3.74.9
+
+- A partymate's ailment chip no longer expires off the wrong number: the duration read a monster's to-hit value as if it were a spell number, so any physical attack whose accuracy happened to equal the ailment's spell number matched, and that attack's damage was then used as the cast level (431 such collisions ship in the Paradigm data — `fear` vs an accuracy of 60 being the common one)
+- Monster attacks that can never land no longer influence ailment durations
+- bug reports addressed: ailment-duration-misattribution-20260912
+
+## 3.74.8
+
+- Unrecognized-line capture now recognizes **templated** catalogue messages, so known casts (`Raijin casts minor healing on Raijin!`, `You invoke the way of the swan.`) are no longer staged for review — previously every templated message in the game read as unknown
+- Buff wear-off lines matched as phrases rather than exact text, so the server's trailing punctuation no longer defeats them
+- Shipped templates too vague to identify a line (`The {source} {spellname}!`) are skipped for recognition instead of swallowing genuine unknown messages
+- Capture skips `par` party-screen rows, room-light announcements, third-party physical attacks, and another player's failed cast
+- Monster death messages dropped by position (the line before an experience gain), and rows captured for them earlier are cleared out
+- Engine-issued commands no longer leave their echo (`swan`, `tige`) in the queue
+- Unrecognized Lines table updates in place — live capture no longer snaps the list back to the top or drops your selection
+- A ranged attack that names ammunition but no weapon (`Suijin shoots an arrow at bandit!`) reads exactly like a projectile spell, so it's settled by the actor's class: a player whose class has no magery can't be casting, so the line is dropped — while the same line from a caster stays captured
+- Monster spell messages and ambient room-spell flavour still captured, deliberately
+- **Likely source** now derives from the line instead of the room, so it stops answering the same thing for every row: a line naming a room monster gets that monster's spells tagged with how each fires (`bites (#80) — forest spider, on hit`), a line naming none gets the room's own on-entry spell (the source of the atmosphere lines — `An ominous wind blows through the trees` is the darkwood forest spell), and with neither the column is blank rather than a guess
+- Never-firing monster attack slots (0% chance) no longer contribute to attribution
+- bug reports addressed: unrecognized-lines-20260912-122401
+
+## 3.74.0
+
+- Party-ailment signalling reworked to interoperate with MegaMUD in a mixed party:
+  - A partymate's **poison** chip is read from the `par` party-screen `P` flag (set and cleared each poll), so it shows even when they're on MegaMUD; poison is no longer announced on say (the `@wait` to the leader stays). Your own poison chip still comes from your apply/wear-off messages.
+  - **Blind / confused / diseased / held** now announce a bare `@blind` / `@confused` / `@diseased` / `@held` on say at apply only (MegaMUD parity — no `on`/`off` suffix); on clear nothing is said.
+  - The client now **witnesses a monster's ailment-apply** landing on a partymate and lights their chip, then clears it when the spell's own duration (derived from the casting monster's level) elapses — so a member's chip no longer sticks forever waiting for an `off` that never comes.
+  - A member's chip clears on whichever is observed first: a witnessed cure on them, the spell-data duration timing out, the `par` `P` flag dropping (poison), or a `@status` reply.
+- **`@panic`** (MegaMUD party bail-out): a leader whose HP crosses the "hang if below" floor can say `@panic` to the whole party and then escape (hang up, or break + sys-goto-wimpy per the Health tab). Two Settings → Party checkboxes: **Use @panic while leading** (send, off by default) and **Ignore @panics** (off by default — an un-ignored `@panic` makes you bail the same way your own low-HP emergency would). A received `@panic` still honours the Disable-hangups master switch for the carrier-drop (it'll wimpy-jump if configured but never be force-dropped).
+- Party window now shows **your own entry while solo** (not just in a party), live-updating its HP/mana and ailment chips from your state — handy for watching the client recognize an ailment apply/clear in real time. It's display-only: a lone self row is never treated as a party.
+- Settings → Spells ailment section simplified to one **"Ignore X"** checkbox per ailment — it now suppresses **both** the party `@wait` and the say announce (the separate "Don't announce X" checkboxes are gone).
 
 ## 3.73.2
 

@@ -3092,6 +3092,12 @@ public partial class MainWindowViewModel : ObservableObject
     // observer fan-out is skipped.
     private void SendEngineWireRaw(byte[] data)
     {
+        // The one observer an engine send still feeds. It doesn't INTERPRET the send
+        // (the reason the rest are skipped) — it only remembers the text briefly so
+        // the server's echo of it isn't staged as an unrecognized line. Without this,
+        // an engine-issued cast echoed a truncated command back ("swan", "tige") and
+        // the capture queue filled with the client's own output.
+        AppServices.Current.MessageCandidateWatcher.ObserveOutbound(data);
         TelnetClient? t = _telnet;
         if (t is not null) _ = FireSendAsync(t, data);
     }
@@ -3507,7 +3513,8 @@ public partial class MainWindowViewModel : ObservableObject
         ProfileManagerWindow window = new()
         {
             DataContext = new ProfileManagerViewModel(
-                () => IsDisconnected, SwapToProfileRef, NewProfile, SaveProfile, SaveProfileAsAsync),
+                () => IsDisconnected, SwapToProfileRef, NewProfile, SaveProfile, SaveProfileAsAsync,
+                OpenBbsSettingsFor),
         };
         window.Closed += (_, _) => _profileManager = null;
         _profileManager = window;
@@ -3904,7 +3911,12 @@ public partial class MainWindowViewModel : ObservableObject
         await Task.CompletedTask;
     }
 
-    private void OpenSettingsAt(string? sectionId)
+    // Profile Management's "Edit settings…" on a BBS row — open Settings on the
+    // BBS tab with that record selected, so a freshly-added BBS has an obvious
+    // path to the host / port it still needs.
+    private void OpenBbsSettingsFor(string bbsName) => OpenSettingsAt("bbs", bbsName);
+
+    private void OpenSettingsAt(string? sectionId, string? bbsName = null)
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
             return;
@@ -3924,6 +3936,7 @@ public partial class MainWindowViewModel : ObservableObject
                     SettingsSectionViewModel? section = vm.Sections
                         .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
                     if (section is not null) vm.SelectedSection = section;
+                    if (bbsName is not null) vm.SelectBbs(bbsName);
                     existing.Activate();
                     return;
                 }
@@ -3942,7 +3955,8 @@ public partial class MainWindowViewModel : ObservableObject
             DataContext = new SettingsWindowViewModel(
                 svc.Profile, svc.Log,
                 sendText: SendTextFromSettings,
-                initialSectionId: sectionId),
+                initialSectionId: sectionId,
+                initialBbsName: bbsName),
         };
         window.Closed += (_, _) =>
         {

@@ -135,15 +135,16 @@ public sealed class SelfHeldResponderTests
     }
 
     [Fact]
-    public void Solo_NoSelfRow_StillHoldsGate()
+    public void Solo_SelfRow_HoldsGateAndLightsChip()
     {
         using Harness h = new();
-        // No party — the chip write is a harmless no-op, but the local hold must
-        // still apply so a solo player doesn't walk while knocked down.
+        // Solo now keeps a lone self row (PartyWindow self-display): the local hold
+        // applies so a solo player doesn't walk while knocked down, AND the self
+        // row's Held chip lights.
         h.Knock();
 
         Assert.True(h.GateHeld);
-        Assert.False(h.SelfChip);
+        Assert.True(h.SelfChip);
     }
 
     [Fact]

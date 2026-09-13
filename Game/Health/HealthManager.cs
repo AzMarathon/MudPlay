@@ -112,6 +112,8 @@ public sealed class HealthManager : IDisposable
     private Action<byte[]>? _hangupWireSender;  // un-wrapped: pierces EngineSendGate
     private Action? _requestHangupDisconnect;   // hard-close the socket after the exit command
     private Func<string, bool>? _tryWimpyGoto;  // sys-goto-wimpy escape substitute for the hangup
+    private Func<Models.Profile.PartySettings>? _readPartySettings; // @panic send/ignore gates
+    private Func<bool>? _selfIsPartyLeader;     // in a party AND leading it (@panic broadcast gate)
     private Func<bool>? _isPartyFollower;       // in a party AND not the leader
     private Action? _requestPartyWait;          // ping leader to halt (PartyRestSync)
     private Action? _requestPartyOk;            // release leader
@@ -277,7 +279,9 @@ public sealed class HealthManager : IDisposable
         Func<bool>? hasHostileInRoom = null,
         Func<Map.RoomKey, Map.RoomKey, IReadOnlyList<Map.Direction>?>? findReversePath = null,
         Action<Action>? post = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Func<Models.Profile.PartySettings>? readPartySettings = null,
+        Func<bool>? selfIsPartyLeader = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(coordinator);
@@ -300,6 +304,8 @@ public sealed class HealthManager : IDisposable
         _hangupSignal = hangupSignal;
         _post = post ?? (a => a());
         _now = now ?? (static () => DateTimeOffset.UtcNow);
+        _readPartySettings = readPartySettings;
+        _selfIsPartyLeader = selfIsPartyLeader;
         _state.PropertyChanged += OnStateChanged;
     }
 
@@ -1315,39 +1321,63 @@ public sealed class HealthManager : IDisposable
 
         _hangFired = true;
 
-        // "Sys goto wimpy instead of hanging": rather than drop the carrier, break
-        // combat and jump to the configured escape location. Only when the character
-        // opted in with a location AND the jump actually dispatched (the delegate
-        // gates on the per-BBS sysop-goto power + the location still being in the
-        // table). A refused / unwired jump falls through to the normal hangup below,
-        // so a mis-set escape never leaves a low-HP character sitting in the fight.
-        //
-        // Fires at ANY HP in the window, bleeding-out included: `sys` commands aren't
-        // subject to the mortally-wounded restriction (confirmed mechanic), so the
-        // jump works even below 0 HP — the delegate sends it on a wire that pierces
-        // the mortally-wounded send-gate hold (see SysopGotoManager wiring).
+        // @panic broadcast (MegaMUD parity): when we're leading a party and opted
+        // in, warn the whole party at the instant our own emergency floor is
+        // crossed — so partymates that don't ignore it bail with us. Sent BEFORE we
+        // escape (we may drop the carrier or jump away next) so the warning reaches
+        // the room first.
+        MaybeBroadcastPanic(s);
+
+        return ExecuteEscape(s, $"HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}",
+            allowCarrierDrop: true);
+    }
+
+    // The low-HP escape action, shared by our own emergency hangup
+    // (TryEmergencyHangup) and a received @panic (RespondToReceivedPanic): sys-goto-
+    // wimpy if the character opted in with a location AND the jump dispatched, else
+    // drop the carrier via the Game-Exit command. Returns true when it acted.
+    //
+    // The wimpy jump is tried first: rather than drop the carrier, break combat and
+    // jump to the configured escape location. Only when opted in with a location AND
+    // the delegate dispatched (it gates on the per-BBS sysop-goto power + the
+    // location still being in the table). It fires at ANY HP, bleeding-out included:
+    // `sys` commands aren't subject to the mortally-wounded restriction (confirmed
+    // mechanic), so the jump works even below 0 HP — the delegate sends it on a wire
+    // that pierces the mortally-wounded send-gate hold (see SysopGotoManager wiring).
+    // A refused / unwired jump falls through to the hangup, so a mis-set escape never
+    // leaves the character sitting in the fight.
+    //
+    // allowCarrierDrop gates the hangup fallback: true for our own emergency (the
+    // DisableHangups master switch was already checked upstream); a received @panic
+    // passes !DisableHangups, so an opted-out character still wimpy-jumps (no carrier
+    // drop) but is never force-disconnected by someone else's panic.
+    private bool ExecuteEscape(HealthSettings s, string reason, bool allowCarrierDrop)
+    {
         if (s.SysGotoWimpyInsteadOfHanging
             && !string.IsNullOrWhiteSpace(s.SysGotoWimpyLocation)
             && _tryWimpyGoto?.Invoke(s.SysGotoWimpyLocation.Trim()) == true)
         {
             _log?.Warn(LogCategory,
-                $"WIMPY GOTO instead of hangup — HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger} " +
-                $"→ break + 'sys goto {s.SysGotoWimpyLocation.Trim()}'");
+                $"WIMPY GOTO instead of hangup ({reason}) → break + 'sys goto {s.SysGotoWimpyLocation.Trim()}'");
             return true;
+        }
+
+        if (!allowCarrierDrop)
+        {
+            _log?.Warn(LogCategory,
+                $"escape ({reason}) — carrier-drop suppressed (DisableHangups) and no wimpy location set; staying put.");
+            return false;
         }
 
         string? hangCmd = _readHangupCommand?.Invoke();
         if (string.IsNullOrWhiteSpace(hangCmd))
         {
             _log?.Warn(LogCategory,
-                $"HANGUP threshold crossed (HP {_state.Hp}/{_state.MaxHp} <= {hangTrigger}) " +
-                $"but no hangup command configured — set Settings → Other → Game Exit.");
+                $"HANGUP ({reason}) but no hangup command configured — set Settings → Other → Game Exit.");
             return false;
         }
 
-        _log?.Warn(LogCategory,
-            $"HANGUP — HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger} cmd='{hangCmd}' " +
-            "(sending exit, then closing carrier)");
+        _log?.Warn(LogCategory, $"HANGUP ({reason}) cmd='{hangCmd}' (sending exit, then closing carrier)");
         // Declare the drop intentional before it lands so MainWindowViewModel's
         // reactive-reconnect path stands down — otherwise the very disconnect we
         // just triggered gets classified as unexpected and immediately dialled back.
@@ -1361,6 +1391,38 @@ public sealed class HealthManager : IDisposable
         // The callback flushes the just-sent exit command before disposing.
         _requestHangupDisconnect?.Invoke();
         return true;
+    }
+
+    // Broadcast a bare '.@panic' on say when we're the party leader and the user
+    // opted in (PartySettings.UsePanicWhileLeading). Rides the un-wrapped hangup
+    // sender so it pierces the mortally-wounded send-gate hold, exactly like the
+    // hangup command — a leader bleeding out below 0 HP must still be able to warn
+    // the party. No-op solo, when following, when opted out, or with no sender.
+    private void MaybeBroadcastPanic(HealthSettings s)
+    {
+        if (_selfIsPartyLeader?.Invoke() != true) return;
+        if (_readPartySettings?.Invoke() is not { UsePanicWhileLeading: true }) return;
+        Action<byte[]>? sender = _hangupWireSender ?? _wireSender;
+        if (sender is null) return;
+        // '.' is MajorMUD's say-channel prefix; the bare "@panic" matches MegaMUD.
+        sender(Encoding.Latin1.GetBytes(".@panic\r"));
+        _log?.Warn(LogCategory, "@panic broadcast to party (leading, emergency floor crossed)");
+    }
+
+    // A party member broadcast @panic and we don't ignore @panics — bail the same
+    // way our own low-HP emergency would (sys-goto-wimpy if opted in + configured,
+    // else hang up). Unlike our own emergency this runs regardless of our HP — the
+    // panic IS the trigger — but it still honours the DisableHangups master switch
+    // for the carrier-drop path (an opted-out character wimpy-jumps if configured
+    // but is never force-dropped by someone else's panic). Returns true when it
+    // acted. Wired to Game.Conditions.PanicResponder; the receive-side IgnorePanics
+    // gate is checked there before this is called.
+    public bool RespondToReceivedPanic(string fromWhom)
+    {
+        HealthSettings s = _readSettings();
+        bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
+        _log?.Warn(LogCategory, $"received @panic from {fromWhom} — bailing (wimpy-or-hang)");
+        return ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop);
     }
 
     // Deferred flee reaction — runs one dispatch tick after the run-trigger

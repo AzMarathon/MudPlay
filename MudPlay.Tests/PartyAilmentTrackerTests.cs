@@ -36,6 +36,12 @@ public sealed class PartyAilmentTrackerTests
         public LineExtractor Lines { get; }
         public PartyAilmentTracker Tracker { get; }
         public List<CureCastMatcher> Cures { get; } = new();
+        // Apply-witness wiring (PR B): matchers the tracker witnesses to SET chips,
+        // a spell# → duration-seconds map, and a mutable test clock (ms) the
+        // tracker reads for arming + sweeping expiries.
+        public List<ApplyCastMatcher> Applies { get; } = new();
+        public Dictionary<int, double?> Durations { get; } = new();
+        public long NowMs;
 
         public Harness()
         {
@@ -46,7 +52,10 @@ public sealed class PartyAilmentTrackerTests
             Essentials = new PartyEssentialHandlers(Engine, Player, State);
             Terminal.TerminalEmulator emulator = new(80, 24);
             Lines = new LineExtractor(emulator);
-            Tracker = new PartyAilmentTracker(Chat, Party, Essentials, () => Cures);
+            Tracker = new PartyAilmentTracker(Chat, Party, Essentials, () => Cures,
+                readApplyMatchers: () => Applies,
+                resolveDurationSeconds: n => Durations.TryGetValue(n, out double? d) ? d : null,
+                nowMs: () => NowMs);
             Tracker.AttachLineExtractor(Lines);
         }
 
@@ -286,6 +295,30 @@ public sealed class PartyAilmentTrackerTests
     }
 
     [Fact]
+    public void InboundOk_ClearsVerboseChips_LeavesPoison()
+    {
+        using Harness h = new();
+        PartyMember mage = h.AddMember("Mage");
+
+        h.Say(@"Mage says ""@blind""");
+        h.Say(@"Mage says ""@held""");
+        h.Say(@"Mage says ""@poisoned""");
+        Assert.True(mage.Blinded);
+        Assert.True(mage.Held);
+        Assert.True(mage.Poisoned);
+
+        // @ok from the member means every NON-ignored ailment cleared on their side
+        // (the sender holds @ok until its last one clears), so drop their VERBOSE
+        // chips (blind / confused / diseased / held). Poison is par-owned — left for
+        // its own P-flag drop.
+        h.Say(@"Mage telepaths: @ok");
+
+        Assert.False(mage.Blinded);
+        Assert.False(mage.Held);
+        Assert.True(mage.Poisoned);   // untouched by @ok
+    }
+
+    [Fact]
     public void NonMemberSpeaker_CreatesNoPhantomMember()
     {
         using Harness h = new();
@@ -470,5 +503,73 @@ public sealed class PartyAilmentTrackerTests
         h.EmitLine("Mage casts bless on Forged!");
 
         Assert.True(forged.Poisoned);
+    }
+
+    // ----- Witnessed APPLY + duration-timeout (PR B) -----------------
+
+    [Fact]
+    public void WitnessedApply_SetsChip_ThenDurationTimeoutClears()
+    {
+        using Harness h = new();
+        PartyMember forged = h.AddMember("Forged");
+        h.Durations[100] = 10.0;   // the spell lasts 10s at the caster's level
+        h.Applies.Add(new ApplyCastMatcher(
+            MessageFlags.Blinded, "blind", 100,
+            CasterMessageMatcher.TryCreate("{source} casts {spellname} on {target}!")!));
+
+        h.NowMs = 1_000;
+        h.EmitLine("A kobold shaman casts blind on Forged!");
+        Assert.True(forged.Blinded);   // witnessed apply lit the chip
+
+        // Inside the 10s window → a sweep (fires on every line) leaves it set.
+        h.NowMs = 9_000;
+        h.EmitLine("The kobold shaman swings.");
+        Assert.True(forged.Blinded);
+
+        // Past the window → the spell-data duration times out and clears it.
+        h.NowMs = 12_000;
+        h.EmitLine("The kobold shaman swings.");
+        Assert.False(forged.Blinded);
+    }
+
+    [Fact]
+    public void WitnessedApply_ClearedEarlyByCure()
+    {
+        using Harness h = new();
+        PartyMember forged = h.AddMember("Forged");
+        h.Durations[100] = 60.0;
+        h.Applies.Add(new ApplyCastMatcher(
+            MessageFlags.Blinded, "blind", 100,
+            CasterMessageMatcher.TryCreate("{source} casts {spellname} on {target}!")!));
+        h.Cures.Add(new CureCastMatcher(
+            MessageFlags.Blinded, "cure-blindness",
+            CasterMessageMatcher.TryCreate("You cast {s} on {s}!")!));
+
+        h.NowMs = 0;
+        h.EmitLine("A kobold shaman casts blind on Forged!");
+        Assert.True(forged.Blinded);
+
+        // A cure lands well before the 60s duration — clears immediately.
+        h.NowMs = 3_000;
+        h.EmitLine("You cast cure-blindness on Forged!");
+        Assert.False(forged.Blinded);
+    }
+
+    [Fact]
+    public void SayAnnounced_NoWitness_ClearsByFallbackCapSoItCannotStick()
+    {
+        using Harness h = new();
+        PartyMember forged = h.AddMember("Forged");
+
+        // A bare say announce carries no spell → no real duration, and confusion
+        // has no cure to witness. The fallback cap still clears it eventually so
+        // the chip can't stick forever.
+        h.NowMs = 0;
+        h.Say(@"Forged says ""@confused""");
+        Assert.True(forged.Confused);
+
+        h.NowMs = 200_000;   // past the ~180s fallback cap
+        h.EmitLine("Something happens.");
+        Assert.False(forged.Confused);
     }
 }

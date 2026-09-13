@@ -91,6 +91,21 @@ public static class KnownPatterns
     // only appears on a successful dodge.
     public const string UserDodges           = "combat.user-dodges";
 
+    // A PHYSICAL attack between two third parties — a partymate swinging at a mob,
+    // or a mob swinging at a partymate. The existing combat patterns all require
+    // the local player as one side ("… at you", "You …"), so these were the only
+    // routine combat text nothing in the catalogue accounted for, and every round
+    // of a party fight staged them as unrecognized lines.
+    //
+    // Recognition is deliberately limited to the two shapes that are unmistakably
+    // physical: an attack naming the weapon or body part it was made with, and a
+    // bare "<actor> <verb>s at <target>!" swing. A monster CASTING at a third party
+    // ("The dark elf hurls a fireball at Suijin!") is left unrecognized on purpose —
+    // monster spell messages are exactly what the capture exists to surface, so no
+    // pattern here may swallow one.
+    public const string OtherAttacksWithWeapon = "combat.other-attacks-with-weapon";
+    public const string OtherSwingsAtTarget    = "combat.other-swings-at-target";
+
     // Local-player death — "You have been slain by <killer>." per MajorMUD's
     // canonical wording. DeathLineWatcher subscribes here and emits the
     // PlayerDied event that DeathRecoveryManager consumes for corpse-recovery.
@@ -144,6 +159,12 @@ public static class KnownPatterns
     // "You attempt to cast <spell>, but fail." — failed concentration / fizzle.
     // Blocks further casts for the current round.
     public const string CastFizzled          = "spell.cast-fizzled";
+
+    // "<Player> attempted to cast <spell>, but failed." — somebody ELSE's fizzle.
+    // The first-person form above is the one that gates our own casting; this is the
+    // witnessed third-party wording, recognized so a partymate's failed cast isn't
+    // staged as an unrecognized line every time it happens.
+    public const string OtherCastFizzled     = "spell.other-cast-fizzled";
 
     // "You do not have enough mana to cast that spell." — blocks further casts
     // until mana recovers.

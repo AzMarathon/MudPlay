@@ -223,8 +223,12 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
                 _messageCandidates, _messages, _dialogs, _gameData,
                 AppServices.CurrentOrNull?.MessageCandidateWatcher,
                 AppServices.CurrentOrNull?.LogDiagnostics,
-                likelySource: (map, room) => Game.Combat.RoomSpellAttributor.LikelySource(
+                // The captured text is passed in as well as the location: the
+                // attribution reads the line for a monster it names, and falls back to
+                // the room's own on-entry spell.
+                likelySource: (map, room, rawText) => Game.Combat.RoomSpellAttributor.LikelySource(
                     new Game.Map.RoomKey(map, room),
+                    rawText,
                     AppServices.CurrentOrNull?.RoomGraph,
                     AppServices.CurrentOrNull?.GameData,
                     AppServices.CurrentOrNull?.MonsterSpawns,

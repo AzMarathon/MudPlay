@@ -87,7 +87,12 @@ public sealed class CasterMessageMatcher
     // to match a name against; a numeric-only template (e.g. ... bursts for {damage}
     // damage!) is still accepted so the damage-message recogniser can compile it —
     // the confirmation helpers then simply find no capture and decline.
-    public static CasterMessageMatcher? TryCreate(string? template)
+    // compiled=false builds an interpreted regex instead. The handful of matchers a
+    // pending cast needs are worth compiling; MessageTemplateIndex builds one per
+    // DISTINCT template in the whole catalogue (~850), where emitting IL for each
+    // would cost far more in startup time and memory than the interpreter costs in
+    // per-line matching.
+    public static CasterMessageMatcher? TryCreate(string? template, bool compiled = true)
     {
         if (string.IsNullOrWhiteSpace(template)) return null;
 
@@ -125,12 +130,48 @@ public sealed class CasterMessageMatcher
 
         if (!sawString && !sawNumber) return null;
 
-        Regex regex = new(pattern.ToString(),
-            RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        RegexOptions options = RegexOptions.CultureInvariant;
+        if (compiled) options |= RegexOptions.Compiled;
+        Regex regex = new(pattern.ToString(), options);
         return new CasterMessageMatcher(
             template, regex,
             stringGroups.ToArray(), numberGroups.ToArray(), stringRoles.ToArray());
     }
+
+    // The longest run of letters in the template's LITERAL text (placeholders
+    // removed), or null when the template is nothing but placeholders and
+    // separators. Any line this template matches must contain that word, which is
+    // what lets MessageTemplateIndex shortlist candidate matchers per line instead
+    // of running the whole catalogue. Longest wins because it's the most selective —
+    // keying on "casts" narrows far better than "the".
+    //
+    // A null return means the template carries no literal text at all ("{s} {s}"),
+    // so it would match virtually any line and can never identify one — callers
+    // must skip such templates rather than treat them as always-matching.
+    public static string? LongestLiteralWord(string? template)
+    {
+        if (string.IsNullOrWhiteSpace(template)) return null;
+
+        string literals = TokenSplit.Replace(template, "\n");
+        string? best = null;
+        int i = 0;
+        while (i < literals.Length)
+        {
+            if (!char.IsLetter(literals[i])) { i++; continue; }
+            int start = i;
+            while (i < literals.Length && char.IsLetter(literals[i])) i++;
+            if (best is null || i - start > best.Length) best = literals[start..i];
+        }
+        return best;
+    }
+
+    // How much LITERAL text the template pins down, placeholders excluded. This is
+    // the whole of a template's selectivity: the placeholders match anything, so two
+    // templates differing only in literal text differ entirely in how many lines they
+    // claim. "The {source} {spellname}!" pins just 7 characters and therefore matches
+    // almost any exclamation, which is why bulk recognizers need to weigh this.
+    public static int LiteralTextLength(string? template) =>
+        string.IsNullOrEmpty(template) ? 0 : TokenSplit.Replace(template, string.Empty).Length;
 
     private static PlaceholderRole RoleOf(string token) => token switch
     {

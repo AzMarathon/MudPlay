@@ -171,33 +171,20 @@ public sealed class SpellsSettings
     // don't pause for a poison tick"). Always-on triggers (over-encumbered,
     // MovementPrevented, Stunned) bypass these flags.
 
-    // Don't @wait for poison. Default false (pause).
+    // Each Ignore<X> is the single "I don't care about this ailment" toggle: it
+    // suppresses BOTH the @wait telepath to the leader AND the say-channel announce
+    // (".@blind" etc.) AilmentSyncEngine emits for other clients to mirror. Default
+    // false (pause + announce).
+
+    // Ignore poison. Default false.
     public bool IgnorePoison    { get; set; }
 
-    // Don't @wait for blindness. Default false (pause).
+    // Ignore blindness. Default false.
     public bool IgnoreBlindness { get; set; }
 
-    // Don't @wait for confusion. Default false (pause).
+    // Ignore confusion. Default false.
     public bool IgnoreConfusion { get; set; }
 
-    // Don't @wait for disease. Default false (pause).
+    // Ignore disease. Default false.
     public bool IgnoreDiseased  { get; set; }
-
-    // The four "do not announce" gates suppress the say-channel broadcast
-    // (".@poisoned" etc.) AilmentSyncEngine emits so other MudPlay clients
-    // in the room can mirror our state. Independent of the Ignore* flags —
-    // a party may want the leader to pause but not broadcast on say, or
-    // vice-versa. Default UNCHECKED = announce.
-
-    // Suppress the say-announce when poisoned. Default false (announce).
-    public bool DoNotAnnouncePoison    { get; set; }
-
-    // Suppress the say-announce when blinded. Default false (announce).
-    public bool DoNotAnnounceBlindness { get; set; }
-
-    // Suppress the say-announce when confused. Default false (announce).
-    public bool DoNotAnnounceConfusion { get; set; }
-
-    // Suppress the say-announce when diseased. Default false (announce).
-    public bool DoNotAnnounceDiseased  { get; set; }
 }

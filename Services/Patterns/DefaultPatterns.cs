@@ -156,6 +156,22 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.UserDodges,
             @"^The (?<source>[\w -]+?) .*\byou dodge\b");
 
+        // Third-party physical attacks — see KnownPatterns.OtherAttacksWithWeapon for
+        // why these exist and why they stay narrow.
+        //
+        // Naming the weapon or body part the blow was made with is the reliable
+        // physical marker ("with its teeth", "with their broadsword", "with their
+        // shortbow"), and it's what keeps a projectile SPELL aimed at a partymate out
+        // of this pattern — a spell line has no such tail. The optional middle group
+        // carries a ranged attack's ammunition ("shoots an arrow at …").
+        yield return new RegexPattern(KnownPatterns.OtherAttacksWithWeapon,
+            @"^(?:The )?[\w' -]+? \w+(?: [\w' -]+?)? at [\w' -]+ with (?:its|their|his|her|the|an?) [\w' -]+[.!,;]");
+        // A bare swing with no weapon named and nothing after the target ("Raijin
+        // swipes at dark goblin archer!"). Anchored at end-of-line so it can't reach
+        // into a longer line whose tail we haven't accounted for.
+        yield return new RegexPattern(KnownPatterns.OtherSwingsAtTarget,
+            @"^(?:The )?[\w' -]+? \w+s at [\w' -]+[.!]\s*$");
+
         // Local-player death. MajorMUD's canonical wording is "You have been
         // slain by <killer>." — the killer is whatever last hit landed (monster
         // name OR another player for PvP, even though MudPlay scopes engines
@@ -182,6 +198,11 @@ public static class DefaultPatterns
         // CastingDirector waits for the next CombatTick before retrying.
         yield return new RegexPattern(KnownPatterns.CastFizzled,
             @"^You attempt to cast (?<spell>.+?), but fail\.");
+        // Somebody else's fizzle. Recognized only so it isn't staged as an
+        // unrecognized line — nothing subscribes, because another player's failed
+        // cast doesn't gate anything we do.
+        yield return new RegexPattern(KnownPatterns.OtherCastFizzled,
+            @"^[\w' -]+ attempted to cast (?<spell>.+?), but failed\.");
         yield return new RegexPattern(KnownPatterns.CastNoMana,
             @"^You do not have enough mana to cast that spell\.");
         yield return new RegexPattern(KnownPatterns.CastAlreadyThisRound,
