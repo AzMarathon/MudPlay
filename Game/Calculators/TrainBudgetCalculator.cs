@@ -25,6 +25,25 @@ public static class TrainBudgetCalculator
         return count;
     }
 
+    // BankableLevels as a FRACTION: the whole banked levels plus the partial
+    // progress toward the next not-yet-earned level. e.g. 2.91 = two full banked
+    // levels and 91% of the way to a third — the "(+N.NN)" a toplist shows beside a
+    // player's level, so a glance tells you how far past your trained level your exp
+    // already sits. 0 when nothing resolves. The fraction is exp's position between
+    // the highest earned level's threshold and the next one's; a saturated / flat
+    // curve (no span) contributes no fraction.
+    public static double BankableLevelsFractional(long exp, int currentLevel, int chart, RealmType realm, int cap)
+    {
+        if (currentLevel <= 0 || chart <= 0 || cap <= 0) return 0;
+        int whole = BankableLevels(exp, currentLevel, chart, realm, cap);
+        long lower = ExperienceTableCalculator.CalcExpNeeded(currentLevel + whole, chart, realm);
+        long upper = ExperienceTableCalculator.CalcExpNeeded(currentLevel + whole + 1, chart, realm);
+        long span = upper - lower;
+        if (span <= 0) return whole;
+        double frac = System.Math.Clamp((double)(exp - lower) / span, 0.0, 1.0);
+        return whole + frac;
+    }
+
     // Levels to train right now: the BankableLevels count less the reserve keep
     // the character always carries, clamped at 0. A negative or zero result means
     // "nothing to train — the reserve already covers everything banked".

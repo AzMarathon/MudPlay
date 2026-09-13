@@ -1853,20 +1853,24 @@ public partial class MainWindowViewModel : ObservableObject
         return $"C: {cur} D: {dest} Steps: {remaining} - {RateWithTnl(xpHr)}";
     }
 
-    // "<rate>/hr" with " - TNL: <time>" appended when the time-to-next-level can be
-    // computed. Uses the SAME estimate as the Session Stats "time to next level"
-    // readout (banked-aware target level + game-data exp chart) so the two never
-    // drift — an earlier stat-line "exp to next" ÷ rate ignored banked levels and
-    // desynced from Session Stats.
+    // "<rate>/hr" with " - TNL: <time> (+N.NN lvls)" appended when the
+    // time-to-next-level can be computed. Uses the SAME estimate as the Session Stats
+    // "time to next level" readout (banked-aware target level + game-data exp chart)
+    // so the two never drift — an earlier stat-line "exp to next" ÷ rate ignored
+    // banked levels and desynced from Session Stats. The "(+N.NN lvls)" is the
+    // banked-levels ratio (whole banked + progress toward the next) — since TNL
+    // targets the next UNearned level, that bracket says how far past your trained
+    // level your exp already sits, so a big TNL time on a low level reads clearly.
     private static string RateWithTnl(double xpHr)
     {
         string rate = $"{Game.Combat.RateText.Compact(xpHr)}/hr";
         if (xpHr <= 0) return rate;
-        if (Game.Calculators.TimeToLevelEstimator.Estimate(
-                AppServices.Current.PlayerStats, AppServices.Current.GameData, xpHr).Eta is not { } tnl)
-            return rate;
-        return $"{rate} - TNL: {(tnl <= TimeSpan.Zero ? "ready"
-            : Game.Calculators.ExperienceTableCalculator.FormatTimeToLevel(tnl))}";
+        Game.Calculators.TimeToLevelEstimator.Result est = Game.Calculators.TimeToLevelEstimator.Estimate(
+            AppServices.Current.PlayerStats, AppServices.Current.GameData, xpHr);
+        if (est.Eta is not { } tnl) return rate;
+        string time = tnl <= TimeSpan.Zero ? "ready"
+            : Game.Calculators.ExperienceTableCalculator.FormatTimeToLevel(tnl);
+        return $"{rate} - TNL: {time} (+{est.BankableLevelsFractional:0.00} lvls)";
     }
 
     private void RefreshStatusBarTicks()
