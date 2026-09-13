@@ -15,9 +15,10 @@ using MudPlay.Views.CharacterWorkshop;
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // ROOMBA section — Roomba Mode's control surface. Lists the character's labeled
-// gang-house rooms (add via the map's "Toggle: Roomba Room" right-click or this
-// tab's Add Room box; this tab reviews + removes and starts/stops the sweep) with
-// a live per-room Status, a phase readout, and a double-click room-inventory view.
+// gang-house rooms one row per sort rule (add via the map's "Toggle: Roomba Room"
+// right-click or this tab's Add Room box; this tab edits + removes rules and
+// starts/stops the sweep) with a live per-room Status, a phase readout, and a
+// double-click room-inventory view.
 // The per-move record + end-of-run summary live in the separate Roomba Log window.
 public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewModel
 {
@@ -29,6 +30,10 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private Control? _view;
     private RoombaLogWindow? _logWindow;
     private RoombaMasterListWindow? _masterListWindow;
+    // The grid's highlighted rows, pushed over from the view — what Edit / Remove act on.
+    private readonly List<GhRoomLabelRowViewModel> _selectedRows = new();
+    // Re-entry guard for the Actively-Manage sibling sync below.
+    private bool _syncingManage;
 
     public override string Id => "ghmanagement";
     public override string Title => "Roomba";
@@ -58,7 +63,15 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     [ObservableProperty] private string? _completionSummary;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchesEditable))]
+    [NotifyPropertyChangedFor(nameof(CanEditSelection))]
+    [NotifyPropertyChangedFor(nameof(CanRemoveSelection))]
     private bool _isRunning;
+
+    // Edit takes exactly one row (it opens that room's picker); Remove takes any
+    // number. Both stay out while a sweep is running — the circuit it's walking was
+    // planned from these labels.
+    public bool CanEditSelection => !IsRunning && _selectedRows.Count == 1;
+    public bool CanRemoveSelection => !IsRunning && _selectedRows.Count > 0;
 
     // Double-click a room row → its current floor inventory (post-sweep, from the
     // final recon pass). Null title keeps the detail panel hidden.
@@ -150,15 +163,76 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         {
             RoomKey key = new(label.Map, label.Room);
             string? name = _roomGraph.GetRoom(key)?.Name;
-            Rooms.Add(new GhRoomLabelRowViewModel(label, name, _managed.IsManaged(key), OnRemoveRow, OnToggleManage, OnGotoRow));
+            bool managed = _managed.IsManaged(key);
+            // One row per sort rule; a room with none (a pure catch-all) keeps a
+            // single placeholder row so it can still be seen, ticked and removed.
+            if (label.Rules.Count == 0)
+            {
+                Rooms.Add(new GhRoomLabelRowViewModel(label, -1, name, managed, OnToggleManage, OnGotoRow));
+                continue;
+            }
+            for (int i = 0; i < label.Rules.Count; i++)
+                Rooms.Add(new GhRoomLabelRowViewModel(label, i, name, managed, OnToggleManage, OnGotoRow));
         }
         RefreshRoomStatuses();
     }
 
-    private void OnRemoveRow(GhRoomLabelRowViewModel row)
+    // The view pushes the grid's highlighted rows here on SelectionChanged: Avalonia's
+    // DataGrid.SelectedItems isn't bindable, and Edit / Remove act on the highlight
+    // rather than on a row-local button.
+    public void SetSelectedRows(IEnumerable<GhRoomLabelRowViewModel> rows)
     {
-        _labels.ClearLabel(row.Key);
-        _managed.SetManaged(row.Key, false);   // drop the per-character managed entry too
+        ArgumentNullException.ThrowIfNull(rows);
+        _selectedRows.Clear();
+        _selectedRows.AddRange(rows);
+        NotifySelectionChanged();
+    }
+
+    private void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(CanEditSelection));
+        OnPropertyChanged(nameof(CanRemoveSelection));
+    }
+
+    // Drops the highlighted RULES, not their rooms: a room keeps its other rules and
+    // only leaves the list once it has nothing left to sort by — its last rule gone
+    // and no catch-all flag to justify visiting it.
+    [RelayCommand]
+    private void RemoveSelected()
+    {
+        if (_selectedRows.Count == 0) return;
+
+        foreach (IGrouping<RoomKey, GhRoomLabelRowViewModel> room in
+                 _selectedRows.GroupBy(r => r.Key).ToList())
+        {
+            if (!_labels.TryGetLabel(room.Key, out GhRoomLabel label)) continue;
+
+            HashSet<int> dropped = room.Select(r => r.RuleIndex).ToHashSet();
+            List<GhCategoryRule> kept = label.Rules.Where((_, i) => !dropped.Contains(i)).ToList();
+            // Removing a rules-less room's placeholder row removes the room itself.
+            if (kept.Count == 0 && (dropped.Contains(-1) || !label.IsCatchAll))
+            {
+                _labels.ClearLabel(room.Key);
+                _managed.SetManaged(room.Key, false);   // drop the per-character managed entry too
+                continue;
+            }
+            _labels.SetLabel(room.Key, kept, label.IsCatchAll);
+        }
+
+        _selectedRows.Clear();
+        NotifySelectionChanged();
+    }
+
+    // Edit the highlighted row's room in the same rule picker Add Room and the map's
+    // right-click use, prefilled — so a mis-set rule is corrected in place instead of
+    // being removed and re-added. Whole-room rather than rule-only on purpose: the
+    // picker is also the only way to add a rule to an existing room or flip its
+    // catch-all flag, and the row's own rule is right there to fix.
+    [RelayCommand]
+    private async Task EditSelectedAsync()
+    {
+        if (_selectedRows.Count != 1) return;
+        if (await OpenLabelPickerAsync(_selectedRows[0].Key)) StartHint = null;
     }
 
     // A row's "Goto" button: open/focus the map and walk to that room now (the full
@@ -166,11 +240,18 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     private void OnGotoRow(RoomKey key) => AppServices.Current.GoWalkTo(key);
 
     // A row's "Actively Manage" checkbox toggled: persist it for THIS character, and
-    // clear the no-rooms-selected prompt the moment the user opts a room in.
+    // clear the no-rooms-selected prompt the moment the user opts a room in. The tick
+    // belongs to the room, so the room's other rule rows follow the one that was
+    // clicked — the store fires no Changed for a single toggle, by design.
     private void OnToggleManage(RoomKey key, bool on)
     {
         _managed.SetManaged(key, on);
         if (on) StartBlockedNoRooms = false;
+        if (_syncingManage) return;
+        _syncingManage = true;
+        foreach (GhRoomLabelRowViewModel row in Rooms)
+            if (row.Key.Equals(key)) row.ActivelyManaged = on;
+        _syncingManage = false;
     }
 
     private bool AnyRoomActivelyManaged() => _managed.Any;
@@ -304,17 +385,26 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
             StartHint = "Enter a room as map/number, e.g. 1/384.";
             return;
         }
+        if (!await OpenLabelPickerAsync(key)) return;   // cancelled
+        _managed.SetManaged(key, true);   // a room you add by hand is yours to sweep
+        StartBlockedNoRooms = false;
+        AddRoomInput = string.Empty;
+        StartHint = null;
+    }
+
+    // Open the rule picker for key — prefilled when the room is already labeled — and
+    // write the result back. False means the user cancelled. Shared by Add Room and
+    // the table's Edit button so both reach the same editor.
+    private async Task<bool> OpenLabelPickerAsync(RoomKey key)
+    {
         string? name = _roomGraph.GetRoom(key)?.Name;
         _labels.TryGetLabel(key, out GhRoomLabel existing);
         GhRoomLabelPickerDialogViewModel picker = new(name ?? string.Empty, key.Map, key.Room, existing);
         GhRoomLabel? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<GhRoomLabelPickerDialogViewModel, GhRoomLabel?>(picker);
-        if (result is null) return;   // cancelled
+        if (result is null) return false;
         _labels.SetLabel(key, result.Rules, result.IsCatchAll);
-        _managed.SetManaged(key, true);   // a room you add by hand is yours to sweep
-        StartBlockedNoRooms = false;
-        AddRoomInput = string.Empty;
-        StartHint = null;
+        return true;
     }
 
     // Parse "map/room" (also accepting space, comma, dash, or colon separators).

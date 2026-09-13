@@ -1,5 +1,14 @@
 # Version history
 
+## 3.74.12
+
+- Profile Management gains "Edit settings…" on the BBS rail (and double-click a row), opening Settings → BBS with that board already selected
+- Adding a BBS hands straight off to its settings, so a fresh board isn't left hostless with nothing pointing at the fix
+- Roomba table lists one row per sort rule, so a room's rules can be dealt with one at a time
+- Remove drops the highlighted rule(s) instead of the room's whole rule set — the room leaves the list only when nothing is left to sort by
+- Remove takes a multi-row highlight (ctrl/shift-click) and clears every highlighted rule
+- New Edit button reopens the highlighted row's room in the rule picker, prefilled — fix a rule, add another, or flag catch-all without removing and re-adding
+
 ## 3.74.9
 
 - A partymate's ailment chip no longer expires off the wrong number: the duration read a monster's to-hit value as if it were a spell number, so any physical attack whose accuracy happened to equal the ailment's spell number matched, and that attack's damage was then used as the cast level (431 such collisions ship in the Paradigm data — `fear` vs an accuracy of 60 being the common one)

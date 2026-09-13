@@ -52,7 +52,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         ProfileService profile,
         LogService log,
         Func<string, Task<bool>>? sendText = null,
-        string? initialSectionId = null)
+        string? initialSectionId = null,
+        string? initialBbsName = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(log);
@@ -67,6 +68,20 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
             ? Sections.FirstOrDefault(s => string.Equals(s.Id, initialSectionId, StringComparison.OrdinalIgnoreCase))
               ?? Sections.FirstOrDefault()
             : Sections.FirstOrDefault();
+
+        if (initialBbsName is not null) SelectBbs(initialBbsName);
+    }
+
+    // Deep-link target for "edit THIS BBS" — Profile Management's Edit button
+    // routes here so the window opens on the BBS tab with that record already
+    // selected, instead of whichever BBS the tab would have auto-picked. Pending
+    // per-BBS field edits survive the switch (BbsSectionViewModel pushes them to
+    // its cache on every keystroke), so re-pointing an already-open window is safe.
+    public void SelectBbs(string bbsName)
+    {
+        if (Sections.OfType<BbsSectionViewModel>().FirstOrDefault() is not { } bbs) return;
+        SelectedSection = bbs;
+        if (bbs.AvailableBbsNames.Contains(bbsName)) bbs.SelectedBbsName = bbsName;
     }
 
     // Tears down every section so the singletons they hooked (ProfileService,
