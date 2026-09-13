@@ -23,6 +23,7 @@ public sealed class LogService
     private readonly LogEntry[] _ring;
     private int _head;          // next write slot
     private int _count;         // live entries in the ring (≤ Capacity)
+    private long _totalAppended;  // monotonic append ordinal; see TotalAppended
     private LogEntry? _latest;
 
     // Fired after each successful Log call, on the producer's thread.
@@ -125,6 +126,16 @@ public sealed class LogService
         get { lock (_gate) { return _latest; } }
     }
 
+    // Count of entries EVER appended, not just those still in the ring. Unlike a
+    // ring index it never goes backwards or repeats, so a consumer that polls
+    // ("what's new since I last looked?") can hold on to one number across ring
+    // wraps. The sequence of an entry is its 1-based append ordinal, so the oldest
+    // entry still live is TotalAppended - Count + 1.
+    public long TotalAppended
+    {
+        get { lock (_gate) { return _totalAppended; } }
+    }
+
     public LogService(int capacity = DefaultCapacity)
     {
         if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));
@@ -153,6 +164,7 @@ public sealed class LogService
             _ring[_head] = entry;
             _head = (_head + 1) % Capacity;
             if (_count < Capacity) _count++;
+            _totalAppended++;
             _latest = entry;
         }
 
@@ -180,6 +192,48 @@ public sealed class LogService
         }
     }
 
+    // Entries appended after `afterSeq` (see TotalAppended for what a sequence
+    // is), oldest first, capped at `limit`.
+    //
+    // TWO sequences come back because they are not the same number and confusing
+    // them loses entries. `newestSeq` is the newest in the RING; `lastSeq` is the
+    // last entry actually RETURNED, and is the only safe cursor to pass as the
+    // next afterSeq. They coincide only when `limit` didn't truncate — reuse
+    // newestSeq as a cursor on a truncated batch and everything past the cap is
+    // skipped, silently, which is the one failure a log tail must not have. Both
+    // are read under the lock so they can't drift against the returned batch.
+    // When nothing is returned both are the ring head, so a poller on a quiet log
+    // still moves forward.
+    //
+    // An afterSeq older than the ring still holds returns what survives rather
+    // than failing: a poller that fell behind gets the oldest available entries
+    // and a sequence gap, which is honest about the ring having dropped them.
+    public LogEntry[] SnapshotAfter(long afterSeq, out long newestSeq, out long lastSeq, int limit = int.MaxValue)
+    {
+        if (limit < 0) limit = 0;
+        lock (_gate)
+        {
+            newestSeq = _totalAppended;
+            lastSeq = _totalAppended;
+            long oldestSeq = _totalAppended - _count + 1;
+            long from = Math.Max(afterSeq + 1, oldestSeq);
+            if (_count == 0 || from > _totalAppended) return Array.Empty<LogEntry>();
+
+            int take = (int)Math.Min(_totalAppended - from + 1, limit);
+            if (take <= 0) return Array.Empty<LogEntry>();
+            lastSeq = from + take - 1;
+
+            // Offset of `from` within the live region, which starts at the oldest entry.
+            int skip = (int)(from - oldestSeq);
+            int start = (_head - _count + skip + Capacity * 2) % Capacity;
+            LogEntry[] result = new LogEntry[take];
+            int firstRun = Math.Min(take, Capacity - start);
+            Array.Copy(_ring, start, result, 0, firstRun);
+            if (firstRun < take) Array.Copy(_ring, 0, result, firstRun, take - firstRun);
+            return result;
+        }
+    }
+
     // Drop every entry. Does not fire EntryAdded.
     public void Clear()
     {
@@ -189,6 +243,10 @@ public sealed class LogService
             _head = 0;
             _count = 0;
             _latest = null;
+            // _totalAppended deliberately survives: a consumer polling with a
+            // sequence cursor must never see it go backwards. Resetting would make
+            // every entry after a Clear look older than what the caller already
+            // has, and it would stop receiving anything.
         }
     }
 

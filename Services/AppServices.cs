@@ -770,6 +770,26 @@ public sealed class AppServices
     // raw bytes.
     public GameDataCache GameData { get; } = new();
 
+    // Loopback-only HTTP control API — live state, program log, scrollback and a
+    // bug-report-equivalent dump for inspecting the client while something is
+    // going wrong, rather than after. Opt-in via Settings → General.
+    public Api.LocalApiServer LocalApi { get; private set; } = null!;
+
+    // How LocalApi reaches the terminal transcript. Set by MainWindowViewModel,
+    // which owns the emulator and is constructed after AppServices.
+    private Func<Terminal.TerminalEmulator?>? _emulatorProvider;
+
+    // Hand the API a way to read the live terminal. Called once, by the main
+    // view-model's constructor.
+    public void SetEmulatorProvider(Func<Terminal.TerminalEmulator?> provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _emulatorProvider = provider;
+    }
+
+    private void ApplyLocalApiFromGlobalSettings()
+        => LocalApi.ApplySettings(Settings.Current.LocalApiEnabled, Settings.Current.LocalApiPort);
+
     // In-memory cache of the active character's
     // Models.GameData.Trigger list + the shared
     // session-scoped named-variable store used by both triggers and
@@ -2022,6 +2042,17 @@ public sealed class AppServices
         // Log already set by ctor parameter — bootstrap log carries the
         // DataMigration entries from before AppServices was constructed.
         Panels = new FloatingPanelHost();
+        // Loopback control API. Constructed always, listening only while the
+        // Global setting says so — and it follows that setting live, so toggling
+        // it opens / closes the socket without a restart. The emulator is fetched
+        // through a provider because the main view-model owns it and is built
+        // after us; until it exists the transcript endpoints answer 503.
+        LocalApi = new Api.LocalApiServer(this, Log, () => _emulatorProvider?.Invoke());
+        // Constructed here so the property is never null, but NOT started here:
+        // starting subscribes to MovementCoordinator, which this ctor doesn't
+        // build until much further down. The initial start is at the end of the
+        // ctor; this only arms the follow-the-setting behaviour.
+        Settings.GlobalSettingsChanged += _ => ApplyLocalApiFromGlobalSettings();
         // Window snapping reads its master on/off live from the Global setting.
         WindowSnap = new WindowSnapManager(() => Settings.Current.SnapWindows);
         WindowLayouts = new WindowLayoutStore(Profile, WindowSnap);
@@ -6467,6 +6498,11 @@ public sealed class AppServices
                 Log.Info("PlayerDatabase",
                     $"Pruned {removed} stale player record(s) older than {cleanupDays} day(s).");
         }
+
+        // Last, because starting the control API subscribes to services this ctor
+        // builds along the way (the movement coordinator in particular). Anything
+        // added below this line is NOT visible to the API's event stream.
+        ApplyLocalApiFromGlobalSettings();
     }
 
     private void ApplyToolbarFromActiveProfile()

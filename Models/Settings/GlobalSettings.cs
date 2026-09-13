@@ -90,6 +90,23 @@ public sealed class GlobalSettings
     // per-character); read live by WindowSnapManager. Surfaced in Settings → General.
     public bool SnapWindows { get; set; } = true;
 
+    // Local control API — a loopback-only HTTP endpoint exposing live client
+    // state, the program log, scrollback, and a bug-report-equivalent dump, so a
+    // wedge can be inspected while it is happening instead of reconstructed from
+    // a log tail afterwards. Install-wide (Global tier); read live by
+    // LocalApiServer.ApplySettings. Surfaced in Settings → General.
+    //
+    // Default FALSE, deliberately: this opens a listening socket, so it is
+    // something the user turns on, never something they discover they were
+    // running. Access needs the bearer token from <app data>/.apitoken on top of
+    // being on loopback — see LocalApiAuth for why loopback alone isn't enough.
+    public bool LocalApiEnabled { get; set; }
+
+    // Port for the above. 6683 spells MMUD on a phone keypad.
+    public int LocalApiPort { get; set; } = LocalApiDefaultPort;
+
+    public const int LocalApiDefaultPort = 6683;
+
     // Per-tab settings deltas — keyed by tab name (Health / Combat / Talk /
     // etc.). Each value is a partial DTO for that tab containing only the
     // fields the user pinned to the Global tier. SettingsResolver merges

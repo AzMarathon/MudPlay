@@ -1,13 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.75.0**
-> - Tab-completes the word you're typing — in the terminal or the Conversation window — against the leading word of your carried, worn, and key-ring item names (`drop emerald-` + Tab → `drop emerald-hilted rapier`; a "bronze emblem" needs `bro`/`bronze`, not `e`); Shift+Tab steps backward through other matches; never active while a full-screen form (trainer stats, character creation) owns the keyboard
-> - New Settings → General toggle, "Tab-complete inventory item names while typing" (default on)
-> - Fixed a ~29s UI freeze on profile load / game-data switch on realms with a large Monsters.json (e.g. Paradigm) — the room→monster spawn index deduped with an O(n) list scan per insert, which blew up into an O(n²) build on rooms with many "Summoned By" references; now O(1) per insert and warmed in the background like the other per-set indexes
-> - Fixed auto-rest/meditate firing on a momentary HP/MA dip that recovered again a tick later (e.g. a kill's mana cost dipping below the rest-trigger right as a regen tick was about to bring it back up) — the rest command now waits one dispatch tick to reconfirm the pool is still below its trigger before committing, so a blip that self-resolves no longer interrupts movement
-> - Fixed auto-rest/meditate still firing after a genuine mid-combat dip fully recovered on its own before the fight ended — a confirmed gate was holding out for the full rest-target instead of the ordinary rest-trigger, so combat ending committed to a rest the pool wasn't low for anymore; it now clears at the trigger until the rest command actually goes out
-> - Fixed auto-rest/meditate still firing on a mid-combat dip that recovered in the very same wire burst as combat ending — HP/MA and the "combat's over" flag can update as two separate ticks off one server read, and when the combat flag lands first the rest command was committing off the about-to-be-overwritten stale low reading; combat ending now re-runs the same one-tick reconfirm the initial breach uses before actually sending
+> **Version 3.76.0**
+> - New **Local control API** (Settings → General, off by default): a loopback-only HTTP endpoint serving live client state, the pause-gate history with who asserted each one, the program log with a tail cursor, the terminal scrollback, and every section a bug report captures — so a stuck client can be inspected while it's stuck instead of reconstructed from a log tail afterwards
+> - Includes a live event stream (Server-Sent Events) of log entries and gate changes as they happen
+> - Also serves the reference side: the saved loop library with per-loop exp / danger rollups, one loop's waypoints with the monsters at each stop, any room's monsters grouped lair / placed / assigned, and a monster's full record — so "which loop should I run?" is answerable from the data rather than by opening each one
+> - Bound to 127.0.0.1 and gated on a bearer token, since any local program — or a web page you're visiting — can otherwise reach loopback; the token is revealed on request in Settings and never appears in the log or a bug report
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

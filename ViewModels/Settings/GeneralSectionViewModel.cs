@@ -100,6 +100,57 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // Install-global (GlobalSettings.SnapWindows), read live by WindowSnapManager.
     [ObservableProperty] private bool _snapWindows = true;
 
+    // Install-global (GlobalSettings.LocalApiEnabled / LocalApiPort). Opens a
+    // loopback HTTP endpoint exposing live state + the program log for
+    // diagnosing the client while it misbehaves. Off by default; the server
+    // follows these values live via AppServices, so Apply is all it takes.
+    [ObservableProperty] private bool _localApiEnabled;
+    [ObservableProperty] private int _localApiPort = GlobalSettings.LocalApiDefaultPort;
+
+    // Read-only mirrors for the status line under the checkbox, refreshed on
+    // load: whether the socket actually came up, and why not if it didn't.
+    [ObservableProperty] private string _localApiStatus = string.Empty;
+
+    // The bearer token, blank until the user asks for it. Revealed rather than
+    // copied to the clipboard because a VM has no TopLevel to reach a clipboard
+    // through — same treatment as the stored suicide password, which the user
+    // selects out of a read-only field.
+    [ObservableProperty] private string _localApiToken = string.Empty;
+
+    // Whether the socket is up right now, for the status line.
+    private static Services.Api.LocalApiServer? Api => AppServices.Current?.LocalApi;
+
+    private void RefreshLocalApiStatus()
+    {
+        if (Api is not { } api) { LocalApiStatus = string.Empty; return; }
+        LocalApiStatus = api.IsListening
+            ? $"Listening on http://127.0.0.1:{api.Port}/ — loopback only, token required."
+            : api.LastStartError is { Length: > 0 } err
+                ? $"Not listening — {err}"
+                : "Not listening.";
+    }
+
+    // Reveal the token. Reading it mints one if none exists yet, which is why
+    // this is a deliberate click rather than something the page does on open —
+    // merely visiting Settings shouldn't create a credential.
+    [RelayCommand]
+    private void ShowLocalApiToken()
+    {
+        if (Api is not { } api) return;
+        LocalApiToken = api.Auth.Token;
+        RefreshLocalApiStatus();
+    }
+
+    // Replace the token, invalidating anything holding the old one. For when it
+    // has been pasted somewhere it shouldn't have been.
+    [RelayCommand]
+    private void RegenerateLocalApiToken()
+    {
+        if (Api is not { } api) return;
+        LocalApiToken = api.Auth.Regenerate();
+        RefreshLocalApiStatus();
+    }
+
     // Install-global (GlobalSettings.RecentProfilesShown): how many entries the
     // File → Recent submenu lists. Default 5; capped at MaxRecentProfilesShown.
     [ObservableProperty] private int _recentProfilesShown = 5;
@@ -414,6 +465,11 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // Window snapping is install-global too; WindowSnapManager reads it live off
         // the same GlobalSettings, so this is all the wiring the toggle needs.
         _globalSettings.Current.SnapWindows = SnapWindows;
+        // The API server subscribes to GlobalSettingsChanged, so Save() below is
+        // what opens or closes the socket — no extra call needed here.
+        _globalSettings.Current.LocalApiEnabled = LocalApiEnabled;
+        _globalSettings.Current.LocalApiPort =
+            LocalApiPort is >= 1024 and <= 65535 ? LocalApiPort : GlobalSettings.LocalApiDefaultPort;
         _globalSettings.Current.RecentProfilesShown =
             System.Math.Clamp(RecentProfilesShown, 0, GlobalSettings.MaxRecentProfilesShown);
         _globalSettings.Save();
@@ -478,6 +534,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
 
         // Window snapping is Global-tier — reflect the live GlobalSettings value.
         SnapWindows = _globalSettings.Current.SnapWindows;
+        LocalApiEnabled = _globalSettings.Current.LocalApiEnabled;
+        LocalApiPort = _globalSettings.Current.LocalApiPort;
+        RefreshLocalApiStatus();
         RecentProfilesShown = _globalSettings.Current.RecentProfilesShown;
 
         // Buff Watchdog layout is a top-level per-character field (not in the DTO).
@@ -620,6 +679,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnInventoryTabCompleteEnabledChanged(bool value) => Dirty();
     partial void OnShowStartupMudAnimationChanged(bool value)        => Dirty();
     partial void OnSnapWindowsChanged(bool value)                    => Dirty();
+    partial void OnLocalApiEnabledChanged(bool value)                => Dirty();
+    partial void OnLocalApiPortChanged(int value)                    => Dirty();
     partial void OnRecentProfilesShownChanged(int value)             => Dirty();
     partial void OnSelectedBuffWatchdogLayoutChanged(BuffLayoutOption? value) => Dirty();
     // Live preview: push straight to the terminal canvas as the picker

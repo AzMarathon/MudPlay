@@ -563,6 +563,11 @@ public partial class MainWindowViewModel : ObservableObject
         Lines = new LineExtractor(Emulator);
         Capture = new CaptureSession(Emulator.Screen.Scrollback);
 
+        // The control API's transcript endpoints need the live screen, and we own
+        // it. AppServices is built before this ctor, so it takes a provider rather
+        // than the instance.
+        AppServices.Current.SetEmulatorProvider(() => Emulator);
+
         // Live-screen watch for the character-creation stat box. It's drawn with
         // cursor positioning, so its marker row never completes as an emitted
         // line until teardown — too late to flip arrow keys into direct-input

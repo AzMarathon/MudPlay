@@ -928,11 +928,47 @@ All of this is stored under a single MudPlay data folder (`~/.local/share/MudPla
 - A handful of controls exist in the UI but currently **do nothing** — they're either genuine stubs (the whole Sounds tab) or fields that were built but never wired into the automation engines (Combat's *Polite mode* and *Show combat round totals*). This guide flags every one of them explicitly rather than describing invented behavior.
 - Many settings only matter once a corresponding **master switch** is on. For example, the entire Auto-Light tab only matters once the Auto-Light engine itself is enabled (Settings → General, or its toolbar toggle); Combat/Spells/Health settings only matter while Auto-Combat is on.
 
+## Local control API
+
+**Settings → General → Local control API**, off by default. When on, MudPlay serves a small HTTP API on **127.0.0.1** (default port **6683** — MMUD on a phone keypad) exposing what the client currently believes, so a stuck or misbehaving session can be inspected **while it's happening** rather than reconstructed from a bug report afterwards. That difference matters: the program log keeps only the most recent entries, so by the time a problem is noticed, the moment that explains it has often already scrolled away.
+
+**What it exposes** (all read-only):
+
+| Endpoint | What you get |
+|---|---|
+| `/health` | Whether MudPlay is up. The only endpoint that needs no token. |
+| `/state` | Live vitals, room and tracker confidence, engine states, **which pause gates are asserted**, combat target. |
+| `/state/full` | Every section a bug report captures, as JSON — add `?format=markdown` for the familiar rendered form. Builds the whole report, so repeat calls within a second reuse the previous one; poll `/state` instead if you want a fast tick. |
+| `/gates` | Recent pause/resume history: which gate, **who asserted it**, why, and when. |
+| `/log` | The program log, filterable by `severity=` (comma-separated names) and `source=`, with a `since=` cursor for tailing. |
+| `/scrollback` | The terminal transcript tail, with per-line timestamps. |
+| `/events` | A live stream (Server-Sent Events) of log entries and gate changes as they happen. |
+| `/loops` | Every saved loop with its area, room and lair-room counts, median and max exp of what spawns on it, the hardest-hitting monster, and the toughest three. |
+| `/loops/{name}` | One loop in full — each waypoint with its room name and the monsters at that stop. |
+| `/rooms/{map}/{room}` | A room: name, exits, its lair tag, and its monsters grouped as lair / placed / assigned, exactly as the map's ROOM INFO panel groups them. |
+| `/monsters/{id}` | A monster's record — exp (with its multiplier applied), HP, AC, resists, attacks and drop table. |
+
+**Access.** Two things are required, not one. The socket is bound to loopback, so nothing outside your machine can reach it — but that alone isn't enough, because any program on your machine (or a web page you happen to be visiting) can also reach 127.0.0.1. So every request must carry a **bearer token**: `Authorization: Bearer <token>`. Requiring a header is what stops a random web page forging a request. The token lives in `.apitoken` in your app data folder, readable only by you, and **Show token** in Settings reveals it. **Regenerate** replaces it, immediately invalidating anything still using the old one — use that if it ends up somewhere it shouldn't. The token is never written to the program log, and a bug report records only whether the API was on and listening, never the token itself.
+
+Reading the log with `curl`:
+
+```
+curl -H "Authorization: Bearer $(cat ~/.local/share/MudPlay/.apitoken)" \
+     'http://127.0.0.1:6683/log?severity=warn,error&limit=50'
+```
+
+(On macOS the path is `~/Library/Application Support/MudPlay/.apitoken`.)
+
+**Comparing loops.** `/loops` exists so "where should I be hunting?" is answerable without opening each one. Note that exp is reported with the **monster's exp multiplier already applied**, which is the number that actually matters and can differ from the raw table value by orders of magnitude — a loop showing a million-plus median is boss content, not a grind circuit. Lair monsters (campable, respawn on a timer) are reported separately from placed fixtures and assigned roamers (which wander in on their own schedule), because a room full of roamers is not a loop you can pace.
+
+**Notes.** Requests are logged at Debug, so they only appear in the program log while Debug diagnostics are on. `/state/full` and `/scrollback` answer *503* until a terminal session exists. Endpoints that read live state do so on the UI thread and give up after five seconds, answering *504 ui thread unresponsive* — which is itself worth knowing: if a client looks frozen and the API says 504, the freeze is the UI thread, not the connection. The status line under the checkbox says whether the socket actually came up — if the port is already taken, that's where it tells you. This release is **read-only**; issuing commands through the API is a separate feature.
+
+
 ---
 
 ## General
 
-Settings → General. Everything here is character-tier (follows the loaded character) except two install-wide (Global-tier) items — the navigation-line color block and the startup-animation toggle — which apply to every character on the install. No character loaded means this whole tab shows a "load or create a profile" banner instead of controls.
+Settings → General. Everything here is character-tier (follows the loaded character) except a few install-wide (Global-tier) items — the navigation-line color block, the startup-animation toggle, window snapping, the recent-profiles count, and the Local control API block — which apply to every character on the install. No character loaded means this whole tab shows a "load or create a profile" banner instead of controls.
 
 ### Data files (directory display)
 
