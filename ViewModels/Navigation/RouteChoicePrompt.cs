@@ -232,7 +232,12 @@ public static class RouteChoicePrompt
             avoidAltNote = $" (+avoid-crossing alt: {alt.AvoidedCount} room(s), no counter)";
         }
 
-        string reqSummary = string.Join(", ", choice.Requirements.Select(r => $"{r.Kind}[{string.Join("/", r.ItemIds)}]"));
+        string reqSummary = string.Join(", ", choice.Requirements.Select(r =>
+            $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"));
+        string shortcutNote = choice.ShortcutItems is { Count: > 0 } sc
+            ? $" (+optional shortcut via CarryItem[{string.Join("/", sc)}] saving "
+              + $"{choice.GatedStepCount - choice.ShortcutStepCount} room(s))"
+            : "";
 
         // Sole route (no gate-free alternative) whose gates are item/ticket/key, not a
         // hazard. When every gate is a single item/ticket the user flagged
@@ -246,9 +251,9 @@ public static class RouteChoicePrompt
             if (services.ShouldAutoObtainSoleRoute(choice.Requirements))
                 return new(RoutePlanKind.AutoObtainSole, choice,
                     $"route pick {src} -> {destination}: sole route needs {reqSummary}, all auto-obtainable "
-                    + "— arming acquisition and walking, no prompt");
+                    + $"— arming acquisition and walking, no prompt{shortcutNote}");
             return new(RoutePlanKind.ItemGate, choice,
-                $"route pick {src} -> {destination}: sole route needs {reqSummary} (not auto-obtainable); showing picker{avoidAltNote}");
+                $"route pick {src} -> {destination}: sole route needs {reqSummary} (not auto-obtainable); showing picker{shortcutNote}{avoidAltNote}");
         }
 
         return new(RoutePlanKind.ItemGate, choice,

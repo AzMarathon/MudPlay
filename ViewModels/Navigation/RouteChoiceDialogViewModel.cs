@@ -482,6 +482,17 @@ public sealed partial class RouteChoiceDialogViewModel
                     choice.Requirements, itemName, giveNameForItem, shopBuyPhraseForItem,
                     dropNameForItem, resolvedHazardCounter)
                 + (string.IsNullOrEmpty(economyNote) ? "" : $" — {economyNote}");
+
+            // An optional shortcut avoids the committed (reliable) route: name the item
+            // it needs and the rooms it saves, but flag it as the crosser's own call —
+            // the client never fetches a shortcut item (it may have no reliable source).
+            if (choice.ShortcutItems is { Count: > 0 } scItems)
+            {
+                string scNames = string.Join(", ", scItems.Select(id => itemName(id) ?? $"item #{id}"));
+                int saved = choice.GatedStepCount - choice.ShortcutStepCount;
+                RequirementSummary += $" — shortcut: carrying {scNames} would save {saved} "
+                    + $"room{(saved == 1 ? "" : "s")}, but you'd obtain it yourself (may be unavailable)";
+            }
             TeleportCaveat = string.Empty;
             TrapCaveat = string.Empty;
             AvoidCaveat = string.Empty;
@@ -538,6 +549,11 @@ public sealed partial class RouteChoiceDialogViewModel
     {
         IEnumerable<string> clauses = reqs.Select(r =>
         {
+            string carriedItems = string.Join(" or ", r.ItemIds.Select(id => itemName(id) ?? $"item #{id}"));
+            // A gate the crosser already satisfies — surfaced so the route's real
+            // requirements read completely, not silently dropped as "not needed".
+            if (r.Carried) return $"{carriedItems} (you have it)";
+
             // A resolved hazard counter names the SPECIFIC item the run will obtain +
             // how ("log raft (buy at Pier)"), instead of the whole any-of set — the
             // picker already chose the cheapest reachable one.

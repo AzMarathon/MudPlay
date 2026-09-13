@@ -8886,8 +8886,12 @@ public sealed class AppServices
     {
         ArgumentNullException.ThrowIfNull(requirements);
         if (requirements.Count == 0) return false;
+        int obtainable = 0;
         foreach (RouteRequirement req in requirements)
         {
+            // Already satisfied (carried) or an optional shortcut → nothing to source;
+            // don't let it veto the auto-obtain, and never source it.
+            if (req.Carried || req.Optional) continue;
             if (req.Kind is not (RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket
                 or RouteRequirementKind.DoorKey))
                 return false;
@@ -8898,8 +8902,9 @@ public sealed class AppServices
             if (req.Kind == RouteRequirementKind.DoorKey
                 && SummonSourcesForItem(req.ItemIds[0]).Count == 0)
                 return false;
+            obtainable++;
         }
-        return true;
+        return obtainable > 0;
     }
 
     // The walk every path-item router drives, for both legs of a detour: out to the

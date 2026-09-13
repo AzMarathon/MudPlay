@@ -4393,3 +4393,33 @@ bounds the per-flag `abil` burst; on both realms it keeps marking to quests the 
 `GeneralSettings.AutoSyncQuestFlagsOnLogin`) reads these values before the availability announce and marks
 `QuestProgress.Complete` for any quest whose flag has reached its effective complete value (the per-quest
 `QuestDefinition.CompleteValueOverride` if set, else the crawl's). Strictly one-way — never clears.
+
+## Route gate items — required vs optional shortcut, and reliable vs unreliable sources *([CONFIRMED] 2026-09-13, user + report `paradigm-20260913-100733`)*
+
+A movement route to a destination may cross item gates of two very different kinds, which the route
+picker must not conflate:
+
+- **Required gate** — the destination is *unreachable* without crossing it (no route avoids it). Example
+  on the way to the dark elf city interior (8/1699): the **bloodstone orb** (item 807) — every route
+  needs it.
+- **Optional shortcut** — an item merely unlocks a *shorter* route; a longer route reaches the
+  destination without it. Example: the **amber talisman** (item 815) opens a rooftop shortcut through the
+  slums; a longer walk (through the city gate) avoids it entirely. An optional shortcut item is **never
+  "required"** and is never auto-fetched.
+
+Optionality is a **topology** fact (does a route avoiding the gate exist?), independent of what the
+crosser currently carries. The client decides it by re-running reachability with that one gate kept
+closed (`MovementFilter.SuspendAcquirableGatesExcept`); reachable ⇒ optional, disconnected ⇒ required.
+
+**Reliable vs unreliable sourcing** (orthogonal to required/optional):
+- **gate key** (item 806) — *guaranteed* obtain from a statue at the dark elf city entrance.
+- **bloodstone orb** (item 807) — *guaranteed* obtain from the gnome commander.
+- **amber talisman** (item 815) — *not* guaranteed: looted from the slaver leader on the slums rooftops
+  (who may be dead), or from hidden player-made stashes. So even though it shortens the trip, detouring
+  to fetch it can fail — the client presents it as the player's own call (the slaver-leader detour may or
+  may not net out ahead, depending on what the player is doing), never an auto-obtain.
+
+**Client use:** for a sole route (no gate-free way there), `RouteChoicePlanner` commits the route that
+avoids every optional shortcut (so the walk takes the reliable way and any gate item the crosser already
+holds surfaces as "— you have it"), reports only genuinely-required unheld items, and offers the shortcut
+separately (`RouteChoice.ShortcutItems` / `ShortcutStepCount`) with the rooms it would save.

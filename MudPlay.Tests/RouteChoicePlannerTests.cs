@@ -477,6 +477,71 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // The paradigm-20260913-100733 shape: the only way to 1/9 crosses a REQUIRED orb
+    // gate (807), after which two routes diverge — a shorter one through an OPTIONAL
+    // amber-talisman shortcut (815) and a longer one through a gate-key door (806) the
+    // crosser already holds. The planner must commit the long, reliable route (so its
+    // carried key surfaces), report only the orb as required, and offer the talisman as
+    // an optional shortcut — never call it "required".
+    // Shortest (all gates suspended): 1/1 ─E(orb)─ 1/2 ─E(talisman)─ 1/9   (2 hops).
+    // Committed (talisman avoided):    1/1 ─E(orb)─ 1/2 ─N─ 1/3 ─E(key)─ 1/9 (3 hops).
+    private const string OptionalShortcutJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Bank",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2 (Item: 807)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Fork",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "0", "E": "1/9 (Item: 815)", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "CityGate",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/9 (Key: 806)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void SoleRoute_OptionalShortcut_IsNotRequired_AndHeldKeySurfaces()
+    {
+        WithGraph(OptionalShortcutJson, (bfs, graph, filter) =>
+        {
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = id => id == 806;   // holds the gate key, lacks orb + talisman
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.False(choice!.HasFreeRoute);
+            // Committed to the reliable long route (3 hops), not the talisman shortcut (2).
+            Assert.Equal(3, choice.GatedStepCount);
+
+            // The orb is genuinely required; the held gate key surfaces as carried.
+            RouteRequirement orb = Assert.Single(choice.Requirements,
+                r => r.Kind == RouteRequirementKind.CarryItem && r.ItemIds.SequenceEqual(new[] { 807 }));
+            Assert.False(orb.Optional);
+            Assert.False(orb.Carried);
+            RouteRequirement key = Assert.Single(choice.Requirements,
+                r => r.Kind == RouteRequirementKind.DoorKey && r.ItemIds.SequenceEqual(new[] { 806 }));
+            Assert.True(key.Carried);
+            // The amber talisman is NEVER a requirement.
+            Assert.DoesNotContain(choice.Requirements, r => r.ItemIds.Contains(815));
+
+            // It's surfaced as an optional shortcut instead, saving the one room.
+            Assert.Equal(new[] { 815 }, choice.ShortcutItems);
+            Assert.Equal(2, choice.ShortcutStepCount);
+
+            // Acquisition sources the orb but never the carried key or the shortcut item.
+            Assert.Equal(new[] { 807 }, RouteChoicePlanner.SourceableGateItems(choice.Requirements, NoSummons));
+        });
+    }
+
     [Fact]
     public void NoChoice_WhenShortcutSavesNoSteps()
     {
