@@ -43,6 +43,18 @@ public sealed class GeneralSettings
     // TerminalInputRouter.Enabled; surfaced in Settings → General.
     public bool TypeToTerminalFromOtherWindows { get; set; } = true;
 
+    // When on (the default), pressing Tab while composing a line in the
+    // terminal, or in the Conversation window's input box, completes the word
+    // at the caret against carried, worn, and key-ring item names
+    // (Services.InventoryAutoCompleter) — Shift+Tab steps backward through the
+    // same match list. Off restores Tab's old behaviour in both places (a raw
+    // byte to the wire mid-line in the terminal; native focus-shift in the
+    // Conversation box). Never fires while a full-screen form owns the
+    // keyboard (TrainerMenuTracker.MenuOwnsKeyboard) — see
+    // Services.InventoryAutoCompleter. Char-tier; surfaced in Settings →
+    // General.
+    public bool InventoryTabCompleteEnabled { get; set; } = true;
+
     // When on (the default), the animated splash plays on the terminal at startup
     // until a session begins. Off shows only the static header (the "MudPlay"
     // title, byline, and hint) — those stay regardless. Surfaced in Settings →

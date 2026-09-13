@@ -22,6 +22,12 @@ public partial class ConversationWindow : Window
     private ListBox? _rowsList;
     private ScrollViewer? _rowsScroll;
 
+    // Per-window Tab-completion cursor over the input box, mirroring the
+    // terminal's own (Controls.TerminalControl._autoComplete) — cycling state
+    // is per-widget, the on/off setting (AppServices.InventoryTabCompleteEnabled)
+    // is shared.
+    private readonly MudPlay.Services.InventoryAutoCompleter _autoComplete = new();
+
     // Click-drag selection paint: on press we pick a direction (select an unselected row,
     // deselect a selected one) and dragging over further rows applies that same state.
     private bool _dragging;
@@ -166,6 +172,39 @@ public partial class ConversationWindow : Window
             else vm.RecallNext();
             if (sender is TextBox tb) tb.CaretIndex = tb.Text?.Length ?? 0;
             e.Handled = true;
+            return;
+        }
+
+        // Tab / Shift+Tab: complete the word at the caret against carried,
+        // worn, and key-ring item names, same as the terminal canvas
+        // (Controls.TerminalControl) — this box sends straight to the game
+        // like the terminal does, not to a specific chat channel, so the same
+        // completion is just as useful here. Gated on TrainerMenu.MenuOwnsKeyboard
+        // (the same signal that drives the terminal's own LocalInputBuffer.
+        // CharacterMode during a full-screen form like the trainer stats
+        // screen): while a form owns the keyboard, Tab must not be
+        // intercepted here either — left unhandled it does its normal
+        // TextBox job (shift focus) instead of risking any interference with
+        // the character-mode input the form needs. Unlike the terminal there
+        // is no raw-byte fallback to protect here, so a no-match press is
+        // simply left unhandled too.
+        if (e.Key == Key.Tab
+            && MudPlay.Services.AppServices.Current.InventoryTabCompleteEnabled
+            && !MudPlay.Services.AppServices.Current.TrainerMenu.MenuOwnsKeyboard
+            && sender is TextBox inputBox)
+        {
+            bool forward = !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            MudPlay.Services.InventoryAutoCompleter.Completion? completed = forward
+                ? _autoComplete.Next(vm.InputText, inputBox.CaretIndex,
+                    MudPlay.Services.AppServices.Current.Inventory.Snapshot)
+                : _autoComplete.Previous(vm.InputText, inputBox.CaretIndex,
+                    MudPlay.Services.AppServices.Current.Inventory.Snapshot);
+            if (completed is { } c)
+            {
+                vm.InputText = c.Text;
+                inputBox.CaretIndex = c.CaretIndex;
+                e.Handled = true;
+            }
             return;
         }
 

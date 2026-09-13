@@ -306,6 +306,15 @@ public sealed class AppServices
     // DialogKeyboardFallthrough forwards through it. Enabled gated by a setting.
     public TerminalInputRouter TerminalInput { get; } = new();
 
+    // Master enable for inventory Tab-completion (Settings -> General), read by
+    // every input widget that offers it (the terminal, the Conversation window).
+    // Each widget owns its own InventoryAutoCompleter instance — the cycling
+    // state (stem/tail/candidates/index) is per-widget, like
+    // CommandHistoryNavigator over the shared CommandHistory below — but the
+    // on/off setting is one value they all share, so it lives here instead of
+    // being pushed into every instance separately.
+    public bool InventoryTabCompleteEnabled { get; set; } = true;
+
     public Game.PartyState PartyState { get; }
 
     // Sole writer of PartyState — every observable field
@@ -2760,7 +2769,16 @@ public sealed class AppServices
         // teleport shadows (ring chime bypassing the Slum Street door). The
         // graph reads the typed store, so the raw JSON eviction here is fine.
         TBInfo = new TBInfoStore(GameData, Log);
+        // MonsterSpawns — reverse RoomKey -> monster-ids index for the room
+        // tooltip's Also Here line. Same lazy-but-warmed-in-the-background shape
+        // as ItemSourceIndex below: a first build walks every Monsters.json row
+        // and self-invalidates by comparing the cache's ActiveSet to the set it
+        // last built from, so there's no explicit invalidation subscription —
+        // only the warm trigger below, so a query never pays the build cost on
+        // the UI thread at an inconvenient moment (a room hover mid-walk).
         MonsterSpawns = new MonsterSpawnIndex(GameData, Log);
+        GameData.ActiveSetChanged += _ => Task.Run(MonsterSpawns.Warm);
+        if (GameData.ActiveSet is not null) Task.Run(MonsterSpawns.Warm);
         GameData.ActiveSetChanged += TBInfo.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
             TBInfo.OnActiveSetChanged(GameData.ActiveSet);
@@ -9251,6 +9269,7 @@ public sealed class AppServices
         // profile-load would let an auto-loaded named profile re-enable the splash the
         // user turned off, and flash the animation for a beat before connect.
         TerminalInput.Enabled = general.TypeToTerminalFromOtherWindows;
+        InventoryTabCompleteEnabled = general.InventoryTabCompleteEnabled;
 
         // Game-menu commands are BBS-tier too — HangupHandler consumes
         // ExitCommand synchronously on @hangup; MainMenuEntryAutomation +

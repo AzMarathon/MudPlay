@@ -84,7 +84,7 @@ The **terminal** is the center of MudPlay — everything the game sends, rendere
 
 ## The terminal and status bar
 
-Type, and your keystrokes go straight to the game. The **numpad** is pre-wired to compass movement out of the box. **Paste** with **Ctrl+V** or **Shift+Insert** — a single line drops onto your input, and a multi-line paste is sent as one command per line. **Right-click the terminal** for a quick menu: your starred GOTO **Favorites** and **Recent destinations** (the last 10 places you walked — click either to walk there) lead the menu, followed by a set of entries you fully control — by default quick-opens for Backscroll / Player Workshop / Party / Spell Book / Conversation / Navigation / Session Stats, **Reset States** (the recovery escape hatch — see Automation), and **Bug report…**. You can rebuild that lower section — add commands, direct links to a Workshop tab or a calculator, your own fly-out folders, and rename anything — under **Settings → Toolbar + Shortcuts** (see *Customizing the terminal right-click menu*).
+Type, and your keystrokes go straight to the game. The **numpad** is pre-wired to compass movement out of the box. **Paste** with **Ctrl+V** or **Shift+Insert** — a single line drops onto your input, and a multi-line paste is sent as one command per line. **Tab** completes the word you're typing against the LEADING word of your carried, worn, and key-ring item names (`drop emerald-` + **Tab** → `drop emerald-hilted rapier`; a "bronze emblem" needs `bro`/`bronze`, not `e`) — press it again, or **Shift+Tab**, to step through other matches; toggle it off in **Settings → General**. **Right-click the terminal** for a quick menu: your starred GOTO **Favorites** and **Recent destinations** (the last 10 places you walked — click either to walk there) lead the menu, followed by a set of entries you fully control — by default quick-opens for Backscroll / Player Workshop / Party / Spell Book / Conversation / Navigation / Session Stats, **Reset States** (the recovery escape hatch — see Automation), and **Bug report…**. You can rebuild that lower section — add commands, direct links to a Workshop tab or a calculator, your own fly-out folders, and rename anything — under **Settings → Toolbar + Shortcuts** (see *Customizing the terminal right-click menu*).
 
 The status bar along the bottom packs several live readouts:
 
@@ -784,7 +784,7 @@ The toolbar across the top controls what you see:
 
 ## Talking
 
-Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands. **↑ / ↓** recall what you sent before, and the chevron at the right edge of the box opens a list of recent commands to pick from.
+Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands. **↑ / ↓** recall what you sent before, and the chevron at the right edge of the box opens a list of recent commands to pick from. **Tab** completes the word at your cursor against your carried, worn, and key-ring item names, the same as the terminal (**Settings → General**) — press it again, or **Shift+Tab**, to step through other matches.
 
 ## Logging and history
 

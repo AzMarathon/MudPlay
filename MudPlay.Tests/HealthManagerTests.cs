@@ -113,6 +113,15 @@ public sealed class HealthManagerTests
         /// Advance it to simulate the window elapsing with no room re-display.</summary>
         public DateTimeOffset Clock = DateTimeOffset.UtcNow;
 
+        /// <summary>When true, a deferred HealthManager reaction (ConfirmHpGate /
+        /// ConfirmMaGate — see _post) is queued into Posted instead of running
+        /// inline, so a test can simulate the tick between a gate's initial assert
+        /// and its one-tick re-check. Default false keeps every existing test's
+        /// gate-assert synchronous (immediately confirmed on unchanged state).</summary>
+        public bool DeferPost { get; set; }
+        public Queue<Action> Posted { get; } = new();
+        public void DrainPost() { while (Posted.Count > 0) Posted.Dequeue()(); }
+
         /// <summary>Char-tier Party settings — drives the @panic send gate
         /// (UsePanicWhileLeading) read by HealthManager. Default instance has
         /// both panic flags off.</summary>
@@ -140,6 +149,7 @@ public sealed class HealthManagerTests
                 log: Log,
                 hangupSignal: Hangup,
                 hasHostileInRoom: () => HostileInRoom,
+                post: a => { if (DeferPost) Posted.Enqueue(a); else a(); },
                 now: () => Clock,
                 readPartySettings: () => Party,
                 selfIsPartyLeader: () => SelfIsLeader);
@@ -374,6 +384,291 @@ public sealed class HealthManagerTests
         h.State.InCombat = false;    // combat just ended
         Assert.True(h.Health.RestInFlight);
         Assert.Contains("rest", h.SentLines);
+    }
+
+    // ----- momentary breach: recovers before the rest command commits -------
+    // Regression for paradigm-20260912-093819: PromptScanner parses prompt
+    // digits ahead of the rest of a wire read, so a spell/attack that drops a
+    // pool below its trigger can be followed, within the same burst, by a
+    // regen tick that brings it back up. The gate still asserts immediately
+    // (the walker still pauses on the spot, unchanged), but the actual
+    // rest/meditate SEND waits one dispatch tick (ConfirmHpGate / ConfirmMaGate)
+    // to re-check the trigger before committing. These tests drive that tick
+    // explicitly via Harness.DeferPost + DrainPost.
+
+    [Fact]
+    public void MaGateAsserted_RecoversAboveTriggerBeforeConfirm_NeverSendsRest()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 350,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 190, maxMa: 394);   // strictly below 197 — gate asserts
+        Assert.True(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);            // send withheld pending confirm
+        Assert.False(h.Health.RestInFlight);
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 245, maxMa: 394);   // regen tick lands before confirm runs — above trigger
+        Assert.False(h.ManaGateHeld);         // cleared immediately — recovered above trigger, confirm not even needed
+        Assert.Empty(h.SentLines);
+
+        h.DrainPost();                        // the deferred re-check runs — no-op, gate's already gone
+
+        Assert.False(h.ManaGateHeld);         // retracted — the breach was momentary
+        Assert.Empty(h.SentLines);            // meditate was never sent
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    [Fact]
+    public void MaGateAsserted_StillBelowTriggerAtConfirm_SendsMeditateAfterConfirm()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 350,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 150, maxMa: 394);   // genuinely low — well below trigger
+        Assert.True(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);            // still withheld pending confirm
+
+        h.DrainPost();                        // confirm runs — still below trigger
+
+        Assert.True(h.ManaGateHeld);
+        Assert.Contains("meditate", h.SentLines);
+        Assert.True(h.Health.RestInFlight);
+    }
+
+    // The engine-disabled branch resets every other in-flight latch, so the gate
+    // CONFIRMATIONS have to drop there too. They're only ever cleared alongside an
+    // asserted gate, so one left standing across the toggle can never be retracted
+    // afterwards — it feeds the send path with no gate asserted, sitting the
+    // character down at full mana and doing it again on every rest completion.
+    [Fact]
+    public void AutoHealToggledOffWhileConfirmed_ThenBackOnAtFullMa_NeverSendsMeditate()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 350,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 150, maxMa: 394);   // genuine breach
+        h.DrainPost();                                           // confirmed → meditate goes out
+        Assert.Contains("meditate", h.SentLines);
+
+        h.AutoHealRestEnabled = false;                           // user flips Auto-Heal / Rest off
+        h.Health.Evaluate();
+        h.Sent.Clear();
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 394, maxMa: 394);   // tops off while the engine is off
+        h.AutoHealRestEnabled = true;                            // and back on
+        h.Health.Evaluate();
+        h.DrainPost();
+
+        Assert.False(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    [Fact]
+    public void HpGateAsserted_RecoversAboveTriggerBeforeConfirm_NeverSendsRest()
+    {
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowHp = 100,
+            RestMaxHp = 195,
+        };
+        using Harness h = new(s) { DeferPost = true };
+
+        h.SetPrompt(hp: 90, maxHp: 200);      // below 100 — gate asserts
+        Assert.True(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+
+        h.SetPrompt(hp: 150, maxHp: 200);     // heal/regen lands before confirm — above trigger
+        h.DrainPost();
+
+        Assert.False(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    // ----- confirmed mid-combat breach that fully recovers before combat ends ---
+    // Regression for paradigm-20260912-103110: the one-tick confirm above only
+    // catches a same-burst regen recovery. A genuine breach confirmed mid-fight
+    // can still fully self-resolve over several more rounds of regen, well
+    // before the fight itself ends — holding the confirmed gate out for the
+    // full rest-target (instead of the ordinary trigger) meant combat ending
+    // committed to a rest/meditate the pool wasn't actually low for anymore.
+
+    [Fact]
+    public void MaGateConfirmed_RecoversAboveTriggerWhileStillInCombat_NoRestWhenCombatEnds()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 335,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 150, maxMa: 394);   // genuine breach, still fighting
+        Assert.True(h.ManaGateHeld);
+        h.DrainPost();                                           // confirm runs — still below trigger
+        Assert.True(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);                                // withheld — still in combat
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 229, maxMa: 394);   // regen climbs it back past 197, fight still on
+        Assert.False(h.ManaGateHeld);                             // cleared at the trigger, not held for target
+        Assert.Empty(h.SentLines);
+
+        h.State.InCombat = false;                                 // combat ends
+        Assert.Empty(h.SentLines);                                // never rests — it wasn't low anymore
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    [Fact]
+    public void HpGateConfirmed_RecoversAboveTriggerWhileStillInCombat_NoRestWhenCombatEnds()
+    {
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowHp = 100,
+            RestMaxHp = 195,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 80, maxHp: 200);       // genuine breach, still fighting
+        Assert.True(h.HealthGateHeld);
+        h.DrainPost();                          // confirm runs — still below trigger
+        Assert.True(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+
+        h.SetPrompt(hp: 150, maxHp: 200);      // heals back past 100, fight still on
+        Assert.False(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+
+        h.State.InCombat = false;               // combat ends
+        Assert.Empty(h.SentLines);
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    // ----- combat-end / same-burst recovery race (successor to -103110) ---------
+    // Regression for paradigm-20260912-123108: -103110's fix (above) closes the
+    // gap where recovery lands as its OWN Evaluate tick while still in combat.
+    // But InCombat and the recovered Hp/Ma can update in the SAME wire burst as
+    // combat itself ending, as two separate PropertyChanged events fired back to
+    // back — and if InCombat's fires first, THIS Evaluate call sees the gate
+    // still confirmed against the stale, about-to-be-overwritten low reading and
+    // would otherwise commit the send right then. The combat-end edge now resets
+    // a confirmed gate and re-defers through the same one-tick ConfirmHpGate /
+    // ConfirmMaGate check the initial breach uses, so a same-burst recovery that
+    // lands moments after InCombat flips false still retracts the gate instead
+    // of sitting down for a pool that isn't actually low anymore.
+
+    [Fact]
+    public void MaGateConfirmed_CombatEndsBeforeSameBurstRecoveryApplies_NeverSendsRest()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 335,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 191, maxMa: 394);   // genuine breach mid-fight
+        Assert.True(h.ManaGateHeld);
+        h.DrainPost();                                            // confirm runs — still below trigger
+        Assert.True(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);
+
+        // Same wire burst as the kill landing: InCombat flips false BEFORE the
+        // accompanying regen tick updates Ma, so Ma is still the stale 191 here.
+        h.State.InCombat = false;
+        Assert.Empty(h.SentLines);            // send withheld — reconfirming instead of trusting the stale value
+        Assert.False(h.Health.RestInFlight);
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 239, maxMa: 394);   // the burst's regen tick lands now
+        h.DrainPost();                                            // deferred reconfirm runs
+
+        Assert.False(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);            // meditate never sent
+        Assert.False(h.Health.RestInFlight);
+    }
+
+    [Fact]
+    public void MaGateConfirmed_CombatEndsWithGenuineBreachStillLow_SendsMeditateAfterReconfirm()
+    {
+        HealthSettings s = new()
+        {
+            MaThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowMa = 197,
+            RestMaxMa = 335,
+            UseMeditateAbility = true,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 362, maxHp: 362, ma: 150, maxMa: 394);   // genuine breach, well below trigger
+        h.DrainPost();                                            // confirm runs — still below trigger
+        Assert.True(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);
+
+        h.State.InCombat = false;              // combat ends — pool never recovered
+        Assert.Empty(h.SentLines);              // withheld one more tick for the combat-end reconfirm
+        h.DrainPost();                          // reconfirm runs — still genuinely below trigger
+
+        Assert.True(h.ManaGateHeld);
+        Assert.Contains("meditate", h.SentLines);
+        Assert.True(h.Health.RestInFlight);
+    }
+
+    [Fact]
+    public void HpGateConfirmed_CombatEndsBeforeSameBurstRecoveryApplies_NeverSendsRest()
+    {
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowHp = 100,
+            RestMaxHp = 195,
+        };
+        using Harness h = new(s) { DeferPost = true };
+        h.State.InCombat = true;
+
+        h.SetPrompt(hp: 80, maxHp: 200);       // genuine breach, still fighting
+        h.DrainPost();                          // confirm runs — still below trigger
+        Assert.True(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+
+        // Same wire burst: InCombat flips false before the heal/regen line updates Hp.
+        h.State.InCombat = false;
+        Assert.Empty(h.SentLines);
+        Assert.False(h.Health.RestInFlight);
+
+        h.SetPrompt(hp: 150, maxHp: 200);      // the burst's heal lands now
+        h.DrainPost();
+
+        Assert.False(h.HealthGateHeld);
+        Assert.Empty(h.SentLines);
+        Assert.False(h.Health.RestInFlight);
     }
 
     [Fact]
