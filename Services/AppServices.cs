@@ -2735,8 +2735,9 @@ public sealed class AppServices
         // witness-SET + duration clear) are derived from Messages + the Spells
         // table, so drop them when either changes: a set switch (reseeds both) or a
         // message edit in the Game Data Browser. Rebuilt lazily on next use.
-        GameData.ActiveSetChanged += _ => { _applyMatchers = null; _spellFormulas = null; };
-        Messages.Messages.CollectionChanged += (_, _) => _applyMatchers = null;
+        _cureSpells = new Game.GameData.CureSpellIndex(GameData, DiseaseApplySpellNumbers);
+        GameData.ActiveSetChanged += _ => { _applyMatchers = null; _spellFormulas = null; _cureSpells.Invalidate(); _cureMatchers = null; };
+        Messages.Messages.CollectionChanged += (_, _) => { _applyMatchers = null; _cureSpells.Invalidate(); _cureMatchers = null; };
         // Monster-message catalogue parallels the spell-message one —
         // same per-set storage + universal seed fallback pattern.
         MonsterMessages = new MonsterMessageStore(Log);
@@ -7150,6 +7151,20 @@ public sealed class AppServices
     // switch (wired where Messages is constructed). Rebuilt lazily here.
     private IReadOnlyList<Game.Conditions.ApplyCastMatcher>? _applyMatchers;
 
+    // Game-data index of which spells REMOVE which ailment (cure poison / disease /
+    // blindness / paralysis, heal+cures). Drives the party chip cure-clear path so a
+    // party-mate's cure is recognized regardless of the local character's config.
+    // Cache keyed on the active set; Invalidated when the Messages catalogue changes
+    // (its Diseased-flagged records are the disease-apply source).
+    private readonly Game.GameData.CureSpellIndex _cureSpells;
+
+    // Compiled cure-confirmation matchers, cached like _applyMatchers — the party
+    // tracker re-reads them on every inbound line, and rebuilding scans the Messages
+    // catalogue once per cure spell, so caching avoids that sweep per line. Depends
+    // only on the active set + the Messages catalogue (no per-character input), so
+    // the same two invalidations that reset _applyMatchers / _cureSpells cover it.
+    private IReadOnlyList<Game.Conditions.CureCastMatcher>? _cureMatchers;
+
     private IReadOnlyList<Game.Conditions.ApplyCastMatcher> ApplyCastMatchers()
     {
         if (_applyMatchers is { } cached) return cached;
@@ -7236,23 +7251,59 @@ public sealed class AppServices
         return rounds > 0 ? rounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock : null;
     }
 
+    // Cure-confirmation matchers for the party ailment tracker's chip-clear path.
+    // Built from game data (CureSpellIndex), NOT the local character's configured
+    // cure slots: a party-mate cures with their own class's spells, which the local
+    // character may never learn, so keying recognition on local config missed every
+    // cross-caster cure (a Priest's cure poison never cleared the member's chip
+    // until the next `par`). Each cure spell's CasterMessage (our cast) and
+    // WitnessMessage (another member's cast seen in the room) compile to matchers
+    // that pin the spell name + target, so a cure landing on a member clears that
+    // member's chip. Re-read live, so a game-data set swap takes effect.
     private IReadOnlyList<Game.Conditions.CureCastMatcher> CureCastMatchers()
     {
-        Models.Profile.SpellsSettings spells =
-            ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells");
-        List<Game.Conditions.CureCastMatcher> list = new(4);
-        Add(spells.CurePoisonSpell,    Models.GameData.MessageFlags.Poisoned);
-        Add(spells.CureDiseaseSpell,   Models.GameData.MessageFlags.Diseased);
-        Add(spells.CureBlindnessSpell, Models.GameData.MessageFlags.Blinded);
-        Add(spells.CureHoldsSpell,     Models.GameData.MessageFlags.MovementPrevented);
-        return list;
+        if (_cureMatchers is { } cached) return cached;
 
-        void Add(string? castCode, Models.GameData.MessageFlags ailment)
+        List<Game.Conditions.CureCastMatcher> list = new();
+        foreach (Game.GameData.CureSpellIndex.CureSpell cure in _cureSpells.AllCures())
         {
-            if (CureMatcherFor(castCode) is { } resolved)
-                list.Add(new Game.Conditions.CureCastMatcher(
-                    ailment, resolved.SpellName, resolved.Caster, resolved.Witness));
+            Models.GameData.MessageRecord? rec = FindSpellMessage(cure.Number, cure.Name);
+            if (rec is null) continue;
+            // Needs a caster matcher that pins {spellname}+{target}; a record whose
+            // cast line has no placeholder (a bare NPC-healer variant) is skipped.
+            if (Game.Spells.CasterMessageMatcher.TryCreate(rec.CasterMessage) is not { } caster) continue;
+            Game.Spells.CasterMessageMatcher? witness =
+                Game.Spells.CasterMessageMatcher.TryCreate(rec.WitnessMessage);
+            foreach (Models.GameData.MessageFlags ailment in CuredAilmentBits(cure.Cures))
+                list.Add(new Game.Conditions.CureCastMatcher(ailment, cure.Name, caster, witness));
         }
+        return _cureMatchers = list;
+    }
+
+    // Split a spell's combined cured-flags value into the individual ailment bits the
+    // tracker clears — a heal+cure removes several at once, each its own matcher.
+    private static IEnumerable<Models.GameData.MessageFlags> CuredAilmentBits(Models.GameData.MessageFlags cured)
+    {
+        if ((cured & Models.GameData.MessageFlags.Poisoned) != 0) yield return Models.GameData.MessageFlags.Poisoned;
+        if ((cured & Models.GameData.MessageFlags.Diseased) != 0) yield return Models.GameData.MessageFlags.Diseased;
+        if ((cured & Models.GameData.MessageFlags.Blinded) != 0) yield return Models.GameData.MessageFlags.Blinded;
+        if ((cured & Models.GameData.MessageFlags.MovementPrevented) != 0) yield return Models.GameData.MessageFlags.MovementPrevented;
+    }
+
+    // Spell numbers that APPLY disease — the Diseased-flagged message records'
+    // linked spells. Disease has no ability code of its own, so this is how a
+    // "cure disease" spell's RemovesSpell targets are recognized as disease (see
+    // CureSpellIndex). Same Diseased-flag source ConditionTracker uses to detect it.
+    private IReadOnlySet<int> DiseaseApplySpellNumbers()
+    {
+        HashSet<int> set = new();
+        foreach (Models.GameData.MessageRecord rec in Messages.Messages)
+        {
+            if (!rec.Flags.HasFlag(Models.GameData.MessageFlags.Diseased)) continue;
+            int n = SpellNumberOf(rec);
+            if (n > 0) set.Add(n);
+        }
+        return set;
     }
 
     // Whether the player has a cure spell configured (a non-blank cast code
@@ -7275,32 +7326,6 @@ public sealed class AppServices
             _ => null,
         };
         return !string.IsNullOrWhiteSpace(code);
-    }
-
-    // Resolve a cure spell's cast code to its game-data name plus the
-    // Game.Spells.CasterMessageMatchers built from the spell's
-    // Models.GameData.MessageRecord.CasterMessage (OUR cast) and
-    // Models.GameData.MessageRecord.WitnessMessage (another
-    // member's cast we see in the room). The name is carried so the tracker
-    // confirms the spell slot, not just the target. The witness matcher is
-    // null when the record has no witness template. Returns null
-    // when the code is blank, unknown to the spellbook, has no message record,
-    // or the caster message has no string capture (nothing to confirm against).
-    private (string SpellName, Game.Spells.CasterMessageMatcher Caster, Game.Spells.CasterMessageMatcher? Witness)?
-        CureMatcherFor(string? castCode)
-    {
-        if (string.IsNullOrWhiteSpace(castCode)) return null;
-        string target = castCode.Trim();
-        foreach (Game.Spells.KnownSpell s in Spellbook.Available)
-        {
-            if (!string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase)) continue;
-            Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
-            if (rec is null) return null;
-            return Game.Spells.CasterMessageMatcher.TryCreate(rec.CasterMessage) is { } caster
-                ? (s.Name, caster, Game.Spells.CasterMessageMatcher.TryCreate(rec.WitnessMessage))
-                : null;
-        }
-        return null;
     }
 
     // Buff-duration source: map a fired AppliedMessage

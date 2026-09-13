@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.77.5**
-> - Removed the non-functional **Sysop map** checkbox (Settings → BBS): the game's `sys map` output can't be reliably matched to the room graph, so it never drove anything — `sys st` remains the working location-recovery power
+> **Version 3.77.6**
+> - A party member's blind / diseased / held / poisoned chip now clears the moment you witness *any* cure land on them — including a cure cast by a party-mate using a spell your own class can't cast. Previously only your own configured cures were recognized, so a cross-cast cure left the chip stuck until the next `par`
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
