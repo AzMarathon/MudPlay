@@ -202,8 +202,8 @@ public sealed class TrainFundingTests
             new RoomKey(1, 1), new RoomKey(1, 9), Flat);
 
         Assert.True(plan.Affordable);
-        Assert.True(plan.NeedsNoDetour);
         Assert.Empty(plan.Legs);
+        Assert.Equal(0, plan.ShortfallCopper);
     }
 
     [Fact]
@@ -306,7 +306,6 @@ public sealed class TrainFundingTests
         Assert.True(stashed.Affordable);
         Assert.True(stashed.DependsOnStash);
         Assert.Equal(1000, stashed.SpeculativeCopper);
-        Assert.Equal(0, stashed.GuaranteedCopper);
     }
 
     [Fact]
@@ -319,7 +318,6 @@ public sealed class TrainFundingTests
         Assert.True(banked.Affordable);
         Assert.False(banked.DependsOnStash);
         Assert.Equal(0, banked.SpeculativeCopper);
-        Assert.Equal(1000, banked.GuaranteedCopper);
     }
 
     [Fact]
@@ -331,8 +329,7 @@ public sealed class TrainFundingTests
             new RoomKey(1, 1), new RoomKey(1, 9), Flat);
 
         Assert.True(plan.DependsOnStash);
-        Assert.Equal(300, plan.SpeculativeCopper);
-        Assert.Equal(700, plan.GuaranteedCopper);   // 400 purse + 300 bank draw
+        Assert.Equal(300, plan.SpeculativeCopper);   // only the stash leg is a guess
     }
 
     // ----- Forecast: when does a shortfall close? -------------------------------
@@ -379,6 +376,36 @@ public sealed class TrainFundingTests
         string text = TrainFundingForecast.Describe(3000, 1500, System.TimeSpan.Zero);
         Assert.Contains("short 3,000 copper", text);
         Assert.DoesNotContain("lap(s)", text);
+    }
+
+    [Fact]
+    public void RetryDelay_NeverCollapsesToImmediate()
+    {
+        // The whole point of the back-off: without a floor, a broke character
+        // re-prices the entire run on every exp gain. "Don't know" is the dangerous
+        // case — it must not mean "retry now".
+        Assert.Equal(TrainFundingForecast.UnknownRetry, TrainFundingForecast.RetryDelay(null));
+        Assert.Equal(TrainFundingForecast.MinRetry,
+            TrainFundingForecast.RetryDelay(System.TimeSpan.Zero));
+        Assert.Equal(TrainFundingForecast.MinRetry,
+            TrainFundingForecast.RetryDelay(System.TimeSpan.FromSeconds(3)));
+    }
+
+    [Fact]
+    public void RetryDelay_CapsLongProjectionsSoOtherIncomeIsNoticed()
+    {
+        // A two-hour projection shouldn't blind us for two hours — a manual
+        // withdrawal or a sold item can close the gap sooner, and re-checking is
+        // only a couple of BFS sweeps.
+        Assert.Equal(TrainFundingForecast.MaxRetry,
+            TrainFundingForecast.RetryDelay(System.TimeSpan.FromHours(2)));
+    }
+
+    [Fact]
+    public void RetryDelay_PassesSensibleProjectionsThrough()
+    {
+        System.TimeSpan projected = System.TimeSpan.FromMinutes(7);
+        Assert.Equal(projected, TrainFundingForecast.RetryDelay(projected));
     }
 
     [Fact]

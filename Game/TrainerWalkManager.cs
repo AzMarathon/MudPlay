@@ -160,6 +160,21 @@ public sealed class TrainerWalkManager : IDisposable
     // session/loop trackers, which this manager has no business reaching into.
     public Func<long, string>? DescribeShortfall { get; set; }
 
+    // How long until earnings are projected to close a shortfall, or null when the
+    // rate is too low to say. Drives the retry hold below.
+    public Func<long, TimeSpan?>? EstimateWaitToAfford { get; set; }
+
+    // Nothing re-checks funding until this passes. Without it the armed trigger
+    // re-prices the entire run on EVERY exp gain while broke — a full itinerary BFS
+    // plus a funding BFS per source, per kill, forever, each one logging the same
+    // shortfall. Grinding is exactly the state a broke character is in, so that's
+    // the common case, not an edge one.
+    private DateTimeOffset _fundingRetryAt = DateTimeOffset.MinValue;
+
+    private void HoldFundingRetry(long shortfall) =>
+        _fundingRetryAt = DateTimeOffset.Now
+            + Game.Train.TrainFundingForecast.RetryDelay(EstimateWaitToAfford?.Invoke(shortfall));
+
     // Invoked once a run that actually trained something has finished and the loop /
     // auto-lair is running again. Bound to the auto-deposit check, so a purse left
     // heavy by a withdraw-and-train trip gets banked on the way back rather than
@@ -199,6 +214,10 @@ public sealed class TrainerWalkManager : IDisposable
     public void TrainNow()
     {
         if (IsBusy || !_wire.IsBound) return;
+        // An explicit click overrides any funding back-off the armed path is sitting
+        // on — the user asking to train now has better information than our
+        // projection of when they'd be able to afford it.
+        _fundingRetryAt = DateTimeOffset.MinValue;
         _ = TrainNowAsync();
     }
 
@@ -352,6 +371,7 @@ public sealed class TrainerWalkManager : IDisposable
         switch (_funding.Begin(cost, trainerRoom))
         {
             case Game.Train.TrainFundingStart.Funded:
+                _fundingRetryAt = DateTimeOffset.MinValue;
                 return false;                       // purse covers it — carry on
 
             case Game.Train.TrainFundingStart.Collecting:
@@ -367,6 +387,7 @@ public sealed class TrainerWalkManager : IDisposable
                 // rather than walking somewhere pointless or disarming. The router
                 // reports the exact gap on its Finished event, which has already
                 // fired synchronously inside Begin by the time we get here.
+                HoldFundingRetry(_lastFundingShortfall);
                 _log?.Info("AutoTrain",
                     DescribeShortfall?.Invoke(_lastFundingShortfall)
                     ?? $"Can't afford training — short {_lastFundingShortfall:N0} copper.");
@@ -387,6 +408,7 @@ public sealed class TrainerWalkManager : IDisposable
 
         if (!result.Funded)
         {
+            HoldFundingRetry(result.ShortfallCopper);
             _log?.Info("AutoTrain",
                 DescribeShortfall?.Invoke(result.ShortfallCopper)
                 ?? $"Funding errand ended short — {result.Detail}.");
@@ -741,6 +763,7 @@ public sealed class TrainerWalkManager : IDisposable
         AutoTrainerSettings s = ReadSettings();
         int keep = Math.Max(0, s.LevelsToKeep);
         if (!IsBusy && EngineActive && s.AutoTrain
+            && DateTimeOffset.Now >= _fundingRetryAt
             && CanStartRun?.Invoke() != false
             && TrainBudgetCalculator.ShouldFire(CountBankableAbove(_stats.Level), keep, s.FireAtBankedLevels)
             && TrainBudgetCalculator.WithinCeiling(_stats.Level, Math.Max(0, s.DoNotTrainAbove)))
@@ -942,5 +965,13 @@ public sealed class TrainerWalkManager : IDisposable
         _statParser.ScreenParsed -= OnStatScreenParsed;
         _autoTrain.StateChanged -= OnAutoTrainStateChanged;
         _autoTrain.PlanCommitted -= OnCpPlanCommitted;
+        if (_funding is not null) _funding.Finished -= OnFundingFinished;
     }
+
+    // Believed shortfall from the last funding attempt, and when the armed run will
+    // look again. Read by the bug report — "auto-train just doesn't go" is the report
+    // this feature will generate, and it's unanswerable without these.
+    public long LastFundingShortfall => _lastFundingShortfall;
+    public DateTimeOffset? FundingRetryAt =>
+        _fundingRetryAt == DateTimeOffset.MinValue ? null : _fundingRetryAt;
 }

@@ -63,6 +63,26 @@ public static class TrainFundingForecast
              + $"roughly {Humanise(eta)}{laps} away";
     }
 
+    // Bounds on the projection before it's used as a retry hold.
+    //
+    // The floor stops a pathological "ready in three seconds" projection from
+    // re-spinning the planner; the ceiling keeps a long projection responsive to
+    // money that arrives some other way — a manual withdrawal, a sold item — since
+    // the re-check itself is only a couple of BFS sweeps. A null projection (rate
+    // too low, or past the horizon) means "don't know", which must NOT collapse to
+    // "retry immediately".
+    public static readonly TimeSpan MinRetry = TimeSpan.FromMinutes(1);
+    public static readonly TimeSpan MaxRetry = TimeSpan.FromMinutes(15);
+    public static readonly TimeSpan UnknownRetry = TimeSpan.FromMinutes(5);
+
+    public static TimeSpan RetryDelay(TimeSpan? projected)
+    {
+        if (projected is not { } wait) return UnknownRetry;
+        if (wait < MinRetry) return MinRetry;
+        if (wait > MaxRetry) return MaxRetry;
+        return wait;
+    }
+
     private static string Humanise(TimeSpan span) =>
         span.TotalMinutes < 1 ? "under a minute"
         : span.TotalHours < 1 ? $"{span.TotalMinutes:N0} min"

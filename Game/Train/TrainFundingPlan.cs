@@ -43,10 +43,6 @@ public readonly record struct TrainFundingPlan(
     long ShortfallCopper,
     long SpeculativeCopper)
 {
-    // Nothing to collect — the purse already covers it, so the run walks straight
-    // to the trainer. The common case, and the only one that costs no detour.
-    public bool NeedsNoDetour => Affordable && Legs.Count == 0;
-
     // The plan only adds up if the stashes still hold what we think they do.
     // Coin in the purse and coin in a bank are certain; coin left hidden in a room
     // is not, because any player who searched it since could have walked off with
@@ -55,17 +51,4 @@ public readonly record struct TrainFundingPlan(
     // gamble, and the run has to re-plan in place when a leg disappoints rather
     // than assuming the rest of the arithmetic still holds.
     public bool DependsOnStash => Affordable && SpeculativeCopper > 0;
-
-    // What the plan is worth if every stash turns out to be empty.
-    public long GuaranteedCopper => OnHandCopper + DrawTotal - SpeculativeCopper;
-
-    private long DrawTotal
-    {
-        get
-        {
-            long total = 0;
-            foreach (TrainFundingLeg leg in Legs) total += leg.DrawCopper;
-            return total;
-        }
-    }
 }

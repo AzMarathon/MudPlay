@@ -6294,6 +6294,9 @@ public sealed class AppServices
                 shortfall,
                 SessionActivity.Snapshot().CurrencyPerHour,
                 LoopRunner.AverageLapTime);
+        TrainerWalk.EstimateWaitToAfford = shortfall =>
+            Game.Train.TrainFundingForecast.TimeToAfford(
+                shortfall, SessionActivity.Snapshot().CurrencyPerHour);
 
         // @train remote: trains in place (no walk) via the coordinator.
         TrainRemote = new Game.Remote.TrainHandler(RemoteCommands, TrainerWalk);

@@ -1351,6 +1351,33 @@ public static class BugReportBuilder
         if (stash is not { Count: > 0 }) sb.Append("_(none)_\n");
         else foreach (var r in stash) sb.Append("- ").Append(r.Map).Append('/').Append(r.Room).Append('\n');
 
+        // Auto-train funding. "Auto-train just doesn't go" is the report this feature
+        // will produce, and answering it needs all three money stores plus whether a
+        // back-off is currently holding the armed run off.
+        var believed = svc.StashBalances.NonEmpty();
+        sb.Append("\n**Stashed coin (believed)** (").Append(believed.Count).Append(")\n\n");
+        if (believed.Count == 0) sb.Append("_(none)_\n");
+        else foreach ((var room, long copper) in believed)
+            sb.Append("- ").Append(room.Map).Append('/').Append(room.Room)
+              .Append(" — ").Append(copper.ToString("N0", System.Globalization.CultureInfo.InvariantCulture))
+              .Append(" copper\n");
+
+        var balances = svc.BankBalance.LastKnown;
+        sb.Append("\n**Bank balances** (").Append(balances.Count).Append(")\n\n");
+        if (balances.Count == 0) sb.Append("_(never queried this session)_\n");
+        else foreach ((string bank, long copper) in balances)
+            sb.Append("- ").Append(bank).Append(" — ")
+              .Append(copper.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)).Append(" copper\n");
+
+        sb.Append('\n');
+        Kv(sb, "Train funding errand", svc.TrainFunding.IsBusy ? "collecting" : "idle");
+        Kv(sb, "Last train shortfall", svc.TrainerWalk.LastFundingShortfall > 0
+            ? $"{svc.TrainerWalk.LastFundingShortfall:N0} copper"
+            : "(none)");
+        Kv(sb, "Funding retry held until", svc.TrainerWalk.FundingRetryAt is { } at
+            ? at.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
+            : "(not held)");
+
         // Only the starred quick-access favourites — the full GOTO list runs to
         // hundreds of entries and bloats the report without helping diagnosis.
         var favorites = svc.Favorites.StarredFavorites();
