@@ -86,7 +86,8 @@ public static class CombatSpellProfileReport
         return $"spells[prio mph{s.PriorityMinorPartyHeal}/Mph{s.PriorityMajorPartyHeal}/" +
                $"msh{s.PriorityMinorSelfHeal}/Msh{s.PriorityMajorSelfHeal}/" +
                $"cure{s.PriorityCuring}/buff{s.PriorityBuffing}/deb{s.PriorityDebuffing}" +
-               $" · minheal={s.MinorHealSpell ?? "—"} majheal={s.MajorHealSpell ?? "—"} hpregen={s.HpRegenSpell ?? "—"}]";
+               $" · minheal={s.MinorHealSpell ?? "—"} majheal={s.MajorHealSpell ?? "—"}" +
+               $" emheal={s.EmergencyHealSpell ?? "—"} hpregen={s.HpRegenSpell ?? "—"}]";
     }
 
     // "main+off" (main only when no off-hand), "—" when the slot is empty.

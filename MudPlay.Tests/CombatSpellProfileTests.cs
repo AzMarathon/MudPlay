@@ -258,6 +258,7 @@ public sealed class CombatSpellProfileTests
         };
         prof.Health.RestMaxHp = 77;
         prof.Spells.MinorHealSpell = "mihe";
+        prof.Spells.EmergencyHealSpell = "lastr";
         prof.Spells.PriorityCuring = 2;
 
         CombatSpellProfile copy = prof.Clone(newIdentity: true);
@@ -267,6 +268,7 @@ public sealed class CombatSpellProfileTests
         Assert.Equal("great axe", copy.AlternateWeapon);
         Assert.Equal(77, copy.Health.RestMaxHp);
         Assert.Equal("mihe", copy.Spells.MinorHealSpell);
+        Assert.Equal("lastr", copy.Spells.EmergencyHealSpell);
         Assert.Equal(2, copy.Spells.PriorityCuring);
 
         // Independent Health + weapon + spell fields.
@@ -285,13 +287,15 @@ public sealed class CombatSpellProfileTests
         var live = new SpellsSettings
         {
             PriorityMinorPartyHeal = 3, PriorityCuring = 1, PriorityDebuffing = 7,
-            MinorHealSpell = "mihe", MajorHealSpell = "cs", HpRegenSpell = "rege",
+            MinorHealSpell = "mihe", MajorHealSpell = "cs", EmergencyHealSpell = "lastr",
+            HpRegenSpell = "rege",
         };
         var subset = new CombatProfileSpells();
         subset.CaptureFrom(live);
         Assert.Equal(3, subset.PriorityMinorPartyHeal);
         Assert.Equal(1, subset.PriorityCuring);
         Assert.Equal("mihe", subset.MinorHealSpell);
+        Assert.Equal("lastr", subset.EmergencyHealSpell);
         Assert.Equal("rege", subset.HpRegenSpell);
 
         // WriteInto overlays the subset but leaves per-character fields intact.
@@ -299,12 +303,14 @@ public sealed class CombatSpellProfileTests
         {
             CurePoisonSpell = "cure", SelfBlessDuringCombat = true, IgnorePoison = true,
             PriorityMinorPartyHeal = 99, MinorHealSpell = "wrong",   // per-profile — will be overwritten
+            EmergencyHealSpell = "wrong-too",
         };
         dst.BlessSlots[1] = "prot";
         subset.WriteInto(dst);
 
         Assert.Equal(3, dst.PriorityMinorPartyHeal);   // per-profile overwritten
         Assert.Equal("mihe", dst.MinorHealSpell);
+        Assert.Equal("lastr", dst.EmergencyHealSpell);
         Assert.Equal("cure", dst.CurePoisonSpell);     // per-character preserved
         Assert.True(dst.SelfBlessDuringCombat);
         Assert.True(dst.IgnorePoison);

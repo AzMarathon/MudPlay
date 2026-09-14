@@ -197,6 +197,9 @@ public sealed class CombatProfileSpells
 
     public string? MinorHealSpell { get; set; }
     public string? MajorHealSpell { get; set; }
+    // Not user-orderable (no Priority field) — it always leads, mirroring
+    // DownedAllyHeal. See SpellsSettings.EmergencyHealSpell.
+    public string? EmergencyHealSpell { get; set; }
     public string? HpRegenSpell { get; set; }
 
     // Snapshot the profile-owned fields off a live SpellsSettings.
@@ -212,6 +215,7 @@ public sealed class CombatProfileSpells
         PriorityDebuffing = src.PriorityDebuffing;
         MinorHealSpell = src.MinorHealSpell;
         MajorHealSpell = src.MajorHealSpell;
+        EmergencyHealSpell = src.EmergencyHealSpell;
         HpRegenSpell = src.HpRegenSpell;
     }
 
@@ -229,6 +233,7 @@ public sealed class CombatProfileSpells
         dst.PriorityDebuffing = PriorityDebuffing;
         dst.MinorHealSpell = MinorHealSpell;
         dst.MajorHealSpell = MajorHealSpell;
+        dst.EmergencyHealSpell = EmergencyHealSpell;
         dst.HpRegenSpell = HpRegenSpell;
     }
 
@@ -243,6 +248,7 @@ public sealed class CombatProfileSpells
         PriorityDebuffing = PriorityDebuffing,
         MinorHealSpell = MinorHealSpell,
         MajorHealSpell = MajorHealSpell,
+        EmergencyHealSpell = EmergencyHealSpell,
         HpRegenSpell = HpRegenSpell,
     };
 }

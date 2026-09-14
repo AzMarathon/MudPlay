@@ -51,7 +51,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     {
         "Health", "HP", "Mana", "Kai",
         "Rest max", "Rest if below", "Heal rest", "Heal combat", "Heal during rest",
-        "Minor heal combat", "Major heal combat",
+        "Minor heal combat", "Major heal combat", "Emergency heal",
         "Heal if above", "Heal if above resting", "Heal if above combat", "Mana floor",
         "Run if below", "Hang up if below", "Bless if above",
         "Sys goto wimpy", "Wimpy", "Wimpy goto", "Wimpy location",
@@ -70,6 +70,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _healRestTrigger  = 80;
     [ObservableProperty] private int _minorHealCombatTrigger = 70;
     [ObservableProperty] private int _majorHealCombatTrigger = 40;
+    [ObservableProperty] private int _emergencyHealTrigger = 20;
     [ObservableProperty] private int _runIfBelowHp     = 20;
     [ObservableProperty] private int _hangIfBelowHp    = 5;
 
@@ -233,6 +234,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         HealRestTrigger        = Clamp(HealRestTrigger),
         MinorHealCombatTrigger = Clamp(MinorHealCombatTrigger),
         MajorHealCombatTrigger = Clamp(MajorHealCombatTrigger),
+        EmergencyHealTrigger   = Clamp(EmergencyHealTrigger),
 
         MaThresholdMode        = MaModeAbsolute ? ThresholdMode.Absolute : ThresholdMode.Percentage,
         RestMaxMa              = Clamp(RestMaxMa),
@@ -384,6 +386,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
             OnPropertyChanged(nameof(HealRestTriggerConverted));
             OnPropertyChanged(nameof(MinorHealCombatTriggerConverted));
             OnPropertyChanged(nameof(MajorHealCombatTriggerConverted));
+            OnPropertyChanged(nameof(EmergencyHealTriggerConverted));
             OnPropertyChanged(nameof(RunIfBelowHpConverted));
             OnPropertyChanged(nameof(HangIfBelowHpConverted));
             OnPropertyChanged(nameof(HangMinimum));   // % floor tracks live max
@@ -422,6 +425,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     public string HealRestTriggerConverted        => FormatConversion(HealRestTrigger,        PreviewMaxHp, HpModePercentage);
     public string MinorHealCombatTriggerConverted => FormatConversion(MinorHealCombatTrigger, PreviewMaxHp, HpModePercentage);
     public string MajorHealCombatTriggerConverted => FormatConversion(MajorHealCombatTrigger, PreviewMaxHp, HpModePercentage);
+    public string EmergencyHealTriggerConverted   => FormatConversion(EmergencyHealTrigger,   PreviewMaxHp, HpModePercentage);
     public string RunIfBelowHpConverted           => FormatConversion(RunIfBelowHp,           PreviewMaxHp, HpModePercentage);
     public string HangIfBelowHpConverted          => FormatConversion(HangIfBelowHp,          PreviewMaxHp, HpModePercentage);
 
@@ -477,6 +481,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         HealRestTrigger        = dto.HealRestTrigger;
         MinorHealCombatTrigger = dto.MinorHealCombatTrigger;
         MajorHealCombatTrigger = dto.MajorHealCombatTrigger;
+        EmergencyHealTrigger   = dto.EmergencyHealTrigger;
         RunIfBelowHp           = dto.RunIfBelowHp;
         HangIfBelowHp          = dto.HangIfBelowHp;
 
@@ -549,6 +554,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     partial void OnHealRestTriggerChanged(int value)          { OnPropertyChanged(nameof(HealRestTriggerConverted));        MarkDirty(); }
     partial void OnMinorHealCombatTriggerChanged(int value)   { OnPropertyChanged(nameof(MinorHealCombatTriggerConverted)); MarkDirty(); }
     partial void OnMajorHealCombatTriggerChanged(int value)   { OnPropertyChanged(nameof(MajorHealCombatTriggerConverted)); MarkDirty(); }
+    partial void OnEmergencyHealTriggerChanged(int value)     { OnPropertyChanged(nameof(EmergencyHealTriggerConverted));   MarkDirty(); }
     partial void OnRunIfBelowHpChanged(int value)             { OnPropertyChanged(nameof(RunIfBelowHpConverted));           MarkDirty(); }
     partial void OnHangIfBelowHpChanged(int value)            { OnPropertyChanged(nameof(HangIfBelowHpConverted));          MarkDirty(); }
 
@@ -578,6 +584,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         if (HealRestTrigger > 100) HealRestTrigger = 100;
         if (MinorHealCombatTrigger > 100) MinorHealCombatTrigger = 100;
         if (MajorHealCombatTrigger > 100) MajorHealCombatTrigger = 100;
+        if (EmergencyHealTrigger > 100) EmergencyHealTrigger = 100;
         if (RunIfBelowHp > 100) RunIfBelowHp = 100;
         if (HangIfBelowHp > 100) HangIfBelowHp = 100;
     }
@@ -604,6 +611,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(HealRestTriggerConverted));
         OnPropertyChanged(nameof(MinorHealCombatTriggerConverted));
         OnPropertyChanged(nameof(MajorHealCombatTriggerConverted));
+        OnPropertyChanged(nameof(EmergencyHealTriggerConverted));
         OnPropertyChanged(nameof(RunIfBelowHpConverted));
         OnPropertyChanged(nameof(HangIfBelowHpConverted));
     }

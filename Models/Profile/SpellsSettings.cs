@@ -52,6 +52,14 @@ public sealed class SpellsSettings
     // trips.
     public string? MajorHealSpell { get; set; }
 
+    // Last-resort self-heal — fires when HealthSettings.EmergencyHealTrigger
+    // trips, unconditionally ahead of every other between-round category
+    // (major/minor heal, cures, buffs, debuffs — see
+    // Game.Spells.CastingDirector.PrioritisedCategories). Falls back to
+    // MajorHealSpell then MinorHealSpell when unset, so an emergency still
+    // fires something rather than nothing.
+    public string? EmergencyHealSpell { get; set; }
+
     // Auto-regen utility (e.g. troll-skin) cast during downtime.
     public string? HpRegenSpell { get; set; }
 

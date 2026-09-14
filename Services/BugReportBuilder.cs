@@ -678,6 +678,7 @@ public static class BugReportBuilder
         {
             ("minor-heal", spells.MinorHealSpell),
             ("major-heal", spells.MajorHealSpell),
+            ("emergency-heal", spells.EmergencyHealSpell),
             ("hp-regen", spells.HpRegenSpell),
             ("ma-regen", spells.MaRegenSpell),
         });

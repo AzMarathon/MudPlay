@@ -74,7 +74,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         "Spells",
         "Spell type priority", "Priority", "Minor party heal", "Major party heal",
         "Minor self heal", "Major self heal", "Curing", "Buffing", "Debuffing",
-        "Healing", "Regeneration", "Minor heal", "Major heal",
+        "Healing", "Regeneration", "Minor heal", "Major heal", "Emergency heal",
         "HP Regen",
         "Other spells", "Cure Holds", "Cure poison", "Cure disease", "Cure blindness",
         "Self bless while resting", "Self bless during combat", "Bless timing",
@@ -117,6 +117,9 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     [NotifyPropertyChangedFor(nameof(MajorHealSpellUnlearned))]
     private string? _majorHealSpell;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EmergencyHealSpellUnlearned))]
+    private string? _emergencyHealSpell;
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HpRegenSpellUnlearned))]
     private string? _hpRegenSpell;
 
@@ -140,6 +143,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     // change (attributes above) and on a spellbook change (OnSpellbookChanged).
     public bool MinorHealSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, MinorHealSpell);
     public bool MajorHealSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, MajorHealSpell);
+    public bool EmergencyHealSpellUnlearned => IsSpellUnlearned(SpellSuggestions, EmergencyHealSpell);
     public bool HpRegenSpellUnlearned       => IsSpellUnlearned(SpellSuggestions, HpRegenSpell);
     public bool CureHoldsSpellUnlearned     => IsSpellUnlearned(SpellSuggestions, CureHoldsSpell);
     public bool CurePoisonSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, CurePoisonSpell);
@@ -230,6 +234,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         s.PriorityDebuffing      = Priority.RankOf("Debuffing");
         s.MinorHealSpell = NullIfBlank(MinorHealSpell);
         s.MajorHealSpell = NullIfBlank(MajorHealSpell);
+        s.EmergencyHealSpell = NullIfBlank(EmergencyHealSpell);
         s.HpRegenSpell   = NullIfBlank(HpRegenSpell);
     }
 
@@ -268,6 +273,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         });
         MinorHealSpell = s.MinorHealSpell;
         MajorHealSpell = s.MajorHealSpell;
+        EmergencyHealSpell = s.EmergencyHealSpell;
         HpRegenSpell   = s.HpRegenSpell;
     }
 
@@ -293,6 +299,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         // The learned set (hence every slot's red-outline flag) just changed.
         OnPropertyChanged(nameof(MinorHealSpellUnlearned));
         OnPropertyChanged(nameof(MajorHealSpellUnlearned));
+        OnPropertyChanged(nameof(EmergencyHealSpellUnlearned));
         OnPropertyChanged(nameof(HpRegenSpellUnlearned));
         OnPropertyChanged(nameof(CureHoldsSpellUnlearned));
         OnPropertyChanged(nameof(CurePoisonSpellUnlearned));
@@ -316,6 +323,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
         MinorHealSpell    = NullIfBlank(MinorHealSpell),
         MajorHealSpell    = NullIfBlank(MajorHealSpell),
+        EmergencyHealSpell = NullIfBlank(EmergencyHealSpell),
         HpRegenSpell      = NullIfBlank(HpRegenSpell),
 
         CureHoldsSpell     = NullIfBlank(CureHoldsSpell),
@@ -374,6 +382,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
         MinorHealSpell  = dto.MinorHealSpell;
         MajorHealSpell  = dto.MajorHealSpell;
+        EmergencyHealSpell = dto.EmergencyHealSpell;
         HpRegenSpell    = dto.HpRegenSpell;
 
         CureHoldsSpell     = dto.CureHoldsSpell;
@@ -420,6 +429,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     partial void OnMinorHealSpellChanged(string? value)      => MarkDirty();
     partial void OnMajorHealSpellChanged(string? value)      => MarkDirty();
+    partial void OnEmergencyHealSpellChanged(string? value)  => MarkDirty();
     partial void OnHpRegenSpellChanged(string? value)        => MarkDirty();
 
     partial void OnCureHoldsSpellChanged(string? value)      => MarkDirty();

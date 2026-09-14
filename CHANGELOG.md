@@ -1,5 +1,12 @@
 # Version history
 
+## 3.86.0
+
+- New Emergency heal tier on Spells + Health: fires the instant HP drops to or below its own threshold, unconditionally ahead of Major/Minor heal, cures, blesses/buffs, and debuffs — even a downed ally's rescue
+- Unlike Minor/Major, Emergency heal fires in any state (combat, resting, mid-walk) and ignores the mana-floor conservation gate — a true last-resort save
+- Falls back to Major heal, then Minor heal, when left unconfigured, so a low Emergency threshold alone still guarantees a life-threat cast
+- Emergency heal spell + threshold are per combat profile, same as the existing heal tiers
+
 ## 3.85.0
 
 - Spell Book: All / Heals / Buffs / Attacks / Party+AoE tabs across the top narrow the grid to what a spell actually does
@@ -14,6 +21,7 @@
 - Describes the map rather than your character, so it works unconnected and never goes blank waiting for a level to be read; on by default, saved per character
 - Room-command tooltips now show a command's level requirement alongside its cost, on both stock and Paradigm — a captain's passage reads "costs 200 Platinum, Level 50+" instead of hiding the floor
 - A room command gated only by level now appears in the tooltip at all, where before it was dropped for having no price
+
 
 ## 3.83.9
 

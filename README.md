@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.85.0**
-> - Spell Book: All / Heals / Buffs / Attacks / Party+AoE tabs across the top narrow the grid to what a spell actually does
-> - A spell can land in more than one tab (a whole-party buff shows under both Buffs and Party+AoE) — switching tabs re-filters the same list rather than sorting each spell into one bucket
-> - The class spell list (Spell Book + Settings → Spells pickers) now respects alignment — a not-yet-learned Good/Evil/Neutral-only spell you can't currently learn is left out
-> - A spell you've already learned never disappears if your alignment later drifts away from it — an alignment-quest reward stays yours
+> **Version 3.86.0**
+> - New Emergency heal tier on Spells + Health: fires the instant HP drops to or below its own threshold, unconditionally ahead of Major/Minor heal, cures, blesses/buffs, and debuffs — even a downed ally's rescue
+> - Unlike Minor/Major, Emergency heal fires in any state (combat, resting, mid-walk) and ignores the mana-floor conservation gate — a true last-resort save
+> - Falls back to Major heal, then Minor heal, when left unconfigured, so a low Emergency threshold alone still guarantees a life-threat cast
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

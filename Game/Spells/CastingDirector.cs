@@ -1411,8 +1411,9 @@ public sealed class CastingDirector : IDisposable
         // (StealthManager.ReSneakAfterCast). Skipped while resting / meditating: a
         // stationary recovery has already stopped, so a due cure/buff there should
         // fire (not wait) — and it's the only place a maintenance heal casts anyway.
-        // Emergency survival (major heal / flee / hangup) and combat debuffs are
-        // never in the deferred set, so a low-HP character still heals/flees here.
+        // Emergency survival (emergency/major heal / flee / hangup) and combat
+        // debuffs are never in the deferred set, so a low-HP character still
+        // heals/flees here.
         bool deferSneakMaintenance =
             _deferMaintenanceWhileStealthed?.Invoke() == true
             && _state.Position is not (PlayerPosition.Resting or PlayerPosition.Meditating);
@@ -1428,6 +1429,7 @@ public sealed class CastingDirector : IDisposable
                 // Heal / cure / debuff stay under AutoHealRest; buffing under
                 // AutoBless. When only one master is on, the other's categories
                 // are skipped rather than the whole loop bailing.
+                SpellCategory.EmergencyHeal   => healRestEnabled ? Wrap(PickEmergencySelfHeal(spells, health)) : null,
                 SpellCategory.DownedAllyHeal  => healRestEnabled ? PickDownedAllyHeal(partySettings) : null,
                 SpellCategory.MinorPartyHeal  => healRestEnabled ? PickMinorPartyHeal(partySettings) : null,
                 SpellCategory.MajorPartyHeal  => healRestEnabled ? PickMajorPartyHeal(partySettings) : null,
@@ -1484,7 +1486,8 @@ public sealed class CastingDirector : IDisposable
             // stale window; skip-and-continue so a different (e.g. major) heal or
             // lower-priority cast can still fire.
             bool isSelfHeal = category is SpellCategory.MinorSelfHeal
-                                        or SpellCategory.MajorSelfHeal;
+                                        or SpellCategory.MajorSelfHeal
+                                        or SpellCategory.EmergencyHeal;
             if (isSelfHeal && IsStaleSelfHealRepeat(cand.Spell))
             {
                 _log?.Combat(LogCategory,
@@ -1548,11 +1551,19 @@ public sealed class CastingDirector : IDisposable
         {
             if (string.IsNullOrWhiteSpace(spell)) return;
             int p = CategoryPriority(spells, cat);
-            string prioLabel = cat == SpellCategory.DownedAllyHeal ? "rescue" : p.ToString();
+            string prioLabel = cat switch
+            {
+                SpellCategory.EmergencyHeal => "emergency",
+                SpellCategory.DownedAllyHeal => "rescue",
+                _ => p.ToString(),
+            };
             q.Add((p, -1, $"{spell.Trim()}({prioLabel})"));
         }
         if (healRestEnabled)
         {
+            // Called before DownedAllyHeal so the two int.MinValue ties display in
+            // the same order they actually fire (stable sort keys off call order).
+            AddSurvival(SpellCategory.EmergencyHeal, PickEmergencySelfHeal(spells, health));
             AddSurvival(SpellCategory.DownedAllyHeal, PickDownedAllyHeal(party)?.Spell);
             AddSurvival(SpellCategory.MinorPartyHeal, PickMinorPartyHeal(party)?.Spell);
             AddSurvival(SpellCategory.MajorPartyHeal, PickMajorPartyHeal(party)?.Spell);
@@ -1586,9 +1597,12 @@ public sealed class CastingDirector : IDisposable
     }
 
     // The configured type-priority number for a between-round category (the Spells-tab
-    // priorities). DownedAllyHeal has none — it always leads — so it sorts first.
+    // priorities). EmergencyHeal and DownedAllyHeal have none — they always lead — so
+    // both sort first (their relative order comes from PrioritisedCategories' explicit
+    // yield order, not this number).
     private static int CategoryPriority(SpellsSettings s, SpellCategory cat) => cat switch
     {
+        SpellCategory.EmergencyHeal => int.MinValue,
         SpellCategory.DownedAllyHeal => int.MinValue,
         SpellCategory.MinorPartyHeal => s.PriorityMinorPartyHeal,
         SpellCategory.MajorPartyHeal => s.PriorityMajorPartyHeal,
@@ -1646,13 +1660,33 @@ public sealed class CastingDirector : IDisposable
             int p = a.Prio.CompareTo(b.Prio);
             return p != 0 ? p : ((int)a.Cat).CompareTo((int)b.Cat);
         });
-        // A downed ally is a life-critical rescue — it always fires ahead of every
-        // user-orderable category, so it leads the walk unconditionally.
+        // An emergency self-save outranks EVERYTHING, DownedAllyHeal included — a
+        // dead caster rescues nobody, so self-preservation leads the walk before
+        // even a downed ally. A downed ally is itself a life-critical rescue that
+        // always fires ahead of every user-orderable category.
+        yield return SpellCategory.EmergencyHeal;
         yield return SpellCategory.DownedAllyHeal;
         foreach ((SpellCategory cat, int _) in order) yield return cat;
     }
 
     // ----- Self heal --------------------------------------------------
+
+    // Last-resort self-save. Deliberately does NOT gate on ManaClearsHealFloor
+    // (unlike Major/Minor below) — an emergency spends whatever mana is left
+    // rather than conserving the pool for a "later" that might not come, and it
+    // fires in ANY state (combat, resting, mid-walk), not just combat/rest like
+    // Minor's own position gate. Falls back Emergency → Major → Minor so a
+    // player who's only configured the older two tiers still gets a life-threat
+    // save at the new, lower trigger once they set EmergencyHealTrigger.
+    private string? PickEmergencySelfHeal(SpellsSettings spells, HealthSettings health)
+    {
+        if (_state.MaxHp <= 0) return null;
+        int trigger = ResolveHealHpTrigger(health.HpThresholdMode, health.EmergencyHealTrigger);
+        if (_state.Hp > trigger) return null;
+        if (!string.IsNullOrWhiteSpace(spells.EmergencyHealSpell)) return spells.EmergencyHealSpell;
+        if (!string.IsNullOrWhiteSpace(spells.MajorHealSpell)) return spells.MajorHealSpell;
+        return spells.MinorHealSpell;
+    }
 
     private string? PickMajorSelfHeal(SpellsSettings spells, HealthSettings health)
     {
@@ -2280,4 +2314,9 @@ public enum SpellCategory
     // outranks every other cast, so PrioritisedCategories emits it first
     // unconditionally rather than reading a priority slot.
     DownedAllyHeal = 7,
+    // Not user-orderable — an emergency save outranks EVERY other cast,
+    // DownedAllyHeal included (you can't rescue anyone if you die first), so
+    // PrioritisedCategories emits it before even that. See
+    // CastingDirector.PickEmergencySelfHeal.
+    EmergencyHeal  = 8,
 }
