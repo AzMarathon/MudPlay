@@ -57,6 +57,26 @@ public sealed class DefaultPatternsTests
         => DefaultPatterns.BuildDefaultPatterns().Single(p => p.Id == id);
 
     [Theory]
+    // Every reply that means "you didn't move". The three refusal lines come from a
+    // realm-custom level cap that isn't in the stock 1.11p data, so routing can't
+    // avoid it in advance — recognising the refusal is the only way the walker
+    // learns the step failed instead of stalling (report stock-20260913-233911).
+    [InlineData("There is no exit in that direction!")]
+    [InlineData("The door is closed in that direction!")]
+    [InlineData("You have progressed too far for this room.")]
+    [InlineData("You have progressed too far to go through this exit!")]
+    [InlineData("You are not permitted in that room!")]
+    public void DirectionFailedRegex_MatchesEveryRefusal(string line)
+        => Assert.True(PatternById(KnownPatterns.DirectionFailed).TryMatch(Line(line), out _));
+
+    [Fact]
+    public void DirectionFailedRegex_DoesNotSwallowTheTrainerRefusal()
+        // Same opening words, entirely different event — it's a failed TRAIN, not a
+        // failed move, and the train loop branches on it.
+        => Assert.False(PatternById(KnownPatterns.DirectionFailed).TryMatch(
+            Line("You have progressed too far to use the training provided here."), out _));
+
+    [Theory]
     // The live stock reply to `open <dir>` on a door someone else already opened is
     // PAST tense. Matching only the present form left it unrecognised, so the door
     // FSM sat in WaitingOpen until it timed out and failed the loop step with "door

@@ -10,6 +10,8 @@
 > - Auto-train is solo-only — training disbands a party server-side
 > - Auto-train / Auto-train stats now live only on the CP Allocation tab — the duplicate pair on Settings → Auto-Trainer is gone
 > - A loop no longer fails with "door open failed" on a door that was already open
+> - Auto-train sends a bare return on leaving the train-stats screen, so realms that don't redisplay the room no longer leave the client idle
+> - A move refused by a level cap or permission check is recognised as a failed move instead of stalling the walker
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
