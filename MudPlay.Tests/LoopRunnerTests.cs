@@ -341,6 +341,48 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
     }
 
+    // Reports paradigm-20260914-054046 / -054501: a gear swap asserted and cleared
+    // the GearSwap gate in the same server-line burst that carried the previous
+    // step's arrival. The arrival advanced and dispatched the next step, then the
+    // resume's deferred body force-cleared _stepInFlight and dispatched it AGAIN —
+    // "n n" on the wire, the second walking into a wall and desyncing the lap.
+    [Fact]
+    public void ResumeDispatch_ArrivalDispatchedSameStepFirst_DoesNotSendTwice()
+    {
+        // The gear swap runs INSIDE EmitCardinal, via the pre-move hook that fires
+        // between NoteMoveSent and the wire write. Asserting and clearing the
+        // GearSwap gate there pauses and resumes the loop re-entrantly, mid-send.
+        Harness h = NewHarness(deferResume: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Runner.Start(new Loop("gear", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "ask barmaid pie", 0),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        }));
+        Assert.Single(h.Sent);            // the waypoint command; move awaits a prompt
+
+        // Nothing in flight and no delay running — the state the live gear swap
+        // caught the loop in. The swap's gate assert/clear pauses and resumes it,
+        // and the resume's dispatch is posted past the burst.
+        h.Coordinator.AssertGate(MovementCoordinator.GearSwapGate);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        h.Coordinator.ClearGate(MovementCoordinator.GearSwapGate);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.NotEmpty(h.Posted);        // the resume really did queue a dispatch
+
+        // The prompt arrives and the move goes out through the normal path.
+        h.Runner.FirePromptForTests();
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+
+        // Now the deferred body runs. The move is already on the wire, so it must
+        // bail rather than putting a second "n" out and walking into a wall.
+        h.Drain();
+
+        Assert.Equal(2, h.Sent.Count);
+    }
+
     [Fact]
     public void Waypoint_WithCommandDelay0_WaitsForPrompt()
     {
