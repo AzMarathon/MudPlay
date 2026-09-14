@@ -84,6 +84,17 @@ public sealed class LevelProjectionColumnTests
     }
 
     [Fact]
+    public void TheOptInColumnsAreExactlyTheOnesOffByDefault()
+    {
+        // These seven only matter to some builds, so a fresh character gets the
+        // original grid and opts in. Pinned explicitly: DefaultVisible is a judgement
+        // call that's easy to flip by accident when adding the next column.
+        Assert.Equal(
+            new[] { "spellcasting", "bsaccuracy", "perception", "thievery", "traps", "picklocks", "tracking" },
+            LevelProjectionColumn.All.Where(c => !c.DefaultVisible).Select(c => c.Key).ToArray());
+    }
+
+    [Fact]
     public void PinnedColumnIsInTheCatalogueAndDefaultsVisible()
     {
         LevelProjectionColumn pinned =

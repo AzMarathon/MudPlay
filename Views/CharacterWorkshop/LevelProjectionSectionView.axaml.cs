@@ -1,12 +1,19 @@
-using System;
 using Avalonia.Controls;
 using Avalonia.Data;
-using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using MudPlay.ViewModels.CharacterWorkshop;
 
 namespace MudPlay.Views.CharacterWorkshop;
 
+// Builds the projection grid's columns from the section view-model's per-character
+// picker, so which ones show can't be authored in XAML.
+//
+// No hand-written InitializeComponent here: the Avalonia name generator owns that
+// method (per AvaloniaNameGeneratorBehavior = InitializeComponent) so the
+// x:Name="ProjectionGrid" field gets populated. Overriding it manually
+// short-circuits the generator and leaves x:Name fields null — which is how the
+// column picker first shipped and drew an empty tab, an NRE on
+// ProjectionGrid.Columns swallowed by the section's lazy View property.
 public partial class LevelProjectionSectionView : UserControl
 {
     private LevelProjectionSectionViewModel? _wired;
@@ -14,20 +21,21 @@ public partial class LevelProjectionSectionView : UserControl
     public LevelProjectionSectionView()
     {
         InitializeComponent();
-        DataContextChanged += OnDataContextChanged;
+        // Either trigger can fire first depending on layout timing. RebuildColumns
+        // clears before it builds, so the second one is a harmless no-op.
+        DataContextChanged += (_, _) => { WireColumnPicker(); RebuildColumns(); };
+        AttachedToVisualTree += (_, _) => { WireColumnPicker(); RebuildColumns(); };
     }
 
-    private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
-
-    // The grid's columns are a per-character choice, so they're built here rather
-    // than declared in XAML. Re-subscribes on every DataContext swap and drops the
-    // previous handler — the section view-model is recreated per profile.
-    private void OnDataContextChanged(object? sender, EventArgs e)
+    // Follow the section's column picker across DataContext swaps — the section
+    // view-model is rebuilt per profile, and the old one must be released.
+    private void WireColumnPicker()
     {
+        LevelProjectionSectionViewModel? vm = DataContext as LevelProjectionSectionViewModel;
+        if (ReferenceEquals(vm, _wired)) return;
         if (_wired is not null) _wired.ColumnsChanged -= RebuildColumns;
-        _wired = DataContext as LevelProjectionSectionViewModel;
+        _wired = vm;
         if (_wired is not null) _wired.ColumnsChanged += RebuildColumns;
-        RebuildColumns();
     }
 
     private void RebuildColumns()

@@ -559,13 +559,14 @@ These figures reflect **your current character**: the base attributes carry your
 
 **Columns ▾** opens a checklist of every column the table can show, and **your choice is saved per character** — each build keeps the columns it actually plans around. **Lvl** is always on (it's what labels the row); **Reset to defaults** forgets your choice and goes back to the built-in set, including any columns added in a later release.
 
-**BS Accy** projects your **backstab accuracy** per level. It reads `—` for a class and race with no stealth source, since that character can't backstab at all. Unlike the plain **Accy** column, this one folds in *everything* the game feeds it — level, stats, your gear and your completed quests — so it's a real number for your current loadout rather than a stat-only partial. The trade-off: future levels assume **today's weapon**, so re-check it after a weapon swap. The two realms use genuinely different formulas (see *The exact formulas* below), and the client picks the right one from your active game-data set automatically.
+Seven columns are **off by default**, because they only matter to some builds:
 
-Six columns are **off by default**, because they only matter to some builds:
-
+- **BS Accy** — backstab accuracy (see below).
 - **Spellcast** — your spellcasting skill (`—` for non-casters and Mystics).
 - **Percep** — Perception. Every class has it, and it's INT's biggest non-caster payoff.
 - **Thievery**, **Traps**, **Picklocks**, **Tracking** — the four thief skills.
+
+**BS Accy** projects your **backstab accuracy** per level. It reads `—` for a class and race with no stealth source, since that character can't backstab at all. Unlike the plain **Accy** column, this one folds in *everything* the game feeds it — level, stats, your gear and your completed quests — so it's a real number for your current loadout rather than a stat-only partial. The trade-off: future levels assume **today's weapon**, so re-check it after a weapon swap. The two realms use genuinely different formulas (see *The exact formulas* below), and the client picks the right one from your active game-data set automatically.
 
 The thief four are computed for whatever Race / Class the dropdowns are set to, so they're useful for previewing a rogue build — but a class that was never granted a skill has no score for it in-game. If they don't apply to you, leave them unchecked. (The CP Allocation tooltips are stricter: they only list a thief skill when **your** class or race actually grants it.)
 

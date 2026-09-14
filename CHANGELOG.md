@@ -3,8 +3,8 @@
 ## 3.82.0
 
 - Level Projection: pick which columns the grid shows, saved per character
-- New BS Accy column projects backstab accuracy per level, realm-split, with gear and quests folded in
-- Six more projection columns — Spellcast, Perception, Thievery, Traps, Picklocks, Tracking — off by default
+- Seven new opt-in columns, all off by default — BS Accy, Spellcast, Perception, Thievery, Traps, Picklocks, Tracking
+- BS Accy projects backstab accuracy per level, realm-split, with gear and quests folded in
 - Perception and the four thief skills now project per level, gear and quest +skill bonuses folded in
 - CP tooltips list the utility skills each stat feeds, and only name a thief skill your class or race grants
 - Item and quest +Tracking bonuses are counted at last

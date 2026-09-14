@@ -35,7 +35,7 @@ public readonly record struct LevelProjectionColumn(
         new LevelProjectionColumn("mpregen", "MP / tick", "MpRegen", 90, true, true),
         new LevelProjectionColumn("spellcasting", "Spellcast", "Spellcasting", 90, false, true),
         new LevelProjectionColumn("accuracy", "Accy", "Accuracy", 70, true, false),
-        new LevelProjectionColumn("bsaccuracy", "BS Accy", "BsAccuracy", 80, true, false),
+        new LevelProjectionColumn("bsaccuracy", "BS Accy", "BsAccuracy", 80, false, false),
         new LevelProjectionColumn("crit", "Crit", "Crit", 70, true, true),
         new LevelProjectionColumn("dodge", "Dodge", "Dodge", 70, true, true),
         new LevelProjectionColumn("stealth", "Stealth", "Stealth", 80, true, true),
