@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.79.12**
-> - An available update now scrolls **UPDATE AVAILABLE!!!** across the title bar, highway-sign style, until you take it — character and BBS stay pinned on the end so alts remain tellable apart
-> - Updates are re-checked at 9am and 9pm, so a client left running for days no longer sits on its launch-time answer
-> - Settings → General "Check for updates on startup" is now "Check for updates automatically" and governs both (existing preference is kept)
+> **Version 3.79.13**
+> - Route picker: the optional shortcut is now its own selectable card. Pick it and, if you're not carrying the shortcut item, the walker goes to the item's source, tries to get it (kill the dropper and grab the drop), then takes the shortcut if it turned up — or the long route if the source was dead/empty
+> - Shortcut items are still never auto-fetched on their own; the pick is the consent
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

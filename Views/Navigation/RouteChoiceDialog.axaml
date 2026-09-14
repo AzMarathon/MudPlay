@@ -155,6 +155,26 @@
                                    Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                 </Button>
+
+                <Button Classes="route"
+                        Classes.selected="{Binding IsShortcutSelected}"
+                        Command="{Binding SelectShortcutCommand}"
+                        IsVisible="{Binding ShowShortcutCard}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        BorderThickness="1"
+                        Padding="12,10">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding ShortcutSummary}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <TextBlock Text="{Binding ShortcutDetail}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
             <TextBlock Grid.Row="2"

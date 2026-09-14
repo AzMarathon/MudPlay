@@ -19,6 +19,9 @@ public enum RouteChoiceResult
     AvoidOverrideAlt, // the extra "route through rooms you marked Avoid" card offered
                       // alongside a hazard/gate route that respects the avoids — the
                       // avoid-crossing way needs no counter, so it's a real alternative.
+    Shortcut,         // the optional shortcut route: a shorter way unlocked by a
+                      // shortcut item. If held, take it; if not, walk to the item's
+                      // source and try to obtain it, else fall back to the long route.
 }
 
 // Route picker, shown when RouteChoicePlanner found a fork worth a user decision.
@@ -187,6 +190,16 @@ public sealed partial class RouteChoiceDialogViewModel
         + "set — only this one walk crosses them.";
     public bool IsAvoidAltSelected => SelectedRoute == RouteChoiceResult.AvoidOverrideAlt;
 
+    // The optional shortcut card, offered on a sole route whose committed (reliable)
+    // way could be shortened by carrying a shortcut item. Path kept for preview;
+    // summary built in Populate. Selecting it either takes the shortcut (item held) or
+    // walks to the item's source to try to obtain it, falling back to the long route.
+    private IReadOnlyList<RoomKey>? _shortcutPath;
+    public bool ShowShortcutCard => _shortcutPath is { Count: > 0 };
+    public string ShortcutSummary { get; private set; } = "";
+    public string ShortcutDetail { get; private set; } = "";
+    public bool IsShortcutSelected => SelectedRoute == RouteChoiceResult.Shortcut;
+
     // The Free card is a real, selectable route only when a gate-free route exists.
     // On a sole route it used to render as a disabled "why you can't walk it" note;
     // that's now dropped (the heading + option cards carry it), so hide it entirely
@@ -221,6 +234,7 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(IsSendItSelected))]
     [NotifyPropertyChangedFor(nameof(IsSearchSelected))]
     [NotifyPropertyChangedFor(nameof(IsAvoidAltSelected))]
+    [NotifyPropertyChangedFor(nameof(IsShortcutSelected))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
     [NotifyCanExecuteChangedFor(nameof(ShowDetailsCommand))]
     private RouteChoiceResult? _selectedRoute;
@@ -483,15 +497,21 @@ public sealed partial class RouteChoiceDialogViewModel
                     dropNameForItem, resolvedHazardCounter)
                 + (string.IsNullOrEmpty(economyNote) ? "" : $" — {economyNote}");
 
-            // An optional shortcut avoids the committed (reliable) route: name the item
-            // it needs and the rooms it saves, but flag it as the crosser's own call —
-            // the client never fetches a shortcut item (it may have no reliable source).
-            if (choice.ShortcutItems is { Count: > 0 } scItems)
+            // An optional shortcut avoids the committed (reliable) route: offer it as
+            // its own selectable card naming the item it needs and the rooms it saves.
+            // Selecting it takes the shortcut if the item's held, else walks to the
+            // item's source to try to obtain it (the pick is the consent) — never a
+            // silent auto-fetch, since a shortcut item may have no reliable source.
+            if (choice.ShortcutItems is { Count: > 0 } scItems && choice.ShortcutPath is { Count: > 0 } scPath)
             {
+                _shortcutPath = scPath;
                 string scNames = string.Join(", ", scItems.Select(id => itemName(id) ?? $"item #{id}"));
                 int saved = choice.GatedStepCount - choice.ShortcutStepCount;
-                RequirementSummary += $" — shortcut: carrying {scNames} would save {saved} "
-                    + $"room{(saved == 1 ? "" : "s")}, but you'd obtain it yourself (may be unavailable)";
+                ShortcutSummary = $"Shortcut via {scNames} — saves {saved} room{(saved == 1 ? "" : "s")} "
+                    + $"({StepsEta(choice.ShortcutStepCount, TimeSpan.Zero)})";
+                ShortcutDetail = $"If you're carrying {scNames}, takes the shorter way. If not, walks to "
+                    + "its source to try to get it — then the shortcut if it turns up, otherwise the long "
+                    + "route. Never bought or fetched automatically.";
             }
             TeleportCaveat = string.Empty;
             TrapCaveat = string.Empty;
@@ -618,6 +638,14 @@ public sealed partial class RouteChoiceDialogViewModel
         if (!ShowAvoidAltCard) return;
         SelectedRoute = RouteChoiceResult.AvoidOverrideAlt;
         PreviewRequested?.Invoke(RouteChoiceResult.AvoidOverrideAlt);
+    }
+
+    [RelayCommand]
+    private void SelectShortcut()
+    {
+        if (!ShowShortcutCard) return;
+        SelectedRoute = RouteChoiceResult.Shortcut;
+        PreviewRequested?.Invoke(RouteChoiceResult.Shortcut);
     }
 
     // The Details… button lights up once a route is picked: it opens the shared

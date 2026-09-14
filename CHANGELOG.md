@@ -1,5 +1,10 @@
 # Version history
 
+## 3.79.13
+
+- Route picker: the optional shortcut is now its own selectable card. Pick it and, if you're not carrying the shortcut item, the walker goes to the item's source, tries to get it (kill the dropper and grab the drop), then takes the shortcut if it turned up — or the long route if the source was dead/empty
+- Shortcut items are still never auto-fetched on their own; the pick is the consent
+
 ## 3.79.12
 
 - An available update now scrolls **UPDATE AVAILABLE!!!** across the title bar, highway-sign style, until you take it — character and BBS stay pinned on the end so alts remain tellable apart

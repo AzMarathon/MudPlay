@@ -1493,6 +1493,10 @@ public sealed class AppServices
     // spawns in, then resumes once it lands. Gated per item by the item
     // record's AutoObtainForPath flag, set in the item-edit dialog.
     public Game.Map.MonsterDropRouter MonsterDropRouter { get; private set; } = null!;
+    // Drives the route picker's "take the shortcut" pick when the shortcut item isn't
+    // held: walk to its source, let the room settle, grab the ground drop, then one
+    // live-filter walk to the destination that self-selects shortcut vs long route.
+    public Game.Map.ShortcutSourceCoordinator ShortcutSource { get; private set; } = null!;
 
     // On-demand party-inventory probe — broadcasts @have and aggregates
     // the party's replies into per-member counts. Feeds
@@ -6394,6 +6398,35 @@ public sealed class AppServices
         Walker.Event += MonsterDropRouter.OnWalkEvent;
         Inventory.Changed += MonsterDropRouter.OnInventoryChanged;
 
+        // Shortcut-source coordinator. When the user picks the route picker's shortcut
+        // card without holding the shortcut item, this walks to the item's source,
+        // waits for the room to settle (auto-combat clears any dropper, dropping the
+        // item on the ground), grabs it, then re-walks to the destination on the LIVE
+        // filter — which takes the shortcut if the item turned up and the long route if
+        // it didn't. Both legs reuse the detour walk (no PathItem need outstanding, so
+        // it plans on the live filter). RoomTracker.StateChanged re-checks the settle on
+        // each room re-survey (a kill re-displays the room). No auto-obtain: the pick is
+        // the consent, and a shortcut item may have no reliable source.
+        ShortcutSource = new Game.Map.ShortcutSourceCoordinator(
+            resolveSource: ResolveShortcutItemSourceRoom,
+            isCarried: IsItemCarried,
+            itemName: ItemNames.GetName,
+            hasHostiles: () => CombatTracker.HasHostileMonster,
+            inCombat: () => PlayerState.InCombat,
+            walkToSource: WalkToForPathItemDetour,
+            liveWalkToDest: WalkToForPathItemDetour,
+            sendGet: name => SendGameCommand($"get {name}"),
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        Walker.Event += ShortcutSource.OnWalkEvent;
+        Inventory.Changed += ShortcutSource.OnInventoryChanged;
+        RoomTracker.StateChanged += _ => ShortcutSource.OnCombatStateChanged();
+
         // Follower-side @comeback. Watches for a movement-failure
         // line (prevents-movement flag / over-encumbered) immediately
         // before "You are no longer following X." — the signature of being
@@ -8016,7 +8049,7 @@ public sealed class AppServices
     // stat alternative. Delegates to CountItemHeld so the key-ring logic
     // lives in one place. Backs PathItemDemand's possession check and the
     // MovementFilter key/item gate.
-    private bool IsItemCarried(int itemId) => CountItemHeld(itemId) > 0;
+    public bool IsItemCarried(int itemId) => CountItemHeld(itemId) > 0;
 
     // Numeric alignment of every crosser for an "(Alignment: X to Y)" exit gate:
     // the controlling character always, plus each follower when we LEAD the party
@@ -8116,6 +8149,46 @@ public sealed class AppServices
                 if (ItemNames.FindByName(name) == itemId) count += quantity;
             }
         return count;
+    }
+
+    // The nearest reachable room where a shortcut item can be obtained — a dropping
+    // monster's lair, a shop that sells it, or a deterministic giver — for the "walk
+    // to the source" leg of a shortcut pick. Null when nothing sources it reachably.
+    // Flag-independent by design: an explicit shortcut pick IS the consent to go get
+    // it, so the item's AutoObtainForPath flag doesn't gate this (unlike the auto
+    // detour routers). Drop first (the amber-talisman case), then shop, then give.
+    private Game.Map.RoomKey? ResolveShortcutItemSourceRoom(int itemId)
+    {
+        if (itemId <= 0) return null;
+        if (RoomTracker.State.CurrentRoom?.Key is not { } cur) return null;
+        System.Collections.Generic.IReadOnlyDictionary<Game.Map.RoomKey, int> dist =
+            Bfs.ComputeDistancesFrom(cur, Movement);
+
+        if (Game.Map.MonsterDropRouter.SelectNearestSpawn(
+                DropSpawnsForItem(itemId), dist, out Game.Map.MonsterDropSpawn spawn, out _))
+            return spawn.Room;
+
+        if (NearestReachableRoom(ShopRoomsSellingItem(itemId), dist) is { } shop)
+            return shop;
+
+        var giveRooms = new System.Collections.Generic.List<Game.Map.RoomKey>();
+        foreach (Game.Map.GiveSource g in GiveSourcesForItem(itemId)) giveRooms.Add(g.Room);
+        return NearestReachableRoom(giveRooms, dist);
+    }
+
+    private static Game.Map.RoomKey? NearestReachableRoom(
+        System.Collections.Generic.IEnumerable<Game.Map.RoomKey> rooms,
+        System.Collections.Generic.IReadOnlyDictionary<Game.Map.RoomKey, int> distances)
+    {
+        Game.Map.RoomKey? best = null;
+        int bestDistance = int.MaxValue;
+        foreach (Game.Map.RoomKey r in rooms)
+            if (distances.TryGetValue(r, out int d) && d < bestDistance)
+            {
+                bestDistance = d;
+                best = r;
+            }
+        return best;
     }
 
     // Room keys of every shop in the live graph that stocks
