@@ -205,6 +205,29 @@ public sealed class LineExtractorTests
         Assert.Equal("n", content.Trim());
     }
 
+    // A resting prompt with nothing typed after it must be a bare prompt row, not
+    // a prompt plus a "(Resting)" content line. That stray content reaches
+    // RoomTracker.NoteInboundMoveEcho, which latches _everReceivedEcho on ANY echo
+    // — so a player who merely rests loses the timing fallback the re-look guard
+    // depends on when the statline isn't actually echo-readable.
+    [Fact]
+    public void PromptSplit_BareRestingPrompt_EmitsNoContentLine()
+    {
+        Assert.Empty(FeedThroughEmulator("[HP=100/MA=50]: (Resting)\r\n"));
+    }
+
+    // The other shape the game prints the tag in — inside the brackets, before
+    // "]:". Already covered by the prompt regex's [^\]]* body; pinned so tightening
+    // that character class can't silently start leaking "(Resting) " into content.
+    [Fact]
+    public void PromptSplit_InBracketRestingTag_ExcludedFromContent()
+    {
+        List<string> emitted = FeedThroughEmulator("[HP=44/KAI=2 (Meditating) ]: n\r\n");
+
+        string content = Assert.Single(emitted);
+        Assert.Equal("n", content.Trim());
+    }
+
     /// <summary>
     /// Helper: build a row whose first <paramref name="text"/>.Length cells
     /// hold <paramref name="text"/> at default attributes, then pad blanks
