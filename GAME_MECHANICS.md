@@ -559,6 +559,24 @@ there** — treat as close-but-unconfirmed until a Paradigm source or capture pi
 
 ## Combat & backstab
 
+### `break` — stopping an announced attack *([CONFIRMED] 2026-09-14, user)*
+
+- **`break` stops your announced attack.** Its practical value is **before you move**: leaving a
+  room with an attack still announced raises the chance the monster **chases you**, so breaking
+  first lowers that chance. This is what the client's *Break combat before running*
+  (`CombatSettings.BreakBeforeFleeing`) is for.
+- **The trigger is "did we send an attack command", physical OR spell** — either kind counts. If
+  an attack went out and a movement command is about to follow, send `break` first.
+- **With no attack sent and no `*Combat Engaged*` seen, a `break` is a wasted command** — don't
+  send one speculatively.
+- **Client note:** `PlayerState.InCombat` only flips once `*Combat Engaged*` has been parsed, so it
+  is *not* sufficient on its own — a toggle can land between our attack going out and that reply
+  arriving (report `stock-20260914-003246`). `CombatStateTracker` therefore reads InCombat **OR**
+  the engine's live target, and the engine keeps two: `CombatManager.CurrentTarget` (weapon mode)
+  and `CastingSpellTarget` (spell mode). Only one is live at a time, so both must be consulted.
+- **[UNVERIFIED]** What the game emits (if anything) for a `break` sent while *not* engaged is not
+  pinned down — which is why the client never sends one speculatively.
+
 ### Attack-prevented states *([CONFIRMED] 2026-09-03, user)*
 
 - Some status effects — a **stun**, **petrification/petrify**, a leg/body **bind** — leave the

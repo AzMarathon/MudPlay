@@ -843,6 +843,12 @@ public sealed partial class CombatManager : IDisposable
     // flight.
     public string? CurrentTarget => _currentTarget;
 
+    // The monster the round's combat spell was announced against, or null when the
+    // round isn't in spell mode. Distinct from CurrentTarget: a weapon attack and a
+    // spell attack are separate modes, and only one is live at a time. Anything
+    // asking "have we attacked something here?" must consult both.
+    public string? CastingSpellTarget => _castingSpellTarget;
+
     // True while combat has deliberately swapped to the alternate weapon for the
     // monster it's fighting (a magic-required mob, or a normal-weapon-no-effect
     // fallback). The auto-equip gear-set triggers consult this so a Default-set

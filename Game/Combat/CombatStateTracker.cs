@@ -363,13 +363,14 @@ public sealed class CombatStateTracker : IDisposable
         _breakBeforeRunning = breakBeforeRunning;
     }
 
-    // Wire the "we have already swung at something here" reader (CombatManager's
-    // CurrentTarget). PlayerState.InCombat only flips once the server's
-    // *Combat Engaged* is parsed, so an auto-attack toggle landing between our
-    // attack going out and that reply arriving sees InCombat false and skips the
-    // break (report stock-20260914-003246). The engine's own target is the
-    // client-side truth for the same question and is available immediately.
-    // Until set, the break path reads InCombat alone (behaviour unchanged).
+    // Wire the "we have already sent an attack here" reader — CombatManager's
+    // weapon target OR its announced spell target, since a physical swing and a
+    // combat spell are separate modes and either one is an attack to break off.
+    // PlayerState.InCombat only flips once the server's *Combat Engaged* is parsed,
+    // so an auto-attack toggle landing between our attack going out and that reply
+    // arriving sees InCombat false and skips the break (report
+    // stock-20260914-003246). The engine's own target answers the same question
+    // immediately. Until set, the break path reads InCombat alone.
     public void SetAttackInFlightGate(Func<bool> attackInFlight)
     {
         ArgumentNullException.ThrowIfNull(attackInFlight);
@@ -395,12 +396,15 @@ public sealed class CombatStateTracker : IDisposable
         // breaks. Fires once — this handler runs only on the toggle transition,
         // not on every room observation.
         //
-        // "In a fight" is InCombat OR a live engine target, because those answer the
-        // same question at different times. InCombat waits on the server's
+        // The break exists to stop an announced attack before we move, which lowers
+        // the chance the monster chases us. So the question is "did we send an attack
+        // here?", answered by InCombat OR a live engine target (weapon or spell) —
+        // the same question at different times. InCombat waits on the server's
         // *Combat Engaged*; a toggle landing between our attack going out and that
         // reply arriving saw it false and skipped the break, letting the walker run
-        // still engaged (report stock-20260914-003246). CurrentTarget is set the
-        // moment we swing, so it covers that window. Deferring the break until
+        // still engaged (report stock-20260914-003246). The engine's target is set
+        // the moment we attack, so it covers that window. With neither true we never
+        // attacked and a break would be a wasted command. Deferring the break until
         // *Combat Engaged* instead would be useless — the gate releases and the
         // walker's next move is already on the wire by the time it lands.
         bool inAFight = _state.InCombat || (_attackInFlight?.Invoke() ?? false);

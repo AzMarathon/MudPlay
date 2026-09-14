@@ -647,6 +647,29 @@ public sealed class CombatStateTrackerTests
         Assert.False(h.CombatGateHeld);
     }
 
+    // The break trigger is "did we send an attack", physical OR spell. A combat spell
+    // sets CombatManager.CastingSpellTarget rather than CurrentTarget (separate modes,
+    // only one live at a time), so a spell attack must break exactly like a swing —
+    // the harness gate stands in for "either target is set".
+    [Fact]
+    public void OnAutoAttackChanged_Off_SpellAttackInFlight_SendsBreak()
+    {
+        using Harness h = new();
+        h.WireBreakBeforeRun();
+        h.BreakBeforeRunning = true;
+        h.AddMonster(1, "giant rat", killable: true);
+
+        h.Feed("Also here: giant rat.");
+        Assert.True(h.CombatGateHeld);
+        h.AttackInFlight = true;            // spell announced, no *Combat Engaged* yet
+        Assert.False(h.State.InCombat);
+
+        h.AutoAttackEnabled = false;
+        h.Tracker.OnAutoAttackChanged();
+
+        Assert.Contains("break", h.Sent);
+    }
+
     // The attack-in-flight signal must not manufacture a fight on its own: with no
     // gate asserted there is no hostile being held for, so a stale target can't
     // produce a stray break into an empty room.
