@@ -263,6 +263,24 @@ public sealed class PathItemShopRouterTests
         Assert.True(r.DetourActive);     // now Buying
     }
 
+    // The carried count is coverage — the item or a route substitute. When it is
+    // already met on arrival (a canoe summoned on the way covers the raft need),
+    // the router buys nothing and walks on.
+    [Fact]
+    public void OnWalkEvent_ArriveAtShop_AlreadyCovered_BuysNothingAndResumes()
+    {
+        var h = new Harness().WithSingleShop();
+        PathItemShopRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(42));
+
+        h.Carry(42);                     // covered before the shop was reached
+        r.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "reached", ShopA));
+
+        Assert.Empty(r.LastSentForTests);
+        Assert.Equal(Dest, h.Walks[^1]);
+        Assert.False(r.DetourActive);
+    }
+
     [Fact]
     public void OnInventoryChanged_BuySucceeds_ResumesToDestination()
     {

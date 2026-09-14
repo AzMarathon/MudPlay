@@ -502,12 +502,10 @@ public sealed class RoomHazardIndexTests : IDisposable
 
     // The trollskin-boots / swamp-boots case (report paradigm-20260829-203409):
     // two items share the same NegateSpell, so they land in the same any-of
-    // group. The route picker resolves to sourcing ONE of them (trollskin), but
-    // the player instead equips the other (swamp boots) they already owned.
-    // GroupSatisfiedByAlternative lets a caller pinned to the originally-chosen
-    // id (trollskin) recognize the substitute already covers the hazard.
+    // group — either one covers the hazard, which is what lets a player who
+    // equips the one they already own stop being chased for the other.
     [Fact]
-    public void GroupSatisfiedByAlternative_OtherGroupMemberCarried_IsTrue()
+    public void SharedNegateSpell_FormsOneAnyOfGroup()
     {
         RoomHazardIndex idx = NewIndex(
             Room(485),
@@ -517,18 +515,40 @@ public sealed class RoomHazardIndexTests : IDisposable
               { "Number": 925,  "NegateSpell-0": 485 } ]
             """);
 
-        Assert.True(idx.GroupSatisfiedByAlternative(1232, id => id == 925));
-        Assert.False(idx.GroupSatisfiedByAlternative(1232, _ => false));
+        RoomHazardIndex.RoomHazard? h = idx.HazardForSpell(485);
+        Assert.NotNull(h);
+        Assert.True(h!.IsSatisfiedBy(id => id == 925));
+        Assert.Contains(h.RequirementGroups, g => g.Contains(1232) && g.Contains(925));
     }
 
+    // The river and the lake, as the game ships them: the river script aborts on
+    // any of four boats, the lake script only on a raft or a skiff. Both are one
+    // any-of group, so a canoe protects on the river and not on the lake.
     [Fact]
-    public void GroupSatisfiedByAlternative_ItemNotInAnyGroup_IsFalse()
+    public void RiverTakesAnyBoat_LakeTakesRaftOrSkiffOnly()
     {
         RoomHazardIndex idx = NewIndex(
-            Room(485),
-            """ [ { "Number": 485, "Abil-0": 1, "AbilVal-0": 25 } ] """,
-            """ [ { "Number": 1232, "NegateSpell-0": 485 } ] """);
+            """
+            [ { "Map Number": 1, "Room Number": 2, "Name": "River", "Spell": 753 },
+              { "Map Number": 1, "Room Number": 3, "Name": "Lake",  "Spell": 1076 } ]
+            """,
+            """
+            [ { "Number": 753,  "Abil-0": 148, "AbilVal-0": 2750 },
+              { "Number": 754,  "Abil-0": 1,   "AbilVal-0": 40   },
+              { "Number": 1076, "Abil-0": 148, "AbilVal-0": 9358 },
+              { "Number": 1077, "Abil-0": 1,   "AbilVal-0": 40   } ]
+            """,
+            itemsJson: null,
+            tbInfoJson: """
+            [ { "Number": 2750, "Action": "failitem 690:failitem 691:failitem 1181:failitem 3609:message 2096:cast 754" },
+              { "Number": 9358, "Action": "failitem 690:failitem 691:cast 1077" } ]
+            """);
 
-        Assert.False(idx.GroupSatisfiedByAlternative(999, id => id == 1232));
+        RoomHazardIndex.RoomHazard river = idx.HazardForSpell(753)!;
+        RoomHazardIndex.RoomHazard lake = idx.HazardForSpell(1076)!;
+        Assert.Equal(new[] { 690, 691, 1181, 3609 }, river.RequirementGroups.Single().OrderBy(i => i));
+        Assert.Equal(new[] { 690, 691 }, lake.RequirementGroups.Single().OrderBy(i => i));
+        Assert.True(river.IsSatisfiedBy(id => id == 1181));
+        Assert.False(lake.IsSatisfiedBy(id => id == 1181));
     }
 }

@@ -49,6 +49,14 @@ namespace MudPlay.Game.Map;
 // each way), so the decision is deferred off the walker's WalkTo call stack
 // through _post.
 //
+// Substitutes. A hazard counter is an any-of group (any boat crosses the river),
+// but the route announces one representative item. Every count here is COVERAGE
+// — copies of the item or any of its route substitutes (PathItemSubstitutes) —
+// so a member carrying a canoe counts as covered for a raft need, the probe asks
+// the party about every substitute, and a hand-off names the item the holder
+// actually carries. An item with no substitutes (an Item/Ticket gate) behaves
+// exactly as before.
+//
 // Scope: multiple copies are acquired by the forwarded shortfall count — a shop
 // detour buys that many, and auto-search stays armed (until the pool is whole)
 // to reveal the rest off the floor. Monster-drop reroute remains single-copy
@@ -59,12 +67,16 @@ public sealed class PartyPathItemGate
 {
     private const string LogCategory = "AutoSearch";
 
-    private static readonly IReadOnlyDictionary<string, int> NoCounts =
-        new Dictionary<string, int>();
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> NoHoldings =
+        new Dictionary<string, IReadOnlyDictionary<int, int>>();
 
-    // A route item the leader is provisioning: its name and the per-member
-    // counts captured from the probe (given name → copies held).
-    private sealed record Pending(int Id, string Name, IReadOnlyDictionary<string, int> Others);
+    // A route item the leader is provisioning: its name and what each member
+    // that replied holds of it and its substitutes (given name → item id → copies).
+    private sealed record Pending(
+        int Id, string Name, IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> Others);
+
+    // One copy a member can hand over, and which item it is.
+    private readonly record struct Spare(string? Giver, int ItemId);
 
     private readonly Func<int, bool> _isCarried;
     private readonly Func<int, int> _selfCount;
@@ -78,6 +90,7 @@ public sealed class PartyPathItemGate
     private readonly Func<string?> _selfGivenName;
     private readonly Action<IReadOnlyList<int>, int> _forward;
     private readonly Action<Action> _post;
+    private readonly Func<int, IReadOnlyList<int>> _substitutes;
     private readonly LogService? _log;
     private readonly object _gate = new();
     private readonly Dictionary<int, Pending> _pending = new();
@@ -96,7 +109,8 @@ public sealed class PartyPathItemGate
         Func<string?> selfGivenName,
         Action<IReadOnlyList<int>, int> forward,
         Action<Action> post,
-        LogService? log = null)
+        LogService? log = null,
+        Func<int, IReadOnlyList<int>>? substitutes = null)
     {
         ArgumentNullException.ThrowIfNull(isCarried);
         ArgumentNullException.ThrowIfNull(selfCount);
@@ -122,6 +136,7 @@ public sealed class PartyPathItemGate
         _selfGivenName = selfGivenName;
         _forward = forward;
         _post = post;
+        _substitutes = substitutes ?? (static id => new[] { id });
         _log = log;
     }
 
@@ -130,6 +145,32 @@ public sealed class PartyPathItemGate
     // a buff item like waterskin to its 2–3 MaxToGet. Never below 1, so an item
     // with no carry policy set keeps the historical one-per-member behaviour.
     private int PerPersonFor(int id) => Math.Max(1, _perPerson(id));
+
+    // The item and everything that stands in for it on this route, item first.
+    private IReadOnlyList<int> SubstitutesFor(int id)
+    {
+        IReadOnlyList<int> subs = _substitutes(id);
+        return subs.Count > 0 ? subs : new[] { id };
+    }
+
+    // What self carries of the item and its substitutes, by item id.
+    private Dictionary<int, int> SelfHoldings(int id)
+    {
+        var held = new Dictionary<int, int>();
+        foreach (int s in SubstitutesFor(id))
+        {
+            int n = _selfCount(s);
+            if (n > 0) held[s] = n;
+        }
+        return held;
+    }
+
+    private static int Total(IReadOnlyDictionary<int, int> holdings)
+    {
+        int total = 0;
+        foreach (int c in holdings.Values) total += c;
+        return total;
+    }
 
     // Bind the wire-sender for the give hand-off. MainWindowVM supplies the
     // engine-gated SendUserInput.
@@ -202,7 +243,7 @@ public sealed class PartyPathItemGate
             }
             else
             {
-                if (_selfCount(id) >= PerPersonFor(id)) continue;   // already hold our quota
+                if (Total(SelfHoldings(id)) >= PerPersonFor(id)) continue;   // already hold our quota
                 _post(() => _ = TryBorrowSpareAsync(id));
             }
         }
@@ -224,6 +265,38 @@ public sealed class PartyPathItemGate
         foreach (int id in ids) TryComplete(id);
     }
 
+    // Ask the party about the item and every substitute at once — the probe keeps
+    // concurrent queries apart by item name — and fold the replies into what each
+    // member holds. A member who answered any of the queries is in the pool; one
+    // who answered none is a non-responder, as before.
+    private async Task<Dictionary<string, IReadOnlyDictionary<int, int>>> QueryHoldingsAsync(int id)
+    {
+        var asks = new List<Task<PartyInventoryProbe.PartyItemResult>>();
+        var askedNames = new List<string>();
+        foreach (int s in SubstitutesFor(id))
+            if (_itemName(s) is { } name && !string.IsNullOrWhiteSpace(name))
+            {
+                asks.Add(_query(s, name));
+                askedNames.Add(name);
+            }
+        if (askedNames.Count > 1)
+            _log?.Info(LogCategory, $"party probe for path item {id}: asking about any of {string.Join(", ", askedNames)}");
+
+        PartyInventoryProbe.PartyItemResult[] results = await Task.WhenAll(asks).ConfigureAwait(true);
+        var byMember = new Dictionary<string, Dictionary<int, int>>(StringComparer.OrdinalIgnoreCase);
+        foreach (PartyInventoryProbe.PartyItemResult r in results)
+            foreach (KeyValuePair<string, int> kv in r.CountsByMember)
+            {
+                if (!byMember.TryGetValue(kv.Key, out Dictionary<int, int>? held))
+                    byMember[kv.Key] = held = new Dictionary<int, int>();
+                if (kv.Value > 0) held[r.ItemId] = kv.Value;
+            }
+
+        var holdings = new Dictionary<string, IReadOnlyDictionary<int, int>>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, Dictionary<int, int>> kv in byMember) holdings[kv.Key] = kv.Value;
+        return holdings;
+    }
+
     private async Task ProvisionAsync(int id)
     {
         string? name = _itemName(id);
@@ -233,11 +306,10 @@ public sealed class PartyPathItemGate
         // a second probe / double-give for the same item.
         lock (_gate)
         {
-            if (!_pending.TryAdd(id, new Pending(id, name, NoCounts))) return;
+            if (!_pending.TryAdd(id, new Pending(id, name, NoHoldings))) return;
         }
 
-        PartyInventoryProbe.PartyItemResult result = await _query(id, name).ConfigureAwait(true);
-        var others = new Dictionary<string, int>(result.CountsByMember, StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, IReadOnlyDictionary<int, int>> others = await QueryHoldingsAsync(id).ConfigureAwait(true);
         lock (_gate)
         {
             if (!_pending.ContainsKey(id)) return;   // cleared while probing
@@ -256,7 +328,7 @@ public sealed class PartyPathItemGate
         // redistribution fires once the pool is whole; otherwise it's a one-shot
         // best-effort and the slot is dropped.
         int othersTotal = 0;
-        foreach (int c in others.Values) othersTotal += c;
+        foreach (IReadOnlyDictionary<int, int> held in others.Values) othersTotal += Total(held);
         int q = PerPersonFor(id);
         int target = Math.Max(1, q * (1 + others.Count) - othersTotal);
         if (!_searchEnabled())
@@ -273,58 +345,79 @@ public sealed class PartyPathItemGate
         lock (_gate) p = _pending.TryGetValue(id, out Pending? found) ? found : null;
         if (p is null) return false;
 
-        int selfNow = _selfCount(id);
+        Dictionary<int, int> self = SelfHoldings(id);
         int othersTotal = 0;
-        foreach (int c in p.Others.Values) othersTotal += c;
+        foreach (IReadOnlyDictionary<int, int> held in p.Others.Values) othersTotal += Total(held);
         int q = PerPersonFor(id);
         int partySize = 1 + p.Others.Count;      // self + everyone who replied
-        int totalHeld = selfNow + othersTotal;
+        int totalHeld = Total(self) + othersTotal;
         if (totalHeld < q * partySize) return false; // not enough yet — keep acquiring
 
         lock (_gate)
         {
             if (!_pending.Remove(id)) return true;   // another pass already handled it
         }
-        Redistribute(p.Name, p.Others, selfNow, id, q);
+        Redistribute(p.Name, p.Others, self, id, q);
         return true;
     }
 
+    // The copies a member can give away: everything above the quota q they keep
+    // for their own crossing. The representative item is handed over first, so a
+    // member holding a raft and a canoe keeps the canoe and gives the raft.
+    private List<Spare> SparesOf(string? giver, IReadOnlyDictionary<int, int> held, int id, int q)
+    {
+        var copies = new List<int>();
+        foreach (int s in SubstitutesFor(id))
+            if (held.TryGetValue(s, out int n))
+                for (int i = 0; i < n; i++) copies.Add(s);
+        var spares = new List<Spare>();
+        for (int i = 0; i < copies.Count - q; i++) spares.Add(new Spare(giver, copies[i]));
+        return spares;
+    }
+
+    private string NameOf(int itemId, string fallback) =>
+        _itemName(itemId) is { Length: > 0 } n ? n : fallback;
+
     private void Redistribute(
-        string name, IReadOnlyDictionary<string, int> others, int selfNow, int id, int q)
+        string name, IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> others,
+        IReadOnlyDictionary<int, int> self, int id, int q)
     {
         if (_wireSender is null) { _forward(new[] { id }, 1); return; }
 
-        // null giver / sink == self. Each member's surplus above the quota q is
+        // null giver / sink == self. Each member's copies above the quota q are
         // giveable; its deficit below q is that many sink slots (a member two
         // short shows up as two sinks → two gives). Feasibility
         // (totalHeld >= q * partySize) was already checked, so surplus covers
         // every sink.
-        var sources = new List<string?>();   // one entry per giveable copy
+        var sources = new List<Spare>();   // one entry per giveable copy
         var sinks = new List<string?>();
+        int selfNow = Total(self);
         for (int i = 0; i < q - selfNow; i++) sinks.Add(null);
-        for (int i = q; i < selfNow; i++) sources.Add(null);
-        foreach (KeyValuePair<string, int> kv in others)
+        sources.AddRange(SparesOf(null, self, id, q));
+        foreach (KeyValuePair<string, IReadOnlyDictionary<int, int>> kv in others)
         {
-            for (int i = 0; i < q - kv.Value; i++) sinks.Add(kv.Key);
-            for (int i = q; i < kv.Value; i++) sources.Add(kv.Key);
+            int held = Total(kv.Value);
+            for (int i = 0; i < q - held; i++) sinks.Add(kv.Key);
+            sources.AddRange(SparesOf(kv.Key, kv.Value, id, q));
         }
         if (sinks.Count == 0) return;   // everyone already holds the quota
 
-        string? self = _selfGivenName();
-        bool selfInvolved = sinks.Contains(null) || sources.Contains(null);
-        if (selfInvolved && string.IsNullOrEmpty(self)) { _forward(new[] { id }, 1); return; }
+        string? selfName = _selfGivenName();
+        bool selfInvolved = sinks.Contains(null) || sources.Any(static s => s.Giver is null);
+        if (selfInvolved && string.IsNullOrEmpty(selfName)) { _forward(new[] { id }, 1); return; }
 
         int sent = 0;
         int si = 0;
         foreach (string? sink in sinks)
         {
             if (si >= sources.Count) break;   // guarded by feasibility, but stay safe
-            string? giver = sources[si++];
-            string recipient = sink ?? self!;
-            if (giver is null)
-                SendRaw($"give {name} to {recipient}");                    // hand over our own
+            Spare copy = sources[si++];
+            string recipient = sink ?? selfName!;
+            string item = NameOf(copy.ItemId, name);
+            if (copy.Giver is null)
+                SendRaw($"give {item} to {recipient}");                        // hand over our own
             else
-                SendRaw($"/{giver} @do give {name} to {recipient}");       // direct the holder
+                SendRaw($"/{copy.Giver} @do give {item} to {recipient}");     // direct the holder
             sent++;
         }
         _log?.Info(LogCategory,
@@ -337,23 +430,23 @@ public sealed class PartyPathItemGate
         if (string.IsNullOrWhiteSpace(name)) { _forward(new[] { id }, 1); return; }
 
         int q = PerPersonFor(id);
-        PartyInventoryProbe.PartyItemResult result = await _query(id, name).ConfigureAwait(true);
+        Dictionary<string, IReadOnlyDictionary<int, int>> holdings = await QueryHoldingsAsync(id).ConfigureAwait(true);
 
         // Might have arrived between the announce and the reply window (an
         // earlier give, a floor pickup) — nothing left to do once we hold quota.
-        int need = q - _selfCount(id);
+        int need = q - Total(SelfHoldings(id));
         if (need <= 0) return;
 
         // A holder can spare whatever it carries above its own quota q (it keeps
         // q for its own crossing). Rank largest spare first so the copies come
         // from the fewest members.
-        var holders = new List<(string Name, int Spare)>();
+        var holders = new List<(string Name, List<Spare> Spares)>();
         int membersWithAny = 0;
-        foreach (KeyValuePair<string, int> kv in result.CountsByMember)
+        foreach (KeyValuePair<string, IReadOnlyDictionary<int, int>> kv in holdings)
         {
-            if (kv.Value > 0) membersWithAny++;
-            int spare = kv.Value - q;
-            if (spare > 0) holders.Add((kv.Key, spare));
+            if (Total(kv.Value) > 0) membersWithAny++;
+            List<Spare> spares = SparesOf(kv.Key, kv.Value, id, q);
+            if (spares.Count > 0) holders.Add((kv.Key, spares));
         }
 
         // No member has a spare to give — post the need (quota copies) so
@@ -363,26 +456,31 @@ public sealed class PartyPathItemGate
         string self = _selfGivenName() ?? string.Empty;
         if (self.Length == 0 || _wireSender is null) { _forward(new[] { id }, q); return; }
 
-        holders.Sort((a, b) => b.Spare.CompareTo(a.Spare));
+        holders.Sort((a, b) => b.Spares.Count.CompareTo(a.Spares.Count));
         int borrowed = 0;
         if (membersWithAny == 1)
         {
             // Only one member holds any copies: @party give is permission-free
             // and only they can act on it, so there's no risk of over-giving.
-            int take = Math.Min(need, holders[0].Spare);
-            for (int i = 0; i < take; i++) SendRaw($"@party give {name} to {self}");
-            borrowed = take;
+            foreach (Spare copy in holders[0].Spares.Take(need))
+            {
+                SendRaw($"@party give {NameOf(copy.ItemId, name)} to {self}");
+                borrowed++;
+            }
         }
         else
         {
             // Several members hold copies: target each holder explicitly so we
             // don't collect a duplicate from every one of them.
-            foreach ((string Name, int Spare) h in holders)
+            foreach ((string Name, List<Spare> Spares) h in holders)
             {
+                foreach (Spare copy in h.Spares)
+                {
+                    if (borrowed >= need) break;
+                    SendRaw($"/{h.Name} @do give {NameOf(copy.ItemId, name)} to {self}");
+                    borrowed++;
+                }
                 if (borrowed >= need) break;
-                int take = Math.Min(need - borrowed, h.Spare);
-                for (int i = 0; i < take; i++) SendRaw($"/{h.Name} @do give {name} to {self}");
-                borrowed += take;
             }
         }
 

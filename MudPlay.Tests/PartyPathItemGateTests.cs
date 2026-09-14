@@ -30,6 +30,8 @@ public sealed class PartyPathItemGateTests
         public bool IsLeader;
         public string? SelfGiven = "MudPlay";
         public readonly Dictionary<int, string> Names = new();
+        // Route substitutes per item (a canoe standing in for a raft); absent = just the item.
+        public readonly Dictionary<int, int[]> Subs = new();
         public readonly Dictionary<int, PartyInventoryProbe.PartyItemResult> Results = new();
         public readonly List<int> Forwarded = new();
         public readonly List<(int Id, int Qty)> ForwardedReq = new();
@@ -63,7 +65,8 @@ public sealed class PartyPathItemGateTests
                     foreach (int id in ids) { Forwarded.Add(id); ForwardedReq.Add((id, qty)); }
                 },
                 post: a => a(),
-                log: null);
+                log: null,
+                substitutes: id => Subs.TryGetValue(id, out int[]? s) ? s : new[] { id });
             if (bindWire)
                 Gate.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b)));
         }
@@ -263,6 +266,96 @@ public sealed class PartyPathItemGateTests
 
         Assert.Equal(1, h.QueryCount);
         Assert.Single(h.Sent);
+    }
+
+    // ----- Route substitutes (any boat crosses the river) ---------------------
+
+    private const int Raft = 690, Skiff = 691, Canoe = 1181;
+
+    private static Harness BoatHarness(bool leader)
+    {
+        var h = new Harness { IsLeader = leader };
+        h.Names[Raft] = "log raft";
+        h.Names[Skiff] = "wooden skiff";
+        h.Names[Canoe] = "silverbark canoe";
+        h.Subs[Raft] = new[] { Raft, Skiff, Canoe };
+        return h;
+    }
+
+    [Fact]
+    public void Leader_FollowerCarriesCanoe_CoveredForRaft_NoBuyNoGive()
+    {
+        var h = BoatHarness(leader: true);
+        h.SelfCounts[Raft] = 1;
+        h.SetResult(Raft, ("Bob", 0));
+        h.SetResult(Canoe, ("Bob", 1));      // Bob has a canoe, not a raft
+        h.Gate.OnPathItemsRequired(new[] { Raft });
+
+        // Asked about every boat, and Bob's canoe covers him — nothing to buy or hand out.
+        Assert.Equal(3, h.QueryCount);
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void Leader_ShortfallCountsSubstitutes()
+    {
+        var h = BoatHarness(leader: true);
+        h.SetResult(Raft, ("Bob", 0), ("Al", 0));
+        h.SetResult(Canoe, ("Bob", 1), ("Al", 0));
+        h.Gate.OnPathItemsRequired(new[] { Raft });
+
+        // Three crossers, one boat (Bob's canoe): buy two, not three.
+        Assert.Equal((Raft, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    [Fact]
+    public void Leader_HolderSpareIsCanoe_GiveNamesTheCanoe()
+    {
+        var h = BoatHarness(leader: true);
+        h.SelfCounts[Raft] = 1;
+        h.SetResult(Raft, ("Bob", 0), ("Al", 0));
+        h.SetResult(Canoe, ("Bob", 2), ("Al", 0));   // Bob carries a spare canoe
+        h.Gate.OnPathItemsRequired(new[] { Raft });
+
+        Assert.Equal("/Bob @do give silverbark canoe to Al\r", Assert.Single(h.Sent));
+        Assert.Empty(h.Forwarded);
+    }
+
+    [Fact]
+    public void Follower_BorrowsSpareSkiff_ByItsOwnName()
+    {
+        var h = BoatHarness(leader: false);
+        h.SetResult(Skiff, ("Bob", 2));      // only Bob has boats, and has a spare skiff
+        h.Gate.OnPathItemsRequired(new[] { Raft });
+
+        Assert.Equal("@party give wooden skiff to MudPlay\r", Assert.Single(h.Sent));
+        Assert.Empty(h.Forwarded);
+    }
+
+    [Fact]
+    public void Follower_CarryingCanoe_IsCoveredAndNeverProbes()
+    {
+        var h = BoatHarness(leader: false);
+        h.SelfCounts[Canoe] = 1;
+        h.Gate.OnPathItemsRequired(new[] { Raft });
+
+        Assert.Equal(0, h.QueryCount);
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void LakeSubstitutes_CanoeDoesNotCoverRaft()
+    {
+        // Crystal Lake takes a raft or skiff only; with no canoe in the route's
+        // substitutes, a carried canoe is not coverage.
+        var h = BoatHarness(leader: false);
+        h.Subs[Raft] = new[] { Raft, Skiff };
+        h.SelfCounts[Canoe] = 1;
+        h.Gate.OnPathItemsRequired(new[] { Raft });
+
+        Assert.Equal((Raft, 1), Assert.Single(h.ForwardedReq));
     }
 
     // ----- Leader provisioning (IsLeader = true) ------------------------------

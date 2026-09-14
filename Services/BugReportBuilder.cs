@@ -1218,8 +1218,15 @@ public static class BugReportBuilder
         sb.Append("\nOutstanding path-item needs (").Append(needs.Count).Append(")\n\n");
         if (needs.Count == 0) sb.Append("_(none)_\n");
         else foreach (Need n in needs)
+        {
             sb.Append("- ").Append(n.Descriptor).Append(" ×").Append(n.Quantity)
-              .Append(" (requester: ").Append(n.Requester).Append(")\n");
+              .Append(" (requester: ").Append(n.Requester);
+            // Which items count toward it on this route (a canoe for a raft on the river).
+            if (int.TryParse(n.Descriptor, out int needId)
+                && svc.PathItemSubstitutes.For(needId) is { Count: > 1 } subs)
+                sb.Append("; covered by any of ").Append(string.Join(", ", subs));
+            sb.Append(")\n");
+        }
 
         // Checkspell hazard-buff provisioning for the CURRENT room — a "walked into
         // the desert / drowned without `use`ing the waterskin" report needs whether

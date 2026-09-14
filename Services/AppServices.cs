@@ -5176,7 +5176,7 @@ public sealed class AppServices
         // seam is bound after the walker is built (below).
         PathItemDemand = new Game.Map.PathItemDemandTracker(
             Needs,
-            carriedCount: CountItemCarried,
+            carriedCount: CountPathItemCoverage,
             inventoryLoaded: () => Inventory.IsLoaded,
             // POSTING gate. The route picker's explicit "obtain then cross" / "search
             // en route" pick forces a per-walk obtain regardless of the global
@@ -5229,42 +5229,22 @@ public sealed class AppServices
             selfGivenName: () => GivenNameOf(Party.LocalCharacterName ?? Profile.Current?.Name),
             forward: PathItemDemand.OnPathItemsRequired,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
-            log: Log);
+            log: Log,
+            substitutes: PathItemSubstitutes.For);
         // The leader coordinates redistribution once acquisition makes the
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
 
         // Per-walk forced-obtain (the route picker's "obtain then cross" choice):
-        // drop an item from the override once it's acquired. The abandon-clear on
-        // Walker.Event is wired after the walker is constructed (see below).
-        Inventory.Changed += () => _forcedPathObtain.RemoveWhere(IsItemCarried);
+        // drop an item from the override once it's covered — the item itself or
+        // any route substitute (a canoe covers a raft on the river). The demand
+        // tracker resolves the matching need on the same coverage count, so a
+        // crosser who picks up a different boat mid-route stops being chased for
+        // the one the picker chose. The abandon-clear on Walker.Event is wired after
+        // the walker is constructed (see below).
+        Inventory.Changed += () => _forcedPathObtain.RemoveWhere(IsPathItemCovered);
 
-        // A hazard's any-of counter group can be satisfied by a DIFFERENT item
-        // than the one the route picker / walker chose to source (both resolve
-        // to ONE representative item from the group — whichever the acquisition
-        // pipeline could actually reach). A player who instead equips or
-        // acquires a different group member (e.g. an already-owned alternative
-        // negator, worn to stop taking hazard damage mid-route while the
-        // planned acquisition stalls) never satisfies that one specific id, so
-        // neither the forced-obtain override above nor PathItemDemand's own
-        // resolve (both keyed on the originally-announced item) ever notice —
-        // leaving a permanently stuck "still need item N" need even though the
-        // hazard is already covered. Confirmed via bug report paradigm-20260829-203409
-        // (swamp boots and trollskin boots both negate spell 485; the player
-        // equipped swamp boots but the walk kept demanding trollskin boots).
-        Inventory.Changed += () =>
-        {
-            foreach (Need need in Needs.Outstanding(NeedKind.PathItem))
-            {
-                if (!int.TryParse(need.Descriptor, out int id)) continue;
-                if (!RoomHazards.GroupSatisfiedByAlternative(id, IsItemCarried)) continue;
-                Needs.Resolve(need);
-                _forcedPathObtain.Remove(id);
-                Log.Info("Needs", $"path item {id} need cleared — hazard covered by a different carried item");
-            }
-        };
-
-        // Registered AFTER the two forced-obtain draining handlers above so the set is
+        // Registered AFTER the forced-obtain draining handler above so the set is
         // fully emptied before this checks it: once the route counter lands (found on
         // the floor or bought), the forced set drains → flip auto-search back off if
         // WE turned it on for a "search en route" pick.
@@ -5609,7 +5589,14 @@ public sealed class AppServices
         // anything the party can't cover to PathItemDemand.OnPathItemsRequired,
         // so with "defer to party inventory" off (or solo) the behaviour is
         // unchanged.
-        Walker.SetPathItemAnnouncer(PartyPathItemGate.OnPathItemsRequired);
+        Walker.SetPathItemAnnouncer(ids =>
+        {
+            // The hazard resolver below staged this pass's substitutes room by
+            // room; commit them before anything counts coverage. An item still
+            // being obtained keeps its substitutes across a detour's own announce.
+            PathItemSubstitutes.Commit(keep: _forcedPathObtain.Contains);
+            PartyPathItemGate.OnPathItemsRequired(ids);
+        });
 
         // Fold each entered hazard room's counter into the same walk-start item
         // announce, so a route the user chose to run through a hazard room
@@ -5632,7 +5619,7 @@ public sealed class AppServices
         // the normal way instead of parking the walk.
         Walker.SetGateItemHoldProbe(id =>
             id > 0
-            && !IsItemCarried(id)
+            && !IsPathItemCovered(id)
             && (PathItemGiveRouter.DetourActive || PathItemShopRouter.DetourActive
                 || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive)
             && HasOutstandingPathItemNeed(id));
@@ -5645,6 +5632,7 @@ public sealed class AppServices
             if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed)
             {
                 _forcedPathObtain.Clear();
+                PathItemSubstitutes.Clear();
                 // Walk abandoned before the counter landed — undo a "search en route"
                 // auto-search flip so it doesn't leak on past the leg it was for.
                 RestoreRouteSearchAutoSearchIfDone("walk ended");
@@ -6437,7 +6425,7 @@ public sealed class AppServices
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
             distanceBetween: PathItemDetourDistance,
-            carriedCount: CountItemCarried,
+            carriedCount: CountPathItemCoverage,
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
@@ -6456,7 +6444,7 @@ public sealed class AppServices
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
             distanceBetween: PathItemDetourDistance,
-            carriedCount: CountItemCarried,
+            carriedCount: CountPathItemCoverage,
             cashOnHand: PathItemCashOnHand,
             buyCost: PathItemBuyCost,
             bankRoom: PathItemBankRoom,
@@ -6494,7 +6482,7 @@ public sealed class AppServices
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
             distanceBetween: PathItemDetourDistance,
-            carriedCount: CountItemCarried,
+            carriedCount: CountPathItemCoverage,
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
@@ -6529,7 +6517,7 @@ public sealed class AppServices
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             walkDestination: () => Walker.Destination,
             distancesFrom: src => Bfs.ComputeDistancesFrom(src, Movement),
-            isCarried: IsItemCarried,
+            isCarried: IsPathItemCovered,
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
@@ -8867,6 +8855,19 @@ public sealed class AppServices
     // in the ctor); replaced wholesale on each fresh obtain-pick.
     private readonly HashSet<int> _forcedPathObtain = new();
 
+    // The route's any-of substitutes for each forced hazard counter — a canoe
+    // stands in for the raft the picker chose on the river, but not on Crystal
+    // Lake. Staged by HazardAnnounceItems, committed by the path-item announcer.
+    public Game.Map.PathItemSubstitutes PathItemSubstitutes { get; } = new();
+
+    // Copies carried that satisfy a path item on this route: the item itself plus
+    // any substitute. The count every path-item fulfiller reads, so none of them
+    // chases the picker's chosen item once a different valid one is in hand.
+    private int CountPathItemCoverage(int itemId) =>
+        PathItemSubstitutes.Coverage(itemId, CountItemCarried);
+
+    private bool IsPathItemCovered(int itemId) => CountPathItemCoverage(itemId) > 0;
+
     // Set (replacing any prior) the items the next walk should obtain for its path
     // regardless of their AutoObtainForPath flag. Called by RouteChoicePrompt when
     // the user picks the hazard "obtain then cross" route.
@@ -8874,6 +8875,7 @@ public sealed class AppServices
     {
         ArgumentNullException.ThrowIfNull(itemIds);
         _forcedPathObtain.Clear();
+        PathItemSubstitutes.Clear();
         foreach (int id in itemIds) if (id > 0) _forcedPathObtain.Add(id);
     }
 
@@ -9079,8 +9081,13 @@ public sealed class AppServices
         foreach (System.Collections.Generic.IReadOnlyList<int> group in hazard.RequirementGroups)
             if (group.Count > 1)
                 foreach (int id in group)
-                    if (_forcedPathObtain.Contains(id) && !items.Contains(id))
-                        items.Add(id);
+                    if (_forcedPathObtain.Contains(id))
+                    {
+                        // Every hazard room the forced counter is announced for
+                        // narrows what may stand in for it on this route.
+                        PathItemSubstitutes.Record(id, group);
+                        if (!items.Contains(id)) items.Add(id);
+                    }
         return items;
     }
 

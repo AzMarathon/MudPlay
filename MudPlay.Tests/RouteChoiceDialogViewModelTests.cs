@@ -607,6 +607,40 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Contains("Cross unprotected", vm.SendItSummary);
     }
 
+    // The resolved counter is named with how it'll be obtained, and the rest of the
+    // any-of set follows, so a player already carrying a canoe sees it would do.
+    [Fact]
+    public void ResolvedHazardCounter_NamesTheAlternatives()
+    {
+        var req = new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691, 1181, 3609 });
+        var names = new Dictionary<int, string>
+        {
+            [690] = "log raft", [691] = "wooden skiff", [1181] = "silverbark canoe", [3609] = "river punt",
+        };
+
+        var vm = new RouteChoiceDialogViewModel(
+            SoleChoice(req), "A Silvery Stream (1/2409)", id => names[id],
+            hazardCounterSource: "buy at Pier", hazardSurvivable: true,
+            resolvedHazardCounter: r => (690, "buy at Pier"));
+
+        Assert.Equal(
+            "Requires log raft (buy at Pier), or wooden skiff, silverbark canoe or river punt",
+            vm.RequirementSummary);
+    }
+
+    // A route that crosses the river (any boat) and the lake (raft or skiff) only
+    // accepts what works on both.
+    [Fact]
+    public void RouteSubstitutes_IntersectAcrossTheRoutesHazards()
+    {
+        var river = new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691, 1181, 3609 });
+        var lake = new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 });
+
+        Assert.Equal(new[] { 690, 691, 1181, 3609 }, RouteChoicePrompt.RouteSubstitutes(new[] { river }, 690));
+        Assert.Equal(new[] { 690, 691 }, RouteChoicePrompt.RouteSubstitutes(new[] { river, lake }, 690));
+        Assert.Equal(new[] { 42 }, RouteChoicePrompt.RouteSubstitutes(new[] { river }, 42));
+    }
+
     // A sole GRAVE hazard (a drown / freeze death) NEVER offers "cross unprotected",
     // even when a counter can be sourced — a counter is the only safe way past.
     [Fact]
