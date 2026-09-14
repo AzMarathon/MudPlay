@@ -17,6 +17,18 @@ public sealed class AutoTrainerSettings
     // saved CP plan to have anything to apply.
     public bool AutoTrainStats { get; set; }
 
+    // How many trainable levels must stack up before auto-train fires at all.
+    // Trips on the way OUT of the grind, not on every level: with this at 3 the
+    // character keeps killing until three levels are banked and then makes ONE
+    // trip that trains them together, instead of three separate trainer detours.
+    // 0 / 1 (the default) fires as soon as a single level is trainable.
+    //
+    // Pairs with LevelsToKeep, which decides how many of those stay banked once
+    // the trip happens: a threshold at or below the keep reserve can never train
+    // anything, so the trigger treats it as "fire as soon as there's something
+    // above the reserve to train".
+    public int FireAtBankedLevels { get; set; }
+
     // Buffer of trainable-but-untrained levels to always keep banked. Auto-train
     // (and the manual Train Now) stops once this many levels are still reachable
     // from banked exp, so the character always carries a reserve. 0 (the

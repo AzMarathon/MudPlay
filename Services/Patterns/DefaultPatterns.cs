@@ -56,10 +56,23 @@ public static class DefaultPatterns
             @"^Your .+ flickers and goes out\.$");
 
         // ----- Movement --------------------------------------------------
-        // Two forms folded into one alternation: the no-exit line and the
-        // closed door/gate line, both meaning "you didn't move".
+        // Every "you didn't move" reply folded into one alternation: the no-exit
+        // line, the closed door/gate line, and the three refusal lines a gated room
+        // answers with — two level-cap phrasings (room-scoped and exit-scoped) plus
+        // the permission refusal, which arrives alongside the room-scoped one.
+        //
+        // These caps are realm-custom and absent from the stock 1.11p data, so
+        // routing cannot know about them in advance — the client only ever learns
+        // by being told. Without them the walker never learned the step failed and
+        // simply stopped, stranding a return-to-loop at the gated exit (report
+        // stock-20260913-233911). Deliberately distinct from the trainer's
+        // "...too far to USE THE TRAINING provided here", which is not a move.
         yield return new RegexPattern(KnownPatterns.DirectionFailed,
-            @"^(?:There is no exit in that direction!|The (?:door|gate) is closed(?: in that direction)?!)");
+            @"^(?:There is no exit in that direction!"
+            + @"|The (?:door|gate) is closed(?: in that direction)?!"
+            + @"|You have progressed too far for this room\."
+            + @"|You have progressed too far to go through this exit!"
+            + @"|You are not permitted in that room!)");
         yield return new RegexPattern(KnownPatterns.BashFailed,
             @"^Your attempts to bash through fail!$");
         yield return new RegexPattern(KnownPatterns.HeardMovement,
@@ -763,8 +776,14 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.DoorOpenedNow,
             @"\byou open the (?:door|gate)\b|\b(?:door|gate) is now open\b",
             options: RegexOptions.IgnoreCase);
+        // Both tenses. `open <dir>` on a door someone already opened answers "The
+        // door WAS already open." — past tense — and matching only "is already open"
+        // left that reply unrecognised, so the FSM sat in WaitingOpen until it timed
+        // out and failed the step with "door open failed" on a door that was plainly
+        // open (report stock-20260913-232235).
         yield return new RegexPattern(KnownPatterns.DoorAlreadyOpen,
-            @"\b(?:door|gate) is already open\b");
+            @"\b(?:door|gate) (?:is|was) already open\b",
+            options: RegexOptions.IgnoreCase);
         yield return new RegexPattern(KnownPatterns.DoorIsLocked,
             @"\b(?:door|gate) is locked\b");
         // "You successfully unlocked the door/gate" — after `use <key> <dir>`.

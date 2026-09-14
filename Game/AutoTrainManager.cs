@@ -269,6 +269,14 @@ public sealed class AutoTrainManager : IDisposable
             _wire.Send(payload);
             await Task.Delay(KeystrokeDelayMs);
         }
+        // Nudge the room back onto the screen. Stock redisplays it on leaving the
+        // train screen; other realms (MMUD Reborn) don't, and with no room display
+        // there's nothing for the tracker to land on — the client sat idle after a
+        // successful train until the user pressed Enter by hand (report
+        // stock-20260913-233911). A bare return is a no-op where the realm already
+        // redisplays, so it's safe to send unconditionally.
+        _wire.Send(string.Empty);
+
         _log?.Info("AutoTrain", "Applied plan; saved + exited trainer.");
         // CP raises + SAVE are on the wire — let "plan committed" subscribers
         // (the plan-grid cleanup) react now, ahead of the menu-exit round-trip.

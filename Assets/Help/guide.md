@@ -545,7 +545,7 @@ The **Target weight** dropdown next to it caps what Find Best is willing to add:
 
 ## CP Allocation
 
-Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you. Two checkboxes mirror Settings → Auto-Trainer: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan).
+Plan how you'll spend character points as you level. **Add level** appends the next level's row; edit the **STR / INT / WIL / AGL / HEA / CHM** targets and the CP columns recompute live (a target that would overspend is clamped so **CP Left** never goes negative). At a trainer, **Apply this level** trains the selected row, or **Train now** walks to a trainer and trains the plan for you. Two checkboxes here are the ONLY place the automation switches live: **Auto-train** (level up at trainers) and **Auto-train stats** (apply this plan). They sit next to the plan they act on; Settings → Auto-Trainer holds the behaviour knobs (when to make the trip, what to keep banked, where to stop).
 
 **Hover a stat's column header** to see everything that stat drives, one effect per line: the derived stat's **current value for your character**, its marginal rate (e.g. *~6 AGL → +1*, *+3 per 4*), and — where it's a discrete breakpoint — **the very next value of that stat where it ticks up** (`next at N`). That's the point of it: spend to a real breakpoint instead of guessing that every 5th or 10th point is a good stopping place. The lists are complete and class-aware: **Health** shows max HP (with the gain per point at your level) and HP regen (idle / resting); **carry weight** shows your current capacity and the per-point rate (steeper past 100 STR); **casters** show **mana regen** and **spellcasting** under their actual casting stat (INT for Mages, WIL for Priests, both for Druids, CHM for Bards — max mana itself is level × magery, not a stat, so it isn't listed); accuracy follows the Stock vs Paradigm weighting; and the **utility skills** each stat feeds are listed too — **Perception** always (every class has it), and **Thievery / Traps / Picklocks / Tracking** only when your class or race actually grants that skill, so you're never shown a breakpoint you can't use. Values are the stat-and-level portion — your gear and quest bonuses stack on top in-game. See **What your stats do** below for the full picture; the projected numbers per level live in the **Level Projection** tab.
 
@@ -2124,15 +2124,31 @@ Settings → Auto-Lair. This tab tunes the scheduler that loops between "lairs" 
 
 ## Auto-Trainer
 
-Settings → Auto-Trainer. Automates leveling up and (separately) spending banked Character Points on stat training. These two behaviors are deliberately independent — you can turn one on without the other.
+Settings → Auto-Trainer. Controls *how* auto-training behaves once it runs — when to make the trip, how many levels to hold back, where to stop, and whether to announce.
+
+**The on/off switches are not here.** **Auto-train** and **Auto-train stats** live on the Player Workshop's **CP Allocation** tab, beside the plan they act on. They used to appear in both places, which was confusing and worse than cosmetic: this tab saves every setting on it at once, so pressing Apply here could quietly undo a toggle you had just flipped on the CP tab.
 
 ### Auto-train
 
+**Where:** Player Workshop → CP Allocation tab (not this tab).
 **Default:** Off
 **What it does:** The master auto-leveling switch. When on, and you're running a Loop or Auto-Lair, the moment your banked experience makes a new level trainable, MudPlay automatically pauses, detours to an allowed trainer, trains every level you can, then resumes what it was doing.
+**Solo only:** training briefly drops you out of and back into the realm, which disbands a party server-side — so an armed Auto-train never fires while you're grouped. Train between groups, or with "Train Now."
+**It checks it can pay first.** Before walking anywhere, MudPlay prices the whole run — including the second trainer when your banked levels span two level bands, since each charges its own markup — and compares it to the coin you're carrying. If you're short it collects the difference first: your stash rooms, then your bank, or a combination, picking the bank branch nearest the trainer rather than nearest you. Pick up enough coin along the way and it abandons the errand and heads straight for the trainer. If everything you can reach still falls short, nothing is walked: it logs how far short you are and roughly how many laps of your loop will close the gap, and stays armed.
+**About stashed coin.** MudPlay tracks what it has hidden in each stash room, but any player who searches that room can take it — so a stash is only ever a good guess. The run confirms by searching when it arrives, and if the room has been emptied it simply re-prices from where it's standing and carries on to the bank.
+**Auto-Get Cash is borrowed, not changed.** A collection trip needs cash pickup on to work, so MudPlay switches it on for the duration and puts it back exactly as it found it. Your saved setting is never modified. Auto-stashing is suppressed for the same window, so the trip can't hide the coin it just came to collect.
+**Banking on the way home.** If Auto-deposit is on, a run that trained something offers the purse to it once the loop is running again — so a withdraw-and-train trip banks the leftovers on the way back rather than carrying them round the circuit.
+
+### Train once this many levels are stacked
+
+**Default:** `0` (go as soon as one level is available)
+**What it does:** Makes Auto-train wait until this many levels are trainable before making a trip, so one detour trains them all instead of one trip per level.
+**When you might change it:** Set it to 3–5 when your trainer is a long walk from your grind spot — you trade a little delay for far fewer interruptions.
+**Important notes:** Works alongside *Levels to keep banked*, which decides how many stay banked once the trip happens. A threshold at or below that reserve could never train anything, so MudPlay treats it as one above the reserve.
 
 ### Auto-train stats
 
+**Where:** Player Workshop → CP Allocation tab (not this tab).
 **Default:** Off
 **What it does:** Independent of Auto-train. When on, every time a training happens (whether from Auto-train, a manual "Train Now," or a remote `@train`), MudPlay also applies your saved CP allocation plan's spending for the level you just reached.
 **Important notes:** You need a saved CP plan (from the Player Workshop's CP Allocation tab) before this checkbox will actually stay checked — MudPlay reverts it and warns you if you try to enable it with no plan saved.

@@ -44,6 +44,15 @@ public static class TrainBudgetCalculator
         return whole + frac;
     }
 
+    // Whether an armed auto-train should fire yet. `fireAt` is the user's "stack
+    // this many levels before making the trip" threshold; `keep` is the reserve
+    // that stays banked after it. A threshold at or below the reserve could never
+    // train anything, so it floors at keep + 1 — which is also what reproduces the
+    // plain "train as soon as there's something above the reserve" behaviour when
+    // the threshold is left at its 0 / 1 default.
+    public static bool ShouldFire(int banked, int keep, int fireAt)
+        => banked >= System.Math.Max(System.Math.Max(0, keep) + 1, System.Math.Max(0, fireAt));
+
     // Levels to train right now: the BankableLevels count less the reserve keep
     // the character always carries, clamped at 0. A negative or zero result means
     // "nothing to train — the reserve already covers everything banked".

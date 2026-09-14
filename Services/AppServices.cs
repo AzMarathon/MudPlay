@@ -1058,6 +1058,54 @@ public sealed class AppServices
     // same session boundary as the other session-stats trackers.
     public Game.Cash.TransactionHistoryTracker TransactionHistory { get; private set; } = null!;
 
+    // Structured per-room tally of coin we believe is stashed, persisted on the
+    // character profile. Backs auto-train funding's "is that stash worth a detour"
+    // question, which the display-oriented TransactionHistory above can't answer.
+    public Game.Cash.StashLedger StashBalances { get; } = new();
+
+    // In-memory force of cash COLLECTION while an auto-train funding errand runs.
+    // Deliberately not a write to the saved AutoGetCash setting: that would move the
+    // user's persisted preference twice per train and could race a profile save,
+    // leaving it flipped if the errand ended down an unexpected path. An override
+    // the gate consults can't survive the errand, let alone the session.
+    private bool? _autoGetCashOverride;
+
+    // True while that override is in force. Collection and STASHING share the one
+    // AutoGetCash toggle ("cash automation is one mental toggle"), which makes the
+    // naive "force the flag on" wrong: the errand's first stop is a stash room, and
+    // an armed auto-stash would hide the very coin we walked there to collect. So
+    // the override is asymmetric — collection on, stashing off — for its duration.
+    internal bool FundingErrandActive => _autoGetCashOverride == true;
+
+    // Collects the money for a train before the run commits to a trainer.
+    public Game.Train.TrainFundingRouter TrainFunding { get; private set; } = null!;
+
+    // Everywhere the funding errand could draw from, with what we believe is
+    // there. Stash figures are a belief (another player can empty a room without us
+    // seeing it); bank figures are certain, tracked from the deposit / withdrawal
+    // echoes between `bank` queries. A bank name maps to its room(s) through the
+    // shop catalogue — a multi-branch bank contributes one source per branch, since
+    // `dep` / `with` are room actions and only the branch you stand in will pay out.
+    private List<Game.Train.TrainFundingSource> BuildTrainFundingSources()
+    {
+        List<Game.Train.TrainFundingSource> sources = new();
+
+        foreach ((Game.Map.RoomKey room, long copper) in StashBalances.NonEmpty())
+            sources.Add(new(Game.Train.TrainFundingSourceKind.Stash, room,
+                $"stash {room.Map}/{room.Room}", copper));
+
+        IReadOnlyList<Game.GameData.BankShop> banks = Game.GameData.BankCatalog.Enumerate(GameData);
+        foreach ((string name, long deposit) in BankBalance.LastKnown)
+        {
+            if (deposit <= 0) continue;
+            foreach (Game.GameData.BankShop b in banks)
+                if (string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase))
+                    sources.Add(new(Game.Train.TrainFundingSourceKind.Bank, b.Key, b.Name, deposit));
+        }
+
+        return sources;
+    }
+
     // Observes the "You have been slain by..."
     // line and emits Game.Combat.DeathLineWatcher.PlayerDied.
     // DeathRecoveryManager is the primary consumer; other
@@ -4831,7 +4879,10 @@ public sealed class AppServices
         // (Settings -> General toggle + toolbar Toggle command).
         Cash = new Game.Cash.CashManager(Router,
             readSettings: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash"),
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoGetCash),
+            // An auto-train funding errand forces collection on regardless of the
+            // toggle — the stash leg only searches, and it's this engine that takes
+            // what the search reveals.
+            isEnabled: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
             // Shared Cash + Items timing toggle: defer ground / corpse / notice
             // cash until the room clears so a get between kills doesn't burn the
             // pre-attack round. hasEngageableHostiles reads CombatTracker, which
@@ -4889,7 +4940,10 @@ public sealed class AppServices
             readCash: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash"),
             getSnapshot: () => Inventory.Snapshot,
             resolveAutoStashItem: ResolveAutoStashItem,
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoGetCash),
+            // The other half of the funding-errand override: while one runs, stashing
+            // is SUPPRESSED. Without this the errand's stash-room stop would hide the
+            // coin it just collected and walk away empty.
+            isEnabled: () => !FundingErrandActive && ReadAutoModeFlag(d => d.AutoGetCash),
             log: Log,
             naming: Currency,
             isParadigm: onParadigm);
@@ -4916,6 +4970,48 @@ public sealed class AppServices
         Cash.CoinHidden += (currency, count) =>
             TransactionHistory.NoteStash(
                 new[] { (currency, (long)count) }, Array.Empty<string>(), CurrentRoomLabel());
+
+        // Funding's structured tally of the same echoes. Separate from the ledger
+        // above on purpose: that one is a rolling display log that formats amounts
+        // into prose, this one has to add up.
+        Cash.CoinHidden += (currency, count) =>
+        {
+            if (RoomTracker?.State.CurrentRoom is not { } room) return;
+            StashBalances.NoteHidden(room.Key,
+                Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), count));
+        };
+        Cash.CoinCollected += (currency, count) =>
+        {
+            // Only rooms we believe hold a stash draw down — picking coin up off a
+            // corpse in an ordinary room isn't a withdrawal from anything.
+            if (RoomTracker?.State.CurrentRoom is not { } room) return;
+            if (StashBalances.Believed(room.Key) <= 0) return;
+            StashBalances.NoteRecovered(room.Key,
+                Game.Inventory.CurrencyHoldings.ToCopper(Currency.Canonicalize(currency), count));
+        };
+
+        // A bank balance only ever moves by a deposit or a withdrawal, and the game
+        // echoes both — so track it from those instead of re-asking `bank` before
+        // every decision. Attributed to the bank we're standing in: `dep` / `with`
+        // are room actions, so the current room IS the account that moved.
+        Inventory.BankDeposited += copper =>
+        {
+            if (RoomTracker?.State.CurrentRoom is { } room && BankNameForRoom(room.Key) is { } name)
+                BankBalance.NoteDeposit(name, copper);
+        };
+        Inventory.BankWithdrew += copper =>
+        {
+            if (RoomTracker?.State.CurrentRoom is { } room && BankNameForRoom(room.Key) is { } name)
+                BankBalance.NoteWithdrawal(name, copper);
+        };
+
+        // Stash beliefs outlive a session because a stash does.
+        Profile.ProfileLoaded += p => StashBalances.Hydrate(p.StashedCopper);
+        Profile.ProfileSaving += p =>
+        {
+            Dictionary<string, long> snapshot = StashBalances.Snapshot();
+            p.StashedCopper = snapshot.Count > 0 ? snapshot : null;
+        };
         Inventory.ItemHidden += item =>
         {
             // An auto-discard offload uses `hide <item>` in HideMode — that's a
@@ -6157,8 +6253,51 @@ public sealed class AppServices
         // Auto-Lair for a train detour, same as AutoDeposit. Manual Train Now
         // (CP tab) + the armed auto-train (live-exp threshold during a loop)
         // both route through it. Wire-sender bound in MainWindowViewModel.
+        // Funding errand for the train bill. Built before the coordinator that owns
+        // it: the coordinator has already snapshotted + stopped the running engine
+        // by the time this drives the walker, so it never touches the loop itself.
+        TrainFunding = new Game.Train.TrainFundingRouter(
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
+            onHandCopper: () => Inventory.Snapshot.Currency.TotalCopperValue,
+            sources: BuildTrainFundingSources,
+            distance: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            // Same gate planning the trainer walk uses — a stash or bank can sit
+            // behind a key-door or hidden exit a plain walk can't route through.
+            walkTo: key => Walker.WalkTo(key, planThroughAcquirableGates: true),
+            send: cmd => SendGameCommand(cmd),
+            armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
+                .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+                    System.Threading.Tasks.TaskScheduler.Default),
+            reconcileStash: (room, copper) => StashBalances.Reconcile(room, copper),
+            autoGetCash: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
+            setAutoGetCash: on => _autoGetCashOverride = on ? true : null,
+            log: Log);
+
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
             RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);
+        TrainerWalk.SetFundingRouter(TrainFunding);
+        // The errand drives the walker itself, so it needs the same event stream the
+        // coordinator watches. TrainerWalkManager ignores walk events while its phase
+        // is Funding, so the two never both act on one event.
+        Walker.Event += e => TrainFunding.OnWalkEvent(e.Kind);
+        // Shortfall wording comes from the live session earn rate + lap time, which
+        // live out here rather than in the train coordinator.
+        // Bank the excess on the way back into the circuit. AutoDeposit's own check
+        // decides whether there's anything worth a trip, against the user's
+        // keep-on-hand floor — this just gives it the prompt to look.
+        TrainerWalk.AfterTrainRun = () => AutoDeposit.OnInventoryChanged();
+        // Solo-only: training drops you out of and back into the realm, which
+        // disbands a party server-side, so an armed run must not fire in a group.
+        TrainerWalk.CanStartRun = () => !PartyState.IsInParty;
+        TrainerWalk.DescribeShortfall = shortfall =>
+            Game.Train.TrainFundingForecast.Describe(
+                shortfall,
+                SessionActivity.Snapshot().CurrencyPerHour,
+                LoopRunner.AverageLapTime);
+        TrainerWalk.EstimateWaitToAfford = shortfall =>
+            Game.Train.TrainFundingForecast.TimeToAfford(
+                shortfall, SessionActivity.Snapshot().CurrencyPerHour);
+
         // @train remote: trains in place (no walk) via the coordinator.
         TrainRemote = new Game.Remote.TrainHandler(RemoteCommands, TrainerWalk);
         // Level-up announcer. Built after StatParser + the ProfileLoaded

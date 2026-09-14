@@ -172,6 +172,18 @@ public sealed class CharacterProfile
     // null or empty = no stash rooms flagged.
     public List<RoomRef>? StashRooms { get; set; }
 
+    // Running tally of the copper we believe each stash room is holding, keyed
+    // "map/room". Built up by the `You hid N <coin>.` echoes and drawn down when we
+    // collect it back, so auto-train funding can decide a stash is worth a detour
+    // before walking one. Survives a restart because a stash does — unlike the
+    // transaction-history window, which is a rolling display log and keeps no
+    // structured amount to add up.
+    //
+    // A belief, not a balance: another player who searches the room can take the
+    // pile without us ever seeing it, so anything planned against these figures is
+    // confirmed by searching on arrival. null / empty = nothing stashed.
+    public Dictionary<string, long>? StashedCopper { get; set; }
+
     // LEGACY Roomba Mode fields — superseded by the BBS-tier RoombaSettings
     // (Data/BBS/{bbs}/roomba.json; see GhRoomLabelStore) since every character
     // on a BBS shares one gang house. Kept ONLY so GhRoomLabelStore can lift an

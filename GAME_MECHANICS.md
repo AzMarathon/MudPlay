@@ -3336,6 +3336,19 @@ fresh `@level` lands ≥ 10.)
     balance.
   - **`dep <amount>`** deposits (amount in copper); confirmation names the actual carried denominations
     (`You deposit 5 platinum pieces, 29 gold crowns, 7 silver nobles.`), as noted above.
+- **[CONFIRMED by user, 2026-09-14] Hiding COIN in a room (`hide <N> <coin>`) — a stash, not a vault.**
+  This is the object-hiding verb, unrelated to the stealth `hid` that conceals the character (see
+  *Stealth* above) — the two share a prefix and nothing else.
+  - **Hidden coin persists, but it is not yours.** It stays in the room rather than decaying, but
+    **any player who searches that room finds it and can take it**. A stash balance is therefore a
+    *belief*, never a fact: plan against it, but confirm it on arrival before spending it.
+  - **Retrieval is `sea` then `get`, and it does not miss.** A search **reliably** surfaces coin you
+    hid — no skill check, unlike the stealth-reveal search which can fail. Once surfaced, `get` takes
+    it. There is no separate un-hide verb.
+  - **Retrieval is capped by carry weight, not by the pile.** `get` takes as much as **available
+    encumbrance** allows, so a large stash can need several trips or may be partly unrecoverable
+    while loaded. Coin weight is **1 unit per 3 coins** regardless of denomination, which is why a
+    withdraw/retrieval in large denominations is far cheaper to carry than the same value in copper.
 - **[CONFIRMED]** Item vs. coin disambiguation is by verb + shape. An **item** get is
   `You took <item>.`; an item drop is `You dropped <item>.` — the drop/hide verbs are **shared**
   with coins, so a colour-adjective item (`You dropped a silver key.`) is told apart from coin only

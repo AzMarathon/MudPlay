@@ -1,5 +1,21 @@
 # Version history
 
+## 3.83.0
+
+- Auto-train now checks it can afford the training before walking anywhere, and collects the difference from your stash rooms and bank when it can't
+- Banked levels spanning two trainers no longer strand at the first one's ceiling — the run walks on to the trainer that covers the next level
+- A stash that's been emptied by another player is written off on arrival and the run re-prices from where it stands instead of giving up
+- When nothing reachable covers the bill, auto-train stays armed and logs how far short you are and roughly how many laps will close it
+- Auto-Get Cash is borrowed for a collection trip and restored afterwards; auto-stashing is suppressed so the trip can't re-hide what it collected
+- New Auto-Trainer setting: train once this many levels are stacked, so one detour trains several levels
+- Auto-train is solo-only — training disbands a party server-side
+- A run that trained something offers its purse to auto-deposit once the loop is back up
+- Auto-train / Auto-train stats now live only on the CP Allocation tab — the duplicate pair on Settings → Auto-Trainer is gone, and an Apply there can no longer undo a toggle set on the CP tab
+- A loop no longer fails with "door open failed" on a door that was already open: the server's past-tense "The door was already open." reply went unrecognised, so the door step waited for a confirmation it had already been given and timed out
+- Auto-train sends a bare return on leaving the train-stats screen, so realms that don't redisplay the room on their own no longer leave the client sitting idle after a successful train
+- A move refused by a level cap or a permission check is now recognised as a failed move — the walker was never told the step failed, so a return-to-loop through a room you'd out-levelled just stopped dead
+- bug reports addressed: stock-20260913-232235, stock-20260913-233911
+
 ## 3.82.0
 
 - Level Projection: pick which columns the grid shows, saved per character
