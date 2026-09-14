@@ -2058,8 +2058,22 @@ public sealed class LoopRunner : IRecoverableEngine
             // Defer the send so a same-burst re-pause (a party @wait telepath
             // arriving after the Combat gate cleared in the same server-line
             // burst) lands first and aborts the leaked move.
+            //
+            // Re-check posture inside the deferred body, because the burst that
+            // paused and resumed us can also carry the previous step's arrival —
+            // and that arrival advances AND dispatches the next step before this
+            // runs. Clearing _stepInFlight unconditionally then sent that same step
+            // a second time: a gear swap straddling the arrival put "n n" on the
+            // wire and walked the loop into a wall, desyncing it into a lap that
+            // re-blocked every circuit (reports paradigm-20260914-054046 /
+            // -054501). The synchronous guard above tests the same thing; it just
+            // runs before the arrival lands. The overshoot dispatch below already
+            // captures its index for this reason.
+            int resumeIndex = _index;
             DeferResumeDispatch(() =>
             {
+                if (_index != resumeIndex) return;
+                if (_stepInFlight && _tracker.State.Confidence == RoomConfidence.Pending) return;
                 _stepInFlight = false;
                 _awaitingPromptForCommand = false;
                 SendNextStep();

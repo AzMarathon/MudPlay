@@ -1,5 +1,10 @@
 # Version history
 
+## 3.83.5
+
+- A gear swap no longer makes a loop send the same move twice and walk into a wall, which had been desyncing the circuit into a lap that re-blocked every time
+- bug reports addressed: paradigm-20260914-054046, paradigm-20260914-054501
+
 ## 3.83.3
 
 - A move echo pushed off the prompt line — by auto-sneak firing in the same breath, or a BBS broadcast landing mid-render — is recognised again, so the walker no longer mistakes a real arrival for a re-look
