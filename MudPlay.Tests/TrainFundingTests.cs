@@ -104,6 +104,88 @@ public sealed class TrainFundingTests
         Assert.Equal(2, plan[0].Trainer.Number);
     }
 
+    // ----- Chain re-target: what happens on "progressed too far" ----------------
+
+    private static TrainerShop? Chain(
+        IReadOnlyList<TrainerShop> trainers, int attained, int bankable, int keep = 0,
+        int ceiling = 0, RoomKey? at = null)
+        => TrainItineraryPlanner.NextTrainerInChain(
+            trainers, attained, bankable, keep, ceiling, classNumber: 0,
+            NoneDisabled, at ?? new RoomKey(1, 1), Flat);
+
+    [Fact]
+    public void Chain_WalksOnToTheTrainerCoveringTheNextLevel()
+    {
+        var trainers = new[] { Trainer(1, 1, 100, 1, 10), Trainer(2, 1, 200, 11, 20) };
+        TrainerShop? next = Chain(trainers, attained: 10, bankable: 1, at: new RoomKey(1, 100));
+
+        Assert.NotNull(next);
+        Assert.Equal(2, next!.Value.Number);
+    }
+
+    [Fact]
+    public void Chain_StopsWhenTheReserveIsAllThatIsLeft()
+    {
+        var trainers = new[] { Trainer(1, 1, 100, 1, 10), Trainer(2, 1, 200, 11, 20) };
+        Assert.Null(Chain(trainers, attained: 10, bankable: 2, keep: 2, at: new RoomKey(1, 100)));
+    }
+
+    [Fact]
+    public void Chain_StopsAtTheCeiling()
+    {
+        var trainers = new[] { Trainer(1, 1, 100, 1, 10), Trainer(2, 1, 200, 11, 20) };
+        Assert.Null(Chain(trainers, attained: 10, bankable: 5, ceiling: 10, at: new RoomKey(1, 100)));
+    }
+
+    [Fact]
+    public void Chain_NeverReturnsTheTrainerThatJustRefusedUs()
+    {
+        // The guard that stops the run spinning: a trainer whose band still covers
+        // the level would otherwise be re-picked while we stand in its room, and the
+        // run would "walk on" to where it already is, forever.
+        var trainers = new[] { Trainer(1, 1, 100, 1, 20) };
+        Assert.Null(Chain(trainers, attained: 10, bankable: 3, at: new RoomKey(1, 100)));
+    }
+
+    [Fact]
+    public void Chain_StopsWhenNoAllowedTrainerServesTheNextLevel()
+    {
+        var trainers = new[] { Trainer(1, 1, 100, 1, 10) };
+        Assert.Null(Chain(trainers, attained: 10, bankable: 3, at: new RoomKey(1, 100)));
+    }
+
+    [Fact]
+    public void Chain_StopsOnAnUnknownLevel()
+        => Assert.Null(Chain(new[] { Trainer(1, 1, 200, 1, 20) }, attained: 0, bankable: 3));
+
+    // ----- ShouldFire: when an armed run trips ----------------------------------
+
+    [Theory]
+    // Default threshold (0 / 1) reproduces the plain "anything above the reserve".
+    [InlineData(1, 0, 0, true)]
+    [InlineData(0, 0, 0, false)]
+    [InlineData(1, 0, 1, true)]
+    // A stacking threshold holds off until it's met.
+    [InlineData(2, 0, 3, false)]
+    [InlineData(3, 0, 3, true)]
+    [InlineData(4, 0, 3, true)]
+    // The reserve raises the bar: keep 2 means 3 banked before anything trains.
+    [InlineData(2, 2, 0, false)]
+    [InlineData(3, 2, 0, true)]
+    // A threshold at or below the reserve could never train anything, so it floors
+    // at keep + 1 rather than deadlocking.
+    [InlineData(3, 3, 2, false)]
+    [InlineData(4, 3, 2, true)]
+    public void ShouldFire_HonoursThresholdAndReserve(int banked, int keep, int fireAt, bool expected)
+        => Assert.Equal(expected, MudPlay.Game.Calculators.TrainBudgetCalculator.ShouldFire(banked, keep, fireAt));
+
+    [Fact]
+    public void ShouldFire_TreatsNegativesAsZero()
+    {
+        Assert.True(MudPlay.Game.Calculators.TrainBudgetCalculator.ShouldFire(1, -5, -5));
+        Assert.False(MudPlay.Game.Calculators.TrainBudgetCalculator.ShouldFire(0, -5, -5));
+    }
+
     // ----- Funding: where the money comes from ---------------------------------
 
     private static TrainFundingSource Stash(int room, long copper)

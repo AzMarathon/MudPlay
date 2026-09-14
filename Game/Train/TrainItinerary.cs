@@ -89,6 +89,45 @@ public static class TrainItineraryPlanner
         return segments;
     }
 
+    // Which trainer (if any) a run should walk on to after the one it's standing at
+    // refuses with "You have progressed too far to use the training provided here."
+    //
+    // Extracted from the coordinator so the decision is testable on its own: the
+    // coordinator around it needs a game-data cache, a room graph and a live walker
+    // to construct, which is why it has no tests — but this is the part that can
+    // actually be wrong.
+    //
+    // Null means "stop here": the reserve is reached, the ceiling is reached, no
+    // allowed trainer serves the next level, or the only candidate is the trainer
+    // that just refused us — which would spin the run walking to the room it's
+    // already in.
+    public static TrainerShop? NextTrainerInChain(
+        IReadOnlyList<TrainerShop> trainers,
+        int attainedLevel,
+        int bankableAboveAttained,
+        int keepLevels,
+        int ceiling,
+        int classNumber,
+        IReadOnlyCollection<string> disabled,
+        RoomKey current,
+        Func<RoomKey, RoomKey, int?> distance)
+    {
+        ArgumentNullException.ThrowIfNull(trainers);
+        ArgumentNullException.ThrowIfNull(disabled);
+        ArgumentNullException.ThrowIfNull(distance);
+
+        if (attainedLevel <= 0) return null;
+        if (bankableAboveAttained <= Math.Max(0, keepLevels)) return null;
+        if (ceiling > 0 && attainedLevel >= ceiling) return null;
+
+        TrainerShop? next = TrainerCatalog.SelectNearest(
+            trainers, attainedLevel, classNumber, disabled,
+            t => distance(current, new RoomKey(t.Map, t.Room)));
+
+        if (next is not { } t) return null;
+        return current.Equals(new RoomKey(t.Map, t.Room)) ? null : t;
+    }
+
     public static long TotalCost(IReadOnlyList<TrainSegment> segments)
     {
         ArgumentNullException.ThrowIfNull(segments);

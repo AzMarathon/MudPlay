@@ -589,21 +589,20 @@ public sealed class TrainerWalkManager : IDisposable
         if (_phase != Phase.Training || !_loopTrain || _cpOnlyRun) return false;
         if (_trainSteps >= MaxTrainLoopSteps) return false;
 
-        // Mid-run, PlayerStats.Level lags (we don't re-poll between loop steps), so
-        // the band question rides the level we last confirmed attaining.
-        int level = _attainedLevel > 0 ? _attainedLevel : _stats.Level;
-        if (CountBankableAbove(level) <= _keepLevels) return false;
-        if (!TrainBudgetCalculator.WithinCeiling(level, Math.Max(0, ReadSettings().DoNotTrainAbove)))
-            return false;
         if (_tracker.State.CurrentRoom is not { } cur) return false;
 
-        if (SelectNearest(cur.Key, level) is not { } next) return false;
+        // Mid-run, PlayerStats.Level lags (we don't re-poll between loop steps), so
+        // the band question rides the level we last confirmed attaining. The whole
+        // decision — reserve, ceiling, candidate, and the "not the trainer that just
+        // refused" guard — lives in NextTrainerInChain so it can be tested.
+        int level = _attainedLevel > 0 ? _attainedLevel : _stats.Level;
+        TrainerShop? pick = Game.Train.TrainItineraryPlanner.NextTrainerInChain(
+            TrainerCatalog.Enumerate(_gameData), level, CountBankableAbove(level), _keepLevels,
+            Math.Max(0, ReadSettings().DoNotTrainAbove), ResolveClassNumber(), ReadDisabledTrainers(),
+            cur.Key, (a, b) => _bfs.DistanceBetween(a, b));
 
-        // The trainer that just refused us can't be the answer to its own refusal —
-        // walking "on" to the room we're standing in would spin the run.
+        if (pick is not { } next) return false;
         var room = new RoomKey(next.Map, next.Room);
-        if (cur.Key == room) return false;
-
         if (!_walker.WalkTo(room, planThroughAcquirableGates: true)) return false;
 
         _target = next;
