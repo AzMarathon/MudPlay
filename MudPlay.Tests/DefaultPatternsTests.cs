@@ -117,6 +117,41 @@ public sealed class DefaultPatternsTests
     }
 
     [Fact]
+    public void UserHitsRegex_MatchesApostropheInSpellName()
+    {
+        // "You summon god's wrath upon <target> for N damage!" (the gwra
+        // alt-attack spell) went completely unmatched — the apostrophe in
+        // "god's" broke the target capture's character class, so no
+        // UserHits subscriber (round/monster-observation stats, the
+        // idle-stall watchdog's activity clock, attack-cast confirmation)
+        // ever saw a gwra hit land. Report paradigm-20260914-055853.
+        IMessagePattern p = PatternById(KnownPatterns.UserHits);
+
+        Assert.True(p.TryMatch(
+            Line("You summon god's wrath upon whale shark for 121 damage!"), out MatchResult r));
+        Assert.Equal("You",                          r.Groups[0]);
+        Assert.Equal("god's wrath upon whale shark",  r.Groups[1]);
+        Assert.Equal("121",                           r.Groups[2]);
+    }
+
+    [Fact]
+    public void MobAttacksYouRegex_MatchesArticlelessBlankVerbDodge()
+    {
+        // Paradigm's full-dodge wording drops both the leading "The" and the
+        // attack verb ("whale shark  at you, but you dodge out of the way!",
+        // confirmed on the wire) — this pattern is the idle-stall watchdog's
+        // sole activity signal for a round the monster's own swing carries no
+        // damage number, so missing this shape reads as total silence and can
+        // force-clear a live combat gate mid-fight. Report paradigm-20260914-055853.
+        IMessagePattern p = PatternById(KnownPatterns.MobAttacksYou);
+
+        Assert.True(p.TryMatch(
+            Line("whale shark  at you, but you dodge out of the way!"), out _));
+        // The normal, article-led wording must still match.
+        Assert.True(p.TryMatch(Line("The whale shark lunges at you!"), out _));
+    }
+
+    [Fact]
     public void StatusLineRegex_ParsesHpManaTypeAndState()
     {
         IMessagePattern p = PatternById(KnownPatterns.StatusLine);
