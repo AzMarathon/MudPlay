@@ -928,16 +928,16 @@
                         <Border Width="14" Height="14" Background="#4A7791"/>
                         <TextBlock Text="Shop / banks" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
-                    <!-- Level gate = the amber corner wedge MapControl draws on
-                         the room node (LevelGateFill). The room is still
-                         enterable; the way onward is not. Approximated here with
-                         a corner-anchored box. -->
+                    <!-- Level gate = the amber wedge MapControl draws in the room
+                         node's TOP-LEFT corner (LevelGateFill + its dark rim). The
+                         room is still enterable; the way onward is not. Same
+                         swatch shape as the U/D corner marks below, so the three
+                         corner badges read as one family. -->
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Border Width="14" Height="14">
-                            <Border Width="7" Height="7" Background="#E0A020"
-                                    BorderBrush="#7A4E00" BorderThickness="1"
-                                    HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                        </Border>
+                        <Grid Width="14" Height="14">
+                            <Border Background="#3A3A3A"/>
+                            <Polygon Points="7,0 0,0 0,7" Fill="#E0A020" Stroke="#7A4E00" StrokeThickness="1"/>
+                        </Grid>
                         <TextBlock Text="Holds a level gate" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
