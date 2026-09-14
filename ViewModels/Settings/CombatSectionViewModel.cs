@@ -229,6 +229,15 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int? _multiAttackMaxCastsPerRoom;
     [ObservableProperty] private int _multiAttackMinManaPerCast;
 
+    // Room spell 2 — picks up once slot 1's cap or mana floor stops it. No
+    // MinEnemies of its own: the room trigger is slot 1's, shared by both.
+    [ObservableProperty] private bool _multiAttack2Enabled;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MultiAttack2SpellUnlearned))]
+    private string? _multiAttack2SpellName;
+    [ObservableProperty] private int? _multiAttack2MaxCastsPerRoom;
+    [ObservableProperty] private int _multiAttack2MinManaPerCast;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AreaDebuffSpellUnlearned))]
     [NotifyPropertyChangedFor(nameof(AreaDebuffSpellMisSlotWarning))]
@@ -270,6 +279,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // character hasn't (re-raised on the name change above via NotifyPropertyChangedFor,
     // and on a spellbook change via OnSpellbookChanged).
     public bool MultiAttackSpellUnlearned        => IsSpellUnlearned(SpellSuggestions, MultiAttackSpellName);
+    public bool MultiAttack2SpellUnlearned       => IsSpellUnlearned(SpellSuggestions, MultiAttack2SpellName);
     public bool AreaDebuffSpellUnlearned         => IsSpellUnlearned(SpellSuggestions, AreaDebuffSpellName);
     public bool SingleTargetDebuffSpellUnlearned => IsSpellUnlearned(SpellSuggestions, SingleTargetDebuffSpellName);
     public bool NormalAttackSpellUnlearned       => IsSpellUnlearned(SpellSuggestions, NormalAttackSpellName);
@@ -313,6 +323,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     public decimal SpellManaMax => SpellManaModePercentage ? 100 : 100_000;
 
     public string MultiAttackMinManaPerCastConverted         => FormatMana(MultiAttackMinManaPerCast);
+    public string MultiAttack2MinManaPerCastConverted        => FormatMana(MultiAttack2MinManaPerCast);
     public string AreaDebuffMinManaPerCastConverted          => FormatMana(AreaDebuffMinManaPerCast);
     public string SingleTargetDebuffMinManaPerCastConverted  => FormatMana(SingleTargetDebuffMinManaPerCast);
     public string NormalAttackSpellMinManaPerCastConverted   => FormatMana(NormalAttackSpellMinManaPerCast);
@@ -333,6 +344,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     private void RefreshAllManaConverted()
     {
         OnPropertyChanged(nameof(MultiAttackMinManaPerCastConverted));
+        OnPropertyChanged(nameof(MultiAttack2MinManaPerCastConverted));
         OnPropertyChanged(nameof(AreaDebuffMinManaPerCastConverted));
         OnPropertyChanged(nameof(SingleTargetDebuffMinManaPerCastConverted));
         OnPropertyChanged(nameof(NormalAttackSpellMinManaPerCastConverted));
@@ -345,6 +357,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     private void ClampManaToPercent()
     {
         if (MultiAttackMinManaPerCast > 100) MultiAttackMinManaPerCast = 100;
+        if (MultiAttack2MinManaPerCast > 100) MultiAttack2MinManaPerCast = 100;
         if (AreaDebuffMinManaPerCast > 100) AreaDebuffMinManaPerCast = 100;
         if (SingleTargetDebuffMinManaPerCast > 100) SingleTargetDebuffMinManaPerCast = 100;
         if (NormalAttackSpellMinManaPerCast > 100) NormalAttackSpellMinManaPerCast = 100;
@@ -615,6 +628,14 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
                 MaxCastsPerRoom = ClampCasts(MultiAttackMaxCastsPerRoom),
                 MinManaPerCast  = ClampSpell(MultiAttackMinManaPerCast),
             },
+            MultiAttack2Enabled = MultiAttack2Enabled,
+            MultiAttack2Spell = new CombatSpellSlot
+            {
+                SpellName       = NullIfBlank(MultiAttack2SpellName),
+                MinEnemies      = 0, // shared with slot 1 — never read for this slot
+                MaxCastsPerRoom = ClampCasts(MultiAttack2MaxCastsPerRoom),
+                MinManaPerCast  = ClampSpell(MultiAttack2MinManaPerCast),
+            },
             AreaDebuffSpell = new CombatSpellSlot
             {
                 SpellName       = NullIfBlank(AreaDebuffSpellName),
@@ -702,6 +723,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(SpellSuggestions));
         // The learned set (hence each slot's red-outline flag) just changed.
         OnPropertyChanged(nameof(MultiAttackSpellUnlearned));
+        OnPropertyChanged(nameof(MultiAttack2SpellUnlearned));
         OnPropertyChanged(nameof(AreaDebuffSpellUnlearned));
         OnPropertyChanged(nameof(SingleTargetDebuffSpellUnlearned));
         OnPropertyChanged(nameof(NormalAttackSpellUnlearned));
@@ -756,6 +778,11 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         MultiAttackMinEnemies      = dto.MultiAttackSpell.MinEnemies;
         MultiAttackMaxCastsPerRoom = dto.MultiAttackSpell.MaxCastsPerRoom;
         MultiAttackMinManaPerCast  = dto.MultiAttackSpell.MinManaPerCast;
+
+        MultiAttack2Enabled         = dto.MultiAttack2Enabled;
+        MultiAttack2SpellName       = dto.MultiAttack2Spell.SpellName;
+        MultiAttack2MaxCastsPerRoom = dto.MultiAttack2Spell.MaxCastsPerRoom;
+        MultiAttack2MinManaPerCast  = dto.MultiAttack2Spell.MinManaPerCast;
 
         AreaDebuffSpellName       = dto.AreaDebuffSpell.SpellName;
         AreaDebuffMinEnemies      = dto.AreaDebuffSpell.MinEnemies;
@@ -894,6 +921,12 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnMultiAttackMinEnemiesChanged(int value)           => MarkDirty();
     partial void OnMultiAttackMaxCastsPerRoomChanged(int? value)     => MarkDirty();
     partial void OnMultiAttackMinManaPerCastChanged(int value)       { OnPropertyChanged(nameof(MultiAttackMinManaPerCastConverted)); MarkDirty(); }
+
+    // Spell slot — multi-attack 2
+    partial void OnMultiAttack2EnabledChanged(bool value)             => MarkDirty();
+    partial void OnMultiAttack2SpellNameChanged(string? value)        => MarkDirty();
+    partial void OnMultiAttack2MaxCastsPerRoomChanged(int? value)     => MarkDirty();
+    partial void OnMultiAttack2MinManaPerCastChanged(int value)       { OnPropertyChanged(nameof(MultiAttack2MinManaPerCastConverted)); MarkDirty(); }
 
     // Spell slot — AOE debuff
     partial void OnAreaDebuffSpellNameChanged(string? value)         => MarkDirty();

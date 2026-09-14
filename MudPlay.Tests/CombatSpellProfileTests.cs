@@ -176,6 +176,43 @@ public sealed class CombatSpellProfileTests
         Assert.Equal("mm", prof.NormalAttackSpell.SpellName);
     }
 
+    // The second room slot has to ride every copy path a profile owns — Capture,
+    // ApplyTo, CaptureCombatFrom and Clone. Missing one silently drops the slot on a
+    // profile switch, which looks like "multi-attack 2 turned itself off".
+    [Fact]
+    public void MultiAttack2_RidesEveryProfileCopyPath()
+    {
+        var src = new CombatSettings { MultiAttack2Enabled = true };
+        src.MultiAttack2Spell.SpellName = "star";
+        src.MultiAttack2Spell.MaxCastsPerRoom = 3;
+        src.MultiAttack2Spell.MinManaPerCast = 15;
+
+        CombatSpellProfile prof = CombatSpellProfile.Capture("X", src, new HealthSettings());
+        Assert.True(prof.MultiAttack2Enabled);
+        Assert.Equal("star", prof.MultiAttack2Spell.SpellName);
+        Assert.Equal(3, prof.MultiAttack2Spell.MaxCastsPerRoom);
+        Assert.Equal(15, prof.MultiAttack2Spell.MinManaPerCast);
+
+        var dst = new CombatSettings();
+        prof.ApplyTo(dst);
+        Assert.True(dst.MultiAttack2Enabled);
+        Assert.Equal("star", dst.MultiAttack2Spell.SpellName);
+        Assert.Equal(3, dst.MultiAttack2Spell.MaxCastsPerRoom);
+
+        // Deep copy, not a shared reference.
+        dst.MultiAttack2Spell.SpellName = "changed";
+        Assert.Equal("star", prof.MultiAttack2Spell.SpellName);
+
+        CombatSpellProfile copy = prof.Clone(newIdentity: true);
+        Assert.True(copy.MultiAttack2Enabled);
+        Assert.Equal("star", copy.MultiAttack2Spell.SpellName);
+
+        var off = new CombatSettings { MultiAttack2Enabled = false };
+        copy.CaptureCombatFrom(off);
+        Assert.False(copy.MultiAttack2Enabled);
+        Assert.Null(copy.MultiAttack2Spell.SpellName);
+    }
+
     [Fact]
     public void CaptureThenApply_RoundTripsExpandedFields()
     {

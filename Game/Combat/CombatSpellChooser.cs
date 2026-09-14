@@ -52,6 +52,7 @@ public sealed class CombatSpellChooser
     private int _areaDebuffCasts;
     private int _singleDebuffCasts;
     private int _multiAttackCasts;
+    private int _multiAttack2Casts;
     private int _normalAttackCasts;
     private int _alternateAttackCasts;
     private int _drainCasts;
@@ -104,6 +105,7 @@ public sealed class CombatSpellChooser
     {
         _singleDebuffCasts = 0;
         _multiAttackCasts = 0;
+        _multiAttack2Casts = 0;
         _normalAttackCasts = 0;
         _alternateAttackCasts = 0;
         _drainCasts = 0;
@@ -177,8 +179,8 @@ public sealed class CombatSpellChooser
             && !(settings.SkipBackstabIfMultiAttack && MultiAttackRoomQualifies(settings, ctx)))
             return CombatSpellDecision.Backstab;
 
-        // SpellsFirst always reaches for the attack-spell cascade (multi → normal
-        // → alternate); PhysicalFirst swings and reaches for it only when the
+        // SpellsFirst always reaches for the attack-spell cascade (multi 1 → multi 2
+        // → normal → alternate); PhysicalFirst swings and reaches for it only when the
         // weapon path is proven ineffective against this target
         // (ctx.WeaponIneffective — normal can't hit and there's no working
         // alternate). Either way a cascade that can't fire this round falls
@@ -366,20 +368,24 @@ public sealed class CombatSpellChooser
         return true;
     }
 
-    // Would the room multi-attack spell fire this round? Mirrors the multi-attack
-    // rung in TryAttackSpell (config + MinEnemies + cast cap + mana + Auto-Nuke),
+    // Would a room multi-attack spell fire this round? Mirrors both multi-attack
+    // rungs in TryAttackSpell (config + MinEnemies + cast cap + mana + Auto-Nuke),
     // plus the preferSpell gate — under PhysicalFirst with an effective weapon the
     // cascade isn't reached, so no AoE fires and the drain has nothing to yield to.
+    // Slot 2 counts: a drain must yield to the room spell that's actually rooming,
+    // whichever slot the round has reached.
     private bool MultiAttackWouldFire(
         CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool preferSpell)
     {
         if (!preferSpell) return false;
+        if (!MultiAttackRoomQualifies(settings, ctx)) return false;
         CombatSpellSlot multi = settings.MultiAttackSpell;
-        return ctx.AllowNukes
-            && IsConfigured(multi)
-            && ctx.EnemyCount >= multi.MinEnemies
-            && CastsOk(multi, _multiAttackCasts)
-            && ManaOk(multi, ctx, mode);
+        if (CastsOk(multi, _multiAttackCasts) && ManaOk(multi, ctx, mode)) return true;
+        CombatSpellSlot multi2 = settings.MultiAttack2Spell;
+        return settings.MultiAttack2Enabled
+            && IsConfigured(multi2)
+            && CastsOk(multi2, _multiAttack2Casts)
+            && ManaOk(multi2, ctx, mode);
     }
 
     // Does the room meet the room multi-attack spell's TRIGGER — Auto-Nuke on, the spell
@@ -394,9 +400,9 @@ public sealed class CombatSpellChooser
         return ctx.AllowNukes && IsConfigured(multi) && ctx.EnemyCount >= multi.MinEnemies;
     }
 
-    // Attack-spell phase: multi-attack room spell while it qualifies, then
-    // normal, then alternate single-target damage spells. Returns null when none
-    // can fire this round.
+    // Attack-spell phase: room spell 1 while it qualifies, room spell 2 once slot 1
+    // is spent, then normal, then alternate single-target damage spells. Returns
+    // null when none can fire this round.
     private CombatSpellDecision? TryAttackSpell(
         CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool singleTargetSpent)
     {
@@ -405,12 +411,25 @@ public sealed class CombatSpellChooser
         // Multi-attack is room-scoped (MinEnemies), not target-scoped, so the
         // per-target single-target latch never suppresses it.
         CombatSpellSlot multi = settings.MultiAttackSpell;
-        if (ctx.AllowNukes
-            && IsConfigured(multi)
-            && ctx.EnemyCount >= multi.MinEnemies
+        bool roomQualifies = MultiAttackRoomQualifies(settings, ctx);
+        if (roomQualifies
             && CastsOk(multi, _multiAttackCasts)
             && ManaOk(multi, ctx, mode))
             return new CombatSpellDecision(CombatSpellAction.MultiAttack, multi.SpellName!);
+
+        // Room spell 2 is slot 1's successor, not a rival — it only ever sees this
+        // rung once slot 1 has spent its per-room cap or mana has fallen under slot
+        // 1's floor, which is what makes "open with the expensive one twice, finish
+        // with the cheap one" configurable. The enemy-count trigger is shared (slot
+        // 1's MinEnemies, via roomQualifies), so a pack too small to room with slot 1
+        // isn't roomed by slot 2 instead; slot 2's own MinEnemies is never read.
+        CombatSpellSlot multi2 = settings.MultiAttack2Spell;
+        if (roomQualifies
+            && settings.MultiAttack2Enabled
+            && IsConfigured(multi2)
+            && CastsOk(multi2, _multiAttack2Casts)
+            && ManaOk(multi2, ctx, mode))
+            return new CombatSpellDecision(CombatSpellAction.MultiAttack2, multi2.SpellName!);
 
         // Single-target attack cascade latched off for this target (its mana
         // reserve is spent or its MaxCasts rounds elapsed) — skip to the weapon.
@@ -474,6 +493,9 @@ public sealed class CombatSpellChooser
                 break;
             case CombatSpellAction.MultiAttack:
                 _multiAttackCasts++;
+                break;
+            case CombatSpellAction.MultiAttack2:
+                _multiAttack2Casts++;
                 break;
             case CombatSpellAction.NormalAttackSpell:
                 _normalAttackCasts++;
@@ -608,6 +630,7 @@ public enum CombatSpellAction
     AreaDebuff,
     SingleDebuff,
     MultiAttack,
+    MultiAttack2,
     NormalAttackSpell,
     AlternateAttackSpell,
     Backstab,

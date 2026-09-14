@@ -181,6 +181,15 @@ public sealed class CombatSettings
     // Multi-target room spell (e.g. cast star).
     public CombatSpellSlot MultiAttackSpell { get; set; } = new();
 
+    // Second room spell, used as MultiAttackSpell's successor rather than a rival:
+    // once the first slot's per-room cast cap is spent or mana has fallen under its
+    // floor, this one carries the room. Lets a big opener soften the pack once or
+    // twice and a cheap follow-up finish it. Off by default; the room's enemy-count
+    // trigger is MultiAttackSpell.MinEnemies for both, so this slot's own MinEnemies
+    // is never read.
+    public bool MultiAttack2Enabled { get; set; }
+    public CombatSpellSlot MultiAttack2Spell { get; set; } = new();
+
     // Area-effect debuff (e.g. blind-room, curse-room).
     public CombatSpellSlot AreaDebuffSpell { get; set; } = new();
 
@@ -224,10 +233,10 @@ public sealed class CombatSettings
     public bool ShowCombatRoundTotals { get; set; }
 }
 
-// One spell-row entry in the Combat tab's Spell-combat section. Five of these
-// live on CombatSettings (multi-attack / AOE debuff / single-target debuff /
-// normal attack spell / alternate attack spell). Single-target rows ignore
-// MinEnemies; the engine documents which rows honor it.
+// One spell-row entry in the Combat tab's Spell-combat section (multi-attack 1 and
+// 2 / AOE debuff / single-target debuff / normal attack spell / alternate attack
+// spell / drain). Single-target rows ignore MinEnemies; the engine documents which
+// rows honor it.
 public sealed class CombatSpellSlot
 {
     // Spell name as it appears in game data. Null = slot unused.

@@ -411,9 +411,9 @@
                     <TextBlock Grid.Column="5" Classes="ColumnHeader" Text="= mana / %"/>
                 </Grid>
 
-                <!-- Multi-attack (room spell). -->
+                <!-- Multi-attack 1 (room spell). -->
                 <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
-                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Multi-attack"/>
+                    <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Multi-attack 1"/>
                     <AutoCompleteBox Grid.Column="1"
                                      Text="{Binding MultiAttackSpellName, Mode=TwoWay}"
                                      Classes.unlearnedSpell="{Binding MultiAttackSpellUnlearned}"
@@ -438,6 +438,40 @@
                                    ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
                     <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
                                Text="{Binding MultiAttackMinManaPerCastConverted}"/>
+                </Grid>
+
+                <!-- Multi-attack 2 — slot 1's successor, not a second room spell racing it.
+                     Shares slot 1's Min enemies, so that column is inert here. -->
+                <Grid ColumnDefinitions="160,260,110,110,140,120" Margin="0,2,0,0">
+                    <CheckBox Grid.Column="0" Content="Multi-attack 2"
+                              IsChecked="{Binding MultiAttack2Enabled, Mode=TwoWay}"
+                              ToolTip.Tip="Off by default. When on, this spell takes over the room once Multi-attack 1 hits its Max casts or mana drops under its Min mana — so a costly opener can fire once or twice and a cheaper spell finishes the pack."/>
+                    <AutoCompleteBox Grid.Column="1"
+                                     Text="{Binding MultiAttack2SpellName, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding MultiAttack2SpellUnlearned}"
+                                     IsEnabled="{Binding MultiAttack2Enabled}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Follow-up multi-target room spell. Suggestions come from this class's known spells."/>
+                    <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               ToolTip.Tip="Shares Multi-attack 1's Min enemies — the room has to qualify for slot 1 before slot 2 is ever reached."/>
+                    <NumericUpDown Grid.Column="3"
+                                   Value="{Binding MultiAttack2MaxCastsPerRoom, Mode=TwoWay}"
+                                   IsEnabled="{Binding MultiAttack2Enabled}"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="100" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
+                    <NumericUpDown Grid.Column="4"
+                                   Value="{Binding MultiAttack2MinManaPerCast, Mode=TwoWay}"
+                                   IsEnabled="{Binding MultiAttack2Enabled}"
+                                   Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
+                    <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                               Text="{Binding MultiAttack2MinManaPerCastConverted}"/>
                 </Grid>
 
                 <!-- Debuff (AOE). -->

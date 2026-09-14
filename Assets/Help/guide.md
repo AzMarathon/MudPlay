@@ -1419,7 +1419,7 @@ Found near the bottom of the "BBS + Display" tab, under a "Show confirmations" h
 
 ## Combat
 
-Settings → Combat. Two switches live *outside* this tab and gate everything here: **Auto-Combat** (Settings → General, or its toolbar toggle) must be on for any of this to matter at all; **Auto-Nuke** separately gates the **multi-attack** and **AoE-debuff** spell slots (single-target attack spells aren't considered "nukes" and stay available regardless). The **single-target debuff** is part of the attack rotation, so it follows **Auto-Combat**, not Auto-Nuke.
+Settings → Combat. Two switches live *outside* this tab and gate everything here: **Auto-Combat** (Settings → General, or its toolbar toggle) must be on for any of this to matter at all; **Auto-Nuke** separately gates **both multi-attack** slots and the **AoE-debuff** slot (single-target attack spells aren't considered "nukes" and stay available regardless). The **single-target debuff** is part of the attack rotation, so it follows **Auto-Combat**, not Auto-Nuke.
 
 A debuff slot only accepts a **0-energy** between-round spell — an attack spell (which costs energy) can't be a debuff — with **slot-appropriate targeting**: a single-enemy scope for the single-target slot, an area/room scope for the AoE slot. A mismatch (an attack spell, or a targeted spell in the AoE slot / an AoE in the single slot) is flagged right under the slot on this tab and refused at cast time with a program-log note.
 
@@ -1515,7 +1515,7 @@ A debuff slot only accepts a **0-energy** between-round spell — an attack spel
 ### Don't BS if multi-attack room spell is firing
 
 **Default:** On
-**What it does:** Skips the backstab attempt whenever the room holds enough enemies to trigger your configured room-wide attack spell, so you don't waste a sneak opener on an AoE round. Keyed on the enemy count meeting the multi-attack slot's minimum (not on whether you currently have the mana), so the opener is skipped consistently in a room you mean to room-spell.
+**What it does:** Skips the backstab attempt whenever the room holds enough enemies to trigger your configured room-wide attack spell, so you don't waste a sneak opener on an AoE round. Keyed on the enemy count meeting the Multi-attack 1 slot's minimum (not on whether you currently have the mana), so the opener is skipped consistently in a room you mean to room-spell.
 
 ### Run if BS fails
 
@@ -1588,21 +1588,26 @@ This editor is **staged** — nothing is saved or used until you press **Apply**
 
 means profile 2 ("Fire") is live, casting `fbl` as the normal attack, `fs` as the alternate, and `ll` on the drain slot.
 
-### Combat spell slots (Multi-attack / Debuff AOE / Debuff single-target / Normal attack / Alternate attack)
+### Combat spell slots (Multi-attack 1 & 2 / Debuff AOE / Debuff single-target / Normal attack / Alternate attack)
 
-**Default:** all unset
-**What it does:** This is the heart of MudPlay's spell-combat automation — five rows, each assigned one role:
-- **Multi-attack** — a room-wide damage spell, cast with no target (room spells hit everyone; naming a target gets it rejected by the game).
+**Default:** all unset (Multi-attack 2 also unchecked)
+**What it does:** This is the heart of MudPlay's spell-combat automation — six rows, each assigned one role:
+- **Multi-attack 1** — a room-wide damage spell, cast with no target (room spells hit everyone; naming a target gets it rejected by the game).
+- **Multi-attack 2** — an optional second room spell that takes over once the first one is spent (see below).
 - **Debuff (AOE)** — a room-wide debuff, also cast bare.
 - **Debuff (single target)** — a single-target weakening spell.
 - **Normal attack spell** — your primary single-target damage spell.
 - **Alternate attack spell** — a backup single-target damage spell, used only once the primary can't fire that round.
 
-Each row also has **Min enemies** (don't cast this slot below this many hostiles in the room — ignored on the three single-target rows), **Max casts** (a repeat cap — blank means unlimited, `0` means never, a number caps it; this counts combat *rounds* spent on the spell, not individual casts, and resets per-target for the three single-target rows but per-room for the two AoE rows), and **Min mana per cast** (a mana floor, read per the Percentage/Value toggle above).
+Each row also has **Min enemies** (don't cast this slot below this many hostiles in the room — ignored on the three single-target rows *and* on Multi-attack 2, which shares row 1's), **Max casts** (a repeat cap — blank means unlimited, `0` means never, a number caps it; this counts combat *rounds* spent on the spell, not individual casts, and resets per-target for the three single-target rows but per-room for the three AoE rows), and **Min mana per cast** (a mana floor, read per the Percentage/Value toggle above).
+
+**Multi-attack 2 (the cheap finisher):** off by default — tick the checkbox to enable it. It is **not** a rival to Multi-attack 1, it's its **successor**: the engine always tries row 1 first, and only reaches row 2 once row 1 is out of the running for the round — its **Max casts** cap is spent, or mana has dropped under its **Min mana per cast**. That's what lets you open with an expensive room nuke for a cast or two and then finish the pack with something far cheaper, instead of burning full price on every round of the fight. A worked example: Multi-attack 1 = `blad` with Max casts `2`, Multi-attack 2 = `star` with no cap — the pack eats two rounds of dancing blades, then star finishes it for a fraction of the mana.
+
+Two things are deliberately shared rather than duplicated. **Min enemies belongs to row 1 only** — the room has to qualify for row 1 before row 2 is ever considered, so a pack too small to be worth rooming doesn't get roomed by the second spell instead (that column shows `—` on row 2). And row 2 needs **row 1 to be filled in**; on its own it does nothing. Row 2 does keep its own **Max casts** and **Min mana per cast**, and its cast tally resets per room just like row 1's — every new room starts over from the opener.
 
 **Picking a spell (learned-spell guard):** each slot is a typeahead — start typing a **cast-code or name** and it lists your class's spells (it commits the 4-letter code). Spells your character **hasn't learned yet** are shown **struck through and dimmed** in the list, and if a slot is pointed at one the box **outlines red** as a warning — so you can't quietly misconfigure a slot with a spell you can technically learn but haven't (the value is still saved; the red outline is only a heads-up). The same picker and guard are on **Settings → Spells** (heals, cures, bless). The guard needs to know what you've learned: type `spells` (or `stat`) in the game once so it can read your spell list — until then nothing is flagged. It also updates the moment you learn a spell mid-session (reading a teaching item, e.g. *"You add agony to your spellbook!"*).
 
-**How the cascade works each round:** A pending backstab always wins first. Then, whichever action type (spell or physical) your Action Order setting prefers gets tried; on the spell side, the order is Multi-attack → Normal attack → Alternate attack, falling through to the weapon if nothing can fire. Debuffing is a separate "extra" action that can land the same round as your main attack. Once you commit to a single-target spell against a specific monster and it later becomes unaffordable, MudPlay sticks with the weapon for the rest of that fight rather than flip-flopping back once mana regenerates.
+**How the cascade works each round:** A pending backstab always wins first. Then, whichever action type (spell or physical) your Action Order setting prefers gets tried; on the spell side, the order is Multi-attack 1 → Multi-attack 2 → Normal attack → Alternate attack, falling through to the weapon if nothing can fire. Debuffing is a separate "extra" action that can land the same round as your main attack. Once you commit to a single-target spell against a specific monster and it later becomes unaffordable, MudPlay sticks with the weapon for the rest of that fight rather than flip-flopping back once mana regenerates.
 **Important notes:** Once a spell is announced, it auto-repeats server-side every round exactly like a weapon swing — MudPlay does **not** re-send the cast command every round, only when the situation actually changes (target dies, cap hit, mana too low, target proves immune).
 
 ### Drain (life-steal) spell
@@ -1612,7 +1617,7 @@ Each row also has **Min enemies** (don't cast this slot below this many hostiles
 
 **Targeting:** a drain can only affect a **living, non-undead** target — there's no life to steal from a construct or a skeleton — so against a NonLiving or Undead monster the drain is skipped and MudPlay falls back to your normal attack cascade for that fight. (If game data is thin, the game's own "no effect" reply is caught as a backstop.)
 
-**Drains override AOE:** by default the drain **yields to your room AoE** — if you have enough enemies present to trigger the Multi-attack spell, rooming is usually the safer play, so the AoE keeps firing and the drain only overrides single-target / weapon rounds. Check this box to let the drain pre-empt the AoE too, when your loop calls for it.
+**Drains override AOE:** by default the drain **yields to your room AoE** — if you have enough enemies present to trigger the Multi-attack spells, rooming is usually the safer play (and it yields to whichever of the two room slots is carrying the round), so the AoE keeps firing and the drain only overrides single-target / weapon rounds. Check this box to let the drain pre-empt the AoE too, when your loop calls for it.
 
 A per-monster override configured in Game Data can substitute different spells (and a physical command) for a specific monster species — worth checking if a particular monster seems to diverge from your setup here. In the monster editor the **Debuff (single target)** / **Normal attack spell** / **Alternate attack spell** are spell **pickers** (type-ahead over your castable spells, committing the cast-code, same as the Settings → Combat spell slots) with a per-room **Max** cast cap and a **Mana** floor — each substitutes into its matching rung and runs the *same* gates the configured slot does (Max cap, Mana floor, **and** the immunity / level / element-resist skip — it is **not** a bypass). A separate **Physical attack** box takes a raw verb (`attack`, `bash`) that replaces the weapon command only on a round the engine already chose physical. The override applies to the monster record **placed or summoned in your current room**, so a name shared across zones (a "zombie" in the graveyard vs the tunnels) picks the right one — an override you set on the graveyard zombie won't bleed onto the tunnels zombie.
 
@@ -2452,6 +2457,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Break combat before running | `true` | bool | `BreakBeforeFleeing` | Models/Profile/CombatSettings.cs |
 | Minimum mana per cast mode | `Percentage` | Percentage / Absolute | `SpellManaThresholdMode` | Models/Profile/CombatSettings.cs |
 | Multi-attack / AOE debuff / single debuff / normal / alternate attack spell | unset | spell code + MinEnemies(0-20) + MaxCastsPerRoom(null/0-100) + MinManaPerCast | `MultiAttackSpell`, `AreaDebuffSpell`, `SingleTargetDebuffSpell`, `NormalAttackSpell`, `AlternateAttackSpell` | Models/Profile/CombatSettings.cs |
+| Multi-attack 2 (enable + slot) | off, unset | bool + spell code + MaxCastsPerRoom(null/0-100) + MinManaPerCast (MinEnemies shared with slot 1) | `MultiAttack2Enabled`, `MultiAttack2Spell` | Models/Profile/CombatSettings.cs |
 | Drain (life-steal) spell + HP trigger + Drains override AOE | unset / 50% / off | spell code + MaxCastsPerRoom + MinManaPerCast; DrainHpTrigger(0-100); DrainsOverrideAoe(bool) | `DrainSpell`, `DrainHpTrigger`, `DrainsOverrideAoe` | Models/Profile/CombatSettings.cs |
 | Show combat round totals ⚠️ unwired | `false` | bool | `ShowCombatRoundTotals` | Models/Profile/CombatSettings.cs |
 

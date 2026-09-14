@@ -668,6 +668,8 @@ public static class BugReportBuilder
             ("normal-attack", combat.NormalAttackSpell.SpellName),
             ("alternate-attack", combat.AlternateAttackSpell.SpellName),
             ("multi-attack", combat.MultiAttackSpell.SpellName),
+            (combat.MultiAttack2Enabled ? "multi-attack-2" : "multi-attack-2 (disabled)",
+             combat.MultiAttack2Spell.SpellName),
             ("area-debuff", combat.AreaDebuffSpell.SpellName),
             ("single-debuff", combat.SingleTargetDebuffSpell.SpellName),
             ("drain", combat.DrainSpell.SpellName),
